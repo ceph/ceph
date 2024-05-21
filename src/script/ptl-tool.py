@@ -79,6 +79,23 @@
 # ...
 #
 #
+# Merging all PRs labeled 'wip-pdonnell-testing' into a new test branch but
+# NOT pushing that branch to ceph-ci repo (pushing to ceph-ci repo usually
+# happens only when we use --create-qa or --update-qa):
+#
+# $ src/script/ptl-tool.py --pr-label wip-pdonnell-testing --branch main --no-push-ci
+# Adding labeled PR #18805 to PR list
+# Adding labeled PR #18774 to PR list
+# Adding labeled PR #18600 to PR list
+# Will merge PRs: [18805, 18774, 18600]
+# Detaching HEAD onto base: main
+# Merging PR #18805
+# Merging PR #18774
+# Merging PR #18600
+# Checked out new branch wip-pdonnell-testing-20171108.054517
+# Created tag testing/wip-pdonnell-testing-20171108.054517
+#
+#
 # Merging PR #1234567 and #2345678 into a new test branch with a testing label added to the PR:
 #
 # $ src/script/ptl-tool.py 1234567 2345678 --label wip-pdonnell-testing
@@ -122,7 +139,6 @@
 # Detaching HEAD onto base: main
 # Merging PR #18192
 # Leaving HEAD detached; no branch anchors your commit
-
 
 # TODO
 # Look for check failures?
@@ -477,8 +493,9 @@ def build_branch(args):
         if args.qa_tags:
             custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_TAGS, 'value': args.qa_tags})
 
-        G.git.push(CI_REMOTE_URL, branch) # for shaman
-        G.git.push(CI_REMOTE_URL, tag.name) # for archival
+        if not args.no_push_ci:
+            G.git.push(CI_REMOTE_URL, branch) # for shaman
+            G.git.push(CI_REMOTE_URL, tag.name) # for archival
         origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH, 'value': origin_url})
 
@@ -548,6 +565,8 @@ def main():
     parser.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
     parser.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
+    parser.add_argument('--no-push-ci', dest='no_push_ci', action='store_true',
+                        help='don\'t push branch to ceph-ci repo')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
 
