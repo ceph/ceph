@@ -2097,6 +2097,8 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
   dump_errno(s);
+  dump_header(s, "x-rgw-bucket-placement-target", 
+    s->bucket->get_info().placement_rule.name);
   end_header(s, this);
   dump_start(s);
 
