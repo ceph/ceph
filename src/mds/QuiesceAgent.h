@@ -33,7 +33,7 @@ class QuiesceAgent {
       agent_thread.create("quiesce.agt");
     };
 
-    ~QuiesceAgent() {
+    virtual ~QuiesceAgent() {
       shutdown();
     }
 
@@ -213,20 +213,28 @@ class QuiesceAgent {
     operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceAgent::TrackedRootsVersion& tr);
 
     TrackedRootsVersion current;
-    TrackedRootsVersion working;
     TrackedRootsVersion pending;
 
     std::mutex agent_mutex;
     std::condition_variable agent_cond;
     bool stop_agent_thread;
+    bool upkeep_needed;
   
     template<class L>
     QuiesceDbVersion await_idle_locked(L &lock) {
-      agent_cond.wait(lock, [this] {
-        return !(current.armed || working.armed || pending.armed);
+      return await_phase_locked(lock, false, false);
+    }
+
+    template <class L>
+    QuiesceDbVersion await_phase_locked(L& lock, bool pending_armed, bool current_armed)
+    {
+      agent_cond.wait(lock, [=, this] {
+        return ( !upkeep_needed
+          && current.armed == current_armed 
+          && pending.armed == pending_armed);
       });
 
-      return current.db_version;
+      return std::max(current.db_version, pending.db_version);
     }
 
     void set_pending_roots(QuiesceDbVersion db_version, TrackedRoots&& new_roots);
@@ -249,4 +257,8 @@ class QuiesceAgent {
     } agent_thread;
 
     void* agent_thread_main();
+
+    virtual void _agent_thread_will_work() { }
+    virtual void _agent_thread_did_work() { }
+
 };
