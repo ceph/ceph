@@ -202,7 +202,7 @@ private:
 
   void _collect_released_allocated();
 
-  void _deferred_decision(uint32_t need_size);
+  void _defer_or_allocate(uint32_t need_size);
 };
 
 std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_printer& printer);
