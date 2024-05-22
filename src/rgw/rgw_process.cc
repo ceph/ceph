@@ -467,11 +467,12 @@ done:
     *latency = lat;
   }
   dout(1) << "====== req done req=" << hex << req << dec
-	  << " op status=" << op_ret
-	  << " http_status=" << s->err.http_ret
-	  << " latency=" << lat
-	  << " ======"
-	  << dendl;
+          << " op status=" << op_ret
+          << " http_status=" << s->err.http_ret
+          << " latency=" << lat
+          << " request_id=" << s->trans_id
+          << " ======"
+          << dendl;
 
   return (ret < 0 ? ret : s->err.ret);
 } /* process_request */
