@@ -20,6 +20,8 @@
 # HAVE_PPC64
 # HAVE_PPC
 #
+# HAVE_S390X
+#
 # SIMD_COMPILE_FLAGS
 #
 
@@ -107,4 +109,7 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(powerpc|ppc)")
   if(HAVE_POWER8)
     message(STATUS " HAVE_POWER8 yes")
   endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "(s390x|S390X|s390|S390)")
+  set(HAVE_S390X 1)
+  message(STATUS " we are s390x")
 endif()
