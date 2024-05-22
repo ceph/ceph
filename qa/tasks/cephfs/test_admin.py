@@ -848,6 +848,9 @@ class TestRenameCommand(TestAdminCommands):
             self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on renaming a non-existent fs")
         else:
             self.fail("expected renaming of a non-existent file system to fail")
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        self.fs.wait_for_daemons()
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session false')
 
     def test_fs_rename_fails_new_name_already_in_use(self):
         """
