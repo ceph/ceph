@@ -697,8 +697,66 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--await'], rank=0, check_status=False)['op']
         self.assertEqual(op['result'], -1) # EPERM
 
-    @unittest.skip("https://tracker.ceph.com/issues/66152")
-    def test_quiesce_drops_remote_authpins_on_failure(self):
+    def test_quiesce_drops_remote_authpins_when_done(self):
+        """
+        That a quiesce operation drops remote authpins after marking the node as quiesced
+
+        It's important that a remote quiesce doesn't stall freezing ops on the auth
+        """
+        self._configure_subvolume()
+
+        # create two dirs for pinning
+        self.mount_a.run_shell_payload("mkdir -p pin0 pin1")
+        # enable export by populating the directories
+        self.mount_a.run_shell_payload("touch pin0/export_dummy pin1/export_dummy")
+        # pin the files to different ranks
+        self.mount_a.setfattr("pin0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("pin1", "ceph.dir.pin", "1")
+
+        # prepare the patient at rank 0
+        self.mount_a.write_file("pin0/thefile", "I'm ready, doc")
+
+        # wait for the export to settle
+        self._wait_subtrees([(f"{self.mntpnt}/pin0", 0), (f"{self.mntpnt}/pin1", 1)])
+
+        def reqid(cmd):
+            J = json.loads(cmd.stdout.getvalue())
+            J = J.get('type_data', J)   # for op get
+            J = J.get('op', J)          # for quiesce path
+                                        # lock path returns the op directly
+            return self._reqid_tostr(J['reqid'])
+        
+        def assertQuiesceOpDone(expected_done, quiesce_op, rank):
+            cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:{rank} op get {quiesce_op}", stdout=StringIO())
+
+            J = json.loads(cmd.stdout.getvalue())
+            self.assertEqual(J['type_data']['result'], 0 if expected_done else None)
+
+        # Take the policy lock on the auth to cause a quiesce operation to request the remote authpin
+        # This is needed to cause the next command to block
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:0 lock path {self.mntpnt}/pin0/thefile policy:x --await", stdout=StringIO())
+        policy_block_op = reqid(cmd)
+
+        # Try quiescing on the replica. This should block for the policy lock
+        # As a side effect, it should take the remote authpin
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 quiesce path {self.mntpnt}/pin0/thefile", stdout=StringIO())
+        quiesce_op = reqid(cmd)
+
+        # verify the quiesce is pending
+        assertQuiesceOpDone(False, quiesce_op, rank=1)
+
+        # kill the op that holds the policy lock exclusively and verify the quiesce succeeds
+        self.fs.kill_op(policy_block_op, rank=0)
+        assertQuiesceOpDone(True, quiesce_op, rank=1)
+
+        # If all is good, the ap-freeze operation below should succeed
+        # despite the quiesce_op that's still active.
+        # We payload this with some lock that we know shouldn't block
+        # The call below will block on freezing if the quiesce failed to release
+        # remote authpins, and after the lifetime elapses will return ECANCELED
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 lock path {self.mntpnt}/pin0/thefile policy:r --ap-freeze --await --lifetime 5")
+
+    def test_request_drops_remote_authpins_when_waiting_for_quiescelock(self):
         """
         That remote authpins are dropped when the request fails to acquire the quiesce lock
 
