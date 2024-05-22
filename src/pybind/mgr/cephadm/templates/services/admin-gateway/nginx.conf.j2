@@ -7,7 +7,24 @@ events {
 http {
 
     server {
-        listen 80;
+
+{% if spec.disable_https %}
+        listen {{ spec.port or 80 }};
+{% else %}
+        listen		    {{ spec.port or 443 }} ssl;
+	listen		    [::]:{{ spec.port or 443 }} ssl;
+	ssl_certificate	    /etc/nginx/ssl/nginx.crt;
+	ssl_certificate_key /etc/nginx/ssl/nginx.key;
+	{% if spec.ssl_protocols %}
+	ssl_protocols	    {{ spec.ssl_protocols | join(' ') }};
+	{% else %}
+	ssl_protocols	    TLSv1.2 TLSv1.3;
+	{% endif %}
+	{% if spec.ssl_ciphers %}
+	ssl_ciphers	    {{ spec.ssl_ciphers | join(':') }};
+	{% endif %}
+	ssl_prefer_server_ciphers {{ spec.ssl_prefer_server_ciphers }};
+{% endif %}
 
 {% if mgr_addr %}
         location / {

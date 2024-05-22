@@ -1765,12 +1765,13 @@ class AdminGatewaySpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
-                 frontend_port: Optional[int] = 80,
-                 ssl_cert: Optional[str] = None,
-                 ssl_key: Optional[str] = None,
-                 ssl_dh_param: Optional[str] = None,
+                 disable_https: Optional[bool] = False,
+                 port: Optional[int] = None,
+                 ssl_certificate: Optional[str] = None,
+                 ssl_certificate_key: Optional[str] = None,
+                 ssl_prefer_server_ciphers: Optional[str] = "on",
+                 ssl_protocols: List[Optional[str]] = None,
                  ssl_ciphers: Optional[List[str]] = None,
-                 ssl_options: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -1786,22 +1787,24 @@ class AdminGatewaySpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
         )
-        self.frontend_port = frontend_port
-        self.ssl_cert = ssl_cert
-        self.ssl_key = ssl_key
-        self.ssl_dh_param = ssl_dh_param
+        self.disable_https = disable_https
+        self.port = port
+        self.ssl_certificate = ssl_certificate
+        self.ssl_certificate_key = ssl_certificate_key
+        self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
+        self.ssl_protocols = ssl_protocols
         self.ssl_ciphers = ssl_ciphers
-        self.ssl_options = ssl_options
         self.unmanaged = unmanaged
 
     def get_port_start(self) -> List[int]:
         ports = []
-        if self.frontend_port is not None:
-            ports.append(cast(int, self.frontend_port))
+        if self.port is not None:
+            ports.append(cast(int, self.port))
         return ports
 
     def validate(self) -> None:
         super(AdminGatewaySpec, self).validate()
+        # TODO(redo)
 
 
 yaml.add_representer(AdminGatewaySpec, ServiceSpec.yaml_representer)

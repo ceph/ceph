@@ -11,7 +11,7 @@ from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
 from ..constants import DEFAULT_NGINX_IMAGE
 from ..data_utils import dict_get
-from ..file_utils import populate_files
+from ..file_utils import populate_files, makedirs, recursive_chown
 
 
 logger = logging.getLogger()
@@ -74,7 +74,10 @@ class AdminGateway(ContainerDaemonForm):
         if not os.path.isdir(data_dir):
             raise OSError('data_dir is not a directory: %s' % (data_dir))
         logger.info('Writing admin-gateway config...')
-        populate_files(data_dir, self.files, uid, gid)
+        config_dir = os.path.join(data_dir, 'etc/')
+        makedirs(config_dir, uid, gid, 0o755)
+        recursive_chown(config_dir, uid, gid)
+        populate_files(config_dir, self.files, uid, gid)
 
     def _get_container_mounts(self, data_dir: str) -> Dict[str, str]:
         mounts: Dict[str, str] = {}
@@ -90,8 +93,8 @@ class AdminGateway(ContainerDaemonForm):
         data_dir = self.identity.data_dir(ctx.data_dir)
         mounts.update(
             {
-                os.path.join(
-                    data_dir, 'nginx.conf'
-                ): '/etc/nginx/nginx.conf:Z'
+                os.path.join(data_dir, 'etc/nginx.conf'): '/etc/nginx/nginx.conf:Z',
+                os.path.join(data_dir, 'etc/nginx.crt'):  '/etc/nginx/ssl/nginx.crt:Z',
+                os.path.join(data_dir, 'etc/nginx.key'): '/etc/nginx/ssl/nginx.key:Z'
             }
         )
