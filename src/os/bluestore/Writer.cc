@@ -1180,11 +1180,13 @@ std::pair<bool, uint32_t> BlueStore::Writer::_write_expand_r(
   return std::make_pair(new_data_pad, new_data_end);
 }
 
+
+
 // This function is a centralized place to make a decision on
 // whether to use deferred or direct writes.
 // The assumption behind it is that having parts of write executed as
 // deferred and other parts as direct is suboptimal in any case.
-void BlueStore::Writer::_deferred_decision(uint32_t need_size)
+void BlueStore::Writer::_defer_or_allocate(uint32_t need_size)
 {
   // make a deferred decision
   uint32_t released_size = 0;
@@ -1314,7 +1316,7 @@ void BlueStore::Writer::do_write(
   if (location != data_end) {
     uint32_t need_size = p2roundup(data_end, au_size) - p2align(location, au_size);
     // make a deferred decision
-    _deferred_decision(need_size);
+    _defer_or_allocate(need_size);
     _do_put_blobs(location, data_end, ref_end, bd, after_punch_it);
   } else {
     // Unlikely, but we just put everything.
