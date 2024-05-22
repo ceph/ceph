@@ -154,10 +154,10 @@ public:
       auto yield = y.get_yield_context();
       auto&& token = yield[ec];
       boost::asio::async_initiate<boost::asio::yield_context, Signature>(
-          [this] (auto handler, auto ex) {
+          [this, &l] (auto handler, auto ex) {
             completion = Completion::create(ex, std::move(handler));
+            l.unlock(); // unlock before suspend
           }, token, yield.get_executor());
-      l.unlock();
       return -ec.value();
     }
     cond.wait(l, [this]{return (done==true);});
