@@ -1090,25 +1090,23 @@ std::pair<bool, uint32_t> BlueStore::Writer::_write_expand_l(
     // we take first blob that we can
     uint32_t can_off = p2align<uint32_t>(logical_offset, it->blob->get_blob().get_chunk_size(block_size));
     // ^smallest stop point that blob can accomodate
+    off_stop = can_off;
+    new_data_off = can_off;
     // the blob is mapped, so it has space for at least up to begin of AU@logical_offset
     if (it->logical_offset < logical_offset && logical_offset < it->logical_end()) {
       // ^ this only works for the first extent we check
-      new_data_off = can_off;
       new_data_pad = false;
     } else {
       if (it->logical_end() <= can_off) {
         // we have a fortunate area in blob that was mapped but not used
-        new_data_off = can_off;
         // the new_data_pad here depends on whether we have visited immutable blobs
       } else {
         // interested in using this blob, but there is data, must read
-        new_data_off = can_off;
         new_data_pad = false;
         //^ read means we must expand punch_hole / ref, but not outside object size
       }
     }
-    break;
-  } while (true);
+  } while ((it != onode->extent_map.extent_map.begin()) && (--it, true));
   done:
   dout(25) << __func__ << std::hex << " logical_offset=0x" << logical_offset
     << " -> 0x" << new_data_off << (new_data_pad ? " pad" : " read") << dendl;
@@ -1140,46 +1138,38 @@ std::pair<bool, uint32_t> BlueStore::Writer::_write_expand_r(
   uint32_t new_data_end = min_end;
   bool     new_data_pad = true; // unless otherwise stated, we pad
   exmp_it it = onode->extent_map.seek_lextent(end_offset);
-  int tries = 0; //check 3 blobs
-  for (; ++tries <= 3 && it != onode->extent_map.extent_map.end(); ++it) {
+  for (; it != onode->extent_map.extent_map.end(); ++it) {
     if (it->logical_offset >= end_stop) {
       // nothing beyond this point is interesting
       // no blob should have an free AU outside its logical mapping
       // This is failure in reuse search.
       break;
     }
-    if (it->blob_start() >= end_offset) {
-      //not interested with blob that we are not overlapping
-      continue;
-      //^ not break, we still can find valid blob to reuse
-    }
     if (!it->blob->get_blob().is_mutable()) {
       new_data_pad = false; //must read...
       continue;
     }
-    //if @ end_offset is something then this blob certainly qualifies
+    // if at end_offset is something then this blob certainly qualifies
     // we take first blob that we can
     uint32_t can_end = p2roundup<uint32_t>(end_offset, it->blob->get_blob().get_chunk_size(block_size));
     // ^smallest stop point that blob can accomodate
+    end_stop = can_end;
+    new_data_end = can_end;
     // the blob is mapped, so it has space for at least up to end of AU@end_offset
     if (it->logical_offset <= end_offset && end_offset < it->logical_end()) {
       // ^ this only works for the first extent we check
-      new_data_end = can_end;
       new_data_pad = false;
       //^ read means we must expand punch_hole / ref, but not outside object size
     } else {
       if (can_end <= it->logical_offset) {
         // we have a fortunate area in blob that was mapped but not used
-        new_data_end = can_end;
         // the new_data_pad here depends on whether we have visited immutable blobs
       } else {
         // interested in using this blob, but there is data, must read
-        new_data_end = can_end;
         new_data_pad = false;
         //^ read means we must expand punch_hole / ref, but not outside object size
       }
     }
-    break;
   }
   dout(25) << __func__ << std::hex << " end_offset=0x" << end_offset
     << " -> 0x" << new_data_end << (new_data_pad ? " pad" : " read") << dendl;
