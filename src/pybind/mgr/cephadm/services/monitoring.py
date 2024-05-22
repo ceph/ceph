@@ -189,7 +189,10 @@ class GrafanaService(CephadmService):
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         spec = cast(GrafanaSpec, self.mgr.spec_store[dd.service_name()].spec)
+        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
+        url_prefix = '/grafana' if adming_gw_cnt > 0 else ''
         service_url = build_url(scheme=spec.protocol, host=addr, port=port)
+        service_url = f'{service_url}{url_prefix}'
         self._set_service_url_on_dashboard(
             'Grafana',
             'dashboard get-grafana-api-url',
@@ -202,7 +205,7 @@ class GrafanaService(CephadmService):
         Called before grafana daemon is removed.
         """
         if daemon.hostname is not None:
-            # delete cert/key entires for this grafana daemon
+            # delete cert/key entries for this grafana daemon
             cert_path = f'{daemon.hostname}/grafana_crt'
             key_path = f'{daemon.hostname}/grafana_key'
             self.mgr.set_store(cert_path, None)
@@ -354,7 +357,10 @@ class AlertmanagerService(CephadmService):
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
+        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
+        url_prefix = '/alertmanager' if adming_gw_cnt > 0 else ''
         service_url = build_url(scheme=protocol, host=addr, port=port)
+        service_url = f'{service_url}{url_prefix}'
         self._set_service_url_on_dashboard(
             'AlertManager',
             'dashboard get-alertmanager-api-host',
@@ -566,7 +572,10 @@ class PrometheusService(CephadmService):
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
+        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
+        url_prefix = '/prometheus' if adming_gw_cnt > 0 else ''
         service_url = build_url(scheme=protocol, host=addr, port=port)
+        service_url = f'{service_url}{url_prefix}'
         self._set_service_url_on_dashboard(
             'Prometheus',
             'dashboard get-prometheus-api-host',
