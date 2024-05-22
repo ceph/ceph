@@ -4536,6 +4536,9 @@ def test_ps_s3_notification_push_kafka_security_sasl_scram():
 @attr('http_test')
 def test_persistent_ps_s3_reload():
     """ do a realm reload while we send notifications """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for reload test')
+
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4642,6 +4645,8 @@ def test_persistent_ps_s3_reload():
 @attr('data_path_v2_test')
 def test_persistent_ps_s3_data_path_v2_migration():
     """ test data path v2 persistent migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4780,6 +4785,8 @@ def test_persistent_ps_s3_data_path_v2_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_migration():
     """ test data path v2 migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4895,6 +4902,8 @@ def test_ps_s3_data_path_v2_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_large_migration():
     """ test data path v2 large migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     connections_list = []
     connections_list.append(conn)
@@ -5023,6 +5032,8 @@ def test_ps_s3_data_path_v2_large_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_mixed_migration():
     """ test data path v2 mixed migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     connections_list = []
     connections_list.append(conn)
