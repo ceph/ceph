@@ -2925,17 +2925,18 @@ Then run the following:
                 deps.append('ingress')
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
+            deps += [d.name() for d in self.cache.get_daemons_by_service('admin-gateway')]
             if self.secure_monitoring_stack:
                 if prometheus_user and prometheus_password:
                     deps.append(f'{hash(prometheus_user + prometheus_password)}')
                 if alertmanager_user and alertmanager_password:
                     deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'grafana':
-            deps += get_daemon_names(['prometheus', 'loki'])
+            deps += get_daemon_names(['prometheus', 'loki', 'admin-gateway'])
             if self.secure_monitoring_stack and prometheus_user and prometheus_password:
                 deps.append(f'{hash(prometheus_user + prometheus_password)}')
         elif daemon_type == 'alertmanager':
-            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway'])
+            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'admin-gateway'])
             if self.secure_monitoring_stack and alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
@@ -2946,9 +2947,11 @@ Then run the following:
                 port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
                 deps.append(build_url(host=dd.hostname, port=port).lstrip('/'))
             deps = sorted(deps)
+        elif daemon_type == 'admin-gateway':
+            # url_prefix for the following services depends on the presence of admin-gateway
+            deps += get_daemon_names(['grafana', 'prometheus', 'alertmanager'])
         else:
-            # TODO(redo): some error message!
-            pass
+            self.log.error(f'Cannot calculate dependencies for unknown daemon_type {daemon_type}')
 
         if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')

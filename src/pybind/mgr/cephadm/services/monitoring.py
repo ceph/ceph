@@ -35,6 +35,9 @@ class GrafanaService(CephadmService):
             deps.append(f'{hash(prometheus_user + prometheus_password)}')
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
 
+        # add a dependency since url_prefix depends on the existence of admin-gateway
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('admin-gateway')]
+
         prom_services = []  # type: List[str]
         for dd in self.mgr.cache.get_daemons_by_service('prometheus'):
             assert dd.hostname is not None
@@ -78,13 +81,15 @@ class GrafanaService(CephadmService):
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
 
+        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
                 'anonymous_access': spec.anonymous_access,
                 'initial_admin_password': spec.initial_admin_password,
                 'http_port': grafana_port,
                 'protocol': spec.protocol,
-                'http_addr': grafana_ip
+                'http_addr': grafana_ip,
+                'use_url_prefix': (adming_gw_cnt > 0)
             })
 
         if 'dashboard' in self.mgr.get('mgr_map')['modules'] and spec.initial_admin_password:
@@ -271,6 +276,9 @@ class AlertmanagerService(CephadmService):
             proto = p_result.scheme
             port = p_result.port
 
+        # add a dependency since url_prefix depends on the existence of admin-gateway
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('admin-gateway')]
+
         # scan all mgrs to generate deps and to get standbys too.
         # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
@@ -311,8 +319,8 @@ class AlertmanagerService(CephadmService):
             addr = self._inventory_get_fqdn(dd.hostname)
             peers.append(build_url(host=addr, port=port).lstrip('/'))
 
+        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
-
         if self.mgr.secure_monitoring_stack:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
             if alertmanager_user and alertmanager_password:
@@ -334,14 +342,16 @@ class AlertmanagerService(CephadmService):
                     'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert()
                 },
                 'peers': peers,
-                'web_config': '/etc/alertmanager/web.yml'
+                'web_config': '/etc/alertmanager/web.yml',
+                'use_url_prefix': (adming_gw_cnt > 0)
             }, sorted(deps)
         else:
             return {
                 "files": {
                     "alertmanager.yml": yml
                 },
-                "peers": peers
+                "peers": peers,
+                'use_url_prefix': (adming_gw_cnt > 0)
             }, sorted(deps)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
@@ -477,6 +487,7 @@ class PrometheusService(CephadmService):
             'prometheus_web_password': password_hash(prometheus_password),
         }
 
+        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
         if self.mgr.secure_monitoring_stack:
             cfg_key = 'mgr/prometheus/root/cert'
             cmd = {'prefix': 'config-key get', 'key': cfg_key}
@@ -499,7 +510,8 @@ class PrometheusService(CephadmService):
                     'retention_time': retention_time,
                     'retention_size': retention_size,
                     'ip_to_bind_to': ip_to_bind_to,
-                    'web_config': '/etc/prometheus/web.yml'
+                    'web_config': '/etc/prometheus/web.yml',
+                    'use_url_prefix': (adming_gw_cnt > 0)
                 }
         else:
             r = {
@@ -508,7 +520,8 @@ class PrometheusService(CephadmService):
                 },
                 'retention_time': retention_time,
                 'retention_size': retention_size,
-                'ip_to_bind_to': ip_to_bind_to
+                'ip_to_bind_to': ip_to_bind_to,
+                'use_url_prefix': (adming_gw_cnt > 0)
             }
 
         # include alerts, if present in the container
@@ -552,6 +565,10 @@ class PrometheusService(CephadmService):
             if alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
+
+        # add a dependency since url_prefix depends on the existence of admin-gateway
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('admin-gateway')]
+
         # add dependency on ceph-exporter daemons
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('ceph-exporter')]
         deps += [s for s in ['node-exporter', 'alertmanager'] if self.mgr.cache.get_daemons_by_service(s)]

@@ -49,6 +49,12 @@ class AdminGatewayService(CephadmService):
         spec = cast(AdminGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
+
+        # url_prefix for the following services depends on the presence of admin-gateway
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('prometheus')]
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('grafana')]
+
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
         prometheus_eps = self.get_service_endpoints('prometheus', scheme)
         alertmanager_eps = self.get_service_endpoints('alertmanager', scheme)

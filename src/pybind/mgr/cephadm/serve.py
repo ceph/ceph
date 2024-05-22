@@ -1091,10 +1091,11 @@ class CephadmServe:
                 self.log.debug(f'{dd.name()} deps {last_deps} -> {deps}')
                 self.log.info(f'Reconfiguring {dd.name()} (dependencies changed)...')
                 action = 'reconfig'
-                # we need only redeploy if secure_monitoring_stack value has changed:
+                # we need only redeploy if secure_monitoring_stack or admin-gateway value has changed:
+                # TODO(redo): check if we should just go always with redeploy (it's fast enough)
                 if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager']:
-                    diff = list(set(last_deps) - set(deps))
-                    if any('secure_monitoring_stack' in e for e in diff):
+                    diff = list(set(last_deps).symmetric_difference(set(deps)))
+                    if any(('secure_monitoring_stack' in e) or ('admin-gateway' in e) for e in diff):
                         action = 'redeploy'
                 elif dd.daemon_type == 'jaeger-agent':
                     # changes to jaeger-agent deps affect the way the unit.run for
