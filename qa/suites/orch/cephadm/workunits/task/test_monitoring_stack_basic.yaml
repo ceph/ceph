@@ -1,0 +1,59 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - |
+        set -e
+        set -x
+        ceph orch apply node-exporter
+        ceph orch apply grafana
+        ceph orch apply alertmanager
+        ceph orch apply prometheus
+        sleep 240
+        ceph orch ls
+        ceph orch ps
+        ceph orch host ls
+        MON_DAEMON=$(ceph orch ps --daemon-type mon -f json | jq -r 'last | .daemon_name')
+        GRAFANA_HOST=$(ceph orch ps --daemon-type grafana -f json | jq -e '.[]' | jq -r '.hostname')
+        PROM_HOST=$(ceph orch ps --daemon-type prometheus -f json | jq -e '.[]' | jq -r '.hostname')
+        ALERTM_HOST=$(ceph orch ps --daemon-type alertmanager -f json | jq -e '.[]' | jq -r '.hostname')
+        GRAFANA_IP=$(ceph orch host ls -f json | jq -r --arg GRAFANA_HOST "$GRAFANA_HOST" '.[] | select(.hostname==$GRAFANA_HOST) | .addr')
+        PROM_IP=$(ceph orch host ls -f json | jq -r --arg PROM_HOST "$PROM_HOST" '.[] | select(.hostname==$PROM_HOST) | .addr')
+        ALERTM_IP=$(ceph orch host ls -f json | jq -r --arg ALERTM_HOST "$ALERTM_HOST" '.[] | select(.hostname==$ALERTM_HOST) | .addr')
+        # check each host node-exporter metrics endpoint is responsive
+        ALL_HOST_IPS=$(ceph orch host ls -f json | jq -r '.[] | .addr')
+        for ip in $ALL_HOST_IPS; do
+          curl -s http://${ip}:9100/metric
+        done
+        # check grafana endpoints are responsive and database health is okay
+        curl -k -s https://${GRAFANA_IP}:3000/api/health
+        curl -k -s https://${GRAFANA_IP}:3000/api/health | jq -e '.database == "ok"'
+        # stop mon daemon in order to trigger an alert
+        ceph orch daemon stop $MON_DAEMON
+        sleep 120
+        # check prometheus endpoints are responsive and mon down alert is firing
+        curl -s http://${PROM_IP}:9095/api/v1/status/config
+        curl -s http://${PROM_IP}:9095/api/v1/status/config | jq -e '.status == "success"'
+        curl -s http://${PROM_IP}:9095/api/v1/alerts
+        curl -s http://${PROM_IP}:9095/api/v1/alerts | jq -e '.data | .alerts | .[] | select(.labels | .alertname == "CephMonDown") | .state == "firing"'
+        # check alertmanager endpoints are responsive and mon down alert is active
+        curl -s http://${ALERTM_IP}:9093/api/v1/status
+        curl -s http://${ALERTM_IP}:9093/api/v1/alerts
+        curl -s http://${ALERTM_IP}:9093/api/v1/alerts | jq -e '.data | .[] | select(.labels | .alertname == "CephMonDown") | .status | .state == "active"'
