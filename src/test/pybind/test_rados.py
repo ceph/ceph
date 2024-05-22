@@ -318,6 +318,7 @@ class TestIoctx(object):
         self.ioctx.read('a')
 
     def test_list_objects(self):
+        self.ioctx.write('a', b'')
         self.ioctx.write('b', b'foo')
         self.ioctx.write_full('c', b'bar')
         self.ioctx.append('d', b'jazz')
