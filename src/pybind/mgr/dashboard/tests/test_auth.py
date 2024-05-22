@@ -40,6 +40,11 @@ class AuthTest(ControllerTestCase):
         self.assertStatus(401)
 
     @patch('dashboard.controllers.auth.JwtManager.gen_token', Mock(return_value='my-token'))
+    @patch('dashboard.mgr.get', Mock(return_value={
+        'config': {
+            'fsid': '943949f0-ce37-47ca-a33c-3413d46ee9ec'
+        }
+    }))
     @patch('dashboard.controllers.auth.AuthManager.authenticate', Mock(return_value={
         'permissions': {'rgw': ['read']},
         'pwdExpirationDate': 1000000,

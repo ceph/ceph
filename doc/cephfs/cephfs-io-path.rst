@@ -47,4 +47,4 @@ client cache.
             |         MDSs        | -=-------> |         OSDs       |
             +---------------------+            +--------------------+
 
-.. _Architecture: ../architecture
+.. _Architecture: ../../architecture

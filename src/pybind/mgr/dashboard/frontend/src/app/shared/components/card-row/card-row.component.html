@@ -1,6 +1,6 @@
 <hr>
 <li class="list-group-item">
-  <div class="d-flex pl-1 pb-2 pt-2">
+  <div class="d-flex pl-1 pb-2 pt-2 position-relative">
     <div class="ms-4 me-auto">
       <a [routerLink]="link"
          *ngIf="link && total > 0; else noLinkTitle"
@@ -12,7 +12,7 @@
         <ng-template ngPluralCase="other">{{ title }}s</ng-template>
       </a>
     </div>
-    <span class="me-3">
+    <span class="me-4">
       <ng-container [ngSwitch]="summaryType">
         <ng-container *ngSwitchCase="'iscsi'">
           <ng-container *ngTemplateOutlet="iscsiSummary"></ng-container>
@@ -28,8 +28,21 @@
         </ng-container>
       </ng-container>
     </span>
+    <span *ngIf="dropdownData && dropdownData.total.total.total > 0"
+          class="position-absolute end-0 me-2">
+      <a (click)="toggleDropdown()"
+         class="dropdown-toggle"
+         [attr.aria-expanded]="dropdownToggled"
+         aria-controls="row-dropdwon"
+         role="button"></a>
+    </span>
   </div>
 </li>
+
+<div *ngIf="dropdownToggled">
+  <hr>
+  <ng-container *ngTemplateOutlet="dropdownTemplate"></ng-container>
+</div>
 
 <ng-template #defaultSummary>
   <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
@@ -153,11 +166,23 @@
 </ng-template>
 
 <ng-template #simplifiedSummary>
-  <span>
+  <span *ngIf="!dropdownTotalError else showErrorNum">
     {{ data }}
     <i class="text-success"
        [ngClass]="[icons.success]"></i>
   </span>
+  <ng-template #showErrorNum>
+    <span *ngIf="data - dropdownTotalError  > 0">
+      {{ data - dropdownTotalError  }}
+    <i class="text-success"
+       [ngClass]="[icons.success]"></i>
+    </span>
+    <span>
+      {{ dropdownTotalError  }}
+      <i class="text-danger"
+         [ngClass]="[icons.danger]"></i>
+    </span>
+  </ng-template>
 </ng-template>
 
 <ng-template #noLinkTitle>
@@ -168,4 +193,37 @@
     <ng-template ngPluralCase="=1">{{ title }}</ng-template>
     <ng-template ngPluralCase="other">{{ title }}s</ng-template>
   </span>
+</ng-template>
+
+<ng-template #dropdownTemplate>
+  <ng-container *ngFor="let data of dropdownData?.total.category | keyvalue">
+    <li class="list-group-item">
+      <div class="d-flex pb-2 pt-2">
+        <div class="ms-5 me-auto">
+          <span *ngIf="data.value.total"
+                [ngPlural]="data.value.total"
+                i18n>
+              {{ data.value.total }}
+            <ng-template ngPluralCase="=0">{{ hwNames[data.key] }}</ng-template>
+            <ng-template ngPluralCase="=1">{{ hwNames[data.key] }}</ng-template>
+            <ng-template ngPluralCase="other">{{ hwNames[data.key] | pluralize }}</ng-template>
+          </span>
+        </div>
+        <span [ngClass]="data.value.error ? 'me-2' : 'me-4'">
+          {{ data.value.ok }}
+          <i class="text-success"
+             *ngIf="data.value.ok"
+             [ngClass]="[icons.success]">
+          </i>
+        </span>
+        <span *ngIf="data.value.error"
+              class="me-4 ms-2">
+              {{ data.value.error }}
+          <i class="text-danger"
+             [ngClass]="[icons.danger]">
+          </i>
+        </span>
+      </div>
+    </li>
+  </ng-container>
 </ng-template>

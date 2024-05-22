@@ -66,7 +66,7 @@ def gen_mds_cap_str(caps):
 
     caps = ((perm1, fsname1, cephfs_mntpt1), (perm2, fsname2, cephfs_mntpt2))
     """
-    def _gen_mds_cap_str(perm, fsname=None, cephfs_mntpt='/'):
+    def _gen_mds_cap_str(perm, fsname=None, cephfs_mntpt='/', root_squash=False):
         mds_cap = f'allow {perm}'
         if fsname:
             mds_cap += f' fsname={fsname}'
@@ -74,6 +74,8 @@ def gen_mds_cap_str(caps):
             if cephfs_mntpt[0] == '/':
                 cephfs_mntpt = cephfs_mntpt[1:]
             mds_cap += f' path={cephfs_mntpt}'
+        if root_squash:
+            mds_cap += ' root_squash'
         return mds_cap
 
     if len(caps) == 1:
@@ -167,10 +169,10 @@ class MonCapTester:
         fsnames = get_fsnames_from_moncap(moncap)
         if fsnames == []:
             log.info('no FS name is mentioned in moncap, client has '
-                     'permission to list all files. moncap -\n{moncap}')
+                     f'permission to list all files. moncap -\n{moncap}')
             return
 
-        log.info('FS names are mentioned in moncap. moncap -\n{moncap}')
+        log.info(f'FS names are mentioned in moncap. moncap -\n{moncap}')
         log.info('testing for presence of these FS names in output of '
                  '"fs ls" command run by client.')
         for fsname in fsnames:
@@ -247,7 +249,7 @@ class MdsCapTester:
         Run test for read perm and, for write perm, run positive test if it
         is present and run negative test if not.
         """
-        if mntpt:
+        if mntpt and mntpt != '/':
             # beacaue we want to value of mntpt from test_set.path along with
             # slash that precedes it.
             mntpt = '/' + mntpt if mntpt[0] != '/' else mntpt

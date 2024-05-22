@@ -57,53 +57,62 @@ case for most clusters), its CRUSH location can be specified as follows::
       ``pod``, ``pdu``, ``rack``, ``chassis``, and ``host``. These defined
       types suffice for nearly all clusters, but can be customized by
       modifying the CRUSH map.
-   #. Not all keys need to be specified. For example, by default, Ceph
-      automatically sets an ``OSD``'s location as ``root=default
-      host=HOSTNAME`` (as determined by the output of ``hostname -s``).
 
-The CRUSH location for an OSD can be modified by adding the ``crush location``
-option in ``ceph.conf``. When this option has been added, every time the OSD
+The CRUSH location for an OSD can be set by adding the ``crush_location``
+option in ``ceph.conf``, example:
+
+   crush_location = root=default row=a rack=a2 chassis=a2a host=a2a1
+
+When this option has been added, every time the OSD
 starts it verifies that it is in the correct location in the CRUSH map and
 moves itself if it is not. To disable this automatic CRUSH map management, add
 the following to the ``ceph.conf`` configuration file in the ``[osd]``
 section::
 
-   osd crush update on start = false
+   osd_crush_update_on_start = false
 
 Note that this action is unnecessary in most cases.
 
+If the ``crush_location`` is not set explicitly,
+a default of ``root=default host=HOSTNAME`` is used for ``OSD``s,
+where the hostname is determined by the output of the ``hostname -s`` command.
+
+.. note:: If you switch from this default to an explicitly set ``crush_location``,
+   do not forget to include ``root=default`` because existing CRUSH rules refer to it.
 
 Custom location hooks
 ---------------------
 
-A custom location hook can be used to generate a more complete CRUSH location
-on startup. The CRUSH location is determined by, in order of preference:
+A custom location hook can be used to generate a more complete CRUSH location,
+on startup.
 
-#. A ``crush location`` option in ``ceph.conf``
-#. A default of ``root=default host=HOSTNAME`` where the hostname is determined
-   by the output of the ``hostname -s`` command
+This is useful when some location fields are not known at the time
+``ceph.conf`` is written (for example, fields ``rack`` or ``datacenter``
+when deploying a single configuration across multiple datacenters).
 
-A script can be written to provide additional location fields (for example,
-``rack`` or ``datacenter``) and the hook can be enabled via the following
-config option::
+If configured, executed, and parsed successfully, the hook's output replaces
+any previously set CRUSH location.
 
-   crush location hook = /path/to/customized-ceph-crush-location
+The hook hook can be enabled in ``ceph.conf`` by providing a path to an
+executable file (often a script), example::
+
+   crush_location_hook = /path/to/customized-ceph-crush-location
 
 This hook is passed several arguments (see below). The hook outputs a single
-line to ``stdout`` that contains the CRUSH location description. The output
-resembles the following:::
+line to ``stdout`` that contains the CRUSH location description. The arguments
+resemble the following:::
 
   --cluster CLUSTER --id ID --type TYPE
 
 Here the cluster name is typically ``ceph``, the ``id`` is the daemon
 identifier or (in the case of OSDs) the OSD number, and the daemon type is
-``osd``, ``mds, ``mgr``, or ``mon``.
+``osd``, ``mds``, ``mgr``, or ``mon``.
 
 For example, a simple hook that specifies a rack location via a value in the
-file ``/etc/rack`` might be as follows::
+file ``/etc/rack`` (assuming it contains no spaces) might be as follows::
 
   #!/bin/sh
-  echo "host=$(hostname -s) rack=$(cat /etc/rack) root=default"
+  echo "root=default rack=$(cat /etc/rack) host=$(hostname -s)"
 
 
 CRUSH structure
@@ -505,6 +514,16 @@ For details on this command's parameters, see the following:
    :Required: No
    :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
+Renaming a bucket
+-----------------
+
+To rename a bucket while maintaining its position in the CRUSH map hierarchy,
+run a command of the following form:
+
+.. prompt:: bash #
+
+   ceph osd crush rename-bucket {oldname} {newname}
+
 Removing a Bucket
 -----------------
 
@@ -709,6 +728,13 @@ The relevant erasure-code profile properties are as follows:
    [default: ``default``].
  * **crush-failure-domain**: the CRUSH bucket type used in the distribution of
    erasure-coded shards [default: ``host``].
+ * **crush-osds-per-failure-domain**: Maximum number of OSDs to place in each
+   failure domain -- defaults to 1.  Using a value greater than one will
+   cause a CRUSH MSR rule to be created, see below.  Must be specified if
+   ``crush-num-failure-domains`` is specified.
+ * **crush-num-failure-domains**: Number of failure domains to map.  Must be
+   specified if ``crush-osds-per-failure-domain`` is specified.  Results in
+   a CRUSH MSR rule being created.
  * **crush-device-class**: the device class on which to place data [default:
    none, which means that all devices are used].
  * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the
@@ -724,6 +750,21 @@ The relevant erasure-code profile properties are as follows:
 .. note: When creating a new pool, it is not necessary to create the rule
    explicitly. If only the erasure-code profile is specified and the rule
    argument is omitted, then Ceph will create the CRUSH rule automatically.
+
+
+CRUSH MSR Rules
+---------------
+
+Creating an erasure-code profile with a ``crush-osds-per-failure-domain``
+value greater than one will cause a CRUSH MSR rule type to be created
+instead of a normal CRUSH rule.  Normal crush rules cannot retry prior
+steps when an out OSD is encountered and rely on CHOOSELEAF steps to
+permit moving OSDs to new hosts.  However, CHOOSELEAF rules don't
+support more than a single OSD per failure domain.  MSR rules, new in
+squid, support multiple OSDs per failure domain by retrying all prior
+steps when an out OSD is encountered.  Using MSR rules requires that
+OSDs and clients be required to support the CRUSH_MSR feature bit
+(squid or newer).
 
 
 Deleting rules

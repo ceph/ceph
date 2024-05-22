@@ -1,3 +1,12 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
+      - mons down
+      - mon down
+      - out of quorum
+    log-only-match:
+      - CEPHADM_
 roles:
 - - host.a
   - mon.a

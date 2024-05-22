@@ -14,6 +14,7 @@
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 #include "common/Timer.h"
+#include "common/async/context_pool.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -58,6 +59,7 @@ struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWReshard;
 class RGWReshardWait;
+namespace rgw { class SiteConfig; }
 
 struct get_obj_data;
 
@@ -389,6 +391,8 @@ class RGWRados
   ceph::mutex meta_sync_thread_lock{ceph::make_mutex("meta_sync_thread_lock")};
   ceph::mutex data_sync_thread_lock{ceph::make_mutex("data_sync_thread_lock")};
 
+  ceph::async::io_context_pool v1_topic_migration;
+
   librados::IoCtx root_pool_ctx;      // .rgw
 
   ceph::mutex bucket_id_lock{ceph::make_mutex("rados_bucket_id")};
@@ -532,7 +536,7 @@ public:
   librados::IoCtx& get_notif_pool_ctx() {
     return notif_pool_ctx;
   }
-
+  
   void set_context(CephContext *_cct) {
     cct = _cct;
   }
@@ -589,15 +593,11 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int init_begin(CephContext *_cct, const DoutPrefixProvider *dpp) {
-    set_context(_cct);
-    return init_begin(dpp);
-  }
+  int init_begin(CephContext *_cct, const DoutPrefixProvider *dpp,
+                         const rgw::SiteConfig& site);
   /** Initialize the RADOS instance and prepare to do other ops */
-  int init_svc(bool raw, const DoutPrefixProvider *dpp);
-  int init_ctl(const DoutPrefixProvider *dpp);
+  int init_svc(bool raw, const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
   virtual int init_rados();
-  int init_begin(const DoutPrefixProvider *dpp);
   int init_complete(const DoutPrefixProvider *dpp, optional_yield y);
   void finalize();
 
@@ -633,7 +633,7 @@ public:
   int create_bucket(const DoutPrefixProvider* dpp,
                     optional_yield y,
                     const rgw_bucket& bucket,
-                    const rgw_user& owner,
+                    const rgw_owner& owner,
                     const std::string& zonegroup_id,
                     const rgw_placement_rule& placement_rule,
                     const RGWZonePlacementInfo* zone_placement,
@@ -797,7 +797,8 @@ public:
         const std::string *ptag;
         std::list<rgw_obj_index_key> *remove_objs;
         ceph::real_time set_mtime;
-        rgw_user owner;
+        rgw_owner bucket_owner; // for quota stats update
+        ACLOwner owner; // owner/owner_display_name for bucket index
         RGWObjCategory category;
         int flags;
         const char *if_match;
@@ -823,10 +824,11 @@ public:
                      std::map<std::string, bufferlist>& attrs,
                      bool modify_tail, bool assume_noent,
                      void *index_op, const req_context& rctx,
+                     jspan_context& trace,
                      bool log_op = true);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     const req_context& rctx, bool log_op = true);
+                     const req_context& rctx, jspan_context& trace, bool log_op = true);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
       const req_state* get_req_state() {
         return nullptr;  /* XXX dang Only used by LTTng, and it handles null anyway */
@@ -837,7 +839,7 @@ public:
       RGWRados::Object *target;
 
       struct DeleteParams {
-        rgw_user bucket_owner;
+        rgw_owner bucket_owner; // for quota stats update
         int versioning_status; // versioning flags defined in enum RGWBucketFlags
         ACLOwner obj_owner;    // needed for creation of deletion marker
         uint64_t olh_epoch;
@@ -975,7 +977,7 @@ public:
                    uint64_t accounted_size, const ceph::real_time& ut,
                    const std::string& etag, const std::string& content_type,
                    const std::string& storage_class,
-                   bufferlist *acl_bl, RGWObjCategory category,
+                   const ACLOwner& owner, RGWObjCategory category,
 		   std::list<rgw_obj_index_key> *remove_objs,
 		   optional_yield y,
 		   const std::string *user_data = nullptr,
@@ -1070,13 +1072,15 @@ public:
   bool swift_versioning_enabled(const RGWBucketInfo& bucket_info) const;
 
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
-                            const rgw_user& user,               /* in */
+                            const ACLOwner& owner,              /* in */
+                            const rgw_user& remote_user,        /* in */
                             RGWBucketInfo& bucket_info,         /* in */
                             const rgw_obj& obj,                 /* in */
                             const DoutPrefixProvider *dpp,      /* in */
                             optional_yield y);                  /* in */
   int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
-                               const rgw_user& user,            /* in */
+                               const ACLOwner& owner,           /* in */
+                               const rgw_user& remote_user,     /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in/out */
                                bool& restored,                  /* out */
@@ -1172,7 +1176,8 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   int copy_obj(RGWObjectCtx& obj_ctx,
-               const rgw_user& user_id,
+               const ACLOwner& owner, // owner of destination object
+               const rgw_user& remote_user, // uid for fetch_remote_obj() auth
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& dest_obj,
@@ -1199,9 +1204,11 @@ public:
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                const DoutPrefixProvider *dpp,
-               optional_yield y);
+               optional_yield y,
+               jspan_context& trace);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
+               const ACLOwner& owner,
                RGWBucketInfo& dest_bucket_info,
                const rgw_placement_rule& dest_placement,
 	       RGWRados::Object::Read& read_op, off_t end,
@@ -1575,7 +1582,7 @@ public:
   int fix_tail_obj_locator(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
                            rgw_obj_key& key, bool fix, bool *need_fix, optional_yield y);
 
-  int check_quota(const DoutPrefixProvider *dpp, const rgw_user& bucket_owner, rgw_bucket& bucket,
+  int check_quota(const DoutPrefixProvider *dpp, const rgw_owner& bucket_owner, rgw_bucket& bucket,
                   RGWQuota& quota, uint64_t obj_size,
 		  optional_yield y, bool check_size_only = false);
 

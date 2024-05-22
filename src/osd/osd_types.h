@@ -315,9 +315,9 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
 inline std::ostream& operator<<(std::ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;
-  if (loc.nspace.length())
+  if (!loc.nspace.empty())
     out << ";" << loc.nspace;
-  if (loc.key.length())
+  if (!loc.key.empty())
     out << ":" << loc.key;
   return out;
 }
@@ -587,6 +587,10 @@ struct spg_t {
 
   ghobject_t make_pgmeta_oid() const {
     return ghobject_t::make_pgmeta(pgid.pool(), pgid.ps(), shard);
+  }
+
+  ghobject_t make_snapmapper_oid() const {
+    return ghobject_t::make_snapmapper(pgid.pool(), pgid.ps(), shard);
   }
 
   void encode(ceph::buffer::list &bl) const {
@@ -6234,7 +6238,7 @@ std::ostream& operator<<(std::ostream& out, const PushOp &op);
  */
 struct ScrubMap {
   struct object {
-    std::map<std::string, ceph::buffer::ptr, std::less<>> attrs;
+    std::map<std::string, ceph::buffer::list, std::less<>> attrs;
     uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
     __u32 digest;              ///< data crc32c
@@ -6298,6 +6302,7 @@ WRITE_CLASS_ENCODER(ScrubMap)
 struct ScrubMapBuilder {
   bool deep = false;
   std::vector<hobject_t> ls;
+  bool metadata_done = false;
   size_t pos = 0;
   int64_t data_pos = 0;
   std::string omap_pos;
@@ -6322,6 +6327,7 @@ struct ScrubMapBuilder {
 
   void next_object() {
     ++pos;
+    metadata_done = false;
     data_pos = 0;
     omap_pos.clear();
     omap_keys = 0;
@@ -6333,6 +6339,7 @@ struct ScrubMapBuilder {
     if (pos.pos < pos.ls.size()) {
       out << " " << pos.ls[pos.pos];
     }
+    out << " metadata_done " << pos.metadata_done;
     if (pos.data_pos < 0) {
       out << " byte " << pos.data_pos;
     }

@@ -45,18 +45,19 @@ void SimpleLock::dump(ceph::Formatter *f) const {
 
 int SimpleLock::get_wait_shift() const {
   switch (get_type()) {
-    case CEPH_LOCK_DN:       return 8;
-    case CEPH_LOCK_DVERSION: return 8 + 1*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IAUTH:    return 8 + 2*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ILINK:    return 8 + 3*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IDFT:     return 8 + 4*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IFILE:    return 8 + 5*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IVERSION: return 8 + 6*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IXATTR:   return 8 + 7*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ISNAP:    return 8 + 8*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_INEST:    return 8 + 9*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_DN:       return 0;
+    case CEPH_LOCK_DVERSION: return 1*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IAUTH:    return 2*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_ILINK:    return 3*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IDFT:     return 4*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IFILE:    return 5*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IVERSION: return 6*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IXATTR:   return 7*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_ISNAP:    return 8*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_INEST:    return 9*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IFLOCK:   return 10*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IPOLICY:  return 11*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IQUIESCE: return 12*SimpleLock::WAIT_BITS;
     default:
       ceph_abort();
   }
@@ -106,4 +107,40 @@ std::vector<MDLockCache*> SimpleLock::get_active_caches() {
     }
   }
   return result;
+}
+
+void SimpleLock::_print(std::ostream& out) const
+{
+  out << get_lock_type_name(get_type()) << " ";
+  out << get_state_name(get_state());
+  if (!get_gather_set().empty())
+    out << " g=" << get_gather_set();
+  {
+    std::string flags;
+    if (is_leased())
+      flags += "l";
+    if (is_cached())
+      flags += "c";
+    if (needs_recover())
+      flags += "r";
+    if (!flags.empty()) {
+      out << " " << flags;
+    }
+  }
+  if (is_rdlocked())
+    out << " r=" << get_num_rdlocks();
+  if (is_wrlocked())
+    out << " w=" << get_num_wrlocks();
+  if (is_xlocked()) {
+    out << " x=" << get_num_xlocks();
+    if (auto mut = get_xlock_by(); mut) {
+      out << " by " << *mut;
+    }
+  }
+#if 0
+  if (is_stable())
+    out << " stable";
+  else
+    out << " unstable";
+#endif
 }

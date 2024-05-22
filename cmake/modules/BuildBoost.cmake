@@ -11,6 +11,8 @@
 #  Boost_USE_STATIC_LIBS : boolean (default: OFF)
 #  Boost_USE_MULTITHREADED : boolean (default: OFF)
 #  BOOST_J: integer (defanult 1)
+#
+# Note: Remove boost_redis submodule once upgraded to Boost version that includes it
 
 function(check_boost_version source_dir expected_version)
   set(version_hpp "${source_dir}/boost/version.hpp")
@@ -47,7 +49,11 @@ endmacro()
 
 function(do_build_boost root_dir version)
   cmake_parse_arguments(Boost_BUILD "" "" COMPONENTS ${ARGN})
-  set(boost_features "variant=release")
+  if(CMAKE_BUILD_TYPE STREQUAL Debug)
+    set(boost_features "variant=debug")
+  else()
+    set(boost_features "variant=release")
+  endif()
   if(Boost_USE_MULTITHREADED)
     list(APPEND boost_features "threading=multi")
   else()

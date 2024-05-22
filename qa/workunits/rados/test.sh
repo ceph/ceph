@@ -16,7 +16,8 @@ function cleanup() {
 }
 trap cleanup EXIT ERR HUP INT QUIT
 
-GTEST_OUTPUT="xml:/home/ubuntu/cephtest/archive/gtest_xml_report"
+GTEST_OUTPUT_DIR=${TESTDIR:-$(mktemp -d)}/archive/unit_test_xml_report
+mkdir -p $GTEST_OUTPUT_DIR
 
 declare -A pids
 
@@ -35,7 +36,6 @@ for f in \
     api_service api_service_pp \
     api_c_write_operations \
     api_c_read_operations \
-    api_cls_remote_reads \
     list_parallel \
     open_pools_parallel \
     delete_pools_parallel
@@ -43,7 +43,7 @@ do
     if [ $parallel -eq 1 ]; then
 	r=`printf '%25s' $f`
 	ff=`echo $f | awk '{print $1}'`
-	bash -o pipefail -exc "ceph_test_rados_$f --gtest_output=$GTEST_OUTPUT-$f.xml $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
+	bash -o pipefail -exc "ceph_test_rados_$f --gtest_output=xml:$GTEST_OUTPUT_DIR/$f.xml $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
 	pid=$!
 	echo "test $f on pid $pid"
 	pids[$f]=$pid

@@ -9,6 +9,8 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "common/perf_counters.h"
+#include "common/perf_counters_key.h"
 #include "include/types.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -19,6 +21,16 @@
 #define dout_subsys ceph_subsys_cephfs_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "cephfs::mirror::Mirror " << __func__
+
+using namespace std::chrono;
+
+// Performance Counters
+enum {
+  l_cephfs_mirror_first = 4000,
+  l_cephfs_mirror_file_systems_mirrorred,
+  l_cephfs_mirror_file_systems_mirror_enable_failures,
+  l_cephfs_mirror_last,
+};
 
 namespace cephfs {
 namespace mirror {
@@ -237,7 +249,7 @@ int Mirror::init_mon_client() {
     return r;
   }
 
-  r = m_monc->authenticate(std::chrono::duration<double>(m_cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
+  r = m_monc->authenticate(duration<double>(m_cct->_conf.get_val<seconds>("client_mount_timeout")).count());
   if (r < 0) {
     derr << ": failed to authenticate to monitor: " << cpp_strerror(r) << dendl;
     return r;
@@ -277,6 +289,17 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
+  std::string labels = ceph::perf_counters::key_create("cephfs_mirror");
+  PerfCountersBuilder plb(m_cct, labels, l_cephfs_mirror_first, l_cephfs_mirror_last);
+
+  auto prio = m_cct->_conf.get_val<int64_t>("cephfs_mirror_perf_stats_prio");
+  plb.add_u64(l_cephfs_mirror_file_systems_mirrorred,
+	      "mirrored_filesystems", "Filesystems mirrored", "mir", prio);
+  plb.add_u64_counter(l_cephfs_mirror_file_systems_mirror_enable_failures,
+		      "mirror_enable_failures", "Mirroring enable failures", "mirf", prio);
+  m_perf_counters = plb.create_perf_counters();
+  m_cct->get_perfcounters_collection()->add(m_perf_counters);
+
   return 0;
 }
 
@@ -285,6 +308,13 @@ void Mirror::shutdown() {
   m_stopping = true;
   m_cluster_watcher->shutdown();
   m_cond.notify_all();
+
+  PerfCounters *perf_counters = nullptr;
+  std::swap(perf_counters, m_perf_counters);
+  if (perf_counters != nullptr) {
+    m_cct->get_perfcounters_collection()->remove(perf_counters);
+    delete perf_counters;
+  }
 }
 
 void Mirror::reopen_logs() {
@@ -328,6 +358,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
     m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
                                                  SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
                                                  true);
+    if (m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_file_systems_mirror_enable_failures);
+    }
     return;
   }
 
@@ -341,6 +374,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
   }
 
   dout(10) << ": Initialized FSMirror for filesystem=" << filesystem << dendl;
+  if (m_perf_counters) {
+    m_perf_counters->inc(l_cephfs_mirror_file_systems_mirrorred);
+  }
 }
 
 void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
@@ -358,6 +394,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
     m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
                                                  SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
                                                  true);
+    if (m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_file_systems_mirror_enable_failures);
+    }
     return;
   }
 
@@ -367,6 +406,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
   m_cond.notify_all();
 
   dout(10) << ": Initialized FSMirror for filesystem=" << filesystem << dendl;
+  if (m_perf_counters) {
+    m_perf_counters->inc(l_cephfs_mirror_file_systems_mirrorred);
+  }
 }
 
 void Mirror::enable_mirroring(const Filesystem &filesystem, uint64_t local_pool_id,
@@ -421,6 +463,10 @@ void Mirror::handle_disable_mirroring(const Filesystem &filesystem, int r) {
       dout(10) << ": no pending actions for filesystem=" << filesystem << dendl;
       m_mirror_actions.erase(filesystem);
     }
+  }
+
+  if (m_perf_counters) {
+    m_perf_counters->dec(l_cephfs_mirror_file_systems_mirrorred);
   }
 }
 
@@ -503,24 +549,23 @@ void Mirror::peer_removed(const Filesystem &filesystem, const Peer &peer) {
 void Mirror::update_fs_mirrors() {
   dout(20) << dendl;
 
-  auto now = ceph_clock_now();
-  double blocklist_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
-    ("cephfs_mirror_restart_mirror_on_blocklist_interval").count();
-  double failed_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
-    ("cephfs_mirror_restart_mirror_on_failure_interval").count();
+  seconds blocklist_interval = g_ceph_context->_conf.get_val<seconds>
+    ("cephfs_mirror_restart_mirror_on_blocklist_interval");
+  seconds failed_interval = g_ceph_context->_conf.get_val<seconds>
+    ("cephfs_mirror_restart_mirror_on_failure_interval");
 
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
       auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
-	(failed_interval > 0 && (mirror_action.fs_mirror->get_failed_ts() - now) > failed_interval);
+	(failed_interval.count() > 0 && duration_cast<seconds>(mirror_action.fs_mirror->get_failed_ts() - clock::now()) > failed_interval);
       auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
-	(blocklist_interval > 0 && (mirror_action.fs_mirror->get_blocklisted_ts() - now) > blocklist_interval);
+	(blocklist_interval.count() > 0 && duration_cast<seconds>(mirror_action.fs_mirror->get_blocklisted_ts() - clock::now()) > blocklist_interval);
 
       if (!mirror_action.action_in_progress && !_is_restarting(filesystem)) {
 	if (failed_restart || blocklisted_restart) {
 	  dout(5) << ": filesystem=" << filesystem << " failed mirroring (failed: "
-		  << failed_restart << ", blocklisted: " << blocklisted_restart << dendl;
+		  << failed_restart << ", blocklisted: " << blocklisted_restart << ")" << dendl;
 	  _set_restarting(filesystem);
 	  auto peers = mirror_action.fs_mirror->get_peers();
 	  auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
@@ -548,7 +593,7 @@ void Mirror::schedule_mirror_update_task() {
                                      m_timer_task = nullptr;
                                      update_fs_mirrors();
                                    });
-  double after = g_ceph_context->_conf.get_val<std::chrono::seconds>
+  double after = g_ceph_context->_conf.get_val<seconds>
     ("cephfs_mirror_action_update_interval").count();
   dout(20) << ": scheduling fs mirror update (" << m_timer_task << ") after "
            << after << " seconds" << dendl;

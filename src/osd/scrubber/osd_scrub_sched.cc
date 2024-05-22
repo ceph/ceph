@@ -168,42 +168,6 @@ void ScrubQueue::delay_on_failure(
 }
 
 
-sched_params_t ScrubQueue::determine_scrub_time(
-  const requested_scrub_t& request_flags,
-  const pg_info_t& pg_info,
-  const pool_opts_t& pool_conf) const
-{
-  sched_params_t res;
-
-  if (request_flags.must_scrub || request_flags.need_auto) {
-
-    // Set the smallest time that isn't utime_t()
-    res.proposed_time = PgScrubber::scrub_must_stamp();
-    res.is_must = Scrub::must_scrub_t::mandatory;
-    // we do not need the interval data in this case
-
-  } else if (pg_info.stats.stats_invalid && conf()->osd_scrub_invalid_stats) {
-    res.proposed_time = time_now();
-    res.is_must = Scrub::must_scrub_t::mandatory;
-
-  } else {
-    res.proposed_time = pg_info.history.last_scrub_stamp;
-    res.min_interval = pool_conf.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
-    res.max_interval = pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
-  }
-
-  dout(15) << fmt::format(
-		"suggested: {:s} hist: {:s} v:{}/{} must:{} pool-min:{} {}",
-		res.proposed_time, pg_info.history.last_scrub_stamp,
-		(bool)pg_info.stats.stats_invalid,
-		conf()->osd_scrub_invalid_stats,
-		(res.is_must == must_scrub_t::mandatory ? "y" : "n"),
-		res.min_interval, request_flags)
-	   << dendl;
-  return res;
-}
-
-
 std::vector<ScrubTargetId> ScrubQueue::ready_to_scrub(
     OSDRestrictions restrictions,  // note: 4B in size! (copy)
     utime_t scrub_tick)

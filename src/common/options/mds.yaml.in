@@ -74,6 +74,24 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_cache_quiesce_delay
+  type: millisecs
+  level: dev
+  desc: delay before starting recursive quiesce inode operations
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_quiesce_splitauth
+  type: bool
+  level: advanced
+  desc: allow recursive quiesce across auth boundaries
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_cache_release_free_interval
   type: secs
   level: dev
@@ -141,6 +159,33 @@ options:
   level: advanced
   desc: threshold for number of dentries that can be trimmed
   default: 256_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_quiesce_decay_rate
+  type: float
+  level: advanced
+  desc: decay rate for quiescing inodes throttle
+  default: 1
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_quiesce_threshold
+  type: size
+  level: advanced
+  desc: threshold for number of inodes that can be quiesced
+  default: 512_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_quiesce_sleep
+  type: millisecs
+  level: advanced
+  desc: sleep time for request after passing quiesce threshold
+  default: 200
   services:
   - mds
   flags:
@@ -1127,14 +1172,14 @@ options:
   default: false
   services:
   - mds
-- name: mds_kill_skip_replaying_inotable
+- name: mds_kill_after_journal_logs_flushed
   type: bool
   level: dev
   default: false
   services:
   - mds
-  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
-    the premary MDS will crash, while the replacing MDS won't.
+  fmt_desc: The primary MDS will crash just after the mknod/openc journal logs
+    are flushed to the pool.
     (for testing only).
   with_legacy: true
 - name: mds_inject_skip_replaying_inotable
@@ -1143,8 +1188,7 @@ options:
   default: false
   services:
   - mds
-  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
-    the premary MDS will crash, while the replacing MDS won't.
+  fmt_desc: MDS will skip replaying the inotable when replaying the journal logs.
     (for testing only).
   with_legacy: true
 #  percentage of MDS modify replies to skip sending the client a trace on [0-1]
@@ -1582,7 +1626,7 @@ options:
   long_desc: Laggy OSD(s) can make clients laggy or unresponsive, this can
     lead to their eviction, this option once enabled can help defer client
     eviction.
-  default: true
+  default: false
   services:
   - mds
   flags:
@@ -1631,6 +1675,22 @@ options:
   desc: MDS log trimming interval
   long_desc: Interval in milliseconds to trim MDS logs.
   default: 1000
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_server_dispatch_killpoint_random
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_server_dispatch_client_request_delay
+  type: millisecs
+  level: dev
+  default: 0
   services:
   - mds
   flags:

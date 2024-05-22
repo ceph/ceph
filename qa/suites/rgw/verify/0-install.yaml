@@ -1,9 +1,10 @@
 tasks:
 - install:
       # extra packages added for the rgw-datacache task
+      # java and maven needed for S3 trailer signature tests
       extra_system_packages:
-        deb: ['s3cmd']
-        rpm: ['s3cmd']
+        deb: ['s3cmd', 'maven']
+        rpm: ['s3cmd', 'maven']
 - ceph:
 - openssl_keys:
 - rgw:

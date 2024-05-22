@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import math
 import time
 from typing import Any, Dict, Iterable, List, Optional, Union, cast
 
@@ -101,7 +102,7 @@ class Pool(RESTController):
 
         crush_rules = {r['rule_id']: r["rule_name"] for r in mgr.get('osd_map_crush')['rules']}
 
-        res: Dict[Union[int, str], Union[str, List[Any]]] = {}
+        res: Dict[Union[int, str], Union[str, List[Any], Dict[str, Any]]] = {}
         for attr in attrs:
             if attr not in pool:
                 continue
@@ -111,6 +112,15 @@ class Pool(RESTController):
                 res[attr] = crush_rules[pool[attr]]
             elif attr == 'application_metadata':
                 res[attr] = list(pool[attr].keys())
+            # handle infinity values
+            elif attr == 'read_balance' and isinstance(pool[attr], dict):
+                read_balance: Dict[str, Any] = {}
+                for key, value in pool[attr].items():
+                    if isinstance(value, float) and math.isinf(value):
+                        read_balance[key] = "Infinity"
+                    else:
+                        read_balance[key] = value
+                res[attr] = read_balance
             else:
                 res[attr] = pool[attr]
 

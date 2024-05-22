@@ -148,7 +148,7 @@ options. By default, ``log-to-stdout`` is enabled, and ``--log-to-syslog`` is di
 vstart.sh
 ---------
 
-The following options aree handy when using ``vstart.sh``,
+The following options can be used with ``vstart.sh``.
 
 ``--crimson``
     Start ``crimson-osd`` instead of ``ceph-osd``.
@@ -194,9 +194,6 @@ The following options aree handy when using ``vstart.sh``,
     data in faster device will be evicted to the slower devices over time.
     Valid types include ``HDD``, ``SSD``(default), ``ZNS``, and ``RANDOM_BLOCK_SSD``
     Note secondary devices should not be faster than the main device.
-
-``--seastore``
-    Use SeaStore as the object store backend.
 
 To start a cluster with a single Crimson node, run::
 
@@ -478,3 +475,10 @@ addresses in the backtrace::
   [root@3deb50a8ad51 ~]# dnf install -q -y file
   [root@3deb50a8ad51 ~]# python3 seastar-addr2line -e /usr/bin/crimson-osd
   # paste the backtrace here
+
+Code Walkthroughs
+=================
+
+* `Ceph Code Walkthroughs: Crimson <https://www.youtube.com/watch?v=rtkrHk6grsg>`_
+
+* `Ceph Code Walkthroughs: SeaStore <https://www.youtube.com/watch?v=0rr5oWDE2Ck>`_

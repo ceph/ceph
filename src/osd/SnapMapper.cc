@@ -95,7 +95,7 @@ int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
 {
-  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+  CRIMSON_DEBUG("OSDriver::{}", __func__);
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, keys
@@ -107,54 +107,54 @@ int OSDriver::get_keys(
     assert(e.value() > 0);
     return -e.value();
   }))); // this requires seastar::thread
-  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 
 int OSDriver::get_next(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next)
 {
-  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+  CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, key
   ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
-    CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
-    if (auto nit = std::begin(vals); nit == std::end(vals)) {
-      CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
+    CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
+    if (auto nit = std::begin(vals);
+        nit == std::end(vals) || !SnapMapper::is_mapping(nit->first)) {
+      CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
       return -ENOENT;
     } else {
-      CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
+      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", nit->first);
       assert(nit->first > key);
       *next = *nit;
       return 0;
     }
   }, FuturizedStore::Shard::read_errorator::all_same_way([] {
-    CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
+    CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
     return -EINVAL;
   }))); // this requires seastar::thread
-  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 
 int OSDriver::get_next_or_current(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next_or_current)
 {
-  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+  CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
   // let's try to get current first
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
+    CRIMSON_DEBUG("OSDriver::get_next_or_current returning {}", key);
     assert(vals.size() == 1);
-    *next_or_current = std::make_pair(key, std::move(vals[0]));
+    *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
     [next_or_current, &key, this] {
+    CRIMSON_DEBUG("OSDriver::get_next_or_current no current, try next {}", key);
     // no current, try next
     return get_next(key, next_or_current);
   }))); // this requires seastar::thread
-  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
 }
 #else
 int OSDriver::get_keys(
@@ -576,56 +576,61 @@ void SnapMapper::reset_prefix_itr(snapid_t snap, const char *s)
   prefix_itr      = prefixes.begin();
 }
 
-void SnapMapper::get_objects_by_prefixes(
+vector<hobject_t> SnapMapper::get_objects_by_prefixes(
   snapid_t snap,
-  unsigned max,
-  vector<hobject_t> *out)
+  unsigned max)
 {
+  vector<hobject_t> out;
+
   /// maintain the prefix_itr between calls to avoid searching depleted prefixes
   for ( ; prefix_itr != prefixes.end(); prefix_itr++) {
-    string prefix(get_prefix(pool, snap) + *prefix_itr);
+    const string prefix(get_prefix(pool, snap) + *prefix_itr);
     string pos = prefix;
-    while (out->size() < max) {
+    while (out.size() < max) {
       pair<string, ceph::buffer::list> next;
       // access RocksDB (an expensive operation!)
       int r = backend.get_next(pos, &next);
       dout(20) << __func__ << " get_next(" << pos << ") returns " << r
-	       << " " << next << dendl;
+	       << " " << next.first << dendl;
       if (r != 0) {
-	return; // Done
-      }
-
-      if (next.first.substr(0, prefix.size()) !=
-	  prefix) {
-	// TBD: we access the DB twice for the first object of each iterator...
-	break; // Done with this prefix
+	return out; // Done
       }
 
       ceph_assert(is_mapping(next.first));
+
+      if (auto next_prefix = next.first.substr(0, prefix.size());
+          next_prefix != prefix) {
+	// TBD: we access the DB twice for the first object of each iterator...
+	dout(20) << fmt::format("{}: breaking, prefix expected {} got {}",
+	                        __func__, prefix, next_prefix)
+	         << dendl;
+	break; // Done with this prefix
+      }
 
       dout(20) << __func__ << " " << next.first << dendl;
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
       ceph_assert(next_decoded.first == snap);
       ceph_assert(check(next_decoded.second));
 
-      out->push_back(next_decoded.second);
+      out.push_back(next_decoded.second);
       pos = next.first;
     }
 
-    if (out->size() >= max) {
-      return;
+    if (out.size() >= max) {
+      dout(20) << fmt::format("{}: reached max of: {} returning",
+                              __func__, out.size())
+               << dendl;
+      return out;
     }
   }
+  return out;
 }
 
-int SnapMapper::get_next_objects_to_trim(
+std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
   snapid_t snap,
-  unsigned max,
-  vector<hobject_t> *out)
+  unsigned max)
 {
   dout(20) << __func__ << "::snapid=" << snap << dendl;
-  ceph_assert(out);
-  ceph_assert(out->empty());
 
   // if max would be 0, we return ENOENT and the caller would mistakenly
   // trim the snaptrim queue
@@ -649,24 +654,25 @@ int SnapMapper::get_next_objects_to_trim(
   // For more info see PG::filter_snapc()
   //
   // We still like to be extra careful and run one extra loop over all prefixes
-  get_objects_by_prefixes(snap, max, out);
-  if (unlikely(out->size() == 0)) {
+  auto objs = get_objects_by_prefixes(snap, max);
+  if (unlikely(objs.size() == 0)) {
     reset_prefix_itr(snap, "Second pass trim");
-    get_objects_by_prefixes(snap, max, out);
+    objs = get_objects_by_prefixes(snap, max);
 
-    if (unlikely(out->size() > 0)) {
+    if (unlikely(objs.size() > 0)) {
       derr << __func__ << "::New Clone-Objects were added to Snap " << snap
 	   << " after trimming was started" << dendl;
     }
     reset_prefix_itr(CEPH_NOSNAP, "Trim was completed successfully");
   }
 
-  if (out->size() == 0) {
-    return -ENOENT;
+  if (objs.size() == 0) {
+    return std::nullopt;
   } else {
-    return 0;
+    return objs;
   }
 }
+
 
 int SnapMapper::remove_oid(
   const hobject_t &oid,
@@ -764,6 +770,10 @@ int SnapMapper::_lookup_purged_snap(
   decode(gotpool, p);
   decode(*begin, p);
   decode(*end, p);
+  if (gotpool != pool) {
+    dout(20) << __func__ << " got wrong pool " << gotpool << dendl;
+    return -ENOENT;
+  }
   if (snap < *begin || snap >= *end) {
     dout(20) << __func__ << " pool " << pool << " snap " << snap
 	     << " found [" << *begin << "," << *end << "), no overlap" << dendl;

@@ -1,0 +1,13 @@
+# {{ cephadm_managed }}
+apiVersion: 1
+
+providers:
+  - name: 'Ceph Dashboard'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 3
+    editable: false
+    options:
+      path: '/etc/grafana/provisioning/dashboards'

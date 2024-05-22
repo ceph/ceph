@@ -266,10 +266,10 @@ OsdScrub::LoadTracker::LoadTracker(
 ///\todo replace with Knuth's algo (to reduce the numerical error)
 std::optional<double> OsdScrub::LoadTracker::update_load_average()
 {
-  int hb_interval = conf->osd_heartbeat_interval;
+  auto hb_interval = conf->osd_heartbeat_interval;
   int n_samples = std::chrono::duration_cast<seconds>(24h).count();
   if (hb_interval > 1) {
-    n_samples = std::max(n_samples / hb_interval, 1);
+    n_samples = std::max(n_samples / hb_interval, 1L);
   }
 
   double loadavg;
@@ -426,14 +426,6 @@ PerfCounters* OsdScrub::get_perf_counters(int pool_type, scrub_level_t level)
 
 // ////////////////////////////////////////////////////////////////////////// //
 // forwarders to the queue
-
-Scrub::sched_params_t OsdScrub::determine_scrub_time(
-    const requested_scrub_t& request_flags,
-    const pg_info_t& pg_info,
-    const pool_opts_t& pool_conf) const
-{
-  return m_queue.determine_scrub_time(request_flags, pg_info, pool_conf);
-}
 
 void OsdScrub::update_job(
     Scrub::ScrubJobRef sjob,

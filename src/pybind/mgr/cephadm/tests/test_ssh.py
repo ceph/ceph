@@ -103,3 +103,14 @@ class TestWithSSH:
 class TestWithoutSSH:
     def test_can_run(self, cephadm_module: CephadmOrchestrator):
         assert cephadm_module.can_run() == (False, "loading asyncssh library:No module named 'asyncssh'")
+
+
+def test_remote_command():
+    from cephadm.ssh import RemoteCommand, Executables
+
+    assert list(RemoteCommand(Executables.TRUE)) == ['true']
+    assert list(RemoteCommand(Executables.RM, ['-rf', '/tmp/blat'])) == [
+        'rm',
+        '-rf',
+        '/tmp/blat',
+    ]

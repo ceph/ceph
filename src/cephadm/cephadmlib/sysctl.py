@@ -16,10 +16,13 @@ from .file_utils import write_new
 logger = logging.getLogger()
 
 
-def install_sysctl(ctx: CephadmContext, fsid: str, daemon: DaemonForm) -> None:
+def install_sysctl(
+    ctx: CephadmContext, fsid: str, daemon: DaemonForm
+) -> None:
     """
     Set up sysctl settings
     """
+
     def _write(conf: Path, lines: List[str]) -> None:
         lines = [
             '# created by cephadm',
@@ -54,11 +57,14 @@ def sysctl_get(ctx: CephadmContext, variable: str) -> Union[str, None]:
     return out or None
 
 
-def filter_sysctl_settings(ctx: CephadmContext, lines: List[str]) -> List[str]:
+def filter_sysctl_settings(
+    ctx: CephadmContext, lines: List[str]
+) -> List[str]:
     """
     Given a list of sysctl settings, examine the system's current configuration
     and return those which are not currently set as described.
     """
+
     def test_setting(desired_line: str) -> bool:
         # Remove any comments
         comment_start = desired_line.find('#')
@@ -67,11 +73,14 @@ def filter_sysctl_settings(ctx: CephadmContext, lines: List[str]) -> List[str]:
         desired_line = desired_line.strip()
         if not desired_line or desired_line.isspace():
             return False
-        setting, desired_value = map(lambda s: s.strip(), desired_line.split('='))
+        setting, desired_value = map(
+            lambda s: s.strip(), desired_line.split('=')
+        )
         if not setting or not desired_value:
             return False
         actual_value = sysctl_get(ctx, setting)
         return desired_value != actual_value
+
     return list(filter(test_setting, lines))
 
 
@@ -81,36 +90,50 @@ def migrate_sysctl_dir(ctx: CephadmContext, fsid: str) -> None:
     This moves it to '/etc/sysctl.d'.
     """
     deprecated_location: str = '/usr/lib/sysctl.d'
-    deprecated_confs: List[str] = glob(f'{deprecated_location}/90-ceph-{fsid}-*.conf')
+    deprecated_confs: List[str] = glob(
+        f'{deprecated_location}/90-ceph-{fsid}-*.conf'
+    )
     if not deprecated_confs:
         return
 
     file_count: int = len(deprecated_confs)
-    logger.info(f'Found sysctl {file_count} files in deprecated location {deprecated_location}. Starting Migration.')
+    logger.info(
+        f'Found sysctl {file_count} files in deprecated location {deprecated_location}. Starting Migration.'
+    )
     for conf in deprecated_confs:
         try:
             shutil.move(conf, ctx.sysctl_dir)
             file_count -= 1
         except shutil.Error as err:
             if str(err).endswith('already exists'):
-                logger.warning(f'Destination file already exists. Deleting {conf}.')
+                logger.warning(
+                    f'Destination file already exists. Deleting {conf}.'
+                )
                 try:
                     os.unlink(conf)
                     file_count -= 1
                 except OSError as del_err:
                     logger.warning(f'Could not remove {conf}: {del_err}.')
             else:
-                logger.warning(f'Could not move {conf} from {deprecated_location} to {ctx.sysctl_dir}: {err}')
+                logger.warning(
+                    f'Could not move {conf} from {deprecated_location} to {ctx.sysctl_dir}: {err}'
+                )
 
     # Log successful migration
     if file_count == 0:
-        logger.info(f'Successfully migrated sysctl config to {ctx.sysctl_dir}.')
+        logger.info(
+            f'Successfully migrated sysctl config to {ctx.sysctl_dir}.'
+        )
         return
 
     # Log partially successful / unsuccessful migration
     files_processed: int = len(deprecated_confs)
     if file_count < files_processed:
-        status: str = f'partially successful (failed {file_count}/{files_processed})'
+        status: str = (
+            f'partially successful (failed {file_count}/{files_processed})'
+        )
     elif file_count == files_processed:
         status = 'unsuccessful'
-    logger.warning(f'Migration of sysctl configuration {status}. You may want to perform a migration manually.')
+    logger.warning(
+        f'Migration of sysctl configuration {status}. You may want to perform a migration manually.'
+    )

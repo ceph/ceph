@@ -1,6 +1,5 @@
 import argparse
 import pytest
-import os
 from ceph_volume import exceptions, process
 from ceph_volume.util import arg_validators
 from mock.mock import patch, MagicMock
@@ -12,23 +11,22 @@ class TestOSDPath(object):
         self.validator = arg_validators.OSDPath()
 
     def test_is_not_root(self, monkeypatch):
-        monkeypatch.setattr(os, 'getuid', lambda: 100)
+        monkeypatch.setattr('ceph_volume.decorators.os.getuid', lambda : 100)
         with pytest.raises(exceptions.SuperUserError):
             self.validator('')
 
-    def test_path_is_not_a_directory(self, is_root, monkeypatch, fake_filesystem):
+    def test_path_is_not_a_directory(self, monkeypatch, fake_filesystem):
         fake_file = fake_filesystem.create_file('/tmp/foo')
+        monkeypatch.setattr('ceph_volume.decorators.os.getuid', lambda : 0)
         monkeypatch.setattr(arg_validators.disk, 'is_partition', lambda x: False)
-        validator = arg_validators.OSDPath()
         with pytest.raises(argparse.ArgumentError):
-            validator(fake_file.path)
+            self.validator(fake_file.path)
 
-    def test_files_are_missing(self, is_root, tmpdir, monkeypatch):
-        tmppath = str(tmpdir)
-        monkeypatch.setattr(arg_validators.disk, 'is_partition', lambda x: False)
-        validator = arg_validators.OSDPath()
+    @patch('ceph_volume.decorators.os.getuid', return_value=0)
+    @patch('ceph_volume.util.arg_validators.disk.is_partition', return_value=False)
+    def test_files_are_missing(self, m_is_partition, m_getuid, fake_filesystem):
         with pytest.raises(argparse.ArgumentError) as error:
-            validator(tmppath)
+            self.validator('/tmp/osdpath')
         assert 'Required file (ceph_fsid) was not found in OSD' in str(error.value)
 
 

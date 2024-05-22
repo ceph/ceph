@@ -151,6 +151,8 @@ class MgrClient;
 class Finisher;
 class ScrubStack;
 class C_ExecAndReply;
+class QuiesceDbManager;
+class QuiesceAgent;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -254,6 +256,10 @@ class MDSRank {
       progress_thread.signal();
     }
 
+    uint64_t get_global_id() const {
+      return monc->get_global_id();
+    }
+
     // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
     // of unavoidable: if we want any depth into our calls 
@@ -305,8 +311,8 @@ class MDSRank {
 
     double get_dispatch_queue_max_age(utime_t now) const;
 
-    void send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
-    void send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr);
+    int send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
+    int send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr);
     void forward_message_mds(const MDRequestRef& mdr, mds_rank_t mds);
     void send_message_client_counted(const ref_t<Message>& m, client_t client);
     void send_message_client_counted(const ref_t<Message>& m, Session* session);
@@ -433,6 +439,9 @@ class MDSRank {
 
     bool cluster_degraded = false;
 
+    std::shared_ptr<QuiesceDbManager> quiesce_db_manager;
+    std::shared_ptr<QuiesceAgent> quiesce_agent;
+
     Finisher *finisher;
   protected:
     typedef enum {
@@ -495,13 +504,9 @@ class MDSRank {
     void command_tag_path(Formatter *f, std::string_view path,
                           std::string_view tag);
     // scrub control commands
-    void command_scrub_abort(Formatter *f, Context *on_finish);
-    void command_scrub_pause(Formatter *f, Context *on_finish);
     void command_scrub_resume(Formatter *f);
     void command_scrub_status(Formatter *f);
 
-    void command_flush_path(Formatter *f, std::string_view path);
-    void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
     void command_export_dir(Formatter *f,
         std::string_view path, mds_rank_t dest);
@@ -521,9 +526,12 @@ class MDSRank {
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
+    int command_quiesce_path(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+    void command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
+    void command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
 
     // FIXME the state machine logic should be separable from the dispatch
     // logic that calls it.
@@ -561,6 +569,10 @@ class MDSRank {
 
     void handle_mds_recovery(mds_rank_t who);
     void handle_mds_failure(mds_rank_t who);
+
+    void quiesce_cluster_update();
+    void quiesce_agent_setup();
+    bool quiesce_dispatch(const cref_t<Message> &m);
 
     /* Update MDSMap export_targets for this rank. Called on ::tick(). */
     void update_targets();

@@ -48,5 +48,6 @@ sensible.
     RGW module <rgw>
     MDS Autoscaler module <mds_autoscaler>
     NFS module <nfs>
+    SMB module <smb>
     Progress Module <progress>
     CLI API Commands module <cli_api>

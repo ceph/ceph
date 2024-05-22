@@ -42,12 +42,9 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addClusterTemplate()
     )
     .addTemplate(
-      $.addJobTemplate()
-    )
-    .addTemplate(
       $.addTemplateSchema('osd_hosts',
                           '$datasource',
-                          'label_values(ceph_disk_occupation{%(matchers)s}, exported_instance)' % $.matchers(),
+                          'label_values(ceph_osd_metadata{%(matchers)s}, hostname)' % $.matchers(),
                           1,
                           true,
                           1,
@@ -57,7 +54,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addTemplateSchema('mon_hosts',
                           '$datasource',
-                          'label_values(ceph_mon_metadata{%(matchers)s}, ceph_daemon)' % $.matchers(),
+                          'label_values(ceph_mon_metadata{%(matchers)s}, hostname)' % $.matchers(),
                           1,
                           true,
                           1,
@@ -67,7 +64,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addTemplateSchema('mds_hosts',
                           '$datasource',
-                          'label_values(ceph_mds_inodes{%(matchers)s}, ceph_daemon)' % $.matchers(),
+                          'label_values(ceph_mds_inodes{hostname, %(matchers)s})' % $.matchers(),
                           1,
                           true,
                           1,
@@ -77,7 +74,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addTemplateSchema('rgw_hosts',
                           '$datasource',
-                          'label_values(ceph_rgw_metadata{%(matchers)s}, ceph_daemon)' % $.matchers(),
+                          'label_values(ceph_rgw_metadata{hostname, %(matchers)s})' % $.matchers(),
                           1,
                           true,
                           1,
@@ -188,7 +185,7 @@ local g = import 'grafonnet/grafana.libsonnet';
               "instance", "$1", "instance", "([^.:]*).*"
             ) * on(instance, device) group_left(ceph_daemon) label_replace(
               label_replace(
-                ceph_disk_occupation_human{%(matchers)s, instance=~"($osd_hosts).*"},
+                ceph_disk_occupation_human{instance=~"($osd_hosts).*", %(matchers)s},
                 "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^.:]*).*"
             )
@@ -209,17 +206,17 @@ local g = import 'grafonnet/grafana.libsonnet';
         |||
           sum (
             (
-              rate(node_network_receive_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval]) or
-              rate(node_network_receive_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval])
+              rate(node_network_receive_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval]) or
+              rate(node_network_receive_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval])
             ) unless on (device, instance)
-            label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
+            label_replace((node_bonding_slaves > 0), "device", "$1", "master", "(.+)")
           ) +
           sum (
             (
-              rate(node_network_transmit_bytes{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval]) or
-              rate(node_network_transmit_bytes_total{instance=~"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*",device!="lo"}[$__rate_interval])
+              rate(node_network_transmit_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval]) or
+              rate(node_network_transmit_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval])
             ) unless on (device, instance)
-            label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)")
+            label_replace((node_bonding_slaves > 0), "device", "$1", "master", "(.+)")
           )
         |||,
         true,
@@ -271,7 +268,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             rate(node_network_transmit_bytes{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval]) or
             rate(node_network_transmit_bytes_total{instance=~"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*",device!="lo"}[$__rate_interval])
           ) unless on (device, instance)
-            label_replace((bonding_slaves > 0), "device", "$1", "master", "(.+)"))
+            label_replace((node_bonding_slaves > 0), "device", "$1", "master", "(.+)"))
           ))
         |||,
         '{{instance}}',
@@ -313,17 +310,14 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addClusterTemplate()
     )
     .addTemplate(
-      $.addJobTemplate()
-    )
-    .addTemplate(
       $.addTemplateSchema('ceph_hosts',
                           '$datasource',
-                          if $._config.showMultiCluster then ('label_values({%(clusterMatcher)s}, instance)' % $.matchers()) else 'label_values(instance)',
+                          'label_values({__name__=~"ceph_.+_metadata", %(matchers)s}, hostname)' % $.matchers(),
                           1,
-                          false,
-                          3,
-                          'Hostname',
-                          '([^.:]*).*')
+                          true,
+                          1,
+                          null,
+                          '([^.]*).*')
     )
     .addPanels([
       $.addRowSchema(false, true, '$ceph_hosts System Overview') + { gridPos: { x: 0, y: 0, w: 24, h: 1 } },
@@ -332,7 +326,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'OSDs',
         '',
         'current',
-        "count(sum by (ceph_daemon) (ceph_osd_metadata{%(matchers)s, hostname='$ceph_hosts'}))" % $.matchers(),
+        'count(sum by (ceph_daemon) (ceph_osd_metadata{%(matchers)s}))' % $.matchers(),
         null,
         'time_series',
         0,
@@ -532,7 +526,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         |||
           sum(
             ceph_osd_stat_bytes{%(matchers)s} and
-              on (ceph_daemon) ceph_disk_occupation{%(matchers)s, instance=~"($ceph_hosts)([\\\\.:].*)?"}
+              on (ceph_daemon) ceph_disk_occupation{instance=~"($ceph_hosts)([\\\\.:].*)?", %(matchers)s}
           )
         ||| % $.matchers(),
         null,
@@ -709,7 +703,7 @@ local g = import 'grafonnet/grafana.libsonnet';
               rate(node_disk_io_time_seconds_total{instance=~"($ceph_hosts)([\\\\.:].*)?"}[$__rate_interval]) * 100
             ), "instance", "$1", "instance", "([^:.]*).*"
           ) * on(instance, device) group_left(ceph_daemon) label_replace(
-            label_replace(ceph_disk_occupation_human{%(matchers)s, instance=~"($ceph_hosts)([\\\\.:].*)?"},
+            label_replace(ceph_disk_occupation_human{instance=~"($ceph_hosts)([\\\\.:].*)?", %(matchers)s},
             "device", "$1", "device", "/dev/(.*)"), "instance", "$1", "instance", "([^:.]*).*"
           )
         ||| % $.matchers(),
@@ -719,23 +713,74 @@ local g = import 'grafonnet/grafana.libsonnet';
         11,
         9
       ),
-      $.addTableSchema(
-        '$datasource',
-        'This table shows the 10 hosts with the highest number of slow ops',
-        { col: 2, desc: true },
-        [
-          $.overviewStyle('Instance', 'instance', 'string', 'short'),
-          $.overviewStyle('Slow Ops', 'Value', 'number', 'none'),
-          $.overviewStyle('', '/.*/', 'hidden', 'short'),
+
+      $.addTableExtended(
+        datasource='${datasource}',
+        title='Top Slow Ops per Host',
+        gridPosition={ h: 8, w: 6, x: 0, y: 30 },
+        options={
+          footer: {
+            fields: '',
+            reducer: ['sum'],
+            countRows: false,
+            enablePagination: false,
+            show: false,
+          },
+          frameIndex: 1,
+          showHeader: true,
+        },
+        custom={ align: 'null', cellOptions: { type: 'auto' }, filterable: true, inspect: false },
+        thresholds={
+          mode: 'absolute',
+          steps: [
+            { color: 'green', value: null },
+            { color: 'red', value: 80 },
+          ],
+        },
+        overrides=[
+          {
+            matcher: { id: 'byName', options: 'instance' },
+            properties: [
+              { id: 'displayName', value: 'Instance' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'Value' },
+            properties: [
+              { id: 'displayName', value: 'Slow Ops' },
+              { id: 'unit', value: 'none' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
         ],
-        'Top Slow Ops per Host',
-        'table'
+        pluginVersion='10.4.0'
       )
-      .addTarget(
+      .addTransformations([
+        {
+          id: 'merge',
+          options: { reducers: [] },
+        }
+        {
+          id: 'organize',
+          options: {
+            excludeByName: {
+              Time: true,
+              cluster: true,
+            },
+            indexByName: {},
+            renameByName: {},
+            includeByName: {},
+          },
+        },
+      ]).addTarget(
         $.addTargetSchema(
           |||
             topk(10,
-              (sum by (instance)(ceph_daemon_health_metrics{type="SLOW_OPS", ceph_daemon=~"osd.*"}))
+              (sum by (instance)(ceph_daemon_health_metrics{type="SLOW_OPS", ceph_daemon=~"osd.*", %(matchers)s}))
             )
           ||| % $.matchers(),
           '',
@@ -743,6 +788,6 @@ local g = import 'grafonnet/grafana.libsonnet';
           1,
           true
         )
-      ) + { gridPos: { x: 0, y: 40, w: 4, h: 8 } },
+      ),
     ]),
 }

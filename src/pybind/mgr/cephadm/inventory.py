@@ -8,7 +8,7 @@ import logging
 import math
 import socket
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
-    NamedTuple, Type
+    NamedTuple, Type, ValuesView
 
 import orchestrator
 from ceph.deployment import inventory
@@ -406,12 +406,14 @@ class ClientKeyringSpec(object):
             mode: Optional[int] = None,
             uid: Optional[int] = None,
             gid: Optional[int] = None,
+            include_ceph_conf: bool = True,
     ) -> None:
         self.entity = entity
         self.placement = placement
         self.mode = mode or 0o600
         self.uid = uid or 0
         self.gid = gid or 0
+        self.include_ceph_conf = include_ceph_conf
 
     def validate(self) -> None:
         pass
@@ -423,6 +425,7 @@ class ClientKeyringSpec(object):
             'mode': self.mode,
             'uid': self.uid,
             'gid': self.gid,
+            'include_ceph_conf': self.include_ceph_conf,
         }
 
     @property
@@ -1407,7 +1410,7 @@ class HostCache():
 
 
 class NodeProxyCache:
-    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+    def __init__(self, mgr: 'CephadmOrchestrator') -> None:
         self.mgr = mgr
         self.data: Dict[str, Any] = {}
         self.oob: Dict[str, Any] = {}
@@ -1425,7 +1428,7 @@ class NodeProxyCache:
 
             if host not in self.mgr.inventory.keys():
                 # remove entry for host that no longer exists
-                self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", None)
+                self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/data/{host}', None)
                 try:
                     self.oob.pop(host)
                     self.data.pop(host)
@@ -1439,15 +1442,15 @@ class NodeProxyCache:
     def save(self,
              host: str = '',
              data: Dict[str, Any] = {}) -> None:
-        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", json.dumps(data))
+        self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/data/{host}', json.dumps(data))
 
     def update_oob(self, host: str, host_oob_info: Dict[str, str]) -> None:
         self.oob[host] = host_oob_info
-        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/oob", json.dumps(self.oob))
+        self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', json.dumps(self.oob))
 
     def update_keyring(self, host: str, key: str) -> None:
         self.keyrings[host] = key
-        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/keyrings", json.dumps(self.keyrings))
+        self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/keyrings', json.dumps(self.keyrings))
 
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
@@ -1485,23 +1488,41 @@ class NodeProxyCache:
         """
         hostname = kw.get('hostname')
         hosts = [hostname] if hostname else self.data.keys()
-        mapper: Dict[bool, str] = {
-            True: 'error',
-            False: 'ok'
-        }
+
+        def is_unknown(statuses: ValuesView) -> bool:
+            return any([status['status']['health'].lower() == 'unknown' for status in statuses]) and not is_error(statuses)
+
+        def is_error(statuses: ValuesView) -> bool:
+            return any([status['status']['health'].lower() == 'error' for status in statuses])
 
         _result: Dict[str, Any] = {}
 
         for host in hosts:
             _result[host] = {}
             _result[host]['status'] = {}
+            state: str = ''
             data = self.data[host]
             for component, details in data['status'].items():
-                res = any([member['status']['health'].lower() != 'ok' for member in data['status'][component].values()])
-                _result[host]['status'][component] = mapper[res]
-            _result[host]['sn'] = data['sn']
-            _result[host]['host'] = data['host']
-            _result[host]['firmwares'] = data['firmwares']
+                _sys_id_res: List[str] = []
+                for element in details.values():
+                    values = element.values()
+                    if is_error(values):
+                        state = 'error'
+                    elif is_unknown(values) or not values:
+                        state = 'unknown'
+                    else:
+                        state = 'ok'
+                    _sys_id_res.append(state)
+                if any([s == 'unknown' for s in _sys_id_res]):
+                    state = 'unknown'
+                elif any([s == 'error' for s in _sys_id_res]):
+                    state = 'error'
+                else:
+                    state = 'ok'
+                _result[host]['status'][component] = state
+        _result[host]['sn'] = data['sn']
+        _result[host]['host'] = data['host']
+        _result[host]['status']['firmwares'] = data['firmwares']
         return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
@@ -1551,18 +1572,19 @@ class NodeProxyCache:
 
     def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
         results: Dict[str, Any] = {}
-        for component, data_component in self.data[hostname]['status'].items():
-            if component not in results.keys():
-                results[component] = {}
-            for member, data_member in data_component.items():
-                if component == 'power':
-                    data_member['status']['health'] = 'critical'
-                    data_member['status']['state'] = 'unplugged'
-                if component == 'memory':
-                    data_member['status']['health'] = 'critical'
-                    data_member['status']['state'] = 'errors detected'
-                if data_member['status']['health'].lower() != 'ok':
-                    results[component][member] = data_member
+        for sys_id, component in self.data[hostname]['status'].items():
+            for component_name, data_component in component.items():
+                if component_name not in results.keys():
+                    results[component_name] = {}
+                for member, data_member in data_component.items():
+                    if component_name == 'power':
+                        data_member['status']['health'] = 'critical'
+                        data_member['status']['state'] = 'unplugged'
+                    if component_name == 'memory':
+                        data_member['status']['health'] = 'critical'
+                        data_member['status']['state'] = 'errors detected'
+                    if data_member['status']['health'].lower() != 'ok':
+                        results[component_name][member] = data_member
         return results
 
     def criticals(self, **kw: Any) -> Dict[str, Any]:

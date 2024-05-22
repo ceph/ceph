@@ -77,6 +77,7 @@ override_dh_auto_install:
 	install -D -m 755 src/tools/rbd_nbd/rbd-nbd_quiesce $(DESTDIR)/usr/libexec/rbd-nbd/rbd-nbd_quiesce
 
 	install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml $(DESTDIR)/etc/prometheus/ceph/ceph_default_alerts.yml
+	install -m 644 -D monitoring/ceph-mixin/dashboards_out/* ${DESTDIR}/etc/grafana/dashboards/ceph-dashboard
 
 # doc/changelog is a directory, which confuses dh_installchangelogs
 override_dh_installchangelogs:
@@ -105,6 +106,7 @@ override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
+	dh_strip -pceph-exporter --dbg-package=ceph-exporter-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
 	dh_strip -pceph-base --dbg-package=ceph-base-dbg

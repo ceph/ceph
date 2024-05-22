@@ -37,7 +37,7 @@ static inline int rgw_http_error_to_errno(int http_err)
     case 503:
         return -EBUSY;
     default:
-        return -EIO;
+        return -ERR_INTERNAL_ERROR;
   }
 
   return 0; /* unreachable */

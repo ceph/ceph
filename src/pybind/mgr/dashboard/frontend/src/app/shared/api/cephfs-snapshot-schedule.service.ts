@@ -5,7 +5,12 @@ import { catchError, map } from 'rxjs/operators';
 import { intersection, isEqual, uniqWith } from 'lodash';
 import { SnapshotSchedule } from '../models/snapshot-schedule';
 import { of } from 'rxjs';
-import { RepeatFrequency } from '../enum/repeat-frequency.enum';
+import {
+  RepeaFrequencyPlural,
+  RepeaFrequencySingular,
+  RepeatFrequency
+} from '../enum/repeat-frequency.enum';
+import { RetentionFrequencyCopy } from '../enum/retention-frequency.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -19,25 +24,63 @@ export class CephfsSnapshotScheduleService {
     return this.http.post(`${this.baseURL}/snapshot/schedule`, data, { observe: 'response' });
   }
 
-  update(data: Record<string, any>): Observable<any> {
+  update({ fs, path, ...rest }: Record<string, any>): Observable<any> {
     return this.http.put(
-      `${this.baseURL}/snapshot/schedule/${data.fs}/${encodeURIComponent(data.path)}`,
-      data,
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}`,
+      rest,
       { observe: 'response' }
     );
+  }
+
+  activate({ fs, path, ...rest }: Record<string, any>): Observable<any> {
+    return this.http.post(
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}/activate`,
+      rest,
+      { observe: 'response' }
+    );
+  }
+
+  deactivate({ fs, path, ...rest }: Record<string, any>): Observable<any> {
+    return this.http.post(
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}/deactivate`,
+      rest,
+      { observe: 'response' }
+    );
+  }
+
+  delete({
+    fs,
+    path,
+    schedule,
+    start,
+    retentionPolicy,
+    subvol,
+    group
+  }: Record<string, any>): Observable<any> {
+    let deleteUrl = `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(
+      path
+    )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`;
+    if (retentionPolicy) {
+      deleteUrl += `&retention_policy=${retentionPolicy}`;
+    }
+    if (subvol && group) {
+      deleteUrl += `&subvol=${encodeURIComponent(subvol)}&group=${encodeURIComponent(group)}`;
+    }
+    return this.http.delete(deleteUrl);
   }
 
   checkScheduleExists(
     path: string,
     fs: string,
     interval: number,
-    frequency: RepeatFrequency
+    frequency: RepeatFrequency,
+    isSubvolume = false
   ): Observable<boolean> {
     return this.getSnapshotScheduleList(path, fs, false).pipe(
       map((response) => {
-        const index = response.findIndex(
-          (x) => x.path === path && x.schedule === `${interval}${frequency}`
-        );
+        const index = response
+          .filter((x) => (isSubvolume ? x.path.startsWith(path) : x.path === path))
+          .findIndex((x) => x.schedule === `${interval}${frequency}`);
         return index > -1;
       }),
       catchError(() => {
@@ -50,13 +93,16 @@ export class CephfsSnapshotScheduleService {
     path: string,
     fs: string,
     retentionFrequencies: string[],
-    retentionFrequenciesRemoved: string[] = []
+    retentionFrequenciesRemoved: string[] = [],
+    isSubvolume = false
   ): Observable<{ exists: boolean; errorIndex: number }> {
     return this.getSnapshotSchedule(path, fs, false).pipe(
       map((response) => {
         let errorIndex = -1;
         let exists = false;
-        const index = response.findIndex((x) => x.path === path);
+        const index = response.findIndex((x) =>
+          isSubvolume ? x.path.startsWith(path) : x.path === path
+        );
         const result = retentionFrequencies?.length
           ? intersection(
               Object.keys(response?.[index]?.retention).filter(
@@ -98,17 +144,35 @@ export class CephfsSnapshotScheduleService {
         uniqWith(
           snapList.map((snapItem: SnapshotSchedule) => ({
             ...snapItem,
+            scheduleCopy: this.parseScheduleCopy(snapItem.schedule),
             status: snapItem.active ? 'Active' : 'Inactive',
-            subvol: snapItem?.subvol || ' - ',
+            subvol: snapItem?.subvol,
+            retentionCopy: this.parseRetentionCopy(snapItem?.retention),
             retention: Object.values(snapItem?.retention || [])?.length
               ? Object.entries(snapItem.retention)
-                  ?.map?.(([frequency, interval]) => `${interval}${frequency.toLocaleUpperCase()}`)
+                  ?.map?.(([frequency, interval]) => `${interval}${frequency}`)
                   .join(' ')
               : '-'
           })),
           isEqual
         )
       )
+    );
+  }
+
+  parseScheduleCopy(schedule: string): string {
+    const scheduleArr = schedule.split('');
+    const interval = Number(scheduleArr.filter((x) => !isNaN(Number(x))).join(''));
+    const frequencyUnit = scheduleArr[scheduleArr.length - 1];
+    const frequency =
+      interval > 1 ? RepeaFrequencyPlural[frequencyUnit] : RepeaFrequencySingular[frequencyUnit];
+    return $localize`Every ${interval > 1 ? interval + ' ' : ''}${frequency}`;
+  }
+
+  parseRetentionCopy(retention: string | Record<string, number>): string[] {
+    if (!retention) return ['-'];
+    return Object.entries(retention).map(([frequency, interval]) =>
+      $localize`${interval} ${RetentionFrequencyCopy[frequency]}`.toLocaleLowerCase()
     );
   }
 }

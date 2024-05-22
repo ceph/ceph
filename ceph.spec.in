@@ -111,6 +111,16 @@
 # this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
 %endif
+# qat only supported for intel devices
+%ifarch x86_64
+%if 0%{?fedora} || 0%{?rhel} >= 9
+%bcond_without system_qat
+%else # not fedora/rhel
+%bcond_with system_qat
+%endif
+%else # not x86_64
+%bcond_with system_qat
+%endif
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -131,7 +141,26 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%{!?gts_prefix: %global gts_prefix gcc-toolset-11}
+%if 0%{with seastar}
+%{!?gts_version: %global gts_version 13}
+%else
+%if 0%{?rhel} == 8
+%{!?gts_version: %global gts_version 11}
+%endif
+%endif
+
+# gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
+# and perhaps elsewhere.  For now, let's just disable it.  See
+# ceph bug https://tracker.ceph.com/issues/63867
+# and
+# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
+# for details.
+#
+# Also disable lto on systems that do not support symver attribute
+# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
+%if 0%{?gts_version} == 13 || (0%{?rhel} && 0%{?rhel} < 9)  || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
+%define _lto_cflags %{nil}
+%endif
 
 %if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
@@ -163,8 +192,16 @@
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
-%if 0%{?rhel} == 8 && 0%{?enable_devtoolset11:1}
+%if 0%{?gts_version} > 0
+%if 0%{gts_version} == 13
+%if 0%{?enable_devtoolset13:1}
+%enable_devtoolset13
+%endif
+%else
+%if 0%{?enable_devtoolset11:1}
 %enable_devtoolset11
+%endif
+%endif
 %endif
 
 #################################################################################
@@ -219,10 +256,14 @@ BuildRequires:	gcc-c++ >= 11
 %if 0%{?suse_version} == 1500
 BuildRequires: gcc11-c++
 %endif
-%if 0%{?rhel} == 8
-BuildRequires:	%{gts_prefix}-gcc-c++
-BuildRequires:	%{gts_prefix}-build
-BuildRequires:	%{gts_prefix}-libatomic-devel
+%if 0%{?gts_version} > 0
+BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
+%if 0%{?gts_version} >= 12
+BuildRequires:	gcc-toolset-%{gts_version}-runtime
+%else
+BuildRequires:	gcc-toolset-%{gts_version}-build
+%endif
+BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
 BuildRequires:  libatomic
@@ -332,6 +373,10 @@ BuildRequires:  libarrow-devel
 BuildRequires:  parquet-libs-devel
 BuildRequires:  utf8proc-devel
 %endif
+%if 0%{with system_qat}
+BuildRequires:  qatlib-devel
+BuildRequires:  qatzip-devel
+%endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
 BuildRequires:  gnutls-devel
@@ -344,11 +389,15 @@ BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
-%if 0%{?rhel} == 8
-BuildRequires:  %{gts_prefix}-annobin
-BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
-BuildRequires:  %{gts_prefix}-libubsan-devel
-BuildRequires:  %{gts_prefix}-libasan-devel
+%if 0%{?gts_version} > 0
+%if 0%{?gts_version} >= 12
+BuildRequires:  gcc-toolset-%{gts_version}-gcc-plugin-annobin
+%else
+BuildRequires:  gcc-toolset-%{gts_version}-annobin
+BuildRequires:  gcc-toolset-%{gts_version}-annobin-plugin-gcc
+%endif
+BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
+BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
 %endif
 #################################################################################
@@ -631,7 +680,6 @@ Requires:       python%{python3_pkgversion}-grpcio-tools
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-routes
-Requires:       python%{python3_pkgversion}-werkzeug
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
 %if 0%{?fedora} || 0%{?rhel} <= 8
@@ -689,6 +737,11 @@ Requires:       python%{python3_pkgversion}-werkzeug
 Requires:       python%{python3_pkgversion}-CherryPy
 Requires:       python%{python3_pkgversion}-PyYAML
 Requires:       python%{python3_pkgversion}-Werkzeug
+%endif
+# RHEL8 has python 3.6 and that lacks dataclasses in the stdlib, so pull in the
+# backport dataclasses module instead.
+%if 0%{?rhel} <= 8
+Requires:       python%{python3_pkgversion}-dataclasses
 %endif
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
@@ -873,6 +926,9 @@ Provides:	ceph-test:/usr/bin/ceph-osdomap-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	sudo
 Requires:	libstoragemgmt
+%if 0%{with seastar}
+Requires:	protobuf
+%endif
 %if 0%{?weak_deps}
 Recommends:	ceph-volume = %{_epoch_prefix}%{version}-%{release}
 %endif
@@ -1320,11 +1376,6 @@ This package provides a Ceph hardware monitoring agent.
 %autosetup -p1 -n @TARBALL_BASENAME@
 
 %build
-# Disable lto on systems that do not support symver attribute
-# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
-%if ( 0%{?rhel} && 0%{?rhel} < 9 ) || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
-%define _lto_cflags %{nil}
-%endif
 
 %if 0%{with cephfs_java}
 # Find jni.h
@@ -1361,6 +1412,9 @@ cmake .. \
 %if 0%{?suse_version} == 1500
     -DCMAKE_C_COMPILER=gcc-11 \
     -DCMAKE_CXX_COMPILER=g++-11 \
+%endif
+%if 0%{?gts_version} == 13
+    -DCMAKE_EXE_LINKER_FLAGS=-lstdc++ \
 %endif
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
@@ -1446,6 +1500,10 @@ cmake .. \
 %if 0%{with system_arrow}
     -DWITH_SYSTEM_ARROW:BOOL=ON \
     -DWITH_SYSTEM_UTF8PROC:BOOL=ON \
+%endif
+%if 0%{with system_qat}
+    -DWITH_SYSTEM_QATLIB:BOOL=ON \
+    -DWITH_SYSTEM_QATZIP:BOOL=ON \
 %endif
 %if 0%{with seastar}
     -DWITH_SEASTAR:BOOL=ON \
@@ -1559,6 +1617,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 # prometheus alerts
 install -m 644 -D monitoring/ceph-mixin/prometheus_alerts.yml %{buildroot}/etc/prometheus/ceph/ceph_default_alerts.yml
 
+# grafana charts
+install -m 644 -D monitoring/ceph-mixin/dashboards_out/* %{buildroot}/etc/grafana/dashboards/ceph-dashboard/
+
 # SNMP MIB
 install -m 644 -D -t %{buildroot}%{_datadir}/snmp/mibs monitoring/snmp/CEPH-MIB.txt
 
@@ -1610,6 +1671,7 @@ rm -rf %{_vpath_builddir}
 %if %{with lttng}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
+%{_libdir}/libmgr_op_tp.so*
 %endif
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
@@ -1923,6 +1985,7 @@ fi
 %{_datadir}/ceph/mgr/restful
 %{_datadir}/ceph/mgr/rgw
 %{_datadir}/ceph/mgr/selftest
+%{_datadir}/ceph/mgr/smb
 %{_datadir}/ceph/mgr/snap_schedule
 %{_datadir}/ceph/mgr/stats
 %{_datadir}/ceph/mgr/status
@@ -2065,6 +2128,7 @@ fi
 
 %files -n ceph-exporter
 %{_bindir}/ceph-exporter
+%{_unitdir}/ceph-exporter.service
 
 %files -n rbd-fuse
 %{_bindir}/rbd-fuse
@@ -2499,6 +2563,7 @@ fi
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-dedup-tool
+%{_bindir}/ceph-dedup-daemon
 %if 0%{with seastar}
 %{_bindir}/crimson-store-nbd
 %endif
@@ -2657,6 +2722,5 @@ exit 0
 %dir %{python3_sitelib}/ceph_node_proxy
 %{python3_sitelib}/ceph_node_proxy/*
 %{python3_sitelib}/ceph_node_proxy-*
-#%{_mandir}/man8/ceph-node-proxy.8*
 
 %changelog

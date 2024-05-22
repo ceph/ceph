@@ -22,7 +22,13 @@
     "baseUrl": "./",
     "resolveJsonModule": true,
     "paths": {
-      "~/*": ["src/*"]
+      "~/*": ["src/*"],
+      "timers": [
+          "node_modules/timers-browserify"
+        ],
+        "stream": [
+          "node_modules/stream-browserify"
+        ]
     },
     "typeRoots": ["node_modules/@types"],
     "lib": ["es2017", "dom"],

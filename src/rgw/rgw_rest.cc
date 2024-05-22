@@ -498,15 +498,24 @@ void dump_time(req_state *s, const char *name, real_time t)
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(req_state *s, const rgw_user& id, const string& name,
+void dump_owner(req_state *s, const std::string& id, const string& name,
 		const char *section)
 {
   if (!section)
     section = "Owner";
   s->formatter->open_object_section(section);
-  s->formatter->dump_string("ID", id.to_str());
-  s->formatter->dump_string("DisplayName", name);
+  s->formatter->dump_string("ID", id);
+  if (!name.empty()) {
+    s->formatter->dump_string("DisplayName", name);
+  }
   s->formatter->close_section();
+}
+
+void dump_owner(req_state *s, const rgw_owner& owner, const string& name,
+		const char *section)
+{
+  std::string id = to_string(owner);
+  dump_owner(s, id, name, section);
 }
 
 void dump_access_control(req_state *s, const char *origin,
@@ -581,7 +590,7 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   dump_trans_id(s);
 
   if ((!s->is_err()) && s->bucket &&
-      (s->bucket->get_info().owner != s->user->get_id()) &&
+      (!s->auth.identity->is_owner_of(s->bucket->get_info().owner)) &&
       (s->bucket->get_info().requester_pays)) {
     dump_header(s, "x-amz-request-charged", "requester");
   }
@@ -670,13 +679,13 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
   if (op != NULL) {
     int new_err_no;
     new_err_no = op->error_handler(err_no, &error_content, y);
-    ldpp_dout(s, 1) << "op->ERRORHANDLER: err_no=" << err_no
+    ldpp_dout(s, 20) << "op->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   } else if (handler != NULL) {
     int new_err_no;
     new_err_no = handler->error_handler(err_no, &error_content, y);
-    ldpp_dout(s, 1) << "handler->ERRORHANDLER: err_no=" << err_no
+    ldpp_dout(s, 20) << "handler->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   }
@@ -1080,7 +1089,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   return len;
-}
+} /* RGWPutObj_ObjStore::get_data(bufferlist& bl) */
 
 
 /*
@@ -1865,20 +1874,6 @@ static http_op op_from_method(const char *method)
 int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET) {
-    // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
-    if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
-      try {
-        if (auto ret = s->user->read_attrs(s, y); ! ret) {
-          auto user_policies = get_iam_user_policy_from_attr(s->cct, s->user->get_attrs(), s->user->get_tenant());
-          s->iam_user_policies.insert(s->iam_user_policies.end(),
-                                      std::make_move_iterator(user_policies.begin()),
-                                      std::make_move_iterator(user_policies.end()));
-
-        }
-      } catch (const std::exception& e) {
-        ldpp_dout(op, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
-      }
-    }
     rgw_build_iam_environment(driver, s);
     return 0;
   }
@@ -2008,23 +2003,6 @@ RGWRESTMgr::~RGWRESTMgr()
     delete iter->second;
   }
   delete default_mgr;
-}
-
-int64_t parse_content_length(const char *content_length)
-{
-  int64_t len = -1;
-
-  if (*content_length == '\0') {
-    len = 0;
-  } else {
-    string err;
-    len = strict_strtoll(content_length, 10, &err);
-    if (!err.empty()) {
-      len = -1;
-    }
-  }
-
-  return len;
 }
 
 int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)

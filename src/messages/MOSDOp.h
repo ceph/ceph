@@ -36,7 +36,7 @@ namespace _mosdop {
 template<typename V>
 class MOSDOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 3;
 
 private:
@@ -364,9 +364,38 @@ struct ceph_osd_request_head {
 
       encode(retry_attempt, payload);
       encode(features, payload);
-    } else {
-      // latest v8 encoding with hobject_t hash separate from pgid, no
+    } else if (!HAVE_FEATURE(features, SERVER_SQUID)) {
+      // v8 encoding with hobject_t hash separate from pgid, no
       // reassert version
+      header.version = 8;
+
+      encode(pgid, payload);
+      encode(hobj.get_hash(), payload);
+      encode(osdmap_epoch, payload);
+      encode(flags, payload);
+      encode(reqid, payload);
+      encode_trace(payload, features);
+
+      // -- above decoded up front; below decoded post-dispatch thread --
+
+      encode(client_inc, payload);
+      encode(mtime, payload);
+      encode(get_object_locator(), payload);
+      encode(hobj.oid, payload);
+
+      __u16 num_ops = ops.size();
+      encode(num_ops, payload);
+      for (unsigned i = 0; i < ops.size(); i++)
+	encode(ops[i].op, payload);
+
+      encode(hobj.snap, payload);
+      encode(snap_seq, payload);
+      encode(snaps, payload);
+
+      encode(retry_attempt, payload);
+      encode(features, payload);
+    } else {
+      // latest v9 opentelemetry trace
       header.version = HEAD_VERSION;
 
       encode(pgid, payload);
@@ -375,6 +404,7 @@ struct ceph_osd_request_head {
       encode(flags, payload);
       encode(reqid, payload);
       encode_trace(payload, features);
+      encode_otel_trace(payload, features);
 
       // -- above decoded up front; below decoded post-dispatch thread --
 
@@ -404,6 +434,16 @@ struct ceph_osd_request_head {
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {
+      decode(pgid, p);
+      uint32_t hash;
+      decode(hash, p);
+      hobj.set_hash(hash);
+      decode(osdmap_epoch, p);
+      decode(flags, p);
+      decode(reqid, p);
+      decode_trace(p);
+      decode_otel_trace(p);
+    } else if (header.version == 8) {
       decode(pgid, p);      // actual pgid
       uint32_t hash;
       decode(hash, p); // raw hash value

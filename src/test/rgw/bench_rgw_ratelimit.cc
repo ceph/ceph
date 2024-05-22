@@ -6,7 +6,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/steady_timer.hpp>
-#include <spawn/spawn.hpp>
+#include <boost/asio/spawn.hpp>
 #include <chrono>
 #include <mutex>
 #include <unordered_map>
@@ -37,7 +37,7 @@ struct parameters {
 std::shared_ptr<std::vector<client_info>> ds = std::make_shared<std::vector<client_info>>(std::vector<client_info>());
 
 std::string method[2] = {"PUT", "GET"};
-void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, spawn::yield_context& yield, boost::asio::io_context& ioctx)
+void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, boost::asio::yield_context& yield, boost::asio::io_context& ioctx)
 {
     auto dout = DoutPrefix(g_ceph_context, ceph_subsys_rgw, "rate limiter: ");
     boost::asio::steady_timer timer(ioctx);
@@ -101,7 +101,7 @@ bool simulate_request(client_info& it, const RGWRateLimitInfo& info, std::shared
     it.accepted++;
     return false;
 }
-void simulate_client(client_info& it, const RGWRateLimitInfo& info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, spawn::yield_context& ctx, bool& to_run, boost::asio::io_context& ioctx)
+void simulate_client(client_info& it, const RGWRateLimitInfo& info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, boost::asio::yield_context& ctx, bool& to_run, boost::asio::io_context& ioctx)
 {
     for (;;)
     {
@@ -130,11 +130,13 @@ void simulate_clients(boost::asio::io_context& context, std::string tenant, cons
         auto& it = ds->emplace_back(client_info());
         it.tenant = tenant;
         int x = ds->size() - 1;
-        spawn::spawn(context,
-                [&to_run ,x, ratelimit, info, params, &context](spawn::yield_context ctx)
+        boost::asio::spawn(context,
+                [&to_run ,x, ratelimit, info, params, &context](boost::asio::yield_context ctx)
                 {
                     auto& it = ds.get()->operator[](x);
                     simulate_client(it, info, ratelimit, params, ctx, to_run, context);
+                }, [] (std::exception_ptr eptr) {
+                  if (eptr) std::rethrow_exception(eptr);
                 });
     }
 }

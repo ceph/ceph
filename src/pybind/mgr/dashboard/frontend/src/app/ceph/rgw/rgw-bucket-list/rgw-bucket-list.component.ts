@@ -13,11 +13,13 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 const BASE_URL = 'rgw/bucket';
@@ -35,6 +37,8 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   bucketSizeTpl: TemplateRef<any>;
   @ViewChild('bucketObjectTpl', { static: true })
   bucketObjectTpl: TemplateRef<any>;
+  @ViewChild('deleteTpl', { static: true })
+  deleteTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -51,7 +55,8 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
-    protected ngZone: NgZone
+    protected ngZone: NgZone,
+    private taskWrapper: TaskWrapperService
   ) {
     super(ngZone);
   }
@@ -156,31 +161,39 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   }
 
   deleteAction() {
+    const itemNames = this.selection.selected.map((bucket: any) => bucket['bid']);
     this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: this.selection.hasSingleSelection ? $localize`bucket` : $localize`buckets`,
-      itemNames: this.selection.selected.map((bucket: any) => bucket['bid']),
+      itemNames: itemNames,
+      bodyTemplate: this.deleteTpl,
       submitActionObservable: () => {
         return new Observable((observer: Subscriber<any>) => {
-          // Delete all selected data table rows.
-          observableForkJoin(
-            this.selection.selected.map((bucket: any) => {
-              return this.rgwBucketService.delete(bucket.bid);
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('rgw/bucket/delete', {
+                bucket_names: itemNames
+              }),
+              call: observableForkJoin(
+                this.selection.selected.map((bucket: any) => {
+                  return this.rgwBucketService.delete(bucket.bid);
+                })
+              )
             })
-          ).subscribe({
-            error: (error) => {
-              // Forward the error to the observer.
-              observer.error(error);
-              // Reload the data table content because some deletions might
-              // have been executed successfully in the meanwhile.
-              this.table.refreshBtn();
-            },
-            complete: () => {
-              // Notify the observer that we are done.
-              observer.complete();
-              // Reload the data table content.
-              this.table.refreshBtn();
-            }
-          });
+            .subscribe({
+              error: (error: any) => {
+                // Forward the error to the observer.
+                observer.error(error);
+                // Reload the data table content because some deletions might
+                // have been executed successfully in the meanwhile.
+                this.table.refreshBtn();
+              },
+              complete: () => {
+                // Notify the observer that we are done.
+                observer.complete();
+                // Reload the data table content.
+                this.table.refreshBtn();
+              }
+            });
         });
       }
     });

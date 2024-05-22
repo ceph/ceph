@@ -29,13 +29,14 @@
 #include <ostream>
 using std::ostream;
 
-#include "include/types.h"
-#include "OpRequest.h"
-
 #include <list>
 #include <vector>
 #include <boost/optional.hpp>
 #include <boost/fusion/include/adapt_struct.hpp>
+
+#include "include/types.h"
+#include "osd/osd_op_util.h"
+
 
 static const __u8 OSD_CAP_R     = (1 << 1);      // read
 static const __u8 OSD_CAP_W     = (1 << 2);      // write

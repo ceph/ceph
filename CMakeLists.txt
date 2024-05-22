@@ -83,6 +83,40 @@ if(WITH_CCACHE)
   endif()
 endif(WITH_CCACHE)
 
+option(WITH_SCCACHE "Build with sccache.")
+if(WITH_SCCACHE)
+  find_program(SCCACHE_EXECUTABLE sccache)
+  if(NOT SCCACHE_EXECUTABLE)
+    message(FATAL_ERROR "Can't find sccache. Is it installed?")
+  endif()
+  if(NOT NINJA_MAX_COMPILE_JOBS)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+      execute_process(
+        COMMAND "sccache" "--dist-status"
+        OUTPUT_VARIABLE sccache_dist_status
+      )
+      string(
+        JSON sccache_cores
+        ERROR_VARIABLE sccache_dist_status_error
+        GET "${sccache_dist_status}" SchedulerStatus 1 num_cpus
+      )
+      string(FIND "${sccache_dist_status}" "disabled" find_result)
+      if(find_result EQUAL -1)
+        message(STATUS "Using sccache with distributed compilation. Effective cores: ${sccache_cores}")
+        set(NINJA_MAX_COMPILE_JOBS ${sccache_cores})
+        set(NINJA_MAX_LINK_JOBS ${sccache_cores})
+      else()
+        message(WARNING "Using sccache, but it is not configured for distributed complilation")
+      endif()
+    else()
+      message(WARNING "Using sccache, but cannot determine maximum job value since cmake version is <3.19")
+    endif()
+  endif()
+  message(STATUS "Building with sccache: ${SCCACHE_EXECUTABLE}, SCCACHE_CONF=$ENV{SCCACHE_CONF}")
+  set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
+  set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
+endif(WITH_SCCACHE)
+
 option(WITH_MANPAGE "Build man pages." ON)
 if(WITH_MANPAGE)
   find_program(SPHINX_BUILD
@@ -307,16 +341,45 @@ endif()
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 
-option(WITH_QAT "Enable Qat driver" OFF)
-if(WITH_QAT)
+CMAKE_DEPENDENT_OPTION(WITH_QATLIB "Enable QAT with qatlib" ON
+  "CMAKE_SYSTEM_PROCESSOR MATCHES amd64|x86_64|AMD64" OFF)
+option(WITH_SYSTEM_QATLIB "Use system packages for qatlib" OFF)
+option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_QATZIP "Enable QATzip" ON
+  "CMAKE_SYSTEM_PROCESSOR MATCHES amd64|x86_64|AMD64" OFF)
+option(WITH_SYSTEM_QATZIP "Use system packages for QATzip" OFF)
+
+if(WITH_QATDRV)
   find_package(QatDrv REQUIRED COMPONENTS qat_s usdm_drv_s)
-  set(HAVE_QATDRV $(QatDrv_FOUND))
+  set(HAVE_QAT TRUE)
+elseif(WITH_QATLIB)
+  if(NOT WITH_SYSTEM_QAT)
+    include(BuildQAT)
+    build_qat()
+  endif()
+  find_package(QAT REQUIRED)
+  if(NOT WITH_SYSTEM_QAT)
+    add_dependencies(QAT::qat qatlib_ext)
+    add_dependencies(QAT::usdm qatlib_ext)
+  endif()
+  set(HAVE_QAT TRUE)
 endif()
 
-option(WITH_QATZIP "Enable QATZIP" OFF)
 if(WITH_QATZIP)
-  find_package(qatzip REQUIRED)
-  set(HAVE_QATZIP ${qatzip_FOUND})
+  if(NOT HAVE_QAT)
+    message(FATAL_ERROR "WITH_QATZIP requires WITH_QATLIB or WITH_QATDRV")
+  endif()
+  if(NOT WITH_SYSTEM_QATZIP)
+    include(BuildQATzip)
+    build_qatzip()
+    # qatzip build depends on qatlib
+    add_dependencies(qatzip_ext QAT::qat)
+  endif()
+  find_package(QATzip REQUIRED)
+  if(NOT WITH_SYSTEM_QATZIP)
+    add_dependencies(QAT::zip qatzip_ext)
+  endif()
+  set(HAVE_QATZIP TRUE)
 endif(WITH_QATZIP)
 
 # needs mds and? XXX
@@ -579,7 +642,7 @@ option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 set(UNIT_TESTS_BUILT ${WITH_TESTS})
-set(CEPH_TEST_TIMEOUT 3600 CACHE STRING 
+set(CEPH_TEST_TIMEOUT 7200 CACHE STRING
   "Maximum time before a CTest gets killed" )
 
 # fio
@@ -699,7 +762,7 @@ if(WITH_SYSTEM_NPM)
     message(FATAL_ERROR "Can't find npm.")
   endif()
 endif()
-set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
+set(DASHBOARD_FRONTEND_LANGS "ALL" CACHE STRING
   "List of comma separated ceph-dashboard frontend languages to build. \
   Use value `ALL` to build all languages")
 CMAKE_DEPENDENT_OPTION(WITH_MGR_ROOK_CLIENT "Enable the mgr's Rook support" ON

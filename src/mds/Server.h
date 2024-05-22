@@ -17,6 +17,8 @@
 
 #include <string_view>
 
+using namespace std::literals::string_view_literals;
+
 #include <common/DecayCounter.h>
 
 #include "include/common_fwd.h"
@@ -237,6 +239,9 @@ public:
   void handle_client_removexattr(const MDRequestRef& mdr);
 
   void handle_client_fsync(const MDRequestRef& mdr);
+  
+  // check layout
+  bool is_valid_layout(file_layout_t *layout);
 
   // open
   void handle_client_open(const MDRequestRef& mdr);
@@ -438,6 +443,7 @@ private:
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
            xattr_name.rfind("ceph.file.layout", 0) == 0 ||
            xattr_name.rfind("ceph.quota", 0) == 0 ||
+           xattr_name == "ceph.quiesce.block"sv ||
            xattr_name == "ceph.dir.subvolume" ||
            xattr_name == "ceph.dir.pin" ||
            xattr_name == "ceph.dir.pin.random" ||
@@ -559,6 +565,9 @@ private:
   uint64_t cap_acquisition_throttle;
   double max_caps_throttle_ratio;
   double caps_throttle_retry_request_timeout;
+
+  std::chrono::milliseconds dispatch_client_request_delay{0};
+  double dispatch_killpoint_random{0.0};
 
   size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
   size_t fscrypt_last_block_max_size = g_conf().get_val<Option::size_t>("mds_fscrypt_last_block_max_size");

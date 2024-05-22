@@ -4,6 +4,8 @@ from typing import List, Optional, TYPE_CHECKING
 import multiprocessing as mp
 import threading
 
+from . import ssh
+
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
@@ -38,7 +40,8 @@ class OfflineHostWatcher(threading.Thread):
     def check_host(self, host: str) -> None:
         if host not in self.mgr.offline_hosts:
             try:
-                self.mgr.ssh.check_execute_command(host, ['true'], log_command=self.mgr.log_refresh_metadata)
+                rcmd = ssh.RemoteCommand(ssh.Executables.TRUE)
+                self.mgr.ssh.check_execute_command(host, rcmd, log_command=self.mgr.log_refresh_metadata)
             except Exception:
                 logger.debug(f'OfflineHostDetector: detected {host} to be offline')
                 # kick serve loop in case corrective action must be taken for offline host

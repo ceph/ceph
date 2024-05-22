@@ -25,7 +25,6 @@ add_executable(ceph_test_rgw_d4n_directory
   test_d4n_directory.cc
   )
 target_include_directories(ceph_test_rgw_d4n_directory
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
 target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   rgw_common
@@ -35,18 +34,14 @@ target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE spawn)
 install(TARGETS ceph_test_rgw_d4n_directory DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
   
-if(WITH_RADOSGW_D4N)
-add_executable(ceph_test_rgw_d4n_filter
-  test_d4n_filter.cc
-  ) 
-target_include_directories(ceph_test_rgw_d4n_filter
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/dbstore/common")
-target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
+add_executable(ceph_test_rgw_d4n_policy
+  test_d4n_policy.cc
+  )
+target_include_directories(ceph_test_rgw_d4n_policy
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE
   rgw_common
   librados
   ceph-common
@@ -54,8 +49,37 @@ target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE spawn)
-install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS ceph_test_rgw_d4n_policy DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_rgw_redis_driver
+  test_redis_driver.cc
+  )
+target_include_directories(ceph_test_rgw_redis_driver
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_link_libraries(ceph_test_rgw_redis_driver PRIVATE
+  rgw_common
+  librados
+  ceph-common
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+install(TARGETS ceph_test_rgw_redis_driver DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_rgw_ssd_driver
+  test_ssd_driver.cc
+  )
+target_include_directories(ceph_test_rgw_ssd_driver
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_link_libraries(ceph_test_rgw_ssd_driver PRIVATE
+  rgw_common
+  librados
+  ceph-common
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+install(TARGETS ceph_test_rgw_ssd_driver DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 #unittest_rgw_bencode

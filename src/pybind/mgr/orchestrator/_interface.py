@@ -38,11 +38,12 @@ from ceph.deployment.service_spec import (
     IscsiServiceSpec,
     MDSSpec,
     NFSServiceSpec,
+    NvmeofServiceSpec,
     RGWSpec,
+    SMBSpec,
     SNMPGatewaySpec,
     ServiceSpec,
     TunedProfileSpec,
-    NvmeofServiceSpec
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
@@ -403,6 +404,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_fullreport(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy full report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
         Return node-proxy firmwares report
@@ -574,6 +583,7 @@ class Orchestrator(object):
             'ingress': self.apply_ingress,
             'snmp-gateway': self.apply_snmp_gateway,
             'host': self.add_host,
+            'smb': self.apply_smb,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -767,6 +777,18 @@ class Orchestrator(object):
         """set prometheus access information"""
         raise NotImplementedError()
 
+    def set_custom_prometheus_alerts(self, alerts_file: str) -> OrchResult[str]:
+        """set prometheus custom alerts files and schedule reconfig of prometheus"""
+        raise NotImplementedError()
+
+    def set_prometheus_target(self, url: str) -> OrchResult[str]:
+        """set prometheus target for multi-cluster"""
+        raise NotImplementedError()
+
+    def remove_prometheus_target(self, url: str) -> OrchResult[str]:
+        """remove prometheus target for multi-cluster"""
+        raise NotImplementedError()
+
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
         """get alertmanager access information"""
         raise NotImplementedError()
@@ -801,6 +823,10 @@ class Orchestrator(object):
 
     def apply_snmp_gateway(self, spec: SNMPGatewaySpec) -> OrchResult[str]:
         """Update an existing snmp gateway service"""
+        raise NotImplementedError()
+
+    def apply_smb(self, spec: SMBSpec) -> OrchResult[str]:
+        """Update a smb gateway service"""
         raise NotImplementedError()
 
     def apply_tuned_profiles(self, specs: List[TunedProfileSpec], no_overwrite: bool) -> OrchResult[str]:
@@ -901,7 +927,8 @@ def daemon_type_to_service(dtype: str) -> str:
         'elasticsearch': 'elasticsearch',
         'jaeger-agent': 'jaeger-agent',
         'jaeger-collector': 'jaeger-collector',
-        'jaeger-query': 'jaeger-query'
+        'jaeger-query': 'jaeger-query',
+        'smb': 'smb',
     }
     return mapping[dtype]
 
@@ -935,7 +962,8 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'jaeger-agent': ['jaeger-agent'],
         'jaeger-collector': ['jaeger-collector'],
         'jaeger-query': ['jaeger-query'],
-        'jaeger-tracing': ['elasticsearch', 'jaeger-query', 'jaeger-collector', 'jaeger-agent']
+        'jaeger-tracing': ['elasticsearch', 'jaeger-query', 'jaeger-collector', 'jaeger-agent'],
+        'smb': ['smb'],
     }
     return mapping[stype]
 

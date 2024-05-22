@@ -74,7 +74,7 @@ backend backend
     balance static-rr
     option httpchk HEAD / HTTP/1.0
     {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100 inter {{ health_check_interval }}
     {% endfor %}
 {% endif %}
 {% if mode == 'tcp' %}
@@ -85,6 +85,6 @@ backend backend
     default-server {{ default_server_opts|join(" ") }}
 {% endif %}
     {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check
     {% endfor %}
 {% endif %}

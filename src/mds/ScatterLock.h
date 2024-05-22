@@ -22,7 +22,7 @@
 
 class ScatterLock : public SimpleLock {
 public:
-  ScatterLock(MDSCacheObject *o, LockType *lt) :
+  ScatterLock(MDSCacheObject *o, const LockType *lt) :
     SimpleLock(o, lt) {}
   ~ScatterLock() override {
     ceph_assert(!_more);

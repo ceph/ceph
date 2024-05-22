@@ -53,6 +53,7 @@ TYPE(rgw_usage_log_entry)
 TYPE(rgw_cls_bi_entry)
 TYPE(rgw_bucket_olh_entry)
 TYPE(rgw_usage_data)
+TYPE(rgw_s3select_usage_data)
 TYPE(rgw_usage_log_info)
 TYPE(rgw_user_bucket)
 TYPE(cls_rgw_lc_entry)
@@ -125,6 +126,8 @@ TYPE(cls_user_bucket)
 TYPE(cls_user_bucket_entry)
 TYPE(cls_user_stats)
 TYPE(cls_user_header)
+TYPE(cls_user_account_header)
+TYPE(cls_user_account_resource)
 
 #include "cls/user/cls_user_ops.h"
 TYPE(cls_user_set_buckets_op)
@@ -134,6 +137,12 @@ TYPE(cls_user_list_buckets_ret)
 TYPE(cls_user_get_header_op)
 TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
+TYPE(cls_user_account_resource_add_op)
+TYPE(cls_user_account_resource_get_op)
+TYPE(cls_user_account_resource_get_ret)
+TYPE(cls_user_account_resource_rm_op)
+TYPE(cls_user_account_resource_list_op)
+TYPE(cls_user_account_resource_list_ret)
 
 #include "cls/journal/cls_journal_types.h"
 TYPE(cls::journal::ObjectPosition)
@@ -153,6 +162,8 @@ TYPE(obj_version)
 TYPE(RGWAccessKey)
 TYPE(RGWSubUser)
 TYPE(RGWUserInfo)
+TYPE(RGWAccountInfo)
+TYPE(RGWGroupInfo)
 TYPE(rgw_bucket)
 TYPE(RGWBucketInfo)
 TYPE(RGWBucketEnt)
@@ -235,5 +246,17 @@ TYPE(RGWUID)
 
 #include "rgw_user_types.h"
 TYPE(rgw_user)
+
+#include "rgw_oidc_provider.h"
+TYPE(RGWOIDCProviderInfo)
+
+#include "driver/rados/groups.h"
+TYPE(rgwrados::groups::resource_metadata)
+
+#include "driver/rados/roles.h"
+TYPE(rgwrados::roles::resource_metadata)
+
+#include "driver/rados/users.h"
+TYPE(rgwrados::users::resource_metadata)
 
 #endif

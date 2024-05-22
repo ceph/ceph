@@ -58,11 +58,11 @@ int ErasureCodeShec::init(ErasureCodeProfile &profile,
   return ErasureCode::init(profile, ss);
 }
 
-unsigned int ErasureCodeShec::get_chunk_size(unsigned int object_size) const
+unsigned int ErasureCodeShec::get_chunk_size(unsigned int stripe_width) const
 {
   unsigned alignment = get_alignment();
-  unsigned tail = object_size % alignment;
-  unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
+  unsigned tail = stripe_width % alignment;
+  unsigned padded_length = stripe_width + (tail ? (alignment - tail) : 0);
 
   ceph_assert(padded_length % k == 0);
   return padded_length / k;

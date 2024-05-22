@@ -6,7 +6,7 @@ requests
 Routes
 -e ../../../python-common
 prettytable
-pytest
+pytest==7.0.1
 pyyaml
 natsort
 setuptools

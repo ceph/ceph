@@ -11,7 +11,7 @@ overrides:
         mon osdmap full prune interval: 2
         mon osdmap full prune txsize: 2
 # thrashing monitors may make mgr have trouble w/ its keepalive
-    log-whitelist:
+    log-ignorelist:
       - overall HEALTH_
       - \(MGR_DOWN\)
       - \(MON_DOWN\)

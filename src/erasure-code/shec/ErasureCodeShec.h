@@ -69,7 +69,7 @@ public:
     return k;
   }
 
-  unsigned int get_chunk_size(unsigned int object_size) const override;
+  unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
   int _minimum_to_decode(const std::set<int> &want_to_read,
 			 const std::set<int> &available_chunks,

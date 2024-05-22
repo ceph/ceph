@@ -22,19 +22,35 @@ class RedFishClient(BaseClient):
         self.url: str = f'https://{self.host}:{self.port}'
         self.token: str = ''
         self.location: str = ''
+        self.session_service: str = ''
+
+    def sessionservice_discover(self) -> None:
+        _error_msg: str = "Can't discover SessionService url"
+        try:
+            _headers, _data, _status_code = self.query(endpoint=RedFishClient.PREFIX)
+            json_data: Dict[str, Any] = json.loads(_data)
+            self.session_service = json_data['Links']['Sessions']['@odata.id']
+        except (URLError, KeyError) as e:
+            msg = f'{_error_msg}: {e}'
+            self.log.error(msg)
+            raise RuntimeError
 
     def login(self) -> None:
         if not self.is_logged_in():
+            self.log.debug('Discovering SessionService url...')
+            self.sessionservice_discover()
+            self.log.debug(f'SessionService url is {self.session_service}')
             self.log.info('Logging in to '
                           f"{self.url} as '{self.username}'")
             oob_credentials = json.dumps({'UserName': self.username,
                                           'Password': self.password})
             headers = {'Content-Type': 'application/json'}
+            location_endpoint: str = ''
 
             try:
                 _headers, _data, _status_code = self.query(data=oob_credentials,
                                                            headers=headers,
-                                                           endpoint='/redfish/v1/SessionService/Sessions/')
+                                                           endpoint=self.session_service)
                 if _status_code != 201:
                     self.log.error(f"Can't log in to {self.url} as '{self.username}': {_status_code}")
                     raise RuntimeError
@@ -43,7 +59,14 @@ class RedFishClient(BaseClient):
                 self.log.error(msg)
                 raise RuntimeError
             self.token = _headers['X-Auth-Token']
-            self.location = _headers['Location']
+            if _headers['Location'].startswith('http'):
+                # We assume the value has the following format:
+                # scheme://address:port/redfish/v1/SessionService/Session
+                location_endpoint = f"/{_headers['Location'].split('/', 3)[-1:][0]}"
+            else:
+                location_endpoint = _headers['Location']
+            self.location = location_endpoint
+            self.log.info(f'Logged in to {self.url}, Received header "Location": {self.location}')
 
     def is_logged_in(self) -> bool:
         self.log.debug(f'Checking token validity for {self.url}')
@@ -111,5 +134,5 @@ class RedFishClient(BaseClient):
 
             return response_headers, response_str, response_status
         except (HTTPError, URLError) as e:
-            self.log.debug(f'{e}')
+            self.log.debug(f'endpoint={endpoint} err={e}')
             raise

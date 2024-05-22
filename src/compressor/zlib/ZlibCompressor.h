@@ -20,19 +20,18 @@
 #include "common/config.h"
 #include "compressor/Compressor.h"
 
+class QatAccel;
+
 class ZlibCompressor : public Compressor {
   bool isal_enabled;
   CephContext *const cct;
-public:
-  ZlibCompressor(CephContext *cct, bool isal)
-    : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct) {
 #ifdef HAVE_QATZIP
-    if (cct->_conf->qat_compressor_enabled && qat_accel.init("zlib"))
-      qat_enabled = true;
-    else
-      qat_enabled = false;
+  bool qat_enabled;
+  static QatAccel qat_accel;
 #endif
-  }
+
+ public:
+  ZlibCompressor(CephContext *cct, bool isal);
 
   int compress(const ceph::buffer::list &in, ceph::buffer::list &out, std::optional<int32_t> &compressor_message) override;
   int decompress(const ceph::buffer::list &in, ceph::buffer::list &out, std::optional<int32_t> compressor_message) override;

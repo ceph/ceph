@@ -30,10 +30,52 @@ class StoreDriver : public Driver {
 
     int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override {return -EOPNOTSUPP;}
+    int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override {return -EOPNOTSUPP;}
     int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
 	optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
     int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
+    int read_topic_v2(const std::string& topic_name,
+                      const std::string& tenant,
+                      rgw_pubsub_topic& topic,
+                      RGWObjVersionTracker* objv_tracker,
+                      optional_yield y,
+                      const DoutPrefixProvider* dpp) override {
+      return -EOPNOTSUPP;
+    }
+    int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                       RGWObjVersionTracker& objv_tracker,
+                       optional_yield y,
+                       const DoutPrefixProvider* dpp) override {
+      return -EOPNOTSUPP;
+    }
+    int remove_topic_v2(const std::string& topic_name,
+                        const std::string& tenant,
+                        RGWObjVersionTracker& objv_tracker,
+                        optional_yield y,
+                        const DoutPrefixProvider* dpp) override {
+      return -EOPNOTSUPP;
+    }
+    int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                    const std::string& bucket_key,
+                                    bool add_mapping,
+                                    optional_yield y,
+                                    const DoutPrefixProvider* dpp) override {
+      return -EOPNOTSUPP;
+    }
+    int remove_bucket_mapping_from_topics(
+        const rgw_pubsub_bucket_topics& bucket_topics,
+        const std::string& bucket_key,
+        optional_yield y,
+        const DoutPrefixProvider* dpp) override {
+      return -EOPNOTSUPP;
+    }
+    int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                 std::set<std::string>& bucket_keys,
+                                 optional_yield y,
+                                 const DoutPrefixProvider* dpp) override {
+      return -EOPNOTSUPP;
+    }
 };
 
 class StoreUser : public User {
@@ -93,7 +135,7 @@ class StoreBucket : public Bucket {
 
     virtual Attrs& get_attrs(void) override { return attrs; }
     virtual int set_attrs(Attrs a) override { attrs = a; return 0; }
-    virtual const rgw_user& get_owner() const override { return info.owner; };
+    virtual const rgw_owner& get_owner() const override { return info.owner; }
     virtual bool empty() const override { return info.bucket.name.empty(); }
     virtual const std::string& get_name() const override { return info.bucket.name; }
     virtual const std::string& get_tenant() const override { return info.bucket.tenant; }
@@ -145,6 +187,7 @@ class StoreObject : public Object {
     RGWObjState state;
     Bucket* bucket = nullptr;
     bool delete_marker{false};
+    jspan_context trace_ctx{false, false};
 
   public:
     StoreObject() = default;
@@ -217,6 +260,8 @@ class StoreObject : public Object {
        * work with lifecycle */
       return -1;
     }
+    jspan_context& get_trace() override { return trace_ctx; }
+    void set_trace (jspan_context&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }
 
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                  optional_yield y, bufferlist& bl) override {
@@ -254,7 +299,7 @@ public:
 
   virtual std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() override { return parts; }
 
-  virtual const jspan_context& get_trace() override { return trace_ctx; }
+  virtual jspan_context& get_trace() override { return trace_ctx; }
 
   virtual void print(std::ostream& out) const override {
     out << get_meta();
@@ -363,14 +408,15 @@ class StoreNotification : public Notification {
 protected:
   Object* obj;
   Object* src_obj;
-  rgw::notify::EventType event_type;
+  rgw::notify::EventTypeList event_types;
 
-  public:
-    StoreNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type)
-      : obj(_obj), src_obj(_src_obj), event_type(_type)
-    {}
+ public:
+  StoreNotification(Object* _obj,
+                    Object* _src_obj,
+                    rgw::notify::EventTypeList _types)
+      : obj(_obj), src_obj(_src_obj), event_types(std::move(_types)) {}
 
-    virtual ~StoreNotification() = default;
+  virtual ~StoreNotification() = default;
 };
 
 class StoreWriter : public Writer {

@@ -35,9 +35,14 @@ export class SettingsService {
     );
   }
 
-  ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
+  ifSettingConfigured(
+    url: string,
+    fn: (value?: string) => void,
+    elseFn?: () => void,
+    forceRefresh = false
+  ): void {
     const setting = this.settings[url];
-    if (setting === undefined) {
+    if (forceRefresh || setting === undefined) {
       this.http.get(url).subscribe(
         (data: any) => {
           this.settings[url] = this.getSettingsValue(data);

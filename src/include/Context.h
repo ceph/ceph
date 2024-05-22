@@ -310,8 +310,8 @@ private:
 #ifdef DEBUG_GATHER
   std::set<ContextType*> waitfor;
 #endif
-  int sub_created_count = 0;
-  int sub_existing_count = 0;
+  uint64_t sub_created_count = 0;
+  uint64_t sub_existing_count = 0;
   mutable ceph::recursive_mutex lock =
     ceph::make_recursive_mutex("C_GatherBase::lock"); // disable lockdep
   bool activated = false;

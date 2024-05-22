@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <cstdint>
 #include <errno.h>
 #include <array>
 #include <string.h>
@@ -463,6 +464,15 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       }
     } catch (const buffer::error&) {} // omit x-rgw-replicated-from headers
   }
+  if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_TIMESTAMP);
+      i != attrs.end()) {
+    try {
+      ceph::real_time replicated_time;
+      decode(replicated_time, i->second);
+      dump_time_header(s, "x-rgw-replicated-at", replicated_time);
+    } catch (const buffer::error&) {}
+  }
+
   if (multipart_parts_count) {
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
@@ -1582,7 +1592,16 @@ void RGWGetUsage_ObjStore_S3::send_response()
       utime_t ut(entry.epoch, 0);
       ut.gmtime(formatter->dump_stream("Time"));
       formatter->dump_int("Epoch", entry.epoch);
+
       dump_usage_categories_info(formatter, entry, &categories);
+
+      formatter->open_object_section("s3select");
+      if (categories.empty() || categories.count("s3select")) {
+        encode_json("BytesProcessed", entry.s3select_usage.bytes_processed, formatter);
+        encode_json("BytesReturned", entry.s3select_usage.bytes_returned, formatter);
+      }
+      formatter->close_section(); // s3select
+
       formatter->close_section(); // bucket
     }
 
@@ -1612,6 +1631,8 @@ void RGWGetUsage_ObjStore_S3::send_response()
        encode_json("BytesReceived", total_usage.bytes_received, formatter);
        encode_json("Ops", total_usage.ops, formatter);
        encode_json("SuccessfulOps", total_usage.successful_ops, formatter);
+       encode_json("BytesProcessed", entry.s3select_usage.bytes_processed, formatter);
+       encode_json("BytesReturned", entry.s3select_usage.bytes_returned, formatter);
        formatter->close_section(); // total
        formatter->close_section(); // user
      }
@@ -1799,7 +1820,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
         auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
         s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
-      dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
+      dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (iter->meta.appendable) {
         s->formatter->dump_string("Type", "Appendable");
       } else {
@@ -1890,7 +1911,7 @@ void RGWListBucket_ObjStore_S3::send_response()
       s->formatter->dump_int("Size", iter->meta.accounted_size);
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
       s->formatter->dump_string("StorageClass", storage_class.c_str());
-      dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
+      dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
 	s->formatter->dump_string("RgwxTag", iter->tag);
       }
@@ -1967,7 +1988,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
         s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
       if (fetchOwner == true) {
-        dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
+        dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       }
       s->formatter->close_section();
     }
@@ -2035,7 +2056,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
       s->formatter->dump_string("StorageClass", storage_class.c_str());
       if (fetchOwner == true) {
-        dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
+        dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       }
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
@@ -2076,6 +2097,8 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
   dump_errno(s);
+  dump_header(s, "x-rgw-bucket-placement-target", 
+    s->bucket->get_info().placement_rule.name);
   end_header(s, this);
   dump_start(s);
 
@@ -2328,9 +2351,9 @@ static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.size));
 
   // only bucket's owner is allowed to get the quota settings of the account
-  if (bucket->get_owner() == s->user->get_id()) {
-    auto user_info = s->user->get_info();
-    auto bucket_quota = s->bucket->get_info().quota; // bucket quota
+  if (s->auth.identity->is_owner_of(bucket->get_owner())) {
+    const auto& user_info = s->user->get_info();
+    const auto& bucket_quota = s->bucket->get_info().quota; // bucket quota
     dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
     dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.quota.user_quota.max_objects));
     dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
@@ -2360,7 +2383,7 @@ static int create_s3_policy(req_state *s, rgw::sal::Driver* driver,
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return rgw::s3::create_policy_from_headers(s, driver, owner,
+    return rgw::s3::create_policy_from_headers(s, s->yield, driver, owner,
                                                *s->info.env, policy);
   }
 
@@ -3127,9 +3150,6 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
     if (ret != 0) {
       return -EACCES;
     } else {
-      /* Populate the owner info. */
-      s->owner.id = s->user->get_id();
-      s->owner.display_name = s->user->get_display_name();
       ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
@@ -3923,7 +3943,42 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
-  return create_s3_policy(s, driver, policy, s->owner);
+  ret = create_s3_policy(s, driver, policy, s->owner);
+  if (ret < 0)
+    return ret;
+
+  //handle object lock
+  auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
+  auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
+  auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  if (obj_lock_mode_str && obj_lock_date_str) {
+    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
+    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+      ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
+      return -EINVAL;;
+    }
+    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
+      ldpp_dout(this,0) << "invalid x-amz-object-lock-mode value" << dendl;
+      return -EINVAL;
+    }
+    obj_retention = RGWObjectRetention(obj_lock_mode_str, *date);
+  } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
+    ldpp_dout(this,0) << "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date " << dendl;
+    return -EINVAL;
+  }
+  if (obj_legal_hold_str) {
+    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+      ldpp_dout(this,0) << "invalid x-amz-object-lock-legal-hold value" << dendl;
+      return -EINVAL;
+    }
+    obj_legal_hold = RGWObjectLegalHold(obj_legal_hold_str);
+  }
+  if (!s->bucket->get_info().obj_lock_enabled() && (obj_retention || obj_legal_hold)) {
+    ldpp_dout(this, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
+    return -ERR_INVALID_REQUEST;
+  }
+
+  return 0;
 }
 
 void RGWInitMultipart_ObjStore_S3::send_response()
@@ -4549,6 +4604,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWGetBucketMetaSearch_ObjStore_S3;
   }
 
@@ -4671,6 +4729,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWDelBucketMetaSearch_ObjStore_S3;
   }
 
@@ -4684,6 +4745,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWConfigBucketMetaSearch_ObjStore_S3;
   }
 
@@ -4862,13 +4926,12 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
 {
   struct req_init_state *t = &s->init_state;
 
-  int ret = rgw_parse_url_bucket(t->url_bucket, s->user->get_tenant(),
+  const std::string& auth_tenant = s->auth.identity->get_tenant();
+
+  int ret = rgw_parse_url_bucket(t->url_bucket, auth_tenant,
                                  s->bucket_tenant, s->bucket_name);
   if (ret) {
     return ret;
-  }
-  if (s->auth.identity->get_identity_type() == TYPE_ROLE) {
-    s->bucket_tenant = s->auth.identity->get_role_tenant();
   }
 
   ldpp_dout(s, 10) << "s->object=" << s->object
@@ -4884,12 +4947,6 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
   }
 
   if (!t->src_bucket.empty()) {
-    string auth_tenant;
-    if (s->auth.identity->get_identity_type() == TYPE_ROLE) {
-      auth_tenant = s->auth.identity->get_role_tenant();
-    } else {
-      auth_tenant = s->user->get_tenant();
-    }
     ret = rgw_parse_url_bucket(t->src_bucket, auth_tenant,
                                s->src_tenant_name, s->src_bucket_name);
     if (ret) {
@@ -5031,13 +5088,7 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
     return -EPERM;
   }
 
-  const auto ret = rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s, y);
-  if (ret == 0) {
-    /* Populate the owner info. */
-    s->owner.id = s->user->get_id();
-    s->owner.display_name = s->user->get_display_name();
-  }
-  return ret;
+  return rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s, y);
 }
 
 int RGWHandler_Auth_S3::init(rgw::sal::Driver* driver, req_state *state,
@@ -5134,8 +5185,6 @@ void update_attribute_map(const std::string& input, AttributeMap& map) {
 void parse_post_action(const std::string& post_body, req_state* s)
 {
   if (post_body.size() > 0) {
-    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
-
     if (post_body.find("Action") != string::npos) {
       const boost::char_separator<char> sep("&");
       const boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
@@ -5159,8 +5208,12 @@ void parse_post_action(const std::string& post_body, req_state* s)
       }
     }
   }
-  const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
-  s->info.args.append("PayloadHash", payload_hash);
+  // PayloadHash is present if request is fwd from secondary site in multisite
+  // environment, so then do not calculate and append.
+  if (!s->info.args.exists("PayloadHash")) {
+    const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
+    s->info.args.append("PayloadHash", payload_hash);
+  }
 }
 
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
@@ -5206,7 +5259,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
         return new RGWHandler_REST_IAM(auth_registry, data);
       }
       if (enable_pubsub && RGWHandler_REST_PSTopic_AWS::action_exists(s)) {
-        return new RGWHandler_REST_PSTopic_AWS(auth_registry); 
+        return new RGWHandler_REST_PSTopic_AWS(auth_registry, std::move(data));
       }
       return nullptr;
     }
@@ -5515,6 +5568,11 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
+  if (s->cct->_conf->rgw_s3_auth_disable_signature_url) {
+    ldpp_dout(s, 10) << "Presigned URLs are disabled by admin" << dendl;
+    throw -ERR_PRESIGNED_URL_DISABLED;
+  }
+  
   if (version == AwsVersion::V2) {
     return get_auth_data_v2(s);
   } else if (version == AwsVersion::V4) {
@@ -5523,6 +5581,7 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
     /* FIXME(rzarzynski): handle anon user. */
     throw -EINVAL;
   }
+
 }
 
 boost::optional<std::string>
@@ -5576,7 +5635,9 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
 
   const char* exp_payload_hash = nullptr;
   string payload_hash;
-  if (is_non_s3_op) {
+  // if the request is related to topics (bucket notification), they are part of
+  // sns service and hence it's a no_s3_op,
+  if (is_non_s3_op || RGWHandler_REST_PSTopic_AWS::action_exists(info)) {
     //For non s3 ops, we need to calculate the payload hash
     payload_hash = info.args.get("PayloadHash");
     exp_payload_hash = payload_hash.c_str();
@@ -5628,9 +5689,9 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
    *   because the URL is used to upload an arbitrary payload. Instead, you
    *   use a constant string UNSIGNED-PAYLOAD.
    *
-   * This means we have absolutely no business in spawning completer. Both
-   * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
-   * by default. We don't need to change that. */
+   * This means that, in the absence of a trailer, we don't need to spawn
+   * a completer. Both aws4_auth_needs_complete and aws4_auth_streaming_mode
+   * are set to false by default. We don't need to change that. */
   return {
     access_key_id,
     date,
@@ -5755,19 +5816,35 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                      std::placeholders::_3,
                                      s);
 
-  /* Requests authenticated with the Query Parameters are treated as unsigned.
-   * From "Authenticating Requests: Using Query Parameters (AWS Signature
-   * Version 4)":
-   *
-   *   You don't include a payload hash in the Canonical Request, because
-   *   when you create a presigned URL, you don't know the payload content
-   *   because the URL is used to upload an arbitrary payload. Instead, you
-   *   use a constant string UNSIGNED-PAYLOAD.
-   *
-   * This means we have absolutely no business in spawning completer. Both
-   * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
-   * by default. We don't need to change that. */
-  if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s) || is_non_s3_op) {
+  // some ops don't expect a request body at all, so never call complete() to
+  // validate the payload hash. check empty signed payloads now and return a
+  // null completer below
+  constexpr std::string_view empty_sha256sum = // echo -n | sha256sum
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  if (is_v4_payload_empty(s) &&
+      !is_v4_payload_unsigned(exp_payload_hash) &&
+      exp_payload_hash != empty_sha256sum) {
+    ldpp_dout(s, 4) << "ERROR: empty payload checksum mismatch, expected "
+        << empty_sha256sum << " got " << exp_payload_hash << dendl;
+    throw -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+  }
+
+  /* Traditional UNSIGNED-PAYLOAD requests do not require a completer, but since
+   * 2022, even unsigned payload requests can be sent as aws-chunked and may
+   * have a checksum trailer */
+
+  auto traditional_v4_unsigned =
+    is_traditional_v4_unsigned_payload(exp_payload_hash);
+  auto v4_unsigned = is_v4_payload_unsigned(exp_payload_hash);
+  auto v4_unsigned_chunked = is_v4_payload_unsigned_chunked(exp_payload_hash);
+  auto checksum_trailer = have_checksum_trailer(exp_payload_hash);
+  auto trailer_signature = expect_trailer_signature(exp_payload_hash);
+
+  if (traditional_v4_unsigned ||
+      (v4_unsigned && !checksum_trailer) ||
+      is_v4_payload_empty(s) ||
+      is_non_s3_op) {
+    ldpp_dout(s, 10) << __func__ << ": UNSIGNED-PAYLOAD or other v4 no-completer case" << dendl;
     return {
       access_key_id,
       client_signature,
@@ -5842,9 +5919,6 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         cmpl_factory
       };
     } else {
-      /* IMHO "streamed" doesn't fit too good here. I would prefer to call
-       * it "chunked" but let's be coherent with Amazon's terminology. */
-
       ldpp_dout(s, 10) << "body content detected in multiple chunks" << dendl;
 
       /* payload in multiple chunks */
@@ -5870,11 +5944,31 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       /* In the case of query string-based authentication there should be no
        * x-amz-content-sha256 header and the value "UNSIGNED-PAYLOAD" is used
        * for CanonReq. */
+
+      uint32_t flags{AWSv4ComplMulti::FLAG_NONE};
+
+      if (v4_unsigned) {
+	flags |= AWSv4ComplMulti::FLAG_UNSIGNED_PAYLOAD;
+      }
+
+      if (checksum_trailer) {
+	flags |= AWSv4ComplMulti::FLAG_TRAILING_CHECKSUM;
+      }
+
+      if (v4_unsigned_chunked) {
+	flags |= AWSv4ComplMulti::FLAG_UNSIGNED_CHUNKED;
+      }
+
+      if (trailer_signature) {
+	flags |= AWSv4ComplMulti::FLAG_TRAILER_SIGNATURE;
+      }
+
       const auto cmpl_factory = std::bind(AWSv4ComplMulti::create,
                                           s,
                                           date,
                                           credential_scope,
                                           client_signature,
+					  flags,
                                           std::placeholders::_1);
       return {
         access_key_id,
@@ -6206,12 +6300,28 @@ rgw::auth::s3::LocalEngine::authenticate(
     }
   }*/
 
+  std::optional<RGWAccountInfo> account;
+  std::vector<IAM::Policy> policies;
+  int ret = load_account_and_policies(dpp, y, driver, user->get_info(),
+                                      user->get_attrs(), account, policies);
+  if (ret < 0) {
+    return result_t::deny(-EPERM);
+  }
+
   const auto iter = user->get_info().access_keys.find(access_key_id);
   if (iter == std::end(user->get_info().access_keys)) {
     ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
     return result_t::reject(-EPERM);
   }
   const RGWAccessKey& k = iter->second;
+
+  /* Ignore signature for HTTP OPTIONS */
+  if (s->op_type == RGW_OP_OPTIONS_CORS) {
+    auto apl = apl_factory->create_apl_local(
+        cct, s, user->get_info(), std::move(account), std::move(policies),
+        k.subuser, std::nullopt, access_key_id);
+    return result_t::grant(std::move(apl), completer_factory(k.key));
+  }
 
   const VersionAbstractor::server_signature_t server_signature = \
     signature_factory(cct, k.key, string_to_sign);
@@ -6228,8 +6338,9 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
-                                           k.subuser, std::nullopt, access_key_id);
+  auto apl = apl_factory->create_apl_local(
+      cct, s, user->get_info(), std::move(account), std::move(policies),
+      k.subuser, std::nullopt, access_key_id);
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
 
@@ -6363,7 +6474,6 @@ rgw::auth::s3::STSEngine::authenticate(
   }
 
   // Get all the authorization info
-  std::unique_ptr<rgw::sal::User> user;
   rgw_user user_id;
   string role_id;
   rgw::auth::RoleApplier::Role r;
@@ -6375,24 +6485,29 @@ rgw::auth::s3::STSEngine::authenticate(
     }
     r.id = token.roleId;
     r.name = role->get_name();
+    r.path = role->get_path();
     r.tenant = role->get_tenant();
 
-    vector<string> role_policy_names = role->get_role_policy_names();
-    for (auto& policy_name : role_policy_names) {
-      string perm_policy;
-      if (int ret = role->get_role_policy(dpp, policy_name, perm_policy); ret == 0) {
-        r.role_policies.push_back(std::move(perm_policy));
+    const auto& account_id = role->get_account_id();
+    if (!account_id.empty()) {
+      r.account.emplace();
+      rgw::sal::Attrs attrs; // ignored
+      RGWObjVersionTracker objv; // ignored
+      int ret = driver->load_account_by_id(dpp, y, account_id,
+                                           *r.account, attrs, objv);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+            << account_id << " for role " << r.name
+            << ": " << cpp_strerror(ret) << dendl;
+        return result_t::deny(-EPERM);
       }
     }
-  }
 
-  user = driver->get_user(token.user);
-  if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
-    // get user info
-    int ret = user->load_user(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
-      return result_t::reject(-EPERM);
+    for (auto& [name, policy] : role->get_info().perm_policy_map) {
+      r.inline_policies.push_back(std::move(policy));
+    }
+    for (auto& arn : role->get_info().managed_policies.arns) {
+      r.managed_policies.push_back(std::move(arn));
     }
   }
 
@@ -6407,11 +6522,34 @@ rgw::auth::s3::STSEngine::authenticate(
     t_attrs.token_claims = std::move(token.token_claims);
     t_attrs.token_issued_at = std::move(token.issued_at);
     t_attrs.principal_tags = std::move(token.principal_tags);
-    auto apl = role_apl_factory->create_apl_role(cct, s, r, t_attrs);
+    auto apl = role_apl_factory->create_apl_role(cct, s, std::move(r),
+                                                 std::move(t_attrs));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
-  } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
+  } else { // This is for all local users of type TYPE_RGW|ROOT|NONE
+    if (token.user.empty()) {
+      ldpp_dout(dpp, 5) << "ERROR: got session token with empty user id" << dendl;
+      return result_t::reject(-EPERM);
+    }
+    // load user info
+    auto user = driver->get_user(token.user);
+    int ret = user->load_user(dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
+      return result_t::reject(-EPERM);
+    }
+
+    std::optional<RGWAccountInfo> account;
+    std::vector<IAM::Policy> policies;
+    ret = load_account_and_policies(dpp, y, driver, user->get_info(),
+                                    user->get_attrs(), account, policies);
+    if (ret < 0) {
+      return result_t::deny(-EPERM);
+    }
+
     string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(), subuser, token.perm_mask, std::string(_access_key_id));
+    auto apl = local_apl_factory->create_apl_local(
+        cct, s, user->get_info(), std::move(account), std::move(policies),
+        subuser, token.perm_mask, std::string(_access_key_id));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }

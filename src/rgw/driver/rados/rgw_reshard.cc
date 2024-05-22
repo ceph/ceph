@@ -1056,7 +1056,7 @@ int RGWReshard::update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucke
   cls_rgw_reshard_entry entry;
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
-  entry.tenant = bucket_info.owner.tenant;
+  entry.tenant = bucket_info.bucket.tenant;
 
   int ret = get(dpp, entry);
   if (ret < 0) {
@@ -1153,10 +1153,9 @@ int RGWReshardWait::wait(optional_yield y)
   }
 
   if (y) {
-    auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
 
-    Waiter waiter(context);
+    Waiter waiter(yield.get_executor());
     waiters.push_back(waiter);
     lock.unlock();
 

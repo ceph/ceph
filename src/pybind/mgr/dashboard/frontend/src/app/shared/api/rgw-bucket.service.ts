@@ -61,27 +61,32 @@ export class RgwBucketService extends ApiClient {
     encryption_type: string,
     key_id: string,
     tags: string,
-    bucketPolicy: string
+    bucketPolicy: string,
+    cannedAcl: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
+      const paramsObject = {
+        bucket,
+        uid,
+        zonegroup,
+        lock_enabled: String(lockEnabled),
+        lock_mode,
+        lock_retention_period_days,
+        encryption_state: String(encryption_state),
+        encryption_type,
+        key_id,
+        tags: tags,
+        bucket_policy: bucketPolicy,
+        canned_acl: cannedAcl,
+        daemon_name: params.get('daemon_name')
+      };
+
+      if (placementTarget) {
+        paramsObject['placement_target'] = placementTarget;
+      }
+
       return this.http.post(this.url, null, {
-        params: new HttpParams({
-          fromObject: {
-            bucket,
-            uid,
-            zonegroup,
-            placement_target: placementTarget,
-            lock_enabled: String(lockEnabled),
-            lock_mode,
-            lock_retention_period_days,
-            encryption_state: String(encryption_state),
-            encryption_type,
-            key_id,
-            tags: tags,
-            bucket_policy: bucketPolicy,
-            daemon_name: params.get('daemon_name')
-          }
-        })
+        params: new HttpParams({ fromObject: paramsObject })
       });
     });
   }
@@ -100,7 +105,8 @@ export class RgwBucketService extends ApiClient {
     lockMode: 'GOVERNANCE' | 'COMPLIANCE',
     lockRetentionPeriodDays: string,
     tags: string,
-    bucketPolicy: string
+    bucketPolicy: string,
+    cannedAcl: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
@@ -116,7 +122,8 @@ export class RgwBucketService extends ApiClient {
         lock_mode: lockMode,
         lock_retention_period_days: lockRetentionPeriodDays,
         tags: tags,
-        bucket_policy: bucketPolicy
+        bucket_policy: bucketPolicy,
+        canned_acl: cannedAcl
       });
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });

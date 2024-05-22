@@ -10,7 +10,7 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/reactor.hh>
 
-#include "common/buffer_seastar.h"
+#include "crimson/common/buffer_seastar.h"
 #include "auth/KeyRing.h"
 #include "include/denc.h"
 #include "crimson/common/buffer_io.h"

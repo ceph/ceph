@@ -26,13 +26,33 @@ from mgr_util import to_pretty_timedelta, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
 from object_format import Format
 
-from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
-    raise_if_exception, _cli_write_command, OrchestratorError, \
-    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
-    RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, \
-    GenericSpec, DaemonDescriptionStatus, SNMPGatewaySpec, MDSSpec, TunedProfileSpec, \
-    NvmeofServiceSpec
+from ._interface import (
+    CLICommandMeta,
+    DaemonDescription,
+    DaemonDescriptionStatus,
+    DeviceLightLoc,
+    GenericSpec,
+    HostSpec,
+    InventoryFilter,
+    InventoryHost,
+    IscsiServiceSpec,
+    MDSSpec,
+    NFSServiceSpec,
+    NoOrchestrator,
+    NvmeofServiceSpec,
+    OrchestratorClientMixin,
+    OrchestratorError,
+    OrchestratorValidationError,
+    RGWSpec,
+    SMBSpec,
+    SNMPGatewaySpec,
+    ServiceDescription,
+    TunedProfileSpec,
+    _cli_read_command,
+    _cli_write_command,
+    json_to_generic_spec,
+    raise_if_exception,
+)
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -496,15 +516,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         :param hostname: hostname
         """
         table_heading_mapping = {
-            'summary': ['HOST', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
+            'summary': ['HOST', 'SN', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
+            'fullreport': [],
             'firmwares': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
             'criticals': ['HOST', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
-            'memory': ['HOST', 'NAME', 'STATUS', 'STATE'],
-            'storage': ['HOST', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'STATUS', 'STATE'],
-            'processors': ['HOST', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
-            'network': ['HOST', 'NAME', 'SPEED', 'STATUS', 'STATE'],
-            'power': ['HOST', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
-            'fans': ['HOST', 'ID', 'NAME', 'STATUS', 'STATE']
+            'memory': ['HOST', 'SYS_ID', 'NAME', 'STATUS', 'STATE'],
+            'storage': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'STATUS', 'STATE'],
+            'processors': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
+            'network': ['HOST', 'SYS_ID', 'NAME', 'SPEED', 'STATUS', 'STATE'],
+            'power': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
+            'fans': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'STATUS', 'STATE']
         }
 
         if category not in table_heading_mapping.keys():
@@ -521,12 +542,23 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 output = json.dumps(summary)
             else:
                 for k, v in summary.items():
-                    row = [k]
-                    row.extend([v['status'][key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
+                    row = [k, v['sn']]
+                    row.extend([v['status'][key] for key in ['storage', 'processors',
+                                                             'network', 'memory',
+                                                             'power', 'fans']])
                     table.add_row(row)
                 output = table.get_string()
+        elif category == 'fullreport':
+            if hostname is None:
+                output = 'Missing host name'
+            elif format != Format.json:
+                output = 'fullreport only supports json output'
+            else:
+                completion = self.node_proxy_fullreport(hostname=hostname)
+                fullreport: Dict[str, Any] = raise_if_exception(completion)
+                output = json.dumps(fullreport)
         elif category == 'firmwares':
-            output = "Missing host name" if hostname is None else self._firmwares_table(hostname, table, format)
+            output = 'Missing host name' if hostname is None else self._firmwares_table(hostname, table, format)
         elif category == 'criticals':
             output = self._criticals_table(hostname, table, format)
         else:
@@ -542,7 +574,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             return json.dumps(data)
         for host, details in data.items():
             for k, v in details.items():
-                table.add_row((host, k, v['name'], v['release_date'], v['version'], v['status']['health']))
+                try:
+                    status = v['status']['health']
+                except (KeyError, TypeError):
+                    status = 'N/A'
+                table.add_row((host, k, v['name'], v['release_date'], v['version'], status))
         return table.get_string()
 
     def _criticals_table(self, hostname: Optional[str], table: PrettyTable, format: Format) -> str:
@@ -574,20 +610,21 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         }
 
         fields = mapping.get(category, ())
-        for host, details in data.items():
-            for k, v in details.items():
-                row = []
-                for field in fields:
-                    if field in v:
-                        row.append(v[field])
-                    elif field in v.get('status', {}):
-                        row.append(v['status'][field])
+        for host in data.keys():
+            for sys_id, details in data[host].items():
+                for k, v in details.items():
+                    row = []
+                    for field in fields:
+                        if field in v:
+                            row.append(v[field])
+                        elif field in v.get('status', {}):
+                            row.append(v['status'][field])
+                        else:
+                            row.append('')
+                    if category in ('power', 'fans', 'processors'):
+                        table.add_row((host, sys_id,) + (k,) + tuple(row))
                     else:
-                        row.append('')
-                if category in ('power', 'fans', 'processors'):
-                    table.add_row((host,) + (k,) + tuple(row))
-                else:
-                    table.add_row((host,) + tuple(row))
+                        table.add_row((host, sys_id,) + tuple(row))
 
         return table.get_string()
 
@@ -613,7 +650,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         data = raise_if_exception(completion)
         output: str = ''
         if action == self.HardwareLightAction.get:
-            status = 'on' if data["LocationIndicatorActive"] else 'off'
+            status = 'on' if data['LocationIndicatorActive'] else 'off'
             if light_type == self.HardwareLightType.device:
                 output = f'ident LED for {device} on {hostname} is: {status}'
             else:
@@ -1133,6 +1170,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         except ArgumentError as e:
             return HandleCommandResult(-errno.EINVAL, "", (str(e)))
 
+    @_cli_write_command('orch prometheus set-target')
+    def _set_prometheus_target(self, url: str) -> HandleCommandResult:
+        completion = self.set_prometheus_target(url)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
+    @_cli_write_command('orch prometheus remove-target')
+    def _remove_prometheus_target(self, url: str) -> HandleCommandResult:
+        completion = self.remove_prometheus_target(url)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
     @_cli_write_command('orch alertmanager set-credentials')
     def _set_alertmanager_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
         try:
@@ -1154,6 +1203,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.get_alertmanager_access_info()
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
+
+    @_cli_write_command('orch prometheus set-custom-alerts')
+    def _set_custom_prometheus_alerts(self, inbuf: Optional[str] = None) -> HandleCommandResult:
+        if not inbuf:
+            raise OrchestratorError('This command requires passing a file with "-i <filepath>"')
+        completion = self.set_custom_prometheus_alerts(inbuf)
+        out = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(out))
 
     @_cli_write_command('orch apply osd')
     def _apply_osd(self,
@@ -1778,6 +1835,42 @@ Usage:
                            unmanaged=unmanaged)
         specs: List[ServiceSpec] = spec.get_tracing_specs()
         return self._apply_misc(specs, dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply smb')
+    def _apply_smb(
+        self,
+        cluster_id: str,
+        config_uri: str,
+        features: str = '',
+        join_sources: Optional[List[str]] = None,
+        custom_dns: Optional[List[str]] = None,
+        include_ceph_users: Optional[List[str]] = None,
+        placement: Optional[str] = None,
+        unmanaged: bool = False,
+        dry_run: bool = False,
+        format: Format = Format.plain,
+        no_overwrite: bool = False,
+    ) -> HandleCommandResult:
+        """Apply an SMB network file system gateway service configuration."""
+
+        _features = features.replace(',', ' ').split()
+        spec = SMBSpec(
+            service_id=cluster_id,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            preview_only=dry_run,
+            cluster_id=cluster_id,
+            features=_features,
+            config_uri=config_uri,
+            join_sources=join_sources,
+            custom_dns=custom_dns,
+            include_ceph_users=include_ceph_users,
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
+        # The previous comment makes no sense to JJM. But when in rome.
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch set-unmanaged')
     def _set_unmanaged(self, service_name: str) -> HandleCommandResult:

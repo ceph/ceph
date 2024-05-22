@@ -290,7 +290,7 @@ options:
   desc: Max number of items in RGW metadata cache.
   long_desc: When full, the RGW metadata cache evicts least recently used entries.
   fmt_desc: The number of entries in the Ceph Object Gateway cache.
-  default: 10000
+  default: 25000
   services:
   - rgw
   see_also:
@@ -892,6 +892,15 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_s3_auth_disable_signature_url
+  type: bool
+  level: advanced
+  desc: Should authentication with presigned URLs be disabled
+  long_desc: 'If enabled, any request that is presigned with either V2 or V4 signature will be denied'
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_barbican_url
   type: str
   level: advanced
@@ -904,8 +913,8 @@ options:
 - name: rgw_ldap_uri
   type: str
   level: advanced
-  desc: Space-separated list of LDAP servers in URI format.
-  default: ldaps://<ldap.your.domain>
+  desc: Space-separated list of LDAP servers in URI format, e.g., "ldaps://<ldap.your.domain>".
+  default:
   services:
   - rgw
   with_legacy: true
@@ -2291,6 +2300,31 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_account_default_quota_max_objects
+  type: int
+  level: basic
+  desc: Account quota max objects
+  long_desc: The default quota configuration for total number of objects for a single
+    account. A negative number means 'unlimited'.
+  fmt_desc: Default max number of objects for a account. This includes all
+    objects in all buckets owned by the account. Set on new accounts
+    if no other quota is specified. Has no effect on existing accounts.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_account_default_quota_max_size
+  type: int
+  level: basic
+  desc: Account quota max size
+  long_desc: The default quota configuration for total size of objects for a single
+    account. A negative number means 'unlimited'.
+  fmt_desc: The value for account max size quota in bytes set on new accounts,
+    if no other quota is specified.  Has no effect on existing accounts.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_multipart_min_part_size
   type: size
   level: advanced
@@ -2372,6 +2406,15 @@ options:
     RGW can server static websites if s3website hostnames are configured, and unrelated
     to this configurable.
   default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_enable_mdsearch
+  type: bool
+  level: basic
+  desc: Enable elastic metadata search APIs
+  long_desc: This configurable controls whether RGW handles the elastic metadata search APIs.
+  default: true
   services:
   - rgw
   with_legacy: true
@@ -3603,6 +3646,89 @@ options:
   see_also:
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_d4n_l1_datacache_persistent_path
+  type: str
+  level: advanced
+  desc: path used for storing locally cached object data
+  long_desc: One cache backend option for D4N is the local SSD, which uses this path to
+    write and read object data. This is the default cache backend chosen by the D4N filter.
+    Only the SSD cache backend uses this path for object data storage since the RedisDriver
+    uses a Redis server instead and there are no additional cache backend implementations
+    available at the moment. 
+  default: /tmp/rgw_d4n_datacache/
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_l1_datacache_size
+  type: size
+  level: advanced
+  desc: maximum size on disk for datacache
+  long_desc: The local SSD cache uses this option to configure its size in bytes. This 
+    option is not used by the Redis cache backend. 
+  default: 1_G
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_l1_evict_cache_on_start
+  type: bool
+  level: advanced
+  desc: clear the contents of the persistent datacache on start
+  long_desc: The local SSD cache uses this option to clear the contents of the path supplied
+    by the rgw_d4n_l1_datacache_persistent_path config option on start. If false, the path's 
+    contents will be retained. 
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_l1_fadvise
+  type: int
+  level: advanced
+  desc: posix_fadvise() flag for access pattern of cache files
+  long_desc: For example, to bypass the page-cache -
+    POSIX_FADV_DONTNEED=4
+  default: 4
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_libaio_aio_threads
+  type: int
+  level: advanced
+  desc: specifies the maximum number of worker threads that may be used by libaio
+  long_desc: This option is used by the SSD cache backend during initialization to set the maximum
+    number of worker threads libaio may use. It does not apply to the Redis cache backend. 
+  default: 20
+  services:
+  - rgw
+  see_also:
+  - rgw_thread_pool_size
+  with_legacy: true
+- name: rgw_d4n_libaio_aio_num
+  type: int
+  level: advanced
+  desc: specifies the maximum number of simultaneous I/O requests that libaio expects to enqueue
+  long_desc: This option is used by the SSD cache backend during initialization to set the maximum
+    number of simultaneous I/O requests that libaio can expect to enqueue. It
+    does not apply to the Redis cache backend. 
+  default: 64
+  services:
+  - rgw
+  see_also:
+  - rgw_thread_pool_size
+  with_legacy: true
+- name: rgw_lfuda_sync_frequency
+  type: int
+  level: advanced
+  desc: LFUDA variables' sync frequency in seconds 
+  long_desc: By default, the D4N cache uses the Least Frequently Used with Dynamic Aging (LFUDA) 
+    cache replacement policy. This class globally stores values that are used by the policy's 
+    algorithm. However, strong consistency for these values is not necessary and adds additional
+    overhead to support. As a result, a thread periodically retrieves these global values and posts
+    updates when certain conditions are satisfied. This Redis thread completes this logic in a loop
+    that is called once every interval, with the interval being set by this option.  
+  default: 60
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_backend_store
   type: str
   level: advanced
@@ -3852,21 +3978,15 @@ options:
   default: true
   services:
   - rgw
-- name: rgw_d4n_host
+- name: rgw_d4n_address
   type: str
   level: advanced
-  desc: The rgw directory host
-  default: 127.0.0.1
-  services: 
-  - rgw
-  flags:
-  - startup
-  with_legacy: true
-- name: rgw_d4n_port
-  type: int
-  level: advanced
-  desc: The rgw directory port
-  default: 6379
+  desc: address for the D4N Redis connection
+  long_desc: The current D4N implementation supports one Redis node
+    which the D4N directory, policy, and overall filter communicate
+    with. This default value is also the address that a Redis server 
+    with no additional configuration will use.
+  default: 127.0.0.1:6379
   services: 
   - rgw
   flags:
@@ -3983,7 +4103,7 @@ options:
     are sent to it for more than the time defined.
     Note that the connection will not be considered idle, even if it is down,
     as long as there are attempts to send messages to it.
-  default: 30
+  default: 300
   services:
   - rgw
   with_legacy: true
@@ -3998,4 +4118,27 @@ options:
   default: 10
   services:
   - rgw
+  with_legacy: true
+- name: rgw_kafka_message_timeout
+  type: uint 
+  level: advanced
+  desc: This is the maximum time in milliseconds to deliver a message (including retries)
+  long_desc: Delivery error occurs when the message timeout is exceeded.
+    Value must be greater than zero, if set to zero, a value of 1 millisecond will be used.
+  default: 5000
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_l1_datacache_address
+  type: str
+  level: advanced
+  desc: local Redis cache address 
+  long_desc: This is the address used to configure the Redis cache backend connection. The default
+    value is the same address used by Redis without any additional configuration. The SSD cache 
+    does not use this option.
+  default: 127.0.0.1:6379
+  services:
+  - rgw
+  flags:
+  - startup
   with_legacy: true

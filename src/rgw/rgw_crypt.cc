@@ -13,6 +13,7 @@
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
 #include "include/ceph_assert.h"
+#include "include/function2.hpp"
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
 #include "rgw/rgw_kms.h"
@@ -964,7 +965,13 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
       continue;
     }
     if (t.compare(i+1, 8, "owner_id") == 0) {
-      r.append(s->bucket->get_info().owner.id);
+      r.append(std::visit(fu2::overload(
+          [] (const rgw_user& user_id) -> const std::string& {
+            return user_id.id;
+          },
+          [] (const rgw_account_id& account_id) -> const std::string& {
+            return account_id;
+          }), s->bucket->get_info().owner));
       i += 9;
       continue;
     }
@@ -1142,13 +1149,13 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
 
-      if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !rgw_transport_is_secure(s->cct, *s->info.env)) {
-        ldpp_dout(s, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
-        return -ERR_INVALID_REQUEST;
-      }
-
       if (req_sse == "aws:kms") {
+        if (s->cct->_conf->rgw_crypt_require_ssl &&
+            !rgw_transport_is_secure(s->cct, *s->info.env)) {
+          ldpp_dout(s, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
+          return -ERR_INVALID_REQUEST;
+        }
+
         std::string_view context =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT);
         std::string cooked_context;
@@ -1462,11 +1469,6 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
 
   /* SSE-S3 */
   if (stored_mode == "AES256") {
-    if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !rgw_transport_is_secure(s->cct, *s->info.env)) {
-      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
-      return -ERR_INVALID_REQUEST;
-    }
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;

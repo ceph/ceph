@@ -32,6 +32,16 @@ hobject_t RecoveryBackend::get_temp_recovery_object(
   return hoid;
 }
 
+void RecoveryBackend::add_temp_obj(const hobject_t &oid)
+{
+  backend->add_temp_obj(oid);
+}
+
+void RecoveryBackend::clear_temp_obj(const hobject_t &oid)
+{
+  backend->clear_temp_obj(oid);
+}
+
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
 			       std::string_view why)
 {
@@ -152,10 +162,7 @@ RecoveryBackend::handle_backfill_remove(
 {
   logger().debug("{} m.ls={}", __func__, m.ls);
   assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
-  if (pg.can_discard_replica_op(m)) {
-    logger().debug("{}: discarding {}", __func__, m);
-    return seastar::now();
-  }
+
   ObjectStore::Transaction t;
   for ([[maybe_unused]] const auto& [soid, ver] : m.ls) {
     // TODO: the reserved space management. PG::try_reserve_recovery_space().

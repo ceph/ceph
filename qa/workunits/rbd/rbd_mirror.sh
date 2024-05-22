@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
 #
 # rbd_mirror.sh - test rbd-mirror daemon in snapshot or journal mirroring mode
 #
@@ -12,6 +12,8 @@
 # creates a temporary directory, used for cluster configs, daemon logs, admin
 # socket, temporary files, and launches rbd-mirror daemon.
 #
+
+set -ex
 
 if [ "${#}" -gt 0 ]; then
   echo "unnecessary arguments: ${@}"

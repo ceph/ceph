@@ -204,10 +204,15 @@ public:
   }
   ~OpTracker();
 
-  template <typename T, typename U>
-  typename T::Ref create_request(U params)
+  // NB: P is ref-like, i.e. `params` should be dereferenced for members
+  template <typename R, typename P>
+  typename R::Ref create_request(P params)
   {
-    typename T::Ref retval(new T(params, this));
+    constexpr bool enable_mark_continuous = requires(typename R::Ref r, P p) {
+      { p->is_continuous() } -> std::same_as<bool>;
+      r->mark_continuous();
+    };
+    typename R::Ref retval(new R(params, this));
     retval->tracking_start();
     if (is_tracking()) {
       retval->mark_event("header_read", params->get_recv_stamp());
@@ -215,18 +220,24 @@ public:
       retval->mark_event("all_read", params->get_recv_complete_stamp());
       retval->mark_event("dispatched", params->get_dispatch_stamp());
     }
-
+    if constexpr (enable_mark_continuous) {
+      if (params->is_continuous()) {
+        retval->mark_continuous();
+      }
+    }
     return retval;
   }
 };
 
 class TrackedOp : public boost::intrusive::list_base_hook<> {
-private:
+public:
   friend class OpHistory;
   friend class OpTracker;
 
-  boost::intrusive::list_member_hook<> tracker_item;
+  static const uint64_t FLAG_CONTINUOUS = (1<<1);
 
+private:
+  boost::intrusive::list_member_hook<> tracker_item;
 public:
   typedef boost::intrusive::list<
   TrackedOp,
@@ -242,6 +253,7 @@ public:
       op->put();
     }
   };
+
 
 protected:
   OpTracker *tracker;          ///< the tracker we are associated with
@@ -281,6 +293,14 @@ protected:
     STATE_HISTORY
   };
   std::atomic<int> state = {STATE_UNTRACKED};
+  uint64_t flags = 0;
+
+  void mark_continuous() {
+    flags |= FLAG_CONTINUOUS;
+  }
+  bool is_continuous() const {
+    return flags & FLAG_CONTINUOUS;
+  }
 
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),

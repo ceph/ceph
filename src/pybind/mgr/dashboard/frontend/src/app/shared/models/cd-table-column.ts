@@ -35,4 +35,9 @@ export interface CdTableColumn extends TableColumn {
    * a customize function if that's not desired. Return true to include a row.
    */
   filterPredicate?: (row: any, value: any) => boolean;
+
+  /**
+   * Hides a column from the 'toggle columns' drop down checkboxes
+   */
+  isInvisible?: boolean;
 }

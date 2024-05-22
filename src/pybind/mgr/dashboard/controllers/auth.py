@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import http.cookies
+import json
 import logging
 import sys
+from typing import Optional
+
+import cherrypy
 
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
@@ -27,6 +31,17 @@ AUTH_CHECK_SCHEMA = {
     "pwdUpdateRequired": (bool, "Is password update required?")
 }
 
+AUTH_SCHEMA = {
+    "token": (str, "Authentication Token"),
+    "username": (str, "Username"),
+    "permissions": ({
+        "cephfs": ([str], "")
+    }, "List of permissions acquired"),
+    "pwdExpirationDate": (str, "Password expiration date"),
+    "sso": (bool, "Uses single sign on?"),
+    "pwdUpdateRequired": (bool, "Is password update required?")
+}
+
 
 @APIRouter('/auth', secure=False)
 @APIDoc("Initiate a session with Ceph", "Auth")
@@ -34,11 +49,23 @@ class Auth(RESTController, ControllerAuthMixin):
     """
     Provide authenticates and returns JWT token.
     """
-
-    def create(self, username, password):
+    @EndpointDoc("Dashboard Authentication",
+                 parameters={
+                     'username': (str, 'Username'),
+                     'password': (str, 'Password'),
+                     'ttl': (int, 'Token Time to Live (in hours)')
+                 },
+                 responses={201: AUTH_SCHEMA})
+    def create(self, username, password, ttl: Optional[int] = None):
+        # pylint: disable=R0912
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
         max_attempt = Settings.ACCOUNT_LOCKOUT_ATTEMPTS
+        origin = cherrypy.request.headers.get('Origin', None)
+        try:
+            fsid = mgr.get('config')['fsid']
+        except KeyError:
+            fsid = ''
         if max_attempt == 0 or mgr.ACCESS_CTRL_DB.get_attempt(username) < max_attempt:
             if user_data:
                 user_perms = user_data.get('permissions')
@@ -51,12 +78,55 @@ class Auth(RESTController, ControllerAuthMixin):
                 logger.info('Login successful: %s', username)
                 mgr.ACCESS_CTRL_DB.reset_attempt(username)
                 mgr.ACCESS_CTRL_DB.save()
-                token = JwtManager.gen_token(username)
+                token = JwtManager.gen_token(username, ttl=ttl)
 
                 # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
                 token = token.decode('utf-8') if isinstance(token, bytes) else token
 
                 self._set_token_cookie(url_prefix, token)
+                if isinstance(Settings.MULTICLUSTER_CONFIG, str):
+                    try:
+                        item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
+                    except json.JSONDecodeError:
+                        item_to_dict = {}
+                    multicluster_config = item_to_dict.copy()
+                else:
+                    multicluster_config = Settings.MULTICLUSTER_CONFIG.copy()
+                try:
+                    if fsid in multicluster_config['config']:
+                        existing_entries = multicluster_config['config'][fsid]
+                        if not any((entry['user'] == username or entry['cluster_alias'] == 'local-cluster') for entry in existing_entries):  # noqa E501 #pylint: disable=line-too-long
+                            existing_entries.append({
+                                "name": fsid,
+                                "url": origin,
+                                "cluster_alias": "local-cluster",
+                                "user": username
+                            })
+                    else:
+                        multicluster_config['config'][fsid] = [{
+                            "name": fsid,
+                            "url": origin,
+                            "cluster_alias": "local-cluster",
+                            "user": username
+                        }]
+
+                except KeyError:
+                    multicluster_config = {
+                        'current_url': origin,
+                        'current_user': username,
+                        'hub_url': origin,
+                        'config': {
+                            fsid: [
+                                {
+                                    "name": fsid,
+                                    "url": origin,
+                                    "cluster_alias": "local-cluster",
+                                    "user": username
+                                }
+                            ]
+                        }
+                    }
+                Settings.MULTICLUSTER_CONFIG = multicluster_config
                 return {
                     'token': token,
                     'username': username,

@@ -48,6 +48,10 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp,
   using RGWValidateKeystoneToken = \
     rgw::keystone::Service::RGWValidateKeystoneToken;
 
+  bool admin_token_retried = false;
+
+admin_token_retry:
+
   /* The container for plain response obtained from Keystone. It will be
    * parsed token_envelope_t::parse method. */
   ceph::bufferlist token_body_bl;
@@ -72,8 +76,10 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp,
   }
 
   std::string admin_token;
-  if (rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
-                                              y, admin_token) < 0) {
+  bool admin_token_cached = false;
+  int ret = rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
+                                                    y, admin_token, admin_token_cached);
+  if (ret < 0) {
     throw -EINVAL;
   }
 
@@ -82,7 +88,7 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp,
 
   validate.set_url(url);
 
-  int ret = validate.process(y);
+  ret = validate.process(y);
 
   /* NULL terminate for debug output. */
   token_body_bl.append(static_cast<char>(0));
@@ -91,12 +97,26 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp,
    * Although failure at the parsing phase doesn't impose a threat,
    * this allows to return proper error code (EACCESS instead of EINVAL
    * or similar) and thus improves logging. */
-  if (validate.get_http_status() ==
-          /* Most likely: wrong admin credentials or admin token. */
-          RGWValidateKeystoneToken::HTTP_STATUS_UNAUTHORIZED ||
-      validate.get_http_status() ==
-          /* Most likely: non-existent token supplied by the client. */
-          RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND) {
+
+  /* If admin token is invalid we should expire it from the cache and
+     try one last time without the cache. */
+  bool admin_token_unauthorized = (validate.get_http_status() ==
+    RGWValidateKeystoneToken::HTTP_STATUS_UNAUTHORIZED);
+
+  if (admin_token_unauthorized && admin_token_cached) {
+    ldpp_dout(dpp, 20) << "invalidating admin_token cache due to 401" << dendl;
+    token_cache.invalidate_admin(dpp);
+
+    if (!admin_token_retried) {
+      ldpp_dout(dpp, 20) << "retrying with uncached admin_token" << dendl;
+      admin_token_retried = true;
+      goto admin_token_retry;
+    }
+  }
+
+  /* If admin token is invalid or token supplied by client is non-existent. */
+  if (admin_token_unauthorized || validate.get_http_status() ==
+        RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND) {
     ldpp_dout(dpp, 5) << "Failed keystone auth from " << url << " with "
                   << validate.get_http_status() << dendl;
     return boost::none;
@@ -404,8 +424,9 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* get authentication token for Keystone. */
   std::string admin_token;
+  bool admin_token_cached = false;
   int ret = rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
-                                                    y, admin_token);
+                                                    y, admin_token, admin_token_cached);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
                   << dendl;
@@ -500,8 +521,9 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
 
   /* get authentication token for Keystone. */
   std::string admin_token;
+  bool admin_token_cached = false;
   int ret = rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
-                                                    y, admin_token);
+                                                    y, admin_token, admin_token_cached);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: cannot get token for keystone access"
                   << dendl;
@@ -570,6 +592,7 @@ auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
                                  const std::string& string_to_sign,
                                  const std::string_view& signature,
                                  const signature_factory_t& signature_factory,
+                                 bool ignore_signature,
                                  optional_yield y) const
     -> access_token_result
 {
@@ -584,12 +607,19 @@ auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 
   /* Check that credentials can correctly be used to sign data */
   if (t) {
-    std::string sig(signature);
-    server_signature_t server_signature = signature_factory(cct, t->get<1>(), string_to_sign);
-    if (sig.compare(server_signature) == 0) {
+    /* We should ignore checking signature in cache if caller tells us to which
+     * means we're handling a HTTP OPTIONS call. */
+    if (ignore_signature) {
+      ldpp_dout(dpp, 20) << "ignore_signature set and found in cache" << dendl;
       return {t->get<0>(), t->get<1>(), 0};
     } else {
-      ldpp_dout(dpp, 0) << "Secret string does not correctly sign payload, cache miss" << dendl;
+      std::string sig(signature);
+      server_signature_t server_signature = signature_factory(cct, t->get<1>(), string_to_sign);
+      if (sig.compare(server_signature) == 0) {
+        return {t->get<0>(), t->get<1>(), 0};
+      } else {
+        ldpp_dout(dpp, 0) << "Secret string does not correctly sign payload, cache miss" << dendl;
+      }
     }
   } else {
     ldpp_dout(dpp, 0) << "No stored secret string, cache miss" << dendl;
@@ -662,7 +692,6 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
-  /* Passthrough only! */
   const req_state* s,
   optional_yield y) const
 {
@@ -681,9 +710,12 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     std::vector<std::string> admin;
   } accepted_roles(cct);
 
+  /* When we handle a HTTP OPTIONS call we must ignore the signature */
+  bool ignore_signature = (s->op_type == RGW_OP_OPTIONS_CORS);
+
   auto [t, secret_key, failure_reason] =
     get_access_token(dpp, access_key_id, string_to_sign,
-                     signature, signature_factory, y);
+                     signature, signature_factory, ignore_signature, y);
   if (! t) {
     if (failure_reason == -ERR_SIGNATURE_NO_MATCH) {
       // we looked up a secret but it didn't generate the same signature as

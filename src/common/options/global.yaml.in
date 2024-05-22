@@ -2918,18 +2918,16 @@ options:
 - name: osd_pg_stat_report_interval_max_seconds
   type: int
   level: advanced
-  desc: The maximum interval seconds for update pg's reported_epoch,
-        benefit for osdmap trim when osdmap not change frequently.
-  default: 500
-  with_legacy: true
+  desc: How often (in seconds) should PGs stats be collected.
+  with_legacy: false
+  default: 5
 - name: osd_pg_stat_report_interval_max_epochs
   type: int
   level: advanced
-  desc: The maximum interval by which pg's reported_epoch lags behind,
-        otherwise, pg's reported_epoch must be updated,
-        benefit for osdmap trim when osdmap changes frequently.
+  desc: The maximum number of epochs allowed to pass before PG stats
+        are collected.
   default: 500
-  with_legacy: true
+  with_legacy: false
 # Max number of snap intervals to report to mgr in pg_stat_t
 - name: osd_max_snap_prune_intervals_per_epoch
   type: uint
@@ -3248,6 +3246,12 @@ options:
 - name: osd_debug_no_purge_strays
   type: bool
   level: dev
+  default: false
+  with_legacy: true
+- name: osd_skip_check_past_interval_bounds
+  type: bool
+  level: dev
+  desc: See https://tracker.ceph.com/issues/64002
   default: false
   with_legacy: true
 - name: osd_debug_pretend_recovery_active
@@ -4012,15 +4016,26 @@ options:
   default: false
   with_legacy: true
 - name: bdev_enable_discard
+  desc: send discards to the block device
   type: bool
   level: advanced
   default: false
   with_legacy: true
-- name: bdev_async_discard
-  type: bool
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
+- name: bdev_async_discard_threads
+  desc: number of discard threads used to issue discards to the device
+  type: uint
   level: advanced
-  default: false
-  with_legacy: true
+  default: 0
+  min: 0
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
@@ -4407,6 +4422,21 @@ options:
   - bluestore_min_alloc_size
   flags:
   - create
+  with_legacy: true
+- name: bluestore_debug_enforce_min_alloc_size
+  type: uint
+  level: dev
+  desc: Enforces specific min_alloc size usages
+  long_desc: This overrides actual min_alloc_size value persisted on mkfs
+    (and originally obtained from bluestore_min_alloc_size) and permits to
+    use arbitrary value for this value. Intended primarily for dev/debug
+    purposes and should be used with care and deep understanding of potential
+    consequences, e.g. data corruption.
+  default: 0
+  see_also:
+  - bluestore_min_alloc_size
+  flags:
+  - startup
   with_legacy: true
 - name: bluestore_use_optimal_io_size_for_min_alloc_size 
   type: bool
@@ -5675,12 +5705,6 @@ options:
   level: dev
   default: false
   with_legacy: true
-- name: filestore_debug_random_read_err
-  type: float
-  level: dev
-  default: 0
-  with_legacy: true
-# Expensive debugging check on sync
 - name: filestore_debug_omap_check
   type: bool
   level: dev
@@ -6207,6 +6231,54 @@ options:
   level: dev
   desc: Time to wait during shutdown to deregister service with mgr
   default: 1
+- name: mgr_enable_op_tracker
+  type: bool
+  level: advanced
+  desc: Enable / disable MGR Op Tracker
+  default: true
+  with_legacy: true
+- name: mgr_num_op_tracker_shard
+  type: uint
+  level: advanced
+  desc: The number of shards for holding the ops
+  default: 32
+  with_legacy: true
+- name: mgr_op_complaint_time
+  type: float
+  level: advanced
+  default: 30
+  desc: An operation becomes complaint worthy after the specified number of seconds have elapsed.
+  with_legacy: true
+- name: mgr_op_log_threshold
+  type: int
+  level: advanced
+  default: 5
+  fmt_desc: How many operations logs to display at once.
+  with_legacy: true
+- name: mgr_op_history_size
+  type: uint
+  level: advanced
+  default: 20
+  fmt_desc: The maximum number of completed operations to track.
+  with_legacy: true
+- name: mgr_op_history_duration
+  type: uint
+  level: advanced
+  default: 600
+  desc: The oldest completed operation to track.
+  with_legacy: true
+- name: mgr_op_history_slow_op_size
+  type: uint
+  level: advanced
+  default: 20
+  desc: Max number of slow ops to track
+  with_legacy: true
+- name: mgr_op_history_slow_op_threshold
+  type: float
+  level: advanced
+  default: 10
+  desc: Duration of an op to be considered as a historical slow op
+  with_legacy: true
 - name: throttler_perf_counter
   type: bool
   level: advanced

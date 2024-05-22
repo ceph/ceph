@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class NvmeofService(CephService):
     TYPE = 'nvmeof'
+    PROMETHEUS_PORT = 10008
 
     def config(self, spec: NvmeofServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
@@ -31,7 +32,7 @@ class NvmeofService(CephService):
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
-                                              'osd', 'allow all tag rbd *=*'])
+                                              'osd', 'profile rbd'])
 
         # TODO: check if we can force jinja2 to generate dicts with double quotes instead of using json.dumps
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
@@ -42,8 +43,9 @@ class NvmeofService(CephService):
             'name': name,
             'addr': host_ip,
             'port': spec.port,
-            'log_level': 'WARN',
-            'rpc_socket': '/var/tmp/spdk.sock',
+            'spdk_log_level': 'WARNING',
+            'rpc_socket_dir': '/var/tmp/',
+            'rpc_socket_name': 'spdk.sock',
             'transport_tcp_options': transport_tcp_options,
             'rados_id': rados_id
         }
@@ -114,7 +116,9 @@ class NvmeofService(CephService):
         """
         Called after the daemon is removed.
         """
-        logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
+        # to clean the keyring up
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
+
         # remove config for dashboard nvmeof gateways if any
         ret, out, err = self.mgr.mon_command({
             'prefix': 'dashboard nvmeof-gateway-rm',

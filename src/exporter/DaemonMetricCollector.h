@@ -35,20 +35,26 @@ public:
   void main();
   std::string get_metrics();
   labels_t get_extra_labels(std::string daemon_name);
-
-private:
+  void dump_asok_metrics(bool sort_metrics, int64_t counter_prio,
+                         bool sockClientsPing, std::string &dump_response,
+                         std::string &schema_response,
+                         bool config_show_response);
   std::map<std::string, AdminSocketClient> clients;
   std::string metrics;
+  std::pair<labels_t, std::string> add_fixed_name_metrics(std::string metric_name);
+
+private:
   std::mutex metrics_mutex;
   std::unique_ptr<MetricsBuilder> builder;
   void update_sockets();
   void request_loop(boost::asio::steady_timer &timer);
 
-  void dump_asok_metrics();
   void dump_asok_metric(boost::json::object perf_info,
                         boost::json::value perf_values, std::string name,
                         labels_t labels);
-  std::pair<labels_t, std::string> add_fixed_name_metrics(std::string metric_name);
+  void parse_asok_metrics(std::string &counter_dump_response,
+                          std::string &counter_schema_response,
+                          int64_t prio_limit, const std::string &daemon_name);
   void get_process_metrics(std::vector<std::pair<std::string, int>> daemon_pids);
   std::string asok_request(AdminSocketClient &asok, std::string command, std::string daemon_name);
 };

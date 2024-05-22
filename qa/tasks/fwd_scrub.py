@@ -4,18 +4,16 @@ Thrash mds by simulating failures
 import logging
 import contextlib
 
-from gevent import sleep, GreenletExit
-from gevent.greenlet import Greenlet
-from gevent.event import Event
+from gevent import sleep
 from teuthology import misc as teuthology
 
 from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
-from tasks.thrasher import Thrasher
+from tasks.thrasher import ThrasherGreenlet
 
 log = logging.getLogger(__name__)
 
-class ForwardScrubber(Thrasher, Greenlet):
+class ForwardScrubber(ThrasherGreenlet):
     """
     ForwardScrubber::
 
@@ -29,7 +27,6 @@ class ForwardScrubber(Thrasher, Greenlet):
         self.logger = log.getChild('fs.[{f}]'.format(f=fs.name))
         self.fs = fs
         self.name = 'thrasher.fs.[{f}]'.format(f=fs.name)
-        self.stopping = Event()
         self.scrub_timeout = scrub_timeout
         self.sleep_between_iterations = sleep_between_iterations
 
@@ -41,21 +38,15 @@ class ForwardScrubber(Thrasher, Greenlet):
             self.logger.exception("exception:")
             # allow successful completion so gevent doesn't see an exception...
 
-    def stop(self):
-        self.stopping.set()
-
     def do_scrub(self):
         """
         Perform the file-system scrubbing
         """
         self.logger.info(f'start scrubbing fs: {self.fs.name}')
 
-        try:
-            while not self.stopping.is_set():
-                self._scrub()
-                sleep(self.sleep_between_iterations)
-        except GreenletExit:
-            pass
+        while not self.is_stopped:
+            self._scrub()
+            self.sleep_unless_stopped(self.sleep_between_iterations)
 
         self.logger.info(f'end scrubbing fs: {self.fs.name}')
 

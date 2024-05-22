@@ -2,6 +2,6 @@ os_type: rhel
 os_version: "8.0"
 overrides:
   selinux:
-    whitelist:
+    allowlist:
       - scontext=system_u:system_r:logrotate_t:s0
 ktype: distro

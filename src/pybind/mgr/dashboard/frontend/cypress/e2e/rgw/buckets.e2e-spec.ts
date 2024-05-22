@@ -18,7 +18,7 @@ describe('RGW buckets page', () => {
   describe('create, edit & delete bucket tests', () => {
     it('should create bucket', () => {
       buckets.navigateTo('create');
-      buckets.create(bucket_name, BucketsPageHelper.USERS[0], 'default-placement');
+      buckets.create(bucket_name, BucketsPageHelper.USERS[0]);
       buckets.getFirstTableCell(bucket_name).should('exist');
     });
 
@@ -38,7 +38,7 @@ describe('RGW buckets page', () => {
 
     it('should create bucket with object locking enabled', () => {
       buckets.navigateTo('create');
-      buckets.create(bucket_name, BucketsPageHelper.USERS[0], 'default-placement', true);
+      buckets.create(bucket_name, BucketsPageHelper.USERS[0], true);
       buckets.getFirstTableCell(bucket_name).should('exist');
     });
 
@@ -57,7 +57,7 @@ describe('RGW buckets page', () => {
 
     it('should test invalid input in edit owner field', () => {
       buckets.navigateTo('create');
-      buckets.create(bucket_name, BucketsPageHelper.USERS[0], 'default-placement');
+      buckets.create(bucket_name, BucketsPageHelper.USERS[0]);
       buckets.testInvalidEdit(bucket_name);
       buckets.navigateTo();
       buckets.delete(bucket_name);

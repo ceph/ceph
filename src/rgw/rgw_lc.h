@@ -44,26 +44,31 @@ protected:
   std::string days;
   //At present only current object has expiration date
   std::string date;
+  std::string newer_noncurrent;
 public:
   LCExpiration() {}
   LCExpiration(const std::string& _days, const std::string& _date) : days(_days), date(_date) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     encode(days, bl);
     encode(date, bl);
+    encode(newer_noncurrent, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(days, bl);
     if (struct_v >= 3) {
       decode(date, bl);
+      if (struct_v >= 4) {
+	decode(newer_noncurrent, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-//  static void generate_test_instances(list<ACLOwner*>& o);
+  //  static void generate_test_instances(list<ACLOwner*>& o);
   void set_days(const std::string& _days) { days = _days; }
   std::string get_days_str() const {
     return days;
@@ -71,6 +76,11 @@ public:
   int get_days() const {return atoi(days.c_str()); }
   bool has_days() const {
     return !days.empty();
+  }
+  void set_newer(const std::string& _newer) { newer_noncurrent = _newer; }
+  int get_newer() const {return atoi(newer_noncurrent.c_str()); }
+  bool has_newer() const {
+    return !newer_noncurrent.empty();
   }
   void set_date(const std::string& _date) { date = _date; }
   std::string get_date() const {
@@ -196,6 +206,8 @@ class LCFilter
 
 protected:
   std::string prefix;
+  std::string size_gt;
+  std::string size_lt;
   RGWObjTags obj_tags;
   uint32_t flags;
 
@@ -217,13 +229,15 @@ public:
   }
 
   bool empty() const {
-    return !(has_prefix() || has_tags() || has_flags());
+    return !(has_prefix() || has_tags() || has_flags() ||
+	     has_size_rule());
   }
 
   // Determine if we need AND tag when creating xml
   bool has_multi_condition() const {
-    if (obj_tags.count() + int(has_prefix()) + int(has_flags()) > 1) // Prefix is a member of Filter
-      return true;
+    if (obj_tags.count() + int(has_prefix()) + int(has_flags()) + int(has_size_rule()) > 1) {
+	return true;
+    }
     return false;
   }
 
@@ -235,6 +249,34 @@ public:
     return !obj_tags.empty();
   }
 
+  bool has_size_gt() const {
+    return !(size_gt.empty());
+  }
+
+  bool has_size_lt() const {
+    return !(size_lt.empty());
+  }
+
+  bool has_size_rule() const {
+    return (has_size_gt() || has_size_lt());
+  }
+
+  uint64_t get_size_gt() const {
+    uint64_t sz{0};
+    try {
+      sz = uint64_t(std::stoull(size_gt));
+    } catch (...) {}
+    return sz;
+  }
+
+  uint64_t get_size_lt() const {
+    uint64_t sz{0};
+    try {
+      sz = uint64_t(std::stoull(size_lt));
+    } catch (...) {}
+    return sz;
+  }
+
   bool has_flags() const {
     return !(flags == uint32_t(LCFlagType::none));
   }
@@ -244,10 +286,12 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(prefix, bl);
     encode(obj_tags, bl);
     encode(flags, bl);
+    encode(size_gt, bl);
+    encode(size_lt, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
@@ -257,6 +301,10 @@ public:
       decode(obj_tags, bl);
       if (struct_v >= 3) {
 	decode(flags, bl);
+	if (struct_v >= 4) {
+	  decode(size_gt, bl);
+	  decode(size_lt, bl);
+	}
       }
     }
     DECODE_FINISH(bl);
@@ -440,7 +488,10 @@ struct lc_op
   bool dm_expiration{false};
   int expiration{0};
   int noncur_expiration{0};
+  uint64_t newer_noncurrent{0};
   int mp_expiration{0};
+  boost::optional<uint64_t> size_gt;
+  boost::optional<uint64_t> size_lt;
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
   std::map<std::string, transition_action> transitions;
@@ -463,7 +514,6 @@ protected:
   std::multimap<std::string, lc_op> prefix_map;
   std::multimap<std::string, LCRule> rule_map;
   bool _add_rule(const LCRule& rule);
-  bool has_same_action(const lc_op& first, const lc_op& second);
 public:
   explicit RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
@@ -581,6 +631,13 @@ public:
 		   rgw::sal::Lifecycle::LCHead& head,
 		   rgw::sal::Lifecycle::LCEntry& entry,
 		   time_t start_date);
+  int check_if_shard_done(const std::string& lc_shard,
+ 			 rgw::sal::Lifecycle::LCHead& head,
+       int worker_ix);
+  int update_head(const std::string& lc_shard,
+			 rgw::sal::Lifecycle::LCHead& head,
+			 rgw::sal::Lifecycle::LCEntry& entry,
+			 time_t start_date, int worker_ix);
   int process(int index, int max_lock_secs, LCWorker* worker, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     const std::string& bucket_entry_marker, bool once);

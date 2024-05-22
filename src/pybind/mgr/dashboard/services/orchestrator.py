@@ -200,6 +200,13 @@ class UpgradeManager(ResourceManager):
         return self.api.upgrade_stop()
 
 
+class HardwareManager(ResourceManager):
+
+    @wait_api_result
+    def common(self, category: str, hostname: Optional[List[str]] = None) -> str:
+        return self.api.node_proxy_common(category, hostname=hostname)
+
+
 class OrchClient(object):
 
     _instance = None
@@ -220,6 +227,7 @@ class OrchClient(object):
         self.osds = OsdManager(self.api)
         self.daemons = DaemonManager(self.api)
         self.upgrades = UpgradeManager(self.api)
+        self.hardware = HardwareManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']

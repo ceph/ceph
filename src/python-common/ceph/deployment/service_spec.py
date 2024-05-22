@@ -306,8 +306,9 @@ class PlacementSpec(object):
             all_hosts = [hs.hostname for hs in hostspecs]
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
         if self.label:
-            return [hs.hostname for hs in hostspecs if self.label in hs.labels]
-        all_hosts = [hs.hostname for hs in hostspecs]
+            all_hosts = [hs.hostname for hs in hostspecs if self.label in hs.labels]
+        else:
+            all_hosts = [hs.hostname for hs in hostspecs]
         if self.host_pattern:
             return self.host_pattern.filter_hosts(all_hosts)
         return all_hosts
@@ -752,12 +753,54 @@ class ServiceSpec(object):
     This structure is supposed to be enough information to
     start the services.
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi nvmeof loki promtail mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw agent ceph-exporter ' \
-                          'container ingress cephfs-mirror snmp-gateway jaeger-tracing ' \
-                          'elasticsearch jaeger-agent jaeger-collector jaeger-query ' \
-                          'node-proxy'.split()
-    REQUIRES_SERVICE_ID = 'iscsi nvmeof mds nfs rgw container ingress '.split()
+
+    # list of all service type names that a ServiceSpec can be cast info
+    KNOWN_SERVICE_TYPES = [
+        'agent',
+        'alertmanager',
+        'ceph-exporter',
+        'cephfs-mirror',
+        'container',
+        'crash',
+        'elasticsearch',
+        'grafana',
+        'ingress',
+        'iscsi',
+        'jaeger-agent',
+        'jaeger-collector',
+        'jaeger-query',
+        'jaeger-tracing',
+        'loki',
+        'mds',
+        'mgr',
+        'mon',
+        'nfs',
+        'node-exporter',
+        'node-proxy',
+        'nvmeof',
+        'osd',
+        'prometheus',
+        'promtail',
+        'rbd-mirror',
+        'rgw',
+        'smb',
+        'snmp-gateway',
+    ]
+
+    # list of all service type names that require/get assigned a service_id value.
+    # if a service is not listed here it *will not* be assigned a service_id even
+    # if it is present in the JSON/YAML input
+    REQUIRES_SERVICE_ID = [
+        'container',
+        'ingress',
+        'iscsi',
+        'mds',
+        'nfs',
+        'nvmeof',
+        'rgw',
+        'smb',
+    ]
+
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -789,6 +832,7 @@ class ServiceSpec(object):
             'jaeger-collector': TracingSpec,
             'jaeger-query': TracingSpec,
             'jaeger-tracing': TracingSpec,
+            SMBSpec.service_type: SMBSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -818,6 +862,7 @@ class ServiceSpec(object):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
+                 targets: Optional[List[str]] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -854,6 +899,7 @@ class ServiceSpec(object):
         #: :ref:`cephadm-monitoring-networks-ports`,
         #: :ref:`cephadm-rgw-networks` and :ref:`cephadm-mgr-networks`.
         self.networks: List[str] = networks or []
+        self.targets: List[str] = targets or []
 
         self.config: Optional[Dict[str, str]] = None
         if config:
@@ -1090,9 +1136,11 @@ class NFSServiceSpec(ServiceSpec):
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
                  virtual_ip: Optional[str] = None,
+                 enable_nlm: bool = False,
                  enable_haproxy_protocol: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'nfs'
@@ -1105,6 +1153,8 @@ class NFSServiceSpec(ServiceSpec):
         self.port = port
         self.virtual_ip = virtual_ip
         self.enable_haproxy_protocol = enable_haproxy_protocol
+        self.idmap_conf = idmap_conf
+        self.enable_nlm = enable_nlm
 
     def get_port_start(self) -> List[int]:
         if self.port:
@@ -1168,7 +1218,12 @@ class RGWSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  rgw_realm_token: Optional[str] = None,
                  update_endpoints: Optional[bool] = False,
-                 zone_endpoints: Optional[str] = None  # commad separated endpoints list
+                 zone_endpoints: Optional[str] = None,  # comma separated endpoints list
+                 zonegroup_hostnames: Optional[str] = None,
+                 rgw_user_counters_cache: Optional[bool] = False,
+                 rgw_user_counters_cache_size: Optional[int] = None,
+                 rgw_bucket_counters_cache: Optional[bool] = False,
+                 rgw_bucket_counters_cache_size: Optional[int] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1208,6 +1263,16 @@ class RGWSpec(ServiceSpec):
         self.rgw_realm_token = rgw_realm_token
         self.update_endpoints = update_endpoints
         self.zone_endpoints = zone_endpoints
+        self.zonegroup_hostnames = zonegroup_hostnames
+
+        #: To track op metrics by user config value rgw_user_counters_cache must be set to true
+        self.rgw_user_counters_cache = rgw_user_counters_cache
+        #: Used to set number of entries in each cache of user counters
+        self.rgw_user_counters_cache_size = rgw_user_counters_cache_size
+        #: To track op metrics by bucket config value rgw_bucket_counters_cache must be set to true
+        self.rgw_bucket_counters_cache = rgw_bucket_counters_cache
+        #: Used to set number of entries in each cache of bucket counters
+        self.rgw_bucket_counters_cache_size = rgw_bucket_counters_cache_size
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]
@@ -1249,21 +1314,45 @@ class NvmeofServiceSpec(ServiceSpec):
                  port: Optional[int] = None,
                  pool: Optional[str] = None,
                  enable_auth: bool = False,
-                 min_controller_id: Optional[str] = '1',
-                 max_controller_id: Optional[str] = '65519',
+                 state_update_notify: Optional[bool] = True,
+                 state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
+                 omap_file_lock_duration: Optional[int] = 20,
+                 omap_file_lock_retries: Optional[int] = 30,
+                 omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
+                 omap_file_update_reloads: Optional[int] = 10,
+                 enable_prometheus_exporter: Optional[bool] = True,
+                 bdevs_per_cluster: Optional[int] = 32,
+                 verify_nqns: Optional[bool] = True,
+                 allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
+                 spdk_ping_interval_in_seconds: Optional[float] = 2.0,
+                 ping_spdk_under_lock: Optional[bool] = False,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
                  client_cert: Optional[str] = None,
                  spdk_path: Optional[str] = None,
                  tgt_path: Optional[str] = None,
-                 timeout: Optional[int] = 60,
+                 spdk_timeout: Optional[float] = 60.0,
+                 spdk_log_level: Optional[str] = 'WARNING',
+                 rpc_socket_dir: Optional[str] = '/var/tmp/',
+                 rpc_socket_name: Optional[str] = 'spdk.sock',
                  conn_retries: Optional[int] = 10,
                  transports: Optional[str] = 'tcp',
                  transport_tcp_options: Optional[Dict[str, int]] =
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  tgt_cmd_extra_args: Optional[str] = None,
+                 discovery_port: Optional[int] = None,
+                 log_level: Optional[str] = 'INFO',
+                 log_files_enabled: Optional[bool] = True,
+                 log_files_rotation_enabled: Optional[bool] = True,
+                 verbose_log_messages: Optional[bool] = True,
+                 max_log_file_size_in_mb: Optional[int] = 10,
+                 max_log_files_count: Optional[int] = 20,
+                 max_log_directory_backups: Optional[int] = 10,
+                 log_directory: Optional[str] = '/var/log/ceph/',
+                 monitor_timeout: Optional[float] = 1.0,
+                 enable_monitor_client: bool = False,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1292,12 +1381,32 @@ class NvmeofServiceSpec(ServiceSpec):
         self.group = group
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
-        #: ``min_controller_id`` minimum controller id used by SPDK, essential for multipath
-        self.min_controller_id = min_controller_id
-        #: ``max_controller_id`` maximum controller id used by SPDK, essential for multipath
-        self.max_controller_id = max_controller_id
+        #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
+        self.state_update_notify = state_update_notify
+        #: ``state_update_interval_sec`` number of seconds to check for updates in OMAP
+        self.state_update_interval_sec = state_update_interval_sec
         #: ``enable_spdk_discovery_controller`` SPDK or ceph-nvmeof discovery service
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
+        #: ``enable_prometheus_exporter`` enables Prometheus exporter
+        self.enable_prometheus_exporter = enable_prometheus_exporter
+        #: ``verify_nqns`` enables verification of subsystem and host NQNs for validity
+        self.verify_nqns = verify_nqns
+        #: ``omap_file_lock_duration`` number of seconds before automatically unlock OMAP file lock
+        self.omap_file_lock_duration = omap_file_lock_duration
+        #: ``omap_file_lock_retries`` number of retries to lock OMAP file before giving up
+        self.omap_file_lock_retries = omap_file_lock_retries
+        #: ``omap_file_lock_retry_sleep_interval`` seconds to wait before retrying to lock OMAP
+        self.omap_file_lock_retry_sleep_interval = omap_file_lock_retry_sleep_interval
+        #: ``omap_file_update_reloads`` number of attempt to reload OMAP when it differs from local
+        self.omap_file_update_reloads = omap_file_update_reloads
+        #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
+        self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
+        #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
+        self.spdk_ping_interval_in_seconds = spdk_ping_interval_in_seconds
+        #: ``ping_spdk_under_lock`` whether or not we should perform SPDK ping under the RPC lock
+        self.ping_spdk_under_lock = ping_spdk_under_lock
+        #: ``bdevs_per_cluster`` number of bdevs per cluster
+        self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
         self.server_key = server_key or './server.key'
         #: ``server_cert`` gateway server certificate
@@ -1310,8 +1419,14 @@ class NvmeofServiceSpec(ServiceSpec):
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
         #: ``tgt_path`` nvmeof target path
         self.tgt_path = tgt_path or '/usr/local/bin/nvmf_tgt'
-        #: ``timeout`` ceph connectivity timeout
-        self.timeout = timeout
+        #: ``spdk_timeout`` SPDK connectivity timeout
+        self.spdk_timeout = spdk_timeout
+        #: ``spdk_log_level`` the SPDK log level
+        self.spdk_log_level = spdk_log_level or 'WARNING'
+        #: ``rpc_socket_dir`` the SPDK socket file directory
+        self.rpc_socket_dir = rpc_socket_dir or '/var/tmp/'
+        #: ``rpc_socket_name`` the SPDK socket file name
+        self.rpc_socket_name = rpc_socket_name or 'spdk.sock'
         #: ``conn_retries`` ceph connection retries number
         self.conn_retries = conn_retries
         #: ``transports`` tcp
@@ -1320,6 +1435,28 @@ class NvmeofServiceSpec(ServiceSpec):
         self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
+        #: ``discovery_port`` port of the discovery service
+        self.discovery_port = discovery_port or 8009
+        #: ``log_level`` the nvmeof gateway log level
+        self.log_level = log_level or 'INFO'
+        #: ``log_files_enabled`` enables the usage of files to keep the nameof gateway log
+        self.log_files_enabled = log_files_enabled
+        #: ``log_files_rotation_enabled`` enables rotation of log files when pass the size limit
+        self.log_files_rotation_enabled = log_files_rotation_enabled
+        #: ``verbose_log_messages`` add more details to the nvmeof gateway log message
+        self.verbose_log_messages = verbose_log_messages
+        #: ``max_log_file_size_in_mb`` max size in MB before starting a new log file
+        self.max_log_file_size_in_mb = max_log_file_size_in_mb
+        #: ``max_log_files_count`` max log files to keep before overriding them
+        self.max_log_files_count = max_log_files_count
+        #: ``max_log_directory_backups`` max directories for old gateways with same name to keep
+        self.max_log_directory_backups = max_log_directory_backups
+        #: ``log_directory`` directory for keeping nameof gateway log files
+        self.log_directory = log_directory or '/var/log/ceph/'
+        #: ``monitor_timeout`` monitor connectivity timeout
+        self.monitor_timeout = monitor_timeout
+        #: ``enable_monitor_client`` whether to connect to the ceph monitor or not
+        self.enable_monitor_client = enable_monitor_client
 
     def get_port_start(self) -> List[int]:
         return [5500, 4420, 8009]
@@ -1338,6 +1475,102 @@ class NvmeofServiceSpec(ServiceSpec):
 
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
+
+        if self.log_level:
+            if self.log_level not in ['debug', 'DEBUG',
+                                      'info', 'INFO',
+                                      'warning', 'WARNING',
+                                      'error', 'ERROR',
+                                      'critical', 'CRITICAL']:
+                raise SpecValidationError(
+                    'Invalid log level. Valid values are: debug, info, warning, error, critial')
+
+        if self.spdk_log_level:
+            if self.spdk_log_level not in ['debug', 'DEBUG',
+                                           'info', 'INFO',
+                                           'warning', 'WARNING',
+                                           'error', 'ERROR',
+                                           'notice', 'NOTICE']:
+                raise SpecValidationError(
+                    'Invalid SPDK log level. Valid values are: DEBUG, INFO, WARNING, ERROR, NOTICE')
+
+        if (
+            self.spdk_ping_interval_in_seconds
+            and self.spdk_ping_interval_in_seconds < 1.0
+        ):
+            raise SpecValidationError("SPDK ping interval should be at least 1 second")
+
+        if (
+            self.allowed_consecutive_spdk_ping_failures
+            and self.allowed_consecutive_spdk_ping_failures < 1
+        ):
+            raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
+
+        if (
+            self.state_update_interval_sec
+            and self.state_update_interval_sec < 0
+        ):
+            raise SpecValidationError("State update interval can't be negative")
+
+        if (
+            self.omap_file_lock_duration
+            and self.omap_file_lock_duration < 0
+        ):
+            raise SpecValidationError("OMAP file lock duration can't be negative")
+
+        if (
+            self.omap_file_lock_retries
+            and self.omap_file_lock_retries < 0
+        ):
+            raise SpecValidationError("OMAP file lock retries can't be negative")
+
+        if (
+            self.omap_file_update_reloads
+            and self.omap_file_update_reloads < 0
+        ):
+            raise SpecValidationError("OMAP file reloads can't be negative")
+
+        if (
+            self.spdk_timeout
+            and self.spdk_timeout < 0.0
+        ):
+            raise SpecValidationError("SPDK timeout can't be negative")
+
+        if (
+            self.conn_retries
+            and self.conn_retries < 0
+        ):
+            raise SpecValidationError("Connection retries can't be negative")
+
+        if (
+            self.max_log_file_size_in_mb
+            and self.max_log_file_size_in_mb < 0
+        ):
+            raise SpecValidationError("Log file size can't be negative")
+
+        if (
+            self.max_log_files_count
+            and self.max_log_files_count < 0
+        ):
+            raise SpecValidationError("Log files count can't be negative")
+
+        if (
+            self.max_log_directory_backups
+            and self.max_log_directory_backups < 0
+        ):
+            raise SpecValidationError("Log file directory backups can't be negative")
+
+        if (
+            self.monitor_timeout
+            and self.monitor_timeout < 0.0
+        ):
+            raise SpecValidationError("Monitor timeout can't be negative")
+
+        if self.port and self.port < 0:
+            raise SpecValidationError("Port can't be negative")
+
+        if self.discovery_port and self.discovery_port < 0:
+            raise SpecValidationError("Discovery port can't be negative")
 
 
 yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
@@ -1445,6 +1678,7 @@ class IngressSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 health_check_interval: Optional[str] = None,
                  ):
         assert service_type == 'ingress'
 
@@ -1477,6 +1711,8 @@ class IngressSpec(ServiceSpec):
         self.ssl = ssl
         self.keepalive_only = keepalive_only
         self.enable_haproxy_protocol = enable_haproxy_protocol
+        self.health_check_interval = health_check_interval.strip(
+        ) if health_check_interval else None
 
     def get_port_start(self) -> List[int]:
         ports = []
@@ -1507,6 +1743,13 @@ class IngressSpec(ServiceSpec):
         if self.virtual_ip is not None and self.virtual_ips_list is not None:
             raise SpecValidationError(
                 'Cannot add ingress: Single and multiple virtual IPs specified')
+        if self.health_check_interval:
+            valid_units = ['s', 'm', 'h']
+            m = re.search(rf"^(\d+)({'|'.join(valid_units)})$", self.health_check_interval)
+            if not m:
+                raise SpecValidationError(
+                    f'Cannot add ingress: Invalid health_check_interval specified. '
+                    f'Valid units are: {valid_units}')
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
@@ -1720,6 +1963,7 @@ class MonitoringSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  port: Optional[int] = None,
+                 targets: Optional[List[str]] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1733,7 +1977,7 @@ class MonitoringSpec(ServiceSpec):
             preview_only=preview_only, config=config,
             networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
-            custom_configs=custom_configs)
+            custom_configs=custom_configs, targets=targets)
 
         self.service_type = service_type
         self.port = port
@@ -1820,10 +2064,11 @@ class GrafanaSpec(MonitoringSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  port: Optional[int] = None,
                  protocol: Optional[str] = 'https',
                  initial_admin_password: Optional[str] = None,
-                 anonymous_access: Optional[bool] = True,
+                 anonymous_access: bool = True,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1840,6 +2085,12 @@ class GrafanaSpec(MonitoringSpec):
         self.anonymous_access = anonymous_access
         self.protocol = protocol
 
+        # whether ports daemons for this service bind to should
+        # bind to only hte networks listed in networks param, or
+        # to all networks. Defaults to false which is saying to bind
+        # on all networks.
+        self.only_bind_port_on_networks = only_bind_port_on_networks
+
     def validate(self) -> None:
         super(GrafanaSpec, self).validate()
         if self.protocol not in ['http', 'https']:
@@ -1851,6 +2102,24 @@ class GrafanaSpec(MonitoringSpec):
                        'must be set to true. Otherwise the grafana dashboard will '
                        'be inaccessible.')
             raise SpecValidationError(err_msg)
+
+    def to_json(self) -> "OrderedDict[str, Any]":
+        json_dict = super(GrafanaSpec, self).to_json()
+        if not self.anonymous_access:
+            # This field was added as a boolean that defaults
+            # to True, which makes it get dropped when the user
+            # sets it to False and it is converted to json. This means
+            # the in memory version of the spec will have the option set
+            # correctly, but the persistent version we store in the config-key
+            # store will always drop this option. It's already been backported to
+            # some release versions, or we'd probably just rename it to
+            # no_anonymous_access and default it to False. This block is to
+            # handle this option specially and in the future, we should avoid
+            # boolean fields that default to True.
+            if 'spec' not in json_dict:
+                json_dict['spec'] = {}
+            json_dict['spec']['anonymous_access'] = False
+        return json_dict
 
 
 yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)
@@ -1865,9 +2134,11 @@ class PrometheusSpec(MonitoringSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  port: Optional[int] = None,
                  retention_time: Optional[str] = None,
                  retention_size: Optional[str] = None,
+                 targets: Optional[List[str]] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1876,12 +2147,13 @@ class PrometheusSpec(MonitoringSpec):
         super(PrometheusSpec, self).__init__(
             'prometheus', service_id=service_id,
             placement=placement, unmanaged=unmanaged,
-            preview_only=preview_only, config=config, networks=networks, port=port,
+            preview_only=preview_only, config=config, networks=networks, port=port, targets=targets,
             extra_container_args=extra_container_args, extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs)
 
         self.retention_time = retention_time.strip() if retention_time else None
         self.retention_size = retention_size.strip() if retention_size else None
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
     def validate(self) -> None:
         super(PrometheusSpec, self).validate()
@@ -2293,3 +2565,92 @@ class CephExporterSpec(ServiceSpec):
 
 
 yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)
+
+
+class SMBSpec(ServiceSpec):
+    service_type = 'smb'
+    _valid_features = {'domain'}
+
+    def __init__(
+        self,
+        # --- common service spec args ---
+        service_type: str = 'smb',
+        service_id: Optional[str] = None,
+        placement: Optional[PlacementSpec] = None,
+        count: Optional[int] = None,
+        config: Optional[Dict[str, str]] = None,
+        unmanaged: bool = False,
+        preview_only: bool = False,
+        networks: Optional[List[str]] = None,
+        # --- smb specific values ---
+        # cluster_id - a name identifying the smb "cluster" this daemon
+        # is part of. A cluster may be made up of one or more services
+        # sharing a common configuration.
+        cluster_id: str = '',
+        # features - a list of terms enabling specific deployment features.
+        # terms include: 'domain' to enable Active Dir. Domain membership.
+        features: Optional[List[str]] = None,
+        # config_uri - a pseudo-uri that resolves to a configuration source
+        # that the samba-container can load. A ceph based samba container will
+        # be typically storing configuration in rados (rados:// prefix)
+        config_uri: str = '',
+        # join_sources - a list of pseudo-uris that resolve to a (JSON) blob
+        # containing data the samba-container can use to join a domain. A ceph
+        # based samba container may typically use a rados uri or a mon
+        # config-key store uri (example:
+        # `rados:mon-config-key:smb/config/mycluster/join1.json`).
+        join_sources: Optional[List[str]] = None,
+        # user_sources - a list of pseudo-uris that resolve to a (JSON) blob
+        # containing data the samba-container can use to create users (and/or
+        # groups). A ceph based samba container may typically use a rados uri
+        # or a mon config-key store uri (example:
+        # `rados:mon-config-key:smb/config/mycluster/join1.json`).
+        user_sources: Optional[List[str]] = None,
+        # custom_dns -  a list of IP addresses that will be set up as custom
+        # dns servers for the samba container.
+        custom_dns: Optional[List[str]] = None,
+        # include_ceph_users - A list of ceph auth entity names that will be
+        # automatically added to the ceph keyring provided to the samba
+        # container.
+        include_ceph_users: Optional[List[str]] = None,
+        # --- genearal tweaks ---
+        extra_container_args: Optional[GeneralArgList] = None,
+        extra_entrypoint_args: Optional[GeneralArgList] = None,
+        custom_configs: Optional[List[CustomConfig]] = None,
+    ) -> None:
+        if service_type != self.service_type:
+            raise ValueError(f'invalid service_type: {service_type!r}')
+        super().__init__(
+            self.service_type,
+            service_id=service_id,
+            placement=placement,
+            count=count,
+            config=config,
+            unmanaged=unmanaged,
+            preview_only=preview_only,
+            networks=networks,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs,
+        )
+        self.cluster_id = cluster_id
+        self.features = features or []
+        self.config_uri = config_uri
+        self.join_sources = join_sources or []
+        self.user_sources = user_sources or []
+        self.custom_dns = custom_dns or []
+        self.include_ceph_users = include_ceph_users or []
+        self.validate()
+
+    def validate(self) -> None:
+        if not self.cluster_id:
+            raise ValueError('a valid cluster_id is required')
+        if not self.config_uri:
+            raise ValueError('a valid config_uri is required')
+        if self.features:
+            invalid = set(self.features).difference(self._valid_features)
+            if invalid:
+                raise ValueError(f'invalid feature flags: {", ".join(invalid)}')
+
+
+yaml.add_representer(SMBSpec, ServiceSpec.yaml_representer)

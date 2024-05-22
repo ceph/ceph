@@ -14,10 +14,10 @@
   tasks:
 
     - name: mark osds down
-      command: "ceph --cluster {{ cluster }} osd down osd.{{ item }}"
+      command: "ceph osd down osd.{{ item }}"
       with_items: "{{ osd_ids }}"
     - name: purge osds
-      command: "ceph --cluster {{ cluster }} osd purge osd.{{ item }} --yes-i-really-mean-it"
+      command: "ceph osd purge osd.{{ item }} --yes-i-really-mean-it"
       with_items: "{{ osd_ids }}"
 
 - hosts: osds
@@ -27,18 +27,18 @@
   tasks:
 
     - name: zap devices used for OSDs
-      command: "ceph-volume --cluster {{ cluster }} lvm zap {{ item }} --destroy"
+      command: "ceph-volume lvm zap {{ item }} --destroy"
       with_items: "{{ devices }}"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: batch create devices again
-      command: "ceph-volume --cluster {{ cluster }} lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} {{ external_devices }} {{ devices[2:] | join(' ') }}"
+      command: "ceph-volume lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} {{ external_devices }} {{ devices[2:] | join(' ') }}"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: ensure batch create is idempotent when all data devices are filtered
-      command: "ceph-volume --cluster {{ cluster }} lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} {{ external_devices }} {{ devices[2:] | join(' ') }}"
+      command: "ceph-volume lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} {{ external_devices }} {{ devices[2:] | join(' ') }}"
       register: batch_cmd
       failed_when: false
       environment:
@@ -51,7 +51,7 @@
          - batch_cmd.rc != 0
 
     - name: run batch --report to see if devices get filtered
-      command: "ceph-volume --cluster {{ cluster }} lvm batch --report --format=json --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} {{ external_devices }} {{ devices[2:] | join(' ') }}"
+      command: "ceph-volume lvm batch --report --format=json --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} {{ external_devices }} {{ devices[2:] | join(' ') }}"
       register: report_cmd
       failed_when: false
       environment:

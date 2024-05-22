@@ -517,6 +517,8 @@ multiple monitors are running to ensure proper functioning of your Ceph
 cluster. Check monitor status regularly in order to ensure that all of the
 monitors are running.
 
+.. _display-mon-map:
+
 To display the monitor map, run the following command:
 
 .. prompt:: bash $

@@ -81,9 +81,17 @@ class NodeProxy(ContainerDaemonForm):
         data_dir = self.identity.data_dir(ctx.data_dir)
         # TODO: update this when we have the actual location
         # in the ceph container we are going to keep node-proxy
-        mounts.update({os.path.join(data_dir, 'node-proxy.json'): '/usr/share/ceph/node-proxy.json:z'})
+        mounts.update(
+            {
+                os.path.join(
+                    data_dir, 'node-proxy.json'
+                ): '/usr/share/ceph/node-proxy.json:z'
+            }
+        )
 
-    def customize_process_args(self, ctx: CephadmContext, args: List[str]) -> None:
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
         # TODO: this corresponds with the mount location of
         # the config in _get_container_mounts above. They
         # will both need to be updated when we have a proper

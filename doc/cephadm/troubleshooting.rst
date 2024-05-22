@@ -32,7 +32,7 @@ completely by running the following commands:
   ceph orch set backend ''
   ceph mgr module disable cephadm
 
-These commands disable all of the ``ceph orch ...`` CLI commands. All
+These commands disable all ``ceph orch ...`` CLI commands. All
 previously deployed daemon containers continue to run and will start just as
 they were before you ran these commands.
 
@@ -56,7 +56,7 @@ following form:
 
   ceph orch ls --service_name=<service-name> --format yaml
 
-This will return something in the following form:
+This will return information in the following form:
 
 .. code-block:: yaml
 
@@ -252,16 +252,17 @@ For more detail on operations of this kind, see
 Accessing the Admin Socket
 --------------------------
 
-Each Ceph daemon provides an admin socket that bypasses the MONs (See
-:ref:`rados-monitoring-using-admin-socket`).
+Each Ceph daemon provides an admin socket that allows runtime option setting and statistic reading. See
+:ref:`rados-monitoring-using-admin-socket`.
 
 #. To access the admin socket, enter the daemon container on the host::
 
    [root@mon1 ~]# cephadm enter --name <daemon-name>
 
-#. Run a command of the following form to see the admin socket's configuration::
+#. Run a command of the following forms to see the admin socket's configuration and other available actions::
   
    [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
+   [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok help
 
 Running Various Ceph Tools
 --------------------------------

@@ -5,13 +5,16 @@
 After the Ceph Object Storage service is up and running, it can be administered
 with user management, access controls, quotas, and usage tracking.
 
+.. _radosgw-user-management:
+
 User Management
 ===============
 
 Ceph Object Storage user management refers only to users of the Ceph Object
 Storage service and not to the Ceph Object Gateway as a user of the Ceph
 Storage Cluster. Create a user, access key, and secret key to enable end users
-to interact with Ceph Object Gateway services.
+to interact with Ceph Object Gateway services. Optionally, the users can belong
+to `Accounts`_ for ease of management.
 
 There are two types of user: 
 
@@ -22,12 +25,16 @@ There are two types of user:
   
 .. ditaa::
            +---------+
-           |   User  |
+           | Account |
            +----+----+  
                 |     
-                |     +-----------+
-                +-----+  Subuser  |
-                      +-----------+
+                |     +---------+
+                +-----+  User   |
+                      +----+----+
+                           |
+                           |     +-----------+
+                           +-----+  Subuser  |
+                                 +-----------+
 
 Users and subusers can be created, modified, viewed, suspended and removed.
 you may add a Display names and an email addresses can be added to user
@@ -375,7 +382,7 @@ form:
 
 .. prompt:: bash
 
-   --caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit]=[\*|read|write|read, write]"
+   --caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit|user-info-without-keys]=[\*|read|write|read, write]"
 
 For example:
 
@@ -531,8 +538,9 @@ users.** If a default quota is set in the Ceph Object Gateway Config, then that
 quota is set for all subsequently-created users, and that quota is enabled. See
 ``rgw_bucket_default_quota_max_objects``,
 ``rgw_bucket_default_quota_max_size``, ``rgw_user_default_quota_max_objects``,
-and ``rgw_user_default_quota_max_size`` in `Ceph Object Gateway Config
-Reference`_
+``rgw_user_default_quota_max_size``, ``rgw_account_default_quota_max_objects``,
+and ``rgw_account_default_quota_max_size`` in `Ceph Object Gateway Config
+Reference`_.
 
 Quota Cache
 -----------
@@ -892,3 +900,4 @@ example commands:
 .. _radosgw-admin: ../../man/8/radosgw-admin/
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Ceph Object Gateway Config Reference: ../config-ref/
+.. _Accounts: ../account/

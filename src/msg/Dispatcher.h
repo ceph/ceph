@@ -33,7 +33,7 @@ public:
     : cct(cct_)
   {
   }
-  virtual ~Dispatcher() { }
+  virtual ~Dispatcher() = default;
 
   /**
    * The Messenger calls this function to query if you are capable

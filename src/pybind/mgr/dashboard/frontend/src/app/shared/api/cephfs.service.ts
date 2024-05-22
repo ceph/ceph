@@ -50,6 +50,10 @@ export class CephfsService {
     return this.http.get(`${this.baseURL}/${id}/mds_counters`);
   }
 
+  getFsRootDirectory(id: string) {
+    return this.http.get(`${this.baseURL}/${id}/get_root_directory`);
+  }
+
   mkSnapshot(id: number, path: string, name?: string) {
     let params = new HttpParams();
     params = params.append('path', path);
@@ -102,6 +106,15 @@ export class CephfsService {
     };
     return this.http.put(`${this.baseURL}/rename`, requestBody, {
       observe: 'response'
+    });
+  }
+
+  setAuth(fsName: string, clientId: number, caps: string[], rootSquash: boolean) {
+    return this.http.put(`${this.baseURL}/auth`, {
+      fs_name: fsName,
+      client_id: `client.${clientId}`,
+      caps: caps,
+      root_squash: rootSquash
     });
   }
 }

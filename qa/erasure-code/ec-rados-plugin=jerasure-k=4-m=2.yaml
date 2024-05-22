@@ -11,7 +11,9 @@ tasks:
       k: 4
       m: 2
       technique: reed_sol_van
-      crush-failure-domain: osd
+      crush-failure-domain: host
+      crush-osds-per-failure-domain: 2
+      crush-num-failure-domains: 3
     op_weights:
       read: 100
       write: 0

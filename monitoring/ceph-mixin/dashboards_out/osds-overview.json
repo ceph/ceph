@@ -103,21 +103,21 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "avg (\n  rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval]) * 1000\n)\n",
+               "expr": "avg (\n  rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "AVG read",
                "refId": "A"
             },
             {
-               "expr": "max(\n  rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval]) * 1000\n)\n",
+               "expr": "max(\n  rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MAX read",
                "refId": "B"
             },
             {
-               "expr": "quantile(0.95,\n  (\n    rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval])\n      * 1000\n  )\n)\n",
+               "expr": "quantile(0.95,\n  (\n    rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval])\n      * 1000\n  )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "@95%ile",
@@ -162,8 +162,82 @@
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
-         "description": "This table shows the osd's that are delivering the 10 highest read latencies within the cluster",
+         "datasource": "${datasource}",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "null",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "OSD ID"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -172,66 +246,24 @@
          },
          "id": 3,
          "links": [ ],
-         "sort": {
-            "col": 2,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "OSD ID",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "ceph_daemon",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Latency (ms)",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "none",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "/.*/",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
-               "expr": "topk(10,\n  (sort(\n    (\n      rate(ceph_osd_op_r_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n        on (ceph_daemon) rate(ceph_osd_op_r_latency_count{job=~\"$job\"}[$__rate_interval]) *\n        1000\n    )\n  ))\n)\n",
+               "expr": "topk(10,\n  (sort(\n    (\n      rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n        on (ceph_daemon) rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) *\n        1000\n    )\n  ))\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -242,7 +274,26 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Highest READ Latencies",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "merge",
+               "options": {
+                  "reducers": [ ]
+               }
+            },
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "cluster": true
+                  },
+                  "includeByName": { },
+                  "indexByName": { },
+                  "renameByName": { }
+               }
+            }
+         ],
          "type": "table"
       },
       {
@@ -299,21 +350,21 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "avg(\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval])\n    * 1000\n)\n",
+               "expr": "avg(\n  rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval])\n    * 1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "AVG write",
                "refId": "A"
             },
             {
-               "expr": "max(\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval]) *\n    1000\n)\n",
+               "expr": "max(\n  rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) *\n    1000\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MAX write",
                "refId": "B"
             },
             {
-               "expr": "quantile(0.95, (\n  rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval]) *\n    1000\n))\n",
+               "expr": "quantile(0.95, (\n  rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n    on (ceph_daemon) rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) *\n    1000\n))\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "@95%ile write",
@@ -358,8 +409,117 @@
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
+         "datasource": "${datasource}",
          "description": "This table shows the osd's that are delivering the 10 highest write latencies within the cluster",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "null",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "OSD ID"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency (ms)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "mappings",
+                        "value": [
+                           {
+                              "options": {
+                                 "NaN": {
+                                    "index": 0,
+                                    "text": "0.00"
+                                 }
+                              },
+                              "type": "value"
+                           }
+                        ]
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -368,66 +528,24 @@
          },
          "id": 5,
          "links": [ ],
-         "sort": {
-            "col": 2,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "OSD ID",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "ceph_daemon",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Latency (ms)",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "none",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "/.*/",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
-               "expr": "topk(10,\n  (sort(\n    (rate(ceph_osd_op_w_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_w_latency_count{job=~\"$job\"}[$__rate_interval]) *\n      1000)\n  ))\n)\n",
+               "expr": "topk(10,\n  (sort(\n    (rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n      on (ceph_daemon) rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[$__rate_interval]) *\n      1000)\n  ))\n)\n",
                "format": "table",
                "instant": true,
                "intervalFactor": 1,
@@ -438,13 +556,47 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Highest WRITE Latencies",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "merge",
+               "options": {
+                  "reducers": [ ]
+               }
+            },
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "cluster": true
+                  },
+                  "includeByName": { },
+                  "indexByName": { },
+                  "renameByName": { }
+               }
+            }
+         ],
          "type": "table"
       },
       {
-         "aliasColors": { },
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [ ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -452,16 +604,30 @@
             "y": 8
          },
          "id": 6,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [
+               "percent"
+            ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "reduceOptions": { },
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
-               "expr": "count by (device_class) (ceph_osd_metadata{job=~\"$job\"})",
+               "expr": "count by (device_class) (ceph_osd_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{device_class}}",
@@ -469,15 +635,27 @@
             }
          ],
          "title": "OSD Types Summary",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       },
       {
-         "aliasColors": {
-            "Non-Encrypted": "#E5AC0E"
-         },
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [ ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -485,23 +663,37 @@
             "y": 8
          },
          "id": 7,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [
+               "percent"
+            ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "reduceOptions": { },
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
-               "expr": "count(ceph_bluefs_wal_total_bytes{job=~\"$job\"})",
+               "expr": "count(ceph_bluefs_wal_total_bytes{cluster=~\"$cluster\", })",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "bluestore",
                "refId": "A"
             },
             {
-               "expr": "absent(ceph_bluefs_wal_total_bytes{job=~\"$job\"}) * count(ceph_osd_metadata{job=~\"$job\"})",
+               "expr": "absent(ceph_bluefs_wal_total_bytes{cluster=~\"$cluster\", }) * count(ceph_osd_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "filestore",
@@ -509,13 +701,27 @@
             }
          ],
          "title": "OSD Objectstore Types",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       },
       {
-         "aliasColors": { },
          "datasource": "$datasource",
          "description": "The pie chart shows the various OSD sizes used within the cluster",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [ ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -523,72 +729,86 @@
             "y": 8
          },
          "id": 8,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [
+               "percent"
+            ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "reduceOptions": { },
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} < 1099511627776)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } < 1099511627776)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<1TB",
                "refId": "A"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 1099511627776 < 2199023255552)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 1099511627776 < 2199023255552)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<2TB",
                "refId": "B"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 2199023255552 < 3298534883328)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 2199023255552 < 3298534883328)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<3TB",
                "refId": "C"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 3298534883328 < 4398046511104)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 3298534883328 < 4398046511104)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<4TB",
                "refId": "D"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 4398046511104 < 6597069766656)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 4398046511104 < 6597069766656)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<6TB",
                "refId": "E"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 6597069766656 < 8796093022208)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 6597069766656 < 8796093022208)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<8TB",
                "refId": "F"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 8796093022208 < 10995116277760)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 8796093022208 < 10995116277760)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<10TB",
                "refId": "G"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 10995116277760 < 13194139533312)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 10995116277760 < 13194139533312)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<12TB",
                "refId": "H"
             },
             {
-               "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} >= 13194139533312)",
+               "expr": "count(ceph_osd_stat_bytes{cluster=~\"$cluster\", } >= 13194139533312)",
                "format": "time_series",
                "intervalFactor": 2,
                "legendFormat": "<12TB+",
@@ -596,8 +816,7 @@
             }
          ],
          "title": "OSD Size Summary",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       },
       {
          "aliasColors": { },
@@ -650,7 +869,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "ceph_osd_numpg{job=~\"$job\"}",
+               "expr": "ceph_osd_numpg{cluster=~\"$cluster\", }",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -756,7 +975,7 @@
          "tableColumn": "",
          "targets": [
             {
-               "expr": "sum(ceph_bluestore_onode_hits{job=~\"$job\"}) / (\n  sum(ceph_bluestore_onode_hits{job=~\"$job\"}) +\n  sum(ceph_bluestore_onode_misses{job=~\"$job\"})\n)\n",
+               "expr": "sum(ceph_bluestore_onode_hits{cluster=~\"$cluster\", }) / (\n  sum(ceph_bluestore_onode_hits{cluster=~\"$cluster\", }) +\n  sum(ceph_bluestore_onode_misses{cluster=~\"$cluster\", })\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "",
@@ -847,14 +1066,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "round(sum(rate(ceph_pool_rd{job=~\"$job\"}[$__rate_interval])))",
+               "expr": "round(sum(rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval])))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Reads",
                "refId": "A"
             },
             {
-               "expr": "round(sum(rate(ceph_pool_wr{job=~\"$job\"}[$__rate_interval])))",
+               "expr": "round(sum(rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval])))",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Writes",
@@ -899,73 +1118,106 @@
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
+         "datasource": "${datasource}",
          "description": "This table shows the 10 OSDs with the highest number of slow ops",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "null",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "ceph_daemon"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "OSD ID"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Slow Ops"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 8,
-            "w": 4,
+            "w": 5,
             "x": 0,
-            "y": 20
+            "y": 25
          },
          "id": 13,
          "links": [ ],
-         "sort": {
-            "col": 2,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "OSD ID",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "ceph_daemon",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Slow Ops",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "none",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "/.*/",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
                "expr": "topk(10,\n  (ceph_daemon_health_metrics{type=\"SLOW_OPS\", ceph_daemon=~\"osd.*\"})\n)\n",
@@ -979,7 +1231,30 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Top Slow Ops",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "merge",
+               "options": {
+                  "reducers": [ ]
+               }
+            },
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "__name__": true,
+                     "cluster": true,
+                     "instance": true,
+                     "job": true,
+                     "type": true
+                  },
+                  "includeByName": { },
+                  "indexByName": { },
+                  "renameByName": { }
+               }
+            }
+         ],
          "type": "table"
       }
    ],
@@ -1007,36 +1282,16 @@
             "type": "datasource"
          },
          {
-            "allValue": ".+",
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 2,
-            "includeAll": true,
-            "label": "cluster",
-            "multi": true,
-            "name": "cluster",
-            "options": [ ],
-            "query": "label_values(ceph_osd_metadata, cluster)",
-            "refresh": 1,
-            "regex": "(.*)",
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
-         {
-            "allValue": ".+",
+            "allValue": null,
             "current": { },
             "datasource": "$datasource",
             "hide": 0,
-            "includeAll": true,
-            "label": "job",
-            "multi": true,
-            "name": "job",
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{}, job)",
+            "query": "label_values(ceph_health_status, cluster)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,

@@ -26,9 +26,9 @@ export class PrometheusAlertService {
     private prometheusService: PrometheusService
   ) {}
 
-  getAlerts() {
+  getAlerts(clusterFilteredAlerts?: boolean) {
     this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusService.getAlerts().subscribe(
+      this.prometheusService.getAlerts(clusterFilteredAlerts).subscribe(
         (alerts) => this.handleAlerts(alerts),
         (resp) => {
           if ([404, 504].includes(resp.status)) {
@@ -54,8 +54,8 @@ export class PrometheusAlertService {
     });
   }
 
-  refresh() {
-    this.getAlerts();
+  refresh(clusterFilteredAlerts?: boolean) {
+    this.getAlerts(clusterFilteredAlerts);
     this.getRules();
   }
 

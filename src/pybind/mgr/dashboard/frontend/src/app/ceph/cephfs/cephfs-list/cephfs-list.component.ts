@@ -21,6 +21,11 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
+import { map, switchMap } from 'rxjs/operators';
+import { HealthService } from '~/app/shared/api/health.service';
+import { CephfsAuthModalComponent } from '~/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component';
 
 const BASE_URL = 'cephfs';
 
@@ -38,6 +43,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
   permissions: Permissions;
   icons = Icons;
   monAllowPoolDelete = false;
+  modalRef!: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -48,7 +54,8 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
     private configurationService: ConfigurationService,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
-    public notificationService: NotificationService
+    public notificationService: NotificationService,
+    private healthService: HealthService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -90,6 +97,19 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
           this.router.navigate([this.urlBuilder.getEdit(String(this.selection.first().id))])
       },
       {
+        name: this.actionLabels.AUTHORIZE,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.authorizeModal()
+      },
+      {
+        name: this.actionLabels.ATTACH,
+        permission: 'read',
+        icon: Icons.bars,
+        disable: () => !this.selection?.hasSelection,
+        click: () => this.showAttachInfo()
+      },
+      {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.removeVolumeModal(),
@@ -125,6 +145,30 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
     this.selection = selection;
   }
 
+  showAttachInfo() {
+    const selectedFileSystem = this.selection?.selected?.[0];
+
+    this.cephfsService
+      .getFsRootDirectory(selectedFileSystem.id)
+      .pipe(
+        switchMap((fsData) =>
+          this.healthService.getClusterFsid().pipe(map((data) => ({ clusterId: data, fs: fsData })))
+        )
+      )
+      .subscribe({
+        next: (val) => {
+          this.modalRef = this.modalService.show(CephfsMountDetailsComponent, {
+            onSubmit: () => this.modalRef.close(),
+            mountData: {
+              fsId: val.clusterId,
+              fsName: selectedFileSystem?.mdsmap?.fs_name,
+              rootPath: val.fs['path']
+            }
+          });
+        }
+      });
+  }
+
   removeVolumeModal() {
     const volName = this.selection.first().mdsmap['fs_name'];
     this.modalService.show(CriticalConfirmationModalComponent, {
@@ -149,5 +193,17 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
     }
 
     return true;
+  }
+
+  authorizeModal() {
+    const selectedFileSystem = this.selection?.selected?.[0];
+    this.modalService.show(
+      CephfsAuthModalComponent,
+      {
+        fsName: selectedFileSystem.mdsmap['fs_name'],
+        id: selectedFileSystem.id
+      },
+      { size: 'lg' }
+    );
   }
 }

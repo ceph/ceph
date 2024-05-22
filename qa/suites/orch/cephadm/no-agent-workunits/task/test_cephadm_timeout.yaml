@@ -1,0 +1,19 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - client.0
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_REFRESH_FAILED
+    log-only-match:
+      - CEPHADM_
+tasks:
+- install:
+- cephadm:
+- workunit:
+    clients:
+      client.0:
+        - cephadm/test_cephadm_timeout.py

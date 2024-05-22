@@ -117,10 +117,16 @@ def check_sanity():
             extra_preargs=['-iquote{path}'.format(path=os.path.join(CEPH_SRC_DIR, 'include'))]
         )
 
+        ldflags = os.environ.get('LDFLAGS')
+        if ldflags:
+            extra_postargs = ldflags.split()
+        else:
+            extra_postargs = None
         compiler.link_executable(
             objects=link_objects,
             output_progname=os.path.join(tmp_dir, 'cephfs_dummy'),
             libraries=['cephfs'],
+            extra_postargs=extra_postargs,
             output_dir=tmp_dir,
         )
 

@@ -12,9 +12,9 @@ class Endpoint:
         if method is None:
             method = 'GET'
         elif not isinstance(method, str) or \
-                method.upper() not in ['GET', 'POST', 'DELETE', 'PUT']:
+                method.upper() not in ['GET', 'POST', 'DELETE', 'PUT', 'PATCH']:
             raise TypeError("Possible values for method are: 'GET', 'POST', "
-                            "'DELETE', or 'PUT'")
+                            "'DELETE', 'PUT', 'PATCH'")
 
         method = method.upper()
 
@@ -25,7 +25,7 @@ class Endpoint:
                                 " path parameters by default".format(method))
 
         if path_params is None:
-            if method in ['POST', 'PUT']:
+            if method in ['POST', 'PUT', 'PATCH']:
                 path_params = []
 
         if query_params is None:
@@ -41,7 +41,7 @@ class Endpoint:
         self.version = version
 
     def __call__(self, func):
-        if self.method in ['POST', 'PUT']:
+        if self.method in ['POST', 'PUT', 'PATCH']:
             func_params = _get_function_params(func)
             for param in func_params:
                 if param['name'] in self.path_params and not param['required']:

@@ -10,6 +10,7 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
+#include "include/rados/librados_fwd.hpp"
 #include "include/types.h"
 #include "rgw_common.h"
 #include "rgw_tools.h"
@@ -188,7 +189,7 @@ public:
 
 class RGWBucketMetaHandlerAllocator {
 public:
-  static RGWBucketMetadataHandlerBase *alloc();
+  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
 };
 
 class RGWBucketInstanceMetaHandlerAllocator {
@@ -198,7 +199,7 @@ public:
 
 class RGWArchiveBucketMetaHandlerAllocator {
 public:
-  static RGWBucketMetadataHandlerBase *alloc();
+  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
 };
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
@@ -212,10 +213,15 @@ extern int rgw_object_get_attr(rgw::sal::Driver* driver, rgw::sal::Object* obj,
 			       const char* attr_name, bufferlist& out_bl,
 			       optional_yield y);
 
-extern void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& user, bool fix, optional_yield y, const DoutPrefixProvider *dpp);
+void check_bad_owner_bucket_mapping(rgw::sal::Driver* driver,
+                                    const rgw_owner& owner,
+                                    const std::string& tenant,
+                                    bool fix, optional_yield y,
+                                    const DoutPrefixProvider *dpp);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
+  rgw_account_id account_id;
   std::string display_name;
   std::string bucket_name;
   std::string bucket_id;
@@ -277,6 +283,7 @@ struct RGWBucketAdminOpState {
   void set_sync_bucket(bool value) { sync_bucket = value; }
 
   rgw_user& get_user_id() { return uid; }
+  rgw_account_id& get_account_id() { return account_id; }
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
   std::string& get_object_name() { return object_name; }
@@ -298,6 +305,7 @@ struct RGWBucketAdminOpState {
   bool will_delete_children() { return delete_child_objects; }
   bool will_check_objects() { return check_objects; }
   bool is_user_op() { return !uid.empty(); }
+  bool is_account_op() { return !account_id.empty(); }
   bool is_system_op() { return uid.empty(); }
   bool has_bucket_stored() { return bucket_stored; }
   int get_max_aio() { return max_aio; }
@@ -330,9 +338,12 @@ public:
   int init(rgw::sal::Driver* storage, RGWBucketAdminOpState& op_state, optional_yield y,
              const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
-  int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-              RGWFormatterFlusher& flusher,
-              const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
+  int check_bad_index_multipart(rgw::sal::RadosStore* const rados_store,
+				RGWBucketAdminOpState& op_state,
+				RGWFormatterFlusher& flusher,
+				const DoutPrefixProvider *dpp,
+				optional_yield y,
+				std::string *err_msg = nullptr);
 
   int check_object_index(const DoutPrefixProvider *dpp, 
                          RGWBucketAdminOpState& op_state,
@@ -372,7 +383,7 @@ public:
   static int dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   std::ostream& os, const DoutPrefixProvider *dpp, optional_yield y);
 
-  static int unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y);
+  static int unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = nullptr);
   static int link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
   static int chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const std::string& marker, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
@@ -678,7 +689,8 @@ public:
                                 const DoutPrefixProvider *dpp);
 
   /* user/bucket */
-  int link_bucket(const rgw_user& user_id,
+  int link_bucket(librados::Rados& rados,
+                  const rgw_owner& owner,
                   const rgw_bucket& bucket,
                   ceph::real_time creation_time,
 		  optional_yield y,
@@ -686,13 +698,14 @@ public:
                   bool update_entrypoint = true,
                   rgw_ep_info *pinfo = nullptr);
 
-  int unlink_bucket(const rgw_user& user_id,
+  int unlink_bucket(librados::Rados& rados,
+                    const rgw_owner& owner,
                     const rgw_bucket& bucket,
 		    optional_yield y,
                     const DoutPrefixProvider *dpp,
                     bool update_entrypoint = true);
 
-  int read_buckets_stats(std::map<std::string, RGWBucketEnt>& m,
+  int read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
                          optional_yield y,
                          const DoutPrefixProvider *dpp);
 
@@ -702,10 +715,12 @@ public:
                         const DoutPrefixProvider *dpp);
 
   /* quota related */
-  int sync_user_stats(const DoutPrefixProvider *dpp, 
-                      const rgw_user& user_id, const RGWBucketInfo& bucket_info,
-		      optional_yield y,
-                      RGWBucketEnt* pent);
+  int sync_owner_stats(const DoutPrefixProvider *dpp,
+                       librados::Rados& rados,
+                       const rgw_owner& owner,
+                       const RGWBucketInfo& bucket_info,
+                       optional_yield y,
+                       RGWBucketEnt* pent);
 
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,
@@ -744,7 +759,8 @@ private:
                                   const DoutPrefixProvider *dpp);
 
   int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                     const rgw_user& user,
+                     librados::Rados& rados,
+                     const rgw_owner& owner,
                      const rgw_bucket& bucket,
                      ceph::real_time creation_time,
                      bool update_entrypoint,
@@ -753,7 +769,8 @@ private:
                      const DoutPrefixProvider *dpp);
 
   int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                       const rgw_user& user_id,
+                       librados::Rados& rados,
+                       const rgw_owner& owner,
                        const rgw_bucket& bucket,
                        bool update_entrypoint,
 		       optional_yield y,

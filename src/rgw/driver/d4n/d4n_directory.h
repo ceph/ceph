@@ -1,53 +1,84 @@
-#ifndef CEPH_RGWD4NDIRECTORY_H
-#define CEPH_RGWD4NDIRECTORY_H
+#pragma once
 
 #include "rgw_common.h"
-#include <cpp_redis/cpp_redis>
-#include <string>
-#include <iostream>
 
-struct cache_obj {
-  std::string bucket_name; /* s3 bucket name */
-  std::string obj_name; /* s3 obj name */
+#include <boost/lexical_cast.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/redis/connection.hpp>
+
+namespace rgw { namespace d4n {
+
+namespace net = boost::asio;
+using boost::redis::config;
+using boost::redis::connection;
+using boost::redis::request;
+using boost::redis::response;
+
+struct CacheObj {
+  std::string objName; /* S3 object name */
+  std::string bucketName; /* S3 bucket name */
+  std::string creationTime; /* Creation time of the S3 Object */
+  bool dirty;
+  std::vector<std::string> hostsList; /* List of hostnames <ip:port> of object locations for multiple backends */
 };
 
-struct cache_block {
-  cache_obj c_obj;
-  uint64_t size_in_bytes; /* block size_in_bytes */
-  std::vector<std::string> hosts_list; /* Currently not supported: list of hostnames <ip:port> of block locations */
+struct CacheBlock {
+  CacheObj cacheObj;
+  uint64_t blockID;
+  std::string version;
+  uint64_t size; /* Block size in bytes */
+  int globalWeight = 0; /* LFUDA policy variable */
+  std::vector<std::string> hostsList; /* List of hostnames <ip:port> of block locations */
 };
 
-class RGWDirectory {
+class Directory {
   public:
-    RGWDirectory() {}
-    CephContext *cct;
+    CephContext* cct;
+
+    Directory() {}
 };
 
-class RGWBlockDirectory: RGWDirectory {
+class ObjectDirectory: public Directory {
   public:
-    RGWBlockDirectory() {}
-    RGWBlockDirectory(std::string blockHost, int blockPort):host(blockHost), port(blockPort) {}
-    
-    void init(CephContext *_cct) {
-      cct = _cct;
-      host = cct->_conf->rgw_d4n_host;
-      port = cct->_conf->rgw_d4n_port;
+    ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+
+    void init(CephContext* cct) {
+      this->cct = cct;
     }
-	
-    int findClient(cpp_redis::client *client);
-    int existKey(std::string key);
-    int setValue(cache_block *ptr);
-    int getValue(cache_block *ptr);
-    int delValue(cache_block *ptr);
+    int exist_key(CacheObj* object, optional_yield y);
 
-    std::string get_host() { return host; }
-    int get_port() { return port; }
+    int set(CacheObj* object, optional_yield y);
+    int get(CacheObj* object, optional_yield y);
+    int copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y);
+    int del(CacheObj* object, optional_yield y);
+    int update_field(CacheObj* object, std::string field, std::string value, optional_yield y);
 
   private:
-    cpp_redis::client client;
-    std::string buildIndex(cache_block *ptr);
-    std::string host = "";
-    int port = 0;
+    std::shared_ptr<connection> conn;
+
+    std::string build_index(CacheObj* object);
 };
 
-#endif
+class BlockDirectory: public Directory {
+  public:
+    BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    
+    void init(CephContext* cct) {
+      this->cct = cct;
+    }
+    int exist_key(CacheBlock* block, optional_yield y);
+
+    int set(CacheBlock* block, optional_yield y);
+    int get(CacheBlock* block, optional_yield y);
+    int copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y);
+    int del(CacheBlock* block, optional_yield y);
+    int update_field(CacheBlock* block, std::string field, std::string value, optional_yield y);
+    int remove_host(CacheBlock* block, std::string value, optional_yield y);
+
+  private:
+    std::shared_ptr<connection> conn;
+
+    std::string build_index(CacheBlock* block);
+};
+
+} } // namespace rgw::d4n

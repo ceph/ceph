@@ -2,7 +2,6 @@ import errno
 import logging
 import signal
 from textwrap import dedent
-from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError
@@ -63,9 +62,6 @@ class TestSnapshots(CephFSTestCase):
         """
         check snaptable transcation
         """
-        if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("Require FUSE client to forcibly kill mount")
-
         self.fs.set_allow_new_snaps(True);
         self.fs.set_max_mds(2)
         status = self.fs.wait_for_daemons()
@@ -123,8 +119,7 @@ class TestSnapshots(CephFSTestCase):
 
             self.fs.rank_signal(signal.SIGKILL, rank=1)
 
-            self.mount_a.kill()
-            self.mount_a.kill_cleanup()
+            self.mount_a.suspend_netns()
 
             self.fs.rank_fail(rank=0)
             self.fs.mds_restart(rank0['name'])
@@ -149,7 +144,13 @@ class TestSnapshots(CephFSTestCase):
                 else:
                     self.assertGreater(self._get_last_created_snap(rank=0), last_created)
 
-            self.mount_a.mount_wait()
+            self.mount_a.resume_netns()
+            try:
+                proc.wait()
+            except CommandFailedError:
+                pass
+            self.mount_a.remount()
+            self.fs.flush()
 
         self.mount_a.run_shell(["rmdir", Raw("d1/dir/.snap/*")])
 
@@ -169,8 +170,7 @@ class TestSnapshots(CephFSTestCase):
             self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(rank=1), timeout=self.fs.beacon_timeout);
             self.delete_mds_coredump(rank1['name']);
 
-            self.mount_a.kill()
-            self.mount_a.kill_cleanup()
+            self.mount_a.suspend_netns()
 
             if i in [3,4]:
                 self.assertEqual(len(self._get_pending_snap_update(rank=0)), 1)
@@ -190,7 +190,13 @@ class TestSnapshots(CephFSTestCase):
                 else:
                     self.assertGreater(self._get_last_created_snap(rank=0), last_created)
 
-            self.mount_a.mount_wait()
+            self.mount_a.resume_netns()
+            try:
+                proc.wait()
+            except CommandFailedError:
+                pass
+            self.mount_a.remount()
+            self.fs.flush()
 
         self.mount_a.run_shell(["rmdir", Raw("d1/dir/.snap/*")])
 
@@ -211,8 +217,7 @@ class TestSnapshots(CephFSTestCase):
         self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(rank=1), timeout=self.fs.beacon_timeout);
         self.delete_mds_coredump(rank1['name']);
 
-        self.mount_a.kill()
-        self.mount_a.kill_cleanup()
+        self.mount_a.suspend_netns()
 
         self.assertEqual(len(self._get_pending_snap_update(rank=0)), 1)
 
@@ -232,7 +237,13 @@ class TestSnapshots(CephFSTestCase):
         self.wait_until_true(lambda: len(self._get_pending_snap_update(rank=0)) == 0, timeout=30)
         self.assertEqual(self._get_last_created_snap(rank=0), last_created)
 
-        self.mount_a.mount_wait()
+        self.mount_a.resume_netns()
+        try:
+            proc.wait()
+        except CommandFailedError:
+            pass
+        self.mount_a.remount()
+        self.fs.flush()
 
     def test_snapclient_cache(self):
         """
@@ -327,8 +338,7 @@ class TestSnapshots(CephFSTestCase):
             self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(rank=2), timeout=self.fs.beacon_timeout);
             self.delete_mds_coredump(rank2['name']);
 
-            self.mount_a.kill()
-            self.mount_a.kill_cleanup()
+            self.mount_a.suspend_netns()
 
             self.assertEqual(len(self._get_pending_snap_update(rank=0)), 1)
 
@@ -356,7 +366,13 @@ class TestSnapshots(CephFSTestCase):
             self.assertEqual(snaps_dump["last_created"], rank0_cache["last_created"])
             self.assertTrue(_check_snapclient_cache(snaps_dump, cache_dump=rank0_cache));
 
-            self.mount_a.mount_wait()
+            self.mount_a.resume_netns()
+            try:
+                proc.wait()
+            except CommandFailedError:
+                pass
+            self.mount_a.remount()
+            self.fs.flush()
 
         self.mount_a.run_shell(["rmdir", Raw("d0/d2/dir/.snap/*")])
 
@@ -376,7 +392,7 @@ class TestSnapshots(CephFSTestCase):
         self.mount_a.write_test_pattern("d0/d1/file_a", 8 * 1024 * 1024)
         self.mount_a.run_shell(["mkdir", "d0/.snap/s1"])
         self.mount_a.run_shell(["rm", "-f", "d0/d1/file_a"])
-        self.mount_a.validate_test_pattern("d0/.snap/s1/d1/file_a", 8 * 1024 * 1024)
+        self.mount_a.validate_test_pattern("d0/.snap/s1/d1/file_a", 8 * 1024 * 1024, timeout=20)
 
         self.mount_a.run_shell(["rmdir", "d0/.snap/s1"])
         self.mount_a.run_shell(["rm", "-rf", "d0"])

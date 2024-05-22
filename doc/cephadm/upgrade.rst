@@ -2,7 +2,7 @@
 Upgrading Ceph
 ==============
 
-Cephadm can safely upgrade Ceph from one bugfix release to the next.  For
+Cephadm can safely upgrade Ceph from one point release to the next.  For
 example, you can upgrade from v15.2.0 (the first Octopus release) to the next
 point release, v15.2.1.
 
@@ -56,13 +56,13 @@ Before you use cephadm to upgrade Ceph, verify that all hosts are currently onli
 
    ceph -s
 
-To upgrade (or downgrade) to a specific release, run the following command:
+To upgrade to a specific release, run a command of the following form:
 
 .. prompt:: bash #
 
   ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v16.2.6, run the following command:
+For example, to upgrade to v16.2.6, run a command of the following form:
 
 .. prompt:: bash #
 
@@ -137,25 +137,25 @@ UPGRADE_NO_STANDBY_MGR
 ----------------------
 
 This alert (``UPGRADE_NO_STANDBY_MGR``) means that Ceph does not detect an
-active standby manager daemon. In order to proceed with the upgrade, Ceph
-requires an active standby manager daemon (which you can think of in this
+active standby Manager daemon. In order to proceed with the upgrade, Ceph
+requires an active standby Manager daemon (which you can think of in this
 context as "a second manager").
 
-You can ensure that Cephadm is configured to run 2 (or more) managers by
+You can ensure that Cephadm is configured to run two (or more) Managers by
 running the following command:
 
 .. prompt:: bash #
 
   ceph orch apply mgr 2  # or more
 
-You can check the status of existing mgr daemons by running the following
+You can check the status of existing Manager daemons by running the following
 command:
 
 .. prompt:: bash #
 
   ceph orch ps --daemon-type mgr
 
-If an existing mgr daemon has stopped, you can try to restart it by running the
+If an existing Manager daemon has stopped, you can try to restart it by running the
 following command: 
 
 .. prompt:: bash #
@@ -183,7 +183,7 @@ Using customized container images
 =================================
 
 For most users, upgrading requires nothing more complicated than specifying the
-Ceph version number to upgrade to.  In such cases, cephadm locates the specific
+Ceph version to which to upgrade.  In such cases, cephadm locates the specific
 Ceph container image to use by combining the ``container_image_base``
 configuration option (default: ``docker.io/ceph/ceph``) with a tag of
 ``vX.Y.Z``.

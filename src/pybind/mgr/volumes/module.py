@@ -273,6 +273,30 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs quiesce '
+                   'name=vol_name,type=CephString '
+                   'name=members,type=CephString,n=N,req=false '
+                   '-- '
+                   'name=set_id,type=CephString,req=false '
+                   'name=timeout,type=CephFloat,range=0,req=false '
+                   'name=expiration,type=CephFloat,range=0,req=false '
+                   'name=await_for,type=CephFloat,range=0,req=false '
+                   'name=await,type=CephBool,req=false '
+                   'name=if_version,type=CephInt,range=0,req=false '
+                   'name=include,type=CephBool,req=false '
+                   'name=exclude,type=CephBool,req=false '
+                   'name=reset,type=CephBool,req=false '
+                   'name=release,type=CephBool,req=false '
+                   'name=query,type=CephBool,req=false '
+                   'name=all,type=CephBool,req=false '
+                   'name=cancel,type=CephBool,req=false '
+                   'name=group_name,type=CephString,req=false '
+                   'name=leader,type=CephBool,req=false '
+                   'name=with_leader,type=CephInt,range=0,req=false ',
+            'desc': "Manage quiesce sets of subvolumes",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolumegroup pin'
                    ' name=vol_name,type=CephString'
                    ' name=group_name,type=CephString,req=true'
@@ -489,7 +513,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'periodic_async_work',
             type='bool',
             default=False,
-            desc='Periodically check for async work')
+            desc='Periodically check for async work'),
+        Option(
+            'snapshot_clone_no_wait',
+            type='bool',
+            default=True,
+            desc='Reject subvolume clone request when cloner threads are busy')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -498,6 +527,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.max_concurrent_clones = None
         self.snapshot_clone_delay = None
         self.periodic_async_work = False
+        self.snapshot_clone_no_wait = None
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -532,6 +562,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         else:
                             self.vc.cloner.unset_wakeup_timeout()
                             self.vc.purge_queue.unset_wakeup_timeout()
+                    elif opt['name'] == "snapshot_clone_no_wait":
+                        self.vc.cloner.reconfigure_reject_clones(self.snapshot_clone_no_wait)
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
@@ -730,6 +762,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       key_name=cmd['key_name'],
                                       group_name=cmd.get('group_name', None),
                                       force=cmd.get('force', False))
+    
+    @mgr_cmd_wrap
+    def _cmd_fs_quiesce(self, inbuf, cmd):
+        return self.vc.quiesce(cmd)
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):

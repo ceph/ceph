@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <boost/tokenizer.hpp>
 #include <optional>
+#include <regex>
+#include "include/function2.hpp"
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -17,11 +19,10 @@
 #include "services/svc_zone.h"
 #include "common/dout.h"
 #include "rgw_url.h"
+#include "rgw_process_env.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
-static const char* AWS_SNS_NS("https://sns.amazonaws.com/doc/2010-03-31/");
 
 bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
   const auto is_secure = rgw_transport_is_secure(cct, env);
@@ -35,26 +36,88 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 // make sure that endpoint is a valid URL
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
-bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct, const RGWEnv& env) {
+bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct,
+                                         const req_info& ri, std::string& message)
+{
   if (dest.push_endpoint.empty()) {
-      return true;
+    return true;
   }
   std::string user;
   std::string password;
   if (!rgw::parse_url_userinfo(dest.push_endpoint, user, password)) {
-    ldout(cct, 1) << "endpoint validation error: malformed endpoint URL:" << dest.push_endpoint << dendl;
+    message = "Malformed URL for push-endpoint";
     return false;
   }
+
+  const auto& args=ri.args;
+  auto topic_user_name=args.get_optional("user-name");
+  auto topic_password=args.get_optional("password");
+
+  // check if username/password was already supplied via topic attributes
+  // and if also provided as part of the endpoint URL issue a warning
+  if (topic_user_name.has_value()) {
+    if (!user.empty()) {
+      message = "Username provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    user = topic_user_name.get();
+  }
+  if (topic_password.has_value()) {
+    if (!password.empty()) {
+      message = "Password provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    password = topic_password.get();
+  }
+
   // this should be verified inside parse_url()
   ceph_assert(user.empty() == password.empty());
   if (!user.empty()) {
-      dest.stored_secret = true;
-      if (!verify_transport_security(cct, env)) {
-        ldout(cct, 1) << "endpoint validation error: sending secrets over insecure transport" << dendl;
-        return false;
-      }
+    dest.stored_secret = true;
+    if (!verify_transport_security(cct, *ri.env)) {
+      message = "Topic contains secrets that must be transmitted over a secure transport";
+      return false;
+    }
   }
   return true;
+}
+
+bool validate_topic_name(const std::string& name, std::string& message)
+{
+  constexpr size_t max_topic_name_length = 256;
+  if (name.size() > max_topic_name_length) {
+    message = "Name cannot be longer than 256 characters";
+    return false;
+  }
+
+  std::regex pattern("[A-Za-z0-9_-]+");
+  if (!std::regex_match(name, pattern)) {
+    message = "Name must be made up of only uppercase and lowercase "
+        "ASCII letters, numbers, underscores, and hyphens";
+    return false;
+  }
+  return true;
+}
+
+auto validate_topic_arn(const std::string& str, std::string& message)
+  -> boost::optional<rgw::ARN>
+{
+  if (str.empty()) {
+    message = "Missing required element TopicArn";
+    return boost::none;
+  }
+  auto arn = rgw::ARN::parse(str);
+  if (!arn || arn->resource.empty()) {
+    message = "Invalid value for TopicArn";
+    return boost::none;
+  }
+  return arn;
+}
+
+const std::string& get_account_or_tenant(const rgw_owner& owner)
+{
+  return std::visit(fu2::overload(
+      [] (const rgw_user& u) -> const std::string& { return u.tenant; },
+      [] (const rgw_account_id& a) -> const std::string& { return a; }
+      ), owner);
 }
 
 bool topic_has_endpoint_secret(const rgw_pubsub_topic& topic) {
@@ -68,56 +131,107 @@ bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
     return false;
 }
 
-std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
-                                                     std::string& policy_text) {
-  const auto bl = bufferlist::static_from_string(policy_text);
+static bool topic_needs_queue(const rgw_pubsub_dest& dest)
+{
+  return !dest.push_endpoint.empty() && dest.persistent;
+}
+
+auto get_policy_from_text(req_state* const s, const std::string& policy_text)
+  -> boost::optional<rgw::IAM::Policy>
+{
   try {
     return rgw::IAM::Policy(
-        s->cct, s->owner.id.tenant, bl,
+        s->cct, nullptr, policy_text,
         s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 1) << "failed to parse policy: '" << policy_text
                      << "' with error: " << e.what() << dendl;
     s->err.message = e.what();
-    return std::nullopt;
+    return boost::none;
   }
 }
 
-int verify_topic_owner_or_policy(req_state* const s,
-                                 const rgw_pubsub_topic& topic,
-                                 const std::string& zonegroup_name,
-                                 const uint64_t op) {
-  if (topic.user == s->owner.id) {
-    return 0;
-  }
-  // no policy set.
-  if (topic.policy_text.empty()) {
-    // if rgw_topic_require_publish_policy is "false" dont validate "publish" policies
-    if (op == rgw::IAM::snsPublish && !s->cct->_conf->rgw_topic_require_publish_policy) {
-      return 0;
+using rgw::IAM::Effect;
+using rgw::IAM::Policy;
+
+bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
+                             const rgw_owner& owner, const rgw::ARN& arn,
+                             const boost::optional<Policy>& policy,
+                             uint64_t op)
+{
+  if (s->auth.identity->get_account()) {
+    const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
+    if (!s->auth.identity->is_owner_of(owner)) {
+      ldpp_dout(dpp, 4) << "cross-account request for resource owner "
+          << owner << " != " << s->owner.id << dendl;
+      // cross-account requests evaluate the identity-based policies separately
+      // from the resource-based policies and require Allow from both
+      const auto identity_res = evaluate_iam_policies(
+          dpp, s->env, *s->auth.identity, account_root, op, arn,
+          {}, s->iam_identity_policies, s->session_policies);
+      if (identity_res == Effect::Deny) {
+        return false;
+      }
+      const auto resource_res = evaluate_iam_policies(
+          dpp, s->env, *s->auth.identity, false, op, arn,
+          policy, {}, {});
+      return identity_res == Effect::Allow && resource_res == Effect::Allow;
+    } else {
+      // require an Allow from either identity- or resource-based policy
+      return Effect::Allow == evaluate_iam_policies(
+          dpp, s->env, *s->auth.identity, account_root, op, arn,
+          policy, s->iam_identity_policies, s->session_policies);
     }
-    if (topic.user.empty()) {
+  }
+
+  constexpr bool account_root = false;
+  const auto effect = evaluate_iam_policies(
+      dpp, s->env, *s->auth.identity, account_root, op, arn,
+      policy, s->iam_identity_policies, s->session_policies);
+  if (effect == Effect::Deny) {
+    return false;
+  }
+  if (effect == Effect::Allow) {
+    return true;
+  }
+
+  if (s->auth.identity->is_owner_of(owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted to resource owner" << dendl;
+    return true;
+  }
+
+  if (!policy) {
+    if (op == rgw::IAM::snsPublish &&
+        !s->cct->_conf->rgw_topic_require_publish_policy) {
+      return true;
+    }
+
+    if (std::visit([] (const auto& o) { return o.empty(); }, owner)) {
       // if we don't know the original user and there is no policy
       // we will not reject the request.
       // this is for compatibility with versions that did not store the user in the topic
-      return 0;
+      return true;
     }
-    s->err.message = "Topic was created by another user.";
-    return -EACCES;
   }
-  // bufferlist::static_from_string wants non const string
-  std::string policy_text(topic.policy_text);
-  const auto p = get_policy_from_text(s, policy_text);
-  rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
-  const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, zonegroup_name,
-                     s->user->get_tenant(), topic.name);
-  if (!p || p->eval(s->env, *s->auth.identity, op, arn, princ_type) !=
-                rgw::IAM::Effect::Allow) {
-    ldout(s->cct, 1) << "topic policy failed validation, topic policy: " << p
-                     << dendl;
-    return -EACCES;
+
+  s->err.message = "Topic was created by another user.";
+  return false;
+}
+
+// parse topic policy if present and evaluate permissions
+bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
+                             const rgw_pubsub_topic& topic,
+                             const rgw::ARN& arn, uint64_t op)
+{
+  boost::optional<Policy> policy;
+  if (!topic.policy_text.empty()) {
+    policy = get_policy_from_text(s, topic.policy_text);
+    if (!policy) {
+      return false;
+    }
   }
-  return 0;
+
+  return verify_topic_permission(dpp, s, topic.owner, arn, policy, op);
 }
 
 // command (AWS compliant): 
@@ -125,36 +239,29 @@ int verify_topic_owner_or_policy(req_state* const s,
 // Action=CreateTopic&Name=<topic-name>[&OpaqueData=data][&push-endpoint=<endpoint>[&persistent][&<arg1>=<value1>]]
 class RGWPSCreateTopicOp : public RGWOp {
   private:
+  bufferlist bl_post_body;
   std::string topic_name;
+  rgw::ARN topic_arn;
+  std::optional<rgw_pubsub_topic> topic;
   rgw_pubsub_dest dest;
-  std::string topic_arn;
   std::string opaque_data;
   std::string policy_text;
 
   int get_params() {
     topic_name = s->info.args.get("Name");
-    if (topic_name.empty()) {
-      ldpp_dout(this, 1) << "CreateTopic Action 'Name' argument is missing" << dendl;
+    if (!validate_topic_name(topic_name, s->err.message)) {
       return -EINVAL;
     }
 
-    // Remove the args that are parsed, so the push_endpoint_args only contains
-    // necessary one's.
     opaque_data = s->info.args.get("OpaqueData");
-    s->info.args.remove("OpaqueData");
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
-    s->info.args.remove("push-endpoint");
     s->info.args.get_bool("persistent", &dest.persistent, false);
-    s->info.args.remove("persistent");
     s->info.args.get_int("time_to_live", reinterpret_cast<int *>(&dest.time_to_live), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("time_to_live");
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("max_retries");
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("retry_sleep_duration");
 
-    if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
+    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
       return -EINVAL;
     }
     // Store topic Policy.
@@ -162,8 +269,19 @@ class RGWPSCreateTopicOp : public RGWOp {
     if (!policy_text.empty() && !get_policy_from_text(s, policy_text)) {
       return -ERR_MALFORMED_DOC;
     }
-    s->info.args.remove("Policy");
 
+    // Remove the args that are parsed, so the push_endpoint_args only contains
+    // necessary one's which is parsed after this if. but only if master zone,
+    // else we do not remove as request is forwarded to master.
+    if (driver->is_meta_master()) {
+      s->info.args.remove("OpaqueData");
+      s->info.args.remove("push-endpoint");
+      s->info.args.remove("persistent");
+      s->info.args.remove("time_to_live");
+      s->info.args.remove("max_retries");
+      s->info.args.remove("retry_sleep_duration");
+      s->info.args.remove("Policy");
+    }
     for (const auto& param : s->info.args.get_params()) {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
@@ -179,44 +297,69 @@ class RGWPSCreateTopicOp : public RGWOp {
     // dest object only stores endpoint info
     dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
-    const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
+    topic_arn = rgw::ARN{rgw::Partition::aws, rgw::Service::sns,
         driver->get_zone()->get_zonegroup().get_name(),
-        s->user->get_tenant(), topic_name);
-    topic_arn = arn.to_string();
+        get_account_or_tenant(s->owner.id), topic_name};
     return 0;
   }
 
-  public:
-   int verify_permission(optional_yield y) override {
-    auto ret = get_params();
+ public:
+  explicit RGWPSCreateTopicOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
+  int init_processing(optional_yield y) override {
+    int ret = get_params();
+    if (ret < 0) {
+      return ret;
+    }
+    ret = RGWOp::init_processing(y);
     if (ret < 0) {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->owner.id.tenant);
+      // account users require the notification_v2 format to index the topic metadata
+    if (s->auth.identity->get_account() &&
+        !rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+      s->err.message = "The 'notification_v2' zone feature must be enabled "
+          "to create topics in an account";
+      return -EINVAL;
+    }
+
+    // try to load existing topic for owner and policy
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     rgw_pubsub_topic result;
-    ret = ps.get_topic(this, topic_name, result, y);
+    ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
       // topic not present
-      return 0;
+    } else if (ret < 0) {
+      ldpp_dout(this, 1) << "failed to read topic '" << topic_name
+          << "', with error:" << ret << dendl;
+      return ret;
+    } else {
+      topic = std::move(result);
     }
-    if (ret == 0) {
-      ret = verify_topic_owner_or_policy(
-          s, result, driver->get_zone()->get_zonegroup().get_name(),
-          rgw::IAM::snsCreateTopic);
-      if (ret == 0)
-      {
-        return 0;
-      }
+    return 0;
+  }
 
-      ldpp_dout(this, 1) << "no permission to modify topic '" << topic_name
-                         << "', topic already exist." << dendl;
-      return -EACCES;
+  int verify_permission(optional_yield y) override {
+    if (topic) {
+      // consult topic policy for overwrite permission
+      if (!verify_topic_permission(this, s, *topic, topic_arn,
+                                   rgw::IAM::snsCreateTopic)) {
+        return -ERR_AUTHORIZATION;
+      }
+    } else {
+      // if no topic policy exists, just check identity policies for denies
+      // account users require an Allow, non-account users just check for Deny
+      const bool mandatory_policy{s->auth.identity->get_account()};
+      if (!verify_user_permission(this, s, topic_arn,
+                                  rgw::IAM::snsCreateTopic,
+                                  mandatory_policy)) {
+        return -ERR_AUTHORIZATION;
+      }
     }
-    ldpp_dout(this, 1) << "failed to read topic '" << topic_name
-                       << "', with error:" << ret << dendl;
-    return ret;
-   }
+    return 0;
+  }
 
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
@@ -239,9 +382,9 @@ class RGWPSCreateTopicOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("CreateTopicResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("CreateTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("CreateTopicResult");
-    encode_xml("TopicArn", topic_arn, f); 
+    encode_xml("TopicArn", topic_arn.to_string(), f);
     f->close_section(); // CreateTopicResult
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
@@ -252,8 +395,27 @@ class RGWPSCreateTopicOp : public RGWOp {
 };
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
-  if (!dest.push_endpoint.empty() && dest.persistent) {
-    op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
+  // master request will replicate the topic creation.
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4)
+          << "CreateTopic forward_request_to_master returned ret = " << op_ret
+          << dendl;
+      return;
+    }
+  }
+
+  // don't add a persistent queue if we already have one
+  const bool already_persistent = topic && topic_needs_queue(topic->dest);
+  if (!already_persistent && topic_needs_queue(dest)) {
+    // initialize the persistent queue's location, using ':' as the namespace
+    // delimiter because its inclusion in a TopicName would break ARNs
+    dest.persistent_queue = string_cat_reserve(
+        get_account_or_tenant(s->owner.id), ":", topic_name);
+
+    op_ret = driver->add_persistent_topic(this, y, dest.persistent_queue);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "CreateTopic Action failed to create queue for "
                             "persistent topics. error:"
@@ -261,11 +423,11 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
-                           s->owner.id, policy_text, y);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+  op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
+                           opaque_data, s->owner.id, policy_text, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 4) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
   ldpp_dout(this, 20) << "successfully created topic '" << topic_name << "'" << dendl;
@@ -277,9 +439,16 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
 class RGWPSListTopicsOp : public RGWOp {
 private:
   rgw_pubsub_topics result;
+  std::string next_token;
 
 public:
   int verify_permission(optional_yield) override {
+    // check account permissions up front
+    if (s->auth.identity->get_account() &&
+        !verify_user_permission(this, s, {}, rgw::IAM::snsListTopics)) {
+      return -ERR_AUTHORIZATION;
+    }
+
     return 0;
   }
   void pre_exec() override {
@@ -303,21 +472,27 @@ public:
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("ListTopicsResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("ListTopicsResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ListTopicsResult");
     encode_xml("Topics", result, f); 
     f->close_section(); // ListTopicsResult
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
-    f->close_section(); // ResponseMetadat
+    f->close_section(); // ResponseMetadata
+    if (!next_token.empty()) {
+      encode_xml("NextToken", next_token, f);
+    }
     f->close_section(); // ListTopicsResponse
     rgw_flush_formatter_and_reset(s, f);
   }
 };
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.get_topics(this, result, y);
+  const std::string start_token = s->info.args.get("NextToken");
+
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+  constexpr int max_items = 100;
+  op_ret = ps.get_topics(this, start_token, max_items, result, next_token, y);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
@@ -325,44 +500,75 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
     return;
   }
   if (topics_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
-    ldpp_dout(this, 1) << "topics contain secrets and cannot be sent over insecure transport" << dendl;
+    s->err.message = "Topic contains secrets that must be transmitted over a secure transport";
     op_ret = -EPERM;
     return;
   }
+
+  ldpp_dout(this, 20) << "successfully got topics" << dendl;
+
+  // non-account users filter out topics they aren't permitted to see
+  if (s->auth.identity->get_account()) {
+    return;
+  }
   for (auto it = result.topics.cbegin(); it != result.topics.cend();) {
-    if (verify_topic_owner_or_policy(
-            s, it->second, driver->get_zone()->get_zonegroup().get_name(),
-            rgw::IAM::snsGetTopicAttributes) != 0) {
+    const auto arn = rgw::ARN::parse(it->second.arn);
+    if (!arn || !verify_topic_permission(this, s, it->second, *arn,
+                                         rgw::IAM::snsGetTopicAttributes)) {
       result.topics.erase(it++);
     } else {
       ++it;
     }
   }
-  ldpp_dout(this, 20) << "successfully got topics" << dendl;
 }
 
 // command (extension to AWS): 
 // POST
 // Action=GetTopic&TopicArn=<topic-arn>
 class RGWPSGetTopicOp : public RGWOp {
-  private:
+ private:
+  rgw::ARN topic_arn;
   std::string topic_name;
   rgw_pubsub_topic result;
   
   int get_params() {
-    const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
-
-    if (!topic_arn || topic_arn->resource.empty()) {
-        ldpp_dout(this, 1) << "GetTopic Action 'TopicArn' argument is missing or invalid" << dendl;
-        return -EINVAL;
+    auto arn = validate_topic_arn(s->info.args.get("TopicArn"), s->err.message);
+    if (!arn) {
+      return -EINVAL;
     }
-
-    topic_name = topic_arn->resource;
+    topic_arn = std::move(*arn);
+    topic_name = topic_arn.resource;
     return 0;
   }
 
-  public:
+ public:
+  int init_processing(optional_yield y) override {
+    int ret = get_params();
+    if (ret < 0) {
+      return ret;
+    }
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    ret = ps.get_topic(this, topic_name, result, y, nullptr);
+    if (ret < 0) {
+      ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        s->err.message = "No such TopicArn";
+        return -ERR_NOT_FOUND; // return NotFound instead of NoSuchKey
+      }
+      return ret;
+    }
+    if (topic_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
+      s->err.message = "Topic contains secrets that must be transmitted over a secure transport";
+      return -EPERM;
+    }
+    return RGWOp::init_processing(y);
+  }
+
   int verify_permission(optional_yield y) override {
+    if (!verify_topic_permission(this, s, result, topic_arn,
+                                 rgw::IAM::snsGetTopicAttributes)) {
+      return -ERR_AUTHORIZATION;
+    }
     return 0;
   }
   void pre_exec() override {
@@ -399,54 +605,56 @@ class RGWPSGetTopicOp : public RGWOp {
 };
 
 void RGWPSGetTopicOp::execute(optional_yield y) {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.get_topic(this, topic_name, result, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
-    return;
-  }
-  if (topic_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
-    ldpp_dout(this, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
-    op_ret = -EPERM;
-    return;
-  }
-  op_ret = verify_topic_owner_or_policy(
-      s, result, driver->get_zone()->get_zonegroup().get_name(),
-      rgw::IAM::snsGetTopicAttributes);
-  if (op_ret != 0) {
-    ldpp_dout(this, 1) << "no permission to get topic '" << topic_name
-                       << "'" << dendl;
-    return;
-  }
-  ldpp_dout(this, 1) << "successfully got topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 4) << "successfully got topic '" << topic_name << "'" << dendl;
 }
 
 // command (AWS compliant): 
 // POST
 // Action=GetTopicAttributes&TopicArn=<topic-arn>
 class RGWPSGetTopicAttributesOp : public RGWOp {
-  private:
+ private:
+  rgw::ARN topic_arn;
   std::string topic_name;
   rgw_pubsub_topic result;
   
   int get_params() {
-    const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
-
-    if (!topic_arn || topic_arn->resource.empty()) {
-        ldpp_dout(this, 1) << "GetTopicAttribute Action 'TopicArn' argument is missing or invalid" << dendl;
-        return -EINVAL;
+    auto arn = validate_topic_arn(s->info.args.get("TopicArn"), s->err.message);
+    if (!arn) {
+      return -EINVAL;
     }
-
-    topic_name = topic_arn->resource;
+    topic_arn = std::move(*arn);
+    topic_name = topic_arn.resource;
     return 0;
   }
 
-  public:
+ public:
+  int init_processing(optional_yield y) override {
+    int ret = get_params();
+    if (ret < 0) {
+      return ret;
+    }
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    ret = ps.get_topic(this, topic_name, result, y, nullptr);
+    if (ret < 0) {
+      ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        s->err.message = "No such TopicArn";
+        return -ERR_NOT_FOUND; // return NotFound instead of NoSuchKey
+      }
+      return ret;
+    }
+    if (topic_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
+      s->err.message = "Topic contains secrets that must be transmitted over a secure transport";
+      return -EPERM;
+    }
+    return 0;
+  }
+
   int verify_permission(optional_yield y) override {
+    if (!verify_topic_permission(this, s, result, topic_arn,
+                                 rgw::IAM::snsGetTopicAttributes)) {
+      return -ERR_AUTHORIZATION;
+    }
     return 0;
   }
   void pre_exec() override {
@@ -470,7 +678,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("GetTopicAttributesResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("GetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("GetTopicAttributesResult");
     result.dump_xml_as_attributes(f);
     f->close_section(); // GetTopicAttributesResult
@@ -483,30 +691,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
 };
 
 void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.get_topic(this, topic_name, result, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
-    return;
-  }
-  if (topic_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
-    ldpp_dout(this, 1) << "topic '" << topic_name << "' contain secret and cannot be sent over insecure transport" << dendl;
-    op_ret = -EPERM;
-    return;
-  }
-  op_ret = verify_topic_owner_or_policy(
-      s, result, driver->get_zone()->get_zonegroup().get_name(),
-      rgw::IAM::snsGetTopicAttributes);
-  if (op_ret != 0) {
-    ldpp_dout(this, 1) << "no permission to get topic '" << topic_name
-                       << "'" << dendl;
-    return;
-  }
-  ldpp_dout(this, 1) << "successfully got topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 4) << "successfully got topic '" << topic_name << "'" << dendl;
 }
 
 // command (AWS compliant):
@@ -514,31 +699,27 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
 // Action=SetTopicAttributes&TopicArn=<topic-arn>&AttributeName=<attribute-name>&AttributeValue=<attribute-value>
 class RGWPSSetTopicAttributesOp : public RGWOp {
  private:
+  bufferlist bl_post_body;
+  rgw::ARN topic_arn;
   std::string topic_name;
-  std::string topic_arn;
+  rgw_pubsub_topic result;
   std::string opaque_data;
   std::string policy_text;
   rgw_pubsub_dest dest;
-  rgw_user topic_owner;
+  rgw_owner topic_owner;
   std::string attribute_name;
 
   int get_params() {
-    const auto arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
-
-    if (!arn || arn->resource.empty()) {
-      ldpp_dout(this, 1) << "SetTopicAttribute Action 'TopicArn' argument is "
-                            "missing or invalid"
-                         << dendl;
+    auto arn = validate_topic_arn(s->info.args.get("TopicArn"), s->err.message);
+    if (!arn) {
       return -EINVAL;
     }
-    topic_arn = arn->to_string();
-    topic_name = arn->resource;
+    topic_arn = std::move(*arn);
+    topic_name = topic_arn.resource;
+
     attribute_name = s->info.args.get("AttributeName");
     if (attribute_name.empty()) {
-      ldpp_dout(this, 1)
-          << "SetTopicAttribute Action 'AttributeName' argument is "
-             "missing or invalid"
-          << dendl;
+      s->err.message = "Missing required element AttributeName";
       return -EINVAL;
     }
     return 0;
@@ -568,7 +749,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                            rgw::notify::DEFAULT_GLOBAL_VALUE);
     } else if (attribute_name == "push-endpoint") {
       dest.push_endpoint = s->info.args.get("AttributeValue");
-      if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
+      if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
         return -EINVAL;
       }
     } else if (attribute_name == "Policy") {
@@ -592,47 +773,58 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                                                : end_pos;
         push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
       };
-      const std::unordered_set<std::string> push_endpoint_args = {
+      static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
-          "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents"};
-      if (push_endpoint_args.count(attribute_name) == 1) {
+          "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
+          "user-name",     "password"};
+      if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;
       }
-      ldpp_dout(this, 1)
-          << "SetTopicAttribute Action 'AttributeName' argument is "
-             "invalid: 'AttributeName' = "
-          << attribute_name << dendl;
+      s->err.message = fmt::format("Invalid value for AttributeName '{}'",
+                                   attribute_name);
       return -EINVAL;
     }
     return 0;
   }
 
  public:
-  int verify_permission(optional_yield y) override {
-    auto ret = get_params();
+  explicit RGWPSSetTopicAttributesOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
+  int init_processing(optional_yield y) override {
+    int ret = get_params();
     if (ret < 0) {
-      return ret;
-    }
-    rgw_pubsub_topic result;
-    const RGWPubSub ps(driver, s->owner.id.tenant);
-    ret = ps.get_topic(this, topic_name, result, y);
-    if (ret < 0) {
-      ldpp_dout(this, 1) << "failed to get topic '" << topic_name
-                         << "', ret=" << ret << dendl;
-      return ret;
-    }
-    topic_owner = result.user;
-    ret = verify_topic_owner_or_policy(
-        s, result, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsSetTopicAttributes);
-    if (ret != 0) {
-      ldpp_dout(this, 1) << "no permission to set attributes for topic '" << topic_name
-                         << "'" << dendl;
       return ret;
     }
 
-    return map_attributes(result);
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    ret = ps.get_topic(this, topic_name, result, y, nullptr);
+    if (ret < 0) {
+      ldpp_dout(this, 4) << "failed to get topic '" << topic_name
+                         << "', ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        s->err.message = "No such TopicArn";
+        return -ERR_NOT_FOUND; // return NotFound instead of NoSuchKey
+      }
+      return ret;
+    }
+    topic_owner = result.owner;
+
+    ret = map_attributes(result);
+    if (ret < 0) {
+      return ret;
+    }
+
+    return RGWOp::init_processing(y);
+  }
+
+  int verify_permission(optional_yield y) override {
+    if (!verify_topic_permission(this, s, result, topic_arn,
+                                 rgw::IAM::snsSetTopicAttributes)) {
+      return -ERR_AUTHORIZATION;
+    }
+    return 0;
   }
 
   void pre_exec() override { rgw_bucket_object_pre_exec(s); }
@@ -654,7 +846,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("SetTopicAttributesResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("SetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f);
     f->close_section();  // ResponseMetadata
@@ -664,29 +856,47 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 };
 
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
-  if (!dest.push_endpoint.empty() && dest.persistent) {
-    op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1)
+      ldpp_dout(this, 4)
+          << "SetTopicAttributes forward_request_to_master returned ret = "
+          << op_ret << dendl;
+      return;
+    }
+  }
+  // don't add a persistent queue if we already have one
+  const bool already_persistent = topic_needs_queue(result.dest);
+  if (!already_persistent && topic_needs_queue(dest)) {
+    // initialize the persistent queue's location, using ':' as the namespace
+    // delimiter because its inclusion in a TopicName would break ARNs
+    dest.persistent_queue = string_cat_reserve(
+        get_account_or_tenant(s->owner.id), ":", topic_name);
+
+    op_ret = driver->add_persistent_topic(this, y, dest.persistent_queue);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4)
           << "SetTopicAttributes Action failed to create queue for "
              "persistent topics. error:"
           << op_ret << dendl;
       return;
     }
-  } else {  // changing the persistent topic to non-persistent.
-    op_ret = rgw::notify::remove_persistent_topic(topic_name, s->yield);
+  } else if (already_persistent) {
+    // changing the persistent topic to non-persistent.
+    op_ret = driver->remove_persistent_topic(this, y, result.dest.persistent_queue);
     if (op_ret != -ENOENT && op_ret < 0) {
-      ldpp_dout(this, 1) << "SetTopicAttributes Action failed to remove queue "
+      ldpp_dout(this, 4) << "SetTopicAttributes Action failed to remove queue "
                             "for persistent topics. error:"
                          << op_ret << dendl;
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
-                           topic_owner, policy_text, y);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+  op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
+                           opaque_data, topic_owner, policy_text, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to SetAttributes for topic '" << topic_name
+    ldpp_dout(this, 4) << "failed to SetAttributes for topic '" << topic_name
                        << "', ret=" << op_ret << dendl;
     return;
   }
@@ -699,24 +909,67 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
 // Action=DeleteTopic&TopicArn=<topic-arn>
 class RGWPSDeleteTopicOp : public RGWOp {
   private:
+  bufferlist bl_post_body;
+  rgw::ARN topic_arn;
   std::string topic_name;
+  std::optional<rgw_pubsub_topic> topic;
   
   int get_params() {
-    const auto topic_arn = rgw::ARN::parse((s->info.args.get("TopicArn")));
-
-    if (!topic_arn || topic_arn->resource.empty()) {
-      ldpp_dout(this, 1) << "DeleteTopic Action 'TopicArn' argument is missing or invalid" << dendl;
+    auto arn = validate_topic_arn(s->info.args.get("TopicArn"), s->err.message);
+    if (!arn) {
       return -EINVAL;
     }
-
-    topic_name = topic_arn->resource;
+    topic_arn = std::move(*arn);
+    topic_name = topic_arn.resource;
     return 0;
   }
 
-  public:
-  int verify_permission(optional_yield) override {
+ public:
+  explicit RGWPSDeleteTopicOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
+  int init_processing(optional_yield y) override {
+    int ret = get_params();
+    if (ret < 0) {
+      return ret;
+    }
+
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    rgw_pubsub_topic result;
+    ret = ps.get_topic(this, topic_name, result, y, nullptr);
+    if (ret == -ENOENT) {
+      // leave topic empty
+    } else if (ret < 0) {
+      ldpp_dout(this, 4) << "failed to get topic '" << topic_name
+                         << "', ret=" << ret << dendl;
+      return ret;
+    } else {
+      topic = std::move(result);
+    }
+
+    return RGWOp::init_processing(y);
+  }
+
+  int verify_permission(optional_yield y) override {
+    if (topic) {
+      // consult topic policy for delete permission
+      if (!verify_topic_permission(this, s, *topic, topic_arn,
+                                   rgw::IAM::snsDeleteTopic)) {
+        return -ERR_AUTHORIZATION;
+      }
+    } else {
+      // if no topic policy exists, just check identity policies
+      // account users require an Allow, non-account users just check for Deny
+      const bool mandatory_policy = !!s->auth.identity->get_account();
+      if (!verify_user_permission(this, s, topic_arn,
+                                  rgw::IAM::snsDeleteTopic,
+                                  mandatory_policy)) {
+        return -ERR_AUTHORIZATION;
+      }
+    }
     return 0;
   }
+
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
@@ -738,7 +991,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("DeleteTopicResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("DeleteTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
     f->close_section(); // ResponseMetadata
@@ -748,66 +1001,57 @@ class RGWPSDeleteTopicOp : public RGWOp {
 };
 
 void RGWPSDeleteTopicOp::execute(optional_yield y) {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  rgw_pubsub_topic result;
-  op_ret = ps.get_topic(this, topic_name, result, y);
-  if (op_ret == 0) {
-    op_ret = verify_topic_owner_or_policy(
-        s, result, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsDeleteTopic);
-    if (op_ret != 0) {
-      ldpp_dout(this, 1) << "no permission to remove topic '" << topic_name
-                         << "'" << dendl;
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->owner.id, &bl_post_body, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1)
+          << "DeleteTopic forward_request_to_master returned ret = " << op_ret
+          << dendl;
       return;
     }
-  } else {
-    ldpp_dout(this, 1) << "failed to fetch topic '" << topic_name
-                       << "' with error: " << op_ret << dendl;
-    if (op_ret == -ENOENT) {
-      // its not an error if no topics exist, just a no-op
-      op_ret = 0;
-    }
+  }
+
+  if (!topic) {
     return;
   }
-  // upon deletion it is not known if topic is persistent or not
-  // will try to delete the persistent topic anyway
-  op_ret = rgw::notify::remove_persistent_topic(topic_name, s->yield);
-  if (op_ret != -ENOENT && op_ret < 0) {
-    ldpp_dout(this, 1) << "DeleteTopic Action failed to remove queue for "
-                          "persistent topics. error:"
-                       << op_ret << dendl;
-    return;
-  }
+
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   op_ret = ps.remove_topic(this, topic_name, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
+  if (op_ret < 0 && op_ret != -ENOENT) {
+    ldpp_dout(this, 4) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
     return;
   }
-  ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
+  ldpp_dout(this, 4) << "successfully removed topic '" << topic_name << "'" << dendl;
+
+  if (op_ret == -ENOENT) {
+    // its not an error if no topics exist, just a no-op
+    op_ret = 0;
+  }
 }
 
-using op_generator = RGWOp*(*)();
+using op_generator = RGWOp*(*)(bufferlist);
 static const std::unordered_map<std::string, op_generator> op_generators = {
-    {"CreateTopic", []() -> RGWOp* { return new RGWPSCreateTopicOp; }},
-    {"DeleteTopic", []() -> RGWOp* { return new RGWPSDeleteTopicOp; }},
-    {"ListTopics", []() -> RGWOp* { return new RGWPSListTopicsOp; }},
-    {"GetTopic", []() -> RGWOp* { return new RGWPSGetTopicOp; }},
+    {"CreateTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSCreateTopicOp(std::move(bl)); }},
+    {"DeleteTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSDeleteTopicOp(std::move(bl)); }},
+    {"ListTopics", [](bufferlist bl) -> RGWOp* { return new RGWPSListTopicsOp; }},
+    {"GetTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSGetTopicOp; }},
     {"GetTopicAttributes",
-     []() -> RGWOp* { return new RGWPSGetTopicAttributesOp; }},
+     [](bufferlist bl) -> RGWOp* { return new RGWPSGetTopicAttributesOp; }},
     {"SetTopicAttributes",
-     []() -> RGWOp* { return new RGWPSSetTopicAttributesOp; }}};
+     [](bufferlist bl) -> RGWOp* { return new RGWPSSetTopicAttributesOp(std::move(bl)); }}};
 
-bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s) 
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_info& info)
 {
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
+  if (info.args.exists("Action")) {
+    const std::string action_name = info.args.get("Action");
     return op_generators.contains(action_name);
   }
   return false;
+}
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s)
+{
+  return action_exists(s->info);
 }
 
 RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
@@ -819,7 +1063,7 @@ RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
     const std::string action_name = s->info.args.get("Action");
     const auto action_it = op_generators.find(action_name);
     if (action_it != op_generators.end()) {
-      return action_it->second();
+      return action_it->second(std::move(bl_post_body));
     }
     ldpp_dout(s, 10) << "unknown action '" << action_name << "' for Topic handler" << dendl;
   } else {
@@ -838,29 +1082,6 @@ int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp, option
     return -ERR_INVALID_REQUEST;
   }
   return 0;
-}
-
-namespace {
-// return a unique topic by prefexing with the notification name: <notification>_<topic>
-std::string topic_to_unique(const std::string& topic, const std::string& notification) {
-  return notification + "_" + topic;
-}
-
-// extract the topic from a unique topic of the form: <notification>_<topic>
-[[maybe_unused]] std::string unique_to_topic(const std::string& unique_topic, const std::string& notification) {
-  if (unique_topic.find(notification + "_") == std::string::npos) {
-    return "";
-  }
-  return unique_topic.substr(notification.length() + 1);
-}
-
-// from list of bucket topics, find the one that was auto-generated by a notification
-auto find_unique_topic(const rgw_pubsub_bucket_topics& bucket_topics, const std::string& notif_name) {
-    auto it = std::find_if(bucket_topics.topics.begin(), bucket_topics.topics.end(), [&](const auto& val) { return notif_name == val.second.s3_id; });
-    return it != bucket_topics.topics.end() ?
-        std::optional<std::reference_wrapper<const rgw_pubsub_topic_filter>>(it->second):
-        std::nullopt;
-}
 }
 
 int remove_notification_by_topic(const DoutPrefixProvider *dpp, const std::string& topic_name, const RGWPubSub::Bucket& b, optional_yield y, const RGWPubSub& ps) {
@@ -890,19 +1111,23 @@ int delete_all_notifications(const DoutPrefixProvider *dpp, const rgw_pubsub_buc
 // a "notification" and a subscription will be auto-generated
 // actual configuration is XML encoded in the body of the message
 class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
+  bufferlist data;
+  rgw_pubsub_s3_notifications configurations;
+  std::map<rgw::ARN, rgw_pubsub_topic> topics;
+
   int verify_params() override {
     bool exists;
     const auto no_value = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
+      s->err.message = "Missing required parameter 'notification'";
       return -EINVAL;
     } 
     if (no_value.length() > 0) {
-      ldpp_dout(this, 1) << "param 'notification' should not have any value" << dendl;
+      s->err.message = "Parameter 'notification' should not have any value";
       return -EINVAL;
     }
     if (s->bucket_name.empty()) {
-      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
+      s->err.message = "Missing required bucket name";
       return -EINVAL;
     }
     return 0;
@@ -911,39 +1136,39 @@ class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
   int get_params_from_body(rgw_pubsub_s3_notifications& configurations) {
     const auto max_size = s->cct->_conf->rgw_max_put_param_size;
     int r;
-    bufferlist data;
     std::tie(r, data) = read_all_input(s, max_size, false);
 
     if (r < 0) {
-      ldpp_dout(this, 1) << "failed to read XML payload" << dendl;
+      ldpp_dout(this, 4) << "failed to read XML payload" << dendl;
       return r;
     }
     if (data.length() == 0) {
-      ldpp_dout(this, 1) << "XML payload missing" << dendl;
+      ldpp_dout(this, 4) << "XML payload missing" << dendl;
       return -EINVAL;
     }
 
     RGWXMLDecoder::XMLParser parser;
 
     if (!parser.init()){
-      ldpp_dout(this, 1) << "failed to initialize XML parser" << dendl;
+      ldpp_dout(this, 4) << "failed to initialize XML parser" << dendl;
       return -EINVAL;
     }
     if (!parser.parse(data.c_str(), data.length(), 1)) {
-      ldpp_dout(this, 1) << "failed to parse XML payload" << dendl;
+      ldpp_dout(this, 4) << "failed to parse XML payload" << dendl;
       return -ERR_MALFORMED_XML;
     }
     try {
       // NotificationConfigurations is mandatory
       // It can be empty which means we delete all the notifications
       RGWXMLDecoder::decode_xml("NotificationConfiguration", configurations, &parser, true);
-    } catch (RGWXMLDecoder::err& err) {
-      ldpp_dout(this, 1) << "failed to parse XML payload. error: " << err << dendl;
+    } catch (const RGWXMLDecoder::err& err) {
+      s->err.message = err.what();
       return -ERR_MALFORMED_XML;
     }
     return 0;
   }
 public:
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
 
   void pre_exec() override {
@@ -954,41 +1179,104 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_CREATE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
-
   void execute(optional_yield) override;
+  void execute_v2(optional_yield);
 };
 
+int RGWPSCreateNotifOp::init_processing(optional_yield y)
+{
+  int ret = verify_params();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = get_params_from_body(configurations);
+  if (ret < 0) {
+    return ret;
+  }
+
+
+  for (const auto& c : configurations.list) {
+    const auto& notif_name = c.id;
+    if (notif_name.empty()) {
+      s->err.message = "Missing required element Id";
+      return -EINVAL;
+    }
+    if (c.topic_arn.empty()) {
+      s->err.message = "Missing required element Topic";
+      return -EINVAL;
+    }
+
+    const auto arn = rgw::ARN::parse(c.topic_arn);
+    if (!arn || arn->resource.empty()) {
+      s->err.message = "Invalid Topic ARN";
+      return -EINVAL;
+    }
+    const auto& topic_name = arn->resource;
+
+    if (std::find(c.events.begin(), c.events.end(), rgw::notify::UnknownEvent) != c.events.end()) {
+      s->err.message = "Unknown Event type: " + notif_name;
+      return -EINVAL;
+    }
+
+    // load topic metadata if we haven't already
+    auto insert = topics.emplace(std::piecewise_construct,
+                                 std::forward_as_tuple(*arn),
+                                 std::forward_as_tuple());
+    if (insert.second) {
+      rgw_pubsub_topic& topic_info = insert.first->second;
+      const RGWPubSub ps(driver, arn->account, *s->penv.site);
+      ret = ps.get_topic(this, topic_name, topic_info, y, nullptr);
+      if (ret < 0) {
+        ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
+        return ret;
+      }
+    }
+  }
+
+  return RGWOp::init_processing(y);
+}
+
+int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
+  // require s3:PutBucketNotification permission for the bucket
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
+  }
+
+  // require sns:Publish permission for each topic
+  for (const auto& [arn, topic] : topics) {
+    if (!verify_topic_permission(this, s, topic, arn, rgw::IAM::snsPublish)) {
+      return -EACCES;
+    }
+  }
+  return 0;
+}
+
 void RGWPSCreateNotifOp::execute(optional_yield y) {
-  op_ret = verify_params();
-  if (op_ret < 0) {
-    return;
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->owner.id, &data, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4) << "CreateBucketNotification "
+                            "forward_request_to_master returned ret = "
+                         << op_ret << dendl;
+      return;
+    }
   }
 
-  rgw_pubsub_s3_notifications configurations;
-  op_ret = get_params_from_body(configurations);
-  if (op_ret < 0) {
-    return;
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+    return execute_v2(y);
   }
 
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
-                               &bucket, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '" << 
-      (s->bucket_tenant.empty() ? s->bucket_name : s->bucket_tenant + ":" + s->bucket_name) << 
-      "' info, ret = " << op_ret << dendl;
-    return;
-  }
-
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  const RGWPubSub::Bucket b(ps, bucket.get());
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+  const RGWPubSub::Bucket b(ps, s->bucket.get());
 
   if(configurations.list.empty()) {
     // get all topics on a bucket
     rgw_pubsub_bucket_topics bucket_topics;
     op_ret = b.get_topics(this, bucket_topics, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
+      ldpp_dout(this, 4) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
       return;
     }
 
@@ -998,47 +1286,19 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
 
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
-    if (notif_name.empty()) {
-      ldpp_dout(this, 1) << "missing notification id" << dendl;
-      op_ret = -EINVAL;
-      return;
-    }
-    if (c.topic_arn.empty()) {
-      ldpp_dout(this, 1) << "missing topic ARN in notification: '" << notif_name << "'" << dendl;
-      op_ret = -EINVAL;
-      return;
-    }
 
     const auto arn = rgw::ARN::parse(c.topic_arn);
-    if (!arn || arn->resource.empty()) {
-      ldpp_dout(this, 1) << "topic ARN has invalid format: '" << c.topic_arn << "' in notification: '" << notif_name << "'" << dendl;
-      op_ret = -EINVAL;
-      return;
+    if (!arn) { // already validated above
+      continue;
     }
+    const auto& topic_name = arn->resource;
 
-    if (std::find(c.events.begin(), c.events.end(), rgw::notify::UnknownEvent) != c.events.end()) {
-      ldpp_dout(this, 1) << "unknown event type in notification: '" << notif_name << "'" << dendl;
-      op_ret = -EINVAL;
-      return;
+    auto t = topics.find(*arn);
+    if (t == topics.end()) {
+      continue;
     }
+    auto& topic_info = t->second;
 
-    const auto topic_name = arn->resource;
-
-    // get topic information. destination information is stored in the topic
-    rgw_pubsub_topic topic_info;  
-    op_ret = ps.get_topic(this, topic_name, topic_info, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
-      return;
-    }
-    op_ret = verify_topic_owner_or_policy(
-        s, topic_info, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsPublish);
-    if (op_ret != 0) {
-      ldpp_dout(this, 1) << "no permission to create notification for topic '"
-                         << topic_name << "'" << dendl;
-      return;
-    }
     // make sure that full topic configuration match
     // TODO: use ARN match function
     
@@ -1072,31 +1332,98 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
   }
 }
 
-int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
-    return -EACCES;
+void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
+  if (const auto ret = driver->stat_topics_v1(s->bucket_tenant, y, this); ret != -ENOENT) {
+    ldpp_dout(this, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+      << ". please try again later" << dendl; 
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+    return;
   }
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    if (configurations.list.empty()) {
+      return remove_notification_v2(this, driver, s->bucket.get(),
+                                    /*delete all notif=true*/"", y);
+    }
+    rgw_pubsub_bucket_topics bucket_topics;
+    int ret = get_bucket_notifications(this, s->bucket.get(), bucket_topics);
+    if (ret < 0) {
+      ldpp_dout(this, 1)
+            << "failed to load existing bucket notification on bucket: "
+              << s->bucket << ", ret = " << ret << dendl;
+      return ret;
+    }
+    for (const auto &c : configurations.list) {
+      const auto &notif_name = c.id;
 
-  return 0;
+      const auto arn = rgw::ARN::parse(c.topic_arn);
+      if (!arn) { // already validated above
+        continue;
+      }
+      const auto &topic_name = arn->resource;
+
+      auto t = topics.find(*arn);
+      if (t == topics.end()) {
+        continue;
+      }
+      auto &topic_info = t->second;
+
+      auto &topic_filter =
+        bucket_topics.topics[topic_to_unique(topic_name, notif_name)];
+      topic_filter.topic = topic_info;
+      topic_filter.events = c.events;
+      topic_filter.s3_id = notif_name;
+      topic_filter.s3_filter = c.filter;
+    }
+    // finally store all the bucket notifications as attr.
+    bufferlist bl;
+    bucket_topics.encode(bl);
+    rgw::sal::Attrs &attrs = s->bucket->get_attrs();
+    attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
+    return s->bucket->merge_and_store_attrs(this, attrs, y);
+  }, y);
+
+  if (op_ret < 0) {
+    ldpp_dout(this, 4)
+        << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="
+        << s->bucket->get_name() << " returned err= " << op_ret << dendl;
+    return;
+  }
+  for (const auto& [_, topic] : topics) {
+    const auto ret = driver->update_bucket_topic_mapping(
+        topic,
+        rgw_make_bucket_entry_name(s->bucket->get_tenant(), s->bucket->get_name()),
+        /*add_mapping=*/true, y, this);
+    if (ret < 0) {
+      ldpp_dout(this, 4) << "Failed to remove topic mapping on bucket="
+                         << s->bucket->get_name() << " ret= " << ret << dendl;
+      // error should be reported ??
+      // op_ret = ret;
+    }
+  }
+  ldpp_dout(this, 20) << "successfully created bucket notification for bucket: "
+                      << s->bucket->get_name() << dendl;
 }
 
 // command (extension to S3): DELETE /bucket?notification[=<notification-id>]
 class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
-  int get_params(std::string& notif_name) const {
+  std::string notif_name;
+  int get_params() {
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
+      s->err.message = "Missing required parameter 'notification'";
       return -EINVAL;
     } 
     if (s->bucket_name.empty()) {
-      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
+      s->err.message = "Missing required bucket name";
       return -EINVAL;
     }
     return 0;
   }
+  void execute_v2(optional_yield y);
 
-public:
+ public:
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
 
   void pre_exec() override {
@@ -1110,31 +1437,48 @@ public:
   void execute(optional_yield y) override;
 };
 
+int RGWPSDeleteNotifOp::init_processing(optional_yield y)
+{
+  int ret = get_params();
+  if (ret < 0) {
+    return ret;
+  }
+  return RGWOp::init_processing(y);
+}
+
+int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
-  std::string notif_name;
-  op_ret = get_params(notif_name);
-  if (op_ret < 0) {
-    return;
+  if (!driver->is_meta_master()) {
+    bufferlist indata;
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->owner.id, &indata, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4) << "DeleteBucketNotification "
+                            "forward_request_to_master returned error ret= "
+                         << op_ret << dendl;
+      return;
+    }
   }
 
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
-                               &bucket, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '" << 
-      (s->bucket_tenant.empty() ? s->bucket_name : s->bucket_tenant + ":" + s->bucket_name) << 
-      "' info, ret = " << op_ret << dendl;
-    return;
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+    return execute_v2(y);
   }
 
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  const RGWPubSub::Bucket b(ps, bucket.get());
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+  const RGWPubSub::Bucket b(ps, s->bucket.get());
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
   op_ret = b.get_topics(this, bucket_topics, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 4) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
     return;
   }
 
@@ -1142,7 +1486,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     // delete a specific notification
     const auto unique_topic = find_unique_topic(bucket_topics, notif_name);
     if (unique_topic) {
-      const auto unique_topic_name = unique_topic->get().topic.name;
+      const auto unique_topic_name = unique_topic->topic.name;
       op_ret = remove_notification_by_topic(this, unique_topic_name, b, y, ps);
       return;
     }
@@ -1154,12 +1498,15 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
   op_ret = delete_all_notifications(this, bucket_topics, b, y, ps);
 }
 
-int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
-    return -EACCES;
+void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
+  if (const auto ret = driver->stat_topics_v1(s->bucket_tenant, y, this); ret != -ENOENT) {
+    ldpp_dout(this, 4) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+      << ". please try again later" << dendl; 
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+    return;
   }
 
-  return 0;
+  op_ret = remove_notification_v2(this, driver, s->bucket.get(), notif_name, y);
 }
 
 // command (S3 compliant): GET /bucket?notification[=<notification-id>]
@@ -1170,11 +1517,11 @@ class RGWPSListNotifsOp : public RGWOp {
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
+      s->err.message = "Missing required parameter 'notification'";
       return -EINVAL;
     } 
     if (s->bucket_name.empty()) {
-      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
+      s->err.message = "Missing required bucket name";
       return -EINVAL;
     }
     return 0;
@@ -1218,31 +1565,36 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
   op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '" << 
+    ldpp_dout(this, 4) << "failed to get bucket '" <<
       (s->bucket_tenant.empty() ? s->bucket_name : s->bucket_tenant + ":" + s->bucket_name) << 
       "' info, ret = " << op_ret << dendl;
     return;
   }
 
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  const RGWPubSub::Bucket b(ps, bucket.get());
-  
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = b.get_topics(this, bucket_topics, y);
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
+      driver->stat_topics_v1(s->bucket_tenant, y, this) == -ENOENT) {
+    op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
+  } else {
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
+    const RGWPubSub::Bucket b(ps, bucket.get());
+    op_ret = b.get_topics(this, bucket_topics, y);
+  }
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 4) << "failed to get list of topics from bucket '"
+                       << s->bucket_name << "', ret=" << op_ret << dendl;
     return;
   }
   if (!notif_name.empty()) {
     // get info of a specific notification
     const auto unique_topic = find_unique_topic(bucket_topics, notif_name);
     if (unique_topic) {
-      notifications.list.emplace_back(unique_topic->get());
+      notifications.list.emplace_back(*unique_topic);
       return;
     }
     op_ret = -ENOENT;
-    ldpp_dout(this, 1) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 4) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
     return;
   }
   // loop through all topics of the bucket

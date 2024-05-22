@@ -14,6 +14,8 @@
 
 #include <regex>
 #include <sstream>
+#include <queue>
+#include <ranges>
 #include <boost/utility.hpp>
 
 #include "MDSMonitor.h"
@@ -174,10 +176,60 @@ void MDSMonitor::create_pending()
   dout(10) << "create_pending e" << fsmap.get_epoch() << dendl;
 }
 
+void MDSMonitor::assign_quiesce_db_leader(FSMap &fsmap) {
+
+  // the quiesce leader is the lowest rank with the highest state up to ACTIVE
+  auto less_leader = [](MDSMap::mds_info_t const* l, MDSMap::mds_info_t const* r) {
+    ceph_assert(l->rank != MDS_RANK_NONE);
+    ceph_assert(r->rank != MDS_RANK_NONE);
+    ceph_assert(l->state <= MDSMap::STATE_ACTIVE);
+    ceph_assert(r->state <= MDSMap::STATE_ACTIVE);
+    if (l->rank == r->rank) {
+      return l->state < r->state;
+    } else {
+      return l->rank > r->rank;
+    }
+  };
+
+  for (const auto& [fscid, fs] : std::as_const(fsmap)) {
+    auto &&mdsmap = fs.get_mds_map();
+
+    if (mdsmap.get_epoch() < fsmap.get_epoch()) {
+      // no changes in this fs, we can skip the calculation below
+      // NB! be careful with this clause when updating the leader selection logic.
+      // When the input from outside of this fsmap will affect the decision
+      // this clause will have to be updated, too.
+      continue;
+    }
+
+    std::priority_queue<MDSMap::mds_info_t const*, std::vector<MDSMap::mds_info_t const*>, decltype(less_leader)> 
+      member_info(less_leader);
+    
+    std::unordered_set<mds_gid_t> members;
+
+    for (auto&& [gid, info] : mdsmap.get_mds_info()) {
+      // if it has a rank and state <= ACTIVE, it's good enough
+      // if (info.rank != MDS_RANK_NONE && info.state <= MDSMap::STATE_ACTIVE) {
+      if (info.rank != MDS_RANK_NONE && info.state == MDSMap::STATE_ACTIVE) {
+        member_info.push(&info);
+        members.insert(info.global_id);
+      }
+    }
+
+    auto leader = member_info.empty() ? MDS_GID_NONE : member_info.top()->global_id;
+
+    fsmap.modify_filesystem(fscid, [&leader, &members](auto &writable_fs) -> bool {
+      return writable_fs.get_mds_map().update_quiesce_db_cluster(leader, std::move(members));
+    });
+  }
+}
+
 void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   auto &pending = get_pending_fsmap_writeable();
   auto epoch = pending.get_epoch();
+
+  assign_quiesce_db_leader(pending);
 
   dout(10) << "encode_pending e" << epoch << dendl;
 
@@ -261,6 +313,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
   pending.get_health_checks(&new_checks);
   for (auto& p : new_checks.checks) {
+    // TODO: handle "client_count" metadata when summarizing
     p.second.summary = std::regex_replace(
       p.second.summary,
       std::regex("%num%"),
@@ -1439,6 +1492,23 @@ out:
   }
 }
 
+bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings)
+{
+  for (auto& [gid, health] : pending_daemon_health) {
+    for (auto& metric : health.metrics) {
+      // metric.type here is the type of health warning. We are only
+      // looking for types of health warnings passed to this func member
+      // through variable "warnings".
+      auto it = std::find(warnings.begin(), warnings.end(), metric.type);
+      if (it != warnings.end()) {
+	return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 int MDSMonitor::filesystem_command(
     FSMap &fsmap,
     MonOpRequestRef op,
@@ -1476,6 +1546,8 @@ int MDSMonitor::filesystem_command(
   } else if (prefix == "mds fail") {
     string who;
     cmd_getval(cmdmap, "role_or_gid", who);
+    bool confirm = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
 
     MDSMap::mds_info_t failed_info;
     mds_gid_t gid = gid_from_arg(fsmap, who, ss);
@@ -1492,6 +1564,12 @@ int MDSMonitor::filesystem_command(
     string_view fs_name = fsmap.fs_name_from_gid(gid);
     if (!op->get_session()->fs_name_capable(fs_name, MON_CAP_W)) {
       ss << "Permission denied.";
+      return -EPERM;
+    }
+
+    if (!confirm &&
+        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
+      ss << errmsg_for_unhealthy_mds;
       return -EPERM;
     }
 

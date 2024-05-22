@@ -50,6 +50,8 @@ struct RootBlock : CachedExtent {
       backref_root_node(nullptr)
   {}
 
+  void on_rewrite(CachedExtent&, extent_len_t) final {}
+
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new RootBlock(*this));
   };
@@ -59,7 +61,7 @@ struct RootBlock : CachedExtent {
     return extent_types_t::ROOT;
   }
 
-  void on_replace_prior(Transaction &t) final;
+  void on_replace_prior() final;
 
   /// dumps root as delta
   ceph::bufferlist get_delta() final {

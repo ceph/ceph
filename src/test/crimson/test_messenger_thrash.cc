@@ -20,6 +20,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
+#include "test/crimson/ctest_utils.h"
 
 using namespace std::chrono_literals;
 namespace bpo = boost::program_options;
@@ -364,12 +365,11 @@ class SyntheticWorkload {
      return msgr->bind(entity_addrvec_t{addr}).safe_then(
          [this, msgr] {
        return msgr->start({&dispatcher});
-     }, crimson::net::Messenger::bind_ertr::all_same_way(
+     }, crimson::net::Messenger::bind_ertr::assert_all_func(
          [addr] (const std::error_code& e) {
        logger().error("{} test_messenger_thrash(): "
                       "there is another instance running at {}",
                        __func__, addr);
-       ceph_abort();
      }));
    }
 
@@ -662,7 +662,7 @@ seastar::future<int> do_test(seastar::app_template& app)
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   app.add_options()
     ("verbose,v", bpo::value<bool>()->default_value(false),
      "chatty if true");

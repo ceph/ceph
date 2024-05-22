@@ -413,6 +413,8 @@ class HostAssignment(object):
                                 hostname=x.hostname, ports=self.ports_start)
                 for x in self.hosts_by_label(self.spec.placement.label)
             ]
+            if self.spec.placement.host_pattern:
+                ls = [h for h in ls if h.hostname in self.spec.placement.filter_matching_hostspecs(self.hosts)]
         elif self.spec.placement.host_pattern:
             ls = [
                 DaemonPlacement(daemon_type=self.primary_daemon_type,

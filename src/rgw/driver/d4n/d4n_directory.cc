@@ -1,179 +1,686 @@
+#include <boost/asio/consign.hpp>
+#include "common/async/blocked_completion.h"
+#include "common/dout.h" 
 #include "d4n_directory.h"
 
-#define dout_subsys ceph_subsys_rgw
-#define dout_context g_ceph_context
+namespace rgw { namespace d4n {
 
-int RGWBlockDirectory::findClient(cpp_redis::client *client) {
-  if (client->is_connected())
-    return 0;
+// initiate a call to async_exec() on the connection's executor
+struct initiate_exec {
+  std::shared_ptr<boost::redis::connection> conn;
 
-  if (host == "" || port == 0) {
-    dout(10) << "RGW D4N Directory: D4N directory endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+  using executor_type = boost::redis::connection::executor_type;
+  executor_type get_executor() const noexcept { return conn->get_executor(); }
+
+  template <typename Handler, typename Response>
+  void operator()(Handler handler, const boost::redis::request& req, Response& resp)
+  {
+    auto h = boost::asio::consign(std::move(handler), conn);
+    return boost::asio::dispatch(get_executor(),
+        [c = conn, &req, &resp, h = std::move(h)] () mutable {
+            return c->async_exec(req, resp, std::move(h));
+    });
   }
+};
 
-  client->connect(host, port, nullptr);
-
-  if (!client->is_connected())
-    return ECONNREFUSED;
-
-  return 0;
+template <typename Response, typename CompletionToken>
+auto async_exec(std::shared_ptr<connection> conn,
+                const boost::redis::request& req,
+                Response& resp, CompletionToken&& token)
+{
+  return boost::asio::async_initiate<CompletionToken,
+         void(boost::system::error_code, std::size_t)>(
+      initiate_exec{std::move(conn)}, token, req, resp);
 }
 
-std::string RGWBlockDirectory::buildIndex(cache_block *ptr) {
-  return "rgw-object:" + ptr->c_obj.obj_name + ":directory";
+template <typename T>
+void redis_exec(std::shared_ptr<connection> conn,
+                boost::system::error_code& ec,
+                const boost::redis::request& req,
+                boost::redis::response<T>& resp, optional_yield y)
+{
+  if (y) {
+    auto yield = y.get_yield_context();
+    async_exec(std::move(conn), req, resp, yield[ec]);
+  } else {
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
+  }
 }
 
-int RGWBlockDirectory::existKey(std::string key) {
-  int result = -1;
-  std::vector<std::string> keys;
-  keys.push_back(key);
-  
-  if (!client.is_connected()) {
-    return result;
-  }
+std::string ObjectDirectory::build_index(CacheObj* object) 
+{
+  return object->bucketName + "_" + object->objName;
+}
+
+int ObjectDirectory::exist_key(CacheObj* object, optional_yield y) 
+{
+  std::string key = build_index(object);
+  response<int> resp;
 
   try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer(); /* Returns 1 upon success */
-      }
-    });
-    
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {}
+    boost::system::error_code ec;
+    request req;
+    req.push("EXISTS", key);
 
-  return result;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return false;
+  } catch (std::exception &e) {}
+
+  return std::get<0>(resp).value();
 }
 
-int RGWBlockDirectory::setValue(cache_block *ptr) {
-  /* Creating the index based on obj_name */
-  std::string key = buildIndex(ptr);
-  if (!client.is_connected()) { 
-    findClient(&client);
+int ObjectDirectory::set(CacheObj* object, optional_yield y) 
+{
+  std::string key = build_index(object);
+    
+  /* Every set will be treated as new */
+  std::string endpoint;
+  std::list<std::string> redisValues;
+    
+  /* Creating a redisValues of the entry's properties */
+  redisValues.push_back("objName");
+  redisValues.push_back(object->objName);
+  redisValues.push_back("bucketName");
+  redisValues.push_back(object->bucketName);
+  redisValues.push_back("creationTime");
+  redisValues.push_back(object->creationTime); 
+  redisValues.push_back("dirty");
+  redisValues.push_back(std::to_string(object->dirty));
+  redisValues.push_back("objHosts");
+
+  for (auto const& host : object->hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
   }
 
-  std::string result;
-  std::vector<std::string> keys;
-  keys.push_back(key);
+  if (!endpoint.empty())
+    endpoint.pop_back();
 
-  /* Every set will be new */
-  if (host == "" || port == 0) {
-    dout(10) << "RGW D4N Directory: Directory endpoint not configured correctly" << dendl;
-    return -1;
-  }
-    
-  std::string endpoint = host + ":" + std::to_string(port);
-  std::vector<std::pair<std::string, std::string>> list;
-    
-  /* Creating a list of key's properties */
-  list.push_back(make_pair("key", key));
-  list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
-  list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
-  list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
-  list.push_back(make_pair("hosts", endpoint)); 
+  redisValues.push_back(endpoint); 
 
   try {
-    client.hmset(key, list, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_string();
-      }
-    });
+    boost::system::error_code ec;
+    request req;
+    req.push_range("HMSET", key, redisValues);
+    response<std::string> resp;
 
-    client.sync_commit(std::chrono::milliseconds(1000));
-    
-    if (result != "OK") {
-      return -1;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      return -ec.value();
     }
-  } catch(std::exception &e) {
-    return -1;
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 
   return 0;
 }
 
-int RGWBlockDirectory::getValue(cache_block *ptr) {
-  std::string key = buildIndex(ptr);
+int ObjectDirectory::get(CacheObj* object, optional_yield y) 
+{
+  std::string key = build_index(object);
 
-  if (!client.is_connected()) {
-    findClient(&client);
-  }
-
-  if (existKey(key)) {
-    int field_exist = -1;
-    
-    std::string hosts;
-    std::string size;
-    std::string bucket_name;
-    std::string obj_name;
+  if (exist_key(object, y)) {
     std::vector<std::string> fields;
 
-    fields.push_back("key");
-    fields.push_back("hosts");
-    fields.push_back("size");
-    fields.push_back("bucket_name");
-    fields.push_back("obj_name");
+    fields.push_back("objName");
+    fields.push_back("bucketName");
+    fields.push_back("creationTime");
+    fields.push_back("dirty");
+    fields.push_back("objHosts");
 
     try {
-      client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &field_exist](cpp_redis::reply &reply) {
-        if (reply.is_array()) {
-	  auto arr = reply.as_array();
+      boost::system::error_code ec;
+      request req;
+      req.push_range("HMGET", key, fields);
+      response< std::vector<std::string> > resp;
 
-	  if (!arr[0].is_null()) {
-	    field_exist = 0;
-	    key = arr[0].as_string();
-	    hosts = arr[1].as_string();
-	    size = arr[2].as_string();
-	    bucket_name = arr[3].as_string();
-	    obj_name = arr[4].as_string();
-	  }
-	}
-      });
+      redis_exec(conn, ec, req, resp, y);
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-
-      if (field_exist < 0) {
-        return field_exist;
+      if (std::get<0>(resp).value().empty()) {
+	return -ENOENT;
+      } else if (ec) {
+	return -ec.value();
       }
 
-      /* Currently, there can only be one host */
-      ptr->size_in_bytes = std::stoi(size);
-      ptr->c_obj.bucket_name = bucket_name;
-      ptr->c_obj.obj_name = obj_name;
-    } catch(std::exception &e) {
-      return -1;
+      object->objName = std::get<0>(resp).value()[0];
+      object->bucketName = std::get<0>(resp).value()[1];
+      object->creationTime = std::get<0>(resp).value()[2];
+      object->dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[3]);
+
+      {
+        std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[4]));
+
+	while (!ss.eof()) {
+          std::string host;
+	  std::getline(ss, host, '_');
+	  object->hostsList.push_back(host);
+	}
+      }
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
+  } else {
+    return -ENOENT;
   }
 
   return 0;
 }
 
-int RGWBlockDirectory::delValue(cache_block *ptr) {
-  int result = 0;
-  std::vector<std::string> keys;
-  std::string key = buildIndex(ptr);
-  keys.push_back(key);
-  
-  if (!client.is_connected()) {
-    findClient(&client);
-  }
-  
-  if (existKey(key)) {
-    try {
-      client.del(keys, [&result](cpp_redis::reply &reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer(); /* Returns 1 upon success */
-        }
-      });
-	
-      client.sync_commit(std::chrono::milliseconds(1000));	
+int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) 
+{
+  std::string key = build_index(object);
+  auto copyObj = CacheObj{ .objName = copyName, .bucketName = copyBucketName };
+  std::string copyKey = build_index(&copyObj);
 
-      return result - 1;
-    } catch(std::exception &e) {
-      return -1;
+  if (exist_key(object, y)) {
+    try {
+      response<int> resp;
+     
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("COPY", key, copyKey);
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (ec) {
+	  return -ec.value();
+	}
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HMSET", copyKey, "objName", copyName, "bucketName", copyBucketName);
+	response<std::string> res;
+
+	redis_exec(conn, ec, req, res, y);
+
+	if (ec) {
+	  return -ec.value();
+	}
+      }
+
+      return std::get<0>(resp).value() - 1; 
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    dout(20) << "RGW D4N Directory: Block is not in directory." << dendl;
-    return -2;
+    return -ENOENT;
   }
 }
+
+int ObjectDirectory::del(CacheObj* object, optional_yield y) 
+{
+  std::string key = build_index(object);
+
+  if (exist_key(object, y)) {
+    try {
+      boost::system::error_code ec;
+      request req;
+      req.push("DEL", key);
+      response<int> resp;
+
+      redis_exec(conn, ec, req, resp, y);
+
+      if (ec) {
+	return -ec.value();
+      }
+
+      return std::get<0>(resp).value() - 1; 
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+  } else {
+    return 0; /* No delete was necessary */
+  }
+}
+
+int ObjectDirectory::update_field(CacheObj* object, std::string field, std::string value, optional_yield y) 
+{
+  std::string key = build_index(object);
+
+  if (exist_key(object, y)) {
+    try {
+      /* Ensure field exists */
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HEXISTS", key, field);
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
+      }
+
+      if (field == "objHosts") {
+	/* Append rather than overwrite */
+	boost::system::error_code ec;
+	request req;
+	req.push("HGET", key, field);
+	response<std::string> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (std::get<0>(resp).value().empty()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
+
+	std::get<0>(resp).value() += "_";
+	std::get<0>(resp).value() += value;
+	value = std::get<0>(resp).value();
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push_range("HSET", key, std::map<std::string, std::string>{{field, value}});
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (ec) {
+	  return -ec.value();
+	}
+
+	return std::get<0>(resp).value(); 
+      }
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+  } else {
+    return -ENOENT;
+  }
+}
+
+std::string BlockDirectory::build_index(CacheBlock* block) 
+{
+  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
+}
+
+int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) 
+{
+  std::string key = build_index(block);
+  response<int> resp;
+
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("EXISTS", key);
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return false;
+  } catch (std::exception &e) {}
+
+  return std::get<0>(resp).value();
+}
+
+int BlockDirectory::set(CacheBlock* block, optional_yield y) 
+{
+  std::string key = build_index(block);
+    
+  /* Every set will be treated as new */
+  std::string endpoint;
+  std::list<std::string> redisValues;
+    
+  /* Creating a redisValues of the entry's properties */
+  redisValues.push_back("blockID");
+  redisValues.push_back(std::to_string(block->blockID));
+  redisValues.push_back("version");
+  redisValues.push_back(block->version);
+  redisValues.push_back("size");
+  redisValues.push_back(std::to_string(block->size));
+  redisValues.push_back("globalWeight");
+  redisValues.push_back(std::to_string(block->globalWeight));
+  redisValues.push_back("blockHosts");
+  
+  for (auto const& host : block->hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
+  }
+
+  if (!endpoint.empty())
+    endpoint.pop_back();
+
+  redisValues.push_back(endpoint);
+
+  redisValues.push_back("objName");
+  redisValues.push_back(block->cacheObj.objName);
+  redisValues.push_back("bucketName");
+  redisValues.push_back(block->cacheObj.bucketName);
+  redisValues.push_back("creationTime");
+  redisValues.push_back(block->cacheObj.creationTime); 
+  redisValues.push_back("dirty");
+  redisValues.push_back(std::to_string(block->cacheObj.dirty));
+  redisValues.push_back("objHosts");
+  
+  endpoint.clear();
+  for (auto const& host : block->cacheObj.hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
+  }
+
+  if (!endpoint.empty())
+    endpoint.pop_back();
+
+  redisValues.push_back(endpoint);
+
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push_range("HMSET", key, redisValues);
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BlockDirectory::get(CacheBlock* block, optional_yield y) 
+{
+  std::string key = build_index(block);
+
+  if (exist_key(block, y)) {
+    std::vector<std::string> fields;
+
+    fields.push_back("blockID");
+    fields.push_back("version");
+    fields.push_back("size");
+    fields.push_back("globalWeight");
+    fields.push_back("blockHosts");
+
+    fields.push_back("objName");
+    fields.push_back("bucketName");
+    fields.push_back("creationTime");
+    fields.push_back("dirty");
+    fields.push_back("objHosts");
+
+    try {
+      boost::system::error_code ec;
+      request req;
+      req.push_range("HMGET", key, fields);
+      response< std::vector<std::string> > resp;
+
+      redis_exec(conn, ec, req, resp, y);
+
+      if (std::get<0>(resp).value().empty()) {
+	return -ENOENT;
+      } else if (ec) {
+	return -ec.value();
+      }
+
+      block->blockID = boost::lexical_cast<uint64_t>(std::get<0>(resp).value()[0]);
+      block->version = std::get<0>(resp).value()[1];
+      block->size = boost::lexical_cast<uint64_t>(std::get<0>(resp).value()[2]);
+      block->globalWeight = boost::lexical_cast<int>(std::get<0>(resp).value()[3]);
+
+      {
+        std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[4]));
+	block->hostsList.clear();
+
+	while (!ss.eof()) {
+          std::string host;
+	  std::getline(ss, host, '_');
+	  block->hostsList.push_back(host);
+	}
+      }
+
+      block->cacheObj.objName = std::get<0>(resp).value()[5];
+      block->cacheObj.bucketName = std::get<0>(resp).value()[6];
+      block->cacheObj.creationTime = std::get<0>(resp).value()[7];
+      block->cacheObj.dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[8]);
+
+      {
+        std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[9]));
+	block->cacheObj.hostsList.clear();
+
+	while (!ss.eof()) {
+          std::string host;
+	  std::getline(ss, host, '_');
+	  block->cacheObj.hostsList.push_back(host);
+	}
+      }
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+  } else {
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
+int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y) 
+{
+  std::string key = build_index(block);
+  auto copyBlock = CacheBlock{ .cacheObj = { .objName = copyName, .bucketName = copyBucketName }, .blockID = 0 };
+  std::string copyKey = build_index(&copyBlock);
+
+  if (exist_key(block, y)) {
+    try {
+      response<int> resp;
+     
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("COPY", key, copyKey);
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (ec) {
+	  return -ec.value();
+	}
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HMSET", copyKey, "objName", copyName, "bucketName", copyBucketName);
+	response<std::string> res;
+
+	redis_exec(conn, ec, req, res, y);
+
+	if (ec) {
+	  return -ec.value();
+	}
+      }
+
+      return std::get<0>(resp).value() - 1; 
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+  } else {
+    return -ENOENT;
+  }
+}
+
+int BlockDirectory::del(CacheBlock* block, optional_yield y) 
+{
+  std::string key = build_index(block);
+
+  if (exist_key(block, y)) {
+    try {
+      boost::system::error_code ec;
+      request req;
+      req.push("DEL", key);
+      response<int> resp;
+
+      redis_exec(conn, ec, req, resp, y);
+
+      if (ec) {
+	return -ec.value();
+      }
+
+      return std::get<0>(resp).value() - 1; 
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+  } else {
+    return 0; /* No delete was necessary */
+  }
+}
+
+int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value, optional_yield y) 
+{
+  std::string key = build_index(block);
+
+  if (exist_key(block, y)) {
+    try {
+      /* Ensure field exists */
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HEXISTS", key, field);
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
+      }
+
+      if (field == "blockHosts") { 
+	/* Append rather than overwrite */
+	boost::system::error_code ec;
+	request req;
+	req.push("HGET", key, field);
+	response<std::string> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (std::get<0>(resp).value().empty()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
+
+	std::get<0>(resp).value() += "_";
+	std::get<0>(resp).value() += value;
+	value = std::get<0>(resp).value();
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push_range("HSET", key, std::map<std::string, std::string>{{field, value}});
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (ec) {
+	  return -ec.value();
+	}
+
+	return std::get<0>(resp).value(); 
+      }
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+  } else {
+    return -ENOENT;
+  }
+}
+
+int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optional_yield y) 
+{
+  std::string key = build_index(block);
+
+  if (exist_key(block, y)) {
+    try {
+      /* Ensure field exists */
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HEXISTS", key, "blockHosts");
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HGET", key, "blockHosts");
+	response<std::string> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (std::get<0>(resp).value().empty()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
+
+	if (std::get<0>(resp).value().find("_") == std::string::npos) /* Last host, delete entirely */
+          return del(block, y);
+
+        std::string result = std::get<0>(resp).value();
+        auto it = result.find(delValue);
+        if (it != std::string::npos) 
+          result.erase(result.begin() + it, result.begin() + it + delValue.size());
+        else
+          return -ENOENT;
+
+        if (result[0] == '_')
+          result.erase(0, 1);
+
+	delValue = result;
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push_range("HSET", key, std::map<std::string, std::string>{{"blockHosts", delValue}});
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (ec) {
+	  return -ec.value();
+	}
+
+	return std::get<0>(resp).value();
+      }
+    } catch (std::exception &e) {
+      return -EINVAL;
+    }
+  } else {
+    return -ENOENT;
+  }
+}
+
+} } // namespace rgw::d4n

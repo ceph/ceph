@@ -32,15 +32,17 @@ using namespace std;
 
 namespace rgw::sal {
 
-  int DBUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
-      const string& end_marker, uint64_t max, bool need_stats,
-      BucketList &result, optional_yield y)
+  int DBStore::list_buckets(const DoutPrefixProvider *dpp,
+      const rgw_owner& owner, const std::string& tenant,
+      const string& marker, const string& end_marker, uint64_t max,
+      bool need_stats, BucketList &result, optional_yield y)
   {
     RGWUserBuckets ulist;
     bool is_truncated = false;
 
-    int ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker,
-        end_marker, max, need_stats, &ulist, &is_truncated);
+    std::string ownerstr = to_string(owner);
+    int ret = getDB()->list_buckets(dpp, "", ownerstr,
+        marker, end_marker, max, need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
 
@@ -79,25 +81,6 @@ namespace rgw::sal {
     ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
         &objv_tracker);
     return ret;
-  }
-
-  int DBUser::read_stats(const DoutPrefixProvider *dpp,
-      optional_yield y, RGWStorageStats* stats,
-      ceph::real_time *last_stats_sync,
-      ceph::real_time *last_stats_update)
-  {
-    return 0;
-  }
-
-  /* stats - Not for first pass */
-  int DBUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
-  {
-    return 0;
-  }
-
-  int DBUser::complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y)
-  {
-    return 0;
   }
 
   int DBUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -150,6 +133,13 @@ namespace rgw::sal {
   {
     *verified = false;
     return 0;
+  }
+
+  int DBUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                          std::string_view marker, uint32_t max_items,
+                          GroupList& listing)
+  {
+    return -ENOTSUP;
   }
 
   int DBBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
@@ -226,8 +216,8 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                RGWBucketEnt* ent)
+  int DBBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
   {
     return 0;
   }
@@ -238,7 +228,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::chown(const DoutPrefixProvider *dpp, const rgw_user& new_owner, optional_yield y)
+  int DBBucket::chown(const DoutPrefixProvider *dpp, const rgw_owner& new_owner, optional_yield y)
   {
     int ret;
 
@@ -702,7 +692,6 @@ namespace rgw::sal {
 
   int DBObject::DBDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
   {
-    parent_op.params.bucket_owner = params.bucket_owner.id;
     parent_op.params.versioning_status = params.versioning_status;
     parent_op.params.obj_owner = params.obj_owner;
     parent_op.params.olh_epoch = params.olh_epoch;
@@ -732,13 +721,13 @@ namespace rgw::sal {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);
 
-    del_op.params.bucket_owner = bucket->get_info().owner;
     del_op.params.versioning_status = bucket->get_info().versioning_status();
 
     return del_op.delete_obj(dpp);
   }
 
-  int DBObject::copy_object(User* user,
+  int DBObject::copy_object(const ACLOwner& owner,
+      const rgw_user& remote_user,
       req_info* info,
       const rgw_zone_id& source_zone,
       rgw::sal::Object* dest_object,
@@ -774,14 +763,16 @@ namespace rgw::sal {
     return parent_op.iterate(dpp, ofs, end, cb);
   }
 
-  int DBObject::swift_versioning_restore(bool& restored,
+  int DBObject::swift_versioning_restore(const ACLOwner& owner,
+      const rgw_user& remote_user, bool& restored,
       const DoutPrefixProvider* dpp, optional_yield y)
   {
     return 0;
   }
 
-  int DBObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
-      optional_yield y)
+  int DBObject::swift_versioning_copy(const ACLOwner& owner,
+      const rgw_user& remote_user,
+      const DoutPrefixProvider* dpp, optional_yield y)
   {
     return 0;
   }
@@ -794,7 +785,7 @@ namespace rgw::sal {
     int ret;
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-    del_op->params.bucket_owner.id = bucket->get_info().owner;
+    del_op->params.bucket_owner = bucket->get_info().owner;
     del_op->params.versioning_status = 0;
 
     // Since the data objects are associated with meta obj till
@@ -834,7 +825,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
 
     /* Create meta object */
-    obj_op.meta.owner = owner.id;
+    obj_op.meta.owner = to_string(owner.id);
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
     obj_op.meta.mtime = &mtime;
@@ -1013,7 +1004,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
     ret = obj_op.prepare(dpp);
 
-    obj_op.meta.owner = owner.id;
+    obj_op.meta.owner = to_string(owner.id);
     obj_op.meta.flags = PUT_OBJ_CREATE;
     obj_op.meta.category = RGWObjCategory::Main;
     obj_op.meta.modify_tail = true;
@@ -1103,7 +1094,7 @@ namespace rgw::sal {
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
@@ -1117,7 +1108,7 @@ namespace rgw::sal {
                 MultipartUpload* upload,
 		        rgw::sal::Object* obj,
 		        DBStore* _driver,
-    		    const rgw_user& _owner,
+    		    const ACLOwner& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
                 uint64_t _part_num, const std::string& _part_num_str):
 			StoreWriter(dpp, y),
@@ -1263,7 +1254,7 @@ namespace rgw::sal {
 	    	    optional_yield y,
 		        rgw::sal::Object* _obj,
 		        DBStore* _driver,
-    		    const rgw_user& _owner,
+    		    const ACLOwner& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag) :
@@ -1406,8 +1397,10 @@ namespace rgw::sal {
 
   std::unique_ptr<RGWRole> DBStore::get_role(std::string name,
       std::string tenant,
+      rgw_account_id account_id,
       std::string path,
       std::string trust_policy,
+      std::string description,
       std::string max_session_duration_str,
       std::multimap<std::string,std::string> tags)
   {
@@ -1427,24 +1420,45 @@ namespace rgw::sal {
     return std::unique_ptr<RGWRole>(p);
   }
 
-  int DBStore::get_roles(const DoutPrefixProvider *dpp,
-      optional_yield y,
-      const std::string& path_prefix,
-      const std::string& tenant,
-      vector<std::unique_ptr<RGWRole>>& roles)
+  int DBStore::list_roles(const DoutPrefixProvider *dpp,
+                          optional_yield y,
+                          const std::string& tenant,
+                          const std::string& path_prefix,
+                          const std::string& marker,
+                          uint32_t max_items,
+                          RoleList& listing)
   {
     return 0;
   }
 
-  std::unique_ptr<RGWOIDCProvider> DBStore::get_oidc_provider()
+  int DBStore::store_oidc_provider(const DoutPrefixProvider *dpp,
+                                   optional_yield y,
+                                   const RGWOIDCProviderInfo& info,
+                                   bool exclusive)
   {
-    RGWOIDCProvider* p = nullptr;
-    return std::unique_ptr<RGWOIDCProvider>(p);
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_oidc_provider(const DoutPrefixProvider *dpp,
+                                  optional_yield y,
+                                  std::string_view account,
+                                  std::string_view url,
+                                  RGWOIDCProviderInfo& info)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
+                                    optional_yield y,
+                                    std::string_view account,
+                                    std::string_view url)
+  {
+    return -ENOTSUP;
   }
 
   int DBStore::get_oidc_providers(const DoutPrefixProvider *dpp,
-      const std::string& tenant,
-      vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
+      optional_yield y, std::string_view tenant,
+      vector<RGWOIDCProviderInfo>& providers)
   {
     return 0;
   }
@@ -1452,7 +1466,7 @@ namespace rgw::sal {
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -1463,7 +1477,7 @@ namespace rgw::sal {
   std::unique_ptr<Writer> DBStore::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) {
@@ -1492,9 +1506,10 @@ namespace rgw::sal {
     RGWUserInfo uinfo;
     User *u;
     int ret = 0;
+    rgw::sal::Attrs attrs;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDB()->get_user(dpp, string("access_key"), key, uinfo, nullptr,
+    ret = getDB()->get_user(dpp, string("access_key"), key, uinfo, &attrs,
         &objv_tracker);
 
     if (ret < 0)
@@ -1505,6 +1520,7 @@ namespace rgw::sal {
     if (!u)
       return -ENOMEM;
 
+    u->get_attrs() = std::move(attrs);
     u->get_version_tracker() = objv_tracker;
     user->reset(u);
 
@@ -1516,9 +1532,10 @@ namespace rgw::sal {
     RGWUserInfo uinfo;
     User *u;
     int ret = 0;
+    rgw::sal::Attrs attrs;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDB()->get_user(dpp, string("email"), email, uinfo, nullptr,
+    ret = getDB()->get_user(dpp, string("email"), email, uinfo, &attrs,
         &objv_tracker);
 
     if (ret < 0)
@@ -1529,6 +1546,7 @@ namespace rgw::sal {
     if (!u)
       return -ENOMEM;
 
+    u->get_attrs() = std::move(attrs);
     u->get_version_tracker() = objv_tracker;
     user->reset(u);
 
@@ -1538,6 +1556,211 @@ namespace rgw::sal {
   int DBStore::get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
   {
     /* Swift keys and subusers are not supported for now */
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_account_by_id(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view id,
+                                  RGWAccountInfo& info,
+                                  Attrs& attrs,
+                                  RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_account_by_name(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view tenant,
+                                    std::string_view name,
+                                    RGWAccountInfo& info,
+                                    Attrs& attrs,
+                                    RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_account_by_email(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view email,
+                                     RGWAccountInfo& info,
+                                     Attrs& attrs,
+                                     RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::store_account(const DoutPrefixProvider* dpp,
+                             optional_yield y, bool exclusive,
+                             const RGWAccountInfo& info,
+                             const RGWAccountInfo* old_info,
+                             const Attrs& attrs,
+                             RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::delete_account(const DoutPrefixProvider* dpp,
+                              optional_yield y,
+                              const RGWAccountInfo& info,
+                              RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_stats(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          const rgw_owner& owner,
+                          RGWStorageStats& stats,
+                          ceph::real_time& last_synced,
+                          ceph::real_time& last_updated)
+  {
+    return 0;
+  }
+  int DBStore::load_stats_async(const DoutPrefixProvider* dpp,
+                                const rgw_owner& owner,
+                                boost::intrusive_ptr<ReadStatsCB> cb)
+  {
+    return -ENOTSUP;
+  }
+  int DBStore::reset_stats(const DoutPrefixProvider *dpp,
+                           optional_yield y,
+                           const rgw_owner& owner)
+  {
+    return -ENOTSUP;
+  }
+  int DBStore::complete_flush_stats(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const rgw_owner& owner)
+  {
+    return 0;
+  }
+
+  int DBStore::load_owner_by_email(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view email,
+                                   rgw_owner& owner)
+  {
+    RGWUserInfo uinfo;
+    int ret = getDB()->get_user(dpp, "email", std::string{email},
+                                uinfo, nullptr, nullptr);
+    if (ret < 0) {
+      return ret;
+    }
+    owner = std::move(uinfo.user_id);
+    return 0;
+  }
+
+  int DBStore::count_account_roles(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   uint32_t& count)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::list_account_roles(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view account_id,
+                                  std::string_view path_prefix,
+                                  std::string_view marker,
+                                  uint32_t max_items,
+                                  RoleList& listing)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                         optional_yield y,
+                                         std::string_view account_id,
+                                         std::string_view tenant,
+                                         std::string_view username,
+                                         std::unique_ptr<User>* user)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::count_account_users(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   uint32_t& count)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::list_account_users(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view account_id,
+                                  std::string_view tenant,
+                                  std::string_view path_prefix,
+                                  std::string_view marker,
+                                  uint32_t max_items,
+                                  UserList& listing)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_group_by_id(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                std::string_view id,
+                                RGWGroupInfo& info, Attrs& attrs,
+                                RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_group_by_name(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view account_id,
+                                  std::string_view name,
+                                  RGWGroupInfo& info, Attrs& attrs,
+                                  RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::store_group(const DoutPrefixProvider* dpp, optional_yield y,
+                           const RGWGroupInfo& info, const Attrs& attrs,
+                           RGWObjVersionTracker& objv, bool exclusive,
+                           const RGWGroupInfo* old_info)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+                            const RGWGroupInfo& info,
+                            RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::list_group_users(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                std::string_view tenant,
+                                std::string_view id,
+                                std::string_view marker,
+                                uint32_t max_items,
+                                UserList& listing)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::count_account_groups(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::list_account_groups(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view path_prefix,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   GroupList& listing)
+  {
     return -ENOTSUP;
   }
 
@@ -1662,17 +1885,45 @@ namespace rgw::sal {
     rgw::notify::EventType event_type, optional_yield y,
     const std::string* object_name)
   {
-    return std::make_unique<DBNotification>(obj, src_obj, event_type);
+    rgw::notify::EventTypeList event_types = {event_type};
+    return std::make_unique<DBNotification>(obj, src_obj, event_types);
   }
 
   std::unique_ptr<Notification> DBStore::get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
-    rgw::sal::Object* src_obj,
-    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
-    std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
-    optional_yield y)
+      const DoutPrefixProvider* dpp,
+      rgw::sal::Object* obj,
+      rgw::sal::Object* src_obj,
+      const rgw::notify::EventTypeList& event_types,
+      rgw::sal::Bucket* _bucket,
+      std::string& _user_id,
+      std::string& _user_tenant,
+      std::string& _req_id,
+      optional_yield y) {
+    return std::make_unique<DBNotification>(obj, src_obj, event_types);
+  }
+
+  int DBStore::list_account_topics(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   TopicList& listing)
   {
-    return std::make_unique<DBNotification>(obj, src_obj, event_type);
+    return -ENOTSUP;
+  }
+
+  int DBStore::add_persistent_topic(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const std::string& topic_queue)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const std::string& topic_queue)
+  {
+    return -ENOTSUP;
   }
 
   RGWLC* DBStore::get_rgwlc(void) {

@@ -461,6 +461,52 @@ In the below instructions, ``{id}`` is an arbitrary name, such as the hostname o
 
 #. Now you are ready to `create a Ceph file system`_.
 
+Manually Installing RADOSGW
+===========================
+
+For a more involved discussion of the procedure presented here, see `this
+thread on the ceph-users mailing list
+<https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/message/LB3YRIKAPOHXYCW7MKLVUJPYWYRQVARU/>`_.
+
+#. Install ``radosgw`` packages on the nodes that will be the RGW nodes.
+
+#. From a monitor or from a node with admin privileges, run a command of the
+   following form:
+
+   .. prompt:: bash #
+      
+      ceph auth get-or-create client.short-hostname-of-rgw mon 'allow rw' osd 'allow rwx'
+
+#. On one of the RGW nodes, do the following:
+
+   a. Create a ``ceph-user``-owned directory. For example: 
+
+      .. prompt:: bash #
+
+         install -d -o ceph -g ceph /var/lib/ceph/radosgw/ceph-$(hostname -s)
+
+   b. Enter the directory just created and create a ``keyring`` file: 
+
+      .. prompt:: bash #
+
+         touch /var/lib/ceph/radosgw/ceph-$(hostname -s)/keyring
+
+      Use a command similar to this one to put the key from the earlier ``ceph
+      auth get-or-create`` step in the ``keyring`` file. Use your preferred
+      editor:
+
+      .. prompt:: bash #
+
+         $EDITOR /var/lib/ceph/radosgw/ceph-$(hostname -s)/keyring
+
+   c. Repeat these steps on every RGW node.
+
+#. Start the RADOSGW service by running the following command:
+
+   .. prompt:: bash #
+
+      systemctl start ceph-radosgw@$(hostname -s).service
+
 
 Summary
 =======

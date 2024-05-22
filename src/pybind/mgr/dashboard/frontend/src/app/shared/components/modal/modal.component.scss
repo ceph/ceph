@@ -16,6 +16,10 @@
     overflow-x: hidden;
     overflow-y: auto;
   }
+
+  .modal-content {
+    display: table;
+  }
 }
 
 button.close {

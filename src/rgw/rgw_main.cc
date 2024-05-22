@@ -134,6 +134,7 @@ int main(int argc, char *argv[])
   register_async_signal_handler(SIGTERM, rgw::signal::handle_sigterm);
   register_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);
   register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
+  register_async_signal_handler(SIGXFSZ, rgw::signal::sig_handler_noop);
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
   main.init_perfcounters();
@@ -167,7 +168,6 @@ int main(int argc, char *argv[])
     main.shutdown();
     return r;
   }
-  main.init_notification_endpoints();
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
@@ -184,6 +184,7 @@ int main(int argc, char *argv[])
     unregister_async_signal_handler(SIGTERM, rgw::signal::handle_sigterm);
     unregister_async_signal_handler(SIGINT, rgw::signal::handle_sigterm);
     unregister_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
+    unregister_async_signal_handler(SIGXFSZ, rgw::signal::sig_handler_noop);
     shutdown_async_signal_handler();
   };
 

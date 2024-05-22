@@ -123,9 +123,6 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
       .subscribe((resp: any) => {
         // Disabled these fields since its not editable
         this.subvolumegroupForm.get('subvolumegroupName').disable();
-        this.subvolumegroupForm.get('pool').disable();
-        this.subvolumegroupForm.get('uid').disable();
-        this.subvolumegroupForm.get('gid').disable();
 
         this.subvolumegroupForm.get('subvolumegroupName').setValue(this.subvolumegroupName);
         if (resp.bytes_quota !== 'infinite') {
@@ -149,16 +146,19 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
     const gid = this.subvolumegroupForm.getValue('gid');
     const mode = this.formatter.toOctalPermission(this.subvolumegroupForm.getValue('mode'));
     if (this.isEdit) {
-      const editSize = size === 0 ? 'infinite' : size;
       this.taskWrapper
         .wrapTaskAroundCall({
           task: new FinishedTask('cephfs/subvolume/group/' + URLVerbs.EDIT, {
             subvolumegroupName: subvolumegroupName
           }),
-          call: this.cephfsSubvolumeGroupService.update(
+          call: this.cephfsSubvolumeGroupService.create(
             this.fsName,
             subvolumegroupName,
-            String(editSize)
+            pool,
+            String(size),
+            uid,
+            gid,
+            mode
           )
         })
         .subscribe({

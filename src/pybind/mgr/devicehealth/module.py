@@ -50,31 +50,39 @@ def get_nvme_wear_level(data: Dict[Any, Any]) -> Optional[float]:
 class Module(MgrModule):
 
     # latest (if db does not exist)
-    SCHEMA = """
-CREATE TABLE Device (
-  devid TEXT PRIMARY KEY
-) WITHOUT ROWID;
-CREATE TABLE DeviceHealthMetrics (
-  time DATETIME DEFAULT (strftime('%s', 'now')),
-  devid TEXT NOT NULL REFERENCES Device (devid),
-  raw_smart TEXT NOT NULL,
-  PRIMARY KEY (time, devid)
-);
-"""
+    SCHEMA = [
+        """
+        CREATE TABLE Device (
+            devid TEXT PRIMARY KEY
+        ) WITHOUT ROWID;
+        """,
+        """
+        CREATE TABLE DeviceHealthMetrics (
+            time DATETIME DEFAULT (strftime('%s', 'now')),
+            devid TEXT NOT NULL REFERENCES Device (devid),
+            raw_smart TEXT NOT NULL,
+            PRIMARY KEY (time, devid)
+        );
+        """
+    ]
 
     SCHEMA_VERSIONED = [
         # v1
-        """
-CREATE TABLE Device (
-  devid TEXT PRIMARY KEY
-) WITHOUT ROWID;
-CREATE TABLE DeviceHealthMetrics (
-  time DATETIME DEFAULT (strftime('%s', 'now')),
-  devid TEXT NOT NULL REFERENCES Device (devid),
-  raw_smart TEXT NOT NULL,
-  PRIMARY KEY (time, devid)
-);
-"""
+        [
+            """
+            CREATE TABLE Device (
+            devid TEXT PRIMARY KEY
+            ) WITHOUT ROWID;
+            """,
+            """
+            CREATE TABLE DeviceHealthMetrics (
+                time DATETIME DEFAULT (strftime('%s', 'now')),
+                devid TEXT NOT NULL REFERENCES Device (devid),
+                raw_smart TEXT NOT NULL,
+                PRIMARY KEY (time, devid)
+            );
+            """,
+        ]
     ]
 
     MODULE_OPTIONS = [
@@ -320,6 +328,7 @@ CREATE TABLE DeviceHealthMetrics (
 
         done = False
         with ioctx, self._db_lock, self.db:
+            self.db.execute('BEGIN;')
             count = 0
             for obj in ioctx.list_objects():
                 try:
@@ -512,6 +521,7 @@ CREATE TABLE DeviceHealthMetrics (
         """
 
         with self._db_lock, self.db:
+            self.db.execute('BEGIN;')
             self._create_device(devid)
             self.db.execute(SQL, (devid, json.dumps(data)))
             self._prune_device_metrics()
@@ -566,6 +576,7 @@ CREATE TABLE DeviceHealthMetrics (
         self.log.debug(f"_get_device_metrics: {devid} {sample} {min_sample}")
 
         with self._db_lock, self.db:
+            self.db.execute('BEGIN;')
             if isample:
                 cursor = self.db.execute(SQL_EXACT, (devid, isample))
             else:

@@ -65,4 +65,8 @@ ceph_test_librgw_file_gp ${K} --get --stat --put --create
 echo "phase 5.2"
 ceph_test_librgw_file_gp ${K} --delete
 
+# rename tests
+echo "phase 6.1"
+ceph_test_librgw_file_rename ${K} --create
+
 exit 0

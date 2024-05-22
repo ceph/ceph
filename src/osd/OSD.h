@@ -563,7 +563,7 @@ public:
 				   unsigned int qu_priority,
 				   Scrub::act_token_t act_token);
 
-  void queue_for_pg_delete(spg_t pgid, epoch_t e);
+  void queue_for_pg_delete(spg_t pgid, epoch_t e, int64_t num_objects);
   bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
 private:
@@ -712,6 +712,7 @@ public:
   void start_shutdown();
   void shutdown_reserver();
   void shutdown();
+  void fast_shutdown();
 
   // -- stats --
   ceph::mutex stat_lock = ceph::make_mutex("OSDService::stat_lock");
@@ -1994,7 +1995,6 @@ private:
   void maybe_override_sleep_options_for_qos();
   bool maybe_override_options_for_qos(
     const std::set<std::string> *changed = nullptr);
-  void maybe_override_cost_for_qos();
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,

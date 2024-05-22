@@ -11,6 +11,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 import { forkJoin } from 'rxjs';
+import * as xml2js from 'xml2js';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
@@ -26,6 +27,11 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
 import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
+import {
+  AclPermissionsType,
+  RgwBucketAclPermissions as aclPermission,
+  RgwBucketAclGrantee as Grantee
+} from './rgw-bucket-acl-permissions.enum';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.component';
@@ -55,6 +61,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   kmsVaultConfig = false;
   s3VaultConfig = false;
   tags: Record<string, string>[] = [];
+  dirtyTags = false;
   tagConfig = [
     {
       attribute: 'key'
@@ -63,6 +70,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       attribute: 'value'
     }
   ];
+  grantees: string[] = [Grantee.Owner, Grantee.Everyone, Grantee.AuthenticatedUsers];
+  aclPermissions: AclPermissionsType[] = [aclPermission.FullControl];
 
   get isVersioningEnabled(): boolean {
     return this.bucketForm.getValue('versioning');
@@ -117,7 +126,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       ],
       owner: [null, [Validators.required]],
       kms_provider: ['vault'],
-      'placement-target': [null, this.editing ? [] : [Validators.required]],
+      'placement-target': [null],
       versioning: [null],
       'mfa-delete': [null],
       'mfa-token-serial': [''],
@@ -142,8 +151,10 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         ]
       ],
       lock_mode: ['COMPLIANCE'],
-      lock_retention_period_days: [0, [CdValidators.number(false), lockDaysValidator]],
-      bucket_policy: ['{}', CdValidators.json()]
+      lock_retention_period_days: [10, [CdValidators.number(false), lockDaysValidator]],
+      bucket_policy: ['{}', CdValidators.json()],
+      grantee: [Grantee.Owner, [Validators.required]],
+      aclPermission: [[aclPermission.FullControl], [Validators.required]]
     });
   }
 
@@ -223,6 +234,12 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           // Append default values.
           value = _.merge(defaults, value);
           // Update the form.
+          if (this.editing) {
+            [value['grantee'], value['aclPermission']] = this.aclXmlToFormValues(
+              bidResp['acl'],
+              bidResp['owner']
+            );
+          }
           this.bucketForm.setValue(value);
           if (this.editing) {
             this.isVersioningAlreadyEnabled = this.isVersioningEnabled;
@@ -236,6 +253,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
                 .get('bucket_policy')
                 .setValue(JSON.stringify(value['bucket_policy'], null, 2));
             }
+            this.filterAclPermissions();
           }
         }
         this.loadingReady();
@@ -260,6 +278,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     const values = this.bucketForm.value;
     const xmlStrTags = this.tagsToXML(this.tags);
     const bucketPolicy = this.getBucketPolicy();
+    const cannedAcl = this.permissionToCannedAcl();
+
     if (this.editing) {
       // Edit
       const versioning = this.getVersioningStatus();
@@ -279,7 +299,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['lock_mode'],
           values['lock_retention_period_days'],
           xmlStrTags,
-          bucketPolicy
+          bucketPolicy,
+          cannedAcl
         )
         .subscribe(
           () => {
@@ -309,7 +330,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['encryption_type'],
           values['keyId'],
           xmlStrTags,
-          bucketPolicy
+          bucketPolicy,
+          cannedAcl
         )
         .subscribe(
           () => {
@@ -416,6 +438,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   deleteTag(index: number) {
     this.tags.splice(index, 1);
+    this.dirtyTags = true;
     this.bucketForm.markAsDirty();
     this.bucketForm.updateValueAndValidity();
   }
@@ -426,11 +449,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     } else {
       this.tags.push(tag);
     }
+    this.dirtyTags = true;
     this.bucketForm.markAsDirty();
     this.bucketForm.updateValueAndValidity();
   }
 
   private tagsToXML(tags: Record<string, string>[]): string {
+    if (!this.dirtyTags && tags.length === 0) return '';
     let xml = '<Tagging><TagSet>';
     for (const tag of tags) {
       xml += '<Tag>';
@@ -445,5 +470,82 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     }
     xml += '</TagSet></Tagging>';
     return xml;
+  }
+
+  aclXmlToFormValues(xml: any, bucketOwner: string): [Grantee, AclPermissionsType] {
+    const parser = new xml2js.Parser({ explicitArray: false, trim: true });
+    let selectedAclPermission: AclPermissionsType = aclPermission.FullControl;
+    let selectedGrantee: Grantee = Grantee.Owner;
+    parser.parseString(xml, (err, result) => {
+      if (err) return null;
+
+      const xmlGrantees: any = result['AccessControlPolicy']['AccessControlList']['Grant'];
+      for (let i = 0; i < xmlGrantees.length; i++) {
+        if (xmlGrantees[i]['Grantee']['ID'] === bucketOwner) continue;
+        if (
+          xmlGrantees[i]['Grantee']['URI'] &&
+          xmlGrantees[i]['Grantee']['URI'].includes('AllUsers')
+        ) {
+          selectedGrantee = Grantee.Everyone;
+          if (
+            xmlGrantees[i]['Permission'] === 'READ' &&
+            selectedAclPermission !== aclPermission.Write
+          ) {
+            selectedAclPermission = aclPermission.Read;
+          } else if (
+            xmlGrantees[i]['Permission'] === ' WRITE' &&
+            selectedAclPermission !== aclPermission.Read
+          ) {
+            selectedAclPermission = aclPermission.Write;
+          } else {
+            selectedAclPermission = aclPermission.All;
+          }
+        } else if (
+          xmlGrantees[i]['Grantee']['URI'] &&
+          xmlGrantees[i]['Grantee']['URI'].includes('AuthenticatedUsers')
+        ) {
+          selectedGrantee = Grantee.AuthenticatedUsers;
+          selectedAclPermission = aclPermission.Read;
+        }
+      }
+    });
+    return [selectedGrantee, selectedAclPermission];
+  }
+
+  /*
+   Set the selector's options to the available options depending
+   on the selected Grantee and reset it's value
+   */
+  onSelectionFilter() {
+    this.filterAclPermissions();
+    this.bucketForm.get('aclPermission').setValue(this.aclPermissions[0]);
+  }
+
+  filterAclPermissions() {
+    const selectedGrantee: Grantee = this.bucketForm.get('grantee').value;
+    switch (selectedGrantee) {
+      case Grantee.Owner:
+        this.aclPermissions = [aclPermission.FullControl];
+        break;
+      case Grantee.Everyone:
+        this.aclPermissions = [aclPermission.Read, aclPermission.All];
+        break;
+      case Grantee.AuthenticatedUsers:
+        this.aclPermissions = [aclPermission.Read];
+        break;
+    }
+  }
+
+  permissionToCannedAcl(): string {
+    const selectedGrantee: Grantee = this.bucketForm.get('grantee').value;
+    const selectedAclPermission = this.bucketForm.get('aclPermission').value;
+    switch (selectedGrantee) {
+      case Grantee.Everyone:
+        return selectedAclPermission === aclPermission.Read ? 'public-read' : 'public-read-write';
+      case Grantee.AuthenticatedUsers:
+        return 'authenticated-read';
+      default:
+        return 'private';
+    }
   }
 }

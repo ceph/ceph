@@ -555,9 +555,9 @@ set<int> ErasureCodeLrc::get_erasures(const set<int> &want,
   return result;
 }
 
-unsigned int ErasureCodeLrc::get_chunk_size(unsigned int object_size) const
+unsigned int ErasureCodeLrc::get_chunk_size(unsigned int stripe_width) const
 {
-  return layers.front().erasure_code->get_chunk_size(object_size);
+  return layers.front().erasure_code->get_chunk_size(stripe_width);
 }
 
 void p(const set<int> &s) { cerr << s; } // for gdb

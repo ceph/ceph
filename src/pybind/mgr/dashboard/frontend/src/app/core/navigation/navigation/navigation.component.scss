@@ -143,6 +143,17 @@
       background-color: vv.$primary;
     }
   }
+
+  .cd-context-bar {
+    background-color: vv.$white;
+    color: vv.$secondary;
+    cursor: pointer;
+  }
+
+  .dropdown-text {
+    font-size: small;
+    font-weight: 600;
+  }
 }
 
 /* ---------------------------------------------------

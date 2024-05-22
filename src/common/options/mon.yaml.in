@@ -55,6 +55,15 @@ options:
   default: 1_min
   services:
   - mon
+- name: mon_down_uptime_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds that the cluster may have a mon down after this (leader) monitor comes up.
+  default: 1_min
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_mgr_beacon_grace
   type: secs
   level: advanced
@@ -112,18 +121,6 @@ options:
   flags:
   - runtime
   with_legacy: true
-- name: mon_cluster_log_to_syslog_level
-  type: str
-  level: advanced
-  desc: Syslog level for cluster log messages
-  default: info
-  services:
-  - mon
-  see_also:
-  - mon_cluster_log_to_syslog
-  flags:
-  - runtime
-  with_legacy: true
 - name: mon_cluster_log_to_syslog_facility
   type: str
   level: advanced
@@ -172,10 +169,12 @@ options:
   flags:
   - runtime
   with_legacy: true
-- name: mon_cluster_log_file_level
+- name: mon_cluster_log_level
   type: str
   level: advanced
-  desc: Lowest level to include is cluster log file
+  desc: Lowest level to include in cluster log file and/or in external log server
+  long_desc: Log level to control the cluster log message verbosity for the cluster
+    log file as well as for all external entities.
   default: debug
   services:
   - mon
@@ -1246,14 +1245,6 @@ options:
   level: dev
   desc: granularity of PG upmap validation background work
   default: 256
-  services:
-  - mon
-  with_legacy: true
-- name: mon_osd_max_creating_pgs
-  type: int
-  level: advanced
-  desc: maximum number of PGs the mon will create at once
-  default: 1024
   services:
   - mon
   with_legacy: true

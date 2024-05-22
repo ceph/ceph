@@ -31,6 +31,7 @@
 #include "common/safe_io.h"
 #include "common/blkdev.h"
 #include "common/PriorityCache.h"
+#include "common/version.h"
 
 #define dout_context g_ceph_context
 
@@ -698,9 +699,20 @@ class MonitorDBStore
   }
 
   int create_and_open(std::ostream &out) {
+    int r = write_meta("ceph_version_when_created", pretty_version_to_str());
+    if (r < 0)
+      return r;
+
+    std::ostringstream created_at;
+    utime_t now = ceph_clock_now();
+    now.gmtime(created_at);
+    r = write_meta("created_at", created_at.str());
+    if (r < 0)
+      return r;
+
     // record the type before open
     std::string kv_type;
-    int r = read_meta("kv_backend", &kv_type);
+    r = read_meta("kv_backend", &kv_type);
     if (r < 0) {
       kv_type = g_conf()->mon_keyvaluedb;
       r = write_meta("kv_backend", kv_type);

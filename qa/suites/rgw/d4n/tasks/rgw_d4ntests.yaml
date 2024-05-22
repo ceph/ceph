@@ -5,6 +5,8 @@ tasks:
       deb: ['s3cmd', 'redis']
       rpm: ['s3cmd', 'redis']
 - ceph:
+- redis:
+    client.0:
 - rgw: [client.0]
 - tox: [client.0]
 - exec:
@@ -17,3 +19,4 @@ tasks:
     clients:
       client.0:
       - rgw/run-d4n.sh
+      - rgw/test_d4n.sh

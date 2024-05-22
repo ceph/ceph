@@ -83,6 +83,37 @@ steps below:
 
      ceph orch apply grafana
 
+Enabling security for the monitoring stack
+----------------------------------------------
+
+By default, in a cephadm-managed cluster, the monitoring components are set up and configured without enabling security measures.
+While this suffices for certain deployments, others with strict security needs may find it necessary to protect the
+monitoring stack against unauthorized access. In such cases, cephadm relies on a specific configuration parameter,
+`mgr/cephadm/secure_monitoring_stack`, which toggles the security settings for all monitoring components. To activate security
+measures, set this option to ``true`` with a command of the following form:
+
+   .. prompt:: bash #
+
+     ceph config set mgr mgr/cephadm/secure_monitoring_stack true
+
+This change will trigger a sequence of reconfigurations across all monitoring daemons, typically requiring
+few minutes until all components are fully operational. The updated secure configuration includes the following modifications:
+
+#. Prometheus: basic authentication is required to access the web portal and TLS is enabled for secure communication.
+#. Alertmanager: basic authentication is required to access the web portal and TLS is enabled for secure communication.
+#. Node Exporter: TLS is enabled for secure communication.
+#. Grafana: TLS is enabled and authentication is requiered to access the datasource information.
+
+In this secure setup, users will need to setup authentication
+(username/password) for both Prometheus and Alertmanager. By default the
+username and password are set to ``admin``/``admin``. The user can change these
+value with the commands ``ceph orch prometheus set-credentials`` and ``ceph
+orch alertmanager set-credentials`` respectively. These commands offer the
+flexibility to input the username/password either as parameters or via a JSON
+file, which enhances security. Additionally, Cephadm provides the commands
+`orch prometheus get-credentials` and `orch alertmanager get-credentials` to
+retrieve the current credentials.
+
 .. _cephadm-monitoring-centralized-logs:
 
 Centralized Logging in Ceph
@@ -128,6 +159,38 @@ example spec file:
       protocol: http
 
 .. _cephadm_monitoring-images:
+
+.. _cephadm_default_images:
+
+Default images
+~~~~~~~~~~~~~~
+
+*The information in this section was developed by Eugen Block in a thread on
+the [ceph-users] mailing list in April of 2024. The thread can be viewed here:
+``https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/thread/QGC66QIFBKRTPZAQMQEYFXOGZJ7RLWBN/``.*
+
+``cephadm`` stores a local copy of the ``cephadm`` binary in
+``var/lib/ceph/{FSID}/cephadm.{DIGEST}``, where ``{DIGEST}`` is an alphanumeric
+string representing the currently-running version of Ceph.
+
+To see the default container images, run a command of the following form:
+
+.. prompt:: bash #
+
+   grep -E "DEFAULT*IMAGE" /var/lib/ceph/{FSID}/cephadm.{DIGEST}
+
+::
+
+   DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.51.0'
+   DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.9.5'    
+   DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.9.5'    
+   DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.7.0'    
+   DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.27.0'   
+   DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:10.4.0'
+
+Default monitoring images are specified in
+``/src/cephadm/cephadmlib/constants.py`` and in
+``/src/pybind/mgr/cephadm/module.py``.
 
 Using custom images
 ~~~~~~~~~~~~~~~~~~~

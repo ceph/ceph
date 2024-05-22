@@ -63,10 +63,10 @@ ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 // -----------------------------------------------------------------------------
 
 unsigned int
-ErasureCodeIsa::get_chunk_size(unsigned int object_size) const
+ErasureCodeIsa::get_chunk_size(unsigned int stripe_width) const
 {
   unsigned alignment = get_alignment();
-  unsigned chunk_size = ( object_size + k - 1 ) / k;
+  unsigned chunk_size = (stripe_width + k - 1) / k;
   dout(20) << "get_chunk_size: chunk_size " << chunk_size
            << " must be modulo " << alignment << dendl;
   unsigned modulo = chunk_size % alignment;
@@ -379,7 +379,10 @@ ErasureCodeIsaDefault::prepare()
     dout(10) << "[ cache tables ] creating coeff for k=" <<
       k << " m=" << m << dendl;
     // build encoding coefficients which need to be computed once for each (k,m)
-    encode_coeff = (unsigned char*) malloc(k * (m + k));
+    //
+    // the coeff array is freed by ErasureCodeIsaTableCache::setEncodingCoefficient
+    // or ErasureCodeIsaTableCache::~ErasureCodeIsaTableCache()
+    encode_coeff = new unsigned char[k * (m + k)];
 
     if (matrixtype == kVandermonde)
       gf_gen_rs_matrix(encode_coeff, k + m, k);
@@ -398,7 +401,7 @@ ErasureCodeIsaDefault::prepare()
     dout(10) << "[ cache tables ] creating tables for k=" <<
       k << " m=" << m << dendl;
     // build encoding table which needs to be computed once for each (k,m)
-    encode_tbls = (unsigned char*) malloc(k * (m + k)*32);
+    encode_tbls = new unsigned char[k * (m + k)*32];
     ec_init_tables(k, m, &encode_coeff[k * k], encode_tbls);
 
     // either our new created table is stored or if it has been

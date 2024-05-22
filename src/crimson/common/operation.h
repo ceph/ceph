@@ -477,12 +477,9 @@ public:
   /// Waits for exit barrier
   virtual std::optional<seastar::future<>> wait() = 0;
 
-  /// Releases pipeline resources, after or without waiting
-  // FIXME: currently, exit() will discard the associated future even if it is
-  // still unresolved, which is discouraged by seastar.
-  virtual void exit() = 0;
-
-  /// Must ensure that resources are released, likely by calling exit()
+  /// Releases pipeline resources.
+  /// If wait() has been called,
+  /// must release after the wait future is resolved.
   virtual ~PipelineExitBarrierI() {}
 };
 
@@ -492,11 +489,6 @@ public:
 #ifndef NDEBUG
   const core_id_t core = seastar::this_shard_id();
 #endif
-
-  template <class... Args>
-  decltype(auto) enter(Args&&... args) {
-    return static_cast<T*>(this)->enter(std::forward<Args>(args)...);
-  }
 };
 
 class PipelineHandle {
@@ -504,6 +496,57 @@ class PipelineHandle {
 
   std::optional<seastar::future<>> wait_barrier() {
     return barrier ? barrier->wait() : std::nullopt;
+  }
+
+  template <typename OpT, typename T>
+  std::optional<seastar::future<>>
+  do_enter_maybe_sync(
+      T &stage,
+      typename T::BlockingEvent::template Trigger<OpT>&& t,
+      PipelineExitBarrierI::Ref&& moved_barrier) {
+    assert(!barrier);
+    if constexpr (!T::is_enter_sync) {
+      auto fut = t.maybe_record_blocking(stage.enter(t), stage);
+      return std::move(fut
+      ).then([this, t=std::move(t),
+              moved_barrier=std::move(moved_barrier)](auto &&barrier_ref) {
+        // destruct moved_barrier and unlock after entered
+        assert(!barrier);
+        barrier = std::move(barrier_ref);
+        return seastar::now();
+      });
+    } else {
+      auto barrier_ref = stage.enter(t);
+      // destruct moved_barrier and unlock after entered
+      barrier = std::move(barrier_ref);
+      return std::nullopt;
+    }
+  }
+
+  template <typename OpT, typename T>
+  std::optional<seastar::future<>>
+  enter_maybe_sync(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
+    assert(stage.core == seastar::this_shard_id());
+    auto wait_fut = wait_barrier();
+    auto moved_barrier = std::move(barrier);
+    barrier.reset();
+    if (wait_fut.has_value()) {
+      return wait_fut.value(
+      ).then([this, &stage, t=std::move(t),
+              moved_barrier=std::move(moved_barrier)]() mutable {
+        auto ret = do_enter_maybe_sync<OpT, T>(
+            stage, std::move(t), std::move(moved_barrier));
+        if constexpr (!T::is_enter_sync) {
+          return std::move(ret.value());
+        } else {
+          assert(ret == std::nullopt);
+          return seastar::now();
+        }
+      });
+    } else {
+      return do_enter_maybe_sync<OpT, T>(
+          stage, std::move(t), std::move(moved_barrier));
+    }
   }
 
 public:
@@ -523,27 +566,27 @@ public:
   template <typename OpT, typename T>
   seastar::future<>
   enter(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
-    assert(stage.core == seastar::this_shard_id());
-    auto wait_fut = wait_barrier();
-    if (wait_fut.has_value()) {
-      return wait_fut.value().then([this, &stage, t=std::move(t)] () mutable {
-        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-        exit();
-        return std::move(fut).then(
-          [this, t=std::move(t)](auto &&barrier_ref) mutable {
-          barrier = std::move(barrier_ref);
-          return seastar::now();
-        });
-      });
+    auto ret = enter_maybe_sync<OpT, T>(stage, std::move(t));
+    if (ret.has_value()) {
+      return std::move(ret.value());
     } else {
-        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-        exit();
-        return std::move(fut).then(
-          [this, t=std::move(t)](auto &&barrier_ref) mutable {
-          barrier = std::move(barrier_ref);
-          return seastar::now();
-        });
+      return seastar::now();
     }
+  }
+
+  /**
+   * Synchronously leaves the previous stage and enters the next stage.
+   * Required for the use case which needs ordering upon entering an
+   * ordered concurrent phase.
+   */
+  template <typename OpT, typename T>
+  void
+  enter_sync(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
+    static_assert(T::is_enter_sync);
+    auto ret = enter_maybe_sync<OpT, T>(stage, std::move(t));
+    // Expect that barrier->wait() (leaving the previous stage)
+    // also returns nullopt, see enter_maybe_sync() above
+    ceph_assert(!ret.has_value());
   }
 
   /**
@@ -551,8 +594,16 @@ public:
    */
   seastar::future<> complete() {
     auto ret = wait_barrier();
+    auto moved_barrier = std::move(barrier);
     barrier.reset();
-    return ret ? std::move(ret.value()) : seastar::now();
+    if (ret) {
+      return std::move(ret.value()
+      ).then([moved_barrier=std::move(moved_barrier)] {
+        // destruct moved_barrier and unlock after wait()
+      });
+    } else {
+      return seastar::now();
+    }
   }
 
   /**
@@ -592,16 +643,10 @@ class OrderedExclusivePhaseT : public PipelineStageIT<T> {
       return std::nullopt;
     }
 
-    void exit() final {
-      if (phase) {
-        assert(phase->core == seastar::this_shard_id());
-        phase->exit(op_id);
-        phase = nullptr;
-      }
-    }
-
     ~ExitBarrier() final {
-      exit();
+      assert(phase);
+      assert(phase->core == seastar::this_shard_id());
+      phase->exit(op_id);
     }
   };
 
@@ -611,6 +656,8 @@ class OrderedExclusivePhaseT : public PipelineStageIT<T> {
   }
 
 public:
+  static constexpr bool is_enter_sync = false;
+
   template <class TriggerT>
   seastar::future<PipelineExitBarrierI::Ref> enter(TriggerT& t) {
     waiting++;
@@ -690,33 +737,32 @@ private:
       return trigger.maybe_record_exit_barrier(std::move(ret));
     }
 
-    void exit() final {
+    ~ExitBarrier() final {
+      assert(phase);
+      assert(phase->core == seastar::this_shard_id());
       if (barrier) {
-        assert(phase);
-        assert(phase->core == seastar::this_shard_id());
+        // wait() hasn't been called
+
+        // FIXME: should not discard future,
+        // it's discouraged by seastar and may cause shutdown issues.
         std::ignore = std::move(*barrier
         ).then([phase=this->phase] {
           phase->mutex.unlock();
         });
-        barrier = std::nullopt;
-        phase = nullptr;
-      } else if (phase) {
-        assert(phase->core == seastar::this_shard_id());
+      } else {
+        // wait() has been called, must unlock
+        // after the wait() future is resolved.
         phase->mutex.unlock();
-        phase = nullptr;
       }
-    }
-
-    ~ExitBarrier() final {
-      exit();
     }
   };
 
 public:
+  static constexpr bool is_enter_sync = true;
+
   template <class TriggerT>
-  seastar::future<PipelineExitBarrierI::Ref> enter(TriggerT& t) {
-    return seastar::make_ready_future<PipelineExitBarrierI::Ref>(
-      new ExitBarrier<TriggerT>{*this, mutex.lock(), t});
+  PipelineExitBarrierI::Ref enter(TriggerT& t) {
+    return std::make_unique<ExitBarrier<TriggerT>>(*this, mutex.lock(), t);
   }
 
 private:
@@ -740,16 +786,15 @@ class UnorderedStageT : public PipelineStageIT<T> {
       return std::nullopt;
     }
 
-    void exit() final {}
-
     ~ExitBarrier() final {}
   };
 
 public:
-  template <class... IgnoreArgs>
-  seastar::future<PipelineExitBarrierI::Ref> enter(IgnoreArgs&&...) {
-    return seastar::make_ready_future<PipelineExitBarrierI::Ref>(
-      new ExitBarrier);
+  static constexpr bool is_enter_sync = true;
+
+  template <class TriggerT>
+  PipelineExitBarrierI::Ref enter(TriggerT&) {
+    return std::make_unique<ExitBarrier>();
   }
 };
 

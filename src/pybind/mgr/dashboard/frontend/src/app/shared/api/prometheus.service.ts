@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, Subscription, timer } from 'rxjs';
+import { Observable, Subscription, forkJoin, timer } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
@@ -58,7 +58,8 @@ export class PrometheusService {
     this.disableSetting(this.settingsKey.prometheus);
   }
 
-  getAlerts(params = {}): Observable<AlertmanagerAlert[]> {
+  getAlerts(clusterFilteredAlerts = false, params = {}): Observable<AlertmanagerAlert[]> {
+    params['cluster_filter'] = clusterFilteredAlerts;
     return this.http.get<AlertmanagerAlert[]>(this.baseURL, { params });
   }
 
@@ -190,5 +191,94 @@ export class PrometheusService {
       step: selectedTime['step']
     };
     return formattedDate;
+  }
+
+  getMultiClusterData(params: any): any {
+    return this.http.get<any>(`${this.baseURL}/prometheus_query_data`, { params });
+  }
+
+  getMultiClusterQueryRangeData(params: any): any {
+    return this.http.get<any>(`${this.baseURL}/data`, { params });
+  }
+
+  getMultiClusterQueriesData(
+    queriesResults: any,
+    validQueries: string[],
+    validRangeQueries: string[],
+    multiClusterQueries: any,
+    validSelectedQueries: string[],
+    allMultiClusterQueries: string[]
+  ) {
+    return new Observable((observer) => {
+      this.ifPrometheusConfigured(() => {
+        if (this.timerGetPrometheusDataSub) {
+          this.timerGetPrometheusDataSub.unsubscribe();
+        }
+
+        this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
+          let requests: any[] = [];
+          let queryNames: string[] = [];
+
+          Object.entries(multiClusterQueries).forEach(([key, _value]) => {
+            for (const queryName in multiClusterQueries[key].queries) {
+              if (
+                multiClusterQueries[key].queries.hasOwnProperty(queryName) &&
+                validSelectedQueries.includes(queryName)
+              ) {
+                const query = multiClusterQueries[key].queries[queryName];
+                const start = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['start'];
+                const end = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['end'];
+                const step = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['step'];
+
+                if (validRangeQueries.includes(queryName)) {
+                  const request = this.getMultiClusterQueryRangeData({
+                    params: encodeURIComponent(query),
+                    start,
+                    end,
+                    step
+                  });
+                  requests.push(request);
+                  queryNames.push(queryName);
+                } else {
+                  const request = this.getMultiClusterData({
+                    params: encodeURIComponent(query),
+                    start,
+                    end,
+                    step
+                  });
+                  requests.push(request);
+                  queryNames.push(queryName);
+                }
+              }
+            }
+          });
+
+          validSelectedQueries = allMultiClusterQueries;
+
+          forkJoin(requests).subscribe(
+            (responses: any[]) => {
+              for (let i = 0; i < responses.length; i++) {
+                const data = responses[i];
+                const queryName = queryNames[i];
+                if (data.result.length) {
+                  if (validQueries.includes(queryName)) {
+                    queriesResults[queryName] = data.result;
+                  } else {
+                    queriesResults[queryName] = data.result.map(
+                      (result: { value: any }) => result.value
+                    );
+                  }
+                }
+              }
+              observer.next(queriesResults);
+              observer.complete();
+            },
+            (error: Error) => {
+              observer.error(error);
+            }
+          );
+        });
+      });
+    });
   }
 }

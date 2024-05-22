@@ -216,23 +216,34 @@
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"
+                     formControlName="protocolNfsv3"
+                     name="protocolNfsv3"
+                     id="protocolNfsv3">
+              <label for="protocolNfsv3"
+                     class="custom-control-label"
+                     i18n>NFSv3</label>
+            </div>
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
                      formControlName="protocolNfsv4"
                      name="protocolNfsv4"
-                     id="protocolNfsv4"
-                     disabled>
-              <label i18n
+                     id="protocolNfsv4">
+              <label for="protocolNfsv4"
                      class="custom-control-label"
-                     for="protocolNfsv4">NFSv4</label>
+                     i18n>NFSv4</label>
             </div>
             <span class="invalid-feedback"
-                  *ngIf="nfsForm.showError('protocolNfsv4', formDir, 'required')"
+                  *ngIf="nfsForm.showError('protocolNfsv3', formDir, 'required') ||
+                  nfsForm.showError('protocolNfsv4', formDir, 'required')"
                   i18n>This field is required.</span>
+            <hr>
           </div>
         </div>
 
         <!-- Pseudo -->
         <div class="form-group row"
-             *ngIf="nfsForm.getValue('protocolNfsv4')">
+             *ngIf="nfsForm.getValue('protocolNfsv4') || nfsForm.getValue('protocolNfsv3')">
           <label class="cd-col-form-label"
                  for="pseudo">
             <span class="required"
@@ -248,7 +259,8 @@
                    class="form-control"
                    name="pseudo"
                    id="pseudo"
-                   formControlName="pseudo">
+                   formControlName="pseudo"
+                   minlength="2">
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'required')"
                   i18n>This field is required.</span>
@@ -258,6 +270,9 @@
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'pattern')"
                   i18n>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &, ( or ).</span>
+            <span class="invalid-feedback"
+                  *ngIf="nfsForm.showError('pseudo', formDir, 'minlength') && nfsForm.getValue('pseudo') === '/'"
+                  i18n>Pseudo path should be an absolute path and it cannot be just '/'</span>
           </div>
         </div>
 

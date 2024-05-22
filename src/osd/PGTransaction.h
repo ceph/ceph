@@ -19,8 +19,11 @@
 #include <optional>
 
 #include "common/hobject.h"
-#include "osd/osd_types.h"
+#ifndef WITH_SEASTAR
 #include "osd/osd_internal_types.h"
+#else
+#include "crimson/osd/object_context.h"
+#endif
 #include "common/interval_map.h"
 #include "common/inline_variant.h"
 

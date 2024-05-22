@@ -21,6 +21,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 #include <errno.h>
 
@@ -454,9 +455,15 @@ public:
    * Caller must already have validated all arguments vs. the existing
    * FSMap and OSDMap contents.
    */
-  const Filesystem& create_filesystem(
+  Filesystem create_filesystem(
       std::string_view name, int64_t metadata_pool, int64_t data_pool,
-      uint64_t features, fs_cluster_id_t fscid, bool recover);
+      uint64_t features, bool recover);
+
+  /**
+   * Commit the created filesystem to the FSMap.
+   *
+   */
+  const Filesystem& commit_filesystem(fs_cluster_id_t fscid, Filesystem fs);
 
   /**
    * Remove the filesystem (it must exist).  Caller should already
@@ -479,9 +486,18 @@ public:
   void modify_filesystem(fs_cluster_id_t fscid, T&& fn)
   {
     auto& fs = filesystems.at(fscid);
-    fn(fs);
-    fs.mds_map.epoch = epoch;
-    fs.mds_map.modified = ceph_clock_now();
+    bool did_update = true;
+
+    if constexpr (std::is_convertible_v<std::invoke_result_t<T, Filesystem&>, bool>) {
+      did_update = fn(fs);
+    } else {
+      fn(fs);
+    }
+    
+    if (did_update) {
+      fs.mds_map.epoch = epoch;
+      fs.mds_map.modified = ceph_clock_now();
+    }
   }
 
   /* This is method is written for the option of "ceph fs swap" commmand

@@ -143,7 +143,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12) # require >= clang-12
     message(FATAL_ERROR "C++20 support requires a minimum Clang version of 12.")
   endif()
-  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_EXPORTS_C_FLAG}")
+  string(APPEND CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(APPEND CMAKE_LINKER_FLAGS " -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(PREPEND CMAKE_CXX_FLAGS_DEBUG "-g ")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-inconsistent-missing-override>)
@@ -293,13 +293,18 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
-if(WITH_RADOSGW_D4N)
-  add_subdirectory(cpp_redis)
-endif()
-
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
+
+if(WITH_JAEGER)
+  find_package(thrift 0.13.0 REQUIRED)
+  include(BuildOpentelemetry)
+  build_opentelemetry()
+  add_library(jaeger_base INTERFACE)
+  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
+    thrift::libthrift)
+endif()
 
 set(mds_files)
 list(APPEND mds_files
@@ -371,6 +376,7 @@ if(WITH_SEASTAR)
   endmacro ()
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
+  set(Seastar_IO_URING OFF CACHE BOOL "" FORCE)
   set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
   if(Seastar_DPDK)
     find_package(dpdk QUIET)
@@ -437,17 +443,11 @@ set(libcommon_files
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
+target_link_libraries(common-objs legacy-option-headers)
 target_compile_definitions(common-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
-  find_package(thrift 0.13.0 REQUIRED)
-  include(BuildOpentelemetry)
-  build_opentelemetry()
-  add_library(jaeger_base INTERFACE)
-  target_link_libraries(jaeger_base INTERFACE opentelemetry::libopentelemetry
-    thrift::libthrift)
   add_dependencies(common-objs jaeger_base)
   target_link_libraries(common-objs jaeger_base)
 endif()
@@ -505,10 +505,6 @@ if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
 
-if(HAVE_QATZIP)
-  list(APPEND ceph_common_deps ${qatzip_LIBRARIES})
-endif()
-
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()
@@ -546,8 +542,9 @@ if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
 endif()
 
 add_library(common STATIC ${ceph_common_objs})
-target_link_libraries(common ${ceph_common_deps})
-add_dependencies(common legacy-option-headers)
+target_link_libraries(common
+  ${ceph_common_deps}
+  legacy-option-headers)
 if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
 endif()
@@ -565,7 +562,7 @@ if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
 endif(ENABLE_COVERAGE)
 
-add_dependencies(ceph-common legacy-option-headers)
+target_link_libraries(ceph-common legacy-option-headers)
 
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
@@ -624,6 +621,8 @@ add_subdirectory(osdc)
 add_subdirectory(perfglue)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
+target_link_libraries(rados_snap_set_diff_obj
+  PRIVATE legacy-option-headers)
 
 option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
@@ -880,7 +879,9 @@ if(WITH_RBD)
   if(WITH_KRBD)
     add_library(krbd STATIC krbd.cc
       $<TARGET_OBJECTS:parse_secret_objs>)
-    target_link_libraries(krbd keyutils::keyutils)
+    target_link_libraries(krbd
+      keyutils::keyutils
+      legacy-option-headers)
   endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)
@@ -894,10 +895,6 @@ if(WITH_RBD)
     DESTINATION ${CMAKE_INSTALL_BINDIR})
   add_subdirectory(rbd_replay)
 endif(WITH_RBD)
-
-set(SPAWN_BUILD_TESTS OFF CACHE INTERNAL "disable building of spawn unit tests")
-set(SPAWN_INSTALL OFF CACHE INTERNAL "disable installation of spawn headers")
-add_subdirectory(spawn)
 
 # RadosGW
 if(WITH_KVS)

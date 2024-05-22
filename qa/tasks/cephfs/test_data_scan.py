@@ -395,7 +395,7 @@ class TestDataScan(CephFSTestCase):
         mds_map = self.fs.get_mds_map()
         return rank in mds_map['damaged']
 
-    def _rebuild_metadata(self, workload, workers=1):
+    def _rebuild_metadata(self, workload, workers=1, unmount=True):
         """
         That when all objects in metadata pool are removed, we can rebuild a metadata pool
         based on the contents of a data pool, and a client can see and read our files.
@@ -407,7 +407,8 @@ class TestDataScan(CephFSTestCase):
 
         # Unmount the client and flush the journal: the tool should also cope with
         # situations where there is dirty metadata, but we'll test that separately
-        self.mount_a.umount_wait()
+        if unmount:
+          self.mount_a.umount_wait()
         workload.flush()
 
         # Stop the MDS
@@ -469,7 +470,8 @@ class TestDataScan(CephFSTestCase):
         workload.scrub()
 
         # Mount a client
-        self.mount_a.mount_wait()
+        if unmount:
+            self.mount_a.mount_wait()
 
         # See that the files are present and correct
         errors = workload.validate()
@@ -495,7 +497,7 @@ class TestDataScan(CephFSTestCase):
         self._rebuild_metadata(BacktracelessFile(self.fs, self.mount_a))
 
     def test_rebuild_backtraceless_with_lf_dir_removed(self):
-        self._rebuild_metadata(BacktracelessFileRemoveLostAndFoundDirectory(self.fs, self.mount_a))
+        self._rebuild_metadata(BacktracelessFileRemoveLostAndFoundDirectory(self.fs, self.mount_a), unmount=False)
 
     def test_rebuild_moved_dir(self):
         self._rebuild_metadata(MovedDir(self.fs, self.mount_a))
@@ -549,11 +551,11 @@ class TestDataScan(CephFSTestCase):
 
         # Ensure that one directory is fragmented
         mds_id = self.fs.get_active_names()[0]
-        self.fs.mds_asok(["dirfrag", "split", "/subdir", "0/0", "1"], mds_id)
+        self.fs.mds_asok(["dirfrag", "split", "/subdir", "0/0", "1"], mds_id=mds_id)
 
         # Flush journal and stop MDS
         self.mount_a.umount_wait()
-        self.fs.mds_asok(["flush", "journal"], mds_id)
+        self.fs.mds_asok(["flush", "journal"], mds_id=mds_id)
         self.fs.fail()
 
         # Pick a dentry and wipe out its key
@@ -596,8 +598,8 @@ class TestDataScan(CephFSTestCase):
         # Finally, close the loop by checking our injected dentry survives a merge
         mds_id = self.fs.get_active_names()[0]
         self.mount_a.ls("subdir")  # Do an ls to ensure both frags are in cache so the merge will work
-        self.fs.mds_asok(["dirfrag", "merge", "/subdir", "0/0"], mds_id)
-        self.fs.mds_asok(["flush", "journal"], mds_id)
+        self.fs.mds_asok(["dirfrag", "merge", "/subdir", "0/0"], mds_id=mds_id)
+        self.fs.mds_asok(["flush", "journal"], mds_id=mds_id)
         frag_obj_id = "{0:x}.00000000".format(dir_ino)
         keys = self._dirfrag_keys(frag_obj_id)
         self.assertListEqual(sorted(keys), sorted(["%s_head" % f for f in file_names]))
@@ -667,7 +669,7 @@ class TestDataScan(CephFSTestCase):
         self.mount_a.run_shell(["ln", "testdir1/file1", "testdir2/link2"])
 
         mds_id = self.fs.get_active_names()[0]
-        self.fs.mds_asok(["flush", "journal"], mds_id)
+        self.fs.mds_asok(["flush", "journal"], mds_id=mds_id)
 
         dirfrag1_keys = self._dirfrag_keys(dirfrag1_oid)
 
@@ -687,7 +689,7 @@ class TestDataScan(CephFSTestCase):
         self.mount_a.run_shell(["touch", "testdir1/file1"])
         self.mount_a.umount_wait()
 
-        self.fs.mds_asok(["flush", "journal"], mds_id)
+        self.fs.mds_asok(["flush", "journal"], mds_id=mds_id)
         self.fs.fail()
 
         # repair linkage errors
@@ -738,8 +740,8 @@ class TestDataScan(CephFSTestCase):
 
         self.mount_a.umount_wait()
 
-        self.fs.mds_asok(["flush", "journal"], mds0_id)
-        self.fs.mds_asok(["flush", "journal"], mds1_id)
+        self.fs.mds_asok(["flush", "journal"], mds_id=mds0_id)
+        self.fs.mds_asok(["flush", "journal"], mds_id=mds1_id)
         self.fs.fail()
 
         self.fs.radosm(["rm", "mds0_inotable"])
@@ -777,7 +779,7 @@ class TestDataScan(CephFSTestCase):
         self.mount_a.umount_wait()
 
         mds0_id = self.fs.get_active_names()[0]
-        self.fs.mds_asok(["flush", "journal"], mds0_id)
+        self.fs.mds_asok(["flush", "journal"], mds_id=mds0_id)
 
         # wait for mds to update removed snaps
         time.sleep(10)

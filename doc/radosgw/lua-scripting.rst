@@ -13,6 +13,8 @@ This feature allows users to assign execution context to Lua scripts. The suppor
  - ``background`` which will execute within a specified time interval
  - ``getdata`` which will execute on objects' data when objects are downloaded
  - ``putdata`` which will execute on objects' data when objects are uploaded
+ - ``preRequest`` which will execute a script before each operation is performed
+ - ``postRequest`` which will execute after each operation is performed
 
 A request (pre or post) or data (get or put) context script may be constrained to operations belonging to a specific tenant's users.
 The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
@@ -42,12 +44,10 @@ To upload a script:
    
 
 ::
+
+   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]   
    
-   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
-
-
 * When uploading a script with the ``background`` context, a tenant name should not be specified.
-* When uploading a script into a cluster deployed with cephadm, use the following command:
 
 ::
 
@@ -58,14 +58,14 @@ To print the content of the script to standard output:
 
 ::
    
-   # radosgw-admin script get --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script get --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 To remove the script:
 
 ::
    
-   # radosgw-admin script rm --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script rm --context={preRequest|postRequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 Package Management via CLI
@@ -200,11 +200,7 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.PlacementRule.StorageClass``      | string   | bucket placement rule storage class                          | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.User``                            | table    | bucket owner                                                 | no       | no        | yes      |
-+----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.User.Tenant``                     | string   | bucket owner tenant                                          | no       | no        | no       |
-+----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.User.Id``                         | string   | bucket owner id                                              | no       | no        | no       |
+| ``Request.Bucket.User``                            | string   | owning user/account id                                       | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Object``                                 | table    | info on the object                                           | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -230,7 +226,7 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.ObjectOwner.DisplayName``                | string   | object owner display name                                    | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.ObjectOwner.User``                       | table    | object user. See: ``Request.Bucket.User``                    | no       | no        | no       |
+| ``Request.ObjectOwner.User``                       | string   | owning user/account id. See: ``Request.Bucket.User``         | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.ZoneGroup.Name``                         | string   | name of zone group                                           | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -248,11 +244,7 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.UserAcl.Grants["<name>"].Type``          | integer  | user ACL grant type                                          | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.UserAcl.Grants["<name>"].User``          | table    | user ACL grant user                                          | no       | no        | yes      |
-+----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.UserAcl.Grants["<name>"].User.Tenant``   | table    | user ACL grant user tenant                                   | no       | no        | no       |
-+----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.UserAcl.Grants["<name>"].User.Id``       | table    | user ACL grant user id                                       | no       | no        | no       |
+| ``Request.UserAcl.Grants["<name>"].User``          | string   | user ACL grant user/account id                               | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.UserAcl.Grants["<name>"].GroupType``     | integer  | user ACL grant group type                                    | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+

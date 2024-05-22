@@ -9,7 +9,9 @@ set(cephfs_journal_tool_srcs
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-journal-tool ${cephfs_journal_tool_srcs})
-target_link_libraries(cephfs-journal-tool librados mds osdc global
+target_link_libraries(cephfs-journal-tool
+  legacy-option-headers
+  librados mds osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 set(cephfs-meta-injection_srcs
@@ -18,7 +20,9 @@ set(cephfs-meta-injection_srcs
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-meta-injection ${cephfs-meta-injection_srcs})
-target_link_libraries(cephfs-meta-injection librados mds osdc global
+target_link_libraries(cephfs-meta-injection
+  legacy-option-headers
+  librados mds osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 set(cephfs_table_tool_srcs

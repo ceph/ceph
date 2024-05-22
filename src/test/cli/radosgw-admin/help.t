@@ -11,6 +11,9 @@
     user check                       check user info
     user stats                       show user stats as accounted by quota subsystem
     user list                        list users
+    user policy attach               attach a managed policy
+    user policy detach               detach a managed policy
+    user policy list attached        list attached managed policies
     caps add                         add user capabilities
     caps rm                          remove user capabilities
     subuser create                   create a new subuser
@@ -18,6 +21,12 @@
     subuser rm                       remove subuser
     key create                       create access key
     key rm                           remove access key
+    account create                   create a new account
+    account modify                   modify an existing account
+    account get                      get account info
+    account stats                    dump account storage stats
+    account rm                       remove an account
+    account list                     list all account ids
     bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)
     bucket limit check               show bucket sharding stats
     bucket link                      link bucket to specified user
@@ -55,9 +64,9 @@
     period list                      list all periods
     period update                    update the staging period
     period commit                    commit the staging period
-    quota set                        set quota params
-    quota enable                     enable quota
-    quota disable                    disable quota
+    quota set                        set quota params for a user/bucket/account
+    quota enable                     enable quota for a user/bucket/account
+    quota disable                    disable quota for a user/bucket/account
     ratelimit get                    get ratelimit params
     ratelimit set                    set ratelimit params
     ratelimit enable                 enable ratelimit
@@ -162,6 +171,9 @@
     role-policy list                 list policies attached to a role
     role-policy get                  get the specified inline policy document embedded with the given role
     role-policy delete               remove policy attached to a role
+    role policy attach               attach a managed policy
+    role policy detach               detach a managed policy
+    role policy list attached        list attached managed policies
     role update                      update max_session_duration of a role
     reshard add                      schedule a resharding of a bucket
     reshard list                     list all bucket resharding or scheduled to be resharded
@@ -198,12 +210,19 @@
      --uid=<id>                        user id
      --new-uid=<id>                    new user id
      --subuser=<name>                  subuser name
+     --account-name=<name>             account name
+     --account-id=<id>                 account id
+     --max-users                       max number of users for an account
+     --max-roles                       max number of roles for an account
+     --max-groups                      max number of groups for an account
+     --max-access-keys                 max number of keys per user for an account
      --access-key=<key>                S3 access key
      --email=<email>                   user's email address
      --secret/--secret-key=<key>       specify secret key
      --gen-access-key                  generate random access key (for S3)
      --gen-secret                      generate random secret key
      --key-type=<type>                 key type, options are: swift, s3
+     --key-active=<bool>               activate or deactivate a key
      --temp-url-key[-2]=<key>          temp url key
      --access=<access>                 Set access permissions for sub-user, should be one
                                        of read, write, readwrite, full
@@ -317,7 +336,7 @@
   Quota options:
      --max-objects                 specify max objects (negative value to disable)
      --max-size                    specify max size (in B/K/M/G/T, negative value to disable)
-     --quota-scope                 scope of quota (bucket, user)
+     --quota-scope                 scope of quota (bucket, user, account)
   
   Rate limiting options:
      --max-read-ops                specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited
@@ -343,6 +362,8 @@
      --policy-name                 name of the policy document
      --policy-doc                  permission policy document
      --path-prefix                 path prefix for filtering roles
+     --description                 Role description
+     --policy-arn                  ARN of a managed policy
   
   MFA options:
      --totp-serial                 a string that represents the ID of a TOTP token
@@ -368,6 +389,10 @@
   radoslist options:
      --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name;
                                    additionally rados objects for incomplete multipart uploads will not be output
+  
+  Bucket list objects options:
+     --max-entries                 max number of entries listed (default 1000)
+     --marker                      the marker used to specify on which entry the listing begins, default none (i.e., very first entry)
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name

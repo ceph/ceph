@@ -1057,6 +1057,15 @@ SegmentCleaner::do_reclaim_space(
     std::size_t &reclaimed,
     std::size_t &runs)
 {
+  // Extents satisfying any of the following requirements
+  // are considered DEAD:
+  // 1. can't find the corresponding mapping in both the
+  // 	backref tree and the backref cache;
+  // 2. the extent is logical, but its lba mapping doesn't
+  // 	exist in the lba tree or the lba mapping in the lba
+  // 	tree doesn't match the extent's paddr
+  // 3. the extent is physical and doesn't exist in the
+  // 	lba tree, backref tree or backref cache;
   return repeat_eagain([this, &backref_extents,
                         &pin_list, &reclaimed, &runs] {
     reclaimed = 0;
@@ -1153,7 +1162,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
-    INFO("reclaim {} {} start, usage={}, time_bound={}",
+    INFO("reclaim start... {} {}, usage={}, time_bound={}",
          seg_id, segment_info,
          space_tracker->calc_utilization(seg_id),
          sea_time_point_printer_t{segments.get_time_bound()});
@@ -1230,7 +1239,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
               d, pavail_ratio, runs);
         if (reclaim_state->is_complete()) {
           auto segment_to_release = reclaim_state->get_segment_id();
-          INFO("reclaim {} finish, reclaimed alive/total={}",
+          INFO("reclaim finish {}, reclaimed alive/total={}",
                segment_to_release,
                stats.reclaiming_bytes/(double)segments.get_segment_size());
           stats.reclaimed_bytes += stats.reclaiming_bytes;
@@ -1254,7 +1263,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
             segments.mark_empty(segment_to_release);
             auto new_usage = calc_utilization(segment_to_release);
             adjust_segment_util(old_usage, new_usage);
-            INFO("released {}, {}",
+            INFO("reclaim released {}, {}",
                  segment_to_release, stat_printer_t{*this, false});
             background_callback->maybe_wake_blocked_io();
           });
@@ -1403,7 +1412,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_no_tail_segment(
       cursor,
       segment_header.segment_nonce,
       segments.get_segment_size(),
-      handler).discard_result();
+      handler);
   }).safe_then([this, segment_id, segment_header] {
     init_mark_segment_closed(
       segment_id,
@@ -1634,7 +1643,7 @@ void RBMCleaner::mark_space_used(
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
-	INFO("allocate addr: {} len: {}", addr, len);
+	DEBUG("allocate addr: {} len: {}", addr, len);
 	stats.used_bytes += len;
 	rbm->mark_space_used(addr, len);
       }
@@ -1653,7 +1662,7 @@ void RBMCleaner::mark_space_free(
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
-	INFO("free addr: {} len: {}", addr, len);
+	DEBUG("free addr: {} len: {}", addr, len);
 	ceph_assert(stats.used_bytes >= len);
 	stats.used_bytes -= len;
 	rbm->mark_space_free(addr, len);

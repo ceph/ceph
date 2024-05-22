@@ -10,7 +10,6 @@
 #include <boost/statechart/event_base.hpp>
 #include <boost/statechart/in_state_reaction.hpp>
 #include <boost/statechart/simple_state.hpp>
-#include <boost/statechart/shallow_history.hpp>
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
@@ -40,6 +39,11 @@ namespace Scrub {
 
 namespace sc = ::boost::statechart;
 namespace mpl = ::boost::mpl;
+
+enum class reservation_status_t {
+  unreserved,
+  requested_or_granted ///< i.e. must be released
+};
 
 //
 //  EVENTS
@@ -264,12 +268,8 @@ struct Session;            ///< either reserving or actively scrubbing
 // the Replica states:
 struct ReplicaActive;  ///< base state for when peered as a replica
 
-/// Inactive replica state. Handles reservation requests
+/// Inactive replica state
 struct ReplicaIdle;
-// its sub-states:
-struct ReplicaUnreserved;      ///< not reserved by a primary
-struct ReplicaWaitingReservation;  ///< a reservation request was received from
-struct ReplicaReserved;	       ///< we are reserved by our primary
 
 // and when handling a single chunk scrub request op:
 struct ReplicaActiveOp;
@@ -764,18 +764,6 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
  *    - initial state of ReplicaActive
  *    - No scrubbing is performed in this state, but reservation-related
  *      events are handled.
- *    - uses 'shallow history', so that when returning from ReplicaActiveOp, we
- *       return to where we were - either reserved by our primary, or unreserved.
- *
- *    - sub-states:
- *      * ReplicaUnreserved - not reserved by a primary. In this state we
- *        are waiting for either a reservation request, or a chunk scrub op.
- *
- *      * ReplicaWaitingReservation - a reservation request was received from
- *        our primary. We expect a ' go ahead' from the reserver, or a
- *        cancellation command from the primary (or an interval change).
- *
- *      * ReplicaReserved - we are reserved by a primary.
  *
  *  - ReplicaActiveOp - handling a single map request op
  *      * ReplicaWaitUpdates
@@ -819,39 +807,11 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
 
 struct ReplicaIdle;
 
-// sc::result cannot be copied or moved, so we need to postpone
-// the creation of such objects to the moment where they are
-// returned from the react() function.
-enum class ReplicaReactCode {
-  discard,
-  goto_waiting_reservation,
-  goto_replica_reserved
-};
-
-struct ReplicaActive : sc::state<
-			   ReplicaActive,
-			   ScrubMachine,
-			   mpl::list<sc::shallow_history<ReplicaIdle>>,
-			   sc::has_shallow_history>,
+struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
 		       NamedSimply {
   explicit ReplicaActive(my_context ctx);
   ~ReplicaActive();
-
-  /// handle a reservation request from a primary
-  ReplicaReactCode on_reserve_request(
-      const ReplicaReserveReq&,
-      bool async_request);
-
-  /**
-   * the queued reservation request was granted by the async reserver.
-   * Notify the Primary.
-   * Returns 'false' if the reservation is not the last one to be received
-   * by this replica.
-   */
-  bool granted_by_reserver(const AsyncScrubResData& resevation);
-
-  /// handle a 'release' from a primary
-  void on_release(const ReplicaRelease& ev);
+  void exit();
 
   /**
    * cancel a granted or pending reservation
@@ -863,20 +823,38 @@ struct ReplicaActive : sc::state<
    */
   void clear_remote_reservation(bool warn_if_no_reservation);
 
-  /**
-   * discard (and log) unhandled 'reservation granted' messages
-   * from the async reserver.
-   * As canceled reservations may still be triggered, this is not
-   * necessarily a bug.
-   */
-  void ignore_unhandled_grant(const ReserverGranted&);
+  void reset_ignored(const FullReset&);
 
   using reactions = mpl::list<
       sc::transition<IntervalChanged, NotActive>,
+      sc::custom_reaction<ReserverGranted>,
+      sc::custom_reaction<ReplicaReserveReq>,
+      sc::custom_reaction<ReplicaRelease>,
       sc::in_state_reaction<
-	  ReserverGranted,
+	  FullReset,
 	  ReplicaActive,
-	  &ReplicaActive::ignore_unhandled_grant>>;
+	  &ReplicaActive::reset_ignored>>;
+
+  /// handle a reservation request from a primary
+  sc::result react(const ReplicaReserveReq& ev);
+
+  /*
+   * the Primary released the reservation.
+   * Note: The ActiveReplicaOp state will handle this event as well.
+   */
+  sc::result react(const ReplicaRelease&);
+
+  /**
+   * the queued reservation request was granted by the async reserver.
+   * Notify the Primary.
+   */
+  sc::result react(const ReserverGranted&);
+
+  /**
+   * a reservation request with this nonce is queued at the scrub_reserver,
+   * and was not yet granted.
+   */
+  MOSDScrubReserve::reservation_nonce_t pending_reservation_nonce{0};
 
  private:
   PG* m_pg;
@@ -904,15 +882,20 @@ struct ReplicaActive : sc::state<
    * Note that in the event that the primary is too old to support asynchronous
    * reservation, MOSDScrubReserve::wait_for_resources will be set to false by
    * the decoder and we bypass the 2'nd case above.
-   * See ReplicaActive::on_reserve_request().
    */
   bool reservation_granted{false};
 
+  reservation_status_t m_reservation_status{reservation_status_t::unreserved};
+
   /**
-   * a reservation request with this nonce is queued at the scrub_reserver,
-   * and was not yet granted.
+   * React to the reservation request.
+   * Called after any existing pending/granted request was released.
+   *
+   * Async requests are sent to the reserver.
+   * For old-style synchronous requests, the reserver is queried using
+   * its 'immediate' interface, and the response is sent back to the primary.
    */
-  MOSDScrubReserve::reservation_nonce_t pending_reservation_nonce{0};
+  void handle_reservation_request(const ReplicaReserveReq& ev);
 
   // clang-format off
   struct RtReservationCB : public Context {
@@ -934,103 +917,12 @@ struct ReplicaActive : sc::state<
 };
 
 
-struct ReplicaIdle : sc::state<
-			 ReplicaIdle,
-			 ReplicaActive,
-			 ReplicaUnreserved,
-			 sc::has_shallow_history>,
-		     NamedSimply {
+struct ReplicaIdle : sc::state<ReplicaIdle, ReplicaActive>, NamedSimply {
   explicit ReplicaIdle(my_context ctx);
   ~ReplicaIdle() = default;
-  void reset_ignored(const FullReset&);
-  using reactions = mpl::list<sc::in_state_reaction<
-      FullReset,
-      ReplicaIdle,
-      &ReplicaIdle::reset_ignored>>;
-};
+  using reactions = mpl::list<sc::custom_reaction<StartReplica>>;
 
-/*
- * ReplicaUnreserved
- *
- * Possible events:
- * - a reservation request from a legacy primary (i.e. a primary that does not
- *   support queued reservations). We either deny or grant, transitioning to
- *   ReplicaReserved directly.
- * - a reservation request from a primary that supports queued reservations.
- *   We transition to ReplicaWaitingReservation, and wait for the Reserver's
- *   response.
- * - (handled by our parent state) a chunk scrub request. We transition to
- *   ReplicaActiveOp.
- */
-struct ReplicaUnreserved : sc::state<ReplicaUnreserved, ReplicaIdle>,
-			   NamedSimply {
-  explicit ReplicaUnreserved(my_context ctx);
-
-  using reactions = mpl::list<
-      sc::custom_reaction<ReplicaReserveReq>,
-      sc::custom_reaction<StartReplica>,
-      // unexpected (bug-induced) events:
-      sc::custom_reaction<ReplicaRelease>,
-      sc::custom_reaction<ReserverGranted>>;
-
-  sc::result react(const ReplicaReserveReq& ev);
   sc::result react(const StartReplica& ev);
-  sc::result react(const ReserverGranted&);
-  sc::result react(const ReplicaRelease&);
-};
-
-/**
- * ReplicaWaitingReservation
- *
- * Possible events:
- * - 'go ahead' from the async reserver. We send a GRANT message to the
- *   primary & transition to ReplicaReserved.
- * - 'cancel' from the primary. We clear our reservation state, and transition
- *   back to ReplicaUnreserved.
- * - a chunk request: shouldn't happen, but we handle it anyway. An error
- *   is logged (to trigger test failures).
- * - on interval change: handled by our parent state.
- */
-struct ReplicaWaitingReservation
-    : sc::state<ReplicaWaitingReservation, ReplicaIdle>,
-      NamedSimply {
-  explicit ReplicaWaitingReservation(my_context ctx);
-
-  using reactions = mpl::list<
-      // the 'normal' (expected) events:
-      sc::custom_reaction<ReplicaRelease>,
-      sc::custom_reaction<StartReplica>,
-      // unexpected (bug-induced) events:
-      sc::custom_reaction<ReplicaReserveReq>,
-      sc::custom_reaction<ReserverGranted>>;
-
-  sc::result react(const ReplicaRelease& ev);
-  sc::result react(const StartReplica& ev);
-  sc::result react(const ReserverGranted&);
-  sc::result react(const ReplicaReserveReq& ev);
-};
-
-/**
- * ReplicaReserved
- *
- * Possible events:
- * - 'cancel' from the primary. We clear our reservation state, and transition
- *   back to ReplicaUnreserved.
- * - a chunk scrub request. We transition to ReplicaActiveOp.
- * - on interval change: we clear our reservation state, and transition
- *   back to ReplicaUnreserved.
- */
-struct ReplicaReserved : sc::state<ReplicaReserved, ReplicaIdle>, NamedSimply {
-  explicit ReplicaReserved(my_context ctx);
-
-  using reactions = mpl::list<
-      sc::custom_reaction<ReplicaReserveReq>,
-      sc::custom_reaction<StartReplica>,
-      sc::custom_reaction<ReplicaRelease>>;
-
-  sc::result react(const ReplicaReserveReq&);
-  sc::result react(const ReplicaRelease&);
-  sc::result react(const StartReplica& eq);
 };
 
 
@@ -1047,7 +939,7 @@ struct ReplicaActiveOp
 
   using reactions = mpl::list<
       sc::custom_reaction<StartReplica>,
-      sc::transition<FullReset, ReplicaIdle>>;
+      sc::custom_reaction<ReplicaRelease>>;
 
   /**
    * Handling the unexpected (read - caused by a bug) case of receiving a
@@ -1060,6 +952,13 @@ struct ReplicaActiveOp
    * - and we should log this unexpected scenario clearly in the cluster log.
    */
   sc::result react(const StartReplica&);
+
+  /**
+   * a 'release' was send by the primary. Possible scenario: 'no-scrub'
+   * abort. We abort the current chunk handling and re-enter ReplicaActive,
+   * releasing the reservation on the way.
+   */
+  sc::result react(const ReplicaRelease&);
 };
 
 /*

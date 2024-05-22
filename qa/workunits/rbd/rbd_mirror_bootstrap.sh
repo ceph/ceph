@@ -1,7 +1,9 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
 #
 # rbd_mirror_bootstrap.sh - test peer bootstrap create/import
 #
+
+set -ex
 
 RBD_MIRROR_MANUAL_PEERS=1
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-1}
@@ -37,6 +39,7 @@ create_image_and_enable_mirror ${CLUSTER1} ${POOL} image1
 wait_for_image_replay_started ${CLUSTER2} ${POOL} image1
 write_image ${CLUSTER1} ${POOL} image1 100
 wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} image1
+wait_for_replaying_status_in_pool_dir ${CLUSTER2} ${POOL} image1
 
 testlog "TEST: verify rx-tx direction"
 # both rx-tx peers are added immediately by "rbd mirror pool peer bootstrap import"
@@ -52,7 +55,44 @@ enable_mirror ${CLUSTER2} ${PARENT_POOL} image2
 wait_for_image_replay_started ${CLUSTER2} ${PARENT_POOL} image1
 write_image ${CLUSTER1} ${PARENT_POOL} image1 100
 wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${PARENT_POOL} image1
+wait_for_replaying_status_in_pool_dir ${CLUSTER2} ${PARENT_POOL} image1
 
 wait_for_image_replay_started ${CLUSTER1} ${PARENT_POOL} image2
 write_image ${CLUSTER2} ${PARENT_POOL} image2 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${PARENT_POOL} image2
+wait_for_replaying_status_in_pool_dir ${CLUSTER1} ${PARENT_POOL} image2
+
+testlog "TEST: pool replayer and callout cleanup when peer is updated"
+test_health_state ${CLUSTER1} ${PARENT_POOL} 'OK'
+test_health_state ${CLUSTER2} ${PARENT_POOL} 'OK'
+POOL_STATUS=$(get_pool_status_json ${CLUSTER2} ${PARENT_POOL})
+jq -e '.summary.health == "OK"' <<< ${POOL_STATUS}
+jq -e '.summary.daemon_health == "OK"' <<< ${POOL_STATUS}
+jq -e '.daemons[0].health == "OK"' <<< ${POOL_STATUS}
+jq -e '.daemons[0] | has("callouts") | not' <<< ${POOL_STATUS}
+OLD_SERVICE_ID=$(jq -r '.daemons[0].service_id' <<< ${POOL_STATUS})
+OLD_INSTANCE_ID=$(jq -r '.daemons[0].instance_id' <<< ${POOL_STATUS})
+# mess up the peer on one of the clusters by setting a bogus user name
+PEER_UUID=$(rbd --cluster ${CLUSTER2} --pool ${PARENT_POOL} mirror pool info --format json | jq -r '.peers[0].uuid')
+rbd --cluster ${CLUSTER2} --pool ${PARENT_POOL} mirror pool peer set ${PEER_UUID} client client.invalid
+wait_for_health_state ${CLUSTER2} ${PARENT_POOL} 'ERROR'
+test_health_state ${CLUSTER1} ${PARENT_POOL} 'WARNING'
+POOL_STATUS=$(get_pool_status_json ${CLUSTER2} ${PARENT_POOL})
+jq -e '.summary.health == "ERROR"' <<< ${POOL_STATUS}
+jq -e '.summary.daemon_health == "ERROR"' <<< ${POOL_STATUS}
+jq -e '.daemons[0].health == "ERROR"' <<< ${POOL_STATUS}
+jq -e '.daemons[0].callouts == ["unable to connect to remote cluster"]' <<< ${POOL_STATUS}
+# restore the correct user name
+rbd --cluster ${CLUSTER2} --pool ${PARENT_POOL} mirror pool peer set ${PEER_UUID} client client.rbd-mirror-peer
+wait_for_health_state ${CLUSTER2} ${PARENT_POOL} 'OK'
+test_health_state ${CLUSTER1} ${PARENT_POOL} 'OK'
+POOL_STATUS=$(get_pool_status_json ${CLUSTER2} ${PARENT_POOL})
+jq -e '.summary.health == "OK"' <<< ${POOL_STATUS}
+jq -e '.summary.daemon_health == "OK"' <<< ${POOL_STATUS}
+jq -e '.daemons[0].health == "OK"' <<< ${POOL_STATUS}
+jq -e '.daemons[0] | has("callouts") | not' <<< ${POOL_STATUS}
+NEW_SERVICE_ID=$(jq -r '.daemons[0].service_id' <<< ${POOL_STATUS})
+NEW_INSTANCE_ID=$(jq -r '.daemons[0].instance_id' <<< ${POOL_STATUS})
+# check that we are running the same service (daemon) but a newer pool replayer
+((OLD_SERVICE_ID == NEW_SERVICE_ID))
+((OLD_INSTANCE_ID < NEW_INSTANCE_ID))

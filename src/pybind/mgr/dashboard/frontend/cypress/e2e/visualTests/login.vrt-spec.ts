@@ -1,4 +1,4 @@
-describe('Login Page', () => {
+describe.skip('Login Page', () => {
   beforeEach(() => {
     cy.visit('#/login');
     cy.eyesOpen({

@@ -168,11 +168,18 @@ class Osd(RESTController):
     @RESTController.Collection('GET', version=APIVersion.EXPERIMENTAL)
     @ReadPermission
     def settings(self):
-        result = CephService.send_command('mon', 'osd dump')
-        return {
-            'nearfull_ratio': result['nearfull_ratio'],
-            'full_ratio': result['full_ratio']
+        data = {
+            'nearfull_ratio': -1,
+            'full_ratio': -1
         }
+        try:
+            result = CephService.send_command('mon', 'osd dump')
+            data['nearfull_ratio'] = result['nearfull_ratio']
+            data['full_ratio'] = result['full_ratio']
+        except TypeError:
+            logger.error(
+                'Error setting nearfull_ratio and full_ratio:', exc_info=True)
+        return data
 
     def _get_operational_status(self, osd_id: int, removing_osd_ids: Optional[List[int]]):
         if removing_osd_ids is None:

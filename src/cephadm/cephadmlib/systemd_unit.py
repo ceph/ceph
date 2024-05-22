@@ -78,7 +78,10 @@ def _write_init_containers_unit_file(
 
 
 def _write_sidecar_unit_file(
-    dest: IO, ctx: CephadmContext, primary: DaemonIdentity, sidecar: DaemonSubIdentity
+    dest: IO,
+    ctx: CephadmContext,
+    primary: DaemonIdentity,
+    sidecar: DaemonSubIdentity,
 ) -> None:
     has_docker_engine = isinstance(ctx.container_engine, Docker)
     has_podman_engine = isinstance(ctx.container_engine, Podman)
@@ -128,9 +131,7 @@ def _install_extended_systemd_services(
             difh = estack.enter_context(
                 write_new(pinfo.drop_in_file, perms=None)
             )
-            _write_drop_in(
-                difh, ctx, identity, enable_init_containers, sids
-            )
+            _write_drop_in(difh, ctx, identity, enable_init_containers, sids)
 
 
 def _get_unit_file(ctx: CephadmContext, fsid: str) -> str:

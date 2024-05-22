@@ -187,7 +187,6 @@ void HybridAllocator::_spillover_range(uint64_t start, uint64_t end)
   ceph_assert(size);
   if (!bmap_alloc) {
     dout(1) << __func__
-      << std::hex
       << " constructing fallback allocator"
       << dendl;
     bmap_alloc = new BitmapAllocator(cct,

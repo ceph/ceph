@@ -20,6 +20,7 @@
 #include "global/global_context.h"
 #include "include/spinlock.h"
 #include "OSDCap.h"
+#include "OpRequest.h"
 #include "Watch.h"
 #include "OSDMap.h"
 #include "PeeringState.h"

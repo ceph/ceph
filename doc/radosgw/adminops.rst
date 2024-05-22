@@ -273,13 +273,14 @@ TBD.
 Get User Info
 =============
 
-Get user information.
+Get user information. Cap ``users`` or ``user-info-without-keys`` must be set to ``read`` to run this operation.
+If cap ``user-info-without-keys`` is set to ``read`` or ``*``, S3 keys and Swift keys will not be
+included in the response unless the user running this operation is the system user, an admin user, or the cap ``users`` is set to ``read``.
 
 Either a ``uid`` or ``access-key`` must be supplied as a request parameter. We recommend supplying uid.
 If both are provided but correspond to different users, the info for the user specified with ``uid`` will be returned.
 
-:caps: users=read
-
+:caps: users=read or user-info-without-keys=read
 
 Syntax
 ~~~~~~
@@ -1159,6 +1160,13 @@ Request Parameters
 ``generate-key``
 
 :Description: Generate a new key pair and add to the existing keyring.
+:Type: Boolean
+:Example: True [True]
+:Required: No
+
+``active``
+
+:Description: Activate or deactivate a key.
 :Type: Boolean
 :Example: True [True]
 :Required: No

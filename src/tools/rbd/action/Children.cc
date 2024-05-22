@@ -84,6 +84,7 @@ void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
+  at::add_image_id_option(options);
   at::add_snap_id_option(options);
   options->add_options()
     ("all,a", po::bool_switch(), "list all children (include trash)");
@@ -104,12 +105,24 @@ int execute(const po::variables_map &vm,
   std::string namespace_name;
   std::string image_name;
   std::string snap_name;
+  std::string image_id;
+
+  if (vm.count(at::IMAGE_ID)) {
+    image_id = vm[at::IMAGE_ID].as<std::string>();
+  }
+
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
-    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
-    utils::SPEC_VALIDATION_NONE);
+    &image_name, &snap_name, image_id.empty(),
+    utils::SNAPSHOT_PRESENCE_PERMITTED, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
+  }
+
+  if (!image_id.empty() && !image_name.empty()) {
+    std::cerr << "rbd: trying to access image using both name and id."
+              << std::endl;
+    return -EINVAL;
   }
 
   if (snap_id != LIBRADOS_SNAP_HEAD && !snap_name.empty()) {
@@ -127,8 +140,8 @@ int execute(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
-                                 true, &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name,
+				 image_id, "", true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }

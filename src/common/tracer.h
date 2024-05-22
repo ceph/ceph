@@ -4,7 +4,7 @@
 #pragma once
 
 #include "acconfig.h"
-#include "include/buffer.h"
+#include "include/encoding.h"
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/trace/provider.h"
@@ -16,6 +16,11 @@ using jspan_attribute = opentelemetry::common::AttributeValue;
 
 namespace tracing {
 
+static constexpr int TraceIdkSize = 16;
+static constexpr int SpanIdkSize = 8;
+static_assert(TraceIdkSize == opentelemetry::trace::TraceId::kSize);
+static_assert(SpanIdkSize == opentelemetry::trace::SpanId::kSize);
+
 class Tracer {
  private:
   const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
@@ -24,6 +29,7 @@ class Tracer {
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 
  public:
+
   Tracer() = default;
 
   void init(CephContext* _cct, opentelemetry::nostd::string_view service_name);
@@ -46,8 +52,41 @@ class Tracer {
 
 };
 
-void encode(const jspan_context& span, ceph::buffer::list& bl, uint64_t f = 0);
-void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl);
+inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
+  ENCODE_START(1, 1, bl);
+  using namespace opentelemetry;
+  using namespace trace;
+  auto is_valid = span_ctx.IsValid();
+  encode(is_valid, bl);
+  if (is_valid) {
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.trace_id().Id().data()), TraceIdkSize), bl);
+    encode_nohead(std::string_view(reinterpret_cast<const char*>(span_ctx.span_id().Id().data()), SpanIdkSize), bl);
+    encode(span_ctx.trace_flags().flags(), bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+inline void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
+  using namespace opentelemetry;
+  using namespace trace;
+  DECODE_START(1, bl);
+  bool is_valid;
+  decode(is_valid, bl);
+  if (is_valid) {
+    std::array<uint8_t, TraceIdkSize> trace_id;
+    std::array<uint8_t, SpanIdkSize> span_id;
+    uint8_t flags;
+    decode(trace_id, bl);
+    decode(span_id, bl);
+    decode(flags, bl);
+    span_ctx = SpanContext(
+      TraceId(nostd::span<uint8_t, TraceIdkSize>(trace_id)),
+      SpanId(nostd::span<uint8_t, SpanIdkSize>(span_id)),
+      TraceFlags(flags),
+      true);
+  }
+  DECODE_FINISH(bl);
+}
 
 } // namespace tracing
 
@@ -63,10 +102,20 @@ class Value {
 
 using jspan_attribute = Value;
 
-struct jspan_context {
-  jspan_context() {}
-  jspan_context(bool sampled_flag, bool is_remote) {}
+namespace opentelemetry {
+inline namespace v1 {
+namespace trace {
+class SpanContext {
+public:
+  SpanContext() = default;
+  SpanContext(bool sampled_flag, bool is_remote) {}
+  bool IsValid() const { return false;}
 };
+} // namespace trace
+} // namespace v1
+} // namespace opentelemetry
+
+using jspan_context = opentelemetry::v1::trace::SpanContext;
 
 class jspan {
   jspan_context _ctx;
@@ -76,7 +125,7 @@ public:
   void AddEvent(std::string_view) {}
   void AddEvent(std::string_view, std::initializer_list<std::pair<std::string_view, jspan_attribute>> fields) {}
   template <typename T> void AddEvent(std::string_view name, const T& fields = {}) {}
-  const jspan_context& GetContext() { return _ctx; }
+  jspan_context GetContext() const { return _ctx; }
   void UpdateName(std::string_view) {}
   bool IsRecording() { return false; }
 };
@@ -103,9 +152,20 @@ struct Tracer {
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
 };
 
-inline void encode(const jspan_context& span, bufferlist& bl, uint64_t f=0) {}
-inline void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl) {}
-
+inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
+  ENCODE_START(1, 1, bl);
+  // jaeger is missing, set "is_valid" to false.
+  bool is_valid = false;
+  encode(is_valid, bl);
+  ENCODE_FINISH(bl);
 }
+
+inline void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
+  DECODE_START(254, bl);
+  // jaeger is missing, consume the buffer but do not decode it.
+  DECODE_FINISH(bl);
+}
+
+} // namespace tracing
 
 #endif // !HAVE_JAEGER

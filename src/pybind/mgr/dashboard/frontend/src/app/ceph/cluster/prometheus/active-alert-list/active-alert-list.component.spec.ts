@@ -14,6 +14,8 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { ActiveAlertListComponent } from './active-alert-list.component';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { of } from 'rxjs';
 
 describe('ActiveAlertListComponent', () => {
   let component: ActiveAlertListComponent;
@@ -37,6 +39,8 @@ describe('ActiveAlertListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(ActiveAlertListComponent);
     component = fixture.componentInstance;
+    let prometheusAlertService = TestBed.inject(PrometheusAlertService);
+    spyOn(prometheusAlertService, 'getAlerts').and.callFake(() => of([]));
   });
 
   it('should create', () => {

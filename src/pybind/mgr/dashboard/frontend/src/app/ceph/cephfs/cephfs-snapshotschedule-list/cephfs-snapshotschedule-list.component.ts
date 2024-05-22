@@ -26,8 +26,11 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CephfsSnapshotscheduleFormComponent } from '../cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FinishedTask } from '~/app/shared/models/finished-task';
 
 @Component({
   selector: 'cd-cephfs-snapshotschedule-list',
@@ -43,6 +46,12 @@ export class CephfsSnapshotscheduleListComponent
   @ViewChild('pathTpl', { static: true })
   pathTpl: any;
 
+  @ViewChild('retentionTpl', { static: true })
+  retentionTpl: any;
+
+  @ViewChild('subvolTpl', { static: true })
+  subvolTpl: any;
+
   @BlockUI()
   blockUI: NgBlockUI;
 
@@ -51,7 +60,7 @@ export class CephfsSnapshotscheduleListComponent
   snapScheduleModuleStatus$ = new BehaviorSubject<boolean>(false);
   moduleServiceListSub!: Subscription;
   columns: CdTableColumn[] = [];
-  tableActions: CdTableAction[] = [];
+  tableActions$ = new BehaviorSubject<CdTableAction[]>([]);
   context!: CdTableFetchDataContext;
   selection = new CdTableSelection();
   permissions!: Permissions;
@@ -59,6 +68,26 @@ export class CephfsSnapshotscheduleListComponent
   errorMessage: string = '';
   selectedName: string = '';
   icons = Icons;
+  tableActions: CdTableAction[] = [
+    {
+      name: this.actionLabels.CREATE,
+      permission: 'create',
+      icon: Icons.add,
+      click: () => this.openModal(false)
+    },
+    {
+      name: this.actionLabels.EDIT,
+      permission: 'update',
+      icon: Icons.edit,
+      click: () => this.openModal(true)
+    },
+    {
+      name: this.actionLabels.DELETE,
+      permission: 'delete',
+      icon: Icons.trash,
+      click: () => this.deleteSnapshotSchedule()
+    }
+  ];
 
   MODULE_NAME = 'snap_schedule';
   ENABLE_MODULE_TIMER = 2 * 1000;
@@ -69,7 +98,8 @@ export class CephfsSnapshotscheduleListComponent
     private modalService: ModalService,
     private mgrModuleService: MgrModuleService,
     private notificationService: NotificationService,
-    private actionLables: ActionLabelsI18n
+    private actionLabels: ActionLabelsI18n,
+    private taskWrapper: TaskWrapperService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -98,7 +128,13 @@ export class CephfsSnapshotscheduleListComponent
             if (!status) {
               return of([]);
             }
-            return this.snapshotScheduleService.getSnapshotScheduleList('/', this.fsName);
+            return this.snapshotScheduleService
+              .getSnapshotScheduleList('/', this.fsName)
+              .pipe(
+                map((list) =>
+                  list.map((l) => ({ ...l, pathForSelection: `${l.path}@${l.schedule}` }))
+                )
+              );
           }),
           shareReplay(1)
         )
@@ -106,30 +142,20 @@ export class CephfsSnapshotscheduleListComponent
     );
 
     this.columns = [
-      { prop: 'path', name: $localize`Path`, flexGrow: 3, cellTemplate: this.pathTpl },
-      { prop: 'subvol', name: $localize`Subvolume` },
-      { prop: 'schedule', name: $localize`Repeat interval` },
-      { prop: 'retention', name: $localize`Retention policy` },
+      { prop: 'pathForSelection', name: $localize`Path`, flexGrow: 3, cellTemplate: this.pathTpl },
+      { prop: 'path', isHidden: true, isInvisible: true },
+      { prop: 'subvol', name: $localize`Subvolume`, cellTemplate: this.subvolTpl },
+      { prop: 'scheduleCopy', name: $localize`Repeat interval` },
+      { prop: 'schedule', isHidden: true, isInvisible: true },
+      { prop: 'retentionCopy', name: $localize`Retention policy`, cellTemplate: this.retentionTpl },
+      { prop: 'retention', isHidden: true, isInvisible: true },
       { prop: 'created_count', name: $localize`Created Count` },
       { prop: 'pruned_count', name: $localize`Deleted Count` },
       { prop: 'start', name: $localize`Start time`, cellTransformation: CellTemplate.timeAgo },
       { prop: 'created', name: $localize`Created`, cellTransformation: CellTemplate.timeAgo }
     ];
 
-    this.tableActions = [
-      {
-        name: this.actionLables.CREATE,
-        permission: 'create',
-        icon: Icons.add,
-        click: () => this.openModal(false)
-      },
-      {
-        name: this.actionLables.EDIT,
-        permission: 'update',
-        icon: Icons.edit,
-        click: () => this.openModal(true)
-      }
-    ];
+    this.tableActions$.next(this.tableActions);
   }
 
   ngOnDestroy(): void {
@@ -142,6 +168,19 @@ export class CephfsSnapshotscheduleListComponent
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+    if (!this.selection.hasSelection) return;
+    const isActive = this.selection.first()?.active;
+
+    this.tableActions$.next([
+      ...this.tableActions,
+      {
+        name: isActive ? this.actionLabels.DEACTIVATE : this.actionLabels.ACTIVATE,
+        permission: 'update',
+        icon: isActive ? Icons.warning : Icons.success,
+        click: () =>
+          isActive ? this.deactivateSnapshotSchedule() : this.activateSnapshotSchedule()
+      }
+    ]);
   }
 
   openModal(edit = false) {
@@ -203,5 +242,83 @@ export class CephfsSnapshotscheduleListComponent
         fnWaitUntilReconnected();
       }
     );
+  }
+
+  deactivateSnapshotSchedule() {
+    const { path, start, fs, schedule, subvol, group } = this.selection.first();
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`snapshot schedule`,
+      actionDescription: this.actionLabels.DEACTIVATE,
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/snapshot/schedule/deactivate', {
+            path
+          }),
+          call: this.snapshotScheduleService.deactivate({
+            path,
+            schedule,
+            start,
+            fs,
+            subvol,
+            group
+          })
+        })
+    });
+  }
+
+  activateSnapshotSchedule() {
+    const { path, start, fs, schedule, subvol, group } = this.selection.first();
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`snapshot schedule`,
+      actionDescription: this.actionLabels.ACTIVATE,
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/snapshot/schedule/activate', {
+            path
+          }),
+          call: this.snapshotScheduleService.activate({
+            path,
+            schedule,
+            start,
+            fs,
+            subvol,
+            group
+          })
+        })
+    });
+  }
+
+  deleteSnapshotSchedule() {
+    const { path, start, fs, schedule, subvol, group, retention } = this.selection.first();
+    const retentionPolicy = retention
+      ?.split(/\s/gi)
+      ?.filter((r: string) => !!r)
+      ?.map((r: string) => {
+        const frequency = r.substring(r.length - 1);
+        const interval = r.substring(0, r.length - 1);
+        return `${interval}-${frequency}`;
+      })
+      ?.join('|');
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`snapshot schedule`,
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.DELETE, {
+            path
+          }),
+          call: this.snapshotScheduleService.delete({
+            path,
+            schedule,
+            start,
+            fs,
+            retentionPolicy,
+            subvol,
+            group
+          })
+        })
+    });
   }
 }

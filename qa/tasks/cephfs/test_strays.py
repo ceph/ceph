@@ -681,8 +681,8 @@ ln dir_1/original dir_2/linkto
 
         # empty mds cache. otherwise mds reintegrates stray when unlink finishes
         self.mount_a.umount_wait()
-        self.fs.mds_asok(['flush', 'journal'], rank_1_id)
-        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
+        self.fs.mds_asok(['flush', 'journal'], mds_id=rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], mds_id=rank_1_id)
 
         self.mount_a.mount_wait()
         self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
@@ -712,7 +712,7 @@ touch pin/placeholder
         self._force_migrate("pin")
 
         # Hold the dir open so it cannot be purged
-        p = self.mount_a.open_dir_background("pin/to-be-unlinked")
+        self.mount_a.open_dir_background("pin/to-be-unlinked")
 
         # Unlink the dentry
         self.mount_a.run_shell(["rmdir", "pin/to-be-unlinked"])
@@ -726,8 +726,8 @@ touch pin/placeholder
         self.assertEqual(self.get_mdc_stat("strays_enqueued", mds_id=rank_1_id), 0)
 
         # Test loading unlinked dir into cache
-        self.fs.mds_asok(['flush', 'journal'], rank_1_id)
-        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
+        self.fs.mds_asok(['flush', 'journal'], mds_id=rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], mds_id=rank_1_id)
 
         # Shut down rank 1
         self.fs.set_max_mds(1)
@@ -735,8 +735,6 @@ touch pin/placeholder
         # Now the stray should be migrated to rank 0
         # self.assertEqual(self.get_mdc_stat("strays_created", mds_id=rank_0_id), 1)
         # https://github.com/ceph/ceph/pull/44335#issuecomment-1125940158
-
-        self.mount_a.kill_background(p)
 
     def assert_backtrace(self, ino, expected_path):
         """

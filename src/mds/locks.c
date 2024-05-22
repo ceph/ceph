@@ -98,6 +98,7 @@ const struct sm_state_t filelock[LOCK_MAX] = {
     [LOCK_MIX_LOCK2] = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   REQ, 0,   0,   0,   0,   0,0,0,0 },
     [LOCK_XSYN_LOCK] = { LOCK_LOCK, true,  LOCK_LOCK, AUTH, 0,   0,   XCL, 0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
 
+    /* Keep Fcb to allow rapid recall of Fw. The client can keep buffered writes / cached reads. */
     [LOCK_PREXLOCK]  = { LOCK_LOCK, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   0,   ANY, CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
     [LOCK_XLOCK]     = { LOCK_LOCK, false, LOCK_LOCK, 0,    XCL, 0,   0,   0,   0,   0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0,0 },
     [LOCK_XLOCKDONE] = { LOCK_LOCK, false, LOCK_LOCK, XCL,  XCL, XCL, 0,   0,   XCL, 0,   CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,CEPH_CAP_GSHARED,0 },

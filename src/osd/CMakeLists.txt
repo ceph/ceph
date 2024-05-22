@@ -17,6 +17,7 @@ set(osd_srcs
   PGLog.cc
   PrimaryLogPG.cc
   ReplicatedBackend.cc
+  ECCommon.cc
   ECBackend.cc
   ECTransaction.cc
   PGBackend.cc
@@ -57,7 +58,9 @@ endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL
-  PRIVATE os heap_profiler cpu_profiler ${FMT_LIB} ${CMAKE_DL_LIBS})
+  PRIVATE
+    legacy-option-headers
+    os heap_profiler cpu_profiler ${FMT_LIB} ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

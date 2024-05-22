@@ -133,7 +133,7 @@ const char * ceph_osd_op_flag_name(unsigned flag)
       name = "fadvise_sequential";
       break;
     case CEPH_OSD_OP_FLAG_FADVISE_WILLNEED:
-      name = "favise_willneed";
+      name = "fadvise_willneed";
       break;
     case CEPH_OSD_OP_FLAG_FADVISE_DONTNEED:
       name = "fadvise_dontneed";
@@ -3886,7 +3886,7 @@ class pi_compact_rep : public PastIntervals::interval_rep {
     bool ec_pool,
     std::list<PastIntervals::pg_interval_t> &&intervals) {
     for (auto &&i: intervals)
-      add_interval(ec_pool, i);
+      pi_compact_rep::add_interval(ec_pool, i);
   }
 public:
   pi_compact_rep() = default;
@@ -7150,8 +7150,16 @@ void ScrubMap::object::generate_test_instances(list<object*>& o)
   o.back()->negative = true;
   o.push_back(new object);
   o.back()->size = 123;
-  o.back()->attrs["foo"] = ceph::buffer::copy("foo", 3);
-  o.back()->attrs["bar"] = ceph::buffer::copy("barval", 6);
+  {
+    bufferlist foobl;
+    foobl.push_back(ceph::buffer::copy("foo", 3));
+    o.back()->attrs["foo"] = std::move(foobl);
+  }
+  {
+    bufferlist barbl;
+    barbl.push_back(ceph::buffer::copy("barval", 6));
+    o.back()->attrs["bar"] = std::move(barbl);
+  }
 }
 
 // -- OSDOp --

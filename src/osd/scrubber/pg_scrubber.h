@@ -784,6 +784,15 @@ class PgScrubber : public ScrubPgIF,
    */
   Scrub::sched_conf_t populate_config_params() const;
 
+  /**
+   * determine the time when the next scrub should be scheduled
+   *
+   * based on the planned scrub's flags, time of last scrub, and
+   * the pool's scrub configuration.
+   */
+  Scrub::sched_params_t determine_scrub_time(
+      const pool_opts_t& pool_conf) const;
+
   /*
    * Select a range of objects to scrub.
    *

@@ -516,6 +516,15 @@ void OSDService::shutdown()
   next_osdmap = OSDMapRef();
 }
 
+void OSDService::fast_shutdown()
+{
+  mono_timer.suspend();
+  {
+    std::lock_guard l(watch_lock);
+    watch_timer.shutdown();
+  }
+}
+
 void OSDService::init()
 {
   reserver_finisher.start();
@@ -1267,6 +1276,7 @@ void OSDService::send_pg_created(pg_t pgid)
   auto o = get_osdmap();
   if (o->require_osd_release >= ceph_release_t::luminous) {
     pg_created.insert(pgid);
+    dout(20) << __func__ << " reply to mon " << pgid << " created." << dendl;
     monc->send_mon_message(new MOSDPGCreated(pgid));
   }
 }
@@ -1278,6 +1288,7 @@ void OSDService::send_pg_created()
   auto o = get_osdmap();
   if (o->require_osd_release >= ceph_release_t::luminous) {
     for (auto pgid : pg_created) {
+      dout(20) << __func__ << " reply to mon " << pgid << " created!" << dendl;
       monc->send_mon_message(new MOSDPGCreated(pgid));
     }
   }
@@ -1877,14 +1888,21 @@ void OSDService::queue_scrub_next_chunk(PG *pg, Scrub::scrub_prio_t with_priorit
   queue_scrub_event_msg<PGScrubGetNextChunk>(pg, with_priority);
 }
 
-void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
+void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e, int64_t num_objects)
 {
   dout(10) << __func__ << " on " << pgid << " e " << e  << dendl;
+  uint64_t cost_for_queue = [this, num_objects] {
+    if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
+      return num_objects * cct->_conf->osd_pg_delete_cost;
+    } else {
+      return cct->_conf->osd_pg_delete_cost;
+    }
+  }();
   enqueue_back(
     OpSchedulerItem(
       unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGDelete(pgid, e)),
-      cct->_conf->osd_pg_delete_cost,
+      cost_for_queue,
       cct->_conf->osd_pg_delete_priority,
       ceph_clock_now(),
       0,
@@ -4066,7 +4084,6 @@ int OSD::init()
 
   // Override a few options if mclock scheduler is enabled.
   maybe_override_sleep_options_for_qos();
-  maybe_override_cost_for_qos();
   maybe_override_options_for_qos();
   maybe_override_max_osd_capacity_for_qos();
 
@@ -4592,6 +4609,7 @@ int OSD::shutdown()
 
     utime_t  start_time_umount = ceph_clock_now();
     store->prepare_for_fast_shutdown();
+    service.fast_shutdown();
     std::lock_guard lock(osd_lock);
     // TBD: assert in allocator that nothing is being add
     store->umount();
@@ -6933,13 +6951,11 @@ void OSD::_send_boot()
     cluster_messenger->get_loopback_connection().get();
   entity_addrvec_t client_addrs = client_messenger->get_myaddrs();
   entity_addrvec_t cluster_addrs = cluster_messenger->get_myaddrs();
-  entity_addrvec_t hb_back_addrs = hb_back_server_messenger->get_myaddrs();
-  entity_addrvec_t hb_front_addrs = hb_front_server_messenger->get_myaddrs();
 
   dout(20) << " initial client_addrs " << client_addrs
 	   << ", cluster_addrs " << cluster_addrs
-	   << ", hb_back_addrs " << hb_back_addrs
-	   << ", hb_front_addrs " << hb_front_addrs
+	   << ", hb_back_addrs " << hb_back_server_messenger->get_myaddrs()
+	   << ", hb_front_addrs " << hb_front_server_messenger->get_myaddrs()
 	   << dendl;
   if (cluster_messenger->set_addr_unknowns(client_addrs)) {
     dout(10) << " assuming cluster_addrs match client_addrs "
@@ -6954,7 +6970,6 @@ void OSD::_send_boot()
   if (hb_back_server_messenger->set_addr_unknowns(cluster_addrs)) {
     dout(10) << " assuming hb_back_addrs match cluster_addrs "
 	     << cluster_addrs << dendl;
-    hb_back_addrs = hb_back_server_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
@@ -6964,7 +6979,6 @@ void OSD::_send_boot()
   if (hb_front_server_messenger->set_addr_unknowns(client_addrs)) {
     dout(10) << " assuming hb_front_addrs match client_addrs "
 	     << client_addrs << dendl;
-    hb_front_addrs = hb_front_server_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
@@ -6975,6 +6989,8 @@ void OSD::_send_boot()
   // are, so now is a good time!
   set_numa_affinity();
 
+  entity_addrvec_t hb_back_addrs = hb_back_server_messenger->get_myaddrs();
+  entity_addrvec_t hb_front_addrs = hb_front_server_messenger->get_myaddrs();
   MOSDBoot *mboot = new MOSDBoot(
     superblock, get_osdmap_epoch(), service.get_boot_epoch(),
     hb_back_addrs, hb_front_addrs, cluster_addrs,
@@ -7566,7 +7582,12 @@ void OSD::ms_fast_dispatch(Message *m)
     tracepoint(osd, ms_fast_dispatch, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
-  op->osd_parent_span = tracing::osd::tracer.start_trace("op-request-created");
+
+  if (m->otel_trace.IsValid()) {
+    op->osd_parent_span = tracing::osd::tracer.add_span("op-request-created", m->otel_trace);
+  } else {
+    op->osd_parent_span = tracing::osd::tracer.start_trace("op-request-created");
+  }
 
   if (m->trace)
     op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
@@ -9224,7 +9245,7 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
 	    std::make_shared<PGPeeringEvent>(
 	      m->epoch,
 	      m->epoch,
-	      NullEvt(),
+	      PgCreateEvt(),
 	      true,
 	      new PGCreateInfo(
 		pgid,
@@ -9881,9 +9902,6 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_sleep_hybrid")) {
     maybe_override_sleep_options_for_qos();
   }
-  if (changed.count("osd_pg_delete_cost")) {
-    maybe_override_cost_for_qos();
-  }
   if (changed.count("osd_min_recovery_priority")) {
     service.local_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
     service.remote_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
@@ -10220,15 +10238,6 @@ void OSD::maybe_override_sleep_options_for_qos()
   }
 }
 
-void OSD::maybe_override_cost_for_qos()
-{
-  // If the scheduler enabled is mclock, override the default PG deletion cost
-  // so that mclock can meet the QoS goals.
-  if (op_queue_type_t::mClockScheduler == osd_op_queue_type()) {
-    uint64_t pg_delete_cost = 15728640;
-    cct->_conf.set_val("osd_pg_delete_cost", std::to_string(pg_delete_cost));
-  }
-}
 
 /**
  * A context for receiving status from a background mon command to set

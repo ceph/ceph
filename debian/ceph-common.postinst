@@ -52,16 +52,20 @@ case "$1" in
                  --system \
                  --no-create-home \
                  --disabled-password \
+                 --home $SERVER_HOME \
                  --uid $SERVER_UID \
                  --gid $SERVER_GID \
                  $SERVER_USER 2>/dev/null || true
          echo "..done"
        fi
        # 3. adjust passwd entry
+       # NOTE: we should use "adduser --comment" if we don't need to
+       # support adduser <3.136. "adduser --gecos" is deprecated,
+       # and will be removed, so we don't use it. the first distro
+       # using --comment is debian/trixie or ubuntu/mantic.
        echo -n "Setting system user $SERVER_USER properties.."
-       usermod -c "$SERVER_NAME" \
-               -d $SERVER_HOME   \
-               -g $SERVER_GROUP  \
+       usermod --comment "$SERVER_NAME" \
+               --gid $SERVER_GROUP      \
                $SERVER_USER
        # Unlock $SERVER_USER in case it is locked from an uninstall
        if [ -f /etc/shadow ]; then

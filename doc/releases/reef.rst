@@ -5,6 +5,24 @@ Reef
 Reef is the 18th stable release of Ceph. It is named after the reef squid
 (Sepioteuthis).
 
+
+v18.2.2 Reef
+============
+
+This is a hotfix release that resolves several flaws including Prometheus crashes and an encoder fix.
+
+Notable Changes
+---------------
+
+* mgr/Prometheus: refine the orchestrator availability check to prevent against crashes in the prometheus module during startup. Introduce additional checks to handle daemon_ids generated within the Rook environment, thus preventing potential issues during RGW metrics metadata generation.
+
+Changelog
+---------
+
+* mgr/prometheus: fix orch check to prevent Prometheus crash (`pr#55491 <https://github.com/ceph/ceph/pull/55491>`_, Redouane Kachach)
+* debian/\*.postinst: add adduser as a dependency and specify --home when adduser (`pr#55709 <https://github.com/ceph/ceph/pull/55709>`_, Kefu Chai)
+* src/osd/OSDMap.cc: Fix encoder to produce same bytestream (`pr#55712 <https://github.com/ceph/ceph/pull/55712>`_, Kamoltat)
+
 v18.2.1 Reef
 ============
 

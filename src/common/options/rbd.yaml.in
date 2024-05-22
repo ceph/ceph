@@ -294,6 +294,8 @@ options:
   default: 0
   services:
   - rbd
+  see_also:
+  - mon_osd_blocklist_default_expire
 - name: rbd_request_timed_out_seconds
   type: uint
   level: advanced
@@ -394,7 +396,7 @@ options:
   - rbd
 - name: rbd_validate_pool
   type: bool
-  level: advanced
+  level: dev
   desc: validate empty pools for RBD compatibility
   default: true
   services:

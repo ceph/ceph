@@ -776,7 +776,9 @@ public:
   struct C_DeleteMore : public Context {
     PGRef pg;
     epoch_t epoch;
-    C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
+    int64_t num_objects;
+    C_DeleteMore(PG *p, epoch_t e, int64_t num) : pg(p), epoch(e),
+	                                          num_objects(num){}
     void finish(int r) override {
       ceph_abort();
     }
@@ -1116,6 +1118,7 @@ protected:
 
   std::set<hobject_t> objects_blocked_on_cache_full;
   std::map<hobject_t,snapid_t> objects_blocked_on_degraded_snap;
+  std::map<hobject_t,snapid_t> objects_blocked_on_unreadable_snap;
   std::map<hobject_t,ObjectContextRef> objects_blocked_on_snap_promotion;
 
   // Callbacks should assume pg (and nothing else) is locked

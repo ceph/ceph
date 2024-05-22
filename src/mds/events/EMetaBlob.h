@@ -611,9 +611,4 @@ WRITE_CLASS_ENCODER(EMetaBlob::remotebit)
 WRITE_CLASS_ENCODER(EMetaBlob::nullbit)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::dirlump)
 
-inline std::ostream& operator<<(std::ostream& out, const EMetaBlob& t) {
-  t.print(out);
-  return out;
-}
-
 #endif

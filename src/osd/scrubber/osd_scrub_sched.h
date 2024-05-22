@@ -233,10 +233,6 @@ class ScrubQueue {
       Scrub::delay_cause_t delay_cause,
       utime_t now_is);
 
-  sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
-				      const pg_info_t& pg_info,
-				      const pool_opts_t& pool_conf) const;
-
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
  public:

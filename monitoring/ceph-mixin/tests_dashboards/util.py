@@ -55,7 +55,7 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                 title = panel['title']
                 legend_format = target['legendFormat'] if 'legendFormat' in target else ""
                 query_id = f'{title}-{legend_format}'
-                if query_id in panel_ids_in_file:
+                if query_id in panel_ids_in_file and legend_format != '__auto':
                     cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
                             f' already exists in the same file: "{path}"'), 'red')
                     error = 1
@@ -75,6 +75,7 @@ def add_dashboard_variables(data: Dict[str, Any], dashboard_data: Dict[str, Any]
 
 def add_default_dashboards_variables(data: Dict[str, Any]) -> None:
     data['variables']['job'] = 'ceph'
+    data['variables']['cluster'] = 'mycluster'
     data['variables']['job_haproxy'] = 'haproxy'
     data['variables']['__rate_interval'] = '1m'
 

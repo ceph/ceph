@@ -16,9 +16,12 @@
 #include <vector>
 #include <functional>
 #include <span>
-#include "boost/circular_buffer.hpp"
-#include "boost/asio/thread_pool.hpp"
+#include <boost/circular_buffer.hpp>
+#include <boost/asio/any_completion_handler.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 extern "C" {
+#ifdef HAVE_QATDRV
 #include "cpa.h"
 #include "cpa_cy_sym_dp.h"
 #include "cpa_cy_im.h"
@@ -28,6 +31,15 @@ extern "C" {
 #include "icp_sal_user.h"
 #include "icp_sal_poll.h"
 #include "qae_mem_utils.h"
+#else
+#include <qat/cpa.h>
+#include <qat/cpa_cy_im.h>
+#include <qat/cpa_cy_sym_dp.h>
+#include <qat/cpa_cy_sym.h>
+#include <qat/qae_mem.h>
+#include <qat/icp_sal_user.h>
+#include <qat/icp_sal_poll.h>
+#endif
 }
 
 class QccCrypto {
@@ -37,7 +49,7 @@ class QccCrypto {
 
     boost::asio::thread_pool my_pool{1};
 
-    boost::circular_buffer<std::function<void(int)>> instance_completions;
+    boost::circular_buffer<boost::asio::any_completion_handler<void(int)>> instance_completions;
 
     template <typename CompletionToken>
     auto async_get_instance(CompletionToken&& token);
@@ -192,23 +204,19 @@ class QccCrypto {
 
 class QatCrypto {
  private:
-  std::function<void(CpaStatus stat)> completion_handler;
+  boost::asio::any_io_executor ex;
+  boost::asio::any_completion_handler<void(CpaStatus stat)> completion_handler;
   std::atomic<std::size_t> count;
  public:
-  void complete() {
-    if (--count == 0) {
-      completion_handler(CPA_STATUS_SUCCESS);
-    }
-    return ;
-  }
+  void complete();
 
-  QatCrypto () : count(0) {}
+  QatCrypto (boost::asio::any_io_executor ex) : ex(ex), count(0) {}
   QatCrypto (const QatCrypto &qat) = delete;
   QatCrypto (QatCrypto &&qat) = delete;
   void operator=(const QatCrypto &qat) = delete;
   void operator=(QatCrypto &&qat) = delete;
 
   template <typename CompletionToken>
-  auto async_perform_op(int avail_inst, std::span<CpaCySymDpOpData*> pOpDataVec, CompletionToken&& token);
+  auto async_perform_op(std::span<CpaCySymDpOpData*> pOpDataVec, CompletionToken&& token);
 };
 #endif //QCCCRYPTO_H

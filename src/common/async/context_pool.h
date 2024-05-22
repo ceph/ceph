@@ -106,6 +106,7 @@ public:
   operator boost::asio::io_context&() {
     return ioctx;
   }
+  using executor_type = boost::asio::io_context::executor_type;
   boost::asio::io_context::executor_type get_executor() {
     return ioctx.get_executor();
   }

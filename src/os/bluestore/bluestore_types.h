@@ -1382,7 +1382,7 @@ struct sb_info_space_efficient_map_t {
 	  [](const sb_info_t& a, const uint64_t& b) {
 	    return a < b;
 	  });
-	if (it->get_sbid() == id) {
+        if (it != aux_items.end() && it->get_sbid() == id) {
 	  return it;
 	}
       }

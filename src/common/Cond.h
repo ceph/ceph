@@ -74,6 +74,7 @@ public:
  * until wait() returns.
  */
 class C_SaferCond : public Context {
+protected:
   ceph::mutex lock;  ///< Mutex to take
   ceph::condition_variable cond;     ///< Cond to signal
   bool done = false; ///< true after finish() has been called

@@ -432,6 +432,7 @@ test_trash() {
     rbd trash mv test2
     ID=`rbd trash ls | cut -d ' ' -f 1`
     rbd info --image-id $ID | grep "rbd image 'test2'"
+    rbd children --image-id $ID | wc -l | grep 0
 
     rbd trash restore $ID
     rbd ls | grep test2
@@ -449,6 +450,7 @@ test_trash() {
     rbd create $RBD_CREATE_ARGS -s 1 test1
     rbd snap create test1@snap1
     rbd snap protect test1@snap1
+    rbd clone test1@snap1 clone
     rbd trash mv test1
 
     rbd trash ls | grep test1
@@ -459,7 +461,10 @@ test_trash() {
     ID=`rbd trash ls | cut -d ' ' -f 1`
     rbd snap ls --image-id $ID | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls --image-id $ID | grep '.*snap1.*'
+    rbd children --image-id $ID | wc -l | grep 1
+    rbd children --image-id $ID | grep 'clone'
 
+    rbd rm clone
     rbd snap unprotect --image-id $ID --snap snap1
     rbd snap rm --image-id $ID --snap snap1
     rbd snap ls --image-id $ID | grep -v 'SNAPID' | wc -l | grep 0

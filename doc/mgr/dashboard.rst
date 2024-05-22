@@ -6,33 +6,29 @@ Ceph Dashboard
 Overview
 --------
 
-The Ceph Dashboard is a built-in web-based Ceph management and monitoring
-application through which you can inspect and administer various aspects
-and resources within the cluster. It is implemented as a :ref:`ceph-manager-daemon` module.
+The Ceph Dashboard is a web-based Ceph management-and-monitoring tool that can
+be used to inspect and administer resources in the cluster. It is implemented
+as a :ref:`ceph-manager-daemon` module.
 
-The original Ceph Dashboard that was shipped with Ceph Luminous started
-out as a simple read-only view into run-time information and performance
-data of Ceph clusters. It used a very simple architecture to achieve the
-original goal. However, there was growing demand for richer web-based
-management capabilities, to make it easier to administer Ceph for users that
-prefer a WebUI over the CLI.
+The original Ceph Dashboard shipped with Ceph Luminous and was a simple
+read-only view into the run-time information and performance data of Ceph
+clusters. It had a simple architecture. However, demand grew for richer,
+web-based management capabilities for users who prefer a WebUI over the CLI.
 
-The new :term:`Ceph Dashboard` module adds web-based monitoring and
-administration to the Ceph Manager. The architecture and functionality of this new
-module are derived from
-and inspired by the `openATTIC Ceph management and monitoring tool
-<https://openattic.org/>`_. Development is actively driven by the
-openATTIC team at `SUSE <https://www.suse.com/>`_, with support from
-companies including `Red Hat <https://redhat.com/>`_ and members of the Ceph
-community.
+The :term:`Ceph Dashboard` module adds web-based monitoring and administration
+to the Ceph Manager. The architecture and functionality of this new module are
+derived from the `openATTIC Ceph management and monitoring tool
+<https://openattic.org/>`_. Development was originally driven by the openATTIC
+team at `SUSE <https://www.suse.com/>`_, with support from members of the Ceph
+community and from companies including `Red Hat <https://redhat.com/>`_.
 
-The dashboard module's backend code uses the CherryPy framework and implements
-a custom REST API. The WebUI implementation is based on
-Angular/TypeScript and includes both functionality from the original dashboard
-and new features originally developed for the standalone version
-of openATTIC. The Ceph Dashboard module is implemented as an
-application that provides a graphical representation of information and statistics
-through a web server hosted by ``ceph-mgr``.
+The dashboard module's backend code uses the CherryPy framework, and implements
+a custom REST API. The WebUI implementation is based on Angular/TypeScript and
+includes both functionality from the original dashboard and new features
+originally developed for the standalone version of openATTIC. The Ceph
+Dashboard module is implemented as an application that provides a graphical
+representation of information and statistics through a web server hosted by
+``ceph-mgr``.
 
 Feature Overview
 ^^^^^^^^^^^^^^^^
@@ -1243,19 +1239,37 @@ code of standby dashboards. To do so you need to run the command:
 Resolve IP address to hostname before redirect
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The redirect from a standby to the active dashboard is done via the IP
-address. This is done because resolving IP addresses to hostnames can be error
-prone in containerized environments. It is also the reason why the option is
+Redirection from a standby dashboard to the active dashboard is done via the
+manager's IP address, not via the manager's hostname. In virtualized
+environments, IP-address-based redirection reduces the incidence of error as
+compared to hostname-based resolution.  Because of the increased risk of error
+due to hostname-based resolution, the option for hostname resolution is
 disabled by default.
+
 However, in some situations it might be helpful to redirect via the hostname.
-For example if the configured TLS certificate matches only the hostnames. To
-activate the redirection via the hostname run the following command::
+For example, if the configured TLS certificate matches only the hostnames and
+not the IP addresses of those hosts, hostname redirection would be preferable.
 
-  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr True
+To activate redirection from standby dashboards to active dashboards via the
+manager's hostname, run the following command:
 
-You can disable it again by::
+.. prompt:: bash $
 
-  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
+   ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr True
+
+Disable hostname redirection by running the following command:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
+
+.. warning::
+
+   If you attempt to activate redirection by using the command above and you
+   get the error message ``EINVAL: unrecognized config option
+   'mgr/dashboard/redirect_resolve_ip_addr'``, then you might be running a
+   release of Ceph prior to version 17.2.6. This feature was introduced in
+   17.2.6, in this commit: https://github.com/ceph/ceph/pull/48219.
 
 HAProxy example configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

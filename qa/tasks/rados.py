@@ -130,6 +130,12 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "please list clients to run on"
 
+    log.info("config is {config}".format(config=str(config)))
+    overrides = ctx.config.get('overrides', {})
+    log.info("overrides is {overrides}".format(overrides=str(overrides)))
+    teuthology.deep_merge(config, overrides.get('rados', {}))
+    log.info("config is {config}".format(config=str(config)))
+
     object_size = int(config.get('object_size', 4000000))
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
@@ -169,7 +175,8 @@ def task(ctx, config):
         '--size', str(object_size),
         '--min-stride-size', str(config.get('min_stride_size', object_size // 10)),
         '--max-stride-size', str(config.get('max_stride_size', object_size // 5)),
-        '--max-seconds', str(config.get('max_seconds', 0))
+        '--max-seconds', str(config.get('max_seconds', 0)),
+        '--max-attr-len', str(config.get('max_attr_len', 20000))
         ])
 
     weights = {}
@@ -231,8 +238,16 @@ def task(ctx, config):
             profile = config.get('erasure_code_profile', {})
             profile_name = profile.get('name', 'teuthologyprofile')
             manager.create_erasure_code_profile(profile_name, profile)
+            crush_prof = config.get('erasure_code_crush', {})
+            crush_name = None
+            if crush_prof:
+                crush_name = crush_prof.get('name', 'teuthologycrush')
+                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
+
         else:
             profile_name = None
+            crush_name = None
+
         for i in range(int(config.get('runs', '1'))):
             log.info("starting run %s out of %s", str(i), config.get('runs', '1'))
             tests = {}
@@ -250,6 +265,7 @@ def task(ctx, config):
                 else:
                     pool = manager.create_pool_with_unique_name(
                         erasure_code_profile_name=profile_name,
+                        erasure_code_crush_rule_name=crush_name,
                         erasure_code_use_overwrites=
                           config.get('erasure_code_use_overwrites', False)
                     )
@@ -272,6 +288,13 @@ def task(ctx, config):
                     )
                 tests[id_] = proc
             run.wait(tests.values())
+            wait_for_all_active_clean_pgs = config.get("wait_for_all_active_clean_pgs", False)
+            # usually set when we do min_size testing.
+            if  wait_for_all_active_clean_pgs:
+                # Make sure we finish the test first before deleting the pool.
+                # Mainly used for test_pool_min_size
+                manager.wait_for_clean()
+                manager.wait_for_all_osds_up(timeout=1800)
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool);

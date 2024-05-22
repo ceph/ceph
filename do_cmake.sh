@@ -14,7 +14,7 @@ if [ -e $BUILD_DIR ]; then
 fi
 
 PYBUILD="3"
-ARGS="-GNinja"
+ARGS="${ARGS} -GNinja"
 if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
@@ -58,7 +58,10 @@ fi
 
 ARGS+=" -DWITH_PYTHON3=${PYBUILD}"
 
-if type ccache > /dev/null 2>&1 ; then
+if type sccache > /dev/null 2>&1 ; then
+    echo "enabling sccache"
+    ARGS+=" -DWITH_SCCACHE=ON"
+elif type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
     ARGS+=" -DWITH_CCACHE=ON"
 fi

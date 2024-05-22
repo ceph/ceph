@@ -83,11 +83,13 @@ Build-Depends: automake,
                libndctl-dev (>= 63) <pkg.ceph.pmdk>,
                libpmem-dev <pkg.ceph.pmdk>,
                libpmemobj-dev (>= 1.8) <pkg.ceph.pmdk>,
+               libprotobuf-dev <pkg.ceph.crimson>,
                ninja-build,
                nlohmann-json3-dev,
                patch,
                pkg-config,
                prometheus <pkg.ceph.check>,
+               protobuf-compiler <pkg.ceph.crimson>,
                python3-all-dev,
                python3-cherrypy3,
                python3-natsort,
@@ -184,7 +186,8 @@ Description: debugging symbols for ceph-base
 Package: cephadm
 Architecture: linux-any
 Recommends: podman (>= 2.0.2) | docker.io | docker-ce
-Depends: lvm2,
+Depends: adduser (>= 3.11),
+	 lvm2,
 	 python3,
 	 ${python3:Depends},
 Description: cephadm utility to bootstrap ceph daemons with systemd and containers
@@ -352,6 +355,30 @@ Description: debugging symbols for ceph-mgr
  .
  This package contains the debugging symbols for ceph-mgr.
 
+Package: ceph-exporter
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}),
+Description: metrics exporter for the ceph distributed storage system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the metrics exporter daemon, which is used to expose
+ the performance metrics.
+
+Package: ceph-exporter-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-exporter (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-exporter
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-exporter.
+
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
@@ -389,6 +416,7 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
+         libprotobuf23 <pkg.ceph.crimson>,
 Replaces: ceph (<< 10),
           ceph-test (<< 12.2.2-14),
           ceph-osd (<< 17.0.0)
@@ -610,7 +638,8 @@ Description: debugging symbols for rbd-nbd
 
 Package: ceph-common
 Architecture: linux-any
-Depends: librbd1 (= ${binary:Version}),
+Depends: adduser (>= 3.11),
+         librbd1 (= ${binary:Version}),
          python3-cephfs (= ${binary:Version}),
          python3-ceph-argparse (= ${binary:Version}),
          python3-ceph-common (= ${binary:Version}),

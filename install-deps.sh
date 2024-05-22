@@ -224,39 +224,6 @@ function install_boost_on_ubuntu {
 
 }
 
-motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
-
-function install_cortx_motr_on_ubuntu {
-    if dpkg -l cortx-motr-dev &> /dev/null; then
-        return
-    fi
-    if [ "$(lsb_release -sc)" = "jammy" ]; then
-      install_pkg_on_ubuntu \
-        cortx-motr \
-        39f89fa1c6945040433a913f2687c4b4e6cbeb3f \
-        jammy \
-        check \
-        cortx-motr \
-        cortx-motr-dev
-    else
-        local deb_arch=$(dpkg --print-architecture)
-        local motr_pkg="cortx-motr_2.0.0.git3252d623_$deb_arch.deb"
-        local motr_dev_pkg="cortx-motr-dev_2.0.0.git3252d623_$deb_arch.deb"
-        $SUDO curl -sL -o/var/cache/apt/archives/$motr_pkg $motr_pkgs_url/$motr_pkg
-        $SUDO curl -sL -o/var/cache/apt/archives/$motr_dev_pkg $motr_pkgs_url/$motr_dev_pkg
-        # For some reason libfabric pkg is not available in arm64 version
-        # of Ubuntu 20.04 (Focal Fossa), so we borrow it from more recent
-        # versions for now.
-        if [[ "$deb_arch" == 'arm64' ]]; then
-            local lf_pkg='libfabric1_1.11.0-2_arm64.deb'
-            $SUDO curl -sL -o/var/cache/apt/archives/$lf_pkg http://ports.ubuntu.com/pool/universe/libf/libfabric/$lf_pkg
-            $SUDO apt-get install -y /var/cache/apt/archives/$lf_pkg
-        fi
-        $SUDO apt-get install -y /var/cache/apt/archives/{$motr_pkg,$motr_dev_pkg}
-        $SUDO apt-get install -y libisal-dev
-    fi
-}
-
 function version_lt {
     test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
 }
@@ -414,7 +381,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
-    [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
@@ -496,11 +462,6 @@ else
         ci_debug "Removing ceph-build-deps"
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
-
-        # for rgw motr backend build checks
-        if $with_rgw_motr; then
-            install_cortx_motr_on_ubuntu
-        fi
         ;;
     rocky|centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
@@ -517,6 +478,11 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 8 ; then
+                    # for grpc-devel
+                    # See https://copr.fedorainfracloud.org/coprs/ceph/grpc/
+                    # epel is enabled for all major versions couple of lines above
+                    $SUDO dnf copr enable -y ceph/grpc
+
                     # Enable 'powertools' or 'PowerTools' repo
                     $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
                     dts_ver=11
@@ -532,6 +498,9 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
+
+                    # Enable ceph/grpc from copr for el8, this is needed for nvmeof management.
+                    $SUDO dnf copr enable -y ceph/grpc
                 fi
                 ;;
         esac
@@ -548,14 +517,6 @@ else
         fi
         IGNORE_YUM_BUILDEP_ERRORS="ValueError: SELinux policy is not managed or store cannot be accessed."
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -i "error:" && exit 1
-        # for rgw motr backend build checks
-        if ! rpm --quiet -q cortx-motr-devel &&
-              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
-            $SUDO dnf install -y \
-                  "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
-                  "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
-                  "$motr_pkgs_url/cortx-motr-devel-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm"
-        fi
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
@@ -580,6 +541,9 @@ fi
 if $for_make_check; then
     mkdir -p install-deps-cache
     top_srcdir=$(pwd)
+    if [ -n "$XDG_CACHE_HOME" ]; then
+        ORIGINAL_XDG_CACHE_HOME=$XDG_CACHE_HOME
+    fi
     export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
     wip_wheelhouse=wheelhouse-wip
     #
@@ -590,6 +554,11 @@ if $for_make_check; then
     done
     rm -rf $top_srcdir/install-deps-python3
     rm -rf $XDG_CACHE_HOME
+    if [ -n "$ORIGINAL_XDG_CACHE_HOME" ]; then
+        XDG_CACHE_HOME=$ORIGINAL_XDG_CACHE_HOME
+    else
+        unset XDG_CACHE_HOME
+    fi
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
 

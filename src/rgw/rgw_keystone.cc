@@ -140,7 +140,8 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
                              TokenCache& token_cache,
                              const Config& config,
                              optional_yield y,
-                             std::string& token)
+                             std::string& token,
+                             bool& token_cached)
 {
   /* Let's check whether someone uses the deprecated "admin token" feature
    * based on a shared secret from keystone.conf file. */
@@ -156,6 +157,7 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
   if (token_cache.find_admin(t)) {
     ldpp_dout(dpp, 20) << "found cached admin token" << dendl;
     token = t.token.id;
+    token_cached = true;
     return 0;
   }
 
@@ -521,6 +523,11 @@ void TokenCache::invalidate(const DoutPrefixProvider *dpp, const std::string& to
   token_entry& e = iter->second;
   tokens_lru.erase(e.lru_iter);
   tokens.erase(iter);
+}
+
+void TokenCache::invalidate_admin(const DoutPrefixProvider *dpp)
+{
+  invalidate(dpp, admin_token_id);
 }
 
 bool TokenCache::going_down() const

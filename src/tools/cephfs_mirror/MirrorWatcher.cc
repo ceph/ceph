@@ -11,7 +11,6 @@
 #include "aio_utils.h"
 #include "MirrorWatcher.h"
 #include "FSMirror.h"
-#include "Types.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
@@ -93,15 +92,15 @@ void MirrorWatcher::handle_rewatch_complete(int r) {
     dout(0) << ": client blocklisted" <<dendl;
     std::scoped_lock locker(m_lock);
     m_blocklisted = true;
-    m_blocklisted_ts = ceph_clock_now();
+    m_blocklisted_ts = clock::now();
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;
     m_failed = true;
-    m_failed_ts = ceph_clock_now();
+    m_failed_ts = clock::now();
   } else if (r < 0) {
     derr << ": rewatch error: " << cpp_strerror(r) << dendl;
     m_failed = true;
-    m_failed_ts = ceph_clock_now();
+    m_failed_ts = clock::now();
   }
 }
 

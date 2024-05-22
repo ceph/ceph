@@ -7,6 +7,7 @@
 /**
  * \file default fmtlib formatters for specifically-tagged types
  */
+#include <fmt/compile.h>
 #include <fmt/format.h>
 
 /**

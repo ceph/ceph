@@ -14,8 +14,8 @@ foreach(component ${Sanitizers_FIND_COMPONENTS})
   elseif(component STREQUAL "leak")
     set(Sanitizers_leak_COMPILE_OPTIONS "-fsanitize=leak")
   elseif(component STREQUAL "thread")
-    if ("address" IN_LIST ${Sanitizers_FIND_COMPONENTS} OR
-        "leak" IN_LIST ${Sanitizers_FIND_COMPONENTS})
+    if ("address" IN_LIST "${Sanitizers_FIND_COMPONENTS}" OR
+        "leak" IN_LIST "${Sanitizers_FIND_COMPONENTS}")
       message(SEND_ERROR "Cannot combine -fsanitize-leak w/ -fsanitize-thread")
     elseif(NOT CMAKE_POSITION_INDEPENDENT_CODE)
       message(SEND_ERROR "TSan requires all code to be position independent")
@@ -57,6 +57,9 @@ string (REPLACE ";" " " CMAKE_REQUIRED_FLAGS "${Sanitizers_COMPILE_OPTIONS}")
 set(CMAKE_REQUIRED_LIBRARIES ${Sanitizers_COMPILE_OPTIONS})
 check_cxx_source_compiles("int main() {}"
   Sanitizers_ARE_SUPPORTED)
+
+file (READ ${CMAKE_CURRENT_LIST_DIR}/code_tests/Sanitizers_fiber_test.cc _sanitizers_fiber_test_code)
+check_cxx_source_compiles ("${_sanitizers_fiber_test_code}" Sanitizers_FIBER_SUPPORT)
 cmake_pop_check_state()
 
 include(FindPackageHandleStandardArgs)

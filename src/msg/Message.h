@@ -32,6 +32,7 @@
 #include "common/ref.h"
 #include "common/debug.h"
 #include "common/zipkin_trace.h"
+#include "common/tracer.h"
 #include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
@@ -198,6 +199,8 @@
 #define MSG_MDS_METRICS            0x501  // for mds metric aggregator
 #define MSG_MDS_PING               0x502  // for mds pinger
 #define MSG_MDS_SCRUB_STATS        0x503  // for mds scrub stack
+#define MSG_MDS_QUIESCE_DB_LISTING 0x505  // quiesce db replication
+#define MSG_MDS_QUIESCE_DB_ACK     0x506  // quiesce agent ack back to the db
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
@@ -281,6 +284,11 @@ public:
   ZTracer::Trace trace;
   void encode_trace(ceph::buffer::list &bl, uint64_t features) const;
   void decode_trace(ceph::buffer::list::const_iterator &p, bool create = false);
+
+  // otel tracing
+  jspan_context otel_trace{false, false};
+  void encode_otel_trace(ceph::buffer::list &bl, uint64_t features) const;
+  void decode_otel_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
   class CompletionHook : public Context {
   protected:

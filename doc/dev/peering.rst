@@ -6,98 +6,93 @@ Concepts
 --------
 
 *Peering*
-   the process of bringing all of the OSDs that store
-   a Placement Group (PG) into agreement about the state
-   of all of the objects (and their metadata) in that PG.
-   Note that agreeing on the state does not mean that
-   they all have the latest contents.
+   the process of bringing all of the OSDs that store a Placement Group (PG)
+   into agreement about the state of all of the objects in that PG and all of
+   the metadata associated with those objects. Two OSDs can agree on the state
+   of the objects in the placement group yet still may not necessarily have the
+   latest contents.
 
 *Acting set*
-   the ordered list of OSDs who are (or were as of some epoch)
-   responsible for a particular PG.
+   the ordered list of OSDs that are (or were as of some epoch) responsible for
+   a particular PG.
 
 *Up set*
-   the ordered list of OSDs responsible for a particular PG for
-   a particular epoch according to CRUSH.  Normally this
-   is the same as the *acting set*, except when the *acting set* has been
-   explicitly overridden via *PG temp* in the OSDMap.
+   the ordered list of OSDs responsible for a particular PG for a particular
+   epoch, according to CRUSH. This is the same as the *acting set* except when
+   the *acting set* has been explicitly overridden via *PG temp* in the OSDMap.
 
 *PG temp* 
-   a temporary placement group acting set used while backfilling the
-   primary osd. Let say acting is [0,1,2] and we are
-   active+clean. Something happens and acting is now [3,1,2]. osd 3 is
-   empty and can't serve reads although it is the primary. osd.3 will
-   see that and request a *PG temp* of [1,2,3] to the monitors using a
-   MOSDPGTemp message so that osd.1 temporarily becomes the
-   primary. It will select osd.3 as a backfill peer and continue to
-   serve reads and writes while osd.3 is backfilled. When backfilling
-   is complete, *PG temp* is discarded and the acting set changes back
-   to [3,1,2] and osd.3 becomes the primary.
+   a temporary placement group acting set that is used while backfilling the
+   primary OSD. Assume that the acting set is ``[0,1,2]`` and we are
+   ``active+clean``. Now assume that something happens and the acting set
+   becomes ``[2,1,2]``. Under these circumstances, OSD ``3`` is empty and can't
+   serve reads even though it is the primary. ``osd.3`` will respond by
+   requesting a *PG temp* of ``[1,2,3]`` to the monitors using a ``MOSDPGTemp``
+   message, and ``osd.1`` will become the primary temporarily. ``osd.1`` will
+   select ``osd.3`` as a backfill peer and will continue to serve reads and
+   writes while ``osd.3`` is backfilled. When backfilling is complete, *PG
+   temp* is discarded. The acting set changes back to ``[3,1,2]`` and ``osd.3``
+   becomes the primary.
 
 *current interval* or *past interval*
-   a sequence of OSD map epochs during which the *acting set* and *up
-   set* for particular PG do not change
+   a sequence of OSD map epochs during which the *acting set* and the *up
+   set* for particular PG do not change.
 
 *primary*
-   the (by convention first) member of the *acting set*,
-   who is responsible for coordination peering, and is
-   the only OSD that will accept client initiated
-   writes to objects in a placement group.
+   the member of the *acting set* that is responsible for coordination peering.
+   The only OSD that accepts client-initiated writes to the objects in a
+   placement group. By convention, the primary is the first member of the
+   *acting set*.
 
 *replica*
-   a non-primary OSD in the *acting set* for a placement group
-   (and who has been recognized as such and *activated* by the primary).
+   a non-primary OSD in the *acting set* of a placement group. A replica has
+   been recognized as a non-primary OSD and has been *activated* by the
+   primary.
 
 *stray*
-   an OSD who is not a member of the current *acting set*, but
-   has not yet been told that it can delete its copies of a
-   particular placement group.
+   an OSD that is not a member of the current *acting set* and has not yet been
+   told to delete its copies of a particular placement group.
 
 *recovery*
-   ensuring that copies of all of the objects in a PG
-   are on all of the OSDs in the *acting set*.  Once
-   *peering* has been performed, the primary can start
-   accepting write operations, and *recovery* can proceed
-   in the background.
+   the process of ensuring that copies of all of the objects in a PG are on all
+   of the OSDs in the *acting set*. After *peering* has been performed, the
+   primary can begin accepting write operations and *recovery* can proceed in
+   the background.
 
 *PG info*
-   basic metadata about the PG's creation epoch, the version
-   for the most recent write to the PG, *last epoch started*, *last
-   epoch clean*, and the beginning of the *current interval*.  Any
-   inter-OSD communication about PGs includes the *PG info*, such that
-   any OSD that knows a PG exists (or once existed) also has a lower
-   bound on *last epoch clean* or *last epoch started*.
+   basic metadata about the PG's creation epoch, the version for the most
+   recent write to the PG, the *last epoch started*, the *last epoch clean*,
+   and the beginning of the *current interval*. Any inter-OSD communication
+   about PGs includes the *PG info*, such that any OSD that knows a PG exists
+   (or once existed) and also has a lower bound on *last epoch clean* or *last
+   epoch started*.
 
 *PG log*
-   a list of recent updates made to objects in a PG.
-   Note that these logs can be truncated after all OSDs
-   in the *acting set* have acknowledged up to a certain
-   point.
+   a list of recent updates made to objects in a PG. These logs can be
+   truncated after all OSDs in the *acting set* have acknowledged the changes.
 
 *missing set*
-   Each OSD notes update log entries and if they imply updates to
-   the contents of an object, adds that object to a list of needed
-   updates.  This list is called the *missing set* for that <OSD,PG>.
+   the set of all objects that have not yet had their contents updated to match
+   the log entries. The missing set is collated by each OSD. Missing sets are
+   kept track of on an ``<OSD,PG>`` basis.
 
 *Authoritative History*
-   a complete, and fully ordered set of operations that, if
-   performed, would bring an OSD's copy of a Placement Group
-   up to date.
+   a complete and fully-ordered set of operations that bring an OSD's copy of a
+   Placement Group up to date.
 
 *epoch*
-   a (monotonically increasing) OSD map version number
+   a (monotonically increasing) OSD map version number.
 
 *last epoch start*
-   the last epoch at which all nodes in the *acting set*
-   for a particular placement group agreed on an
-   *authoritative history*.  At this point, *peering* is
-   deemed to have been successful.
+   the last epoch at which all nodes in the *acting set* for a given placement
+   group agreed on an *authoritative history*.  At the start of the last epoch,
+   *peering* is deemed to have been successful.
 
 *up_thru*
    before a primary can successfully complete the *peering* process,
    it must inform a monitor that is alive through the current
    OSD map epoch by having the monitor set its *up_thru* in the osd
-   map.  This helps peering ignore previous *acting sets* for which
+   map. This helps peering ignore previous *acting sets* for which
    peering never completed after certain sequences of failures, such as
    the second interval below:
 
@@ -107,10 +102,9 @@ Concepts
    - *acting set* = [B] (B restarts, A does not)
 
 *last epoch clean*
-   the last epoch at which all nodes in the *acting set*
-   for a particular placement group were completely
-   up to date (both PG logs and object contents).
-   At this point, *recovery* is deemed to have been
+   the last epoch at which all nodes in the *acting set* for a given placement
+   group were completely up to date (this includes both the PG's logs and the
+   PG's object contents). At this point, *recovery* is deemed to have been
    completed.
 
 Description of the Peering Process
@@ -267,4 +261,5 @@ Use the `gen_state_diagram.py <https://github.com/ceph/ceph/blob/master/doc/scri
 
 Sample state model:
 
-.. graphviz:: peering_graph.generated.dot
+.. image:: peering_graph.generated.svg
+

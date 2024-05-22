@@ -256,8 +256,6 @@ private:
   std::pair<std::string, ceph::buffer::list> to_raw(
     const std::pair<snapid_t, hobject_t> &to_map) const;
 
-  static bool is_mapping(const std::string &to_test);
-
   static std::pair<snapid_t, hobject_t> from_raw(
     const std::pair<std::string, ceph::buffer::list> &image);
 
@@ -293,11 +291,10 @@ private:
   tl::expected<object_snaps, SnapMapReaderI::result_t> get_snaps_common(
     const hobject_t &hoid) const;
 
-  /// file @out vector with the first objects with @snap as a snap
-  void get_objects_by_prefixes(
+  /// \returns vector with the first objects with @snap as a snap
+  std::vector<hobject_t> get_objects_by_prefixes(
     snapid_t snap,
-    unsigned max,
-    std::vector<hobject_t> *out);
+    unsigned max);
 
   std::set<std::string>           prefixes;
   // maintain a current active prefix
@@ -316,6 +313,8 @@ private:
     ceph_assert(r < (int)sizeof(buf));
     return std::string(buf, r) + '_';
   }
+
+  static bool is_mapping(const std::string &to_test);
 
   uint32_t mask_bits;
   const uint32_t match;
@@ -373,11 +372,10 @@ private:
     );
 
   /// Returns first object with snap as a snap
-  int get_next_objects_to_trim(
+  std::optional<std::vector<hobject_t>> get_next_objects_to_trim(
     snapid_t snap,              ///< [in] snap to check
-    unsigned max,               ///< [in] max to get
-    std::vector<hobject_t> *out      ///< [out] next objects to trim (must be empty)
-    );  ///< @return error, -ENOENT if no more objects
+    unsigned max                ///< [in] max to get
+    );  ///< @return nullopt if no more objects
 
   /// Remove mapping for oid
   int remove_oid(

@@ -395,7 +395,7 @@ void LastEpochClean::report(unsigned pg_num, const pg_t& pg,
   return lec.report(pg_num, pg.ps(), last_epoch_clean);
 }
 
-epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
+epoch_t LastEpochClean::get_lower_bound_by_pool(const OSDMap& latest) const
 {
   auto floor = latest.get_epoch();
   for (auto& pool : latest.get_pools()) {
@@ -906,12 +906,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       if (state & CEPH_OSD_UP) {
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd);
-      }
-    }
-    for (auto [osd, weight] : inc.new_weight) {
-      if (weight == CEPH_OSD_OUT) {
-        // manually marked out, so drop it
-        osd_epochs.erase(osd);
+	osd_epochs.erase(osd);
       }
     }
   }
@@ -1256,10 +1251,8 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
   }
 
   // process queue
-  unsigned max = std::max<int64_t>(1, g_conf()->mon_osd_max_creating_pgs);
   const auto total = pending_creatings.pgs.size();
-  while (pending_creatings.pgs.size() < max &&
-	 !pending_creatings.queue.empty()) {
+  while (!pending_creatings.queue.empty()) {
     auto p = pending_creatings.queue.begin();
     int64_t poolid = p->first;
     dout(10) << __func__ << " pool " << poolid
@@ -1267,21 +1260,16 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
 	     << " modified " << p->second.modified
 	     << " [" << p->second.start << "-" << p->second.end << ")"
 	     << dendl;
-    int64_t n = std::min<int64_t>(max - pending_creatings.pgs.size(),
-				  p->second.end - p->second.start);
-    ps_t first = p->second.start;
-    ps_t end = first + n;
-    for (ps_t ps = first; ps < end; ++ps) {
+    for (ps_t ps = p->second.start; ps < p->second.end; ++ps) {
       const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
-      // NOTE: use the *current* epoch as the PG creation epoch so that the
-      // OSD does not have to generate a long set of PastIntervals.
+      // The current epoch must be the pool creation epoch
       pending_creatings.pgs.emplace(
 	pgid,
-	creating_pgs_t::pg_create_info(inc.epoch,
+	creating_pgs_t::pg_create_info(p->second.created,
 				       p->second.modified));
       dout(10) << __func__ << " adding " << pgid << dendl;
     }
-    p->second.start = end;
+    p->second.start = p->second.end;
     if (p->second.done()) {
       dout(10) << __func__ << " done with queue for " << poolid << dendl;
       pending_creatings.queue.erase(p);
@@ -2285,13 +2273,21 @@ version_t OSDMonitor::get_trim_to() const
   return 0;
 }
 
+/* There are two constraints on trimming:
+ * 1. we must not trim past the last_epoch_clean for any pg
+ * 2. we must not trim past the last reported epoch for any up
+ *    osds.
+ *
+ * LastEpochClean::get_lower_bound_by_pool gives a value <= constraint 1.
+ * For constraint 2, we take the min over osd_epochs, which is populated with
+ * MOSDBeacon::version, see OSDMonitor::prepare_beacon
+ */
 epoch_t OSDMonitor::get_min_last_epoch_clean() const
 {
-  auto floor = last_epoch_clean.get_lower_bound(osdmap);
-  // also scan osd epochs
-  // don't trim past the oldest reported osd epoch
+  auto floor = last_epoch_clean.get_lower_bound_by_pool(osdmap);
   for (auto [osd, epoch] : osd_epochs) {
     if (epoch < floor) {
+      ceph_assert(osdmap.is_up(osd));
       floor = epoch;
     }
   }
@@ -3517,7 +3513,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
       if (!osdmap.get_allow_crimson()) {
 	mon.clog->info()
 	  << "Disallowing boot of crimson-osd without allow_crimson "
-	  << "OSDMap flag.  Run ceph osd set_allow_crimson to set "
+	  << "OSDMap flag.  Run ceph osd set-allow-crimson to set "
 	  << "allow_crimson flag.  Note that crimson-osd is "
 	  << "considered unstable and may result in crashes or "
 	  << "data loss.  Its usage should be restricted to "
@@ -4399,8 +4395,8 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 
   last_osd_report[from].first = ceph_clock_now();
   last_osd_report[from].second = beacon->osd_beacon_report_interval;
+  ceph_assert(osdmap.is_up(from));
   osd_epochs[from] = beacon->version;
-
   for (const auto& pg : beacon->pgs) {
     if (auto* pool = osdmap.get_pg_pool(pg.pool()); pool != nullptr) {
       unsigned pg_num = pool->get_pg_num();
@@ -4569,6 +4565,17 @@ void OSDMonitor::send_incremental(epoch_t first,
       break;
   }
 }
+
+bool OSDMonitor::remove_pool_snap(std::string_view snapname,
+                                  pg_pool_t &pp, int64_t pool) {
+  snapid_t snapid = pp.snap_exists(snapname);
+  if (snapid) {
+    pp.remove_snap(snapid);
+    pending_inc.new_removed_snaps[pool].insert(snapid);
+    return true;
+  }
+  return false;
+};
 
 int OSDMonitor::get_version(version_t ver, bufferlist& bl)
 {
@@ -8032,10 +8039,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     /* crimson-osd requires that the pool be replicated and that pg_num/pgp_num
      * be static.  User must also have specified set-allow-crimson */
     const auto *suffix = " (--crimson specified or osd_pool_default_crimson set)";
-    if (pool_type != pg_pool_t::TYPE_REPLICATED) {
-      *ss << "crimson-osd only supports replicated pools" << suffix;
-      return -EINVAL;
-    } else if (pg_autoscale_mode != "off") {
+    if (pg_autoscale_mode != "off") {
       *ss << "crimson-osd does not support changing pg_num or pgp_num, "
 	  << "pg_autoscale_mode must be set to 'off'" << suffix;
       return -EINVAL;
@@ -8091,7 +8095,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     return r;
   }
 
-  if (osdmap.crush->get_rule_type(crush_rule) != (int)pool_type) {
+  if (!osdmap.crush->rule_valid_for_pool_type(crush_rule, pool_type)) {
     *ss << "crush rule " << crush_rule << " type does not match pool";
     return -EINVAL;
   }
@@ -8368,7 +8372,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EPERM;
       }
     }
-    if (osdmap.crush->get_rule_type(p.get_crush_rule()) != (int)p.type) {
+    if (!osdmap.crush->rule_valid_for_pool_type(p.get_crush_rule(), p.type)) {
       ss << "crush rule " << p.get_crush_rule() << " type does not match pool";
       return -EINVAL;
     }
@@ -8601,7 +8605,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << cpp_strerror(id);
       return -ENOENT;
     }
-    if (osdmap.crush->get_rule_type(id) != (int)p.get_type()) {
+    if (!osdmap.crush->rule_valid_for_pool_type(id, p.get_type())) {
       ss << "crush rule " << id << " type does not match pool";
       return -EINVAL;
     }
@@ -11305,6 +11309,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  err = 0;
 	  goto reply_no_propose;
 	}
+	bool force_no_fake = false;
+	cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
 	if (!force) {
 	  err = -EPERM;
 	  ss << "will not override erasure code profile " << name
@@ -11312,6 +11318,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     << existing_profile_map
 	     << " is different from the proposed profile "
 	     << profile_map;
+	  goto reply_no_propose;
+	} else if (!force_no_fake) {
+	  err = -EPERM;
+	  ss << "overriding erasure code profile can be DANGEROUS"
+	     << "; add --yes-i-really-mean-it to do it anyway";
 	  goto reply_no_propose;
 	}
       }
@@ -13083,9 +13094,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pp = &pending_inc.new_pools[pool];
       *pp = *p;
     }
-    snapid_t sn = pp->snap_exists(snapname.c_str());
-    if (sn) {
-      pp->remove_snap(sn);
+    if (remove_pool_snap(snapname, *pp, pool)) {
       pp->set_snap_epoch(pending_inc.epoch);
       ss << "removed pool " << poolstr << " snap " << snapname;
     } else {
@@ -14306,10 +14315,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   case POOL_OP_DELETE_SNAP:
     {
-      snapid_t s = pp.snap_exists(m->name.c_str());
-      if (s) {
-	pp.remove_snap(s);
-	pending_inc.new_removed_snaps[m->pool].insert(s);
+      if (remove_pool_snap(m->name, pp, m->pool)) {
 	changed = true;
       }
     }

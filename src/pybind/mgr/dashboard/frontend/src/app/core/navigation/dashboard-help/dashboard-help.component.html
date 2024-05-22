@@ -10,15 +10,18 @@
   </a>
   <div ngbDropdownMenu>
     <a ngbDropdownItem
-       class="text-capitalize"
        [ngClass]="{'disabled': !docsUrl}"
        href="{{ docsUrl }}"
        target="_blank"
-       i18n>documentation</a>
-    <button ngbDropdownItem
-            routerLink="/api-docs"
-            target="_blank"
-            i18n>API</button>
+       i18n>Documentation
+      <i class="fa fa-external-link"></i>
+    </a>
+    <a ngbDropdownItem
+       routerLink="/api-docs"
+       target="_blank"
+       i18n>API
+      <i class="fa fa-external-link"></i>
+    </a>
     <button ngbDropdownItem
             (click)="openAboutModal()"
             i18n>About</button>

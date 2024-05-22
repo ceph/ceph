@@ -56,7 +56,7 @@ class CephFS(RESTController):
             service_spec_str = service_spec_str[:-1]
         if 'hosts' in service_spec['placement']:
             for host in service_spec['placement']['hosts']:
-                service_spec_str += f'{host},'
+                service_spec_str += f'{host} '
             service_spec_str = service_spec_str[:-1]
 
         error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_create', None,
@@ -101,15 +101,45 @@ class CephFS(RESTController):
                 component='cephfs')
         return f'Volume {name} renamed successfully to {new_name}'
 
+    @UpdatePermission
+    @Endpoint('PUT')
+    @EndpointDoc("Set Ceph authentication capabilities for the specified user ID in the given path",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'client_id': (str, 'Cephx user ID'),
+                     'caps': (str, 'Path and given capabilities'),
+                     'root_squash': (str, 'File System Identifier'),
+
+                 })
+    def auth(self, fs_name: str, client_id: int, caps: List[str], root_squash: bool):
+        if root_squash:
+            caps.insert(2, 'root_squash')
+        error_code, _, err = mgr.mon_command({'prefix': 'fs authorize',
+                                              'filesystem': fs_name,
+                                              'entity': client_id,
+                                              'caps': caps})
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Error setting authorization for {client_id} with {caps}: {err}',
+                component='cephfs')
+        return f'Updated {client_id} authorization successfully'
+
     def get(self, fs_id):
         fs_id = self.fs_id_to_int(fs_id)
         return self.fs_status(fs_id)
 
     @RESTController.Resource('GET')
-    def clients(self, fs_id):
+    def clients(self, fs_id, **kwargs):
+        flag = kwargs.pop('suppress_client_ls_errors', 'True')
+        if flag not in ('True', 'False'):
+            raise DashboardException(msg='suppress_client_ls_errors value '
+                                         'needs to be either True or False '
+                                         f'but provided "{flag}"',
+                                     component='cephfs')
+
         fs_id = self.fs_id_to_int(fs_id)
 
-        return self._clients(fs_id)
+        return self._clients(fs_id, suppress_client_ls_errors=flag)
 
     @RESTController.Resource('DELETE', path='/client/{client_id}')
     def evict(self, fs_id, client_id):
@@ -352,17 +382,23 @@ class CephFS(RESTController):
             "versions": mds_versions
         }
 
-    def _clients(self, fs_id):
+    def _clients(self, fs_id, **kwargs):
+        suppress_get_errors = kwargs.pop('suppress_client_ls_errors', 'True')
         cephfs_clients = self.cephfs_clients.get(fs_id, None)
         if cephfs_clients is None:
             cephfs_clients = CephFSClients(mgr, fs_id)
             self.cephfs_clients[fs_id] = cephfs_clients
 
         try:
-            status, clients = cephfs_clients.get()
+            status, clients = cephfs_clients.get(suppress_get_errors)
         except AttributeError:
             raise cherrypy.HTTPError(404,
                                      "No cephfs with id {0}".format(fs_id))
+        except RuntimeError:
+            raise cherrypy.HTTPError(500,
+                                     f"Could not fetch client(s), maybe there "
+                                     f"is no active MDS on CephFS {fs_id} or "
+                                     "the FS is in failed state.")
 
         if clients is None:
             raise cherrypy.HTTPError(404,
@@ -610,11 +646,14 @@ class CephFSClients(object):
         self.fscid = fscid
 
     @ViewCache()
-    def get(self):
+    def get(self, suppress_errors='True'):
         try:
             ret = CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
         except RuntimeError:
-            ret = []
+            if suppress_errors == 'True':
+                ret = []
+            else:
+                raise
         return ret
 
 
@@ -969,13 +1008,16 @@ class CephFSSnapshotSchedule(RESTController):
             )
         return json.loads(output_json)
 
-    def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None):
+    def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None,
+               subvol=None, group=None):
         error_code, _, err = mgr.remote('snap_schedule',
                                         'snap_schedule_add',
                                         path,
                                         snap_schedule,
                                         start,
-                                        fs)
+                                        fs,
+                                        subvol,
+                                        group)
 
         if retention_policy:
             retention_policies = retention_policy.split('|')
@@ -987,7 +1029,9 @@ class CephFSSnapshotSchedule(RESTController):
                                                                     path,
                                                                     retention_spec_or_period,
                                                                     retention_count,
-                                                                    fs)
+                                                                    fs,
+                                                                    subvol,
+                                                                    group)
                 if error_code_retention != 0:
                     raise DashboardException(
                         f'Failed to add retention policy for path {path}: {err_retention}'
@@ -999,7 +1043,8 @@ class CephFSSnapshotSchedule(RESTController):
 
         return f'Snapshot schedule for path {path} created successfully'
 
-    def set(self, fs: str, path: str, retention_to_add=None, retention_to_remove=None):
+    def set(self, fs: str, path: str, retention_to_add=None, retention_to_remove=None,
+            subvol=None, group=None):
         def editRetentionPolicies(method, retention_policy):
             if not retention_policy:
                 return
@@ -1014,8 +1059,8 @@ class CephFSSnapshotSchedule(RESTController):
                                                                     retention_spec_or_period,
                                                                     retention_count,
                                                                     fs,
-                                                                    None,
-                                                                    None)
+                                                                    subvol,
+                                                                    group)
                 if error_code_retention != 0:
                     raise DashboardException(
                         f'Failed to add/remove retention policy for path {path}: {err_retention}'
@@ -1025,3 +1070,84 @@ class CephFSSnapshotSchedule(RESTController):
         editRetentionPolicies('snap_schedule_retention_add', retention_to_add)
 
         return f'Retention policies for snapshot schedule on path {path} updated successfully'
+
+    @RESTController.Resource('DELETE')
+    def delete_snapshot(self, fs: str, path: str, schedule: str, start: str,
+                        retention_policy=None, subvol=None, group=None):
+        if retention_policy:
+            # check if there are other snap schedules for this exact same path
+            error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                              path, False, fs, subvol, group, 'plain')
+
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to get snapshot schedule list for path {path}: {err}'
+                )
+            # only remove the retention policies if there no other snap schedules for this path
+            snapshot_schedule_list = out.split('\n')
+            if len(snapshot_schedule_list) <= 1:
+                retention_policies = retention_policy.split('|')
+                for retention in retention_policies:
+                    retention_count = retention.split('-')[0]
+                    retention_spec_or_period = retention.split('-')[1]
+                    error_code, _, err = mgr.remote('snap_schedule',
+                                                    'snap_schedule_retention_rm',
+                                                    path,
+                                                    retention_spec_or_period,
+                                                    retention_count,
+                                                    fs,
+                                                    subvol,
+                                                    group)
+                    if error_code != 0:
+                        raise DashboardException(
+                            f'Failed to remove retention policy for path {path}: {err}'
+                        )
+        # remove snap schedule
+        error_code, _, err = mgr.remote('snap_schedule',
+                                        'snap_schedule_rm',
+                                        path,
+                                        schedule,
+                                        start,
+                                        fs,
+                                        subvol,
+                                        group)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to delete snapshot schedule for path {path}: {err}'
+            )
+
+        return f'Snapshot schedule for path {path} deleted successfully'
+
+    @RESTController.Resource('POST')
+    def deactivate(self, fs: str, path: str, schedule: str, start: str, subvol=None, group=None):
+        error_code, _, err = mgr.remote('snap_schedule',
+                                        'snap_schedule_deactivate',
+                                        path,
+                                        schedule,
+                                        start,
+                                        fs,
+                                        subvol,
+                                        group)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to deactivate snapshot schedule for path {path}: {err}'
+            )
+
+        return f'Snapshot schedule for path {path} deactivated successfully'
+
+    @RESTController.Resource('POST')
+    def activate(self, fs: str, path: str, schedule: str, start: str, subvol=None, group=None):
+        error_code, _, err = mgr.remote('snap_schedule',
+                                        'snap_schedule_activate',
+                                        path,
+                                        schedule,
+                                        start,
+                                        fs,
+                                        subvol,
+                                        group)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to activate snapshot schedule for path {path}: {err}'
+            )
+
+        return f'Snapshot schedule for path {path} activated successfully'

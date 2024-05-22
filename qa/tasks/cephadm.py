@@ -4,12 +4,16 @@ Ceph cluster task, deployed via cephadm orchestrator
 import argparse
 import configobj
 import contextlib
+import functools
+import json
 import logging
 import os
-import json
 import re
+import time
 import uuid
 import yaml
+
+import jinja2
 
 from copy import deepcopy
 from io import BytesIO, StringIO
@@ -21,18 +25,84 @@ from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
-from teuthology.exceptions import ConfigError
+from teuthology.exceptions import ConfigError, CommandFailedError
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.util import chacra
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
-from tasks.vip import subst_vip
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
 log = logging.getLogger(__name__)
+
+
+def _convert_strs_in(o, conv):
+    """A function to walk the contents of a dict/list and recurisvely apply
+    a conversion function (`conv`) to the strings within.
+    """
+    if isinstance(o, str):
+        return conv(o)
+    if isinstance(o, dict):
+        for k in o:
+            o[k] = _convert_strs_in(o[k], conv)
+    if isinstance(o, list):
+        o[:] = [_convert_strs_in(v, conv) for v in o]
+    return o
+
+
+def _apply_template(jinja_env, rctx, template):
+    """Apply jinja2 templating to the template string `template` via the jinja
+    environment `jinja_env`, passing a dictionary containing top-level context
+    to render into the template.
+    """
+    if '{{' in template or '{%' in template:
+        return jinja_env.from_string(template).render(**rctx)
+    return template
+
+
+def _template_transform(ctx, config, target):
+    """Apply jinja2 based templates to strings within the target object,
+    returning a transformed target. Target objects may be a list or dict or
+    str.
+
+    Note that only string values in the list or dict objects are modified.
+    Therefore one can read & parse yaml or json that contain templates in
+    string values without the risk of changing the structure of the yaml/json.
+    """
+    jenv = getattr(ctx, '_jinja_env', None)
+    if jenv is None:
+        loader = jinja2.BaseLoader()
+        jenv = jinja2.Environment(loader=loader)
+        jenv.filters['role_to_remote'] = _role_to_remote
+        setattr(ctx, '_jinja_env', jenv)
+    rctx = dict(ctx=ctx, config=config, cluster_name=config.get('cluster', ''))
+    _vip_vars(rctx)
+    conv = functools.partial(_apply_template, jenv, rctx)
+    return _convert_strs_in(target, conv)
+
+
+def _vip_vars(rctx):
+    """For backwards compat with the previous subst_vip function."""
+    ctx = rctx['ctx']
+    if 'vnet' in getattr(ctx, 'vip', {}):
+        rctx['VIPPREFIXLEN'] = str(ctx.vip["vnet"].prefixlen)
+        rctx['VIPSUBNET'] = str(ctx.vip["vnet"].network_address)
+    if 'vips' in getattr(ctx, 'vip', {}):
+        vips = ctx.vip['vips']
+        for idx, vip in enumerate(vips):
+            rctx[f'VIP{idx}'] = str(vip)
+
+
+@jinja2.pass_context
+def _role_to_remote(rctx, role):
+    """Return the first remote matching the given role."""
+    ctx = rctx['ctx']
+    for remote, roles in ctx.cluster.remotes.items():
+        if role in roles:
+            return remote
+    return None
 
 
 def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
@@ -51,6 +121,19 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
             ] + args,
         **kwargs
     )
+
+
+def _cephadm_remotes(ctx, log_excluded=False):
+    out = []
+    for remote, roles in ctx.cluster.remotes.items():
+        if any(r.startswith('cephadm.exclude') for r in roles):
+            if log_excluded:
+                log.info(
+                    f'Remote {remote.shortname} excluded from cephadm cluster by role'
+                )
+            continue
+        out.append((remote, roles))
+    return out
 
 
 def build_initial_config(ctx, config):
@@ -79,7 +162,7 @@ def distribute_iscsi_gateway_cfg(ctx, conf_data):
     These will help in iscsi clients with finding trusted_ip_list.
     """
     log.info('Distributing iscsi-gateway.cfg...')
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         remote.write_file(
             path='/etc/ceph/iscsi-gateway.cfg',
             data=conf_data,
@@ -99,43 +182,6 @@ def update_archive_setting(ctx, key, value):
         else:
             info_yaml['archive'] = {key: value}
         yaml.safe_dump(info_yaml, info_file, default_flow_style=False)
-
-
-@contextlib.contextmanager
-def nvmeof_gateway_cfg(ctx, config):
-    source_host = config.get('source')
-    target_host = config.get('target')
-    nvmeof_service = config.get('service')
-    if not (source_host and target_host and nvmeof_service):
-        raise ConfigError('nvmeof_gateway_cfg requires "source", "target", and "service"')
-    remote = list(ctx.cluster.only(source_host).remotes.keys())[0]
-    ip_address = remote.ip_address
-    gateway_name = ""
-    r = remote.run(args=[
-        'systemctl', 'list-units',
-        run.Raw('|'), 'grep', nvmeof_service
-    ], stdout=StringIO())
-    output = r.stdout.getvalue()
-    pattern_str = f"{re.escape(nvmeof_service)}(.*?)(?=\.service)"
-    pattern = re.compile(pattern_str)
-    match = pattern.search(output)
-    if match:
-        gateway_name = match.group()
-    conf_data = dedent(f"""
-        NVMEOF_GATEWAY_IP_ADDRESS={ip_address}
-        NVMEOF_GATEWAY_NAME={gateway_name}
-        """)
-    target_remote = list(ctx.cluster.only(target_host).remotes.keys())[0]
-    target_remote.write_file(
-        path='/etc/ceph/nvmeof.env',
-        data=conf_data,
-        sudo=True
-    )
-
-    try:
-        yield
-    finally:
-        pass
 
 
 @contextlib.contextmanager
@@ -162,7 +208,10 @@ def normalize_hostnames(ctx):
 def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
 
-    if config.get('cephadm_mode') != 'cephadm-package':
+    if 'cephadm_binary_url' in config:
+        url = config['cephadm_binary_url']
+        _download_cephadm(ctx, url)
+    elif config.get('cephadm_mode') != 'cephadm-package':
         if ctx.config.get('redhat'):
             _fetch_cephadm_from_rpm(ctx)
         # TODO: come up with a sensible way to detect if we need an "old, uncompiled"
@@ -270,28 +319,8 @@ def _fetch_cephadm_from_chachra(ctx, config, cluster_name):
             sha1=sha1,
     )
     log.info("Discovered cachra url: %s", url)
-    ctx.cluster.run(
-        args=[
-            'curl', '--silent', '-L', url,
-            run.Raw('>'),
-            ctx.cephadm,
-            run.Raw('&&'),
-            'ls', '-l',
-            ctx.cephadm,
-        ],
-    )
+    _download_cephadm(ctx, url)
 
-    # sanity-check the resulting file and set executable bit
-    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
-    ctx.cluster.run(
-        args=[
-            'test', '-s', ctx.cephadm,
-            run.Raw('&&'),
-            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
-            run.Raw('&&'),
-            'chmod', '+x', ctx.cephadm,
-        ],
-    )
 
 def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
     branch = config.get('compiled_cephadm_branch', 'reef')
@@ -319,6 +348,11 @@ def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
             branch=branch,
     )
     log.info("Discovered cachra url: %s", url)
+    _download_cephadm(ctx, url)
+
+
+def _download_cephadm(ctx, url):
+    log.info("Downloading cephadm from url: %s", url)
     ctx.cluster.run(
         args=[
             'curl', '--silent', '-L', url,
@@ -345,13 +379,14 @@ def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
 
 def _rm_cluster(ctx, cluster_name):
     log.info('Removing cluster...')
-    ctx.cluster.run(args=[
-        'sudo',
-        ctx.cephadm,
-        'rm-cluster',
-        '--fsid', ctx.ceph[cluster_name].fsid,
-        '--force',
-    ])
+    for remote, _ in _cephadm_remotes(ctx):
+        remote.run(args=[
+            'sudo',
+            ctx.cephadm,
+            'rm-cluster',
+            '--fsid', ctx.ceph[cluster_name].fsid,
+            '--force',
+        ])
 
 
 def _rm_cephadm(ctx):
@@ -383,7 +418,7 @@ def ceph_log(ctx, config):
 
     finally:
         log.info('Checking cluster log for badness...')
-        def first_in_ceph_log(pattern, excludes):
+        def first_in_ceph_log(pattern, excludes, only_match):
             """
             Find the first occurrence of the pattern specified in the Ceph log,
             Returns None if none found.
@@ -398,6 +433,8 @@ def ceph_log(ctx, config):
                 '/var/log/ceph/{fsid}/ceph.log'.format(
                     fsid=fsid),
             ]
+            if only_match:
+                args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
             if excludes:
                 for exclude in excludes:
                     args.extend([run.Raw('|'), 'egrep', '-v', exclude])
@@ -413,14 +450,22 @@ def ceph_log(ctx, config):
                 return stdout
             return None
 
+        # NOTE: technically the first and third arg to first_in_ceph_log
+        # are serving a similar purpose here of being something we
+        # look for in the logs. The reason they are separate args is that
+        # we want '\[ERR\]|\[WRN\]|\[SEC\]' to always have to be in the thing
+        # we match even if the test yaml specifies nothing else, and then the
+        # log-only-match options are for when a test only wants to fail on
+        # a specific subset of log lines that '\[ERR\]|\[WRN\]|\[SEC\]' matches
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-ignorelist')) is not None:
+                             config.get('log-ignorelist'),
+                             config.get('log-only-match')) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-ignorelist'])
+                    match = first_in_ceph_log(pattern, config['log-ignorelist'], config.get('log-only-match'))
                     if match is not None:
                         ctx.summary['failure_reason'] = \
                             '"{match}" in cluster log'.format(
@@ -519,22 +564,31 @@ def ceph_crash(ctx, config):
 def pull_image(ctx, config):
     cluster_name = config['cluster']
     log.info(f'Pulling image {ctx.ceph[cluster_name].image} on all hosts...')
-    run.wait(
-        ctx.cluster.run(
-            args=[
-                'sudo',
-                ctx.cephadm,
-                '--image', ctx.ceph[cluster_name].image,
-                'pull',
-            ],
-            wait=False,
-        )
-    )
+    cmd = [
+        'sudo',
+        ctx.cephadm,
+        '--image',
+        ctx.ceph[cluster_name].image,
+        'pull',
+    ]
+    if config.get('registry-login'):
+        registry = config['registry-login']
+        login_cmd = [
+            'sudo',
+            ctx.cephadm,
+            'registry-login',
+            '--registry-url', registry['url'],
+            '--registry-username', registry['username'],
+            '--registry-password', registry['password'],
+        ]
+        cmd = login_cmd + [run.Raw('&&')] + cmd
+    run.wait(ctx.cluster.run(args=cmd, wait=False))
 
     try:
         yield
     finally:
         pass
+
 
 @contextlib.contextmanager
 def setup_ca_signed_keys(ctx, config):
@@ -763,7 +817,7 @@ def ceph_bootstrap(ctx, config):
                    check_status=False)
 
         # add other hosts
-        for remote in ctx.cluster.remotes.keys():
+        for remote, roles in _cephadm_remotes(ctx, log_excluded=True):
             if remote == bootstrap_remote:
                 continue
 
@@ -847,7 +901,7 @@ def ceph_mons(ctx, config):
             # This is the old way of adding mons that works with the (early) octopus
             # cephadm scheduler.
             num_mons = 1
-            for remote, roles in ctx.cluster.remotes.items():
+            for remote, roles in _cephadm_remotes(ctx):
                 for mon in [r for r in roles
                             if teuthology.is_type('mon', cluster_name)(r)]:
                     c_, _, id_ = teuthology.split_role(mon)
@@ -886,7 +940,7 @@ def ceph_mons(ctx, config):
                                 break
         else:
             nodes = []
-            for remote, roles in ctx.cluster.remotes.items():
+            for remote, roles in _cephadm_remotes(ctx):
                 for mon in [r for r in roles
                             if teuthology.is_type('mon', cluster_name)(r)]:
                     c_, _, id_ = teuthology.split_role(mon)
@@ -960,7 +1014,7 @@ def ceph_mgrs(ctx, config):
     try:
         nodes = []
         daemons = {}
-        for remote, roles in ctx.cluster.remotes.items():
+        for remote, roles in _cephadm_remotes(ctx):
             for mgr in [r for r in roles
                         if teuthology.is_type('mgr', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mgr)
@@ -1005,7 +1059,7 @@ def ceph_osds(ctx, config):
         # provision OSDs in numeric order
         id_to_remote = {}
         devs_by_remote = {}
-        for remote, roles in ctx.cluster.remotes.items():
+        for remote, roles in _cephadm_remotes(ctx):
             devs_by_remote[remote] = teuthology.get_scratch_devices(remote)
             for osd in [r for r in roles
                         if teuthology.is_type('osd', cluster_name)(r)]:
@@ -1013,7 +1067,12 @@ def ceph_osds(ctx, config):
                 id_to_remote[int(id_)] = (osd, remote)
 
         cur = 0
+        raw = config.get('raw-osds', False)
         for osd_id in sorted(id_to_remote.keys()):
+            if raw:
+                raise ConfigError(
+                    "raw-osds is only supported without OSD roles"
+                )
             osd, remote = id_to_remote[osd_id]
             _, _, id_ = teuthology.split_role(osd)
             assert int(id_) == cur
@@ -1045,9 +1104,10 @@ def ceph_osds(ctx, config):
             cur += 1
 
         if cur == 0:
-            _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'apply', 'osd', '--all-available-devices',
-            ])
+            osd_cmd = ['ceph', 'orch', 'apply', 'osd', '--all-available-devices']
+            if raw:
+                osd_cmd.extend(['--method', 'raw'])
+            _shell(ctx, cluster_name, remote, osd_cmd)
             # expect the number of scratch devs
             num_osds = sum(map(len, devs_by_remote.values()))
             assert num_osds
@@ -1089,7 +1149,7 @@ def ceph_mdss(ctx, config):
 
     nodes = []
     daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                     if teuthology.is_type('mds', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1166,7 +1226,7 @@ def ceph_monitoring(daemon_type, ctx, config):
 
     nodes = []
     daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                     if teuthology.is_type(daemon_type, cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1202,7 +1262,7 @@ def ceph_rgw(ctx, config):
 
     nodes = {}
     daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                     if teuthology.is_type('rgw', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1245,7 +1305,7 @@ def ceph_iscsi(ctx, config):
     daemons = {}
     ips = []
 
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                      if teuthology.is_type('iscsi', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1373,6 +1433,22 @@ def stop(ctx, config):
     yield
 
 
+def _expand_roles(ctx, config):
+    if 'all-roles' in config and len(config) == 1:
+        a = config['all-roles']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
+    elif 'all-hosts' in config and len(config) == 1:
+        a = config['all-hosts']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
+    elif 'all-roles' in config or 'all-hosts' in config:
+        raise ValueError(
+            'all-roles/all-hosts may not be combined with any other roles'
+        )
+    return config
+
+
 def shell(ctx, config):
     """
     Execute (shell) commands
@@ -1385,28 +1461,63 @@ def shell(ctx, config):
     for k in config.pop('volumes', []):
         args.extend(['-v', k])
 
-    if 'all-roles' in config and len(config) == 1:
-        a = config['all-roles']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
-    elif 'all-hosts' in config and len(config) == 1:
-        a = config['all-hosts']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
-
+    config = _expand_roles(ctx, config)
+    config = _template_transform(ctx, config, config)
     for role, cmd in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
         if isinstance(cmd, list):
-            for c in cmd:
-                _shell(ctx, cluster_name, remote,
-                       ['bash', '-c', subst_vip(ctx, c)],
-                       extra_cephadm_args=args)
+            for cobj in cmd:
+                sh_cmd, stdin = _shell_command(cobj)
+                _shell(
+                    ctx,
+                    cluster_name,
+                    remote,
+                    ['bash', '-c', sh_cmd],
+                    extra_cephadm_args=args,
+                    stdin=stdin,
+                )
+
         else:
             assert isinstance(cmd, str)
             _shell(ctx, cluster_name, remote,
-                   ['bash', '-ex', '-c', subst_vip(ctx, cmd)],
+                   ['bash', '-ex', '-c', cmd],
                    extra_cephadm_args=args)
+
+
+def _shell_command(obj):
+    if isinstance(obj, str):
+        return obj, None
+    if isinstance(obj, dict):
+        cmd = obj['cmd']
+        stdin = obj.get('stdin', None)
+        return cmd, stdin
+    raise ValueError(f'invalid command item: {obj!r}')
+
+
+def exec(ctx, config):
+    """
+    This is similar to the standard 'exec' task, but does template substitutions.
+
+    TODO: this should probably be moved out of cephadm.py as it's pretty generic.
+    """
+    assert isinstance(config, dict), "task exec got invalid config"
+    testdir = teuthology.get_testdir(ctx)
+    config = _expand_roles(ctx, config)
+    for role, ls in config.items():
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        log.info('Running commands on role %s host %s', role, remote.name)
+        for c in ls:
+            c.replace('$TESTDIR', testdir)
+            remote.run(
+                args=[
+                    'sudo',
+                    'TESTDIR={tdir}'.format(tdir=testdir),
+                    'bash',
+                    '-ex',
+                    '-c',
+                    _template_transform(ctx, config, c)],
+                )
 
 
 def apply(ctx, config):
@@ -1431,7 +1542,8 @@ def apply(ctx, config):
     cluster_name = config.get('cluster', 'ceph')
 
     specs = config.get('specs', [])
-    y = subst_vip(ctx, yaml.dump_all(specs))
+    specs = _template_transform(ctx, config, specs)
+    y = yaml.dump_all(specs)
 
     log.info(f'Applying spec(s):\n{y}')
     _shell(
@@ -1439,6 +1551,20 @@ def apply(ctx, config):
         ['ceph', 'orch', 'apply', '-i', '-'],
         stdin=y,
     )
+
+
+
+def _orch_ls(ctx, cluster_name):
+    r = _shell(
+        ctx=ctx,
+        cluster_name=cluster_name,
+        remote=ctx.ceph[cluster_name].bootstrap_remote,
+        args=[
+            'ceph', 'orch', 'ls', '-f', 'json',
+        ],
+        stdout=StringIO(),
+    )
+    return json.loads(r.stdout.getvalue())
 
 
 def wait_for_service(ctx, config):
@@ -1461,16 +1587,7 @@ def wait_for_service(ctx, config):
     )
     with contextutil.safe_while(sleep=1, tries=timeout) as proceed:
         while proceed():
-            r = _shell(
-                ctx=ctx,
-                cluster_name=cluster_name,
-                remote=ctx.ceph[cluster_name].bootstrap_remote,
-                args=[
-                    'ceph', 'orch', 'ls', '-f', 'json',
-                ],
-                stdout=StringIO(),
-            )
-            j = json.loads(r.stdout.getvalue())
+            j = _orch_ls(ctx, cluster_name)
             svc = None
             for s in j:
                 if s['service_name'] == service:
@@ -1482,6 +1599,28 @@ def wait_for_service(ctx, config):
                 )
                 if s['status']['running'] == s['status']['size']:
                     break
+
+
+def wait_for_service_not_present(ctx, config):
+    """Wait for a service to not be present.
+    Note that this doesn't ensure that the service was previously present.
+    """
+    cluster_name = config.get('cluster', 'ceph')
+    timeout = config.get('timeout', 120)
+    service = config.get('service')
+    assert service
+
+    log.info(
+        f'Waiting for {cluster_name} service {service} to be not present'
+        ' in service list'
+    )
+    with contextutil.safe_while(sleep=1, tries=timeout) as proceed:
+        while proceed():
+            j = _orch_ls(ctx, cluster_name)
+            services = {s['service_name'] for s in j}
+            log.debug('checking if %r in %r', service, services)
+            if service not in services:
+                break
 
 
 @contextlib.contextmanager
@@ -1578,7 +1717,7 @@ def distribute_config_and_admin_keyring(ctx, config):
     """
     cluster_name = config['cluster']
     log.info('Distributing (final) config and client.admin keyring...')
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         remote.write_file(
             '/etc/ceph/{}.conf'.format(cluster_name),
             ctx.ceph[cluster_name].config_file,
@@ -1671,7 +1810,7 @@ def initialize_config(ctx, config):
 
     # mon ips
     log.info('Choosing monitor IPs and ports...')
-    remotes_and_roles = ctx.cluster.remotes.items()
+    remotes_and_roles = _cephadm_remotes(ctx)
     ips = [host for (host, port) in
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
 
@@ -1722,6 +1861,292 @@ def initialize_config(ctx, config):
         log.info('First mgr is %s' % (first_mgr))
         ctx.ceph[cluster_name].first_mgr = first_mgr
     yield
+
+
+def _disable_systemd_resolved(ctx, remote):
+    r = remote.run(args=['ss', '-lunH'], stdout=StringIO())
+    # this heuristic tries to detect if systemd-resolved is running
+    if '%lo:53' not in r.stdout.getvalue():
+        return
+    log.info('Disabling systemd-resolved on %s', remote.shortname)
+    # Samba AD DC container DNS support conflicts with resolved stub
+    # resolver when using host networking. And we want host networking
+    # because it is the simplest thing to set up.  We therefore will turn
+    # off the stub resolver.
+    r = remote.run(
+        args=['sudo', 'cat', '/etc/systemd/resolved.conf'],
+        stdout=StringIO(),
+    )
+    resolved_conf = r.stdout.getvalue()
+    setattr(ctx, 'orig_resolved_conf', resolved_conf)
+    new_resolved_conf = (
+        resolved_conf + '\n# EDITED BY TEUTHOLOGY: deploy_samba_ad_dc\n'
+    )
+    if '[Resolve]' not in new_resolved_conf.splitlines():
+        new_resolved_conf += '[Resolve]\n'
+    new_resolved_conf += 'DNSStubListener=no\n'
+    remote.write_file(
+        path='/etc/systemd/resolved.conf',
+        data=new_resolved_conf,
+        sudo=True,
+    )
+    remote.run(args=['sudo', 'systemctl', 'restart', 'systemd-resolved'])
+    r = remote.run(args=['ss', '-lunH'], stdout=StringIO())
+    assert '%lo:53' not in r.stdout.getvalue()
+    # because docker is a big fat persistent deamon, we need to bounce it
+    # after resolved is restarted
+    remote.run(args=['sudo', 'systemctl', 'restart', 'docker'])
+
+
+def _reset_systemd_resolved(ctx, remote):
+    orig_resolved_conf = getattr(ctx, 'orig_resolved_conf', None)
+    if not orig_resolved_conf:
+        return  # no orig_resolved_conf means nothing to reset
+    log.info('Resetting systemd-resolved state on %s', remote.shortname)
+    remote.write_file(
+        path='/etc/systemd/resolved.conf',
+        data=orig_resolved_conf,
+        sudo=True,
+    )
+    remote.run(args=['sudo', 'systemctl', 'restart', 'systemd-resolved'])
+    setattr(ctx, 'orig_resolved_conf', None)
+
+
+def _samba_ad_dc_conf(ctx, remote, cengine):
+    # this config has not been tested outside of smithi nodes. it's possible
+    # that this will break when used elsewhere because we have to list
+    # interfaces explicitly. Later I may add a feature to sambacc to exclude
+    # known-unwanted interfaces that having to specify known good interfaces.
+    cf = {
+        "samba-container-config": "v0",
+        "configs": {
+            "demo": {
+                "instance_features": ["addc"],
+                "domain_settings": "sink",
+                "instance_name": "dc1",
+            }
+        },
+        "domain_settings": {
+            "sink": {
+                "realm": "DOMAIN1.SINK.TEST",
+                "short_domain": "DOMAIN1",
+                "admin_password": "Passw0rd",
+                "interfaces": {
+                    "exclude_pattern": "^docker[0-9]+$",
+                },
+            }
+        },
+        "domain_groups": {
+            "sink": [
+                {"name": "supervisors"},
+                {"name": "employees"},
+                {"name": "characters"},
+                {"name": "bulk"},
+            ]
+        },
+        "domain_users": {
+            "sink": [
+                {
+                    "name": "bwayne",
+                    "password": "1115Rose.",
+                    "given_name": "Bruce",
+                    "surname": "Wayne",
+                    "member_of": ["supervisors", "characters", "employees"],
+                },
+                {
+                    "name": "ckent",
+                    "password": "1115Rose.",
+                    "given_name": "Clark",
+                    "surname": "Kent",
+                    "member_of": ["characters", "employees"],
+                },
+                {
+                    "name": "user0",
+                    "password": "1115Rose.",
+                    "given_name": "George0",
+                    "surname": "Hue-Sir",
+                    "member_of": ["bulk"],
+                },
+                {
+                    "name": "user1",
+                    "password": "1115Rose.",
+                    "given_name": "George1",
+                    "surname": "Hue-Sir",
+                    "member_of": ["bulk"],
+                },
+                {
+                    "name": "user2",
+                    "password": "1115Rose.",
+                    "given_name": "George2",
+                    "surname": "Hue-Sir",
+                    "member_of": ["bulk"],
+                },
+                {
+                    "name": "user3",
+                    "password": "1115Rose.",
+                    "given_name": "George3",
+                    "surname": "Hue-Sir",
+                    "member_of": ["bulk"],
+                },
+            ]
+        },
+    }
+    cf_json = json.dumps(cf)
+    remote.run(args=['sudo', 'mkdir', '-p', '/var/tmp/samba'])
+    remote.write_file(
+        path='/var/tmp/samba/container.json', data=cf_json, sudo=True
+    )
+    return [
+        '--volume=/var/tmp/samba:/etc/samba-container:ro',
+        '-eSAMBACC_CONFIG=/etc/samba-container/container.json',
+    ]
+
+
+@contextlib.contextmanager
+def configure_samba_client_container(ctx, config):
+    # TODO: deduplicate logic between this task and deploy_samba_ad_dc
+    role = config.get('role')
+    samba_client_image = config.get(
+        'samba_client_image', 'quay.io/samba.org/samba-client:latest'
+    )
+    if not role:
+        raise ConfigError(
+            "you must specify a role to discover container engine / pull image"
+        )
+    (remote,) = ctx.cluster.only(role).remotes.keys()
+    cengine = 'podman'
+    try:
+        log.info("Testing if podman is available")
+        remote.run(args=['sudo', cengine, '--help'])
+    except CommandFailedError:
+        log.info("Failed to find podman. Using docker")
+        cengine = 'docker'
+
+    remote.run(args=['sudo', cengine, 'pull', samba_client_image])
+    samba_client_container_cmd = [
+        'sudo',
+        cengine,
+        'run',
+        '--rm',
+        '--net=host',
+        '-eKRB5_CONFIG=/dev/null',
+        samba_client_image,
+    ]
+
+    setattr(ctx, 'samba_client_container_cmd', samba_client_container_cmd)
+    try:
+        yield
+    finally:
+        setattr(ctx, 'samba_client_container_cmd', None)
+
+
+@contextlib.contextmanager
+def deploy_samba_ad_dc(ctx, config):
+    role = config.get('role')
+    ad_dc_image = config.get(
+        'ad_dc_image', 'quay.io/samba.org/samba-ad-server:latest'
+    )
+    samba_client_image = config.get(
+        'samba_client_image', 'quay.io/samba.org/samba-client:latest'
+    )
+    test_user_pass = config.get('test_user_pass', 'DOMAIN1\\ckent%1115Rose.')
+    if not role:
+        raise ConfigError(
+            "you must specify a role to allocate a host for the AD DC"
+        )
+    (remote,) = ctx.cluster.only(role).remotes.keys()
+    ip = remote.ssh.get_transport().getpeername()[0]
+    cengine = 'podman'
+    try:
+        log.info("Testing if podman is available")
+        remote.run(args=['sudo', cengine, '--help'])
+    except CommandFailedError:
+        log.info("Failed to find podman. Using docker")
+        cengine = 'docker'
+    remote.run(args=['sudo', cengine, 'pull', ad_dc_image])
+    remote.run(args=['sudo', cengine, 'pull', samba_client_image])
+    _disable_systemd_resolved(ctx, remote)
+    remote.run(
+        args=[
+            'sudo',
+            'mkdir',
+            '-p',
+            '/var/lib/samba/container/logs',
+            '/var/lib/samba/container/data',
+        ]
+    )
+    remote.run(
+        args=[
+            'sudo',
+            cengine,
+            'run',
+            '-d',
+            '--name=samba-ad',
+            '--network=host',
+            '--privileged',
+        ]
+        + _samba_ad_dc_conf(ctx, remote, cengine)
+        + [ad_dc_image]
+    )
+
+    # test that the ad dc is running and basically works
+    connected = False
+    samba_client_container_cmd = [
+        'sudo',
+        cengine,
+        'run',
+        '--rm',
+        '--net=host',
+        f'--dns={ip}',
+        '-eKRB5_CONFIG=/dev/null',
+        samba_client_image,
+    ]
+    for idx in range(10):
+        time.sleep((2 ** (1 + idx)) / 8)
+        log.info("Probing SMB status of DC %s, idx=%s", ip, idx)
+        cmd = samba_client_container_cmd + [
+            'smbclient',
+            '-U',
+            test_user_pass,
+            '//domain1.sink.test/sysvol',
+            '-c',
+            'ls',
+        ]
+        try:
+            remote.run(args=cmd)
+            connected = True
+            log.info("SMB status probe succeeded")
+            break
+        except CommandFailedError:
+            pass
+    if not connected:
+        raise RuntimeError('failed to connect to AD DC SMB share')
+
+    setattr(ctx, 'samba_ad_dc_ip', ip)
+    setattr(ctx, 'samba_client_container_cmd', samba_client_container_cmd)
+    try:
+        yield
+    finally:
+        try:
+            remote.run(args=['sudo', cengine, 'stop', 'samba-ad'])
+        except CommandFailedError:
+            log.error("Failed to stop samba-ad container")
+        try:
+            remote.run(args=['sudo', cengine, 'rm', 'samba-ad'])
+        except CommandFailedError:
+            log.error("Failed to remove samba-ad container")
+        remote.run(
+            args=[
+                'sudo',
+                'rm',
+                '-rf',
+                '/var/lib/samba/container/logs',
+                '/var/lib/samba/container/data',
+            ]
+        )
+        _reset_systemd_resolved(ctx, remote)
+        setattr(ctx, 'samba_ad_dc_ip', None)
+        setattr(ctx, 'samba_client_container_cmd', None)
 
 
 @contextlib.contextmanager

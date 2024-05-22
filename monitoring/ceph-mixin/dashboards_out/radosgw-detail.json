@@ -114,14 +114,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_get_initial_lat_count{job=~\"$job\"}[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_op_get_obj_lat_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n    rate(ceph_rgw_op_get_obj_lat_count{cluster=~\"$cluster\", }[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GET {{ceph_daemon}}",
                "refId": "A"
             },
             {
-               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_put_initial_lat_count{job=~\"$job\"}[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_op_put_obj_lat_sum{cluster=~\"$cluster\", }[$__rate_interval]) /\n    rate(ceph_rgw_op_put_obj_lat_count{cluster=~\"$cluster\", }[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUT {{ceph_daemon}}",
@@ -216,14 +216,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_get_b{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_op_get_obj_bytes{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GETs {{ceph_daemon}}",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_put_b{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon)\n  ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_op_put_obj_bytes{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon)\n  ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUTs {{ceph_daemon}}",
@@ -324,28 +324,28 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_failed_req{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\",ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_failed_req{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Requests Failed {{ceph_daemon}}",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_get{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_get{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GETs {{ceph_daemon}}",
                "refId": "B"
             },
             {
-               "expr": "rate(ceph_rgw_put{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_put{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUTs {{ceph_daemon}}",
                "refId": "C"
             },
             {
-               "expr": "(\n  rate(ceph_rgw_req{job=~\"$job\"}[$__rate_interval]) -\n    (\n      rate(ceph_rgw_get{job=~\"$job\"}[$__rate_interval]) +\n        rate(ceph_rgw_put{job=~\"$job\"}[$__rate_interval])\n    )\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "(\n  rate(ceph_rgw_req{cluster=~\"$cluster\", }[$__rate_interval]) -\n    (\n      rate(ceph_rgw_get{cluster=~\"$cluster\", }[$__rate_interval]) +\n        rate(ceph_rgw_put{cluster=~\"$cluster\", }[$__rate_interval])\n    )\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Other {{ceph_daemon}}",
@@ -389,15 +389,100 @@
          ]
       },
       {
-         "aliasColors": {
-            "Failures": "#bf1b00",
-            "GETs": "#7eb26d",
-            "Other (HEAD,POST,DELETE)": "#447ebc",
-            "PUTs": "#eab839",
-            "Requests": "#3f2b5b"
-         },
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Failures"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#bf1b00",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "GETs"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#7eb26d",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Other (HEAD,POST,DELETE)"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#447ebc",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "PUTs"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#eab839",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Requests"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#3f2b5b",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -405,37 +490,55 @@
             "y": 1
          },
          "id": 6,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [ ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
-               "expr": "rate(ceph_rgw_failed_req{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_failed_req{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Failures {{ceph_daemon}}",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_get{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_get{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GETs {{ceph_daemon}}",
                "refId": "B"
             },
             {
-               "expr": "rate(ceph_rgw_put{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_put{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUTs {{ceph_daemon}}",
                "refId": "C"
             },
             {
-               "expr": "(\n  rate(ceph_rgw_req{job=~\"$job\"}[$__rate_interval]) -\n    (\n      rate(ceph_rgw_get{job=~\"$job\"}[$__rate_interval]) +\n        rate(ceph_rgw_put{job=~\"$job\"}[$__rate_interval])\n    )\n) * on (instance_id) group_left (ceph_daemon)\n  ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "(\n  rate(ceph_rgw_req{cluster=~\"$cluster\", }[$__rate_interval]) -\n    (\n      rate(ceph_rgw_get{cluster=~\"$cluster\", }[$__rate_interval]) +\n        rate(ceph_rgw_put{cluster=~\"$cluster\", }[$__rate_interval])\n    )\n) * on (instance_id) group_left (ceph_daemon)\n  ceph_rgw_metadata{ceph_daemon=~\"$rgw_servers\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Other (DELETE,LIST) {{ceph_daemon}}",
@@ -443,8 +546,7 @@
             }
          ],
          "title": "Workload Breakdown",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       }
    ],
    "refresh": "30s",
@@ -472,36 +574,16 @@
             "type": "datasource"
          },
          {
-            "allValue": ".+",
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 2,
-            "includeAll": true,
-            "label": "cluster",
-            "multi": true,
-            "name": "cluster",
-            "options": [ ],
-            "query": "label_values(ceph_osd_metadata, cluster)",
-            "refresh": 1,
-            "regex": "(.*)",
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
-         {
-            "allValue": ".+",
+            "allValue": null,
             "current": { },
             "datasource": "$datasource",
             "hide": 0,
-            "includeAll": true,
-            "label": "job",
-            "multi": true,
-            "name": "job",
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{}, job)",
+            "query": "label_values(ceph_health_status, cluster)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,
@@ -521,7 +603,7 @@
             "multi": false,
             "name": "rgw_servers",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata{job=~\"$job\"}, ceph_daemon)",
+            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster\", }, ceph_daemon)",
             "refresh": 1,
             "regex": "",
             "sort": 1,

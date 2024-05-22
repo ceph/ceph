@@ -5,6 +5,13 @@
 # abort on failure
 set -e
 
+# flush local redis server
+pid=`ps -ef | grep "redis-server"  | grep -v grep | awk -F' ' '{print $2}'`
+if [[ -n $pid ]]; then
+    echo "Flushing redis-server."
+    redis-cli FLUSHALL
+fi
+
 quoted_print() {
     for s in "$@"; do
         if [[ "$s" =~ \  ]]; then
@@ -175,6 +182,9 @@ pmem_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 force_addr=0
+osds_per_host=0
+require_osd_and_client_version=""
+use_crush_tunables=""
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
@@ -263,6 +273,9 @@ options:
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
+	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
+	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
+	--use-crush-tunables: if supplied, set tunables to specified value
 \n
 EOF
 
@@ -594,6 +607,21 @@ case $1 in
         with_jaeger=1
         echo "with_jaeger $with_jaeger"
         ;;
+    --osds-per-host)
+        osds_per_host="$2"
+        shift
+        echo "osds_per_host $osds_per_host"
+        ;;
+    --require-osd-and-client-version)
+        require_osd_and_client_version="$2"
+        shift
+        echo "require_osd_and_client_version $require_osd_and_client_version"
+        ;;
+    --use-crush-tunables)
+        use_crush_tunables="$2"
+        shift
+        echo "use_crush_tunables $use_crush_tunables"
+        ;;
     *)
         usage_exit
 esac
@@ -688,6 +716,7 @@ do_rgw_conf() {
         rgw frontends = $rgw_frontend port=${current_port}${flight_conf:+,arrow_flight}
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
         debug rgw_flight = 20
+        debug rgw_notification = 20
 EOF
         current_port=$((current_port + 1))
         unset flight_conf
@@ -873,6 +902,8 @@ $CCLIENTDEBUG
         rgw crypt s3 kms backend = testing
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
+        rgw sts key = abcdefghijklmnop
+        rgw s3 auth use sts = true
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
@@ -1082,6 +1113,15 @@ EOF
     if [ "$crimson" -eq 1 ]; then
         $CEPH_BIN/ceph osd set-allow-crimson --yes-i-really-mean-it
     fi
+
+    if [ -n "$require_osd_and_client_version" ]; then
+        $CEPH_BIN/ceph osd set-require-min-compat-client $require_osd_and_client_version
+        $CEPH_BIN/ceph osd require-osd-release $require_osd_and_client_version --yes-i-really-mean-it
+    fi
+
+    if [ -n "$use_crush_tunables" ]; then
+        $CEPH_BIN/ceph osd crush tunables $use_crush_tunables
+    fi
 }
 
 start_osd() {
@@ -1109,6 +1149,13 @@ start_osd() {
 [osd.$osd]
         host = $HOSTNAME
 EOF
+
+            if [ "$osds_per_host" -gt 0 ]; then
+                wconf <<EOF
+        crush location = root=default host=$HOSTNAME-$(echo "$osd / $osds_per_host" | bc)
+EOF
+            fi
+
             if [ "$spdk_enabled" -eq 1 ]; then
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
@@ -1460,7 +1507,7 @@ EOF
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
-        prun env CEPH_CONF="${conf_fn}" ganesha.nfsd -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" ganesha.nfsd -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_EVENT
 
         # Wait few seconds for grace period to be removed
         sleep 2
@@ -1595,11 +1642,6 @@ osd_debug_op_order = true
 osd_debug_misdirected_ops = true
 osd_copyfrom_max_chunk = 524288
 
-[mds]
-mds_debug_frag = true
-mds_debug_auth_pins = true
-mds_debug_subtrees = true
-
 [mgr]
 mgr/telemetry/nag = false
 mgr/telemetry/enable = false
@@ -1636,6 +1678,9 @@ debug_monc = 20
 debug_mgrc = 20
 mds_debug_scatterstat = true
 mds_verify_scatter = true
+mds_debug_frag = true
+mds_debug_auth_pins = true
+mds_debug_subtrees = true
 EOF
     fi
     if [ "$cephadm" -gt 0 ]; then
@@ -1772,12 +1817,13 @@ do_rgw_create_users()
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
     debug echo "setting up s3-test users"
+
     $CEPH_BIN/radosgw-admin user create \
         --uid 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
         --access-key ABCDEFGHIJKLMNOPQRST \
         --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
         --display-name youruseridhere \
-        --email s3@example.com --caps="user-policy=*" -c $conf_fn > /dev/null
+        --email s3@example.com --caps="roles=*;user-policy=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
         --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
         --access-key NOPQRSTUVWXYZABCDEFG \
@@ -1791,6 +1837,28 @@ do_rgw_create_users()
         --secret opqrstuvwxyzabcdefghijklmnopqrstuvwxyzab \
         --display-name tenanteduser \
         --email tenanteduser@example.com -c $conf_fn > /dev/null
+
+    if [ "$rgw_store" == "rados" ] ; then
+        # create accounts/users for iam s3tests
+        a1_akey='AAAAAAAAAAAAAAAAAAaa'
+        a1_skey='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $CEPH_BIN/radosgw-admin account create --account-id RGW11111111111111111 --account-name Account1 --email account1@ceph.com -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1root --account-root \
+            --display-name 'Account1Root' --access-key $a1_akey --secret $a1_skey -c $conf_fn > /dev/null
+
+        a2_akey='BBBBBBBBBBBBBBBBBBbb'
+        a2_skey='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        $CEPH_BIN/radosgw-admin account create --account-id RGW22222222222222222 --account-name Account2 --email account2@ceph.com -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user create --account-id RGW22222222222222222 --uid testacct2root --account-root \
+            --display-name 'Account2Root' --access-key $a2_akey --secret $a2_skey -c $conf_fn > /dev/null
+
+        a1u_akey='CCCCCCCCCCCCCCCCCCcc'
+        a1u_skey='cccccccccccccccccccccccccccccccccccccccc'
+        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1user \
+            --display-name 'Account1User' --access-key $a1u_akey --secret $a1u_skey -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user policy attach --uid testacct1user \
+            --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess -c $conf_fn > /dev/null
+    fi
 
     # Create Swift user
     debug echo "setting up user tester"

@@ -50,16 +50,33 @@ int WnbdHandler::wait()
 {
   int err = 0;
   if (started && wnbd_disk) {
-    dout(10) << __func__ << ": waiting" << dendl;
+    dout(10) << "waiting for WNBD mapping: " << instance_name << dendl;
 
     err = WnbdWaitDispatcher(wnbd_disk);
     if (err) {
-      derr << __func__ << " failed waiting for dispatcher to stop: "
-           << err << dendl;
+      derr << __func__ << ": failed waiting for dispatcher to stop: "
+           << instance_name
+           << ". Error: " << err << dendl;
+    } else {
+      dout(10) << "WNBD mapping disconnected: " << instance_name << dendl;
     }
   }
 
   return err;
+}
+
+WnbdAdminHook::WnbdAdminHook(WnbdHandler *handler, AdminSocket* admin_socket)
+  : m_handler(handler)
+  , m_admin_socket(admin_socket)
+{
+  if (m_admin_socket) {
+    m_admin_socket->register_command(
+      std::string("wnbd stats ") + m_handler->instance_name,
+      this, "get WNBD stats");
+  } else {
+    dout(0) << "no admin socket provided, skipped registering wnbd hooks"
+            << dendl;
+  }
 }
 
 int WnbdAdminHook::call (
@@ -69,7 +86,7 @@ int WnbdAdminHook::call (
   std::ostream& errss,
   bufferlist& out)
 {
-  if (command == "wnbd stats") {
+  if (command == "wnbd stats " + m_handler->instance_name) {
     return m_handler->dump_stats(f);
   }
   return -ENOSYS;

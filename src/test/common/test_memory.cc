@@ -30,11 +30,11 @@ TEST_P(MemoryIsZeroBigTest, MemoryIsZeroTestBig) {
 TEST_P(MemoryIsZeroSmallTest, MemoryIsZeroTestSmall) {
   size_t size = GetParam();
   for (size_t i = 0; i < size; i++) {
-    char* data = new char[size]();
-    EXPECT_TRUE(mem_is_zero(data, size));
+    auto data = std::make_unique<char[]>(size);
+    EXPECT_TRUE(mem_is_zero(data.get(), size));
 
     data[i] = 'a';
-    EXPECT_FALSE(mem_is_zero(data, size));
+    EXPECT_FALSE(mem_is_zero(data.get(), size));
   }
 }
 

@@ -10,6 +10,7 @@ from ceph_volume.api import lvm as api
 from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int, merge_dict
 from ceph_volume.util.device import Device
 from ceph_volume.systemd import systemctl
+from typing import List
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)

@@ -112,10 +112,16 @@ def check_sanity():
             sources=[tmp_file],
             output_dir=tmp_dir
         )
+        ldflags = os.environ.get('LDFLAGS')
+        if ldflags:
+            extra_postargs = ldflags.split()
+        else:
+            extra_postargs = None
         compiler.link_executable(
             objects=link_objects,
             output_progname=os.path.join(tmp_dir, 'rados_dummy'),
             libraries=['rados'],
+            extra_postargs=extra_postargs,
             output_dir=tmp_dir,
         )
 

@@ -17,6 +17,7 @@
 
 #include "acconfig.h"
 
+#include <tuple>
 #include <unistd.h>
 
 #include <atomic>
@@ -32,6 +33,7 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/circular_buffer.hpp>
+#include <utility>
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -192,6 +194,11 @@ enum {
   l_bluestore_omap_iterator_count,
   l_bluestore_omap_rmkeys_count,
   l_bluestore_omap_rmkey_ranges_count,
+  l_bluestore_omap_setheader_count,
+  l_bluestore_omap_setheader_bytes,
+  l_bluestore_omap_setkeys_count,
+  l_bluestore_omap_setkeys_records,
+  l_bluestore_omap_setkeys_bytes,
   //****************************************
 
   // other client ops latencies
@@ -311,6 +318,20 @@ public:
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
 
+    Buffer(Buffer &&other) {
+      std::swap(space, other.space);
+      std::swap(state, other.state);
+      std::swap(cache_private, other.cache_private);
+      std::swap(flags, other.flags);
+      std::swap(seq, other.seq);
+      std::swap(offset, other.offset);
+      std::swap(length, other.length);
+      std::swap(data, other.data);
+      std::swap(cache_age_bin, other.cache_age_bin);
+      lru_item.swap_nodes(other.lru_item);
+      state_item.swap_nodes(other.state_item);
+    }
+
     bool is_empty() const {
       return state == STATE_EMPTY;
     }
@@ -366,7 +387,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    mempool::bluestore_cache_meta::map<uint32_t, std::unique_ptr<Buffer>>
+    mempool::bluestore_cache_meta::map<uint32_t, Buffer>
       buffer_map;
 
     // we use a bare intrusive list here instead of std::map because
@@ -379,56 +400,63 @@ public:
       ceph_assert(writing.empty());
     }
 
-    void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
+    void _add_buffer(BufferCacheShard *cache, BufferSpace *space, Buffer&& buffer,
+                     uint16_t cache_private, int level, Buffer *near) {
+      auto it = buffer_map.emplace(buffer.offset, std::move(buffer));
+      Buffer *cached_buffer = &it.first->second;
+      cached_buffer->cache_private = cache_private;
+      _add_buffer(cache, space, cached_buffer, level, near);
+    }
+
+    void _add_buffer(BufferCacheShard *cache, BufferSpace *space,
+                     Buffer *buffer, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
-      buffer_map[b->offset].reset(b);
-      if (b->is_writing()) {
+      if (buffer->is_writing()) {
         // we might get already cached data for which resetting mempool is inppropriate
         // hence calling try_assign_to_mempool
-        b->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
-        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
-          writing.push_back(*b);
+        buffer->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
+        if (writing.empty() || writing.rbegin()->seq <= buffer->seq) {
+          writing.push_back(*buffer);
         } else {
           auto it = writing.begin();
-          while (it->seq < b->seq) {
+          while (it->seq < buffer->seq) {
             ++it;
           }
 
-          ceph_assert(it->seq >= b->seq);
+          ceph_assert(it->seq >= buffer->seq);
           // note that this will insert b before it
           // hence the order is maintained
-          writing.insert(it, *b);
+          writing.insert(it, *buffer);
         }
       } else {
-        b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-        cache->_add(b, level, near);
+        buffer->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+        cache->_add(buffer, level, near);
       }
       cache->_audit("_add_buffer end");
     }
     void _rm_buffer(BufferCacheShard* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator
+    std::map<uint32_t, Buffer>::iterator
     _rm_buffer(BufferCacheShard* cache,
-		    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
+		    std::map<uint32_t, Buffer>::iterator p) {
       ceph_assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
-      if (p->second->is_writing()) {
-        writing.erase(writing.iterator_to(*p->second));
+      if (p->second.is_writing()) {
+        writing.erase(writing.iterator_to(p->second));
       } else {
-	cache->_rm(p->second.get());
+	cache->_rm(&p->second);
       }
       p = buffer_map.erase(p);
       cache->_audit("_rm_buffer end");
       return p;
     }
 
-    std::map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
-      uint32_t offset) {
+    std::map<uint32_t, Buffer>::iterator _data_lower_bound(uint32_t offset) {
       auto i = buffer_map.lower_bound(offset);
       if (i != buffer_map.begin()) {
 	--i;
-	if (i->first + i->second->length <= offset)
+	if (i->first + i->second.length <= offset)
 	  ++i;
       }
       return i;
@@ -449,18 +477,22 @@ public:
     void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
-      Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
-			     flags);
-      b->cache_private = _discard(cache, offset, bl.length());
-      _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      uint16_t cache_private = _discard(cache, offset, bl.length());
+      _add_buffer(cache, this,
+                  Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+                                   flags),
+                  cache_private, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1,
+                  nullptr);
       cache->_trim();
     }
     void _finish_write(BufferCacheShard* cache, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
-      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
-      b->cache_private = _discard(cache, offset, bl.length());
-      _add_buffer(cache, b, 1, nullptr);
+      uint16_t cache_private = _discard(cache, offset, bl.length());
+      _add_buffer(
+          cache, this,
+          Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl, 0),
+          cache_private, 1, nullptr);
       cache->_trim();
     }
 
@@ -481,8 +513,8 @@ public:
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
-	ceph_assert(i.first == i.second->offset);
-	i.second->dump(f);
+	ceph_assert(i.first == i.second.offset);
+	i.second.dump(f);
 	f->close_section();
       }
       f->close_section();
@@ -499,13 +531,13 @@ public:
     std::atomic_int nref = {0}; ///< reference count
     bool loaded = false;
 
-    CollectionRef coll;
+    CollectionRef collection;
     union {
       uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
     };
 
-    SharedBlob(Collection *_coll) : coll(_coll), sbid_unloaded(0) {
+    SharedBlob(Collection *_coll) : collection(_coll), sbid_unloaded(0) {
     }
     SharedBlob(uint64_t i, Collection *_coll);
     ~SharedBlob();
@@ -535,10 +567,10 @@ public:
       return l.get_sbid() == r.get_sbid();
     }
     inline BufferCacheShard* get_cache() {
-      return coll ? coll->cache : nullptr;
+      return collection ? collection->cache : nullptr;
     }
     inline SharedBlobSet* get_parent() {
-      return coll ? &(coll->shared_blob_set) : nullptr;
+      return collection ? &(collection->shared_blob_set) : nullptr;
     }
     inline bool is_loaded() const {
       return loaded;
@@ -569,7 +601,7 @@ public:
     void add(Collection* coll, SharedBlob *sb) {
       std::lock_guard l(lock);
       sb_map[sb->get_sbid()] = sb;
-      sb->coll = coll;
+      sb->collection = coll;
     }
 
     bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
@@ -605,17 +637,19 @@ public:
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
-    SharedBlobRef shared_blob;      ///< shared blob state (if any)
+    CollectionRef collection;
 
     void set_shared_blob(SharedBlobRef sb) {
       ceph_assert((bool)sb);
       ceph_assert(!shared_blob);
+      ceph_assert(sb->collection = collection);
       shared_blob = sb;
-      ceph_assert(shared_blob->get_cache());
-      shared_blob->get_cache()->add_blob();
+      ceph_assert(get_cache());
     }
+    Blob(CollectionRef collection) : collection(collection) {}
     BufferSpace bc;
   private:
+    SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
 #ifdef CACHE_BLOB_BL
     mutable ceph::buffer::list blob_bl;     ///< cached encoded blob, blob is dirty if empty
@@ -637,6 +671,15 @@ public:
     bluestore_blob_use_tracker_t& dirty_blob_use_tracker() {
       return used_in_blob;
     }
+
+    const SharedBlobRef& get_shared_blob() const {
+      return shared_blob;
+    }
+
+    SharedBlobRef& get_dirty_shared_blob() {
+      return shared_blob;
+    }
+
     bool is_referenced() const {
       return used_in_blob.is_not_empty();
     }
@@ -648,8 +691,8 @@ public:
       return id >= 0;
     }
 
-    bool can_split() const {
-      std::lock_guard l(shared_blob->get_cache()->lock);
+    bool can_split() {
+      std::lock_guard l(get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
       return get_bc().writing.empty() &&
              used_in_blob.can_split() &&
@@ -722,6 +765,19 @@ public:
       if (--nref == 0)
 	delete this;
     }
+    bool is_shared_loaded() const {
+      return shared_blob && shared_blob->is_loaded();
+    }
+    inline BufferCacheShard* get_cache() {
+      return collection ? collection->cache : nullptr;
+    }
+    uint64_t get_sbid() const {
+      return shared_blob ? shared_blob->get_sbid() : 0;
+    }
+    CollectionRef get_collection() const {
+      return collection;
+    }
+
     ~Blob();
 
 #ifdef CACHE_BLOB_BL
@@ -824,7 +880,7 @@ public:
     }
     ~Extent() {
       if (blob) {
-	blob->shared_blob->get_cache()->rm_extent();
+	blob->get_cache()->rm_extent();
       }
     }
 
@@ -833,7 +889,7 @@ public:
     void assign_blob(const BlobRef& b) {
       ceph_assert(!blob);
       blob = b;
-      blob->shared_blob->get_cache()->add_extent();
+      blob->get_cache()->add_extent();
     }
 
     // comparators for intrusive_set
@@ -1022,7 +1078,7 @@ public:
 
     void bound_encode_spanning_blobs(size_t& p);
     void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
-    BlobRef get_spanning_blob(int id) {
+    BlobRef& get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
       ceph_assert(p != spanning_blob_map.end());
       return p->second;
@@ -1428,19 +1484,19 @@ private:
       _trim_to(0);
     }
 
-    virtual void shift_bins() {
+    void shift_bins() {
       std::lock_guard l(lock);
       age_bins.push_front(std::make_shared<int64_t>(0));
     }
-    virtual uint32_t get_bin_count() {
+    uint32_t get_bin_count() {
       std::lock_guard l(lock);
       return age_bins.capacity();
     }
-    virtual void set_bin_count(uint32_t count) {
+    void set_bin_count(uint32_t count) {
       std::lock_guard l(lock);
       age_bins.set_capacity(count);
     }
-    virtual uint64_t sum_bins(uint32_t start, uint32_t end) {
+    uint64_t sum_bins(uint32_t start, uint32_t end) {
       std::lock_guard l(lock);
       auto size = age_bins.size();
       if (size < start) {
@@ -1609,8 +1665,8 @@ private:
     uint64_t make_blob_unshared(SharedBlob *sb);
 
     BlobRef new_blob() {
-      BlobRef b = new Blob();
-      b->set_shared_blob(new SharedBlob(this));
+      BlobRef b = new Blob(this);
+      b->get_cache()->add_blob();
       return b;
     }
 
@@ -1891,7 +1947,7 @@ private:
     void write_onode(OnodeRef& o) {
       onodes.insert(o);
     }
-    void write_shared_blob(SharedBlobRef &sb) {
+    void write_shared_blob(const SharedBlobRef &sb) {
       shared_blobs.insert(sb);
     }
     void unshare_blob(SharedBlob *sb) {
@@ -2789,6 +2845,29 @@ public:
   using  per_pool_statfs =
     mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
 
+  struct pool_fsck_stats_t {
+    uint64_t num_objects = 0;
+    uint64_t shared_blobs = 0;
+    uint64_t omaps = 0;
+    uint64_t omap_key_size = 0;
+    uint64_t omap_val_size = 0;
+    uint64_t stored = 0;
+    uint64_t allocated = 0;
+
+    void add(const pool_fsck_stats_t& other) {
+      num_objects += other.num_objects;
+      shared_blobs += other.shared_blobs;
+      omaps += other.omaps;
+      omap_key_size += other.omap_key_size;
+      omap_val_size += other.omap_val_size;
+      stored += other.stored;
+      allocated += other.allocated;
+    }
+    friend std::ostream& operator<<(std::ostream& out, const pool_fsck_stats_t& s);
+  };
+  using  per_pool_fsck_stats_t =
+    mempool::bluestore_fsck::map<int64_t, pool_fsck_stats_t>; // pool_id -> stats
+
   enum FSCKDepth {
     FSCK_REGULAR,
     FSCK_DEEP,
@@ -2807,6 +2886,7 @@ private:
     uint64_t granularity,
     BlueStoreRepairer* repairer,
     store_statfs_t& expected_statfs,
+    pool_fsck_stats_t& pool_fsck_stat,
     FSCKDepth depth);
 
   void _fsck_check_statfs(
@@ -2832,7 +2912,7 @@ private:
     uint64_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+    b->dirty_bc().write(b->get_cache(), txc->seq, offset, bl,
 			     flags);
     txc->blobs_written.insert(b);
   }
@@ -2921,13 +3001,19 @@ public:
 
 private:
   int _mount();
+  int _mount_readonly();
+  int _umount_readonly();
+
 public:
+  int mount_readonly() override;
+  int umount_readonly() override;
+
   int mount() override {
     return _mount();
   }
   int umount() override;
 
-  int open_db_environment(KeyValueDB **pdb, bool to_repair);
+  int open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair);
   int close_db_environment();
   BlueFS* get_bluefs();
 
@@ -3718,6 +3804,7 @@ public:
 
     store_statfs_t& expected_store_statfs;
     per_pool_statfs& expected_pool_statfs;
+    per_pool_fsck_stats_t& per_pool_fsck_stats;
     BlueStoreRepairer* repairer;
 
     FSCK_ObjectCtx(int64_t& e,
@@ -3736,6 +3823,7 @@ public:
 		   shared_blob_2hash_tracker_t& _sb_ref_counts,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
+		   per_pool_fsck_stats_t& _per_pool_fsck_stats,
                    BlueStoreRepairer* _repairer) :
       errors(e),
       warnings(w),
@@ -3752,6 +3840,7 @@ public:
       sb_ref_counts(_sb_ref_counts),
       expected_store_statfs(_store_statfs),
       expected_pool_statfs(_pool_statfs),
+      per_pool_fsck_stats(_per_pool_fsck_stats),
       repairer(_repairer) {
     }
   };
@@ -3765,7 +3854,7 @@ public:
     const ceph::buffer::list& value,
     mempool::bluestore_fsck::list<std::string>* expecting_shards,
     std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
-    const BlueStore::FSCK_ObjectCtx& ctx);
+    BlueStore::FSCK_ObjectCtx& ctx);
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();

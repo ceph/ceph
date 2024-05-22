@@ -104,6 +104,8 @@ inline std::ostream& operator<<(std::ostream& out, const std::list<A,Alloc>& ili
 template<class A, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::set<A, Comp, Alloc>& iset);
 template<class A, class Comp, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const std::unordered_set<A, Comp, Alloc>& iset);
+template<class A, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::multiset<A,Comp,Alloc>& iset);
 template<class A, class B, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::map<A,B,Comp,Alloc>& m);
@@ -200,6 +202,17 @@ inline std::ostream& operator<<(std::ostream& out, const std::list<A,Alloc>& ili
 
 template<class A, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::set<A, Comp, Alloc>& iset) {
+  for (auto it = iset.begin();
+       it != iset.end();
+       ++it) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A, class Comp, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const std::unordered_set<A, Comp, Alloc>& iset) {
   for (auto it = iset.begin();
        it != iset.end();
        ++it) {
@@ -513,7 +526,7 @@ struct shard_id_t {
   shard_id_t() : id(0) {}
   constexpr explicit shard_id_t(int8_t _id) : id(_id) {}
 
-  operator int8_t() const { return id; }
+  constexpr operator int8_t() const { return id; }
 
   const static shard_id_t NO_SHARD;
 

@@ -506,7 +506,7 @@ static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int p
     s.append(", ");
 
   if (const auto user = grant.get_user(); user) {
-    s.append("id=\"" + user->id.to_str() + "\"");
+    s.append("id=\"" + to_string(user->id) + "\"");
   } else if (const auto email = grant.get_email(); email) {
     s.append("emailAddress=\"" + email->address + "\"");
   } else if (const auto group = grant.get_group(); group) {

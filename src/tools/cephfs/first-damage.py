@@ -60,6 +60,8 @@ CONF = os.environ.get('CEPH_CONF')
 REPAIR_NOSNAP = None
 
 CEPH_NOSNAP = 0xfffffffe # int32 -2
+ROOT_INODE  = "1.00000000"
+LOST_FOUND_INODE  = "4.00000000"
 
 DIR_PATTERN = re.compile(r'[0-9a-fA-F]{8,}\.[0-9a-fA-F]+')
 
@@ -67,7 +69,7 @@ CACHE = set()
 
 def traverse(MEMO, ioctx):
     for o in ioctx.list_objects():
-        if not DIR_PATTERN.fullmatch(o.key):
+        if not DIR_PATTERN.fullmatch(o.key) and o.key not in [ROOT_INODE, LOST_FOUND_INODE]:
             log.debug("skipping %s", o.key)
             continue
         elif o.key in CACHE:

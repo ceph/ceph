@@ -821,7 +821,7 @@ void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist> 
   }
 }
 
-int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
+int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj, bool force)
 {
   struct stat st;
   mysize_t total;
@@ -845,13 +845,19 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
     bufferlist bl;
     ret = store->getattr(ch, obj, OI_ATTR, bp);
     if (ret < 0) {
-      cerr << "getattr failure object_info " << ret << std::endl;
-      return ret;
+      cerr << "getattr failure: " << cpp_strerror(ret)
+           << " at obj:" << obj
+           << (force ? " IGNORED" : "")
+           << std::endl;
+      if (!force) {
+        return ret;
+      }
+    } else {
+      bl.push_back(bp);
+      decode(objb.oi, bl);
+      if (debug)
+        cerr << "object_info: " << objb.oi << std::endl;
     }
-    bl.push_back(bp);
-    decode(objb.oi, bl);
-    if (debug)
-      cerr << "object_info: " << objb.oi << std::endl;
   }
 
   // NOTE: we include whiteouts, lost, etc.
@@ -869,10 +875,35 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
       len = total;
 
     ret = store->read(ch, obj, offset, len, rawdatabl);
-    if (ret < 0)
-      return ret;
-    if (ret == 0)
-      return -EINVAL;
+
+    ret = ret == 0 ? -EINVAL : ret;
+    if (ret < 0) {
+      if (!force) {
+        cerr << "read failure: " << cpp_strerror(ret)
+             << " at obj:" << obj
+             << std::hex << ", read 0x" << offset << "~" << len << std::dec
+             << std::endl;
+        return ret;
+      }
+      // re-read using minimal disk block to minimize error footprint.
+      auto o = offset;
+      const size_t block_size = 4096;
+      while(o < offset + len) {
+        bufferlist bl;
+        int r = store->read(ch, obj, o, block_size, bl);
+        if (r <= 0) {
+          rawdatabl.append_zero(block_size);
+          cerr << "read failure: " << cpp_strerror(r == 0 ? -EINVAL : r)
+               << " at obj:" << obj << std::hex
+               << ", read 0x" << o << "~" << block_size
+               << std::dec << std::endl;
+        } else {
+          rawdatabl.claim_append(bl);
+        }
+        o += block_size;
+      }
+      ret = len;
+    }
 
     data_section dblock(offset, len, rawdatabl);
     if (debug)
@@ -941,7 +972,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
   return 0;
 }
 
-int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
+int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll, bool force)
 {
   ghobject_t next;
   auto ch = store->open_collection(coll);
@@ -958,7 +989,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
       if (i->is_pgmeta() || i->hobj.is_temp() || !i->is_no_gen()) {
 	continue;
       }
-      r = export_file(store, coll, *i);
+      r = export_file(store, coll, *i, force);
       if (r < 0)
         return r;
     }
@@ -1057,6 +1088,84 @@ int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
   return 0;
 }
 
+int expand_log(
+  CephContext *cct,
+  ObjectStore *fs,
+  spg_t pgid,
+  pg_info_t &info,
+  eversion_t target_version)
+{
+  try {
+    bufferlist bl;
+    OSDMap osdmap;
+    int ret = get_osdmap(fs, info.last_update.epoch, osdmap, bl);
+    if (ret < 0) {
+      std::cerr << "Can't find latest local OSDMap " << info.last_update.epoch << std::endl;
+      return ret;
+    }
+    ceph_assert(osdmap.have_pg_pool(info.pgid.pool()));
+    auto pool_info = osdmap.get_pg_pool(info.pgid.pool());
+    if (!pool_info->is_erasure()) {
+      std::cerr << "extend-log-with-fake-entries can only apply to pgs of ec pools" << std::endl;
+      return -EINVAL;
+    }
+
+    PGLog log(cct);
+    pg_missing_t missing;
+    auto ch = fs->open_collection(coll_t(pgid));
+    if (!ch) {
+      return -ENOENT;
+    }
+    ostringstream oss;
+    log.read_log_and_missing(
+      fs, ch,
+      pgid.make_pgmeta_oid(),
+      info,
+      oss,
+      cct->_conf->osd_ignore_stale_divergent_priors,
+      cct->_conf->osd_debug_verify_missing_on_start);
+    if (debug && oss.str().size())
+      cerr << oss.str() << std::endl;
+
+    auto e = target_version;
+    e.version = log.get_head().version + 1;
+    auto entry = *log.get_log().log.rbegin();
+    for (; e <= target_version; e.version++) {
+      entry.version = e;
+      std::cout << "adding " << e << std::endl;
+      log.add(entry, true);
+    }
+    info.last_complete = target_version;
+    info.last_update = target_version;
+    info.last_user_version = target_version.version + 1;
+
+    std::map<string, bufferlist> km;
+    ObjectStore::Transaction t;
+
+    pg_fast_info_t fast;
+    fast.populate_from(info);
+    encode(fast, km[string(fastinfo_key)]);
+    encode(info, km[string(info_key)]);
+    log.write_log_and_missing(
+      t,
+      &km,
+      coll_t(pgid),
+      pgid.make_pgmeta_oid(),
+      pool_info->require_rollback());
+
+    for (auto &ent : km) {
+      std::cout << "km key: " << ent.first << std::endl;
+    }
+
+    t.omap_setkeys(coll_t(pgid), pgid.make_pgmeta_oid(), km);
+    fs->queue_transaction(ch, std::move(t));
+    return 0;
+  } catch (const buffer::error &e) {
+    cerr << "read_log_and_missing threw exception error " << e.what() << std::endl;
+    return -EFAULT;
+  }
+}
+
 int get_pg_num_history(ObjectStore *store, pool_pg_num_history_t *h)
 {
   ObjectStore::CollectionHandle ch = store->open_collection(coll_t::meta());
@@ -1124,9 +1233,9 @@ int ObjectStoreTool::do_export(
   if (ret)
     return ret;
 
-  ret = export_files(fs, coll);
+  ret = export_files(fs, coll, force);
   if (ret) {
-    cerr << "export_files error " << ret << std::endl;
+    cerr << "export_files error: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
 
@@ -3350,7 +3459,7 @@ bool ends_with(const string& check, const string& ending)
 int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
-  string target_data_path, fsid;
+  string target_data_path, fsid, target_version_str;
   string objcmd, arg1, arg2, type, format, argnspace, pool, rmtypestr, dump_data_dir;
   boost::optional<std::string> nspace;
   spg_t pgid;
@@ -3368,6 +3477,8 @@ int main(int argc, char **argv)
      "Arg is one of [bluestore (default), memstore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
+    ("target-version", po::value<string>(&target_version_str),
+     "the target version that log is expected to be expanded to")
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
@@ -3490,12 +3601,25 @@ int main(int argc, char **argv)
     tmp.swap(ceph_option_strings);
   }
 
-  vector<const char *> ceph_options;
-  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
-  for (vector<string>::iterator i = ceph_option_strings.begin();
-       i != ceph_option_strings.end();
-       ++i) {
-    ceph_options.push_back(i->c_str());
+  boost::intrusive_ptr<CephContext> cct;
+  {
+    vector<const char *> ceph_options;
+    ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
+    for (vector<string>::iterator i = ceph_option_strings.begin();
+         i != ceph_option_strings.end();
+         ++i) {
+      ceph_options.push_back(i->c_str());
+    }
+    int init_flags = 0;
+    if (vm.count("no-mon-config") > 0) {
+      init_flags |= CINIT_FLAG_NO_MON_CONFIG;
+    }
+    cct = global_init(
+      nullptr,
+      ceph_options,
+      CEPH_ENTITY_TYPE_OSD,
+      CODE_ENVIRONMENT_UTILITY_NODOUT,
+      init_flags);
   }
 
   snprintf(fn, sizeof(fn), "%s/type", dpath.c_str());
@@ -3570,16 +3694,6 @@ int main(int argc, char **argv)
     perror(err.c_str());
     return 1;
   }
-  int init_flags = 0;
-  if (vm.count("no-mon-config") > 0) {
-    init_flags |= CINIT_FLAG_NO_MON_CONFIG;
-  }
-
-  auto cct = global_init(
-    NULL, ceph_options,
-    CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY_NODOUT,
-    init_flags);
   common_init_finish(g_ceph_context);
   if (debug) {
     g_conf().set_val_or_die("log_to_stderr", "true");
@@ -3622,6 +3736,18 @@ int main(int argc, char **argv)
   if (pgidstr.length() && pgidstr != "meta" && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
     return 1;
+  }
+
+  eversion_t target_version;
+  if (op == "extend-log-with-fake-entries") {
+    if (target_version_str.empty()) {
+      std::cerr << "target-version needed" << std::endl;
+      return 1;
+    }
+    std::string epoch_str = target_version_str.substr(0, target_version_str.find("."));
+    std::string version_str = target_version_str.substr(target_version_str.find(".") + 1);
+    target_version.epoch = std::stoi(epoch_str);
+    target_version.version = std::stoll(version_str);
   }
 
   std::unique_ptr<ObjectStore> fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
@@ -3703,7 +3829,28 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  int ret = fs->mount();
+  int ret;
+  bool mount_readonly =
+    op == "export" ||
+    op == "list" ||
+    op == "list-pgs" ||
+    op == "meta-list" ||
+    op == "get-osdmap" ||
+    op == "get-superblock" ||
+    op == "get-inc-osdmap" ||
+    objcmd == "get-bytes" ||
+    objcmd == "get-attrs" ||
+    objcmd == "get-omap" ||
+    objcmd == "get-omaphdr" ||
+    objcmd == "list-attrs" ||
+    objcmd == "list-omap" ||
+    objcmd == "dump";
+  if(mount_readonly) {
+    ret = fs->mount_readonly();
+  } else {
+    ret = fs->mount();
+  }
+
   if (ret < 0) {
     if (ret == -EBUSY) {
       cerr << "OSD has the store locked" << std::endl;
@@ -3769,6 +3916,9 @@ int main(int argc, char **argv)
       ret = -EINVAL;
       goto out;
     }
+  } else {
+    cout << "Using no superblock" << std::endl;
+    superblock.reset(new OSDSuperblock);
   }
 
   if (op != "list" && vm.count("object")) {
@@ -4144,7 +4294,7 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups" && op != "pg-log-inject-dups") {
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups" && op != "pg-log-inject-dups" && op != "extend-log-with-fake-entries") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, "
       "trim-pg-log-dups statfs)"
@@ -4461,6 +4611,10 @@ int main(int argc, char **argv)
           goto out;
 
       dump_log(formatter, cout, log, missing);
+    } else if (op == "extend-log-with-fake-entries") {
+      ret = expand_log(cct.get(), fs.get(), pgid, info, target_version);
+      if (ret < 0)
+	goto out;
     } else if (op == "mark-complete") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
@@ -4588,7 +4742,7 @@ out:
     cout <<  ostr.str() << std::endl;
   }
 
-  int r = fs->umount();
+  int r = mount_readonly ? fs->umount_readonly() : fs->umount();
   if (r < 0) {
     cerr << "umount failed: " << cpp_strerror(r) << std::endl;
     // If no previous error, then use umount() error

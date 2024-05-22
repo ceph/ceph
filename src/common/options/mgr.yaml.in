@@ -103,6 +103,13 @@ options:
   services:
   - mgr
   with_legacy: true
+- name: mgr_max_pg_creating
+  type: uint
+  level: advanced
+  desc: bound on max creating pgs when acting to create more pgs
+  default: 1024
+  services:
+  - mgr
 - name: mgr_module_path
   type: str
   level: advanced

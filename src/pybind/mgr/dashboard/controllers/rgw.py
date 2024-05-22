@@ -304,6 +304,14 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_tags(bucket_name, tags)
 
+    def _get_acl(self, bucket_name, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return str(rgw_client.get_acl(bucket_name))
+
+    def _set_acl(self, bucket_name: str, acl: str, owner, daemon_name):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.set_acl(bucket_name, acl)
+
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
         # type (str) -> str
@@ -357,6 +365,7 @@ class RgwBucket(RgwRESTController):
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
         result['bucket_policy'] = self._get_policy(bucket_name)
+        result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
 
         # Append the locking configuration.
         locking = self._get_locking(result['owner'], daemon_name, bucket_name)
@@ -370,7 +379,7 @@ class RgwBucket(RgwRESTController):
                lock_retention_period_days=None,
                lock_retention_period_years=None, encryption_state='false',
                encryption_type=None, key_id=None, tags=None,
-               bucket_policy=None, daemon_name=None):
+               bucket_policy=None, canned_acl=None, daemon_name=None):
         lock_enabled = str_to_bool(lock_enabled)
         encryption_state = str_to_bool(encryption_state)
         try:
@@ -392,6 +401,9 @@ class RgwBucket(RgwRESTController):
             if bucket_policy:
                 self._set_policy(bucket, bucket_policy, daemon_name, uid)
 
+            if canned_acl:
+                self._set_acl(bucket, canned_acl, uid, daemon_name)
+
             return result
         except RequestException as e:  # pragma: no cover - handling is too obvious
             raise DashboardException(e, http_status_code=500, component='rgw')
@@ -401,7 +413,8 @@ class RgwBucket(RgwRESTController):
             encryption_state='false', encryption_type=None, key_id=None,
             mfa_delete=None, mfa_token_serial=None, mfa_token_pin=None,
             lock_mode=None, lock_retention_period_days=None,
-            lock_retention_period_years=None, tags=None, bucket_policy=None, daemon_name=None):
+            lock_retention_period_years=None, tags=None, bucket_policy=None,
+            canned_acl=None, daemon_name=None):
         encryption_state = str_to_bool(encryption_state)
         # When linking a non-tenant-user owned bucket to a tenanted user, we
         # need to prefix bucket name with '/'. e.g. photos -> /photos
@@ -444,7 +457,9 @@ class RgwBucket(RgwRESTController):
         if tags:
             self._set_tags(bucket_name, tags, daemon_name, uid)
         if bucket_policy:
-            self._set_policy(bucket, bucket_policy, daemon_name, uid)
+            self._set_policy(bucket_name, bucket_policy, daemon_name, uid)
+        if canned_acl:
+            self._set_acl(bucket_name, canned_acl, uid, daemon_name)
         return self._append_bid(result)
 
     def delete(self, bucket, purge_objects='true', daemon_name=None):
@@ -515,21 +530,6 @@ class RgwBucketUi(RgwBucket):
 @APIRouter('/rgw/user', Scope.RGW)
 @APIDoc("RGW User Management API", "RgwUser")
 class RgwUser(RgwRESTController):
-    def _append_uid(self, user):
-        """
-        Append the user identifier that looks like [<tenant>$]<user>.
-        See http://docs.ceph.com/docs/jewel/radosgw/multitenancy/ for
-        more information.
-        :param user: The user parameters.
-        :type user: dict
-        :return: The modified user parameters including the 'uid' parameter.
-        :rtype: dict
-        """
-        if isinstance(user, dict):
-            user['uid'] = '{}${}'.format(user['tenant'], user['user_id']) \
-                if user['tenant'] else user['user_id']
-        return user
-
     @staticmethod
     def _keys_allowed():
         permissions = AuthManager.get_user(JwtManager.get_username()).permissions_dict()
@@ -565,7 +565,8 @@ class RgwUser(RgwRESTController):
         if not self._keys_allowed():
             del result['keys']
             del result['swift_keys']
-        return self._append_uid(result)
+        result['uid'] = result['full_user_id']
+        return result
 
     @Endpoint()
     @ReadPermission
@@ -580,7 +581,7 @@ class RgwUser(RgwRESTController):
 
     @allow_empty_body
     def create(self, uid, display_name, email=None, max_buckets=None,
-               suspended=None, generate_key=None, access_key=None,
+               system=None, suspended=None, generate_key=None, access_key=None,
                secret_key=None, daemon_name=None):
         params = {'uid': uid}
         if display_name is not None:
@@ -589,6 +590,8 @@ class RgwUser(RgwRESTController):
             params['email'] = email
         if max_buckets is not None:
             params['max-buckets'] = max_buckets
+        if system is not None:
+            params['system'] = system
         if suspended is not None:
             params['suspended'] = suspended
         if generate_key is not None:
@@ -598,11 +601,12 @@ class RgwUser(RgwRESTController):
         if secret_key is not None:
             params['secret-key'] = secret_key
         result = self.proxy(daemon_name, 'PUT', 'user', params)
-        return self._append_uid(result)
+        result['uid'] = result['full_user_id']
+        return result
 
     @allow_empty_body
     def set(self, uid, display_name=None, email=None, max_buckets=None,
-            suspended=None, daemon_name=None):
+            system=None, suspended=None, daemon_name=None):
         params = {'uid': uid}
         if display_name is not None:
             params['display-name'] = display_name
@@ -610,10 +614,13 @@ class RgwUser(RgwRESTController):
             params['email'] = email
         if max_buckets is not None:
             params['max-buckets'] = max_buckets
+        if system is not None:
+            params['system'] = system
         if suspended is not None:
             params['suspended'] = suspended
         result = self.proxy(daemon_name, 'POST', 'user', params)
-        return self._append_uid(result)
+        result['uid'] = result['full_user_id']
+        return result
 
     def delete(self, uid, daemon_name=None):
         try:
@@ -850,9 +857,13 @@ edit_role_form = Form(path='/edit',
         "CreateDate": {'cellTemplate': 'date'},
         "MaxSessionDuration": {'cellTemplate': 'duration'},
         "RoleId": {'isHidden': True},
-        "AssumeRolePolicyDocument": {'isHidden': True}
+        "AssumeRolePolicyDocument": {'isHidden': True},
+        "PermissionPolicies": {'isHidden': True},
+        "Description": {'isHidden': True},
+        "AccountId": {'isHidden': True}
     },
-    detail_columns=['RoleId', 'AssumeRolePolicyDocument'],
+    detail_columns=['RoleId', 'Description',
+                    'AssumeRolePolicyDocument', 'PermissionPolicies', 'AccountId'],
     meta=CRUDMeta()
 )
 class RgwUserRole(NamedTuple):
@@ -863,6 +874,9 @@ class RgwUserRole(NamedTuple):
     CreateDate: str
     MaxSessionDuration: int
     AssumeRolePolicyDocument: str
+    PermissionPolicies: List
+    Description: str
+    AccountId: str
 
 
 @APIRouter('/rgw/realm', Scope.RGW)

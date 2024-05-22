@@ -15,6 +15,9 @@
 #ifndef __CEPH_OS_HOBJECT_H
 #define __CEPH_OS_HOBJECT_H
 
+#include <fmt/compile.h>
+#include <fmt/format.h>
+
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>
 #endif
@@ -310,6 +313,26 @@ public:
     return nspace;
   }
 
+  /**
+   * PG_LOCAL_NS
+   *
+   * Used exclusively by crimson at this time.
+   *
+   * Namespace for objects maintained by the local pg instantiation updated
+   * independently of the pg log.  librados IO to this namespace should fail.
+   * Listing operations related to pg objects should exclude objects in this
+   * namespace along with temp objects, ec rollback objects, and the pg
+   * meta object. Such operations include:
+   * - scrub
+   * - backfill
+   * - pgls
+   * See crimson/osd/pg_backend PGBackend::list_objects
+   */
+  static constexpr std::string_view INTERNAL_PG_LOCAL_NS = ".internal_pg_local";
+  bool is_internal_pg_local() const {
+    return nspace == INTERNAL_PG_LOCAL_NS;
+  }
+
   bool parse(const std::string& s);
 
   void encode(ceph::buffer::list& bl) const;
@@ -318,7 +341,7 @@ public:
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<hobject_t*>& o);
   friend int cmp(const hobject_t& l, const hobject_t& r);
-  auto operator<=>(const hobject_t &rhs) const noexcept {
+  constexpr auto operator<=>(const hobject_t &rhs) const noexcept {
     auto cmp = max <=> rhs.max;
     if (cmp != 0) return cmp;
     cmp = pool <=> rhs.pool;
@@ -335,10 +358,11 @@ public:
     if (cmp != 0) return cmp;
     return snap <=> rhs.snap;
   }
-  bool operator==(const hobject_t& rhs) const noexcept {
+  constexpr bool operator==(const hobject_t& rhs) const noexcept {
     return operator<=>(rhs) == 0;
   }
   friend struct ghobject_t;
+  friend struct test_hobject_fmt_t;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
@@ -350,6 +374,54 @@ template<> struct hash<hobject_t> {
   }
 };
 } // namespace std
+
+namespace fmt {
+template <>
+struct formatter<hobject_t> {
+
+  template <typename FormatContext>
+  static inline auto
+  append_sanitized(FormatContext& ctx, const std::string& in, int sep = 0)
+  {
+    for (const auto i : in) {
+      if (i == '%' || i == ':' || i == '/' || i < 32 || i >= 127) {
+	fmt::format_to(
+	    ctx.out(), FMT_COMPILE("%{:02x}"), static_cast<unsigned char>(i));
+      } else {
+	fmt::format_to(ctx.out(), FMT_COMPILE("{:c}"), i);
+      }
+    }
+    if (sep) {
+      fmt::format_to(
+	  ctx.out(), FMT_COMPILE("{:c}"), sep);
+    }
+    return ctx.out();
+  }
+
+  constexpr auto parse(format_parse_context& ctx) const { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const hobject_t& ho, FormatContext& ctx) const
+  {
+    if (ho == hobject_t{}) {
+      return fmt::format_to(ctx.out(), "MIN");
+    }
+
+    if (ho.is_max()) {
+      return fmt::format_to(ctx.out(), "MAX");
+    }
+
+    fmt::format_to(
+	ctx.out(), FMT_COMPILE("{}:{:08x}:"), static_cast<uint64_t>(ho.pool),
+	ho.get_bitwise_key_u32());
+    append_sanitized(ctx, ho.nspace, ':');
+    append_sanitized(ctx, ho.get_key(), ':');
+    append_sanitized(ctx, ho.oid.name);
+    return fmt::format_to(ctx.out(), FMT_COMPILE(":{}"), ho.snap);
+  }
+};
+}  // namespace fmt
+
 
 std::ostream& operator<<(std::ostream& out, const hobject_t& o);
 
@@ -430,6 +502,30 @@ struct ghobject_t {
     return hobj.pool >= 0 && hobj.oid.name.empty();
   }
 
+  bool is_internal_pg_local() const {
+    return hobj.is_internal_pg_local();
+  }
+
+  /**
+   * SNAPMAPPER_OID, make_snapmapper, is_snapmapper
+   *
+   * Used exclusively by crimson at this time.
+   * 
+   * Unlike classic, crimson uses a snap mapper object for each pg.
+   * The snapmapper object provides an index for efficient trimming of clones as
+   * snapshots are removed.
+   *
+   * As with the pgmeta object, we pin the hash to the pg hash.
+   */
+  static constexpr std::string_view SNAPMAPPER_OID = "snapmapper";
+  static ghobject_t make_snapmapper(
+    int64_t pool, uint32_t hash, shard_id_t shard) {
+    hobject_t h(object_t(SNAPMAPPER_OID), std::string(),
+		CEPH_NOSNAP, hash, pool,
+		std::string(hobject_t::INTERNAL_PG_LOCAL_NS));
+    return ghobject_t(h, NO_GEN, shard);
+  }
+
   bool match(uint32_t bits, uint32_t match) const {
     return hobj.match_hash(hobj.hash, bits, match);
   }
@@ -495,7 +591,7 @@ struct ghobject_t {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<ghobject_t*>& o);
   friend int cmp(const ghobject_t& l, const ghobject_t& r);
-  auto operator<=>(const ghobject_t&) const = default;
+  constexpr auto operator<=>(const ghobject_t&) const = default;
   bool operator==(const ghobject_t&) const = default;
 };
 WRITE_CLASS_ENCODER(ghobject_t)

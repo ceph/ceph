@@ -25,6 +25,7 @@ def nfs_json(**kwargs):
     if kwargs.get("files"):
         result["files"] = {
             "ganesha.conf": "",
+            "idmap.conf": "",
         }
     if kwargs.get("rgw_content"):
         result["rgw"] = dict(kwargs["rgw_content"])

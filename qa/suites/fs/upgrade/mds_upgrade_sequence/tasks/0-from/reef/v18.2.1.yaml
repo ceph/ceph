@@ -1,0 +1,31 @@
+meta:
+- desc: |
+   setup ceph/v18.2.1
+
+tasks:
+- install:
+    tag: v18.2.1
+    exclude_packages:
+      - ceph-volume
+- print: "**** done install task..."
+- cephadm:
+    image: quay.io/ceph/ceph:v18.2.1
+    roleless: true
+    compiled_cephadm_branch: reef
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing v18.2.1 cephadm ..."
+- cephadm.shell:
+    host.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    host.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls

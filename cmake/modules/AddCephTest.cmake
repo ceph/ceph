@@ -19,9 +19,43 @@ function(add_ceph_test test_name test_path)
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
     PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.3:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
-  # none of the tests should take more than 1 hour to complete
+  if(WITH_UBSAN)
+    set_property(TEST ${test_name}
+      APPEND
+      PROPERTY ENVIRONMENT
+      UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1)
+  endif()
+  if(WITH_ASAN)
+    # AddressSanitizer: odr-violation: global 'ceph::buffer::list::always_empty_bptr' at
+    # /home/jenkins-build/build/workspace/ceph-pull-requests/src/common/buffer.cc:1267:34
+    # see https://tracker.ceph.com/issues/65098
+    set_property(TEST ${test_name}
+      APPEND
+      PROPERTY ENVIRONMENT
+      ASAN_OPTIONS=detect_odr_violation=0
+      LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp)
+  endif()
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
+  # Crimson seastar unittest always run with --smp N to start N threads. By default, crimson seastar unittest
+  # will take cpu cores[0, N), starting one thread per core. When running many crimson seastar unittests
+  # parallely, the front N cpu cores are shared, and the left cpu cores are idle. Lots of cpu cores are wasted.
+  # Using CTest resource allocation feature(https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-allocation),
+  # ctest can specify cpu cores resources to crimson seastar unittests.
+  # 3 steps to enable CTest resource allocation feature:
+  #  Step 1: Generate a resource specification file to describe available resource, $(nproc) CPUs with id 0 to $(nproc) - 1
+  #  Step 2: Set RESOURCE_GROUPS property to a test with value "${smp_count},cpus:1"
+  #  Step 3: Read a series of environment variables CTEST_RESOURCE_GROUP_* and set seastar smp_opts while running a test
+  list(FIND ARGV "--smp" smp_pos)
+  if(smp_pos GREATER -1)
+    if(smp_pos EQUAL ARGC)
+      message(FATAL_ERROR "${test_name} --smp requires an argument")
+    endif()
+    math(EXPR i "${smp_pos} + 1")
+    list(GET ARGV ${i} smp_count)
+    set_property(TEST ${test_name}
+      PROPERTY RESOURCE_GROUPS "${smp_count},cpus:1")
+  endif()
 endfunction()
 
 option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)

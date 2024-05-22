@@ -22,7 +22,6 @@
 #include "rgw_frontend.h"
 #include "arrow/type.h"
 #include "arrow/flight/server.h"
-#include "arrow/util/string_view.h"
 
 #include "rgw_flight_frontend.h"
 
@@ -122,6 +121,7 @@ class FlightServer : public flt::FlightServerBase {
   FlightStore* flight_store;
 
   std::map<std::string, Data1> data;
+  arw::Status serve_return_value;
 
 public:
 
@@ -131,6 +131,12 @@ public:
 	       FlightStore* flight_store,
 	       const DoutPrefix& dp);
   ~FlightServer() override;
+
+  // provides a version of Serve that has no return value, to avoid
+  // warnings when launching in a thread
+  void ServeAlt() {
+    serve_return_value = Serve();
+  }
 
   FlightStore* get_flight_store() {
     return flight_store;
@@ -153,14 +159,14 @@ public:
 		    std::unique_ptr<flt::FlightDataStream> *stream) override;
 }; // class FlightServer
 
-class OwningStringView : public arw::util::string_view {
+class OwningStringView : public std::string_view {
 
   uint8_t* buffer;
   int64_t capacity;
   int64_t consumed;
 
   OwningStringView(uint8_t* _buffer, int64_t _size) :
-    arw::util::string_view((const char*) _buffer, _size),
+    std::string_view((const char*) _buffer, _size),
     buffer(_buffer),
     capacity(_size),
     consumed(_size)

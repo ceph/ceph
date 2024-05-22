@@ -452,12 +452,12 @@ public:
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
   void get_rules_avail(const OSDMap& osdmap,
 		       std::map<int,int64_t> *avail_map) const;
-  void dump(ceph::Formatter *f, bool with_net = true) const;
+  void dump(ceph::Formatter *f, bool with_net = false) const;
   void dump_basic(ceph::Formatter *f) const;
   void dump_pg_stats(ceph::Formatter *f, bool brief) const;
   void dump_pg_progress(ceph::Formatter *f) const;
   void dump_pool_stats(ceph::Formatter *f) const;
-  void dump_osd_stats(ceph::Formatter *f, bool with_net = true) const;
+  void dump_osd_stats(ceph::Formatter *f, bool with_net = false) const;
   void dump_osd_ping_times(ceph::Formatter *f) const;
   void dump_delta(ceph::Formatter *f) const;
   void dump_filtered_pg_stats(ceph::Formatter *f, std::set<pg_t>& pgs) const;

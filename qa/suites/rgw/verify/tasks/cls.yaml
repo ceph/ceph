@@ -10,6 +10,8 @@ tasks:
         - cls/test_cls_rgw_stats.sh
         - cls/test_cls_cmpomap.sh
         - cls/test_cls_2pc_queue.sh
+        - cls/test_cls_user.sh
         - rgw/test_rgw_gc_log.sh
         - rgw/test_rgw_obj.sh
         - rgw/test_librgw_file.sh
+        - rgw/test_awssdkv4_sig.sh

@@ -24,7 +24,7 @@ set -e
 
 case "$1" in
     configure)
-	[ -x /sbin/start ] && start ceph-mon-all || :
+    :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:

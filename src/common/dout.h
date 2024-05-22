@@ -44,6 +44,18 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   return out;
 }
 
+template<typename T>
+concept HasPrint = requires(T t, std::ostream& u) {
+  { t.print(u) } -> std::same_as<void>;
+};
+
+template<typename T> requires HasPrint<T>
+static inline std::ostream& operator<<(std::ostream& out, T&& t)
+{
+  t.print(out);
+  return out;
+}
+
 class DoutPrefixProvider {
 public:
   virtual std::ostream& gen_prefix(std::ostream& out) const = 0;
@@ -144,17 +156,27 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #else
 #define dout_impl(cct, sub, v)						\
   do {									\
-  const bool should_gather = [&](const auto cctX) {			\
-    if constexpr (ceph::dout::is_dynamic<decltype(sub)>::value ||	\
-		  ceph::dout::is_dynamic<decltype(v)>::value) {		\
+  const bool should_gather = [&](const auto cctX, auto sub_, auto v_) {	\
+    /* The check is performed on `sub_` and `v_` to leverage the C++'s 	\
+     * guarantee on _discarding_ one of blocks of `if constexpr`, which	\
+     * includes also the checks for ill-formed code (`should_gather<>`	\
+     * must not be feed with non-const expresions), BUT ONLY within	\
+     * a template (thus the generic lambda) and under the restriction	\
+     * it's dependant on a parameter of this template).			\
+     * GCC prior to v14 was not enforcing these restrictions. */	\
+    if constexpr (ceph::dout::is_dynamic<decltype(sub_)>::value ||	\
+		  ceph::dout::is_dynamic<decltype(v_)>::value) {	\
       return cctX->_conf->subsys.should_gather(sub, v);			\
     } else {								\
+      constexpr auto sub_helper = static_cast<decltype(sub_)>(sub);	\
+      constexpr auto v_helper = static_cast<decltype(v_)>(v);		\
       /* The parentheses are **essential** because commas in angle	\
        * brackets are NOT ignored on macro expansion! A language's	\
        * limitation, sorry. */						\
-      return (cctX->_conf->subsys.template should_gather<sub, v>());	\
+      return (cctX->_conf->subsys.template should_gather<sub_helper,	\
+							 v_helper>());	\
     }									\
-  }(cct);								\
+  }(cct, sub, v);							\
 									\
   if (should_gather) {							\
     ceph::logging::MutableEntry _dout_e(v, sub);                        \

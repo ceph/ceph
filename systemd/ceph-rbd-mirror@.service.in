@@ -5,10 +5,9 @@ Wants=network-online.target local-fs.target
 PartOf=ceph-rbd-mirror.target
 
 [Service]
-Environment=CLUSTER=ceph
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
 ExecReload=/bin/kill -HUP $MAINPID
-ExecStart=/usr/bin/rbd-mirror -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
+ExecStart=/usr/bin/rbd-mirror -f --id %i --setuser ceph --setgroup ceph
 LimitNOFILE=1048576
 LimitNPROC=1048576
 LockPersonality=true

@@ -187,7 +187,6 @@ private:
   abstracted_msg_t msg;
   crimson::net::ConnectionXcoreRef conn;
   std::optional<osd_op_params_t> osd_op_params;
-  bool user_modify = false;
   ceph::os::Transaction txn;
 
   size_t num_read = 0;    ///< count read ops
@@ -254,6 +253,14 @@ private:
       && snapc.snaps.size()                             // there are snaps
       && snapc.snaps[0] > initial_obc.ssc->snapset.seq; // existing obj is old
   }
+
+  /**
+  * update_clone_overlap
+  *
+  * We need to update the most recent snapshot and the overlapping
+  * part of the head object for each write operation.
+  */
+  void update_clone_overlap();
 
   interruptible_future<std::vector<pg_log_entry_t>> flush_clone_metadata(
     std::vector<pg_log_entry_t>&& log_entries,
@@ -416,7 +423,7 @@ public:
     MutFunc&& mut_func) &&;
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
-  void fill_op_params_bump_pg_version();
+  void fill_op_params(modified_by m);
 
   ObjectContextRef get_obc() const {
     return obc;
@@ -450,7 +457,8 @@ public:
   version_t get_last_user_version() const;
 
   ObjectContextRef prepare_clone(
-    const hobject_t& coid);
+    const hobject_t& coid,
+    eversion_t version);
 
   void apply_stats();
 };
@@ -512,9 +520,6 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     ceph_assert(want_mutate);
   }
   if (want_mutate) {
-    if (user_modify) {
-      osd_op_params->user_at_version = osd_op_params->at_version.version;
-    }
     maybe_mutated = flush_clone_metadata(
       prepare_transaction(ops),
       snap_mapper,
@@ -522,6 +527,9 @@ OpsExecuter::flush_changes_n_do_ops_effects(
       txn
     ).then_interruptible([mut_func=std::move(mut_func),
                           this](auto&& log_entries) mutable {
+      if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
+        ceph_assert(log_rit->version == osd_op_params->at_version);
+      }
       auto [submitted, all_completed] =
         std::forward<MutFunc>(mut_func)(std::move(txn),
                                         std::move(obc),

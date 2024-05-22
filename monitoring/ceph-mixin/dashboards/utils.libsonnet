@@ -1,4 +1,5 @@
 local g = import 'grafonnet/grafana.libsonnet';
+local pieChartPanel = import 'piechart_panel.libsonnet';
 local timeSeries = import 'timeseries_panel.libsonnet';
 
 {
@@ -117,7 +118,8 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                     regex,
                     hide='',
                     multi=false,
-                    allValues=null)::
+                    allValues=null,
+                    current=null)::
     g.template.new(name=name,
                    datasource=datasource,
                    query=query,
@@ -128,7 +130,8 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                    regex=regex,
                    hide=hide,
                    multi=multi,
-                   allValues=allValues),
+                   allValues=allValues,
+                   current=current),
 
   addAnnotationSchema(builtIn,
                       datasource,
@@ -193,14 +196,6 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                         title=title,
                         valueName=valueName),
 
-  addTableSchema(datasource, description, sort, styles, title, transform)::
-    g.tablePanel.new(datasource=datasource,
-                     description=description,
-                     sort=sort,
-                     styles=styles,
-                     title=title,
-                     transform=transform),
-
   addStyle(alias,
            colorMode,
            colors,
@@ -225,44 +220,28 @@ local timeSeries = import 'timeseries_panel.libsonnet';
       unit: unit,
       valueMaps: valueMaps,
     },
+
   matchers()::
-    local jobMatcher = 'job=~"$job"';
     local clusterMatcher = '%s=~"$cluster"' % $._config.clusterLabel;
     {
       // Common labels
-      jobMatcher: jobMatcher,
-      clusterMatcher: (if $._config.showMultiCluster then clusterMatcher else ''),
-      matchers: jobMatcher +
-                (if $._config.showMultiCluster then ', ' + clusterMatcher else ''),
+      matchers: (if $._config.showMultiCluster then clusterMatcher + ', ' else ''),
     },
+
 
   addClusterTemplate()::
     $.addTemplateSchema(
       'cluster',
       '$datasource',
-      'label_values(ceph_osd_metadata, %s)' % $._config.clusterLabel,
+      'label_values(ceph_health_status, %s)' % $._config.clusterLabel,
       1,
-      true,
+      false,
       1,
       'cluster',
       '(.*)',
       if !$._config.showMultiCluster then 'variable' else '',
-      multi=true,
-      allValues='.+',
-    ),
-
-  addJobTemplate()::
-    $.addTemplateSchema(
-      'job',
-      '$datasource',
-      'label_values(ceph_osd_metadata{%(clusterMatcher)s}, job)' % $.matchers(),
-      1,
-      true,
-      1,
-      'job',
-      '(.*)',
-      multi=true,
-      allValues='.+',
+      multi=false,
+      allValues=null,
     ),
 
   overviewStyle(alias,
@@ -500,7 +479,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
   addGaugePanel(title='',
                 description='',
                 transparent=false,
-                datasource='${DS_PROMETHEUS}',
+                datasource='$datasource',
                 gridPosition={},
                 pluginVersion='9.1.3',
                 unit='percentunit',
@@ -523,6 +502,16 @@ local timeSeries = import 'timeseries_panel.libsonnet';
       gridPos: gridPosition,
       maxDataPoints: maxDataPoints,
       interval: interval,
+    },
+
+  addBarGaugePanel(title='',
+                   description='',
+                   datasource='${DS_PROMETHEUS}',
+                   gridPosition={},
+                   unit='percentunit',
+                   thresholds={})::
+    g.barGaugePanel.new(title, description, datasource, unit, thresholds) + {
+      gridPos: gridPosition,
     },
   addTableExtended(
     title='',
@@ -635,6 +624,39 @@ local timeSeries = import 'timeseries_panel.libsonnet';
       pluginVersion: pluginVersion,
       [if interval != null then 'interval']: interval,
     },
+
+  pieChartPanel(
+    title,
+    description='',
+    datasource=null,
+    gridPos={},
+    displayMode='table',
+    placement='bottom',
+    showLegend=true,
+    displayLabels=[],
+    tooltip={},
+    pieType='pie',
+    values=[],
+    colorMode='auto',
+    overrides=[],
+    reduceOptions={},
+  )::
+    pieChartPanel.new(
+      title,
+      description=description,
+      datasource=datasource,
+      gridPos=gridPos,
+      displayMode=displayMode,
+      placement=placement,
+      showLegend=showLegend,
+      displayLabels=displayLabels,
+      tooltip=tooltip,
+      pieType=pieType,
+      values=values,
+      colorMode=colorMode,
+      overrides=overrides,
+      reduceOptions=reduceOptions,
+    ),
 
   heatMapPanel(
     title='',
