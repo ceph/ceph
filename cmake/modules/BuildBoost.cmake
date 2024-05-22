@@ -156,7 +156,7 @@ function(do_build_boost root_dir version)
     set(boost_version 1.75.0)
     set(boost_sha256 953db31e016db7bb207f11432bef7df100516eeb746843fa0486a222e3fd49cb)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
-    string(JOIN " " boost_url
+    list(APPEND boost_url
       https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2
       https://downloads.sourceforge.net/project/boost/boost/${boost_version}/boost_${boost_version_underscore}.tar.bz2
       https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2)
