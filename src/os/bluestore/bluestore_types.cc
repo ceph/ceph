@@ -1262,12 +1262,11 @@ uint32_t bluestore_blob_t::release_extents(
     // and insert hold in this place
     int32_t insert_element_cnt = hold_size - (p - anchor);
     auto anchor_it = extents.begin() + (anchor - begin);
-    if (insert_element_cnt != 0) {
-      if (insert_element_cnt > 0) {
-        anchor_it = extents.insert(anchor_it, insert_element_cnt, bluestore_pextent_t(0, 0));
-      } else {
-        anchor_it = extents.erase(anchor_it, anchor_it + (-insert_element_cnt));
-      }
+    if (insert_element_cnt > 0) {
+      anchor_it = extents.insert(anchor_it, insert_element_cnt, bluestore_pextent_t(0, 0));
+    }
+    if (insert_element_cnt < 0) {
+      anchor_it = extents.erase(anchor_it, anchor_it + (-insert_element_cnt));
     }
     for (uint32_t i = 0; i < hold_size; i++) {
       anchor_it->offset = hold[i].offset;
