@@ -916,7 +916,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
-            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query'
+            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'admin-gateway'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):

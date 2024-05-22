@@ -794,7 +794,6 @@ class ServiceSpec(object):
     REQUIRES_SERVICE_ID = [
         'container',
         'ingress',
-        'admin-gateway',
         'iscsi',
         'mds',
         'nfs',
