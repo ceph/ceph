@@ -188,11 +188,11 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash
 
-      sign-rpms octopus
+      sign-rpms ceph octopus
 
    Example::
 
-      $ sign-rpms octopus
+      $ sign-rpms ceph octopus
       Checking packages in: /opt/repos/ceph/octopus-15.2.17/centos/7
       signing:  /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-release-1-1.el7.src.rpm
       /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-release-1-1.el7.src.rpm:
@@ -206,12 +206,12 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
    .. prompt:: bash $
 
-      sync-push octopus
+      sync-push ceph octopus
 
 This leaves the packages in a password-protected prerelease area
-at https://download.ceph.com/prerelease.  Verify them from there.
-When done and ready for release, mv the directories to the parent
-directory (that is, "mv <whatever you're promoting> ..".
+at https://download.ceph.com/prerelease/ceph.  Verify them from there.
+When done and ready for release, mv the directories to the release
+directory (that is, "mv <whatever you're promoting> ../..".
 
 
 5. Build Containers
