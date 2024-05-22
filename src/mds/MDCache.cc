@@ -13799,6 +13799,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
   qs.inc_inodes_quiesced();
   auto* c = mdr->internal_op_finish;
   mdr->internal_op_finish = nullptr; // prevent ::request_kill recursion
+  mdr->result = 0;
   c->complete(0);
 
   /* do not respond/complete so locks are not lost, parent request will complete */
@@ -13897,6 +13898,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     dout(5) << __func__ << ": skipping recursive quiesce of path for non-auth inode" << dendl;
     mdr->mark_event("quiesce complete for non-auth tree");
   } else if (auto& qops = mdr->more()->quiesce_ops; qops.count(dirino) == 0) {
+    mdr->mark_event("quiescing root");
     MDRequestRef qimdr = request_start_internal(CEPH_MDS_OP_QUIESCE_INODE);
     qimdr->set_filepath(filepath(dirino));
     qimdr->internal_op_finish = new C_MDS_RetryRequest(this, mdr);
@@ -13916,11 +13918,11 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     mdr->mark_event("quiesce complete");
   }
 
+  mdr->result = 0;
   if (qfinisher) {
     mdr->internal_op_finish = nullptr; // prevent ::request_kill recursion
     qfinisher->complete(0);
   }
-  mdr->result = 0;
 
   /* caller kills this op */
 }

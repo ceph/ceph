@@ -470,7 +470,7 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("ln -s ../.. subvol_quiesce")
         path = self.mount_a.cephfs_mntpt + "/subvol_quiesce"
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'], check_status=False)
         log.debug(f"{J}")
         self.assertEqual(J['op']['result'], -20) # ENOTDIR: the link is not a directory
 
@@ -484,7 +484,7 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("ln -s ../../.. _nogroup")
         path = self.mount_a.cephfs_mntpt + "/_nogroup/" + self.QUIESCE_SUBVOLUME
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'], check_status=False)
         log.debug(f"{J}")
         self.assertEqual(J['op']['result'], -20) # ENOTDIR: path_traverse: the intermediate link is not a directory
 
@@ -498,7 +498,7 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("mkdir dir")
         path = self.mount_a.cephfs_mntpt + "/dir"
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'], check_status=False)
         reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid, path=path)
         self._verify_quiesce(root=path)
@@ -513,7 +513,7 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("touch file")
         path = self.mount_a.cephfs_mntpt + "/file"
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'], check_status=False)
         log.debug(f"{J}")
         self.assertEqual(J['op']['result'], -20) # ENOTDIR
 
@@ -525,9 +525,9 @@ class TestQuiesce(QuiesceTestCase):
 
         self._configure_subvolume()
 
-        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume])['op']
+        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], check_status=False)['op']
         op1_reqid = self._reqid_tostr(op1['reqid'])
-        op2 = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'])['op']
+        op2 = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], check_status=False)['op']
         op1 = self.fs.get_op(op1_reqid)['type_data'] # for possible dup result
         log.debug(f"op1 = {op1}")
         log.debug(f"op2 = {op2}")
@@ -545,7 +545,7 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("touch file")
         self.mount_a.setfattr("file", "ceph.quiesce.block", "1")
 
-        J = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], check_status=False)
         log.debug(f"{J}")
         self.assertEqual(J['op']['result'], 0)
         self.assertEqual(J['state']['inodes_blocked'], 1)
@@ -560,7 +560,7 @@ class TestQuiesce(QuiesceTestCase):
         self._configure_subvolume()
         self._client_background_workload()
 
-        J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
+        J = self.fs.rank_tell(["quiesce", "path", self.subvolume], check_status=False)
         log.debug(f"{J}")
         reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
@@ -582,7 +582,7 @@ class TestQuiesce(QuiesceTestCase):
         # drop cache
         self.fs.rank_tell(["cache", "drop"])
 
-        J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
+        J = self.fs.rank_tell(["quiesce", "path", self.subvolume], check_status=False)
         log.debug(f"{J}")
         reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
@@ -684,7 +684,7 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         self._client_background_workload()
         self._wait_distributed_subtrees(2*2, rank="all", path=self.mntpnt)
 
-        op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0)['op']
+        op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0, check_status=False)['op']
         self.assertEqual(op['result'], -1) # EPERM
 
     @unittest.skip("https://tracker.ceph.com/issues/66152")
@@ -934,8 +934,8 @@ class TestQuiesceSplitAuth(QuiesceTestCase):
 
         sleep(2)
 
-        op0 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=0)['op']
-        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=1)['op']
+        op0 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=0, check_status=False)['op']
+        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=1, check_status=False)['op']
         reqid0 = self._reqid_tostr(op0['reqid'])
         reqid1 = self._reqid_tostr(op1['reqid'])
         op0 = self._wait_for_quiesce_complete(reqid0, rank=0, timeout=300)
