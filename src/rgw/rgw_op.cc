@@ -12,6 +12,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <fmt/format.h>
 
 #include "include/scope_guard.h"
 #include "common/Clock.h"
@@ -6788,13 +6789,15 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   }
 
   if (!parser.parse(buf, data.length(), 1)) {
-    op_ret = -EINVAL;
+    s->err.message = "Failed to parse xml input";
+    op_ret = -ERR_MALFORMED_XML;
     return;
   }
 
   auto multi_delete = static_cast<RGWMultiDelDelete *>(parser.find_first("Delete"));
   if (!multi_delete) {
-    op_ret = -EINVAL;
+    s->err.message = "Missing require element Delete";
+    op_ret = -ERR_MALFORMED_XML;
     return;
   }
 
@@ -6805,6 +6808,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   }
   const int multi_delete_object_num = multi_delete->objects.size();
   if (multi_delete_object_num > max_num) {
+    s->err.message = fmt::format("Object count limit {} exceeded", max_num);
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
