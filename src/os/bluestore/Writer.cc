@@ -788,16 +788,19 @@ void BlueStore::Writer::_try_reuse_allocated_r(
   // that is, data is not compressed and is not AU aligned
   uint32_t au_size = bstore->min_alloc_size;
   uint32_t block_size = bstore->block_size;
+  uint32_t blob_size = wctx->target_blob_size;
+  uint32_t search_end = p2roundup(end_offset, blob_size);
   ceph_assert(!bd.is_compressed());
   ceph_assert(p2phase<uint32_t>(end_offset, au_size) != 0);
   BlueStore::ExtentMap& emap = onode->extent_map;
   for (auto it = after_punch_it; it != emap.extent_map.end(); ++it) {
     // first of all, check it we can even use the blob here
-    if (it->blob_start() > end_offset) break; // need at least something
+    if (it->logical_offset >= search_end) break;
     Blob* b = it->blob.get();
     dout(25) << __func__ << " trying " << b->print(pp_mode) << dendl;
     bluestore_blob_t bb = b->dirty_blob();
     if (!bb.is_mutable()) continue;
+
     // all offsets must be aligned to blob chunk_size,
     // which is larger of csum and device block granularity
     bufferlist& data = bd.disk_data;
@@ -1018,9 +1021,12 @@ void BlueStore::Writer::_do_put_blobs(
           after_punch_it, left_bound, right_bound,
           data_end_offset - back_it->disk_data.length(), data_end_offset);
       if (right_b != emap.end()) {
-        // before putting last blob, put previous
+        // Before putting last blob, put all previous;
         // it is nicer to have AUs in order.
-        _do_put_new_blobs(logical_offset, ref_end_offset, bd_it, back_it);
+        if (bd_it != back_it) {
+          // Last blob will be merged, we put blobs without the last.
+          _do_put_new_blobs(logical_offset, ref_end_offset, bd_it, back_it);
+        }
         uint32_t data_begin_offset = data_end_offset - back_it->disk_data.length();
         uint32_t in_blob_offset = data_begin_offset - right_b->blob_start();
         _maybe_expand_blob(right_b->blob.get(), in_blob_offset + bd_it->disk_data.length());
