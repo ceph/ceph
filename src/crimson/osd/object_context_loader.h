@@ -33,9 +33,15 @@ public:
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
   // Use this variant by default
+  // If oid is a clone object, the clone obc *and* it's
+  // matching head obc will be locked and can be used in func.
+  // resolve_clone: For SnapTrim, it may be possible that it
+  //                won't be possible to resolve the clone.
+  // See SnapTrimObjSubEvent::remove_or_update - in_removed_snaps_queue usage.
   template<RWState::State State>
   load_obc_iertr::future<> with_obc(hobject_t oid,
-                                    with_obc_func_t&& func);
+                                    with_obc_func_t&& func,
+                                    bool resolve_clone = true);
 
   // Use this variant in the case where the head object
   // obc is already locked and only the clone obc is needed.
@@ -43,16 +49,9 @@ public:
   // with an already locked head.
   template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc_only(ObjectContextRef head,
-                                               hobject_t oid,
-                                               with_obc_func_t&& func);
-
-  // Use this variant in the case where both the head
-  // object *and* the matching clone object are being used
-  // in func.
-  template<RWState::State State>
-  load_obc_iertr::future<> with_clone_obc_direct(
-    hobject_t oid,
-    with_obc_func_t&& func);
+                                               hobject_t clone_oid,
+                                               with_obc_func_t&& func,
+                                               bool resolve_clone = true);
 
   load_obc_iertr::future<> reload_obc(ObjectContext& obc) const;
 
@@ -65,12 +64,12 @@ private:
   obc_accessing_list_t obc_set_accessing;
 
   template<RWState::State State>
-  load_obc_iertr::future<> with_clone_obc(hobject_t oid,
-                                          with_obc_func_t&& func);
+  load_obc_iertr::future<> with_clone_obc(const hobject_t& oid,
+                                          with_obc_func_t&& func,
+                                          bool resolve_clone);
 
   template<RWState::State State>
-  load_obc_iertr::future<> with_head_obc(ObjectContextRef obc,
-                                         bool existed,
+  load_obc_iertr::future<> with_head_obc(const hobject_t& oid,
                                          with_obc_func_t&& func);
 
   template<RWState::State State>
