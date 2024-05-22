@@ -404,7 +404,7 @@ int MetadataDriver::inject_unlinked_inode(
     return r;
   }
   if (already_exists && !force_init) {
-    std::cerr << "Inode 0x" << std::hex << inono << std::dec << " already"
+    std::cerr << "Inode " << std::hex << inono << std::dec << " already"
                " exists, skipping create.  Use --force-init to overwrite"
                " the existing object." << std::endl;
     return 0;
