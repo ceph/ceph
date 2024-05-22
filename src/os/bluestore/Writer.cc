@@ -643,9 +643,7 @@ inline void BlueStore::Writer::_schedule_io(
     if (do_deferred) {
       bluestore_deferred_op_t *op = bstore->_get_deferred_op(txc, data.length());
       op->op = bluestore_deferred_op_t::OP_WRITE;
-      for (auto& e : disk_allocs) {
-        op->extents.emplace_back(e);
-      }
+      op->extents = disk_allocs;
       op->data = data;
     } else {
       for (auto loc : disk_allocs) {
