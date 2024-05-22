@@ -461,18 +461,28 @@ class TestQuiesce(QuiesceTestCase):
 
     def test_quiesce_path_link_terminal(self):
         """
-        That quiesce on path with an terminal link fails with ENOTDIR even
-        pointing to a valid subvolume.
+        That quiesce on path with an terminal link quiesces just the link inode
         """
 
         self._configure_subvolume()
 
-        self.mount_a.run_shell_payload("ln -s ../.. subvol_quiesce")
-        path = self.mount_a.cephfs_mntpt + "/subvol_quiesce"
+        self.mount_a.run_shell_payload("mkdir -p dir/")
+        self.mount_a.write_file("dir/afile", "I'm a file")
+        self.mount_a.run_shell_payload("ln -s dir symlink_to_dir")
+        path = self.mount_a.cephfs_mntpt + "/symlink_to_dir"
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--await'], check_status=False)
-        log.debug(f"{J}")
-        self.assertEqual(J['op']['result'], -20) # ENOTDIR: the link is not a directory
+        # MDS doesn't treat symlinks differently from regular inodes,
+        # so quiescing one is allowed
+        self.quiesce_and_verify(path)
+
+        # however, this also means that the directory this symlink points to isn't quiesced
+        ops = self.fs.get_ops()
+        quiesce_inode = 0
+        for op in ops['ops']:
+            op_name = op['type_data'].get('op_name', None)
+            if op_name == "quiesce_inode":
+                quiesce_inode += 1
+        self.assertEqual(1, quiesce_inode)
 
     def test_quiesce_path_link_intermediate(self):
         """
@@ -505,7 +515,7 @@ class TestQuiesce(QuiesceTestCase):
 
     def test_quiesce_path_regfile(self):
         """
-        That quiesce on a regular file fails with ENOTDIR.
+        That quiesce on a regular file is possible.
         """
 
         self._configure_subvolume()
@@ -515,7 +525,7 @@ class TestQuiesce(QuiesceTestCase):
 
         J = self.fs.rank_tell(["quiesce", "path", path, '--await'], check_status=False)
         log.debug(f"{J}")
-        self.assertEqual(J['op']['result'], -20) # ENOTDIR
+        self.assertEqual(J['op']['result'], 0)
 
     def test_quiesce_path_dup(self):
         """
