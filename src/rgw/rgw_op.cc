@@ -6798,12 +6798,12 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     return;
   }
 
-#define DELETE_MULTI_OBJ_MAX_NUM      1000
+  constexpr int DEFAULT_MAX_NUM = 1000;
   int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
   if (max_num < 0) {
-    max_num = DELETE_MULTI_OBJ_MAX_NUM;
+    max_num = DEFAULT_MAX_NUM;
   }
-  int multi_delete_object_num = multi_delete->objects.size();
+  const int multi_delete_object_num = multi_delete->objects.size();
   if (multi_delete_object_num > max_num) {
     op_ret = -ERR_MALFORMED_XML;
     return;
