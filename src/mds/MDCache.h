@@ -627,8 +627,10 @@ private:
   void add_quiesce(CInode* parent, CInode* in);
 
   struct LockPathConfig {
+    using Lifetime = std::chrono::milliseconds;
     filepath fpath;
     std::vector<std::string> locks;
+    std::optional<Lifetime> lifetime;
     bool ap_dont_block = false;
     bool ap_freeze = false;
   };

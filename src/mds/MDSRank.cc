@@ -3531,6 +3531,10 @@ void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::funct
   config.ap_dont_block = cmd_getval_or<bool>(cmdmap, "ap_dont_block", false);
   config.ap_freeze = cmd_getval_or<bool>(cmdmap, "ap_freeze", false);
   config.fpath = filepath(path);
+  if (double lifetime; cmd_getval(cmdmap, "lifetime", lifetime)) {
+    using std::chrono::duration_cast;
+    config.lifetime = duration_cast<MDCache::LockPathConfig::Lifetime>(std::chrono::duration<double>(lifetime));
+  }
   bool await = cmd_getval_or<bool>(cmdmap, "await", false);
 
   auto respond = [f, on_finish=std::move(on_finish)](MDRequestRef const& req) {
