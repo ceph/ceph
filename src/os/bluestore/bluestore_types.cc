@@ -1146,7 +1146,7 @@ bool bluestore_blob_t::release_extents(bool all,
 uint32_t bluestore_blob_t::release_extents(
   uint32_t offset,
   uint32_t length,
-	PExtentVector* released_disk)
+  PExtentVector* released_disk)
 {
   uint32_t released_length = 0;
   constexpr auto EMPTY = bluestore_pextent_t::INVALID_OFFSET;
@@ -1227,10 +1227,10 @@ uint32_t bluestore_blob_t::release_extents(
     // starts copying remainder
     if (p->length - offset) {
       released_disk->emplace_back(p->offset + offset, p->length - offset);
+      released_length += p->length - offset;
+      empty->length += p->length - offset;
+      rem -= (p->length - offset);
     }
-    released_length += p->length - offset;
-    empty->length += p->length - offset;
-    rem -= (p->length - offset);
     ++p;
     while (rem > 0 && p->length <= rem) {
       ceph_assert(p->is_valid());
