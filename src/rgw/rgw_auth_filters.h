@@ -81,6 +81,10 @@ public:
     return get_decoratee().is_owner_of(o);
   }
 
+  bool is_root() const override {
+    return get_decoratee().is_root();
+  }
+
   bool is_anonymous() const override {
     return get_decoratee().is_anonymous();
   }
