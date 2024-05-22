@@ -3482,7 +3482,7 @@ void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::fu
     return;
   }
 
-  bool wait = cmd_getval_or<bool>(cmdmap, "wait", false);
+  bool await = cmd_getval_or<bool>(cmdmap, "await", false);
 
   C_SaferCond cond;
   auto* quiesce_ctx = new C_MDS_QuiescePathCommand(mdcache);
@@ -3509,7 +3509,7 @@ void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::fu
   // We should still be under the mds lock for this test to be valid.
   // MDCache will delete the quiesce_ctx if it manages to complete syncrhonously,
   // so we are testing the `mdr->internal_op_finish` to see if that has happend
-  if (!wait && mdr && mdr->internal_op_finish) {
+  if (!await && mdr && mdr->internal_op_finish) {
     ceph_assert(mdr->internal_op_finish == quiesce_ctx);
     quiesce_ctx->finish(mdr->result.value_or(0));
   }
