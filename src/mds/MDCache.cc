@@ -13854,7 +13854,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
   QuiesceInodeStateRef qis = std::make_shared<QuiesceInodeState>();
   *qis = {mdr, qfinisher->qs, delay, splitauth};
 
-  CInode* diri = nullptr;
+  CInode* rooti = nullptr;
   CF_MDS_RetryRequestFactory cf(this, mdr, true);
   static const int ptflags = 0
     | MDS_TRAVERSE_DISCOVER
@@ -13863,7 +13863,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     ;
 
   CDir* curdir = nullptr;
-  int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &diri, &curdir);
+  int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &rooti, &curdir);
   if (r > 0) {
     // we must abort asyncrhonously, since we may be on the unfreeze waiter list,
     // which whill be flushed syncrhonously with the abort
@@ -13874,13 +13874,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     return;
   }
 
-  auto dirino = diri->ino();
-
-  if (!diri->is_dir()) {
-    dout(5) << __func__ << ": file is not a directory" << dendl;
-    mds->server->respond_to_request(mdr, -CEPHFS_ENOTDIR);
-    return;
-  }
+  auto rootino = rooti->ino();
 
   {
     int myrc = 0;
@@ -13894,16 +13888,16 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     }
   }
 
-  if (!diri->is_auth() && !splitauth) {
+  if (!rooti->is_auth() && !splitauth) {
     dout(5) << __func__ << ": skipping recursive quiesce of path for non-auth inode" << dendl;
     mdr->mark_event("quiesce complete for non-auth tree");
-  } else if (auto& qops = mdr->more()->quiesce_ops; qops.count(dirino) == 0) {
+  } else if (auto& qops = mdr->more()->quiesce_ops; qops.count(rootino) == 0) {
     mdr->mark_event("quiescing root");
     MDRequestRef qimdr = request_start_internal(CEPH_MDS_OP_QUIESCE_INODE);
-    qimdr->set_filepath(filepath(dirino));
+    qimdr->set_filepath(filepath(rootino));
     qimdr->internal_op_finish = new C_MDS_RetryRequest(this, mdr);
     qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
-    qops[dirino] = qimdr->reqid;
+    qops[rootino] = qimdr->reqid;
     qs.inc_inodes();
     if (delay > 0ms) {
       mds->timer.add_event_after(delay, new LambdaContext([cache=this,qimdr](int r) {
@@ -13914,7 +13908,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     }
     return;
   } else {
-    dout(5) << __func__ << ": fully quiesced "  << *diri << dendl;
+    dout(5) << __func__ << ": fully quiesced "  << *rooti << dendl;
     mdr->mark_event("quiesce complete");
   }
 
