@@ -132,7 +132,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   stray_manager(m, purge_queue_),
   recovery_queue(m),
   trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate")),
-  quiesce_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate")),
+  quiesce_counter(g_conf().get_val<double>("mds_cache_quiesce_decay_rate")),
   quiesce_threshold(g_conf().get_val<Option::size_t>("mds_cache_quiesce_threshold")),
   quiesce_sleep(g_conf().get_val<std::chrono::milliseconds>("mds_cache_quiesce_sleep"))
 {
