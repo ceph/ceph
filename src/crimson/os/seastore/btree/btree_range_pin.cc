@@ -14,6 +14,7 @@ BtreeNodeMapping<key_t, val_t>::get_logical_extent(
   assert(parent);
   assert(parent->is_valid());
   assert(pos != std::numeric_limits<uint16_t>::max());
+  ceph_assert(t.get_trans_id() == ctx.trans.get_trans_id());
   auto &p = (FixedKVNode<key_t>&)*parent;
   auto k = this->is_indirect()
     ? this->get_intermediate_base()
