@@ -1,5 +1,12 @@
 >=19.0.0
 
+* ceph: a new --daemon-output-file switch is available for `ceph tell` commands
+  to dump output to a file local to the daemon. For commands which produce
+  large amounts of output, this avoids a potential spike in memory usage on the
+  daemon, allows for faster streaming writes to a file local to the daemon, and
+  reduces time holding any locks required to execute the command. For analysis,
+  it is necessary to retrieve the file from the host running the daemon
+  manually. Currently, only --format=json|json-pretty are supported.
 * RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
   header for replicated objects. This timestamp can be compared against the
   Last-Modified header to determine how long the object took to replicate.
