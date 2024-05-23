@@ -2,6 +2,8 @@
 
 set -e
 
+export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+
 if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     CEPH_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
