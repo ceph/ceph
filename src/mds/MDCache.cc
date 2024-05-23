@@ -13563,7 +13563,7 @@ void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
   }
 }
 
-void MDCache::quiesce_overdrive_fragmenting(CDir* dir, bool async) {
+void MDCache::quiesce_overdrive_fragmenting_async(CDir* dir) {
   if (!dir || !dir->state_test(CDir::STATE_FRAGMENTING)) {
     return;
   }
@@ -13578,21 +13578,22 @@ void MDCache::quiesce_overdrive_fragmenting(CDir* dir, bool async) {
       dout(20) << __func__ << ": dirfrag " << it->first << " contains my dirfrag " << mydf << dendl;
       auto const& mdr = it->second.mdr;
 
-      if (async) {
-        dout(10) << __func__ << ": will schedule async abort_if_freezing for " << *mdr << dendl;
-        mds->queue_waiter(new MDSInternalContextWrapper(mds, new LambdaContext( [this, mdr] {
-          if (!mdr->dead) {
-            dispatch_fragment_dir(mdr, true);
-          }
-        })));
-      } else {
-        if (mdr->dead) {
-          dout(20) << __func__ << ": the request is already dead: " << *mdr << dendl;
-        } else {
-          dout(10) << __func__ << ": will call abort_if_freezing for " << *mdr << dendl;
-          dispatch_fragment_dir(mdr, true);
+      dout(10) << __func__ << ": will schedule an async abort_if_freezing for mdr " << *mdr << dendl;
+      mds->queue_waiter(new MDSInternalContextWrapper(mds, new LambdaContext([this, basefrag=it->first, mdr](){
+        if (!mdr->is_live()) {
+          dout(20) << "quiesce_overdrive_fragmenting_async: bailing out, mdr " << *mdr << "is dead: " << mdr->dead << "; killed: " << mdr->killed << dendl;
+          return;
         }
-      }
+        if (auto it = fragments.find(basefrag); it != fragments.end() && it->second.mdr == mdr) {
+          if (it->second.all_frozen) {
+            dout(20) << "quiesce_overdrive_fragmenting_async: too late, won't abort mdr " << *mdr << dendl;
+          } else {
+            dout(20) << "quiesce_overdrive_fragmenting_async: will abort mdr " << *mdr << dendl;
+            mdr->aborted = true;
+            dispatch_fragment_dir(mdr);
+          }
+        }
+      })));
 
       // there can't be (shouldn't be) more than one containing fragment
       break;
@@ -13756,8 +13757,9 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     std::vector<MDRequestRef> todispatch;
     for (auto& dir : in->get_dirfrags()) {
       dout(25) << " iterating " << *dir << dendl;
-      // overdrive syncrhonously since we aren't yet on the waiting list
-      quiesce_overdrive_fragmenting(dir, false);
+      // we could be woken up by a finished fragmenting that's now cleaning up
+      // and completing the waiter list, so we should attempt the abort asynchronosuly
+      quiesce_overdrive_fragmenting_async(dir);
       migrator->quiesce_overdrive_export(dir);
       for (auto& [dnk, dn] : *dir) {
         dout(25) << " evaluating (" << dnk << ", " << *dn << ")" << dendl;
@@ -13880,9 +13882,9 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
   CDir* curdir = nullptr;
   int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &rooti, &curdir);
   if (r > 0) {
-    // we must abort asyncrhonously, since we may be on the unfreeze waiter list,
-    // which whill be flushed syncrhonously with the abort
-    quiesce_overdrive_fragmenting(curdir, true);
+    // since we may be on the unfreeze waiter list,
+    // we should abort fragmenting asynchronously
+    quiesce_overdrive_fragmenting_async(curdir);
     return;
   } else if (r < 0) {
     mds->server->respond_to_request(mdr, r);
