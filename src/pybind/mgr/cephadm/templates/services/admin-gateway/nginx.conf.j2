@@ -26,10 +26,17 @@ http {
 	ssl_prefer_server_ciphers {{ spec.ssl_prefer_server_ciphers }};
 {% endif %}
 
-{% if mgr_addr %}
-        location / {
-            proxy_pass {{ mgr_addr }};
-        }
+{% if dashboard_urls %}
+         {% for url in dashboard_urls %}
+         location {% if loop.index0 == 0 %}/{% else %}@handle_redirects_{{ loop.index0 }}{% endif %} {
+             proxy_pass {{ url }};
+             {% if loop.index0 < dashboard_urls | length - 1 %}
+             proxy_intercept_errors on;
+             recursive_error_pages on;
+             error_page 301 302 303 307 308 = @handle_redirects_{{ loop.index0 + 1 }};
+             {% endif %}
+         }
+         {% endfor %}
 {% endif %}
 
 {% if grafana_url %}

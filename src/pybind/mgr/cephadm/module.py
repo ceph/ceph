@@ -2948,10 +2948,12 @@ Then run the following:
                 deps.append(build_url(host=dd.hostname, port=port).lstrip('/'))
             deps = sorted(deps)
         elif daemon_type == 'admin-gateway':
-            # url_prefix for the following services depends on the presence of admin-gateway
-            deps += get_daemon_names(['grafana', 'prometheus', 'alertmanager'])
+            # url_prefix for monitoring daemons depends on the presence of admin-gateway
+            # while dashboard urls depend on the mgr daemons
+            deps += get_daemon_names(['mgr', 'grafana', 'prometheus', 'alertmanager'])
         else:
-            self.log.error(f'Cannot calculate dependencies for unknown daemon_type {daemon_type}')
+            # this daemon type doesn't need deps mgmt
+            pass
 
         if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')

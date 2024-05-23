@@ -13,7 +13,7 @@ from mgr_util import build_url
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AdminGatewaySpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from cephadm.ssl_cert_utils import SSLCerts
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,10 @@ class AdminGatewayService(CephadmService):
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('prometheus')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('grafana')]
+        for dd in self.mgr.cache.get_daemons_by_service('mgr'):
+            # we consider mgr a dep even if the dashboard is disabled
+            # in order to be consistent with _calc_daemon_deps().
+            deps.append(dd.name())
 
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
         prometheus_eps = self.get_service_endpoints('prometheus', scheme)
@@ -62,7 +66,7 @@ class AdminGatewayService(CephadmService):
 
         context = {
             'spec': spec,
-            'mgr_addr': f"https://{wrap_ipv6(self.mgr.get_mgr_ip())}:8443", # TODO: check if dashboard ssl is enabled or not
+            'dashboard_urls': get_dashboard_urls(self),
             'prometheus_url': f"{prometheus_eps[0]}"  if prometheus_eps else None,
             'alertmanager_url': f"{alertmanager_eps[0]}"  if alertmanager_eps else None,
             'grafana_url': f"{grafana_eps[0]}" if grafana_eps else None

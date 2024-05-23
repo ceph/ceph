@@ -1,17 +1,15 @@
 import errno
-import ipaddress
 import logging
 import os
 import socket
 from typing import List, Any, Tuple, Dict, Optional, cast
-from urllib.parse import urlparse
 
 from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
     SNMPGatewaySpec, PrometheusSpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url, get_cert_issuer_info, password_hash
 from ceph.deployment.utils import wrap_ipv6
 
@@ -252,47 +250,15 @@ class AlertmanagerService(CephadmService):
                 user_data['default_webhook_urls'], list):
             default_webhook_urls.extend(user_data['default_webhook_urls'])
 
-        # dashboard(s)
-        dashboard_urls: List[str] = []
-        snmp_gateway_urls: List[str] = []
-        mgr_map = self.mgr.get('mgr_map')
-        port = None
-        proto = None  # http: or https:
-        url = mgr_map.get('services', {}).get('dashboard', None)
-        if url:
-            p_result = urlparse(url.rstrip('/'))
-            hostname = socket.getfqdn(p_result.hostname)
-
-            try:
-                ip = ipaddress.ip_address(hostname)
-            except ValueError:
-                pass
-            else:
-                if ip.version == 6:
-                    hostname = f'[{hostname}]'
-
-            dashboard_urls.append(
-                f'{p_result.scheme}://{hostname}:{p_result.port}{p_result.path}')
-            proto = p_result.scheme
-            port = p_result.port
-
         # add a dependency since url_prefix depends on the existence of admin-gateway
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('admin-gateway')]
-
         # scan all mgrs to generate deps and to get standbys too.
-        # assume that they are all on the same port as the active mgr.
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
             # we consider mgr a dep even if the dashboard is disabled
             # in order to be consistent with _calc_daemon_deps().
             deps.append(dd.name())
-            if not port:
-                continue
-            if dd.daemon_id == self.mgr.get_mgr_id():
-                continue
-            assert dd.hostname is not None
-            addr = self._inventory_get_fqdn(dd.hostname)
-            dashboard_urls.append(build_url(scheme=proto, host=addr, port=port).rstrip('/'))
 
+        snmp_gateway_urls: List[str] = []
         for dd in self.mgr.cache.get_daemons_by_service('snmp-gateway'):
             assert dd.hostname is not None
             assert dd.ports
@@ -304,7 +270,7 @@ class AlertmanagerService(CephadmService):
 
         context = {
             'secure_monitoring_stack': self.mgr.secure_monitoring_stack,
-            'dashboard_urls': dashboard_urls,
+            'dashboard_urls': get_dashboard_urls(self),
             'default_webhook_urls': default_webhook_urls,
             'snmp_gateway_urls': snmp_gateway_urls,
             'secure': secure,
