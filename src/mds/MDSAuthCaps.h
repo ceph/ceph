@@ -158,6 +158,10 @@ struct MDSCapMatch {
   bool match_path(std::string_view target_path) const;
   std::string to_string();
 
+  bool match_fs(std::string_view target_fs) const {
+    return fs_name == target_fs || fs_name.empty() || fs_name == "*";
+  }
+
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(uid, bl);
@@ -275,8 +279,7 @@ public:
     }
 
     for (const MDSCapGrant &g : grants) {
-      if (g.match.fs_name == fs_name || g.match.fs_name.empty() ||
-	  g.match.fs_name == "*") {
+      if (g.match.match_fs(fs_name)) {
 	if (mask & MAY_READ && g.spec.allow_read()) {
 	  return true;
 	}
@@ -299,10 +302,12 @@ public:
     }
   }
 
-  bool root_squash_in_caps() const {
-    for (const MDSCapGrant &g : grants) {
-      if (g.match.root_squash) {
-        return true;
+  bool root_squash_in_caps(std::string_view fs_name) const {
+    for (const MDSCapGrant& g : grants) {
+      if (g.match.match_fs(fs_name)) {
+        if (g.match.root_squash) {
+          return true;
+        }
       }
     }
     return false;

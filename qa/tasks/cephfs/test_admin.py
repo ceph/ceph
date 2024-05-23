@@ -1406,6 +1406,101 @@ class TestFsAuthorize(CephFSTestCase):
         self.captester.conduct_neg_test_for_chown_caps()
         self.captester.conduct_neg_test_for_truncate_caps()
 
+    def test_multifs_rootsquash_nofeature(self):
+        """
+        That having root_squash on one fs doesn't prevent access to others.
+        """
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+
+        self.mount_a.umount_wait()
+
+        # Authorize client to fs1
+        FS_AUTH_CAPS = (('/', 'rw'),)
+        self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
+
+        FS_AUTH_CAPS = (('/', 'rw', 'root_squash'),)
+        keyring = self.fs2.authorize(self.client_id, FS_AUTH_CAPS)
+
+        CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
+        # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
+        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)])
+        mntargs = [f"--client_debug_inject_features={features}"]
+
+        # should succeed
+        with self.assert_cluster_log("report clients with broken root_squash", present=False):
+            keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+            self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, mntargs=mntargs, cephfs_name=self.fs1.name)
+
+        captester = CapTester(self.mount_a, '/')
+        captester.conduct_pos_test_for_read_caps()
+        captester.conduct_pos_test_for_open_caps()
+
+    def test_rootsquash_nofeature(self):
+        """
+        That having root_squash on an fs without the feature bit raises a HEALTH_ERR warning.
+        """
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        FS_AUTH_CAPS = (('/', 'rw', 'root_squash'),)
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
+        # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
+        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)])
+        mntargs = [f"--client_debug_inject_features={features}"]
+
+        # should succeed
+        with self.assert_cluster_log("with broken root_squash implementation"):
+            keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+            self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, mntargs=mntargs, cephfs_name=self.fs.name)
+            self.wait_for_health("MDS_CLIENTS_BROKEN_ROOTSQUASH", 60)
+            self.assertFalse(self.mount_a.is_blocked())
+
+        self.mount_a.umount_wait()
+        self.wait_for_health_clear(60)
+
+    def test_rootsquash_nofeature_evict(self):
+        """
+        That having root_squash on an fs without the feature bit can be evicted.
+        """
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        FS_AUTH_CAPS = (('/', 'rw', 'root_squash'),)
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
+        # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
+        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)])
+        mntargs = [f"--client_debug_inject_features={features}"]
+
+        # should succeed
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, mntargs=mntargs, cephfs_name=self.fs.name)
+        self.wait_for_health("MDS_CLIENTS_BROKEN_ROOTSQUASH", 60)
+
+        self.fs.required_client_features("add", "client_mds_auth_caps")
+        self.wait_for_health_clear(60)
+        self.assertTrue(self.mount_a.is_blocked())
+
+
     def test_single_path_rootsquash_issue_56067(self):
         """
         That a FS client using root squash MDS caps allows non-root user to write data
