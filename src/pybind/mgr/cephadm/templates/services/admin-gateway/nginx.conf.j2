@@ -6,6 +6,31 @@ events {
 
 http {
 
+{% if grafana_eps %}
+        upstream grafana_servers {
+         {% for ep in grafana_eps %}
+         server {{ ep }};
+	 {% endfor %}
+        }
+{% endif %}
+
+{% if prometheus_eps %}
+        upstream prometheus_servers {
+         {% for ep in prometheus_eps %}
+         server {{ ep }};
+	 {% endfor %}
+        }
+{% endif %}
+
+{% if alertmanager_eps %}
+        upstream alertmanager_servers {
+         {% for ep in alertmanager_eps %}
+         server {{ ep }};
+	 {% endfor %}
+        }
+{% endif %}
+
+
     server {
 
 {% if spec.disable_https %}
@@ -39,24 +64,25 @@ http {
          {% endfor %}
 {% endif %}
 
-{% if grafana_url %}
+{% if grafana_eps %}
         location /grafana {
             rewrite ^/grafana/(.*) /$1 break;
-            proxy_pass {{ grafana_url }};
+            proxy_pass {{ grafana_scheme}}://grafana_servers;
         }
 {% endif %}
 
-{% if prometheus_url %}
+{% if prometheus_eps %}
         location /prometheus {
-            proxy_pass {{ prometheus_url }};
+            proxy_pass {{ prometheus_scheme}}://prometheus_servers;
         }
 {% endif %}
 
-{% if alertmanager_url %}
+{% if alertmanager_eps %}
         location /alertmanager {
-            proxy_pass {{ alertmanager_url }};
+            proxy_pass {{ alertmanager_scheme}}://alertmanager_servers;
         }
 {% endif %}
+
 
     }
 }

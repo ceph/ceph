@@ -27,13 +27,13 @@ class AdminGatewayService(CephadmService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
-    def get_service_endpoints(self, service_name, scheme):
+    def get_service_endpoints(self, service_name):
         srv_entries = []
         for dd in self.mgr.cache.get_daemons_by_service(service_name):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
             port = dd.ports[0] if dd.ports else AlertmanagerService.DEFAULT_SERVICE_PORT
-            srv_entries.append('{}'.format(build_url(scheme=scheme, host=addr, port=port).lstrip('/')))
+            srv_entries.append(f'{addr}:{port}')
         return srv_entries
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
@@ -60,16 +60,15 @@ class AdminGatewayService(CephadmService):
             deps.append(dd.name())
 
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
-        prometheus_eps = self.get_service_endpoints('prometheus', scheme)
-        alertmanager_eps = self.get_service_endpoints('alertmanager', scheme)
-        grafana_eps = self.get_service_endpoints('grafana', 'https')
-
         context = {
             'spec': spec,
+            'grafana_scheme': 'https', # TODO(redo): fixme, get current value of grafana scheme
+            'prometheus_scheme': scheme,
+            'alertmanager_scheme': scheme,
             'dashboard_urls': get_dashboard_urls(self),
-            'prometheus_url': f"{prometheus_eps[0]}"  if prometheus_eps else None,
-            'alertmanager_url': f"{alertmanager_eps[0]}"  if alertmanager_eps else None,
-            'grafana_url': f"{grafana_eps[0]}" if grafana_eps else None
+            'prometheus_eps': self.get_service_endpoints('prometheus'),
+            'alertmanager_eps': self.get_service_endpoints('alertmanager'),
+            'grafana_eps': self.get_service_endpoints('grafana')
         }
         conf = self.mgr.template.render('services/admin-gateway/nginx.conf.j2', context)
 
