@@ -102,17 +102,23 @@ enum {
   l_mon_backup_duration,
   l_mon_backup_last_size,
   l_mon_backup_last_files,
+  l_mon_backup_last_success,
+  l_mon_backup_last_failed,
+  l_mon_backup_running,
+  l_mon_backup_cleanup_running,
   l_mon_backup_cleanup_success,
   l_mon_backup_cleanup_failed,
   l_mon_backup_cleanup_duration,
-  l_mon_backup_cleanup_size,
   l_mon_backup_cleanup_freed,
+  l_mon_backup_cleanup_size,
+  l_mon_backup_cleanup_kept,
   l_mon_last,
 };
 
 class PaxosService;
 
 class AdminSocketHook;
+class MonitorBackupManager;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -1040,6 +1046,7 @@ private:
 
   OpTracker op_tracker;
 
+  MonitorBackupManager *backup_manager;
   bool mon_backup_requested;
 
  public:

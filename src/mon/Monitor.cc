@@ -35,6 +35,7 @@
 #include "osd/OSDMap.h"
 
 #include "MonitorDBStore.h"
+#include "MonitorBackup.h"
 
 #include "messages/PaxosServiceMessage.h"
 #include "messages/MMonMap.h"
@@ -277,6 +278,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   // actually matters will wait until we have quorum etc and then
   // retry (and revalidate).
   leader_mon_commands = local_mon_commands;
+  
+  backup_manager = new MonitorBackupManager(cct, this);
 }
 
 Monitor::~Monitor()
@@ -504,62 +507,43 @@ abort:
 
 int Monitor::backup()
 {
-    dout(1) << "triggering backup" << dendl;
-    logger->inc(l_mon_backup_started);
-    auto start = ceph::coarse_mono_clock::now();
-    std::string backup_path = g_conf().get_val<string>("mon_backup_path");
-    if (backup_path.empty()) {
-      logger->inc(l_mon_backup_failed);
-      dout(1) << "backup failed: no backup_path configured" << dendl;
-      return -ENOTDIR;
-    }
-    KeyValueDB::BackupStats stats = store->backup();
-    auto end = ceph::coarse_mono_clock::now();
-    auto duration = ceph::to_seconds<double>(end - start);
-    logger->tinc(l_mon_backup_duration, end - start);
-    logger->set(l_mon_backup_last_size, stats.size);
-    logger->set(l_mon_backup_last_files, stats.number_files);
-    if (stats.error) {
-      logger->inc(l_mon_backup_success);
-      dout(1) << "finished backup in "
-              << duration << " seconds" << dendl;
-    } else {
-      logger->inc(l_mon_backup_failed);
-      dout(1) << "failed backup in "
-              << duration << " seconds" << dendl;
-      return -EIO;
-    }
+  if(!backup_manager) {
+    return -EIO;
+  }
+  dout(1) << "triggering backup" << dendl;
+  std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  if (backup_path.empty()) {
+    logger->inc(l_mon_backup_failed);
+    dout(1) << "backup failed: no backup_path configured" << dendl;
+    return -ENOTDIR;
+  }
+  uint64_t jobid = backup_manager->backup();
+  if (jobid > 0) {
+    dout(1) << "queues backup job id"
+              << jobid << dendl;
     return 0;
+  } else {
+    dout(1) << "failed to queue job job" << dendl;
+    return -EIO;
+  }
 }
 
 int Monitor::backup_cleanup()
 {
-    dout(1) << "triggering backup_cleanup" << dendl;
-    logger->inc(l_mon_backup_started);
-    auto start = ceph_clock_now();
-    std::string backup_path = g_conf().get_val<string>("mon_backup_path");
-    if (backup_path.empty()) {
-      dout(1) << "backup_cleanup failed: no backup_path configured" << dendl;
-      return -ENOTDIR;
-    }
-    KeyValueDB::BackupCleanupStats stats = store->backup_cleanup();
-    auto end = ceph_clock_now();
-    //auto duration = ceph::to_seconds<double>(end - start);
-    auto duration = end - start;
-    logger->tset(l_mon_backup_cleanup_duration, end - start);
-    logger->set(l_mon_backup_cleanup_size, stats.size);
-    logger->set(l_mon_backup_cleanup_freed, stats.freed);
-    if (!stats.error) {
-      logger->inc(l_mon_backup_cleanup_success);
-      dout(1) << "finished backup in "
-              << duration << " seconds" << dendl;
-    } else {
-      logger->inc(l_mon_backup_cleanup_failed);
-      dout(1) << "failed backup in "
-              << duration << " seconds" << dendl;
-      return -EIO;
-    }
-    return !stats.error ? 0 : -EIO;
+  if(!backup_manager) {
+    return -EIO;
+  }
+  dout(1) << "triggering backup_cleanup" << dendl;
+  logger->inc(l_mon_backup_started);
+  std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  if (backup_path.empty()) {
+    dout(1) << "backup_cleanup failed: no backup_path configured" << dendl;
+    return -ENOTDIR;
+  }
+  uint32_t jobid = backup_manager->cleanup();
+  dout(1) << "queues backup cleanup job "
+            << jobid << dendl;
+  return jobid > 0 ? 0 : -EIO;
 }
 
 void Monitor::handle_signal(int signum)
@@ -819,6 +803,10 @@ int Monitor::preinit()
         "bakf", PerfCountersBuilder::PRIO_USEFUL);
     pcb.add_time_avg(l_mon_backup_duration, "backup_duration", "Mon backup duration",
         "bakd", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time(l_mon_backup_last_success, "backup_last_success", "Last successfull mon backup",
+        "bakst", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time(l_mon_backup_last_failed, "backup_last_failed", "Last failed mon backup",
+        "bakst", PerfCountersBuilder::PRIO_USEFUL);
     pcb.add_u64_counter(l_mon_backup_last_size, "backup_last_size", "Last backup size",
         "bakls", PerfCountersBuilder::PRIO_USEFUL);
     pcb.add_u64_counter(l_mon_backup_last_files, "backup_last_files", "Last backup file numbers",
@@ -827,8 +815,16 @@ int Monitor::preinit()
         "baks", PerfCountersBuilder::PRIO_USEFUL);
     pcb.add_u64_counter(l_mon_backup_cleanup_failed, "backup_failed", "Mon backup cleanup failed",
         "bakf", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_cleanup_size, "backup_cleanup_size", "Size of backups removed",
+        "bakrc", PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_kept, "backup_cleanup_kept", "Number of backups kept after cleanup",
+        "bakrc", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_time_avg(l_mon_backup_cleanup_duration, "backup_duration", "Mon backup cleanup duration",
         "bakd", PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_running, "backup_running", "Mon backup process is running",
+        "bakr", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_cleanup_running, "backup_running", "Mon backup cleanup is running",
+        "bakrc", PerfCountersBuilder::PRIO_USEFUL);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
