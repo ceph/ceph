@@ -1,9 +1,14 @@
 from __future__ import print_function
 import argparse
 import os
-import pkg_resources
 import sys
 import logging
+
+try:
+    from importlib.metadata import entry_points
+except ImportError:
+    from pkg_resources import iter_entry_points as entry_points
+
 
 from ceph_volume.decorators import catches
 from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory, drive_group, activate
@@ -170,9 +175,9 @@ def _load_library_extensions():
     """
     logger = logging.getLogger('ceph_volume.plugins')
     group = 'ceph_volume_handlers'
-    entry_points = pkg_resources.iter_entry_points(group=group)
+
     plugins = []
-    for ep in entry_points:
+    for ep in entry_points(group=group):
         try:
             logger.debug('loading %s' % ep.name)
             plugin = ep.load()
