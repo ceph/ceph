@@ -127,6 +127,7 @@ void MetricAggregator::shutdown() {
 }
 
 bool MetricAggregator::ms_dispatch2(const ref_t<Message> &m) {
+  dout(25) << " processing " << m << dendl;
   if (m->get_type() == MSG_MDS_METRICS &&
       m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MDS) {
     const Message *msg = m.get();
