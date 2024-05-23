@@ -1280,8 +1280,13 @@ TEST_P(seastore_test_t, zero)
 INSTANTIATE_TEST_SUITE_P(
   seastore_test,
   seastore_test_t,
-  ::testing::Values (
-    "segmented",
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK,
+      integrity_check_t::NONFULL_CHECK)
   )
 );
