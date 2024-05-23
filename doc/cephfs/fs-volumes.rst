@@ -603,14 +603,17 @@ fail (if the metadata key did not exist).
 Cloning Snapshots
 -----------------
 
-Subvolumes can be created by cloning subvolume snapshots. Cloning is an asynchronous operation that copies
-data from a snapshot to a subvolume. Due to this bulk copying, cloning is inefficient for very large
-data sets.
+Subvolumes can be created by cloning subvolume snapshots. Cloning is an
+asynchronous operation that copies data from a snapshot to a subvolume. Because
+cloning is an operation that involves bulk copying, it is inefficient for
+very large data sets.
 
-.. note:: Removing a snapshot (source subvolume) would fail if there are pending or in progress clone operations.
+.. note:: Removing a snapshot (source subvolume) fails when there are
+   pending or in-progress clone operations.
 
-Protecting snapshots prior to cloning was a prerequisite in the Nautilus release, and the commands to protect/unprotect
-snapshots were introduced for this purpose. This prerequisite, and hence the commands to protect/unprotect, is being
+Protecting snapshots prior to cloning was a prerequisite in the Nautilus
+release. Commands that made possible the protection and unprotection of
+snapshots were introduced for this purpose. This prerequisite is being
 deprecated and may be removed from a future release.
 
 The commands being deprecated are:
@@ -624,7 +627,7 @@ The commands being deprecated are:
 
 .. note:: Use the ``subvolume info`` command to fetch subvolume metadata regarding supported ``features`` to help decide if protect/unprotect of snapshots is required, based on the availability of the ``snapshot-autoprotect`` feature.
 
-To initiate a clone operation use:
+Run a command of the following form to initiate a clone operation:
 
 .. prompt:: bash #
 
@@ -632,25 +635,30 @@ To initiate a clone operation use:
 
 .. note:: ``subvolume snapshot clone`` command depends upon the above mentioned config option ``snapshot_clone_no_wait``
 
-If a snapshot (source subvolume) is a part of non-default group, the group name needs to be specified:
+Run a command of the following form when a snapshot (source subvolume) is a
+part of non-default group. Note that the group name needs to be specified:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --group_name <subvol_group_name>
 
-Cloned subvolumes can be a part of a different group than the source snapshot (by default, cloned subvolumes are created in default group). To clone to a particular group use:
+Cloned subvolumes can be a part of a different group than the source snapshot
+(by default, cloned subvolumes are created in default group). Run a command of
+the following form to clone to a particular group use:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --target_group_name <subvol_group_name>
 
-Similar to specifying a pool layout when creating a subvolume, pool layout can be specified when creating a cloned subvolume. To create a cloned subvolume with a specific pool layout use:
+Pool layout can be specified when creating a cloned subvolume in a way that is
+similar to specifying a pool layout when creating a subvolume. Run a command of
+the following form to create a cloned subvolume with a specific pool layout:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
 
-To check the status of a clone operation use:
+Run a command of the following form to check the status of a clone operation:
 
 .. prompt:: bash #
 
@@ -716,11 +724,14 @@ Here is an example of a ``failed`` clone:
         }
     }
 
-(NOTE: since ``subvol1`` is in the default group, the ``source`` object's  ``clone status`` does not include the group name)
+.. note::  Because ``subvol1`` is in the default group, the ``source`` object's
+   ``clone status`` does not include the group name)
 
-.. note:: Cloned subvolumes are accessible only after the clone operation has successfully completed.
+.. note:: Cloned subvolumes are accessible only after the clone operation has
+   successfully completed.
 
-After a successful clone operation, ``clone status`` will look like the below:
+After a successful clone operation, ``clone status`` will look like the
+following:
 
 .. prompt:: bash #
 
@@ -736,23 +747,28 @@ After a successful clone operation, ``clone status`` will look like the below:
 
 If a clone operation is unsuccessful, the ``state`` value will be  ``failed``.
 
-To retry a failed clone operation, the incomplete clone must be deleted and the clone operation must be issued again.
-To delete a partial clone use:
+To retry a failed clone operation, the incomplete clone must be deleted and the
+clone operation must be issued again.
+
+Run a command of the following form to delete a partial clone:
 
 .. prompt:: bash #
 
    ceph fs subvolume rm <vol_name> <clone_name> [--group_name <group_name>] --force
 
-.. note:: Cloning synchronizes only directories, regular files and symbolic links. Inode timestamps (access and
-          modification times) are synchronized up to seconds granularity.
+.. note:: Cloning synchronizes only directories, regular files and symbolic
+   links. inode timestamps (access and modification times) are synchronized up
+   to a second's granularity.
 
-An ``in-progress`` or a ``pending`` clone operation may be canceled. To cancel a clone operation use the ``clone cancel`` command:
+An ``in-progress`` or a ``pending`` clone operation may be canceled. To cancel
+a clone operation use the ``clone cancel`` command:
 
 .. prompt:: bash #
 
    ceph fs clone cancel <vol_name> <clone_name> [--group_name <group_name>]
 
-On successful cancellation, the cloned subvolume is moved to the ``canceled`` state:
+On successful cancellation, the cloned subvolume is moved to the ``canceled``
+state:
 
 .. prompt:: bash #
 
@@ -773,7 +789,8 @@ On successful cancellation, the cloned subvolume is moved to the ``canceled`` st
         }
     }
 
-.. note:: The canceled cloned may be deleted by supplying the ``--force`` option to the `fs subvolume rm` command.
+.. note:: Delete the canceled cloned by supplying the ``--force`` option to the
+   ``fs subvolume rm`` command.
 
 Configurables
 ~~~~~~~~~~~~~
@@ -784,17 +801,20 @@ Configure the maximum number of concurrent clone operations. The default is 4:
 
    ceph config set mgr mgr/volumes/max_concurrent_clones <value>
 
-Configure the snapshot_clone_no_wait option :
+Configure the ``snapshot_clone_no_wait`` option:
 
-The ``snapshot_clone_no_wait`` config option is used to reject clone creation requests when cloner threads 
-(which can be configured using above option i.e. ``max_concurrent_clones``) are not available.
-It is enabled by default i.e. the value set is True, whereas it can be configured by using below command.
+The ``snapshot_clone_no_wait`` config option is used to reject clone-creation
+requests when cloner threads (which can be configured using the above options,
+for example, ``max_concurrent_clones``) are not available. It is enabled by
+default. This means that the value is set to ``True``, but it can be configured
+by using the following command:
 
 .. prompt:: bash #
 
    ceph config set mgr mgr/volumes/snapshot_clone_no_wait <bool>
 
-The current value of ``snapshot_clone_no_wait`` can be fetched by using below command.
+The current value of ``snapshot_clone_no_wait`` can be fetched by running the
+following command.
 
 .. prompt:: bash #
     
