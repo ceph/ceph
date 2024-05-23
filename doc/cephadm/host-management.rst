@@ -303,7 +303,10 @@ Setting the initial CRUSH location of host
 ==========================================
 
 Hosts can contain a ``location`` identifier which will instruct cephadm to 
-create a new CRUSH host located in the specified hierarchy.
+create a new CRUSH host bucket located in the specified hierarchy.
+You can specify more than one element of the tree when doing so (for
+instance if you want to ensure that the rack that a host is being
+added to is also added to the default bucket), for example:
 
 .. code-block:: yaml
 
@@ -311,6 +314,7 @@ create a new CRUSH host located in the specified hierarchy.
     hostname: node-00
     addr: 192.168.0.10
     location:
+      root: default
       rack: rack1
 
 .. note:: 
