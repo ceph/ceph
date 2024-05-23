@@ -2675,6 +2675,7 @@ void MDSRankDispatcher::handle_asok_command(
       f->close_section();
 
       bufferlist outbl;
+      f->flush(outbl); /* even for errors, dump f */
       do_respond(rc, {}, outbl);
     }
   };
