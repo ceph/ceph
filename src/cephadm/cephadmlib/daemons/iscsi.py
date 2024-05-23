@@ -138,11 +138,6 @@ class CephIscsi(ContainerDaemonForm):
         )
         if code == 0:
             return out.strip()
-        out, _, code = python(
-            "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"
-        )
-        if code == 0:
-            return out.strip()
         return None
 
     def validate(self):
