@@ -4671,6 +4671,14 @@ def test_persistent_ps_s3_reload():
     print('delete all topics')
     delete_all_topics(conn, '', get_config_cluster())
 
+    # disable v2 notification
+    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
     # create random port for the http server
     host = get_ip()
     http_port = random.randint(10000, 20000)
