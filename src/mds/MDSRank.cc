@@ -2668,8 +2668,7 @@ void MDSRankDispatcher::handle_asok_command(
 
     void finish(int rc) override {
       f->open_object_section("result");
-      if (!ss.view().empty()) {
-        f->dump_string("message", ss.view());
+      f->dump_string("message", ss.view());
       f->dump_int("return_code", rc);
       f->close_section();
 
