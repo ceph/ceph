@@ -1408,13 +1408,13 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``bdevs_per_cluster`` number of bdevs per cluster
         self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
-        self.server_key = server_key or './server.key'
+        self.server_key = server_key
         #: ``server_cert`` gateway server certificate
-        self.server_cert = server_cert or './server.crt'
+        self.server_cert = server_cert
         #: ``client_key`` client key
-        self.client_key = client_key or './client.key'
+        self.client_key = client_key
         #: ``client_cert`` client certificate
-        self.client_cert = client_cert or './client.crt'
+        self.client_cert = client_cert
         #: ``spdk_path`` path to SPDK
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
         #: ``tgt_path`` nvmeof target path
@@ -1469,7 +1469,7 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         if self.enable_auth:
-            if not any([self.server_key, self.server_cert, self.client_key, self.client_cert]):
+            if not all([self.server_key, self.server_cert, self.client_key, self.client_cert]):
                 raise SpecValidationError(
                     'enable_auth is true but client/server certificates are missing')
 
