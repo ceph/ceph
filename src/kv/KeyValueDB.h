@@ -24,6 +24,7 @@ class KeyValueDB {
 public:
   struct BackupCleanupStats {
     bool error;
+    utime_t timestamp;
     uint32_t corrupted;
     uint32_t deleted;
     uint32_t kept;
@@ -33,6 +34,7 @@ public:
 
   struct BackupStats {
     bool error;
+    utime_t timestamp;
     std::string msg;
     uint64_t size;
     uint64_t number_files;

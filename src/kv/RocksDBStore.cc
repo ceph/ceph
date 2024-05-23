@@ -2031,7 +2031,10 @@ KeyValueDB::BackupStats RocksDBStore::backup(const std::string& path)
   rocksdb::CreateBackupOptions new_backup_options;
   
   s = backup_engine->CreateNewBackupWithMetadata(new_backup_options, db, "", &new_backup);
+
+  rv.timestamp = ceph_clock_now();
   rv.msg = s.ToString();
+
   if (!s.ok()) {
     ldout(cct, 0) << __func__ << "can't create backup: " << s.ToString() << dendl;
     rv.error = true;
@@ -2183,6 +2186,7 @@ KeyValueDB::BackupCleanupStats RocksDBStore::cleanup_backups(const std::string& 
         rv.deleted++;
     }
   }
+  rv.timestamp = ceph_clock_now();
   return rv;
 }
 
