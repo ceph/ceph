@@ -72,8 +72,8 @@ namespace ceph {
 	  Formatter::create(std::forward<Params>(params)...));
     }
 
-    Formatter();
-    virtual ~Formatter();
+    Formatter() = default;
+    virtual ~Formatter() = default;
 
     virtual void enable_line_break() = 0;
     virtual void flush(std::ostream& os) = 0;
