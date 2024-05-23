@@ -5001,7 +5001,7 @@ options:
     The price was layered inefficiencies gained along the way.
     Rework of write path done from scratch clears it and optimizes for typical cases.
     Write_v2 is necessary for recompression feature.
-  default: false
+  default: true
   flags:
   - startup
   with_legacy: false
