@@ -267,14 +267,22 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   submit() {
     // Exit immediately if the form isn't dirty.
-    if (this.bucketForm.getValue('encryption_enabled') == null) {
-      this.bucketForm.get('encryption_enabled').setValue(false);
-      this.bucketForm.get('encryption_type').setValue(null);
-    }
     if (this.bucketForm.pristine) {
       this.goToListView();
       return;
     }
+
+    // Ensure that no validation is pending
+    if (this.bucketForm.pending) {
+      this.bucketForm.setErrors({ cdSubmitButton: true });
+      return;
+    }
+
+    if (this.bucketForm.getValue('encryption_enabled') == null) {
+      this.bucketForm.get('encryption_enabled').setValue(false);
+      this.bucketForm.get('encryption_type').setValue(null);
+    }
+
     const values = this.bucketForm.value;
     const xmlStrTags = this.tagsToXML(this.tags);
     const bucketPolicy = this.getBucketPolicy();
