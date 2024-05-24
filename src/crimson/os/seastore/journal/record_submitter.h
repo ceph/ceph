@@ -217,16 +217,6 @@ class RecordSubmitter {
     // OVERFLOW: outstanding_io >  io_depth_limit is impossible
   };
 
-  struct grouped_io_stats {
-    uint64_t num_io = 0;
-    uint64_t num_io_grouped = 0;
-
-    void increment(uint64_t num_grouped_io) {
-      ++num_io;
-      num_io_grouped += num_grouped_io;
-    }
-  };
-
   using base_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
 
@@ -334,13 +324,8 @@ private:
   // wait for decrement_io_with_flush()
   std::optional<seastar::promise<> > wait_unfull_flush_promise;
 
-  struct {
-    grouped_io_stats record_batch_stats;
-    grouped_io_stats io_depth_stats;
-    uint64_t record_group_padding_bytes = 0;
-    uint64_t record_group_metadata_bytes = 0;
-    uint64_t record_group_data_bytes = 0;
-  } stats;
+  writer_stats_t stats;
+
   seastar::metrics::metric_group metrics;
 };
 
