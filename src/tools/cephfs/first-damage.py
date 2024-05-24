@@ -64,12 +64,15 @@ ROOT_INODE  = "1.00000000"
 LOST_FOUND_INODE  = "4.00000000"
 
 DIR_PATTERN = re.compile(r'[0-9a-fA-F]{8,}\.[0-9a-fA-F]+')
+STRAY_DIR_PATTERN = re.compile(r'6[0-9a-fA-F]{2,}\.[0-9a-fA-F]+')
 
 CACHE = set()
 
 def traverse(MEMO, ioctx):
     for o in ioctx.list_objects():
-        if not DIR_PATTERN.fullmatch(o.key) and o.key not in [ROOT_INODE, LOST_FOUND_INODE]:
+        if (not DIR_PATTERN.fullmatch(o.key) and
+            not STRAY_DIR_PATTERN.fullmatch(o.key)
+            and o.key not in [ROOT_INODE, LOST_FOUND_INODE]):
             log.debug("skipping %s", o.key)
             continue
         elif o.key in CACHE:
