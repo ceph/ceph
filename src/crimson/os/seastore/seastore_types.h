@@ -2211,6 +2211,43 @@ struct scan_valid_records_cursor {
 };
 std::ostream& operator<<(std::ostream&, const scan_valid_records_cursor&);
 
+template <typename CounterT>
+using counter_by_src_t = std::array<CounterT, TRANSACTION_TYPE_MAX>;
+
+template <typename CounterT>
+CounterT& get_by_src(
+    counter_by_src_t<CounterT>& counters_by_src,
+    transaction_type_t src) {
+  assert(static_cast<std::size_t>(src) < counters_by_src.size());
+  return counters_by_src[static_cast<std::size_t>(src)];
+}
+
+template <typename CounterT>
+const CounterT& get_by_src(
+    const counter_by_src_t<CounterT>& counters_by_src,
+    transaction_type_t src) {
+  assert(static_cast<std::size_t>(src) < counters_by_src.size());
+  return counters_by_src[static_cast<std::size_t>(src)];
+}
+
+struct grouped_io_stats {
+  uint64_t num_io = 0;
+  uint64_t num_io_grouped = 0;
+
+  void increment(uint64_t num_grouped_io) {
+    ++num_io;
+    num_io_grouped += num_grouped_io;
+  }
+};
+
+struct writer_stats_t {
+  grouped_io_stats record_batch_stats;
+  grouped_io_stats io_depth_stats;
+  uint64_t record_group_padding_bytes = 0;
+  uint64_t record_group_metadata_bytes = 0;
+  uint64_t record_group_data_bytes = 0;
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
