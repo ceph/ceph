@@ -167,6 +167,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
   }
   ceph_assert(size > 0);
   ceph_assert(is_aligned(size, block_size));
+  ceph_assert(size <= max_alloc_size);
 
   interval_set<rbm_abs_addr> result;
 
@@ -183,8 +184,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
     return 0;
   };
   
-  auto alloc = std::min(max_alloc_size, size);
-  rbm_abs_addr ret = try_to_alloc_block(alloc);
+  rbm_abs_addr ret = try_to_alloc_block(size);
   if (ret == 0) {
     return std::nullopt;
   }
@@ -220,7 +220,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
   {
     while (alloc_size) {
       rbm_abs_addr start = 0;
-      extent_len_t len = find_block(alloc_size, start);
+      extent_len_t len = find_block(std::min(max_alloc_size, alloc_size), start);
       ceph_assert(len);
       _remove_from_tree(start, len);
       DEBUG("allocate addr: {}, allocate size: {}, available size: {}",
@@ -231,8 +231,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
     return 0;
   };
   
-  auto alloc = std::min(max_alloc_size, size);
-  try_to_alloc_block(alloc);
+  try_to_alloc_block(size);
 
   assert(!result.empty());
   for (auto p : result) {
