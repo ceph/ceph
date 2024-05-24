@@ -296,7 +296,18 @@ void JSONFormatter::finish_pending_string()
   }
 }
 
-template <class T>
+void JSONFormatter::add_value(std::string_view name, double val) {
+  CachedStackStringStream css;
+  if (!std::isfinite(val) || std::isnan(val)) {
+    *css << "null";
+  } else {
+    css->precision(std::numeric_limits<double>::max_digits10);
+    *css << val;
+  }
+  add_value(name, css->strv(), false);
+}
+
+template <typename T>
 void JSONFormatter::add_value(std::string_view name, T val)
 {
   CachedStackStringStream css;
