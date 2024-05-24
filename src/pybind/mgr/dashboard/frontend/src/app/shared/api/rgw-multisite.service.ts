@@ -30,4 +30,8 @@ export class RgwMultisiteService {
   getSyncStatus() {
     return this.http.get(`${this.url}/sync_status`);
   }
+
+  status() {
+    return this.http.get(`${this.uiUrl}/status`);
+  }
 }

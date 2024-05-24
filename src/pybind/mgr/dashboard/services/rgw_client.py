@@ -29,6 +29,10 @@ except ImportError:
 
 logger = logging.getLogger('rgw_client')
 
+_SYNC_GROUP_ID = 'dashboard_admin_group'
+_SYNC_FLOW_ID = 'dashboard_admin_flow'
+_SYNC_PIPE_ID = 'dashboard_admin_pipe'
+
 
 class NoRgwDaemonsException(Exception):
     def __init__(self):
@@ -605,6 +609,9 @@ class RgwClient(RestClient):
                 return realm_info['name']
         return None
 
+    def get_default_zonegroup(self):
+        return self.daemon.zonegroup_name
+
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):
         """
@@ -983,6 +990,38 @@ class RgwClient(RestClient):
             msg = "Retention mode must be either COMPLIANCE or GOVERNANCE."
             raise DashboardException(msg=msg, component='rgw')
         return retention_period_days, retention_period_years
+
+    @RestClient.api_put('/{bucket_name}?replication')
+    def set_bucket_replication(self, bucket_name, replication: bool, request=None):
+        # pGenerate the minimum replication configuration
+        # required for enabling the replication
+        root = ET.Element('ReplicationConfiguration',
+                          xmlns='http://s3.amazonaws.com/doc/2006-03-01/')
+        role = ET.SubElement(root, 'Role')
+        role.text = f'{bucket_name}_replication_role'
+
+        rule = ET.SubElement(root, 'Rule')
+        rule_id = ET.SubElement(rule, 'ID')
+        rule_id.text = _SYNC_PIPE_ID
+
+        status = ET.SubElement(rule, 'Status')
+        status.text = 'Enabled' if replication else 'Disabled'
+
+        filter_elem = ET.SubElement(rule, 'Filter')
+        prefix = ET.SubElement(filter_elem, 'Prefix')
+        prefix.text = ''
+
+        destination = ET.SubElement(rule, 'Destination')
+
+        bucket = ET.SubElement(destination, 'Bucket')
+        bucket.text = bucket_name
+
+        replication_config = ET.tostring(root, encoding='utf-8', method='xml').decode()
+
+        try:
+            request = request(data=replication_config)
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
 
 
 class SyncStatus(Enum):
@@ -1655,8 +1694,8 @@ class RgwMultisite:
         rgw_realm_list = self.list_realms()
         rgw_zonegroup_list = self.list_zonegroups()
         rgw_zone_list = self.list_zones()
-        if len(rgw_realm_list['realms']) < 1 and len(rgw_zonegroup_list['zonegroups']) < 1 \
-                and len(rgw_zone_list['zones']) < 1:
+        if len(rgw_realm_list['realms']) < 1 and len(rgw_zonegroup_list['zonegroups']) <= 1 \
+                and len(rgw_zone_list['zones']) <= 1:
             is_multisite_configured = False
         return is_multisite_configured
 
@@ -1772,10 +1811,13 @@ class RgwMultisite:
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-    def get_sync_policy_group(self, group_id: str, bucket_name: str = ''):
+    def get_sync_policy_group(self, group_id: str, bucket_name: str = '',
+                              zonegroup_name: str = ''):
         rgw_sync_policy_cmd = ['sync', 'group', 'get', '--group-id', group_id]
         if bucket_name:
             rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        if zonegroup_name:
+            rgw_sync_policy_cmd += ['--rgw-zonegroup', zonegroup_name]
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
@@ -1922,3 +1964,30 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def create_dashboard_admin_sync_group(self, zonegroup_name: str = ''):
+
+        zonegroup_info = self.get_zonegroup(zonegroup_name)
+        zone_names = []
+        for zones in zonegroup_info['zones']:
+            zone_names.append(zones['name'])
+
+        # create a sync policy group with status allowed
+        self.create_sync_policy_group(_SYNC_GROUP_ID, SyncStatus.allowed.value)
+        # create a sync flow with source and destination zones
+        self.create_sync_flow(_SYNC_GROUP_ID, _SYNC_FLOW_ID,
+                              SyncFlowTypes.symmetrical.value,
+                              zones=zone_names)
+        # create a sync pipe with source and destination zones
+        self.create_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID, source_zones=['*'],
+                              destination_zones=['*'], destination_buckets=['*'])
+        # period update --commit
+        self.update_period()
+
+    def policy_group_exists(self, group_name: str, zonegroup_name: str):
+        try:
+            _ = self.get_sync_policy_group(
+                group_id=group_name, zonegroup_name=zonegroup_name)
+            return True
+        except DashboardException:
+            return False
