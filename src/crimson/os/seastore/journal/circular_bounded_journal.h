@@ -66,6 +66,10 @@ public:
     return trimmer;
   }
 
+  writer_stats_t get_writer_stats() const final {
+    return record_submitter.get_stats();
+  }
+
   open_for_mkfs_ret open_for_mkfs() final;
 
   open_for_mount_ret open_for_mount() final;

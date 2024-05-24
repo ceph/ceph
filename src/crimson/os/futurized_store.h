@@ -186,6 +186,8 @@ public:
 
   virtual seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const = 0;
 
+  virtual seastar::future<> report_stats() { return seastar::now(); }
+
   virtual uuid_d get_fsid() const  = 0;
 
   virtual seastar::future<> write_meta(const std::string& key,
