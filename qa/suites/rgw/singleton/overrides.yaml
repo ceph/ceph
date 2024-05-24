@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
