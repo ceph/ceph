@@ -289,7 +289,18 @@ void JSONFormatter::finish_pending_string()
   }
 }
 
-template <class T>
+void JSONFormatter::add_value(std::string_view name, double val) {
+  std::stringstream ss;
+  if (std::isinf(val) || std::isnan(val)) {
+    ss << "null";
+  } else {
+    ss.precision(std::numeric_limits<double>::max_digits10);
+    ss << val;
+  }
+  add_value(name, ss.str(), false);
+}
+
+template <typename T>
 void JSONFormatter::add_value(std::string_view name, T val)
 {
   std::stringstream ss;
