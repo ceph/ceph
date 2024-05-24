@@ -491,16 +491,16 @@ public:
     void validate() const;
 
     static config_t get_default(
-        std::size_t roll_size, journal_type_t type);
+        std::size_t roll_size, backend_type_t type);
 
     static config_t get_test(
-        std::size_t roll_size, journal_type_t type);
+        std::size_t roll_size, backend_type_t type);
   };
 
   JournalTrimmerImpl(
     BackrefManager &backref_manager,
     config_t config,
-    journal_type_t type,
+    backend_type_t type,
     device_off_t roll_start,
     device_off_t roll_size);
 
@@ -538,8 +538,8 @@ public:
       config.rewrite_dirty_bytes_per_cycle;
   }
 
-  journal_type_t get_journal_type() const {
-    return journal_type;
+  backend_type_t get_backend_type() const {
+    return backend_type;
   }
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
@@ -564,7 +564,7 @@ public:
   bool should_block_io_on_trim() const {
     return get_tail_limit() >
       get_journal_tail().add_offset(
-        journal_type, reserved_usage, roll_start, roll_size);
+        backend_type, reserved_usage, roll_start, roll_size);
   }
 
   bool try_reserve_inline_usage(std::size_t usage) final {
@@ -587,7 +587,7 @@ public:
   static JournalTrimmerImplRef create(
       BackrefManager &backref_manager,
       config_t config,
-      journal_type_t type,
+      backend_type_t type,
       device_off_t roll_start,
       device_off_t roll_size) {
     return std::make_unique<JournalTrimmerImpl>(
@@ -627,7 +627,7 @@ private:
   BackrefManager &backref_manager;
 
   config_t config;
-  journal_type_t journal_type;
+  backend_type_t backend_type;
   device_off_t roll_start;
   device_off_t roll_size;
 
