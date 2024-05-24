@@ -904,7 +904,6 @@ enum class backend_type_t {
 };
 
 std::ostream& operator<<(std::ostream& out, backend_type_t);
-using journal_type_t = backend_type_t;
 
 constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
   assert(dtype != device_type_t::NONE &&
@@ -933,13 +932,13 @@ struct journal_seq_t {
 
   // produces a pseudo journal_seq_t relative to this by offset
   journal_seq_t add_offset(
-      journal_type_t type,
+      backend_type_t type,
       device_off_t off,
       device_off_t roll_start,
       device_off_t roll_size) const;
 
   device_off_t relative_to(
-      journal_type_t type,
+      backend_type_t type,
       const journal_seq_t& r,
       device_off_t roll_start,
       device_off_t roll_size) const;

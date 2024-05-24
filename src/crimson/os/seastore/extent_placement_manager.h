@@ -250,8 +250,8 @@ public:
     return writer->can_inplace_rewrite(t, extent);
   }
 
-  journal_type_t get_journal_type() const {
-    return background_process.get_journal_type();
+  backend_type_t get_backend_type() const {
+    return background_process.get_backend_type();
   }
 
   extent_len_t get_block_size() const {
@@ -644,8 +644,8 @@ private:
       }
     }
 
-    journal_type_t get_journal_type() const {
-      return trimmer->get_journal_type();
+    backend_type_t get_backend_type() const {
+      return trimmer->get_backend_type();
     }
 
     bool has_cold_tier() const {
@@ -764,7 +764,7 @@ private:
 
     seastar::future<> stop_background();
     backend_type_t get_main_backend_type() const {
-      return get_journal_type();
+      return get_backend_type();
     }
 
     // Testing interfaces
