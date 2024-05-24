@@ -242,6 +242,9 @@ public:
   // whether is available to submit a record
   bool is_available() const;
 
+  // get the stats since last_stats
+  writer_stats_t get_stats() const;
+
   // wait for available if cannot submit, should check is_available() again
   // when the future is resolved.
   using wa_ertr = base_ertr;
@@ -329,6 +332,7 @@ private:
   std::optional<seastar::promise<> > wait_unfull_flush_promise;
 
   writer_stats_t stats;
+  mutable writer_stats_t last_stats;
 
   seastar::metrics::metric_group metrics;
 };

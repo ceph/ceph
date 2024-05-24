@@ -878,4 +878,46 @@ std::ostream& operator<<(std::ostream& out, const scan_valid_records_cursor& c)
              << ")";
 }
 
+std::ostream& operator<<(std::ostream& out, const tw_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  double d_num_records = static_cast<double>(p.stats.num_records);
+  out << "rps="
+      << fmt::format(dfmt, d_num_records/p.seconds)
+      << ",bwMiB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/p.seconds/(1<<20))
+      << ",sizeB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/d_num_records)
+      << "("
+      << fmt::format(dfmt, p.stats.data_bytes/d_num_records)
+      << ","
+      << fmt::format(dfmt, p.stats.metadata_bytes/d_num_records)
+      << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const writer_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  auto d_num_io = static_cast<double>(p.stats.io_depth_stats.num_io);
+  out << "iops="
+      << fmt::format(dfmt, d_num_io/p.seconds)
+      << ",depth="
+      << fmt::format(dfmt, p.stats.io_depth_stats.average())
+      << ",batch="
+      << fmt::format(dfmt, p.stats.record_batch_stats.average())
+      << ",bwMiB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/p.seconds/(1<<20))
+      << ",sizeB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/d_num_io)
+      << "("
+      << fmt::format(dfmt, p.stats.record_group_data_bytes/d_num_io)
+      << ","
+      << fmt::format(dfmt, p.stats.record_group_metadata_bytes/d_num_io)
+      << ","
+      << fmt::format(dfmt, p.stats.record_group_padding_bytes/d_num_io)
+      << ")";
+  return out;
+}
+
 }

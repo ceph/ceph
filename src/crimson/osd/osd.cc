@@ -413,6 +413,9 @@ seastar::future<> OSD::start()
             INFO("reactor_utilizations: {}", oss.str());
           });
         });
+        gate.dispatch_in_background("stats_store", *this, [this] {
+          return store.report_stats();
+        });
       });
       stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
     }
