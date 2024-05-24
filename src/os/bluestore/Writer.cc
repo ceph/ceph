@@ -739,8 +739,10 @@ void BlueStore::Writer::_try_reuse_allocated_l(
       want_subau_end = logical_offset + data.length();
       if (p2phase(want_subau_end, chunk_size) !=0) continue;
     }
+    if (want_subau_begin < it->blob_start()) continue;
+    if (want_subau_begin >= it->blob_end()) continue;
     uint32_t in_blob_offset = want_subau_begin - blob_offset;
-    uint64_t subau_disk_offset = bb.get_allocation_at(want_subau_begin - blob_offset);
+    uint64_t subau_disk_offset = bb.get_allocation_at(in_blob_offset);
     if (subau_disk_offset == bluestore_blob_t::NO_ALLOCATION) continue;
     dout(25) << __func__ << " 0x" << std::hex << want_subau_begin << "-"
       << want_subau_end << std::dec << " -> " << b->print(pp_mode) << dendl;
@@ -812,8 +814,10 @@ void BlueStore::Writer::_try_reuse_allocated_r(
       want_subau_begin = end_offset - data.length();
       if (p2phase(want_subau_begin, chunk_size) != 0) continue; //case B
     }
+    if (want_subau_begin < it->blob_start()) continue;
+    if (want_subau_begin >= it->blob_end()) continue;
     uint32_t in_blob_offset = want_subau_begin - blob_offset;
-    uint64_t subau_disk_offset = bb.get_allocation_at(want_subau_begin - blob_offset);
+    uint64_t subau_disk_offset = bb.get_allocation_at(in_blob_offset);
     if (subau_disk_offset == bluestore_blob_t::NO_ALLOCATION) continue;
     dout(25) << __func__ << " 0x" << std::hex << want_subau_begin << "-"
       << want_subau_end << std::dec << " -> " << b->print(pp_mode) << dendl;
