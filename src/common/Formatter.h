@@ -232,6 +232,7 @@ private:
     void print_quoted_string(std::string_view s);
     void print_name(std::string_view name);
     void print_comma(json_formatter_stack_entry_d& entry);
+    void add_value(std::string_view name, double val);
 
     template <class T>
     void add_value(std::string_view name, T val);
