@@ -59,7 +59,7 @@ NEXT_SNAP = None
 CONF = os.environ.get('CEPH_CONF')
 REPAIR_NOSNAP = None
 
-CEPH_NOSNAP = 0xfffffffe # int32 -2
+CEPH_NOSNAP = 0xfffffffffffffffe # int64 -2
 ROOT_INODE  = "1.00000000"
 LOST_FOUND_INODE  = "4.00000000"
 
@@ -96,7 +96,7 @@ def traverse(MEMO, ioctx):
                             log.warning(f"repairing first==CEPH_NOSNAP damage, setting to NEXT_SNAP (0x{NEXT_SNAP:x})")
                             first = NEXT_SNAP
                             nval = bytearray(val)
-                            struct.pack_into("<I", nval, 0, NEXT_SNAP)
+                            struct.pack_into("<Q", nval, 0, NEXT_SNAP)
                             with rados.WriteOpCtx() as wctx:
                                 ioctx.set_omap(wctx, (dnk,), (bytes(nval),))
                                 ioctx.operate_write_op(wctx, o.key)
