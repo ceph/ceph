@@ -387,6 +387,49 @@
           </div>
         </fieldset>
 
+        <!-- Replication -->
+        <fieldset>
+          <legend class="cd-header"
+                  i18n>Replication</legend>
+          <div class="form-group row">
+            <label class="cd-col-form-label pt-0"
+                   for="replication"
+                   i18n>
+                    Enable
+            </label>
+            <div class="cd-col-form-input"
+                 *ngIf="{status: multisiteStatus$, isDefaultZg: isDefaultZoneGroup$ | async} as multisiteStatus; else loadingTpl">
+              <input type="checkbox"
+                     class="form-check-input"
+                     id="replication"
+                     name="replication"
+                     formControlName="replication"
+                     [attr.disabled]="!multisiteStatus.isDefaultZg && !multisiteStatus.status.available ? true : null">
+              <cd-help-text>
+                <span i18n>Enables replication for the objects in the bucket.</span>
+              </cd-help-text>
+              <div class="mt-1">
+                <cd-alert-panel type="info"
+                                *ngIf="!multisiteStatus.status.available && !multisiteStatus.isDefaultZg"
+                                class="me-1"
+                                id="multisite-configured-info"
+                                i18n>
+                  Multi-site needs to be configured on the current realm or you need to be on
+                  the default zonegroup to enable replication.
+                </cd-alert-panel>
+                <cd-alert-panel type="info"
+                                *ngIf="bucketForm.getValue('replication')"
+                                class="me-1"
+                                id="replication-info"
+                                i18n>
+                  A bi-directional sync policy group will be created by the dashboard along with flows and pipes.
+                  The pipe id will then be used for applying the replication policy to the bucket.
+                </cd-alert-panel>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
         <!-- Tags -->
         <fieldset>
           <legend class="cd-header"
@@ -592,5 +635,11 @@
             (click)="deleteTag(index)">
       <i [ngClass]="[icons.trash]"></i>
     </button>
+  </div>
+</ng-template>
+
+<ng-template #loadingTpl>
+  <div class="cd-col-form-input">
+    <cd-loading-panel i18n>Checking multi-site status...</cd-loading-panel>
   </div>
 </ng-template>

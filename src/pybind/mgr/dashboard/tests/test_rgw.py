@@ -93,6 +93,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'id': 'daemon1',
                 'realm_name': 'realm1',
                 'zonegroup_name': 'zg1',
+                'zonegroup_id': 'zg1-id',
                 'zone_name': 'zone1',
                 'frontend_config#0': 'beast port=80'
             },
@@ -101,6 +102,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'id': 'daemon2',
                 'realm_name': 'realm2',
                 'zonegroup_name': 'zg2',
+                'zonegroup_id': 'zg2-id',
                 'zone_name': 'zone2',
                 'frontend_config#0': 'beast ssl_port=443 ssl_certificate=config:/config'
             },
@@ -109,6 +111,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'id': 'daemon3',
                 'realm_name': 'realm3',
                 'zonegroup_name': 'zg3',
+                'zonegroup_id': 'zg3-id',
                 'zone_name': 'zone3',
                 'frontend_config#0':
                     'beast ssl_endpoint=0.0.0.0:8080 ssl_certificate=config:/config'
@@ -118,6 +121,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'id': 'daemon4',
                 'realm_name': 'realm4',
                 'zonegroup_name': 'zg4',
+                'zonegroup_id': 'zg4-id',
                 'zone_name': 'zone4',
                 'frontend_config#0': 'beast ssl_certificate=config:/config'
             },
@@ -126,6 +130,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'id': 'daemon5',
                 'realm_name': 'realm5',
                 'zonegroup_name': 'zg5',
+                'zonegroup_id': 'zg5-id',
                 'zone_name': 'zone5',
                 'frontend_config#0':
                     'beast endpoint=0.0.0.0:8445 ssl_certificate=config:/config'
@@ -139,6 +144,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'server_hostname': 'host1',
             'realm_name': 'realm1',
             'zonegroup_name': 'zg1',
+            'zonegroup_id': 'zg1-id',
             'zone_name': 'zone1', 'default': True,
             'port': 80
         },
@@ -149,6 +155,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'server_hostname': 'host1',
             'realm_name': 'realm2',
             'zonegroup_name': 'zg2',
+            'zonegroup_id': 'zg2-id',
             'zone_name': 'zone2',
             'default': False,
             'port': 443,
@@ -160,6 +167,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'server_hostname': 'host1',
             'realm_name': 'realm3',
             'zonegroup_name': 'zg3',
+            'zonegroup_id': 'zg3-id',
             'zone_name': 'zone3',
             'default': False,
             'port': 8080,
@@ -171,6 +179,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'server_hostname': 'host1',
             'realm_name': 'realm4',
             'zonegroup_name': 'zg4',
+            'zonegroup_id': 'zg4-id',
             'zone_name': 'zone4',
             'default': False,
             'port': None,
@@ -182,6 +191,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'server_hostname': 'host1',
             'realm_name': 'realm5',
             'zonegroup_name': 'zg5',
+            'zonegroup_id': 'zg5-id',
             'zone_name': 'zone5',
             'default': False,
             'port': 8445,
