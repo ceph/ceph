@@ -133,7 +133,7 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 }
 
 journal_seq_t journal_seq_t::add_offset(
-      journal_type_t type,
+      backend_type_t type,
       device_off_t off,
       device_off_t roll_start,
       device_off_t roll_size) const
@@ -145,10 +145,10 @@ journal_seq_t journal_seq_t::add_offset(
 
   segment_seq_t jseq = segment_seq;
   device_off_t joff;
-  if (type == journal_type_t::SEGMENTED) {
+  if (type == backend_type_t::SEGMENTED) {
     joff = offset.as_seg_paddr().get_segment_off();
   } else {
-    assert(type == journal_type_t::RANDOM_BLOCK);
+    assert(type == backend_type_t::RANDOM_BLOCK);
     auto boff = offset.as_blk_paddr().get_device_off();
     joff = boff;
   }
@@ -184,7 +184,7 @@ journal_seq_t journal_seq_t::add_offset(
 }
 
 device_off_t journal_seq_t::relative_to(
-      journal_type_t type,
+      backend_type_t type,
       const journal_seq_t& r,
       device_off_t roll_start,
       device_off_t roll_size) const
@@ -196,11 +196,11 @@ device_off_t journal_seq_t::relative_to(
 
   device_off_t ret = static_cast<device_off_t>(segment_seq) - r.segment_seq;
   ret *= roll_size;
-  if (type == journal_type_t::SEGMENTED) {
+  if (type == backend_type_t::SEGMENTED) {
     ret += (static_cast<device_off_t>(offset.as_seg_paddr().get_segment_off()) -
             static_cast<device_off_t>(r.offset.as_seg_paddr().get_segment_off()));
   } else {
-    assert(type == journal_type_t::RANDOM_BLOCK);
+    assert(type == backend_type_t::RANDOM_BLOCK);
     ret += offset.as_blk_paddr().get_device_off() -
            r.offset.as_blk_paddr().get_device_off();
   }

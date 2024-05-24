@@ -191,7 +191,7 @@ void ExtentPlacementManager::init(
     dynamic_max_rewrite_generation = MAX_REWRITE_GENERATION;
   }
 
-  if (trimmer->get_journal_type() == journal_type_t::SEGMENTED) {
+  if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
     auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
     ceph_assert(segment_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
@@ -217,7 +217,7 @@ void ExtentPlacementManager::init(
       add_device(device);
     }
   } else {
-    assert(trimmer->get_journal_type() == journal_type_t::RANDOM_BLOCK);
+    assert(trimmer->get_backend_type() == backend_type_t::RANDOM_BLOCK);
     auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
     ceph_assert(rb_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
