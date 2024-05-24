@@ -113,6 +113,10 @@ public:
     }
   }
 
+  const record_group_t& get_record_group() const {
+    return pending;
+  }
+
   struct evaluation_t {
     record_group_size_t submit_size;
     bool is_full;
@@ -150,7 +154,7 @@ public:
       extent_len_t block_size);
 
   // Encode the batched records for write.
-  std::pair<ceph::bufferlist, record_group_size_t> encode_batch(
+  ceph::bufferlist encode_batch(
       const journal_seq_t& committed_to,
       segment_nonce_t segment_nonce);
 
@@ -165,8 +169,8 @@ public:
   // the intervention of the shared io_promise.
   //
   // Note the current RecordBatch can be reused afterwards.
-  std::pair<ceph::bufferlist, record_group_size_t> submit_pending_fast(
-      record_t&&,
+  ceph::bufferlist submit_pending_fast(
+      record_group_t&&,
       extent_len_t block_size,
       const journal_seq_t& committed_to,
       segment_nonce_t segment_nonce);
@@ -296,7 +300,7 @@ private:
     free_batch_ptrs.pop_front();
   }
 
-  void account_submission(std::size_t, const record_group_size_t&);
+  void account_submission(const record_group_t&);
 
   using maybe_result_t = RecordBatch::maybe_result_t;
   void finish_submit_batch(RecordBatch*, maybe_result_t);
