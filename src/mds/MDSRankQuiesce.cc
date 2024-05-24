@@ -45,7 +45,7 @@
   }           \
   while (0)
 
-void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   // validate the command:
   using ceph::common::cmd_getval;
@@ -111,7 +111,7 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
   }
 
   struct Ctx : public QuiesceDbManager::RequestContext {
-    std::function<void(int, const std::string&, bufferlist&)> on_finish;
+    asok_finisher on_finish;
     bool all = false;
     mds_gid_t me;
 

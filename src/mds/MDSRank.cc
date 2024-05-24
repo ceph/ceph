@@ -2651,7 +2651,7 @@ void MDSRankDispatcher::handle_asok_command(
   const cmdmap_t& cmdmap,
   Formatter *f,
   const bufferlist &inbl,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   int r = 0;
   CachedStackStringStream css;
@@ -3090,7 +3090,7 @@ out:
  */
 void MDSRankDispatcher::evict_clients(
   const SessionFilter &filter,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   bufferlist outbl;
   if (is_any_replay()) {
@@ -3473,7 +3473,7 @@ public:
   std::function<void(int, C_MDS_QuiescePathCommand const&)> finish_once;
 };
 
-void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   std::string path;
   if (!cmd_getval(cmdmap, "path", path)) {
@@ -3515,7 +3515,7 @@ void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::fu
   }
 }
 
-void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   std::string path;
 

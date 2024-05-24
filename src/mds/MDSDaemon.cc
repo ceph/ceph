@@ -127,7 +127,7 @@ public:
     const cmdmap_t& cmdmap,
     Formatter *f,
     const bufferlist& inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
+    asok_finisher on_finish) override {
     mds->asok_command(command, cmdmap, f, inbl, on_finish);
   }
 };
@@ -137,7 +137,7 @@ void MDSDaemon::asok_command(
   const cmdmap_t& cmdmap,
   Formatter *f,
   const bufferlist& inbl,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   dout(1) << "asok_command: " << command << " " << cmdmap
 	  << " (starting...)" << dendl;
