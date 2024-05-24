@@ -72,8 +72,8 @@ public:
 
   close_ertr::future<> close() final;
 
-  journal_type_t get_type() final {
-    return journal_type_t::RANDOM_BLOCK;
+  backend_type_t get_type() final {
+    return backend_type_t::RANDOM_BLOCK;
   }
 
   submit_record_ret submit_record(

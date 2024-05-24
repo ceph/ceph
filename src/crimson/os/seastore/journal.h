@@ -103,7 +103,7 @@ public:
 
   virtual ~Journal() {}
 
-  virtual journal_type_t get_type() = 0;
+  virtual backend_type_t get_type() = 0;
 };
 using JournalRef = std::unique_ptr<Journal>;
 
