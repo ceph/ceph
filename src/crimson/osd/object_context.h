@@ -252,7 +252,8 @@ public:
     }
   }
   void wait_recovery_read() {
-    assert(lock.get_readers() > 0);
+    assert(lock.get_readers() > 0
+      || lock.is_excl_acquired());
     recovery_read_marker = true;
   }
   void drop_recovery_read() {
