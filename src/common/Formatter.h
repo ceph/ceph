@@ -196,8 +196,9 @@ namespace ceph {
     void print_name(std::string_view name);
     void print_comma(json_formatter_stack_entry_d& entry);
     void finish_pending_string();
+    void add_value(std::string_view name, double val);
 
-    template <class T>
+    template <typename T>
     void add_value(std::string_view name, T val);
     void add_value(std::string_view name, std::string_view val, bool quoted);
 
