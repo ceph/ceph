@@ -232,7 +232,7 @@ public:
       return target_shard_services.get_or_create_pg(
         std::move(trigger),
         opref.get_pgid(),
-        std::move(opref.get_create_info())
+        opref.get_create_info()
       );
     }).safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
       logger.debug("{}: have_pg", opref);
