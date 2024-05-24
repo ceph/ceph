@@ -482,6 +482,15 @@ void RecordSubmitter::account_submission(
   stats.record_group_metadata_bytes += rg.size.get_raw_mdlength();
   stats.record_group_data_bytes += rg.size.dlength;
   stats.record_batch_stats.increment(rg.get_size());
+
+  for (const record_t& r : rg.records) {
+    auto src = r.type;
+    assert(is_modify_transaction(src));
+    auto& trans_stats = get_by_src(stats.stats_by_src, src);
+    ++(trans_stats.num_records);
+    trans_stats.metadata_bytes += r.size.get_raw_mdlength();
+    trans_stats.data_bytes += r.size.dlength;
+  }
 }
 
 void RecordSubmitter::finish_submit_batch(

@@ -1888,6 +1888,11 @@ constexpr bool is_trim_transaction(transaction_type_t type) {
       type == transaction_type_t::TRIM_ALLOC);
 }
 
+constexpr bool is_modify_transaction(transaction_type_t type) {
+  return (type == transaction_type_t::MUTATE ||
+      is_background_transaction(type));
+}
+
 struct record_size_t {
   extent_len_t plain_mdlength = 0; // mdlength without the record header
   extent_len_t dlength = 0;
@@ -2240,12 +2245,19 @@ struct grouped_io_stats {
   }
 };
 
+struct trans_writer_stats_t {
+  uint64_t num_records = 0;
+  uint64_t metadata_bytes = 0;
+  uint64_t data_bytes = 0;
+};
+
 struct writer_stats_t {
   grouped_io_stats record_batch_stats;
   grouped_io_stats io_depth_stats;
   uint64_t record_group_padding_bytes = 0;
   uint64_t record_group_metadata_bytes = 0;
   uint64_t record_group_data_bytes = 0;
+  counter_by_src_t<trans_writer_stats_t> stats_by_src;
 };
 
 }
