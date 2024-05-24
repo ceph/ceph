@@ -246,7 +246,6 @@ public:
     auto writer = get_writer(placement_hint_t::REWRITE,
       get_extent_category(extent->get_type()),
       OOL_GENERATION);
-    ceph_assert(writer);
     return writer->can_inplace_rewrite(t, extent);
   }
 
@@ -323,9 +322,7 @@ public:
       addr = make_record_relative_paddr(0);
     } else {
       assert(category == data_category_t::METADATA);
-      assert(md_writers_by_gen[generation_to_writer(gen)]);
-      addr = md_writers_by_gen[
-	  generation_to_writer(gen)]->alloc_paddr(length);
+      addr = get_writer(hint, category, gen)->alloc_paddr(length);
     }
     assert(!(category == data_category_t::DATA));
 
@@ -378,9 +375,7 @@ public:
     {
 #endif
       assert(category == data_category_t::DATA);
-      assert(data_writers_by_gen[generation_to_writer(gen)]);
-      auto addrs = data_writers_by_gen[
-          generation_to_writer(gen)]->alloc_paddrs(length);
+      auto addrs = get_writer(hint, category, gen)->alloc_paddrs(length);
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
@@ -593,15 +588,19 @@ private:
                               data_category_t category,
                               rewrite_gen_t gen) {
     assert(hint < placement_hint_t::NUM_HINTS);
+    // TODO: might worth considering the hint
     assert(is_rewrite_generation(gen));
     assert(gen != INLINE_GENERATION);
     assert(gen <= dynamic_max_rewrite_generation);
+    ExtentOolWriter* ret = nullptr;
     if (category == data_category_t::DATA) {
-      return data_writers_by_gen[generation_to_writer(gen)];
+      ret = data_writers_by_gen[generation_to_writer(gen)];
     } else {
       assert(category == data_category_t::METADATA);
-      return md_writers_by_gen[generation_to_writer(gen)];
+      ret = md_writers_by_gen[generation_to_writer(gen)];
     }
+    assert(ret != nullptr);
+    return ret;
   }
 
   /**

@@ -196,7 +196,7 @@ void ExtentPlacementManager::init(
     ceph_assert(segment_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
 
-    data_writers_by_gen.resize(num_writers, {});
+    data_writers_by_gen.resize(num_writers, nullptr);
     for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::DATA, gen, *segment_cleaner,
@@ -221,7 +221,7 @@ void ExtentPlacementManager::init(
     auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
     ceph_assert(rb_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
-    data_writers_by_gen.resize(num_writers, {});
+    data_writers_by_gen.resize(num_writers, nullptr);
     md_writers_by_gen.resize(num_writers, {});
     writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(
 	    rb_cleaner));
