@@ -1481,6 +1481,36 @@ TRACEPOINT_EVENT(librbd, clone3_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, clone4_enter,
+    TP_ARGS(
+        const char*, parent_pool_name,
+        uint64_t, parent_pool_id,
+        const char*, parent_name,
+        uint64_t, parent_snap_id,
+        const char*, child_pool_name,
+        uint64_t, child_pool_id,
+        const char*, child_name,
+        void*, opts),
+    TP_FIELDS(
+        ctf_string(parent_pool_name, parent_pool_name)
+        ctf_integer(uint64_t, parent_pool_id, parent_pool_id)
+        ctf_string(parent_name, parent_name)
+        ctf_integer(uint64_t, parent_snap_id, parent_snap_id)
+        ctf_string(child_pool_name, child_pool_name)
+        ctf_integer(uint64_t, child_pool_id, child_pool_id)
+        ctf_string(child_name, child_name)
+        ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, clone4_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, flatten_enter,
     TP_ARGS(
         void*, imagectx,

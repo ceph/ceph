@@ -350,6 +350,10 @@ cdef nogil:
                    const char *p_snapname, rados_ioctx_t c_ioctx,
                    const char *c_name, rbd_image_options_t c_opts):
         pass
+    int rbd_clone4(rados_ioctx_t p_ioctx, const char *p_name,
+                   uint64_t p_snap_id, rados_ioctx_t c_ioctx,
+                   const char *c_name, rbd_image_options_t c_opts):
+        pass
     int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
                                  librbd_progress_fn_t cb, void *cbdata):
         pass

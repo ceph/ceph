@@ -294,6 +294,8 @@ public:
 	     int *c_order, uint64_t stripe_unit, int stripe_count);
   int clone3(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
+  int clone4(IoCtx& p_ioctx, const char *p_name, uint64_t p_snap_id,
+	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
