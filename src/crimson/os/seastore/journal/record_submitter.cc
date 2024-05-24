@@ -172,6 +172,14 @@ bool RecordSubmitter::is_available() const
   return ret;
 }
 
+writer_stats_t RecordSubmitter::get_stats() const
+{
+  writer_stats_t ret = stats;
+  ret.minus(last_stats);
+  last_stats = stats;
+  return ret;
+}
+
 RecordSubmitter::wa_ertr::future<>
 RecordSubmitter::wait_available()
 {
@@ -364,6 +372,7 @@ RecordSubmitter::open(bool is_mkfs)
     LOG_PREFIX(RecordSubmitter::open);
     DEBUG("{} register metrics", get_name());
     stats = {};
+    last_stats = {};
     namespace sm = seastar::metrics;
     std::vector<sm::label_instance> label_instances;
     label_instances.push_back(sm::label_instance("submitter", get_name()));
