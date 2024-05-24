@@ -10615,6 +10615,9 @@ paths:
                   type: string
                 placement_target:
                   type: string
+                replication:
+                  default: 'false'
+                  type: string
                 tags:
                   type: string
                 uid:
