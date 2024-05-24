@@ -2235,13 +2235,58 @@ const CounterT& get_by_src(
   return counters_by_src[static_cast<std::size_t>(src)];
 }
 
+template <typename CounterT>
+void add_srcs(counter_by_src_t<CounterT>& base,
+              const counter_by_src_t<CounterT>& by) {
+  for (std::size_t i=0; i<TRANSACTION_TYPE_MAX; ++i) {
+    base[i] += by[i];
+  }
+}
+
+template <typename CounterT>
+void minus_srcs(counter_by_src_t<CounterT>& base,
+                const counter_by_src_t<CounterT>& by) {
+  for (std::size_t i=0; i<TRANSACTION_TYPE_MAX; ++i) {
+    base[i] -= by[i];
+  }
+}
+
 struct grouped_io_stats {
   uint64_t num_io = 0;
   uint64_t num_io_grouped = 0;
 
+  double average() const {
+    return static_cast<double>(num_io_grouped)/num_io;
+  }
+
+  bool is_empty() const {
+    return num_io == 0;
+  }
+
+  void add(const grouped_io_stats &o) {
+    num_io += o.num_io;
+    num_io_grouped += o.num_io_grouped;
+  }
+
+  void minus(const grouped_io_stats &o) {
+    num_io -= o.num_io;
+    num_io_grouped -= o.num_io_grouped;
+  }
+
   void increment(uint64_t num_grouped_io) {
-    ++num_io;
-    num_io_grouped += num_grouped_io;
+    add({1, num_grouped_io});
+  }
+};
+
+struct device_stats_t {
+  uint64_t num_io = 0;
+  uint64_t total_depth = 0;
+  uint64_t total_bytes = 0;
+
+  void add(const device_stats_t& other) {
+    num_io += other.num_io;
+    total_depth += other.total_depth;
+    total_bytes += other.total_bytes;
   }
 };
 
@@ -2249,7 +2294,36 @@ struct trans_writer_stats_t {
   uint64_t num_records = 0;
   uint64_t metadata_bytes = 0;
   uint64_t data_bytes = 0;
+
+  bool is_empty() const {
+    return num_records == 0;
+  }
+
+  uint64_t get_total_bytes() const {
+    return metadata_bytes + data_bytes;
+  }
+
+  trans_writer_stats_t&
+  operator+=(const trans_writer_stats_t& o) {
+    num_records += o.num_records;
+    metadata_bytes += o.metadata_bytes;
+    data_bytes += o.data_bytes;
+    return *this;
+  }
+
+  trans_writer_stats_t&
+  operator-=(const trans_writer_stats_t& o) {
+    num_records -= o.num_records;
+    metadata_bytes -= o.metadata_bytes;
+    data_bytes -= o.data_bytes;
+    return *this;
+  }
 };
+struct tw_stats_printer_t {
+  double seconds;
+  const trans_writer_stats_t &stats;
+};
+std::ostream& operator<<(std::ostream&, const tw_stats_printer_t&);
 
 struct writer_stats_t {
   grouped_io_stats record_batch_stats;
@@ -2258,7 +2332,40 @@ struct writer_stats_t {
   uint64_t record_group_metadata_bytes = 0;
   uint64_t record_group_data_bytes = 0;
   counter_by_src_t<trans_writer_stats_t> stats_by_src;
+
+  bool is_empty() const {
+    return io_depth_stats.is_empty();
+  }
+
+  uint64_t get_total_bytes() const {
+    return record_group_padding_bytes +
+           record_group_metadata_bytes +
+           record_group_data_bytes;
+  }
+
+  void add(const writer_stats_t &o) {
+    record_batch_stats.add(o.record_batch_stats);
+    io_depth_stats.add(o.io_depth_stats);
+    record_group_padding_bytes += o.record_group_padding_bytes;
+    record_group_metadata_bytes += o.record_group_metadata_bytes;
+    record_group_data_bytes += o.record_group_data_bytes;
+    add_srcs(stats_by_src, o.stats_by_src);
+  }
+
+  void minus(const writer_stats_t &o) {
+    record_batch_stats.minus(o.record_batch_stats);
+    io_depth_stats.minus(o.io_depth_stats);
+    record_group_padding_bytes -= o.record_group_padding_bytes;
+    record_group_metadata_bytes -= o.record_group_metadata_bytes;
+    record_group_data_bytes -= o.record_group_data_bytes;
+    minus_srcs(stats_by_src, o.stats_by_src);
+  }
 };
+struct writer_stats_printer_t {
+  double seconds;
+  const writer_stats_t &stats;
+};
+std::ostream& operator<<(std::ostream&, const writer_stats_printer_t&);
 
 }
 
