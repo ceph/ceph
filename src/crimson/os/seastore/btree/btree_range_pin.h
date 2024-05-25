@@ -218,6 +218,13 @@ public:
   get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction&) final;
   bool is_stable() const final;
   bool is_data_stable() const final;
+  bool is_parent_valid() const final {
+    ceph_assert(parent);
+    if (!parent->is_valid()) {
+      return false;
+    }
+    return !is_unviewable_by_trans(*parent, ctx.trans);
+  }
 };
 
 }

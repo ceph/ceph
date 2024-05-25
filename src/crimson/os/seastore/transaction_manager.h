@@ -197,6 +197,7 @@ public:
     Transaction &t,
     LBAMappingRef pin)
   {
+    ceph_assert(pin->is_parent_valid());
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut().safe_then([pin=std::move(pin)](auto extent) {
@@ -220,6 +221,7 @@ public:
     LBAMappingRef pin,
     extent_types_t type)
   {
+    ceph_assert(pin->is_parent_valid());
     auto v = pin->get_logical_extent(t);
     // checking the lba child must be atomic with creating
     // and linking the absent child
