@@ -204,10 +204,11 @@ The output format is JSON and contains fields as follows:
 
 * ``atime``: access time of the subvolume group path in the format ``YYYY-MM-DD
   HH:MM:SS``
-* ``mtime``: modification time of the subvolume group path in the format
+* ``mtime``: time of the most recent modification of the subvolume group path
+  in the format
   ``YYYY-MM-DD HH:MM:SS``
-* ``ctime``: change time of the subvolume group path in the format ``YYYY-MM-DD
-  HH:MM:SS``
+* ``ctime``: time of the most recent change of the subvolume group path in the
+  format ``YYYY-MM-DD HH:MM:SS``
 * ``uid``: uid of the subvolume group path
 * ``gid``: gid of the subvolume group path
 * ``mode``: mode of the subvolume group path
