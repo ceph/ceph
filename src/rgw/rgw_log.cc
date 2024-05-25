@@ -26,9 +26,7 @@ using namespace std;
 
 static void set_param_str(req_state *s, const char *name, string& str)
 {
-  const char *p = s->info.env->get(name);
-  if (p)
-    str = p;
+  str = s->info.env->get(name, "");
 }
 
 string render_log_object_name(const string& format,
@@ -590,7 +588,7 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
     entry.obj_size = s->obj_size;
   } /* !bucket empty */
 
-  entry.remote_addr = extract_remote_addr(s);
+  set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   // legacy apps are still using misspelling referer, such as curl -e option
   if (s->info.env->exists("HTTP_REFERRER"))

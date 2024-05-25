@@ -899,11 +899,9 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
     s->env.emplace("aws:SecureTransport", "true");
   }
 
-  const auto ip = extract_remote_addr(s);
-  if (likely(ip.length())) {
-    s->env.emplace("aws:SourceIp", ip);
-    ldpp_dout(s, 20) << "aws:SourceIp=" << ip << dendl;
-  }
+  const auto ip = s->info.env->get("REMOTE_ADDR");
+  s->env.emplace("aws:SourceIp", ip);
+  ldpp_dout(s, 20) << "aws:SourceIp=" << ip << dendl;
 
   i = m.find("HTTP_USER_AGENT"); {
   if (i != m.end())

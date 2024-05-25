@@ -1117,10 +1117,11 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   RGWProcessEnv penv;
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
+  rgw_env.init(cct.get());
   ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size); \
   rgw::sal::RadosStore store(context_pool);
   std::unique_ptr<rgw::sal::User> user = store.get_user(rgw_user());
-  rgw_env.set("REMOTE_ADDR", "192.168.1.1");
+  rgw_env.set_remote_addr("192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
   req_state rgw_req_state(cct.get(), penv, &rgw_env, 0);
   rgw_req_state.set_user(user);
@@ -1131,12 +1132,8 @@ TEST_F(IPPolicyTest, IPEnvironment) {
 
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
   EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
-  rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
-  ip = rgw_req_state.env.find("aws:SourceIp");
-  EXPECT_EQ(ip, rgw_req_state.env.end());
-
   rgw_env.set("SOME_VAR", "192.168.1.2");
+  EXPECT_EQ(rgw_env.set_remote_addr("127.0.0.1"), 0);
   rgw_req_state.env.clear();
   rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
@@ -1149,6 +1146,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   EXPECT_EQ(cct.get()->_conf->rgw_trusted_proxy_count, 0);
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3, 192.168.2.3");
+  EXPECT_EQ(rgw_env.set_remote_addr("127.0.0.1"), 0);
   rgw_req_state.env.clear();
   rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
@@ -1159,6 +1157,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_trusted_proxy_count", "1"), 0);
   EXPECT_EQ(cct.get()->_conf->rgw_trusted_proxy_count, 1);
   rgw_env.set("HTTP_X_FORWARDED_FOR", "4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348, 192.168.1.4");
+  EXPECT_EQ(rgw_env.set_remote_addr("127.0.0.1"), 0);
   rgw_req_state.env.clear();
   rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
@@ -1173,6 +1172,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
   rgw_env.set("SOME_VAR", "1.2.3.4");
   rgw_env.set("HTTP_X_FORWARDED_FOR", "4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348, 192.168.1.4");
+  EXPECT_EQ(rgw_env.set_remote_addr("127.0.0.1"), 0);
   rgw_req_state.env.clear();
   rgw_build_iam_environment(&store, &rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
