@@ -826,25 +826,32 @@ to policies. This can distribute load across MDS ranks in predictable and
 stable ways.  Review :ref:`cephfs-pinning` and :ref:`cephfs-ephemeral-pinning`
 for details on how pinning works.
 
-Pinning is configured by::
+Run a command of the following form to configure pinning for subvolumegroups:
 
-  $ ceph fs subvolumegroup pin <vol_name> <group_name> <pin_type> <pin_setting>
+.. prompt:: bash #
 
-or for subvolumes::
+   ceph fs subvolumegroup pin <vol_name> <group_name> <pin_type> <pin_setting>
 
-  $ ceph fs subvolume pin <vol_name> <group_name> <pin_type> <pin_setting>
+Run a command of the following form to configure pinning for subvolumes:
 
-Typically you will want to set subvolume group pins. The ``pin_type`` may be
-one of ``export``, ``distributed``, or ``random``. The ``pin_setting``
-corresponds to the extended attributed "value" as in the pinning documentation
-referenced above.
+.. prompt:: bash #
 
-So, for example, setting a distributed pinning strategy on a subvolume group::
+   ceph fs subvolume pin <vol_name> <group_name> <pin_type> <pin_setting>
 
-  $ ceph fs subvolumegroup pin cephfilesystem-a csi distributed 1
+Under most circumstances, you will want to set subvolume group pins. The
+``pin_type`` may be ``export``, ``distributed``, or ``random``. The
+``pin_setting`` corresponds to the extended attributed "value" as in the
+pinning documentation referenced above.
 
-Will enable distributed subtree partitioning policy for the "csi" subvolume
-group.  This will cause every subvolume within the group to be automatically
+Here is an example of setting a distributed pinning strategy on a subvolume
+group:
+
+.. prompt:: bash $
+
+   ceph fs subvolumegroup pin cephfilesystem-a csi distributed 1
+
+This enables distributed subtree partitioning policy for the "csi" subvolume
+group. This will cause every subvolume within the group to be automatically
 pinned to one of the available ranks on the file system.
 
 
