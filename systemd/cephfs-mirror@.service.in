@@ -1,0 +1,31 @@
+[Unit]
+Description=CephFS Mirror Daemon
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+PartOf=cephfs-mirror.target
+
+[Service]
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
+ExecStart=/usr/bin/cephfs-mirror --id %i -f --setuser ceph --setgroup ceph
+LimitNOFILE=1048576
+LimitNPROC=1048576
+LockPersonality=true
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+PrivateDevices=yes
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=full
+Restart=on-failure
+RestrictSUIDSGID=true
+StartLimitBurst=3
+StartLimitInterval=30min
+TasksMax=infinity
+
+[Install]
+WantedBy=cephfs-mirror.target
