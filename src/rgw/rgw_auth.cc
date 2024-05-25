@@ -490,7 +490,7 @@ rgw::auth::Strategy::authenticate(const DoutPrefixProvider* dpp, const req_state
     }
   }
 
-  return strategy_result;
+  return strategy_result; //NOLINT(bugprone-use-after-move)
 }
 
 int
