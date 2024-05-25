@@ -1,5 +1,6 @@
 natsort
 CherryPy
+packaging
 pecan
 werkzeug
 requests
