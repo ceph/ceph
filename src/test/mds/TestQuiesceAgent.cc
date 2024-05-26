@@ -272,16 +272,19 @@ TEST_F(QuiesceAgentTest, DbUpdates) {
   
     // manipulate root0 and root1 as if they were quiesced and root2 as if it was released
     auto& root0 = *roots.at("root0");
-    root0.quiesce_result = 0;
-    EXPECT_EQ(QS_QUIESCED, root0.get_actual_state());
+    complete_quiesce("root0", 0);
 
     auto& root1 = *roots.at("root1");
-    root1.quiesce_result = 0;
-    EXPECT_EQ(QS_QUIESCED, root1.get_actual_state());
+    complete_quiesce("root1", 0);
 
     auto& root2 = *roots.at("root2");
-    root2.quiesce_result = 0;
-    root2.cancel_result = 0;
+    complete_quiesce("root2", 0);
+    root2.cancel_result = root2.cancel(*root2.quiesce_request);
+
+    EXPECT_TRUE(await_idle());
+
+    EXPECT_EQ(QS_QUIESCED, root0.get_actual_state());
+    EXPECT_EQ(QS_QUIESCED, root1.get_actual_state());
     EXPECT_EQ(QS_RELEASED, root2.get_actual_state());
   }
 
@@ -495,13 +498,10 @@ TEST_F(QuiesceAgentTest, DuplicateQuiesceRequest) {
       { "root1", QS_QUIESCING },
       { "root2", QS_QUIESCING },
       { "root3", QS_QUIESCING },
-    });
+    }, WaitForAgent::No);
 
-    ASSERT_TRUE(ack.has_value());
-    EXPECT_EQ(3, ack->db_version);
-    // even though root1 is already quiesced,
-    // we should not know about it synchronously
-    EXPECT_EQ(0, ack->roots.size());
+    // no sync update
+    EXPECT_FALSE(ack.has_value());
   }
 
   EXPECT_TRUE(await_idle());
@@ -594,21 +594,17 @@ TEST_F(QuiesceAgentTest, RapidDbUpdates)
     auto ack = update(2, {
                              { "root1", QS_QUIESCING },
                              { "root2", QS_QUIESCING },
-                         });
+                         }, WaitForAgent::No);
 
-    ASSERT_TRUE(ack.has_value());
-    EXPECT_EQ(2, ack->db_version);
-    EXPECT_EQ(0, ack->roots.size());
+    EXPECT_FALSE(ack.has_value());
   };
 
   {
     auto ack = update(1, {
                              { "root1", QS_QUIESCING },
-                         });
+                         }, WaitForAgent::No);
 
-    ASSERT_TRUE(ack.has_value());
-    EXPECT_EQ(1, ack->db_version);
-    EXPECT_EQ(0, ack->roots.size());
+    EXPECT_FALSE(ack.has_value());
   }
 
   EXPECT_TRUE(await_idle_v(2));
