@@ -1631,13 +1631,13 @@ Usage::
 Options
 =======
 
-.. option:: -i infile
+.. option:: -i infile, --in-file=infile
 
    will specify an input file to be passed along as a payload with the
    command to the monitor cluster. This is only used for specific
    monitor commands.
 
-.. option:: -o outfile
+.. option:: -o outfile, --out-file=outfile
 
    will write any payload returned by the monitor cluster with its
    reply to outfile.  Only specific monitor commands (e.g. osd getmap)
