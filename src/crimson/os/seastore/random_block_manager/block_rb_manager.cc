@@ -209,7 +209,8 @@ std::ostream &operator<<(std::ostream &out, const rbm_superblock_t &header)
        << ", journal_size=" << header.journal_size
        << ", crc=" << header.crc
        << ", config=" << header.config
-       << ", shard_num=" << header.shard_num;
+       << ", shard_num=" << header.shard_num
+       << ", end_to_end_data_protection=" << header.is_end_to_end_data_protection();
   for (auto p : header.shard_infos) {
     out << p;
   }
