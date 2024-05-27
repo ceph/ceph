@@ -146,7 +146,7 @@ using crimson::common::local_conf;
     LOG_PREFIX(ObjectContextLoader::get_or_load_obc);
     auto loaded =
       load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
-    if (existed) {
+    if (existed && obc->is_loaded()) {
       if (!obc->is_loaded_and_valid()) {
 	ERRORDPP(
 	  "obc for {} invalid -- fully_loaded={}, "
