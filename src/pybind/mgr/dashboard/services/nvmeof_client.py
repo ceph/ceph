@@ -24,12 +24,23 @@ else:
 
         def __init__(self):
             logger.info("Initiating nvmeof gateway connection...")
+            service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info()
 
-            self.gateway_addr = list(
-                NvmeofGatewaysConfig.get_gateways_config()["gateways"].values()
-            )[0]["service_url"]
-            self.channel = grpc.insecure_channel("{}".format(self.gateway_addr))
-            logger.info("Found nvmeof gateway at %s", self.gateway_addr)
+            root_ca_cert = NvmeofGatewaysConfig.get_root_ca_cert(service_name)
+            client_key = NvmeofGatewaysConfig.get_client_key(service_name)
+            client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
+
+            if root_ca_cert and client_key and client_cert:
+                logger.info('Securely connecting to: %s', self.gateway_addr)
+                credentials = grpc.ssl_channel_credentials(
+                    root_certificates=root_ca_cert,
+                    private_key=client_key,
+                    certificate_chain=client_cert,
+                )
+                self.channel = grpc.secure_channel(self.gateway_addr, credentials)
+            else:
+                logger.info("Insecurely connecting to: %s", self.gateway_addr)
+                self.channel = grpc.insecure_channel(self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
 
     def make_namedtuple_from_object(cls: Type[NamedTuple], obj: Any) -> NamedTuple:
