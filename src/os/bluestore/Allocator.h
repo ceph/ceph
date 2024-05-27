@@ -351,6 +351,52 @@ public:
       std::function<void(uint64_t, uint64_t, uint64_t, uint64_t)> cb);
   };
 
+  // The following code build Allocator's free extents spatial histogram.
+  // Which is a set of N buckets to track extents location.
+  // Extent lands into a bucket depending on its offset using N buckets.
+  // An extent which spans multiple buckets lands into all of them
+  // Each bucket tracks:
+  // - amount of extents
+  // - amount of bytes
+  //
+  struct free_state_spatial_hist_bucket {
+    static const size_t base_bits = 12;
+    static const size_t base = 1ull << base_bits;
+    static const size_t mux = 2;
+
+    uint64_t extents = 0;
+    uint64_t bytes = 0;
+
+    static size_t get_bucket(uint64_t offset,
+                             size_t num_buckets,
+                             uint64_t unit,
+                             uint64_t total) {
+      auto blen = p2roundup(total / num_buckets, unit);
+      return offset / blen;
+    }
+    // returns starting offset of a bucket
+    static uint64_t get_start(size_t bucket,
+                              size_t num_buckets,
+                              uint64_t unit,
+                              uint64_t total) {
+      ceph_assert (bucket <= num_buckets);
+      auto blen = p2roundup(total / num_buckets, unit);
+      return blen * bucket;
+    };
+    // returns ending offset (exclusive) of a bucket
+    static uint64_t get_end(size_t bucket,
+                            size_t num_buckets,
+                            uint64_t unit,
+                            uint64_t total) {
+      ceph_assert (bucket < num_buckets);
+      auto base = get_start(bucket + 1, num_buckets, unit, total);
+      return std::min(base, total);
+    };
+  };
+
+  typedef std::vector<free_state_spatial_hist_bucket> FreeStateSpatialHistogram;
+  void build_free_state_spatial_histogram(FreeStateSpatialHistogram& hist);
+
 private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;

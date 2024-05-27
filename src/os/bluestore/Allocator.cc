@@ -59,6 +59,12 @@ public:
 	  this,
 	  "build allocator free regions state histogram");
         ceph_assert(r == 0);
+        r = admin_socket->register_command(
+	  ("bluestore allocator spatial histogram " + name +
+           " name=num_buckets,type=CephInt,req=false").c_str(),
+	  this,
+	  "build allocator free regions spatial histogram");
+        ceph_assert(r == 0);
       }
     }
   }
@@ -141,6 +147,37 @@ public:
           f->close_section();
         }
       );
+      f->close_section();
+    } else if (command == "bluestore allocator spatial histogram " + name) {
+      int64_t num_buckets = 16;
+      cmd_getval(cmdmap, "num_buckets", num_buckets);
+      if (num_buckets <= 1) {
+        ss << "Invalid amount of buckets (min=2): '" << num_buckets
+           << std::endl;
+        return -EINVAL;
+      }
+
+      Allocator::FreeStateSpatialHistogram hist;
+      hist.resize(num_buckets);
+      alloc->build_free_state_spatial_histogram(hist);
+      auto unit = alloc->get_block_size();
+      auto total = alloc->get_capacity();
+      f->open_array_section("buckets");
+      for(int i = 0; i < num_buckets; i++) {
+        f->open_object_section("b");
+        char start_hex[30];
+        char end_hex[30];
+        snprintf(start_hex, sizeof(start_hex) - 1, "0x%zx",
+          hist[i].get_start(i, num_buckets, unit, total));
+        snprintf(end_hex, sizeof(end_hex) - 1, "0x%zx",
+          hist[i].get_end(i, num_buckets, unit, total));
+        f->dump_unsigned("bucket", i);
+        f->dump_string("start", start_hex);
+        f->dump_string("end", end_hex);
+        f->dump_unsigned("extents", hist[i].extents);
+        f->dump_unsigned("bytes", hist[i].bytes);
+        f->close_section();
+      }
       f->close_section();
     } else {
       ss << "Invalid command" << std::endl;
@@ -311,4 +348,30 @@ void Allocator::FreeStateHistogram::foreach(
       b.total, b.aligned, b.alloc_units);
     ++i;
   }
+}
+
+void Allocator::build_free_state_spatial_histogram(
+  Allocator::FreeStateSpatialHistogram& hist)
+{
+  auto num_buckets = hist.size();
+  ceph_assert(num_buckets);
+
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    size_t idx =
+      free_state_spatial_hist_bucket::get_bucket(off,
+        num_buckets, get_block_size(), get_capacity());
+    while (len > 0) {
+      uint64_t bend = free_state_spatial_hist_bucket::get_end(idx,
+        num_buckets, get_block_size(), get_capacity());
+      ceph_assert(off <= bend);
+      auto delta = std::min(len, bend - off);
+      len -= delta;
+      off = bend;
+      ceph_assert(idx < num_buckets);
+      hist[idx].extents++;
+      hist[idx].bytes += delta;
+      idx++;
+    }
+  };
+  foreach(iterated_allocation);
 }
