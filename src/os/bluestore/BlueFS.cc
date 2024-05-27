@@ -3925,7 +3925,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   ceph_assert(id < alloc.size());
   int64_t alloc_len = 0;
   PExtentVector extents;
-  uint64_t hint = 0;
+  int64_t hint = -1;
   int64_t need = len;
   bool shared = is_shared_alloc(id);
   auto shared_unit = shared_alloc ? shared_alloc->alloc_unit : 0;
@@ -3952,7 +3952,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     need = round_up_to(len, alloc_unit);
     if (!node->extents.empty() && node->extents.back().bdev == id) {
       hint = node->extents.back().end();
-    }   
+    }
     ++alloc_attempts;
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     auto t0 = mono_clock::now();
