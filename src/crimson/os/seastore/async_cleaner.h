@@ -416,6 +416,12 @@ public:
   // set the committed journal head
   virtual void set_journal_head(journal_seq_t) = 0;
 
+  // get the opened journal head sequence
+  virtual segment_seq_t get_journal_head_sequence() const = 0;
+
+  // set the opened journal head sequence
+  virtual void set_journal_head_sequence(segment_seq_t) = 0;
+
   // get the committed journal dirty tail
   virtual journal_seq_t get_dirty_tail() const = 0;
 
@@ -455,7 +461,9 @@ public:
     }
     assert(get_journal_head().segment_seq >=
            get_journal_tail().segment_seq);
-    return get_journal_head().segment_seq + 1 -
+    assert(get_journal_head_sequence() >=
+           get_journal_head().segment_seq);
+    return get_journal_head_sequence() + 1 -
            get_journal_tail().segment_seq;
   }
 };
@@ -510,6 +518,12 @@ public:
 
   void set_journal_head(journal_seq_t) final;
 
+  segment_seq_t get_journal_head_sequence() const final {
+    return journal_head_seq;
+  }
+
+  void set_journal_head_sequence(segment_seq_t) final;
+
   journal_seq_t get_dirty_tail() const final {
     return journal_dirty_tail;
   }
@@ -539,6 +553,7 @@ public:
   }
 
   void reset() {
+    journal_head_seq = NULL_SEG_SEQ;
     journal_head = JOURNAL_SEQ_NULL;
     journal_dirty_tail = JOURNAL_SEQ_NULL;
     journal_alloc_tail = JOURNAL_SEQ_NULL;
@@ -618,6 +633,7 @@ private:
   device_off_t roll_start;
   device_off_t roll_size;
 
+  segment_seq_t journal_head_seq = NULL_SEG_SEQ;
   journal_seq_t journal_head;
   journal_seq_t journal_dirty_tail;
   journal_seq_t journal_alloc_tail;
