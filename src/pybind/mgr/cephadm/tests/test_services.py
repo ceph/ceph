@@ -91,17 +91,17 @@ class FakeMgr:
 
 
 class TestCephadmService:
-    def test_set_service_url_on_dashboard(self):
+    def test_set_value_on_dashboard(self):
         # pylint: disable=protected-access
         mgr = FakeMgr()
         service_url = 'http://svc:1000'
         service = GrafanaService(mgr)
-        service._set_service_url_on_dashboard('svc', 'get-cmd', 'set-cmd', service_url)
+        service._set_value_on_dashboard('svc', 'get-cmd', 'set-cmd', service_url)
         assert mgr.config == service_url
 
         # set-cmd should not be called if value doesn't change
         mgr.check_mon_command.reset_mock()
-        service._set_service_url_on_dashboard('svc', 'get-cmd', 'set-cmd', service_url)
+        service._set_value_on_dashboard('svc', 'get-cmd', 'set-cmd', service_url)
         mgr.check_mon_command.assert_called_once_with({'prefix': 'get-cmd'})
 
     def _get_services(self, mgr):

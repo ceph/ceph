@@ -372,22 +372,21 @@ class CephadmService(metaclass=ABCMeta):
         addr = self.mgr.inventory.get_addr(hostname)
         return socket.getfqdn(addr)
 
-    def _set_service_url_on_dashboard(self,
+    def _set_value_on_dashboard(self,
                                       service_name: str,
                                       get_mon_cmd: str,
                                       set_mon_cmd: str,
-                                      service_url: str) -> None:
-        """A helper to get and set service_url via Dashboard's MON command.
-
-           If result of get_mon_cmd differs from service_url, set_mon_cmd will
+                                      new_value: str) -> None:
+        """A helper to get and set values via Dashboard's MON command.
+           If result of get_mon_cmd differs from the new_value, set_mon_cmd will
            be sent to set the service_url.
         """
         def get_set_cmd_dicts(out: str) -> List[dict]:
             cmd_dict = {
                 'prefix': set_mon_cmd,
-                'value': service_url
+                'value': new_value
             }
-            return [cmd_dict] if service_url != out else []
+            return [cmd_dict] if new_value != out else []
 
         self._check_and_set_dashboard(
             service_name=service_name,

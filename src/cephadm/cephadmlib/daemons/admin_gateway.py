@@ -95,6 +95,8 @@ class AdminGateway(ContainerDaemonForm):
             {
                 os.path.join(data_dir, 'etc/nginx.conf'): '/etc/nginx/nginx.conf:Z',
                 os.path.join(data_dir, 'etc/nginx.crt'):  '/etc/nginx/ssl/nginx.crt:Z',
-                os.path.join(data_dir, 'etc/nginx.key'): '/etc/nginx/ssl/nginx.key:Z'
+                os.path.join(data_dir, 'etc/nginx.key'): '/etc/nginx/ssl/nginx.key:Z',
+                os.path.join(data_dir, 'etc/nginx_internal.crt'):  '/etc/nginx/ssl/nginx_internal.crt:Z',
+                os.path.join(data_dir, 'etc/nginx_internal.key'):  '/etc/nginx/ssl/nginx_internal.key:Z'
             }
         )

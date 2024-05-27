@@ -193,15 +193,16 @@ class GrafanaService(CephadmService):
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         spec = cast(GrafanaSpec, self.mgr.spec_store[dd.service_name()].spec)
         adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
-        url_prefix = '/grafana' if adming_gw_cnt > 0 else ''
-        service_url = build_url(scheme=spec.protocol, host=addr, port=port)
-        service_url = f'{service_url}{url_prefix}'
-        self._set_service_url_on_dashboard(
-            'Grafana',
-            'dashboard get-grafana-api-url',
-            'dashboard set-grafana-api-url',
-            service_url
-        )
+        if adming_gw_cnt == 0:
+            url_prefix = '/grafana' if adming_gw_cnt > 0 else ''
+            service_url = build_url(scheme=spec.protocol, host=addr, port=port)
+            service_url = f'{service_url}{url_prefix}'
+            self._set_value_on_dashboard(
+                'Grafana',
+                'dashboard get-grafana-api-url',
+                'dashboard set-grafana-api-url',
+                service_url
+            )
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
         """
@@ -334,15 +335,16 @@ class AlertmanagerService(CephadmService):
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
         adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
-        url_prefix = '/alertmanager' if adming_gw_cnt > 0 else ''
-        service_url = build_url(scheme=protocol, host=addr, port=port)
-        service_url = f'{service_url}{url_prefix}'
-        self._set_service_url_on_dashboard(
-            'AlertManager',
-            'dashboard get-alertmanager-api-host',
-            'dashboard set-alertmanager-api-host',
-            service_url
-        )
+        if adming_gw_cnt == 0:
+            url_prefix = '/alertmanager' if adming_gw_cnt > 0 else ''
+            service_url = build_url(scheme=protocol, host=addr, port=port)
+            service_url = f'{service_url}{url_prefix}'
+            self._set_value_on_dashboard(
+                'AlertManager',
+                'dashboard get-alertmanager-api-host',
+                'dashboard set-alertmanager-api-host',
+                service_url
+            )
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
@@ -556,15 +558,16 @@ class PrometheusService(CephadmService):
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
         adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
-        url_prefix = '/prometheus' if adming_gw_cnt > 0 else ''
-        service_url = build_url(scheme=protocol, host=addr, port=port)
-        service_url = f'{service_url}{url_prefix}'
-        self._set_service_url_on_dashboard(
-            'Prometheus',
-            'dashboard get-prometheus-api-host',
-            'dashboard set-prometheus-api-host',
-            service_url
-        )
+        if adming_gw_cnt == 0:
+            url_prefix = '/prometheus' if adming_gw_cnt > 0 else ''
+            service_url = build_url(scheme=protocol, host=addr, port=port)
+            service_url = f'{service_url}{url_prefix}'
+            self._set_value_on_dashboard(
+                'Prometheus',
+                'dashboard get-prometheus-api-host',
+                'dashboard set-prometheus-api-host',
+                service_url
+            )
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
