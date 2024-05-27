@@ -30,7 +30,6 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     [this, FNAME, config=std::move(config), shard_num, journal_size](auto st) {
     super.block_size = st.block_size;
     super.size = st.size;
-    super.feature |= RBM_BITMAP_BLOCK_CRC;
     super.config = std::move(config);
     super.journal_size = journal_size;
     ceph_assert_always(super.journal_size > 0);
@@ -59,13 +58,16 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
       crimson::ct_error::assert_all{
       "Invalid error open in RBMDevice::do_primary_mkfs"}
     ).safe_then([this] {
-      return write_rbm_superblock(
+      return initialize_nvme_features(
       ).safe_then([this] {
-	return close();
-      }).handle_error(
-	mkfs_ertr::pass_further{},
-	crimson::ct_error::assert_all{
-	"Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
+	return write_rbm_superblock(
+	).safe_then([this] {
+	  return close();
+	}).handle_error(
+	  mkfs_ertr::pass_further{},
+	  crimson::ct_error::assert_all{
+	  "Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
+	});
       });
     });
   });
@@ -79,7 +81,7 @@ write_ertr::future<> RBMDevice::write_rbm_superblock()
   // If NVMeDevice supports data protection, CRC for checksum is not required
   // NVMeDevice is expected to generate and store checksum internally.
   // CPU overhead for CRC might be saved.
-  if (is_data_protection_enabled()) {
+  if (is_end_to_end_data_protection()) {
     super.crc = -1;
   } else {
     super.crc = meta_b_header.crc32c(-1);
@@ -127,7 +129,7 @@ read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
 	  super_block.block_size);
 
       // Do CRC verification only if data protection is not supported.
-      if (is_data_protection_enabled() == false) {
+      if (super_block.is_end_to_end_data_protection() == false) {
 	if (meta_b_header.crc32c(-1) != crc) {
 	  DEBUG("bad crc on super block, expected {} != actual {} ",
 		meta_b_header.crc32c(-1), crc);

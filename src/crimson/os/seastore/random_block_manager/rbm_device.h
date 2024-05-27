@@ -66,11 +66,6 @@ using discard_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
 
 constexpr uint32_t RBM_SUPERBLOCK_SIZE = 4096;
-enum {
-  // TODO: This allows the device to manage crc on a block by itself
-  RBM_NVME_END_TO_END_PROTECTION = 1,
-  RBM_BITMAP_BLOCK_CRC = 2,
-};
 
 class RBMDevice : public Device {
 public:
@@ -149,7 +144,13 @@ public:
     ceph::bufferlist bl,
     uint16_t stream = 0) = 0;
 
-  bool is_data_protection_enabled() const { return false; }
+  bool is_end_to_end_data_protection() const final {
+    return super.is_end_to_end_data_protection();
+  }
+
+  virtual nvme_command_ertr::future<> initialize_nvme_features() { 
+    return nvme_command_ertr::now(); 
+  }
 
   mkfs_ret do_mkfs(device_config_t);
 

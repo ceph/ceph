@@ -39,6 +39,10 @@ struct rbm_shard_info_t {
   }
 };
 
+enum class rbm_feature_t : uint64_t {
+  RBM_NVME_END_TO_END_PROTECTION = 1,
+};
+
 struct rbm_superblock_t {
   size_t size = 0;
   size_t block_size = 0;
@@ -79,6 +83,13 @@ struct rbm_superblock_t {
     ceph_assert(get_default_backend_of_device(config.spec.dtype) ==
 		backend_type_t::RANDOM_BLOCK);
     ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
+  }
+
+  bool is_end_to_end_data_protection() const {
+    return (feature & (uint64_t)rbm_feature_t::RBM_NVME_END_TO_END_PROTECTION);
+  }
+  void set_end_to_end_data_protection() {
+    feature |= (uint64_t)rbm_feature_t::RBM_NVME_END_TO_END_PROTECTION;
   }
 };
 
