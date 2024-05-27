@@ -89,9 +89,10 @@ class NvmeofService(CephService):
 
             for dd in daemon_descrs:
                 assert dd.hostname is not None
+                service_name = dd.service_name()
 
                 if not spec:
-                    logger.warning(f'No ServiceSpec found for {dd.service_name()}')
+                    logger.warning(f'No ServiceSpec found for {service_name}')
                     continue
 
                 ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
@@ -104,7 +105,7 @@ class NvmeofService(CephService):
                     cmd_dicts.append({
                         'prefix': 'dashboard nvmeof-gateway-add',
                         'inbuf': service_url,
-                        'name': dd.hostname
+                        'name': service_name
                     })
             return cmd_dicts
 
@@ -140,11 +141,12 @@ class NvmeofService(CephService):
         """
         # to clean the keyring up
         super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
+        service_name = daemon.service_name()
 
         # remove config for dashboard nvmeof gateways if any
         ret, out, err = self.mgr.mon_command({
             'prefix': 'dashboard nvmeof-gateway-rm',
-            'name': daemon.hostname,
+            'name': service_name,
         })
         if not ret:
             logger.info(f'{daemon.hostname} removed from nvmeof gateways dashboard config')
