@@ -55,6 +55,12 @@ struct btree_test_base :
 
   void set_journal_head(journal_seq_t) final {}
 
+  segment_seq_t get_journal_head_sequence() const final {
+    return NULL_SEG_SEQ;
+  }
+
+  void set_journal_head_sequence(segment_seq_t) final {}
+
   journal_seq_t get_dirty_tail() const final { return dummy_tail; }
 
   journal_seq_t get_alloc_tail() const final { return dummy_tail; }

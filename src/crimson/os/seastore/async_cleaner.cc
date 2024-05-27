@@ -443,6 +443,18 @@ void JournalTrimmerImpl::set_journal_head(journal_seq_t head)
   background_callback->maybe_wake_background();
 }
 
+void JournalTrimmerImpl::set_journal_head_sequence(
+  segment_seq_t seq)
+{
+  if (journal_head != JOURNAL_SEQ_NULL) {
+    ceph_assert(seq == journal_head.segment_seq + 1);
+  }
+  if (journal_head_seq != NULL_SEG_SEQ) {
+    ceph_assert(seq == journal_head_seq + 1);
+  }
+  journal_head_seq = seq;
+}
+
 void JournalTrimmerImpl::update_journal_tails(
   journal_seq_t dirty_tail,
   journal_seq_t alloc_tail)
@@ -976,6 +988,10 @@ segment_id_t SegmentCleaner::allocate_segment(
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type, category, generation);
+      if (type == segment_type_t::JOURNAL) {
+        assert(trimmer != nullptr);
+        trimmer->set_journal_head_sequence(seq);
+      }
       background_callback->maybe_wake_background();
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
