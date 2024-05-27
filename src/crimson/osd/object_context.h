@@ -117,8 +117,16 @@ public:
     }
   }
 
+  bool is_loaded() const {
+    return fully_loaded;
+  }
+
+  bool is_valid() const {
+    return !invalidated_by_interval_change;
+  }
+
   bool is_loaded_and_valid() const {
-    return fully_loaded && !invalidated_by_interval_change;
+    return is_loaded() && is_valid();
   }
 
 private:
