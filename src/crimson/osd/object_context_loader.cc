@@ -144,18 +144,15 @@ using crimson::common::local_conf;
                                        bool existed)
   {
     LOG_PREFIX(ObjectContextLoader::get_or_load_obc);
+    DEBUGDPP("{} -- fully_loaded={}, "
+             "invalidated_by_interval_change={}",
+             dpp, obc->get_oid(),
+             obc->fully_loaded,
+             obc->invalidated_by_interval_change);
     auto loaded =
       load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
     if (existed && obc->is_loaded()) {
-      if (!obc->is_loaded_and_valid()) {
-	ERRORDPP(
-	  "obc for {} invalid -- fully_loaded={}, "
-	  "invalidated_by_interval_change={}",
-	  dpp, obc->get_oid(),
-	  obc->fully_loaded, obc->invalidated_by_interval_change
-	);
-      }
-      ceph_assert(obc->is_loaded_and_valid());
+      ceph_assert(obc->is_valid());
       DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
     } else {
       DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
