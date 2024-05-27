@@ -953,6 +953,9 @@ $DAEMONOPTS
 
         bluestore fsck on mount = true
         bluestore block create = true
+        bluestore allocator = bitmap
+        bluestore alloc favor spatial locality = false
+        
 $BLUESTORE_OPTS
 
         ; kstore
