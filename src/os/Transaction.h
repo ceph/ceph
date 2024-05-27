@@ -103,6 +103,7 @@ void decode_str_set_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::l
  * A and B.
  *
  */
+
 namespace ceph::os {
 class Transaction {
 public:
@@ -613,28 +614,6 @@ public:
   uint64_t get_num_bytes() {
     return get_encoded_bytes();
   }
-  /// Size of largest data buffer to the "write" operation encountered so far
-  uint32_t get_data_length() {
-    return data.largest_data_len;
-  }
-  /// offset within the encoded buffer to the start of the largest data buffer that's encoded
-  uint32_t get_data_offset() {
-    if (data.largest_data_off_in_data_bl) {
-	return data.largest_data_off_in_data_bl +
-	  sizeof(__u8) +      // encode struct_v
-	  sizeof(__u8) +      // encode compat_v
-	  sizeof(__u32) +     // encode len
-	  sizeof(__u32);      // data_bl len
-    }
-    return 0;  // none
-  }
-  /// offset of buffer as aligned to destination within object.
-  int get_data_alignment() {
-    if (!data.largest_data_len)
-	return 0;
-    return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
-  }
-  /// Is the Transaction empty (no operations)
   bool empty() {
     return !data.ops;
   }
@@ -1270,36 +1249,98 @@ public:
     data.ops = data.ops + 1;
   }
 
-  void encode(ceph::buffer::list& bl) const {
-    //layout: data_bl + op_bl + coll_index + object_index + data
-    ENCODE_START(9, 9, bl);
-    encode(data_bl, bl);
-    encode(op_bl, bl);
-    encode(coll_index, bl);
-    encode(object_index, bl);
-    data.encode(bl);
-    ENCODE_FINISH(bl);
+  void encode(ceph::buffer::list& bl) const
+  {
+    encode(bl,bl);
+  }
+
+  void encode(ceph::buffer::list &p_bl,ceph::buffer::list &d_bl) const
+  {
+    uint8_t ver = (&p_bl == &d_bl)?9:10;
+
+    //See also get_encoded_bytes which assumes layout version 9
+
+    //layout version 9:
+    // buffer = data_bl + op_bl + coll_index + object_index + data
+    //layout version 10 (for inter-OSD messages):
+    // payload = op_bl + coll_index + object_index + data
+    // data = [page aligned data_bl] + [misaligned data_bl]
+    ENCODE_START(ver, ver, p_bl);
+    if (ver < 10) {
+      encode(data_bl, p_bl);
+    }
+    encode(op_bl, p_bl);
+    encode(coll_index, p_bl);
+    encode(object_index, p_bl);
+    data.encode(p_bl);
+
+    if (ver >= 10) {
+      unsigned int len = data.largest_data_len;
+      unsigned int align = (0-data.largest_data_off) & ~CEPH_PAGE_MASK;
+      unsigned int off_in_data_bl = data.largest_data_off_in_data_bl;
+
+      if ((off_in_data_bl != 0) && (len >= CEPH_PAGE_SIZE+align)) {
+        // Put page aligned data at the start of the data buffer
+        off_in_data_bl += align;
+        bufferlist before;
+        bufferlist remainder;
+        before.substr_of(data_bl, 0, off_in_data_bl);
+        remainder.substr_of(data_bl, off_in_data_bl, data_bl.length()-off_in_data_bl);
+        encode(remainder, p_bl, d_bl);
+        encode(before, p_bl, d_bl);
+      } else {
+        // No aligned data
+        encode(data_bl, p_bl, d_bl);
+      }
+    }
+    ENCODE_FINISH(p_bl);
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(9, bl);
+    decode(bl,bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &p_bl,ceph::buffer::list::const_iterator &d_bl) {
+    DECODE_START(10, p_bl);
     DECODE_OLDEST(9);
 
-    decode(data_bl, bl);
-    decode(op_bl, bl);
-    decode(coll_index, bl);
-    decode(object_index, bl);
-    data.decode(bl);
+    if (struct_v < 10) {
+      decode(data_bl, p_bl);
+    }
+    decode(op_bl, p_bl);
+    decode(coll_index, p_bl);
+    decode(object_index, p_bl);
+    data.decode(p_bl);
     coll_id = coll_index.size();
     object_id = object_index.size();
 
-    DECODE_FINISH(bl);
+    if (struct_v >= 10) {
+      unsigned int len = data.largest_data_len;
+      unsigned int align = (0-data.largest_data_off) & ~CEPH_PAGE_MASK;
+      unsigned int off_in_data_bl = data.largest_data_off_in_data_bl;
+
+      if ((off_in_data_bl != 0) && (len >= CEPH_PAGE_SIZE+align)) {
+        // Aligned data is at the front of the buffer
+        bufferlist before;
+        bufferlist remainder;
+        decode(remainder, p_bl, d_bl);
+        decode(before, p_bl, d_bl);
+        data_bl.append(before);
+        data_bl.append(remainder);
+      } else {
+        decode(data_bl, p_bl, d_bl);
+      }
+    }
+
+    DECODE_FINISH(p_bl);
   }
 
   void dump(ceph::Formatter *f);
   static void generate_test_instances(std::list<Transaction*>& o);
 };
+
 WRITE_CLASS_ENCODER(ceph::os::Transaction)
+WRITE_CLASS_ENCODER_WITH_DATA(ceph::os::Transaction)
 WRITE_CLASS_ENCODER(ceph::os::Transaction::TransactionData)
 
 std::ostream& operator<<(std::ostream& out, const Transaction& tx);
