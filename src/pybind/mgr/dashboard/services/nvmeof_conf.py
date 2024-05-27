@@ -87,8 +87,17 @@ class NvmeofGatewaysConfig(object):
 
     @classmethod
     def get_root_ca_cert(cls, service_name: str):
-        root_ca_cert = cls.from_cert_store('nvmeof_root_ca_cert', service_name)
-        return root_ca_cert.encode() if root_ca_cert else None
+        try:
+            root_ca_cert = cls.from_cert_store('nvmeof_root_ca_cert', service_name)
+            return root_ca_cert.encode()
+        except DashboardException:
+            # If root_ca_cert is not set, use server_cert as root_ca_cert
+            return cls.get_server_cert(service_name)
+
+    @classmethod
+    def get_server_cert(cls, service_name: str):
+        server_cert = cls.from_cert_store('nvmeof_server_cert', service_name)
+        return server_cert.encode() if server_cert else None
 
     @classmethod
     def from_cert_store(cls, entity: str, service_name: str, key=False):
