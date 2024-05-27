@@ -125,10 +125,6 @@ public:
     return !invalidated_by_interval_change;
   }
 
-  bool is_loaded_and_valid() const {
-    return is_loaded() && is_valid();
-  }
-
 private:
   tri_mutex lock;
   bool recovery_read_marker = false;
