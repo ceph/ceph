@@ -84,10 +84,27 @@ class NvmeofService(CephService):
 
             for dd in daemon_descrs:
                 assert dd.hostname is not None
+                service_name = dd.service_name()
 
                 if not spec:
-                    logger.warning(f'No ServiceSpec found for {dd.service_name()}')
+                    logger.warning(f'No ServiceSpec found for {service_name}')
                     continue
+
+                self.mgr.check_mon_command({
+                    'prefix': 'config-key set',
+                    'key': f'mgr/dashboard/{service_name}/mtls_server_cert',
+                    'val': spec.server_cert if spec.server_cert else '',
+                })
+                self.mgr.check_mon_command({
+                    'prefix': 'config-key set',
+                    'key': f'mgr/dashboard/{service_name}/mtls_client_key',
+                    'val': spec.server_key if spec.server_key else '',
+                })
+                self.mgr.check_mon_command({
+                    'prefix': 'config-key set',
+                    'key': f'mgr/dashboard/{service_name}/mtls_client_cert',
+                    'val': spec.client_cert if spec.client_cert else '',
+                })
 
                 ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
                 if type(ip_address(ip)) is IPv6Address:
@@ -99,7 +116,7 @@ class NvmeofService(CephService):
                     cmd_dicts.append({
                         'prefix': 'dashboard nvmeof-gateway-add',
                         'inbuf': service_url,
-                        'name': dd.hostname
+                        'name': service_name
                     })
             return cmd_dicts
 
