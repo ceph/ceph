@@ -5,6 +5,7 @@ import json
 import re
 import tempfile
 import time
+from typing import Any, Dict
 from urllib.parse import urlparse
 
 import requests
@@ -230,7 +231,7 @@ class MultiCluster(RESTController):
 
     @Endpoint('PUT')
     @UpdatePermission
-    def set_config(self, config: object):
+    def set_config(self, config: Dict[str, Any]):
         multicluster_config = self.load_multi_cluster_config()
         multicluster_config.update({'current_url': config['url']})
         multicluster_config.update({'current_user': config['user']})
