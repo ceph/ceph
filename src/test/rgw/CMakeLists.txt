@@ -34,7 +34,6 @@ target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE spawn)
 install(TARGETS ceph_test_rgw_d4n_directory DESTINATION ${CMAKE_INSTALL_BINDIR})
   
 add_executable(ceph_test_rgw_d4n_policy
@@ -50,7 +49,6 @@ target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE spawn)
 install(TARGETS ceph_test_rgw_d4n_policy DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_executable(ceph_test_rgw_redis_driver
@@ -66,7 +64,6 @@ target_link_libraries(ceph_test_rgw_redis_driver PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_redis_driver PRIVATE spawn)
 install(TARGETS ceph_test_rgw_redis_driver DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_executable(ceph_test_rgw_ssd_driver
@@ -82,7 +79,6 @@ target_link_libraries(ceph_test_rgw_ssd_driver PRIVATE
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   )
-  target_link_libraries(ceph_test_rgw_ssd_driver PRIVATE spawn)
 install(TARGETS ceph_test_rgw_ssd_driver DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 

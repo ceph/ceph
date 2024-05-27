@@ -85,7 +85,8 @@ def traverse(MEMO, ioctx):
                 nkey = None
                 for (dnk, val) in it:
                     log.debug(f'\t{dnk}: val size {len(val)}')
-                    (first,) = struct.unpack('<I', val[:4])
+                    (first,) = struct.unpack('<Q', val[:8])
+                    log.debug(f'\t{dnk}: first {first}')
                     if first > NEXT_SNAP:
                         log.warning(f"found {o.key}:{dnk} first (0x{first:x}) > NEXT_SNAP (0x{NEXT_SNAP:x})")
                         if REPAIR_NOSNAP and dnk.endswith(b"_head") and first == CEPH_NOSNAP:

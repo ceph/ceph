@@ -98,10 +98,12 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const 
     boost::system::error_code ec;
     if (y) {
         using namespace boost::asio;
-        spawn::yield_context yield = y.get_yield_context();
-        this->put_async(dpp, y.get_io_context(), key, bl, len, attrs, yield[ec]);
+        yield_context yield = y.get_yield_context();
+        auto ex = yield.get_executor();
+        this->put_async(dpp, ex, key, bl, len, attrs, yield[ec]);
     } else {
-        this->put_async(dpp, y.get_io_context(), key, bl, len, attrs, ceph::async::use_blocked[ec]);
+      auto ex = boost::asio::system_executor{};
+      this->put_async(dpp, ex, key, bl, len, attrs, ceph::async::use_blocked[ec]);
     }
     if (ec) {
         return ec.value();
@@ -199,18 +201,21 @@ auto SSDDriver::AsyncWriteRequest::create(const Executor1& ex1, CompletionHandle
     return p;
 }
 
-template <typename ExecutionContext, typename CompletionToken>
-auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+template <typename Executor, typename CompletionToken>
+auto SSDDriver::get_async(const DoutPrefixProvider *dpp, const Executor& ex, const std::string& key,
                 off_t read_ofs, off_t read_len, CompletionToken&& token)
 {
+  using Op = AsyncReadOp;
+  using Signature = typename Op::Signature;
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [this] (auto handler, const DoutPrefixProvider *dpp,
+              const Executor& ex, const std::string& key,
+              off_t read_ofs, off_t read_len) {
+    auto p = Op::create(ex, handler);
+    auto& op = p->user_data;
+
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
-
-    using Op = AsyncReadOp;
-    using Signature = typename Op::Signature;
-    boost::asio::async_completion<CompletionToken, Signature> init(token);
-    auto p = Op::create(ctx.get_executor(), init.completion_handler);
-    auto& op = p->user_data;
 
     int ret = op.prepare_libaio_read_op(dpp, location, read_ofs, read_len, p.get());
     if(0 == ret) {
@@ -223,22 +228,24 @@ auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, 
     } else {
         (void)p.release();
     }
-    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Before init.result.get()" << ret << dendl;
-    return init.result.get();
+  }, token, dpp, ex, key, read_ofs, read_len);
 }
 
-template <typename ExecutionContext, typename CompletionToken>
-void SSDDriver::put_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+template <typename Executor, typename CompletionToken>
+void SSDDriver::put_async(const DoutPrefixProvider *dpp, const Executor& ex, const std::string& key,
                 const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, CompletionToken&& token)
 {
+  using Op = AsyncWriteRequest;
+  using Signature = typename Op::Signature;
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [this] (auto handler, const DoutPrefixProvider *dpp,
+              const Executor& ex, const std::string& key, const bufferlist& bl,
+              uint64_t len, const rgw::sal::Attrs& attrs) {
+    auto p = Op::create(ex, handler);
+    auto& op = p->user_data;
+
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
-
-    using Op = AsyncWriteRequest;
-    using Signature = typename Op::Signature;
-    boost::asio::async_completion<CompletionToken, Signature> init(token);
-    auto p = Op::create(ctx.get_executor(), init.completion_handler);
-    auto& op = p->user_data;
 
     int r = 0;
     bufferlist src = bl;
@@ -267,7 +274,7 @@ void SSDDriver::put_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, 
     } else {
         (void)p.release();
     }
-    init.result.get();
+  }, token, dpp, ex, key, bl, len, attrs);
 }
 
 rgw::Aio::OpFunc SSDDriver::ssd_cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,
@@ -277,12 +284,11 @@ rgw::Aio::OpFunc SSDDriver::ssd_cache_read_op(const DoutPrefixProvider *dpp, opt
     ldpp_dout(dpp, 20) << "SSDCache: cache_read_op(): Read From Cache, oid=" << r.obj.oid << dendl;
 
     using namespace boost::asio;
-    spawn::yield_context yield = y.get_yield_context();
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
+    yield_context yield = y.get_yield_context();
+    auto ex = yield.get_executor();
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
-    this->get_async(dpp, y.get_io_context(), key, read_ofs, read_len, bind_executor(ex, SSDDriver::libaio_read_handler{aio, r}));
+    this->get_async(dpp, ex, key, read_ofs, read_len, bind_executor(ex, SSDDriver::libaio_read_handler{aio, r}));
   };
 }
 
@@ -293,12 +299,11 @@ rgw::Aio::OpFunc SSDDriver::ssd_cache_write_op(const DoutPrefixProvider *dpp, op
     ldpp_dout(dpp, 20) << "SSDCache: cache_write_op(): Write to Cache, oid=" << r.obj.oid << dendl;
 
     using namespace boost::asio;
-    spawn::yield_context yield = y.get_yield_context();
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
+    yield_context yield = y.get_yield_context();
+    auto ex = yield.get_executor();
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
-    this->put_async(dpp, y.get_io_context(), key, bl, len, attrs, bind_executor(ex, SSDDriver::libaio_write_handler{aio, r}));
+    this->put_async(dpp, ex, key, bl, len, attrs, bind_executor(ex, SSDDriver::libaio_write_handler{aio, r}));
   };
 }
 

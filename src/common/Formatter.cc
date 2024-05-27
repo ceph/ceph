@@ -16,6 +16,7 @@
 
 #include "HTMLFormatter.h"
 #include "common/escape.h"
+#include "common/StackStringStream.h"
 #include "include/buffer.h"
 
 #include <fmt/format.h>
@@ -29,27 +30,39 @@ namespace ceph {
 std::string
 fixed_u_to_string(uint64_t num, int scale)
 {
-	std::ostringstream t;
+  CachedStackStringStream css;
 
-	t.fill('0');
-	t.width(scale + 1);
-	t << num;
-	int len = t.str().size();
-	return t.str().substr(0,len - scale) + "." + t.str().substr(len - scale);
+  css->fill('0');
+  css->width(scale + 1);
+  *css << num;
+  auto len = css->strv().size();
+
+  CachedStackStringStream css2;
+  *css2 << css->strv().substr(0, len - scale)
+        << "."
+        << css->strv().substr(len - scale);
+  return css2->str();
 }
 
 std::string
 fixed_to_string(int64_t num, int scale)
 {
-	std::ostringstream t;
-	bool neg = num < 0;
-	if (neg) num = -num;
+  CachedStackStringStream css;
 
-	t.fill('0');
-	t.width(scale + 1);
-	t << num;
-	int len = t.str().size();
-	return (neg ? "-" : "") + t.str().substr(0,len - scale) + "." + t.str().substr(len - scale);
+  bool neg = num < 0;
+  if (neg) num = -num;
+
+  css->fill('0');
+  css->width(scale + 1);
+  *css << num;
+  auto len = css->strv().size();
+
+  CachedStackStringStream css2;
+  *css2 << (neg ? "-" : "")
+        << css->strv().substr(0, len - scale)
+        << "."
+        << css->strv().substr(len - scale);
+  return css2->str();
 }
 
 /*
@@ -77,10 +90,6 @@ FormatterAttrs::FormatterAttrs(const char *attr, ...)
 }
 
 void Formatter::write_bin_data(const char*, int){}
-
-Formatter::Formatter() { }
-
-Formatter::~Formatter() { }
 
 Formatter *Formatter::create(std::string_view type,
 			     std::string_view default_type,
@@ -116,9 +125,9 @@ Formatter *Formatter::create(std::string_view type,
 
 void Formatter::flush(bufferlist &bl)
 {
-  std::stringstream os;
-  flush(os);
-  bl.append(os.str());
+  CachedStackStringStream css;
+  flush(*css);
+  bl.append(css->strv());
 }
 
 void Formatter::dump_format(std::string_view name, const char *fmt, ...)
@@ -290,10 +299,10 @@ void JSONFormatter::finish_pending_string()
 template <class T>
 void JSONFormatter::add_value(std::string_view name, T val)
 {
-  std::stringstream ss;
-  ss.precision(std::numeric_limits<T>::max_digits10);
-  ss << val;
-  add_value(name, ss.str(), false);
+  CachedStackStringStream css;
+  css->precision(std::numeric_limits<T>::max_digits10);
+  *css << val;
+  add_value(name, css->strv(), false);
 }
 
 void JSONFormatter::add_value(std::string_view name, std::string_view val, bool quoted)
@@ -564,15 +573,15 @@ void XMLFormatter::write_bin_data(const char* buff, int buf_len)
 
 void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str)
 {
-  std::stringstream attrs_ss;
+  CachedStackStringStream css;
 
   for (std::list<std::pair<std::string, std::string> >::const_iterator iter = attrs->attrs.begin();
        iter != attrs->attrs.end(); ++iter) {
     std::pair<std::string, std::string> p = *iter;
-    attrs_ss << " " << p.first << "=" << "\"" << p.second << "\"";
+    *css << " " << p.first << "=" << "\"" << p.second << "\"";
   }
 
-  attrs_str = attrs_ss.str();
+  attrs_str = css->strv();
 }
 
 void XMLFormatter::open_section_in_ns(std::string_view name, const char *ns, const FormatterAttrs *attrs)
@@ -941,15 +950,15 @@ void TableFormatter::write_raw_data(const char *data) {
 
 void TableFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str)
 {
-  std::stringstream attrs_ss;
+  CachedStackStringStream css;
 
   for (std::list<std::pair<std::string, std::string> >::const_iterator iter = attrs->attrs.begin();
        iter != attrs->attrs.end(); ++iter) {
     std::pair<std::string, std::string> p = *iter;
-    attrs_ss << " " << p.first << "=" << "\"" << p.second << "\"";
+    *css << " " << p.first << "=" << "\"" << p.second << "\"";
   }
 
-  attrs_str = attrs_ss.str();
+  attrs_str = css->strv();
 }
 
 void TableFormatter::finish_pending_string()

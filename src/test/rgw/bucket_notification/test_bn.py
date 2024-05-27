@@ -656,7 +656,7 @@ def test_ps_s3_topic_admin_on_master():
                  'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_1')
 
     endpoint_address = 'http://127.0.0.1:9001'
-    endpoint_args = 'push-endpoint='+endpoint_address
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
     topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
     topic_arn2 = topic_conf2.set_config()
     assert_equal(topic_arn2,
@@ -4536,6 +4536,9 @@ def test_ps_s3_notification_push_kafka_security_sasl_scram():
 @attr('http_test')
 def test_persistent_ps_s3_reload():
     """ do a realm reload while we send notifications """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for reload test')
+
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4642,6 +4645,8 @@ def test_persistent_ps_s3_reload():
 @attr('data_path_v2_test')
 def test_persistent_ps_s3_data_path_v2_migration():
     """ test data path v2 persistent migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4780,6 +4785,8 @@ def test_persistent_ps_s3_data_path_v2_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_migration():
     """ test data path v2 migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4895,6 +4902,8 @@ def test_ps_s3_data_path_v2_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_large_migration():
     """ test data path v2 large migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     connections_list = []
     connections_list.append(conn)
@@ -5023,6 +5032,8 @@ def test_ps_s3_data_path_v2_large_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_mixed_migration():
     """ test data path v2 mixed migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     connections_list = []
     connections_list.append(conn)
