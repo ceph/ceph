@@ -284,6 +284,7 @@ public:
     static constexpr uint16_t BUF = 256;  // print Blob's buffers (takes cache lock)
     static constexpr uint16_t SBUF = 512; // short print Blob's buffers (takes cache lock)
     static constexpr uint16_t ATTRS = 1024; // print attrs in onode
+    static constexpr uint16_t JUSTID = 2048; // used to suppress printing length, spanning and shared blob
   };
 
   /// cached buffer
@@ -307,9 +308,9 @@ public:
     // Not print "clean", as it is most frequent.
     static const char *get_state_name_short(int s) {
       switch (s) {
-      case STATE_EMPTY: return "empty";
+      case STATE_EMPTY: return ",empty";
       case STATE_CLEAN: return "";
-      case STATE_WRITING: return "writing";
+      case STATE_WRITING: return ",writing";
       default: return "???";
       }
     }
