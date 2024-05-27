@@ -65,7 +65,7 @@ int64_t Btree2Allocator::allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint, // unused and likely unneeded
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
@@ -182,7 +182,7 @@ int64_t Btree2Allocator::_allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint, // unused and likely unneeded
   PExtentVector* extents)
 {
   uint64_t allocated = 0;
