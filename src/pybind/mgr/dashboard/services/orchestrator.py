@@ -130,11 +130,9 @@ class ServiceManager(ResourceManager):
             service_ids = [service_ids]
 
         completion_list = [
-            self.api.service_action('reload', service_type, service_name,
-                                    service_id)
-            for service_name, service_id in service_ids
+            self.api.service_action('restart', f'{service_type}.{service_id}')
+            for service_id in service_ids
         ]
-        self.api.orchestrator_wait(completion_list)
         for c in completion_list:
             raise_if_exception(c)
 
