@@ -439,7 +439,7 @@ private:
     eversion_t last_complete;
     epoch_t epoch_started;
 
-    ObjectStore::Transaction opt, localt;
+    ObjectStore::Transaction localt;
     
     RepModify() : committed(false), ackerosd(-1),
 		  epoch_started(0) {}
