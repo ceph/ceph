@@ -260,7 +260,8 @@ ClientRequest::process_op(
   co_await ihref.enter_stage<interruptor>(
     client_pp(*pg).recover_missing, *this
   );
-  co_await recover_missings(pg, m->get_hobj(), snaps_need_to_recover());
+  co_await recover_missings(pg, m->get_hobj(),
+                            snaps_need_to_recover(), m->get_reqid());
 
   DEBUGDPP("{}.{}: checking already_complete",
 	   *pg, *this, this_instance_id);
