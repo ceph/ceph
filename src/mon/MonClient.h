@@ -559,6 +559,7 @@ private:
   struct MonCommand {
     // for tell only
     std::string target_name;
+    std::string sent_name;
     int target_rank = -1;
     ConnectionRef target_con;
     std::unique_ptr<MonConnection> target_session;
