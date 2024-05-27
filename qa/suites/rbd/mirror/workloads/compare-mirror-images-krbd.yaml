@@ -1,8 +1,7 @@
 overrides:
   install:
-    ceph:
-      extra_system_packages:
-        - pv
+    extra_system_packages:
+      - pv
 tasks:
 - workunit:
     clients:
