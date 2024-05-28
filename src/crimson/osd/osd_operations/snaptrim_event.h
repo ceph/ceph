@@ -168,6 +168,7 @@ public:
     StartEvent,
     CommonPGPipeline::GetOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
+    CommonPGPipeline::WaitRepop::BlockingEvent,
     CompletionEvent
   > tracking_events;
 };

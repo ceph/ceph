@@ -416,8 +416,12 @@ SnapTrimObjSubEvent::start()
 	      std::move(osd_op_p),
 	      std::move(log_entries));
 	    return submitted.then_interruptible(
-	      [all_completed=std::move(all_completed), this] () mutable {
-		return std::move(all_completed);
+	      [this, all_completed=std::move(all_completed)]() mutable {
+		return enter_stage<interruptor>(
+		  client_pp().wait_repop
+		).then_interruptible([all_completed=std::move(all_completed)]() mutable{
+		  return std::move(all_completed);
+		});
 	      });
 	  });
 	});
