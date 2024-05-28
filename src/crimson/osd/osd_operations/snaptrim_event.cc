@@ -72,6 +72,8 @@ SnapTrimEvent::start()
     handle.exit();
   });
 
+  /* TODO: add a way to expose progress via the optracker without misusing
+   * pipeline stages. https://tracker.ceph.com/issues/66473 */
   ShardServices &shard_services = pg->get_shard_services();
   co_await enter_stage<interruptor>(client_pp().wait_for_active);
 
@@ -124,18 +126,11 @@ SnapTrimEvent::start()
 	  snapid));
     }
 
-    co_await enter_stage<interruptor>(wait_subop);
-
     logger().debug("{}: awaiting completion", *this);
     co_await subop_blocker.interruptible_wait_completion();
   }
 
   if (needs_pause) {
-    // let's know operators we're waiting
-    co_await enter_stage<interruptor>(
-      wait_trim_timer
-    );
-
     using crimson::common::local_conf;
     const auto time_to_sleep =
       local_conf().template get_val<double>("osd_snap_trim_sleep");
@@ -452,11 +447,7 @@ SnapTrimObjSubEvent::start()
 	      std::move(log_entries));
 	    return submitted.then_interruptible(
 	      [all_completed=std::move(all_completed), this] () mutable {
-		return enter_stage<interruptor>(
-		  wait_repop
-		).then_interruptible([all_completed=std::move(all_completed)] () mutable {
-		  return std::move(all_completed);
-		});
+		return std::move(all_completed);
 	      });
 	  });
 	});
