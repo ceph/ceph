@@ -201,6 +201,7 @@ class HTTPServerWithEvents(ThreadingHTTPServer):
         self.delay = delay
         self.cloudevents = cloudevents
         self.addr = addr
+        self.request_queue_size = 100
         self.lock = threading.Lock()
         ThreadingHTTPServer.__init__(self, addr, HTTPPostHandler)
         log.info('http server created on %s', self.addr)
