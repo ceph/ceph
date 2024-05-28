@@ -218,7 +218,7 @@ public:
       ++next_id
     );
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
-             *ret, name, src, is_weak);
+              *ret, name, src, is_weak);
     assert(!is_weak || src == Transaction::src_t::READ);
     return ret;
   }
@@ -227,7 +227,7 @@ public:
   void reset_transaction_preserve_handle(Transaction &t) {
     LOG_PREFIX(Cache::reset_transaction_preserve_handle);
     if (t.did_reset()) {
-      SUBTRACET(seastore_t, "reset", t);
+      SUBDEBUGT(seastore_t, "reset", t);
       ++(get_by_src(stats.trans_created_by_src, t.get_src()));
     }
     t.reset_preserve_handle(last_commit);
