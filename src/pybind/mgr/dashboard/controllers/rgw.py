@@ -17,8 +17,9 @@ from ..services.ceph_service import CephService
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient, RgwMultisite
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
-    CRUDCollectionMethod, CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, \
-    RESTController, UIRouter, UpdatePermission, allow_empty_body
+    CRUDCollectionMethod, CRUDEndpoint, DeletePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission, \
+    allow_empty_body
 from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, \
     TableAction, Validator, VerticalContainer
 from ._version import APIVersion
@@ -114,14 +115,97 @@ class RgwMultisiteStatus(RESTController):
 
 @APIRouter('rgw/multisite', Scope.RGW)
 @APIDoc("RGW Multisite Management API", "RgwMultisite")
-class RgwMultisiteSyncStatus(RESTController):
-    @RESTController.Collection(method='GET', path='/sync_status')
+class RgwMultisiteController(RESTController):
+    @Endpoint(path='/sync_status')
+    @EndpointDoc("Get the sync status")
+    @ReadPermission
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def get_sync_status(self):
         multisite_instance = RgwMultisite()
         result = multisite_instance.get_multisite_sync_status()
         return result
+
+    @Endpoint(path='/sync-policy')
+    @EndpointDoc("Get the sync policy")
+    @ReadPermission
+    def get_sync_policy(self, bucket_name='', zonegroup_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.get_sync_policy(bucket_name, zonegroup_name)
+
+    @Endpoint(path='/sync-policy-group')
+    @EndpointDoc("Get the sync policy group")
+    @ReadPermission
+    def get_sync_policy_group(self, group_id: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.get_sync_policy_group(group_id, bucket_name)
+
+    @Endpoint(method='POST', path='/sync-policy-group')
+    @EndpointDoc("Create the sync policy group")
+    @CreatePermission
+    def create_sync_policy_group(self, group_id: str, status: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.create_sync_policy_group(group_id, status, bucket_name)
+
+    @Endpoint(method='PUT', path='/sync-policy-group')
+    @EndpointDoc("Update the sync policy group")
+    @UpdatePermission
+    def update_sync_policy_group(self, group_id: str, status: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.update_sync_policy_group(group_id, status, bucket_name)
+
+    @Endpoint(method='DELETE', path='/sync-policy-group')
+    @EndpointDoc("Remove the sync policy group")
+    @DeletePermission
+    def remove_sync_policy_group(self, group_id: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.remove_sync_policy_group(group_id, bucket_name)
+
+    @Endpoint(method='PUT', path='/sync-flow')
+    @EndpointDoc("Create or update the sync flow")
+    @CreatePermission
+    def create_sync_flow(self, flow_id: str, flow_type: str, group_id: str,
+                         source_zone='', destination_zone='', zones: Optional[List[str]] = None,
+                         bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.create_sync_flow(group_id, flow_id, flow_type, zones,
+                                                   bucket_name, source_zone, destination_zone)
+
+    @Endpoint(method='DELETE', path='/sync-flow')
+    @EndpointDoc("Remove the sync flow")
+    @DeletePermission
+    def remove_sync_flow(self, flow_id: str, flow_type: str, group_id: str,
+                         source_zone='', destination_zone='', zones: Optional[List[str]] = None,
+                         bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.remove_sync_flow(group_id, flow_id, flow_type, source_zone,
+                                                   destination_zone, zones, bucket_name)
+
+    @Endpoint(method='PUT', path='/sync-pipe')
+    @EndpointDoc("Create or update the sync pipe")
+    @CreatePermission
+    def create_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_zones: Optional[List[str]] = None,
+                         destination_zones: Optional[List[str]] = None,
+                         destination_buckets: Optional[List[str]] = None,
+                         bucket_name: str = ''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.create_sync_pipe(group_id, pipe_id, source_zones,
+                                                   destination_zones, destination_buckets,
+                                                   bucket_name)
+
+    @Endpoint(method='DELETE', path='/sync-pipe')
+    @EndpointDoc("Remove the sync pipe")
+    @DeletePermission
+    def remove_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_zones: Optional[List[str]] = None,
+                         destination_zones: Optional[List[str]] = None,
+                         destination_buckets: Optional[List[str]] = None,
+                         bucket_name: str = ''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.remove_sync_pipe(group_id, pipe_id, source_zones,
+                                                   destination_zones, destination_buckets,
+                                                   bucket_name)
 
 
 @APIRouter('/rgw/daemon', Scope.RGW)
