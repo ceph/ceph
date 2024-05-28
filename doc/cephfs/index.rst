@@ -191,6 +191,7 @@ Developer Guides
     Client's Capabilities <capabilities>
     Java and Python bindings <api/index>
     Mantle <mantle>
+    Metrics <metrics>
 
 
 .. raw:: html
