@@ -72,8 +72,6 @@ public:
 
   std::tuple<
     StartEvent,
-    CommonPGPipeline::GetOBC::BlockingEvent,
-    CommonPGPipeline::Process::BlockingEvent,
     PG::BackgroundProcessLock::Wait::BlockingEvent,
     CompletionEvent
   > tracking_events;
