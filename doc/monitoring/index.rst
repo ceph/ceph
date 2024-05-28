@@ -277,24 +277,24 @@ Generic metrics
 
 GET operations: related metrics
 -------------------------------
-- ``ceph_rgw_get_initial_lat_count``: Number of get operations
+- ``ceph_rgw_op_global_get_obj_lat_count``: Number of get operations
 
-- ``ceph_rgw_get_initial_lat_sum``: Total latency time for the GET operations
+- ``ceph_rgw_op_global_get_obj_lat_sum``: Total latency time for the GET operations
 
-- ``ceph_rgw_get``: Number total of GET requests
+- ``ceph_rgw_op_global_get_obj_ops``: Total number of GET requests
 
-- ``ceph_rgw_get_b``: Total bytes transferred in GET operations
+- ``ceph_rgw_op_global_get_obj_bytes``: Total bytes transferred in GET operations
 
 
 Put operations: related metrics
 -------------------------------
-- ``ceph_rgw_put_initial_lat_count``: Number of get operations
+- ``ceph_rgw_op_global_put_obj_lat_count``: Number of get operations
 
-- ``ceph_rgw_put_initial_lat_sum``: Total latency time for the PUT operations
+- ``ceph_rgw_op_global_put_obj_lat_sum``: Total latency time for the PUT operations
 
-- ``ceph_rgw_put``: Total number of PUT operations
+- ``ceph_rgw_op_global_put_obj_ops``: Total number of PUT operations
 
-- ``ceph_rgw_get_b``: Total bytes transferred in PUT operations
+- ``ceph_rgw_op_global_get_obj_bytes``: Total bytes transferred in PUT operations
 
 
 Useful queries
@@ -303,31 +303,31 @@ Useful queries
 .. code-block:: bash
 
   The average of get latencies:
-  rate(ceph_rgw_get_initial_lat_sum[30s]) / rate(ceph_rgw_get_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
+  rate(ceph_rgw_op_global_get_obj_lat_sum[30s]) / rate(ceph_rgw_op_global_get_obj_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
 
   The average of put latencies:
-  rate(ceph_rgw_put_initial_lat_sum[30s]) / rate(ceph_rgw_put_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
+  rate(ceph_rgw_op_global_put_obj_lat_sum[30s]) / rate(ceph_rgw_op_global_put_obj_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
 
   Total requests per second:
   rate(ceph_rgw_req[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
 
   Total number of "other" operations (LIST, DELETE)
-  rate(ceph_rgw_req[30s]) -  (rate(ceph_rgw_get[30s]) + rate(ceph_rgw_put[30s]))
+  rate(ceph_rgw_req[30s]) -  (rate(ceph_rgw_op_global_get_obj_ops[30s]) + rate(ceph_rgw_op_global_put_obj_ops[30s]))
 
   GET latencies
-  rate(ceph_rgw_get_initial_lat_sum[30s]) /  rate(ceph_rgw_get_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
+  rate(ceph_rgw_op_global_get_obj_lat_sum[30s]) /  rate(ceph_rgw_op_global_get_obj_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
 
   PUT latencies
-  rate(ceph_rgw_put_initial_lat_sum[30s]) /  rate(ceph_rgw_put_initial_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
+  rate(ceph_rgw_op_global_put_obj_lat_sum[30s]) /  rate(ceph_rgw_op_global_put_obj_lat_count[30s]) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
 
   Bandwidth consumed by GET operations
-  sum(rate(ceph_rgw_get_b[30s]))
+  sum(rate(ceph_rgw_op_global_get_obj_bytes[30s]))
 
   Bandwidth consumed by PUT operations
-  sum(rate(ceph_rgw_put_b[30s]))
+  sum(rate(ceph_rgw_op_global_put_obj_bytes[30s]))
 
   Bandwidth consumed by RGW instance (PUTs + GETs)
-  sum by (instance_id) (rate(ceph_rgw_get_b[30s]) + rate(ceph_rgw_put_b[30s])) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
+  sum by (instance_id) (rate(ceph_rgw_op_global_get_obj_bytes[30s]) + rate(ceph_rgw_op_global_put_obj_bytes[30s])) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata
 
   Http errors:
   rate(ceph_rgw_failed_req[30s])
