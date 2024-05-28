@@ -207,21 +207,60 @@ CI:
   - .github/**
 
 rbd:
+  - doc/dev/rbd*
+  - doc/man/8/ceph-rbdnamer.rst
   - doc/man/8/rbd*
   - doc/rbd/**
+  - doc/start/quick-rbd.rst
+  - examples/librbd/**
+  - examples/rbd-replay/**
+  - qa/rbd/**
+  - qa/run_xfstests*
+  - qa/suites/krbd/**
   - qa/suites/rbd/**
+  - qa/tasks/ceph_iscsi_client.py
+  - qa/tasks/metadata.yaml
+  - qa/tasks/qemu.py
+  - qa/tasks/rbd*
+  - qa/tasks/userdata*
+  - qa/workunits/cls/test_cls_journal.sh
+  - qa/workunits/cls/test_cls_lock.sh
+  - qa/workunits/cls/test_cls_rbd.sh
   - qa/workunits/rbd/**
+  - qa/workunits/windows/**
+  - src/ceph-rbdnamer
+  - src/cls/journal/**
+  - src/cls/lock/**
+  - src/cls/rbd/**
+  - src/common/options/rbd*
+  - src/etc-rbdmap
+  - src/include/krbd.h
+  - src/include/rbd*
   - src/include/rbd/**
+  - src/journal/**
+  - src/krbd.cc
   - src/librbd/**
+  - src/ocf/**
   - src/pybind/mgr/rbd_support/**
   - src/pybind/rbd/**
+  - src/rbd*
+  - src/rbd*/**
+  - src/test/cli/rbd/**
+  - src/test/cli-integration/rbd/**
+  - src/test/cls_journal/**
+  - src/test/cls_lock/**
+  - src/test/cls_rbd/**
+  - src/test/journal/**
   - src/test/librbd/**
-  - src/test/rbd_mirror/**
-  - src/tools/rbd/**
-  - src/tools/rbd_ggate/**
-  - src/tools/rbd_mirror/**
-  - src/tools/rbd_nbd/**
-  - src/tools/rbd_wnbd/**
+  - src/test/pybind/test_rbd.py
+  - src/test/rbd*
+  - src/test/rbd*/**
+  - src/test/run-rbd*
+  - src/test/test_rbd*
+  - src/tools/rbd*/**
+  - systemd/ceph-rbd-mirror*
+  - systemd/rbdmap.service.in
+  - udev/50-rbd.rules
 
 rgw:
   - qa/suites/rgw/**
@@ -248,8 +287,7 @@ ceph-volume:
   - src/python-common/ceph/deployment/drive_selection/**
 
 tests:
-  - qa/tasks/**
-  - qa/workunits/**
+  - qa/**
   - src/test/**
 
 nfs:
