@@ -12385,8 +12385,8 @@ int BlueStore::read(
     }
   }
   if (might_need_reformatting) {
-    int64_t opt_defragment;
-    int64_t opt_recompress;
+    int64_t opt_defragment = 0;
+    int64_t opt_recompress = 0;
     c->pool_opts.get(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, &opt_defragment);
     c->pool_opts.get(pool_opts_t::DEEP_SCRUB_RECOMPRESS, &opt_recompress);
     dout(10) << __func__ << " defragment = " << opt_defragment
@@ -17452,7 +17452,16 @@ void BlueStore::_choose_write_options(
      (cm == Compressor::COMP_AGGRESSIVE &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
      (cm == Compressor::COMP_PASSIVE &&
-      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE)));
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE)) ||
+      (cm == Compressor::COMP_FORCE_LAZY &&
+	(fadvise_flags & CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING)) ||
+      (cm == Compressor::COMP_AGGRESSIVE_LAZY &&
+	(fadvise_flags & CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING) &&
+	(alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
+      (cm == Compressor::COMP_PASSIVE_LAZY &&
+	(fadvise_flags & CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING) &&
+	(alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE))
+      );
 
   if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
