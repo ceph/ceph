@@ -2780,10 +2780,18 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
     // funky.
   case CEPH_MDS_OP_CREATE:
-    if (mdr->has_completed)
+    if (mdr->has_completed) {
+      inodeno_t created;
+
+      ceph_assert(mdr->session);
+      mdr->session->have_completed_request(req->get_reqid().tid, &created);
+      ceph_assert(created != inodeno_t());
+
+      set_reply_extra_bl(req, created, mdr->reply_extra_bl);
       handle_client_open(mdr);  // already created.. just open
-    else
+    } else {
       handle_client_openc(mdr);
+    }
     break;
 
   case CEPH_MDS_OP_OPEN:
