@@ -2487,7 +2487,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
         auto reply = make_message<MClientReply>(*req, 0);
 	if (created != inodeno_t()) {
 	  bufferlist extra;
-	  encode(created, extra);
+	  set_reply_extra_bl(req, created, extra);
 	  reply->set_extra_bl(extra);
 	}
         mds->send_message_client(reply, session);
