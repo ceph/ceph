@@ -61,19 +61,6 @@ private:
 
   SubOpBlocker<snap_trim_obj_subevent_ret_t> subop_blocker;
 
-  // we don't need to synchronize with other instances of SnapTrimEvent;
-  // it's here for the sake of op tracking.
-  struct WaitSubop : OrderedConcurrentPhaseT<WaitSubop> {
-    static constexpr auto type_name = "SnapTrimEvent::wait_subop";
-  } wait_subop;
-
-  // an instantiator can instruct us to go over this stage and then
-  // wait for the future to implement throttling. It is implemented
-  // that way to for the sake of tracking ops.
-  struct WaitTrimTimer : OrderedExclusivePhaseT<WaitTrimTimer> {
-    static constexpr auto type_name = "SnapTrimEvent::wait_trim_timer";
-  } wait_trim_timer;
-
   Ref<PG> pg;
   PipelineHandle handle;
   SnapMapper& snap_mapper;
@@ -89,9 +76,7 @@ public:
     PGActivationBlocker::BlockingEvent,
     CommonPGPipeline::GetOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
-    WaitSubop::BlockingEvent,
     PG::BackgroundProcessLock::Wait::BlockingEvent,
-    WaitTrimTimer::BlockingEvent,
     CompletionEvent
   > tracking_events;
 
@@ -153,12 +138,6 @@ private:
   remove_or_update_iertr::future<ceph::os::Transaction>
   remove_or_update(ObjectContextRef obc, ObjectContextRef head_obc);
 
-  // we don't need to synchronize with other instances started by
-  // SnapTrimEvent; it's here for the sake of op tracking.
-  struct WaitRepop : OrderedConcurrentPhaseT<WaitRepop> {
-    static constexpr auto type_name = "SnapTrimObjSubEvent::wait_repop";
-  } wait_repop;
-
   void add_log_entry(
     int _op,
     const hobject_t& _soid,
@@ -195,7 +174,6 @@ public:
     PGActivationBlocker::BlockingEvent,
     CommonPGPipeline::GetOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
-    WaitRepop::BlockingEvent,
     CompletionEvent
   > tracking_events;
 };
