@@ -52,10 +52,33 @@ Running your first test
 The Python tests in Ceph repository can be executed on your local machine
 using `vstart_runner.py`_. To do that, you'd need `teuthology`_ installed::
 
+    $ git clone https://github.com/ceph/teuthology
+    $ cd teuthology
+    $ ./bootstrap install
+
+This will create a virtual environment named ``virtualenv`` in root of the
+teuthology repository and install teuthology in it.
+
+You can also install teuthology via ``pip`` if you would like to install it
+in a custom virtual environment with clone `teuthology`_ repository using
+``git``::
+
     $ virtualenv --python=python3 venv
     $ source venv/bin/activate
     $ pip install 'setuptools >= 12'
     $ pip install teuthology[test]@git+https://github.com/ceph/teuthology
+    $ deactivate
+
+If for some unforeseen reason above approaches do no work (maybe boostrap
+script doesn't work due to a bug or you can't download tethology at the
+moment) teuthology can be installed manually manually from copy of
+teuthology repo already present on your machine::
+
+    $ cd teuthology
+    $ virtualenv -p python3 venv
+    $ source venv/bin/activate
+    $ pip install -r requirements.txt
+    $ pip install .
     $ deactivate
 
 The above steps installs teuthology in a virtual environment. Before running
