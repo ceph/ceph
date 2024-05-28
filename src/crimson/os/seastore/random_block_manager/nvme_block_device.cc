@@ -133,6 +133,13 @@ write_ertr::future<> NVMeBlockDevice::write(
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
   }
+  if (is_end_to_end_data_protection()) {
+    return seastar::do_with(
+      std::move(bptr),
+      [this, offset] (auto &bptr) {
+      return nvme_write(offset, bptr.length(), bptr.c_str());
+    });
+  }
   return seastar::do_with(
     std::move(bptr),
     [this, offset, length, supported_stream] (auto& bptr) {
@@ -159,8 +166,14 @@ read_ertr::future<> NVMeBlockDevice::read(
       offset,
       bptr.length());
   auto length = bptr.length();
-
+  if (length == 0) {
+    return read_ertr::now();
+  }
   assert((length % super.block_size) == 0);
+
+  if (is_end_to_end_data_protection()) {
+    return nvme_read(offset, length, bptr.c_str());
+  }
 
   return device.dma_read(offset, bptr.c_str(), length).handle_exception(
     [](auto e) -> read_ertr::future<size_t> {
@@ -187,6 +200,13 @@ write_ertr::future<> NVMeBlockDevice::writev(
   uint16_t supported_stream = stream;
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
+  }
+  if (is_end_to_end_data_protection()) {
+    return seastar::do_with(
+      std::move(bl),
+      [this, offset] (auto &bl) {
+      return nvme_write(offset, bl.length(), bl.c_str());
+    });
   }
   bl.rebuild_aligned(super.block_size);
 
@@ -256,6 +276,7 @@ discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
 nvme_command_ertr::future<nvme_identify_namespace_data_t>
 NVMeBlockDevice::identify_namespace(seastar::file f) {
   return get_nsid(f).safe_then([this, f](auto nsid) {
+    namespace_id = nsid;
     return seastar::do_with(
       nvme_admin_command_t(),
       nvme_identify_namespace_data_t(),
@@ -314,6 +335,7 @@ nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() 
       if (id_namespace_data.lbaf[i].ms ==
 	  nvme_identify_namespace_data_t::METASIZE_FOR_CHECKSUM_OFFLOAD) {
 	lba_format_index = i;
+	super.nvme_block_size = (1 << id_namespace_data.lbaf[i].lbads);
 	break;
       }
     }
@@ -360,6 +382,62 @@ nvme_command_ertr::future<> NVMeBlockDevice::initialize_nvme_features() {
     return try_enable_end_to_end_protection();
   }
   return nvme_command_ertr::now();
+}
+
+write_ertr::future<> NVMeBlockDevice::nvme_write(
+  uint64_t offset, size_t len, void *buffer_ptr) {
+  return seastar::do_with(
+    nvme_io_command_t(),
+    [this, offset, len, buffer_ptr] (auto &cmd) {
+    cmd.common.opcode = nvme_io_command_t::OPCODE_WRITE;
+    cmd.common.nsid = namespace_id;
+    cmd.common.data_len = len;
+    // To perform checksum offload, we need to set PRACT to 1 and PRCHK to 4
+    // according to NVMe spec.
+    cmd.rw.prinfo_pract = nvme_rw_command_t::PROTECT_INFORMATION_ACTION_ENABLE;
+    cmd.rw.prinfo_prchk = nvme_rw_command_t::PROTECT_INFORMATION_CHECK_GUARD;
+    cmd.common.addr = (__u64)(uintptr_t)buffer_ptr;
+    ceph_assert(super.nvme_block_size > 0);
+    auto lba_shift = ffsll(super.nvme_block_size) - 1;
+    cmd.rw.s_lba = offset >> lba_shift;
+    cmd.rw.nlb = (len >> lba_shift) - 1;
+    return pass_through_io(cmd
+    ).safe_then([] (auto ret) {
+      if (ret != 0) {
+	logger().error(
+	  "write nvm command with checksum offload fails : {}", ret);
+	ceph_abort();
+      }
+      return nvme_command_ertr::now();
+    });
+  });
+}
+
+read_ertr::future<> NVMeBlockDevice::nvme_read(
+  uint64_t offset, size_t len, void *buffer_ptr) {
+  return seastar::do_with(
+    nvme_io_command_t(),
+    [this, offset, len, buffer_ptr] (auto &cmd) {
+    cmd.common.opcode = nvme_io_command_t::OPCODE_READ;
+    cmd.common.nsid = namespace_id;
+    cmd.common.data_len = len;
+    cmd.rw.prinfo_pract = nvme_rw_command_t::PROTECT_INFORMATION_ACTION_ENABLE;
+    cmd.rw.prinfo_prchk = nvme_rw_command_t::PROTECT_INFORMATION_CHECK_GUARD;
+    cmd.common.addr = (__u64)(uintptr_t)buffer_ptr;
+    ceph_assert(super.nvme_block_size > 0);
+    auto lba_shift = ffsll(super.nvme_block_size) - 1;
+    cmd.rw.s_lba = offset >> lba_shift;
+    cmd.rw.nlb = (len >> lba_shift) - 1;
+    return pass_through_io(cmd
+    ).safe_then([] (auto ret) {
+      if (ret != 0) {
+	logger().error(
+	  "read nvm command with checksum offload fails : {}", ret);
+	ceph_abort();
+      }
+      return nvme_command_ertr::now();
+    });
+  });
 }
 
 }

@@ -170,6 +170,11 @@ struct nvme_rw_command_t {
   uint32_t dspec : 16;
 
   static const uint32_t DTYPE_STREAM = 1;
+
+  static const uint8_t PROTECT_INFORMATION_ACTION_ENABLE = 1;
+  static const uint8_t PROTECT_INFORMATION_CHECK_GUARD = 4;
+  static const uint8_t PROTECT_INFORMATION_CHECK_APPLICATION_TAG = 2;
+  static const uint8_t PROTECT_INFORMATION_CHECK_LOGICAL_REFERENCE_TAG = 1;
 };
 
 struct nvme_io_command_t {
@@ -178,7 +183,7 @@ struct nvme_io_command_t {
     nvme_rw_command_t rw;
   };
   static const uint8_t OPCODE_WRITE = 0x01;
-  static const uint8_t OPCODE_READ = 0x01;
+  static const uint8_t OPCODE_READ = 0x02;
 };
 
 /*
@@ -224,6 +229,9 @@ public:
     uint64_t offset,
     bufferptr &bptr) final;
 
+  read_ertr::future<> nvme_read(
+    uint64_t offset, size_t len, void *buffer_ptr);
+
   close_ertr::future<> close() override;
 
   discard_ertr::future<> discard(
@@ -240,6 +248,9 @@ public:
     uint64_t offset,
     ceph::bufferlist bl,
     uint16_t stream = 0) final;
+
+  write_ertr::future<> nvme_write(
+    uint64_t offset, size_t len, void *buffer_ptr);
 
   stat_device_ret stat_device() final {
     return seastar::file_stat(device_path, seastar::follow_symlink::yes
@@ -376,6 +387,7 @@ private:
   uint64_t write_alignment = 4096;
   uint32_t atomic_write_unit = 4096;
 
+  int namespace_id; // TODO: multi namespaces
   std::string device_path;
   seastar::sharded<NVMeBlockDevice> shard_devices;
 };
