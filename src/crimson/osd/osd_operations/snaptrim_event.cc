@@ -67,25 +67,14 @@ SnapTrimEvent::start()
 {
   ceph_assert(pg->is_active_clean());
 
-  auto exit_handle = seastar::defer([this] {
-    logger().debug("{}: exit", *this);
-    handle.exit();
-  });
-
   /* TODO: add a way to expose progress via the optracker without misusing
    * pipeline stages. https://tracker.ceph.com/issues/66473 */
   ShardServices &shard_services = pg->get_shard_services();
-  co_await enter_stage<interruptor>(
-    client_pp().get_obc);
-
   {
     co_await pg->background_process_lock.lock_with_op(*this);
     auto unlocker = seastar::defer([this] {
       pg->background_process_lock.unlock();
     });
-
-    co_await enter_stage<interruptor>(
-      client_pp().process);
 
     auto to_trim_fut = interruptor::async([this] {
       using crimson::common::local_conf;
@@ -134,9 +123,6 @@ SnapTrimEvent::start()
       seastar::sleep(
 	std::chrono::milliseconds(std::lround(time_to_sleep * 1000))));
   }
-
-  logger().debug("{}: completed", *this);
-  co_await interruptor::make_interruptible(handle.complete());
 
   logger().debug("{}: all completed", *this);
   co_return seastar::stop_iteration::no;
