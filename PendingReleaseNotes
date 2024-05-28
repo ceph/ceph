@@ -234,6 +234,28 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   exposed via the new `--snap-id` option for `rbd clone` command.
 * RBD: The output of `rbd snap ls --all` command now includes the original
   type for trashed snapshots.
+* Monitoring: RGW performance counters: Replacing the Object Gateway-related Prometheus metrics previously used. The new metrics are being introduced before complete removal to allow overlapping usage.
+  * Metrics that will get Deprecated:
+  ```ceph_rgw_get
+  ceph_rgw_get_b
+  ceph_rgw_get_initial_lat_sum
+  ceph_rgw_get_initial_lat_count
+  ceph_rgw_put
+  cdeph_rgw_put_b
+  ceph_rgw_put_initial_lat_sum
+  ceph_rgw_put_initial_lat_count
+  ```
+
+  * Replacement metrics:
+  ```ceph_rgw_get -> ceph_rgw_op_global_get_obj_ops
+     ceph_rgw_get_b -> ceph_rgw_op_global_get_obj_bytes
+     ceph_rgw_get_initial_lat_sum -> ceph_rgw_op_global_get_obj_lat_sum
+     ceph_rgw_get_initial_lat_count -> ceph_rgw_op_global_get_obj_lat_count
+     ceph_rgw_put -> ceph_rgw_op_global_put_obj_ops
+     cdeph_rgw_put_b -> ceph_rgw_op_global_put_obj_bytes
+     ceph_rgw_put_initial_lat_sum -> ceph_rgw_op_global_put_obj_lat_sum
+     ceph_rgw_put_initial_lat_count -> ceph_rgw_op_global_put_obj_lat_count
+  ```
 
 >=18.0.0
 
