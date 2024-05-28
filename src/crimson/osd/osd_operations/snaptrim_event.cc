@@ -65,6 +65,8 @@ CommonPGPipeline& SnapTrimEvent::client_pp()
 SnapTrimEvent::snap_trim_event_ret_t
 SnapTrimEvent::start()
 {
+  ceph_assert(pg->is_active_clean());
+
   auto exit_handle = seastar::defer([this] {
     logger().debug("{}: exit", *this);
     handle.exit();
@@ -78,11 +80,6 @@ SnapTrimEvent::start()
       return pg->wait_for_active_blocker.wait(std::move(trigger));
     });
 
-  co_await enter_stage<interruptor>(
-    client_pp().recover_missing);
-
-  // co_await do_recover_missing(pg, get_target_oid());
-  
   co_await enter_stage<interruptor>(
     client_pp().get_obc);
 
@@ -414,6 +411,8 @@ SnapTrimObjSubEvent::remove_or_update(
 SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::start()
 {
+  ceph_assert(pg->is_active_clean());
+
   auto exit_handle = seastar::defer([this] {
     logger().debug("{}: exit", *this);
     handle.exit();
@@ -427,11 +426,6 @@ SnapTrimObjSubEvent::start()
     [this] (auto&& trigger) {
       return pg->wait_for_active_blocker.wait(std::move(trigger));
     });
-
-  co_await enter_stage<interruptor>(
-    client_pp().recover_missing);
-
-  // co_await do_recover_missing(pg, get_target_oid());
 
   co_await enter_stage<interruptor>(
     client_pp().get_obc);
