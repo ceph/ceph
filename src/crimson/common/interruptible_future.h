@@ -1230,6 +1230,17 @@ public:
 	    };
   }
 
+  template <typename Lock, typename Func>
+  [[gnu::always_inline]]
+  static auto with_lock(Lock& lock, Func&& func) {
+    return seastar::with_lock(
+      lock,
+      [func=std::move(func),
+       interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
+      return call_with_interruption(interrupt_condition, func);
+    });
+  }
+
   template <typename Iterator,
 	    InvokeReturnsInterruptibleFuture<typename Iterator::reference> AsyncAction>
   [[gnu::always_inline]]

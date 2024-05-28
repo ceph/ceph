@@ -29,6 +29,9 @@ public:
       ::crimson::osd::IOInterruptCondition,
       load_obc_ertr>;
 
+  using interruptor = ::crimson::interruptible::interruptor<
+    ::crimson::osd::IOInterruptCondition>;
+
   using with_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
