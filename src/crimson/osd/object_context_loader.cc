@@ -88,8 +88,8 @@ using crimson::common::local_conf;
       [existed=existed, clone=std::move(clone),
        func=std::move(func), head=std::move(head), this]() mutable
       -> load_obc_iertr::future<> {
-      auto loaded = get_or_load_obc<State>(clone, existed);
-      return loaded.safe_then_interruptible(
+      return get_or_load_obc<State>(clone, existed
+      ).safe_then_interruptible(
         [func = std::move(func), head=std::move(head)](auto clone) mutable {
         clone->set_clone_ssc(head->ssc);
         return std::move(func)(std::move(head), std::move(clone));
@@ -151,20 +151,17 @@ using crimson::common::local_conf;
              obc->invalidated_by_interval_change);
     return interruptor::with_lock(obc->loading_mutex,
     [this, obc, existed, FNAME] {
-      auto loaded =
-        load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
       if (existed) {
         ceph_assert(obc->is_valid() && obc->is_loaded());
         DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
+        return load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
       } else {
         DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
-        loaded =
-          obc->template with_promoted_lock<State, IOInterruptCondition>(
+        return obc->template with_promoted_lock<State, IOInterruptCondition>(
           [obc, this] {
           return load_obc(obc);
         });
       }
-      return loaded;
     });
   }
 
