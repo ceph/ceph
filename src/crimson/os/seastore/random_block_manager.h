@@ -51,6 +51,8 @@ struct rbm_superblock_t {
   checksum_t crc = 0;
   device_config_t config;
   unsigned int shard_num = 0;
+  // Must be assigned if ent-to-end-data-protection features is enabled
+  uint32_t nvme_block_size = 0;
   std::vector<rbm_shard_info_t> shard_infos;
 
   DENC(rbm_superblock_t, v, p) {
@@ -63,6 +65,7 @@ struct rbm_superblock_t {
     denc(v.crc, p);
     denc(v.config, p);
     denc(v.shard_num, p);
+    denc(v.nvme_block_size, p);
     denc(v.shard_infos, p);
     DENC_FINISH(p);
   }
