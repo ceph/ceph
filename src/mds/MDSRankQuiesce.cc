@@ -432,7 +432,11 @@ void MDSRank::quiesce_agent_setup() {
 
   using RequestHandle = QuiesceInterface::RequestHandle;
   using QuiescingRoot = std::pair<RequestHandle, Context*>;
-  auto dummy_requests = std::make_shared<std::unordered_map<QuiesceRoot, QuiescingRoot>>();
+
+  std::shared_ptr<std::unordered_map<QuiesceRoot, QuiescingRoot>> dummy_requests;
+#ifdef QUIESCE_ROOT_DEBUG_PARAMS
+  dummy_requests = std::make_shared<std::unordered_map<QuiesceRoot, QuiescingRoot>>();
+#endif
 
   QuiesceAgent::ControlInterface ci;
 
@@ -447,7 +451,9 @@ void MDSRank::quiesce_agent_setup() {
 
     dout(10) << "submit_request: " << uri << dendl;
 
+    bool the_real_deal = true;
     std::chrono::milliseconds quiesce_delay_ms = 0ms;
+#ifdef QUIESCE_ROOT_DEBUG_PARAMS
     if (auto pit = uri->params().find("delayms"); pit != uri->params().end()) {
       try {
         quiesce_delay_ms = std::chrono::milliseconds((*pit).has_value ? std::stoul((*pit).value) : 1000);
@@ -496,12 +502,14 @@ void MDSRank::quiesce_agent_setup() {
         return std::nullopt;
     }
 
+    the_real_deal = !debug_quiesce_after && !debug_fail_after && !debug_rank;
+#endif
+
     auto path = uri->path();
 
     std::lock_guard l(mds_lock);
 
-    if (!debug_quiesce_after && !debug_fail_after && !debug_rank) {
-      // the real deal!
+    if (the_real_deal) {
       if (mdsmap->is_degraded()) {
         dout(3) << "DEGRADED: refusing to quiesce" << dendl;
         c->complete(EPERM);
@@ -511,6 +519,9 @@ void MDSRank::quiesce_agent_setup() {
       auto mdr = mdcache->quiesce_path(filepath(path), qc, nullptr, quiesce_delay_ms);
       return mdr ? mdr->reqid : std::optional<RequestHandle>();
     } else {
+#ifndef QUIESCE_ROOT_DEBUG_PARAMS
+      ceph_abort("quiesce debug parameters are disabled");
+#else
       /* we use this branch to allow for quiesce emulation for testing purposes */
       // always create a new request id
       auto req_id = metareqid_t(entity_name_t::MDS(whoami), issue_tid());
@@ -562,6 +573,7 @@ void MDSRank::quiesce_agent_setup() {
         timer.add_event_after(delay, quiesce_task);
       }
       return it->second.first;
+#endif // QUIESCE_ROOT_DEBUG_PARAMS
     }
   };
 
@@ -575,6 +587,7 @@ void MDSRank::quiesce_agent_setup() {
       return 0;
     }
 
+#ifdef QUIESCE_ROOT_DEBUG_PARAMS
     // if we get here then it could be a test (dummy) quiesce
     auto it = std::ranges::find(*dummy_requests, h, [](auto x) { return x.second.first; });
     if (it != dummy_requests->end()) {
@@ -585,6 +598,7 @@ void MDSRank::quiesce_agent_setup() {
       dummy_requests->erase(it);
       return 0;
     }
+#endif // QUIESCE_ROOT_DEBUG_PARAMS
 
     // we must indicate that the handle wasn't found
     // so that the agent can properly report a missing

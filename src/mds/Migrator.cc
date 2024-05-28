@@ -242,6 +242,20 @@ void Migrator::find_stale_export_freeze()
   }
 }
 
+void Migrator::quiesce_overdrive_export(CDir *dir) {
+  map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+  if (it == export_state.end()) {
+    return;
+  }
+  auto state = it->second.state;
+  if (state <= EXPORT_FREEZING) {
+    dout(10) << "will try to cancel in state: (" << state << ") " << get_export_statename(state) << dendl;
+    export_try_cancel(dir, true);
+  } else {
+    dout(10) << "won't cancel in state: (" << state << ") " << get_export_statename(state) << dendl;
+  }
+}
+
 void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
 {
   dout(10) << *dir << dendl;
@@ -1229,13 +1243,18 @@ void Migrator::handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m
     ceph_assert(it->second.state == EXPORT_DISCOVERING);
 
     if (m->is_success()) {
-      // release locks to avoid deadlock
-      MDRequestRef mdr = static_cast<MDRequestImpl*>(it->second.mut.get());
-      ceph_assert(mdr);
-      mdcache->request_finish(mdr);
-      it->second.mut.reset();
-      // freeze the subtree
+      // move to freezing the subtree
       it->second.state = EXPORT_FREEZING;
+      auto&& mdr = boost::static_pointer_cast<MDRequestImpl>(std::move(it->second.mut));
+      ceph_assert(!it->second.mut); // should have been moved out of
+
+      // release locks to avoid deadlock
+      ceph_assert(mdr);
+      // We should only call request_finish after we changed the state.
+      // Other requests may run as part of the finish here, so we want them
+      // to see this export in the updated state.
+      mdcache->request_finish(mdr);
+
       dir->auth_unpin(this);
       ceph_assert(g_conf()->mds_kill_export_at != 3);
 
@@ -2388,7 +2407,11 @@ void Migrator::handle_export_cancel(const cref_t<MExportDirCancel> &m)
   dirfrag_t df = m->get_dirfrag();
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(df);
   if (it == import_state.end()) {
-    ceph_abort_msg("got export_cancel in weird state");
+    // don't assert here: we could NACK a discovery and also
+    // receive an async cancel.
+    // In general, it shouldn't be fatal error to receive a cancel
+    // for an opration we don't know about.
+    dout(3) << "got export_cancel for an unknown fragment " << df << dendl;
   } else if (it->second.state == IMPORT_DISCOVERING) {
     import_reverse_discovering(df);
   } else if (it->second.state == IMPORT_DISCOVERED) {

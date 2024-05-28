@@ -366,6 +366,7 @@ void MDSDaemon::set_up_admin_socket()
                                      " name=ap_dont_block,type=CephBool,req=false"
                                      " name=ap_freeze,type=CephBool,req=false"
                                      " name=await,type=CephBool,req=false"
+                                     " name=lifetime,type=CephFloat,req=false"
 				     ,asok_hook
 				     ,"lock a path");
   ceph_assert(r == 0);
@@ -375,7 +376,7 @@ void MDSDaemon::set_up_admin_socket()
   ceph_assert(r == 0);
   r = admin_socket->register_command("quiesce path"
                                      " name=path,type=CephString,req=true"
-                                     " name=wait,type=CephBool,req=false"
+                                     " name=await,type=CephBool,req=false"
 				     ,asok_hook
 				     ,"quiesce a subtree");
   ceph_assert(r == 0);
