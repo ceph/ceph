@@ -210,7 +210,8 @@ std::ostream &operator<<(std::ostream &out, const rbm_superblock_t &header)
        << ", crc=" << header.crc
        << ", config=" << header.config
        << ", shard_num=" << header.shard_num
-       << ", end_to_end_data_protection=" << header.is_end_to_end_data_protection();
+       << ", end_to_end_data_protection=" << header.is_end_to_end_data_protection()
+       << ", device_block_size=" << header.nvme_block_size;
   for (auto p : header.shard_infos) {
     out << p;
   }
