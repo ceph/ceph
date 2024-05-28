@@ -75,6 +75,26 @@ def simplified_keyring(entity: str, contents: str) -> str:
     return keyring
 
 
+def get_dashboard_eps(svc) -> Tuple[List[str], str]:
+        dashboard_eps: List[str] = []
+        port = None
+        protocol = None
+        mgr_map = svc.mgr.get('mgr_map')
+        url = mgr_map.get('services', {}).get('dashboard', None)
+        if url:
+            p_result = urlparse(url.rstrip('/'))
+            protocol = p_result.scheme
+            port = p_result.port
+            # assume that they are all dashboards on the same port as the active mgr.
+            for dd in svc.mgr.cache.get_daemons_by_service('mgr'):
+                if not port:
+                    continue
+                addr = dd.ip if dd.ip else svc.mgr.inventory.get_addr(dd.hostname)
+                dashboard_eps.append(f'{addr}:{port}')
+
+        return dashboard_eps, protocol
+
+
 def get_dashboard_urls(svc) -> List[str]:
         # dashboard(s)
         dashboard_urls: List[str] = []

@@ -13,7 +13,7 @@ from mgr_util import build_url
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AdminGatewaySpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls, get_dashboard_eps
 from cephadm.ssl_cert_utils import SSLCerts
 
 logger = logging.getLogger(__name__)
@@ -99,6 +99,12 @@ class AdminGatewayService(CephadmService):
             'false'
         )
 
+        # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
+        self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
+        self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
+
+        # TODO(redo): undo these changes when the service is removed
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
 
         def read_certificate(spec_field):
@@ -122,14 +128,16 @@ class AdminGatewayService(CephadmService):
             # in order to be consistent with _calc_daemon_deps().
             deps.append(dd.name())
 
+        dashboard_eps, dashboard_scheme = get_dashboard_eps(self)
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
         context = {
             'spec': spec,
             'internal_port': self.INTERNAL_SERVICE_PORT,
+            'dashboard_scheme': dashboard_scheme,
             'grafana_scheme': 'https', # TODO(redo): fixme, get current value of grafana scheme
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
-            'dashboard_urls': get_dashboard_urls(self),
+            'dashboard_eps': dashboard_eps,
             'prometheus_eps': self.get_service_endpoints('prometheus'),
             'alertmanager_eps': self.get_service_endpoints('alertmanager'),
             'grafana_eps': self.get_service_endpoints('grafana')
