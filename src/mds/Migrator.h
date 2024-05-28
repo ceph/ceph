@@ -182,6 +182,7 @@ public:
   void handle_mds_failure_or_stop(mds_rank_t who);
 
   void audit();
+  void quiesce_overdrive_export(CDir *dir);
 
   // -- import/export --
   // exporter

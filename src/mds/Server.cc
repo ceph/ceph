@@ -3105,7 +3105,7 @@ void Server::dispatch_peer_request(const MDRequestRef& mdr)
         // will want to take other locks is to prevent issuing unwanted client capabilities,
         // but since replicas can't issue capabilities, it should be fine allowing remote locks
         // without taking the quiesce lock.
-	if (!mds->locker->acquire_locks(mdr, lov, nullptr, {}, false, true))
+	if (!mds->locker->acquire_locks(mdr, lov, nullptr, false, true))
 	  return;
 	
 	// ack
