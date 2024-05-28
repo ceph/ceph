@@ -149,20 +149,23 @@ using crimson::common::local_conf;
              dpp, obc->get_oid(),
              obc->fully_loaded,
              obc->invalidated_by_interval_change);
-    auto loaded =
-      load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
-    if (existed && obc->is_loaded()) {
-      ceph_assert(obc->is_valid());
-      DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
-    } else {
-      DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
-      loaded =
-        obc->template with_promoted_lock<State, IOInterruptCondition>(
-        [obc, this] {
-        return load_obc(obc);
-      });
-    }
-    return loaded;
+    return interruptor::with_lock(obc->loading_mutex,
+    [this, obc, existed, FNAME] {
+      auto loaded =
+        load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
+      if (existed) {
+        ceph_assert(obc->is_valid() && obc->is_loaded());
+        DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
+      } else {
+        DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
+        loaded =
+          obc->template with_promoted_lock<State, IOInterruptCondition>(
+          [obc, this] {
+          return load_obc(obc);
+        });
+      }
+      return loaded;
+    });
   }
 
   ObjectContextLoader::load_obc_iertr::future<>
