@@ -4793,7 +4793,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
     dout(10) << "adding ino to reply to indicate inode was created" << dendl;
     // add the file created flag onto the reply if create_flags features is supported
-    encode(newi->ino(), mdr->reply_extra_bl);
+    encode(_inode->ino, mdr->reply_extra_bl);
   }
 
   journal_and_reply(mdr, newi, dn, le, fin);
