@@ -185,6 +185,27 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
   and the new feature bit for more information.
 
+* cls_cxx_gather is marked as deprecated.
+
+* Dashboard: Rearranged Navigation Layout: The navigation layout has been reorganized
+  for improved usability and easier access to key features.
+* Dashboard: CephFS Improvments
+  * Support for managing CephFS snapshots and clones, as well as snapshot schedule
+    management
+  * Manage authorization capabilities for CephFS resources
+  * Helpers on mounting a CephFS volume
+* Dashboard: RGW Improvements
+  * Support for managing bucket policies
+  * Add/Remove bucket tags
+  * ACL Management
+  * Several UI/UX Improvements to the bucket form
+* Monitoring: Grafana dashboards are now loaded into the container at runtime rather than
+  building a grafana image with the grafana dashboards. Official Ceph grafana images
+  can be found in quay.io/ceph/grafana
+* Monitoring: RGW S3 Analytics: A new Grafana dashboard is now available, enabling you to
+  visualize per bucket and user analytics data, including total GETs, PUTs, Deletes,
+  Copies, and list metrics.
+
 >=18.0.0
 
 * The RGW policy parser now rejects unknown principals by default. If you are
