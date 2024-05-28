@@ -17703,7 +17703,16 @@ void BlueStore::_choose_write_options(
      (cm == Compressor::COMP_AGGRESSIVE &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
      (cm == Compressor::COMP_PASSIVE &&
-      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE)));
+      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE)) ||
+      (cm == Compressor::COMP_FORCE_LAZY &&
+	(fadvise_flags & CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING)) ||
+      (cm == Compressor::COMP_AGGRESSIVE_LAZY &&
+	(fadvise_flags & CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING) &&
+	(alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
+      (cm == Compressor::COMP_PASSIVE_LAZY &&
+	(fadvise_flags & CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING) &&
+	(alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE))
+      );
 
   if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
