@@ -50,7 +50,9 @@ class AdminGatewayService(CephadmService):
         port = dd.ports[0] if dd.ports else AdminGatewayService.DEFAULT_SERVICE_PORT
 
         # Grafana has to be configured by using the 'external' URL
-        admin_gw_external_ep = build_url(scheme='https', host=addr, port=port)
+        spec = cast(AdminGatewaySpec, self.mgr.spec_store[dd.service_name()].spec)
+        protocol = 'http' if spec.disable_https else 'https'
+        admin_gw_external_ep = build_url(scheme=protocol, host=addr, port=port)
         self._set_value_on_dashboard(
             'Grafana',
             'dashboard get-grafana-api-url',
@@ -145,18 +147,21 @@ class AdminGatewayService(CephadmService):
         }
         conf = self.mgr.template.render('services/admin-gateway/nginx.conf.j2', context)
 
+        self.ssl_certs = SSLCerts()
+        self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
+        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+        internal_cert, internal_pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
+
         if spec.disable_https:
             return {
                 "files": {
                     "nginx.conf": conf,
+                    "nginx_internal.crt": internal_cert,
+                    "nginx_internal.key": internal_pkey
                 }
             }, sorted(deps)
         else:
-            self.ssl_certs = SSLCerts()
-            self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
-            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            internal_cert, internal_pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
             cert = read_certificate(spec.ssl_certificate)
             pkey = read_certificate(spec.ssl_certificate_key)
             if not (cert and pkey):
