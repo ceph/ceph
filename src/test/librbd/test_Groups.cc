@@ -70,6 +70,42 @@ TEST_F(TestGroup, group_createPP)
   ASSERT_EQ(0U, groups.size());
 }
 
+TEST_F(TestGroup, group_get_id)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, _pool_name.c_str(), &ioctx);
+  BOOST_SCOPE_EXIT(ioctx) {
+    rados_ioctx_destroy(ioctx);
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, rbd_group_create(ioctx, "group_get_id"));
+  
+  size_t size = 0;
+  ASSERT_EQ(-ERANGE, rbd_group_get_id(ioctx, "group_get_id", NULL, &size));
+  ASSERT_GT(size, 0);
+
+  char group_id[32];
+  ASSERT_EQ(0, rbd_group_get_id(ioctx, "group_get_id", group_id, &size));
+  ASSERT_EQ(strlen(group_id) + 1, size);
+
+  ASSERT_EQ(0, rbd_group_remove(ioctx, "group_get_id"));
+}
+
+TEST_F(TestGroup, group_get_idPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.group_create(ioctx, "group_get_idPP"));
+
+  std::string group_id;
+  ASSERT_EQ(0, rbd.group_get_id(ioctx, "group_get_idPP", &group_id));
+  ASSERT_FALSE(group_id.empty());
+
+  ASSERT_EQ(0, rbd.group_remove(ioctx, "group_get_idPP"));
+}
+
 TEST_F(TestGroup, add_image)
 {
   REQUIRE_FORMAT_V2();

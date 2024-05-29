@@ -841,6 +841,9 @@ cdef nogil:
         pass
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size):
         pass
+    int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
+                         char *group_id, size_t *size):
+        pass
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest):
         pass
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
