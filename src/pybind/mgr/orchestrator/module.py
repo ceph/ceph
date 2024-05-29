@@ -46,6 +46,7 @@ from ._interface import (
     RGWSpec,
     SMBSpec,
     SNMPGatewaySpec,
+    AdminGatewaySpec,
     ServiceDescription,
     TunedProfileSpec,
     _cli_read_command,
@@ -1748,18 +1749,21 @@ Usage:
 
     @_cli_write_command('orch apply admin-gateway')
     def _apply_admin_gateway(self,
-                            placement: Optional[str] = None,
-                            unmanaged: bool = False,
-                            dry_run: bool = False,
-                            format: Format = Format.plain,
-                            no_overwrite: bool = False,
-                            inbuf: Optional[str] = None) -> HandleCommandResult:
+                             port: Optional[int] = None,
+                             disable_https: Optional[bool] = False,
+                             placement: Optional[str] = None,
+                             unmanaged: bool = False,
+                             dry_run: bool = False,
+                             format: Format = Format.plain,
+                             no_overwrite: bool = False,
+                             inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add a cluster gateway service (cephadm only)"""
 
-        spec = ClusterGatewaySpec(
+        spec = AdminGatewaySpec(
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
-            preview_only=dry_run
+            port=port,
+            disable_https=disable_https
         )
 
         spec.validate()  # force any validation exceptions to be caught correctly
