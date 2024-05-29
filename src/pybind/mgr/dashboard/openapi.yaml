@@ -9899,6 +9899,8 @@ paths:
                   type: string
                 flags:
                   type: string
+                rbd_mirroring:
+                  type: string
               type: object
       responses:
         '200':
