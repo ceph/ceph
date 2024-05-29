@@ -191,6 +191,25 @@
             </i>
           </div>
         </div>
+        <!-- Mirroring -->
+        <div class="form-group row"
+             *ngIf="data.applications.selected.includes('rbd')">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="rbdMirroring"
+                     name="rbdMirroring"
+                     type="checkbox"
+                     formControlName="rbdMirroring">
+              <label class="custom-control-label"
+                     for="rbdMirroring"
+                     i18n>Mirroring</label>
+              <cd-help-text>
+                <span i18n>Check this option to enable Pool based mirroring on a Block(RBD) pool.</span>
+              </cd-help-text>
+            </div>
+          </div>
+        </div>
         <!-- CRUSH -->
         <div *ngIf="isErasure || isReplicated">
 
