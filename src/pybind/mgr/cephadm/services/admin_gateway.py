@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 class AdminGatewayService(CephadmService):
     TYPE = 'admin-gateway'
-    DEFAULT_SERVICE_PORT = 9443
     INTERNAL_SERVICE_PORT = 29443
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -47,11 +46,11 @@ class AdminGatewayService(CephadmService):
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         dd = self.get_active_daemon(daemon_descrs)
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
-        port = dd.ports[0] if dd.ports else AdminGatewayService.DEFAULT_SERVICE_PORT
+        spec = cast(AdminGatewaySpec, self.mgr.spec_store[dd.service_name()].spec)
 
         # Grafana has to be configured by using the 'external' URL
-        spec = cast(AdminGatewaySpec, self.mgr.spec_store[dd.service_name()].spec)
         protocol = 'http' if spec.disable_https else 'https'
+        port = dd.ports[0] if dd.ports else None
         admin_gw_external_ep = build_url(scheme=protocol, host=addr, port=port)
         self._set_value_on_dashboard(
             'Grafana',
@@ -134,7 +133,6 @@ class AdminGatewayService(CephadmService):
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
         context = {
             'spec': spec,
-            'server_port': spec.port if spec.port is not None else self.DEFAULT_SERVICE_PORT,
             'internal_port': self.INTERNAL_SERVICE_PORT,
             'dashboard_scheme': dashboard_scheme,
             'grafana_scheme': 'https', # TODO(redo): fixme, get current value of grafana scheme

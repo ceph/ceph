@@ -42,10 +42,10 @@ http {
     server {
 
 {% if spec.disable_https %}
-        listen {{ server_port }};
+        listen {{ spec.port or 80 }};
 {% else %}
-        listen		    {{ server_port }} ssl;
-	listen		    [::]:{{ server_port }} ssl;
+        listen		    {{ spec.port or 443 }} ssl;
+	listen		    [::]:{{ spec.port or 443 }} ssl;
 	ssl_certificate	    /etc/nginx/ssl/nginx.crt;
 	ssl_certificate_key /etc/nginx/ssl/nginx.key;
 	{% if spec.ssl_protocols %}
