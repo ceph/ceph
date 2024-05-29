@@ -7,13 +7,19 @@
 @use '@carbon/styles/scss/compat/themes' as compat;
 @use '@carbon/styles/scss/themes';
 @use '@carbon/styles/scss/theme' with (
-  $fallback: compat.$g90,
-  $theme: upstream.$theme,
+  $theme: compat.$g90,
+  $fallback: upstream.$theme,
 );
 @use "@carbon/styles";
 @use '@carbon/type';
 
-
+/**********************************************************************************
+These are meant to be temporary style overrides.
+The sizing of some Carbon components clash with a requirement
+of one third party component  - the data table - that needs
+to set the body's font-size at 12px.
+Once this component is removed we should be ok to remove the overrides below
+**********************************************************************************/
 
 $block-size: 2.7rem;
 
