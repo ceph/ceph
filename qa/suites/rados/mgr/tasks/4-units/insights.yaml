@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    # tests may leave mgrs broken, so don't try and call into them
+    # to invoke e.g. pg dump during teardown.
+    wait-for-scrub: false
+    log-ignorelist:
+      - \(MGR_INSIGHTS_WARNING\)
+      - \(insights_health_check
+      - \(RECENT_CRASH\)
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_insights
