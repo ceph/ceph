@@ -226,6 +226,63 @@ struct seastore_test_t :
 	std::move(t)).get();
     }
 
+    void clone_range(
+      SeaStoreShard &sharded_seastore,
+      const object_state_t &s_obj,
+      extent_len_t srcoff,
+      extent_len_t length,
+      extent_len_t dstoff) {
+      CTransaction t;
+      clone_range(sharded_seastore, t, s_obj, srcoff, length, dstoff);
+      sharded_seastore.do_transaction(coll, std::move(t)).get();
+    }
+
+    void clone_range(
+      SeaStoreShard &sharded_seastore,
+      CTransaction &t,
+      const object_state_t &s_obj,
+      extent_len_t srcoff,
+      extent_len_t length,
+      extent_len_t dstoff) {
+      bufferlist to_check;
+      if (s_obj.contents.length() >= srcoff) {
+	to_check.substr_of(
+	  s_obj.contents,
+	  srcoff,
+	  std::min((uint64_t)length,
+		   (uint64_t)s_obj.contents.length() - srcoff));
+      }
+      auto ret = sharded_seastore.read(
+	coll,
+	s_obj.oid,
+	srcoff,
+	length).unsafe_get();
+      EXPECT_EQ(ret.length(), to_check.length());
+      EXPECT_EQ(ret, to_check);
+
+      bufferlist new_contents;
+      if (srcoff > 0 && contents.length()) {
+	new_contents.substr_of(
+	  contents,
+	  0,
+	  std::min<size_t>(srcoff, contents.length())
+	);
+      }
+      new_contents.append_zero(srcoff - new_contents.length());
+      new_contents.append(ret);
+
+      auto tail_offset = srcoff + ret.length();
+      if (contents.length() > tail_offset) {
+	bufferlist tail;
+	tail.substr_of(
+	  contents,
+	  tail_offset,
+	  contents.length() - tail_offset);
+	new_contents.append(tail);
+      }
+      contents.swap(new_contents);
+      t.clone_range(cid, s_obj.oid, oid, srcoff, length, dstoff);
+    }
     void write(
       SeaStoreShard &sharded_seastore,
       CTransaction &t,
@@ -1279,6 +1336,58 @@ TEST_P(seastore_test_t, sparse_read)
       off += miter.second;
     }
     test_obj.remove(*sharded_seastore);
+  });
+}
+
+TEST_P(seastore_test_t, clone_range)
+{
+  run_async([this] {
+    auto &test_obj1 = get_object(make_oid(0));
+    test_obj1.write(*sharded_seastore, 0, 4096 * 1024, 'c');
+    auto test_obj2 = test_obj1.get_clone(10);
+    test_obj2.write(*sharded_seastore, 65536, 65536, 'b');
+    test_obj2.write(*sharded_seastore, 1 << 18, 1 << 16, 'd');
+
+    auto test_obj3 = test_obj1.get_clone(20);
+    test_obj3.clone_range(*sharded_seastore, test_obj1, 98304, 4096, 98304);
+    std::cout << "seastore_test_t.clone_range 1 clone_range" << std::endl;
+    test_obj3.read(*sharded_seastore, 0, 131072);
+
+    test_obj3.clone_range(*sharded_seastore, test_obj1, 1 << 18, 4096, 1 << 18);
+    std::cout << "seastore_test_t.clone_range 2 clone_range" << std::endl;
+    test_obj3.read(*sharded_seastore, 0, (1 << 18) + (1 << 16));
+
+    test_obj3.clone_range(
+      *sharded_seastore,
+      test_obj1,
+      (1 << 18) + (1 << 16) - 4096,
+      4096,
+      (1 << 18) + (1 << 16) - 4096);
+    std::cout << "seastore_test_t.clone_range 3 clone_range" << std::endl;
+    test_obj3.read(*sharded_seastore, 0, (1 << 18) + (1 << 16));
+
+    auto test_obj4 = test_obj1.get_clone(30);
+    test_obj4.clone_range(*sharded_seastore, test_obj2, 98304, 4096, 98304);
+    std::cout << "seastore_test_t.clone_range 4 clone_range" << std::endl;
+    test_obj4.read(*sharded_seastore, 0, 131072);
+
+    test_obj4.clone_range(*sharded_seastore, test_obj2, 1 << 18, 4096, 1 << 18);
+    std::cout << "seastore_test_t.clone_range 5 clone_range" << std::endl;
+    test_obj4.read(*sharded_seastore, 0, (1 << 18) + (1 << 16));
+
+    test_obj4.clone_range(
+      *sharded_seastore,
+      test_obj2,
+      (1 << 18) + (1 << 16) - 4096,
+      4096,
+      (1 << 18) + (1 << 16) - 4096);
+    std::cout << "seastore_test_t.clone_range 6 clone_range" << std::endl;
+    test_obj4.read(*sharded_seastore, 0, (1 << 18) + (1 << 16));
+
+    auto test_obj5 =test_obj1.get_clone(40);
+    test_obj5.clone_range(*sharded_seastore, test_obj1, 2048, (1 << 18), 2048);
+    std::cout << "seastore_test_t.clone_range 7 clone_range" << std::endl;
+    test_obj5.read(*sharded_seastore, 0, (1 << 18) + 2048);
   });
 }
 
