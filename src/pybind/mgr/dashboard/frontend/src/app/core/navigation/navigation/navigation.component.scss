@@ -171,7 +171,7 @@
     SIDEBAR STYLE
 --------------------------------------------------- */
 
-$sidebar-width: 250px;
+$sidebar-width: 20.8rem;
 
 // .cd-navbar-primary .active > a,
 // .cd-navbar-primary > .active > a:focus,
@@ -200,7 +200,7 @@ $sidebar-width: 250px;
 
     &.active {
       // margin-left: -$sidebar-width;
-      margin-left: -208px;
+      margin-left: -16rem;
     }
 
     // ul {

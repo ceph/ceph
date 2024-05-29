@@ -15,14 +15,36 @@
   @include themes.theme(t.$g90);
 }
 
+$block-size: 2.7rem;
+
+.cds--side-nav__submenu {
+  block-size: $block-size;
+}
+
+a.cds--side-nav__link {
+  min-block-size: $block-size;
+}
+
+.cds--side-nav__menu a.cds--side-nav__link {
+  block-size: $block-size;
+}
+
 .cds--side-nav__submenu-title,
-a.cds--side-nav__link > .cds--side-nav__link-text{
+a.cds--side-nav__link > .cds--side-nav__link-text {
   font-size: calc(type.type-scale(4) + 0.5px);
 }
 
-.cds--side-nav__icon > svg  {
+.cds--side-nav__icon > svg {
   block-size: 20px;
   inline-size: 20px;
+}
+
+.cds--side-nav--expanded {
+  min-width: 20.8rem !important;
+}
+
+.cds--side-nav__navigation {
+  min-width: 4.2rem;
 }
 
 /*** CARBON END ****/
