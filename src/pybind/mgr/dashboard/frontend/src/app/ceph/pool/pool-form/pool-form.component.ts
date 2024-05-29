@@ -83,6 +83,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   crushRuleMaxSize = 10;
+  DEFAULT_RATIO = 0.875;
 
   private modalSubscription: Subscription;
 
@@ -128,7 +129,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       maxBlobSize: new UntypedFormControl('', {
         updateOn: 'blur'
       }),
-      ratio: new UntypedFormControl('', {
+      ratio: new UntypedFormControl(this.DEFAULT_RATIO, {
         updateOn: 'blur'
       })
     });
