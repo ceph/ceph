@@ -1032,8 +1032,11 @@ int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_buc
 int RGWBucketReshard::execute(int num_shards,
                               ReshardFaultInjector& fault,
                               int max_op_entries,
-                              const DoutPrefixProvider *dpp, optional_yield y,
-                              bool verbose, ostream *out,
+			      const cls_rgw_reshard_initiator initiator,
+                              const DoutPrefixProvider *dpp,
+			      optional_yield y,
+                              bool verbose,
+			      ostream *out,
                               Formatter *formatter,
                               RGWReshard* reshard_log)
 {
@@ -1046,7 +1049,7 @@ int RGWBucketReshard::execute(int num_shards,
   auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
 
   if (reshard_log) {
-    ret = reshard_log->update(dpp, bucket_info, y);
+    ret = reshard_log->update(dpp, bucket_info, initiator, y);
     if (ret < 0) {
       return ret;
     }
@@ -1134,19 +1137,23 @@ int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry,
 
   librados::ObjectWriteOperation op;
 
-  // if we're reducing, we don't want to overwrite an existing entry
-  // in order to not interfere with the reshard reduction wait period
-  const bool create_only = entry.new_num_shards < entry.old_num_shards;
+  // if this is dynamic resharding and we're reducing, we don't want
+  // to overwrite an existing entry in order to not interfere with the
+  // reshard reduction wait period
+  const bool create_only =
+    entry.initiator == cls_rgw_reshard_initiator::Dynamic &&
+    entry.new_num_shards < entry.old_num_shards;
 
   cls_rgw_reshard_add(op, entry, create_only);
 
   int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, &op, y);
   if (create_only && ret == -EEXIST) {
-    ldpp_dout(dpp, 20) << "INFO: did not write reshard queue entry for oid=" <<
+    ldpp_dout(dpp, 20) <<
+      "INFO: did not write reshard queue entry for oid=" <<
       logshard_oid << " tenant=" << entry.tenant << " bucket=" <<
       entry.bucket_name <<
-      ", because it's a reshard reduction and an entry for that bucket already exists" <<
-      dendl;
+      ", because it's a dynamic reshard reduction and an entry for that "
+      "bucket already exists" << dendl;
     // this is not an error so just fall through
   } else if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to add entry to reshard log, oid=" <<
@@ -1157,12 +1164,16 @@ int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry,
   return 0;
 }
 
-int RGWReshard::update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, optional_yield y)
+int RGWReshard::update(const DoutPrefixProvider *dpp,
+		       const RGWBucketInfo& bucket_info,
+		       const cls_rgw_reshard_initiator initiator,
+		       optional_yield y)
 {
   cls_rgw_reshard_entry entry;
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.tenant = bucket_info.bucket.tenant;
+  entry.initiator = initiator;
 
   int ret = get(dpp, entry);
   if (ret < 0) {
@@ -1171,7 +1182,7 @@ int RGWReshard::update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucke
 
   ret = add(dpp, entry, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << __func__ << ":Error in updating entry bucket " << entry.bucket_name << ": " <<
+    ldpp_dout(dpp, 0) << __func__ << ": Error in updating entry bucket " << entry.bucket_name << ": " <<
       cpp_strerror(-ret) << dendl;
   }
 
@@ -1354,9 +1365,12 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     }
   }
 
-  // if reshard reduction, perform extra sanity checks in part to
-  // prevent chasing constantly changing entry count
-  if (entry.new_num_shards < entry.old_num_shards) {
+  // if *dynamic* reshard reduction, perform extra sanity checks in
+  // part to prevent chasing constantly changing entry count. If
+  // *admin*-initiated (or unknown-initiated) reshard reduction, skip
+  // this step and proceed.
+  if (entry.initiator == cls_rgw_reshard_initiator::Dynamic &&
+      entry.new_num_shards < entry.old_num_shards) {
     const bool may_reduce =
       store->ctx()->_conf.get_val<bool>("rgw_dynamic_resharding_may_reduce");
     if (! may_reduce) {
@@ -1446,8 +1460,8 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
   RGWBucketReshard br(store, bucket_info, bucket_attrs, nullptr);
 
   ReshardFaultInjector f; // no fault injected
-  ret = br.execute(entry.new_num_shards, f, max_entries, dpp, y,
-                   false, nullptr, nullptr, this);
+  ret = br.execute(entry.new_num_shards, f, max_entries, entry.initiator,
+		   dpp, y, false, nullptr, nullptr, this);
   if (ret < 0) {
     ldpp_dout(dpp, 0) <<  __func__ <<
         ": Error during resharding bucket " << entry.bucket_name << ":" <<
@@ -1491,7 +1505,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
       continue;
     }
 
-    for(auto& entry: entries) { // logshard entries
+    for(auto& entry : entries) { // logshard entries
       process_entry(entry, max_entries, dpp, y);
 
       Clock::time_point now = Clock::now();

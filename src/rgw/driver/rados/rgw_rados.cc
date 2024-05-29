@@ -10424,6 +10424,7 @@ int RGWRados::add_bucket_to_reshard(const DoutPrefixProvider *dpp,
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.old_num_shards = num_source_shards;
   entry.new_num_shards = new_num_shards;
+  entry.initiator = cls_rgw_reshard_initiator::Dynamic;
 
   return reshard.add(dpp, entry, y);
 }
