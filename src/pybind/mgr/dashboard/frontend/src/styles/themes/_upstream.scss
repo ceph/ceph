@@ -1,0 +1,9 @@
+@use './src/styles/vendor/variables' as vv;
+
+$theme: (
+  text-primary: #f4f4f4,
+  text-secondary: #c6c6c6,
+  btn-primary: vv.$primary,
+  border-interactive: vv.$primary,
+  background: vv.$secondary,
+);
