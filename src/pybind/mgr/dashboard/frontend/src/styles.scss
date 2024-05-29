@@ -47,6 +47,13 @@ a.cds--side-nav__link > .cds--side-nav__link-text {
   min-width: 4.2rem;
 }
 
+a.cds--header__menu-item,
+.cds--header__action,
+.cds--header{
+  block-size: 3.9rem;
+  font-size: calc(type.type-scale(4) + 0.5px);
+}
+
 /*** CARBON END ****/
 
 // Angular2-Tree Component
