@@ -2769,6 +2769,11 @@ class TestGroups(object):
         eq([], list(self.group.list_images()))
         RBD().trash_restore(ioctx, image_id, image_name)
 
+    def test_group_get_id(self):
+        id = self.group.id()
+        assert isinstance(id, str)
+        assert len(id) > 0
+
     def test_group_image_many_images(self):
         eq([], list(self.group.list_images()))
         self.group.add_image(ioctx, image_name)
