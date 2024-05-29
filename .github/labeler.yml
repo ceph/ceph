@@ -287,8 +287,7 @@ ceph-volume:
   - src/python-common/ceph/deployment/drive_selection/**
 
 tests:
-  - qa/tasks/**
-  - qa/workunits/**
+  - qa/**
   - src/test/**
 
 nfs:

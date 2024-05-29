@@ -228,8 +228,8 @@ following form:
 
 The ``exist`` command outputs:
 
-* "subvolumegroup exists": if any subvolumegroup is present
-* "no subvolumegroup exists": if no subvolumegroup is present
+* ``subvolumegroup exists``: if any subvolumegroup is present
+* ``no subvolumegroup exists``: if no subvolumegroup is present
 
 .. note:: This command checks for the presence of custom groups and not
    presence of the default one. A subvolumegroup-existence check alone is not
@@ -902,7 +902,7 @@ to policies. This can distribute load across MDS ranks in predictable and
 stable ways.  Review :ref:`cephfs-pinning` and :ref:`cephfs-ephemeral-pinning`
 for details on how pinning works.
 
-Run a command of the following form to configure pinning for subvolumegroups:
+Run a command of the following form to configure pinning for subvolume groups:
 
 .. prompt:: bash #
 

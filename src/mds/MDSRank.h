@@ -526,7 +526,7 @@ class MDSRank {
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
-    int command_quiesce_path(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+    void command_quiesce_path(Formatter *f, const cmdmap_t &cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
     void command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);

@@ -627,8 +627,10 @@ private:
   void add_quiesce(CInode* parent, CInode* in);
 
   struct LockPathConfig {
+    using Lifetime = std::chrono::milliseconds;
     filepath fpath;
     std::vector<std::string> locks;
+    std::optional<Lifetime> lifetime;
     bool ap_dont_block = false;
     bool ap_freeze = false;
   };
@@ -1476,7 +1478,7 @@ private:
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
-  void quiesce_overdrive_fragmenting(CDir* dir, bool async);
+  void quiesce_overdrive_fragmenting_async(CDir* dir);
   void dispatch_quiesce_path(const MDRequestRef& mdr);
   void dispatch_quiesce_inode(const MDRequestRef& mdr);
 
