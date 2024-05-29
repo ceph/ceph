@@ -2,7 +2,7 @@
 <!-- HEADER  -->
 <!-- ************************ -->
 <ng-template #header>
-<cds-header name="Ceph Dashboard">
+<cds-header name="Ceph Dashboard" [brand]="brandTemplate" [isTemplate]="true">
   <cds-hamburger [active]="showMenuSidebar"
                  (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
   <cds-header-global>
@@ -19,6 +19,18 @@
 </cds-header>
 </ng-template>
 
+<ng-template #brandTemplate>
+  <!-- <a class="cds--header__name">
+    <svg cdsIcon="carbon" size="32" style="stroke:white;fill:white"></svg>
+    <span class="cds--header__name--prefix">IBM</span>
+    [Platform]
+  </a> -->
+  <a class="cds--header__name navbar-brand ms-3"
+     href="#">
+    <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
+         alt="Ceph" />
+  </a>
+</ng-template>
 <!-- ************************ -->
 <!-- NOTIFICATIONS/ALERTS  -->
 <!-- ************************ -->

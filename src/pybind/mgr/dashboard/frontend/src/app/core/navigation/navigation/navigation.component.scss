@@ -15,6 +15,17 @@
     NAVBAR STYLE
 --------------------------------------------------- */
 
+.navbar-brand,
+.navbar-brand:hover {
+  color: vv.$gray-200;
+  height: auto;
+  padding: 0;
+}
+
+.navbar-brand > img {
+  height: 25px;
+}
+
 ::ng-deep cd-navigation .cd-navbar-top {
   .cd-navbar-brand {
     background: vv.$secondary;
