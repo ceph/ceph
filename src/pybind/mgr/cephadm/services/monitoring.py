@@ -79,7 +79,7 @@ class GrafanaService(CephadmService):
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
 
-        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
+        admin_gw_enabled = len(self.mgr.cache.get_daemons_by_service('admin-gateway')) > 0
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
                 'anonymous_access': spec.anonymous_access,
@@ -87,7 +87,7 @@ class GrafanaService(CephadmService):
                 'http_port': grafana_port,
                 'protocol': spec.protocol,
                 'http_addr': grafana_ip,
-                'use_url_prefix': (adming_gw_cnt > 0)
+                'use_url_prefix': admin_gw_enabled
             })
 
         if 'dashboard' in self.mgr.get('mgr_map')['modules'] and spec.initial_admin_password:
@@ -192,11 +192,9 @@ class GrafanaService(CephadmService):
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         spec = cast(GrafanaSpec, self.mgr.spec_store[dd.service_name()].spec)
-        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
-        if adming_gw_cnt == 0:
-            url_prefix = '/grafana' if adming_gw_cnt > 0 else ''
+        admin_gw_enabled = len(self.mgr.cache.get_daemons_by_service('admin-gateway')) > 0
+        if not admin_gw_enabled:
             service_url = build_url(scheme=spec.protocol, host=addr, port=port)
-            service_url = f'{service_url}{url_prefix}'
             self._set_value_on_dashboard(
                 'Grafana',
                 'dashboard get-grafana-api-url',
@@ -286,7 +284,7 @@ class AlertmanagerService(CephadmService):
             addr = self._inventory_get_fqdn(dd.hostname)
             peers.append(build_url(host=addr, port=port).lstrip('/'))
 
-        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
+        admin_gw_enabled = len(self.mgr.cache.get_daemons_by_service('admin-gateway')) > 0
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
         if self.mgr.secure_monitoring_stack:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
@@ -310,7 +308,7 @@ class AlertmanagerService(CephadmService):
                 },
                 'peers': peers,
                 'web_config': '/etc/alertmanager/web.yml',
-                'use_url_prefix': (adming_gw_cnt > 0)
+                'use_url_prefix': admin_gw_enabled
             }, sorted(deps)
         else:
             return {
@@ -318,7 +316,7 @@ class AlertmanagerService(CephadmService):
                     "alertmanager.yml": yml
                 },
                 "peers": peers,
-                'use_url_prefix': (adming_gw_cnt > 0)
+                'use_url_prefix': admin_gw_enabled
             }, sorted(deps)
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
@@ -334,11 +332,9 @@ class AlertmanagerService(CephadmService):
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
-        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
-        if adming_gw_cnt == 0:
-            url_prefix = '/alertmanager' if adming_gw_cnt > 0 else ''
+        admin_gw_enabled = len(self.mgr.cache.get_daemons_by_service('admin-gateway')) > 0
+        if not admin_gw_enabled:
             service_url = build_url(scheme=protocol, host=addr, port=port)
-            service_url = f'{service_url}{url_prefix}'
             self._set_value_on_dashboard(
                 'AlertManager',
                 'dashboard get-alertmanager-api-host',
@@ -455,7 +451,7 @@ class PrometheusService(CephadmService):
             'prometheus_web_password': password_hash(prometheus_password),
         }
 
-        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
+        admin_gw_enabled = len(self.mgr.cache.get_daemons_by_service('admin-gateway')) > 0
         if self.mgr.secure_monitoring_stack:
             cfg_key = 'mgr/prometheus/root/cert'
             cmd = {'prefix': 'config-key get', 'key': cfg_key}
@@ -479,7 +475,7 @@ class PrometheusService(CephadmService):
                     'retention_size': retention_size,
                     'ip_to_bind_to': ip_to_bind_to,
                     'web_config': '/etc/prometheus/web.yml',
-                    'use_url_prefix': (adming_gw_cnt > 0)
+                    'use_url_prefix': admin_gw_enabled
                 }
         else:
             r = {
@@ -489,7 +485,7 @@ class PrometheusService(CephadmService):
                 'retention_time': retention_time,
                 'retention_size': retention_size,
                 'ip_to_bind_to': ip_to_bind_to,
-                'use_url_prefix': (adming_gw_cnt > 0)
+                'use_url_prefix': admin_gw_enabled
             }
 
         # include alerts, if present in the container
@@ -557,11 +553,9 @@ class PrometheusService(CephadmService):
         addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
-        adming_gw_cnt = len(self.mgr.cache.get_daemons_by_service('admin-gateway'))
-        if adming_gw_cnt == 0:
-            url_prefix = '/prometheus' if adming_gw_cnt > 0 else ''
+        admin_gw_enabled = len(self.mgr.cache.get_daemons_by_service('admin-gateway')) > 0
+        if not admin_gw_enabled:
             service_url = build_url(scheme=protocol, host=addr, port=port)
-            service_url = f'{service_url}{url_prefix}'
             self._set_value_on_dashboard(
                 'Prometheus',
                 'dashboard get-prometheus-api-host',

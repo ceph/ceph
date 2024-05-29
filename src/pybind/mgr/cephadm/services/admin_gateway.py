@@ -173,6 +173,8 @@ class AdminGatewayService(CephadmService):
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
         """
-        Called before grafana daemon is removed.
+        Called before admin-gateway daemon is removed.
         """
-        # TODO(redo): should we delete user certificates?
+        # reset the standby dashboard redirection behaviour
+        self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')
+        self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'redirect')
