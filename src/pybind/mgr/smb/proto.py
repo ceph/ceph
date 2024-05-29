@@ -4,6 +4,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Collection,
+    ContextManager,
     Dict,
     Iterator,
     List,
@@ -114,6 +115,20 @@ class FindingConfigStore(ConfigStore, Protocol):
         """Find entries in the store matching the given params.
         Params is a dict that will be compared to the same keys/attributes of
         the objects being searched. Only exact matches will be returned.
+        """
+        ...  # pragma: no cover
+
+
+class TransactingConfigStore(ConfigStore, Protocol):
+    """A protocol for a config store that supports transactions.
+    Using the transactions can make using the store more robust or
+    efficient.
+    """
+
+    def transaction(self) -> ContextManager[None]:
+        """Return a context manager that wraps a transaction. What exactly
+        this means depends on the store. Typically this would wrap a database
+        transaction.
         """
         ...  # pragma: no cover
 
