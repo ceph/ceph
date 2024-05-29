@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 class AdminGatewayService(CephadmService):
     TYPE = 'admin-gateway'
-    DEFAULT_SERVICE_PORT = 8447
-    INTERNAL_SERVICE_PORT = 28447
+    DEFAULT_SERVICE_PORT = 9443
+    INTERNAL_SERVICE_PORT = 29443
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -34,7 +34,7 @@ class AdminGatewayService(CephadmService):
         for dd in self.mgr.cache.get_daemons_by_service(service_name):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            port = dd.ports[0] if dd.ports else AlertmanagerService.DEFAULT_SERVICE_PORT
+            port = dd.ports[0] if dd.ports else None
             srv_entries.append(f'{addr}:{port}')
         return srv_entries
 
@@ -132,6 +132,7 @@ class AdminGatewayService(CephadmService):
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
         context = {
             'spec': spec,
+            'server_port': spec.port if spec.port is not None else self.DEFAULT_SERVICE_PORT,
             'internal_port': self.INTERNAL_SERVICE_PORT,
             'dashboard_scheme': dashboard_scheme,
             'grafana_scheme': 'https', # TODO(redo): fixme, get current value of grafana scheme
