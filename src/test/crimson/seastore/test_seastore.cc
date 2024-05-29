@@ -378,7 +378,7 @@ struct seastore_test_t :
 	to_check.substr_of(
 	  contents,
 	  offset,
-	  std::min(len, (uint64_t)contents.length()));
+	  std::min(len, (uint64_t)contents.length() - offset));
       }
       auto ret = sharded_seastore.read(
 	coll,
