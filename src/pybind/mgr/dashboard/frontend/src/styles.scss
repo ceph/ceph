@@ -10,11 +10,22 @@
 @use '@carbon/themes/scss/themes' as t;
 @use "@carbon/styles";
 @use '@carbon/themes';
-// :root {
-//   @include themes.theme(t.$g90);
-// }
+@use '@carbon/type';
+:root {
+  @include themes.theme(t.$g90);
+}
 
-/*** CARBON START ****/
+.cds--side-nav__submenu-title,
+a.cds--side-nav__link > .cds--side-nav__link-text{
+  font-size: calc(type.type-scale(4) + 0.5px);
+}
+
+.cds--side-nav__icon > svg  {
+  block-size: 20px;
+  inline-size: 20px;
+}
+
+/*** CARBON END ****/
 
 // Angular2-Tree Component
 @import '@circlon/angular-tree-component/css/angular-tree-component.css';
