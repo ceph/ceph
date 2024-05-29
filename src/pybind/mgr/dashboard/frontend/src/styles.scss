@@ -1,61 +1,6 @@
 /* You can add global styles to this file, and also import other style files */
 @use './src/styles/defaults' as *;
-/*** CARBON START ****/
-
-@use "@carbon/styles/scss/config" with (
-  $font-path: "~@ibm/plex",
-  $flex-grid-columns: 16,
-  $use-flexbox-grid: true,
-);
-@use '@carbon/themes/scss/themes' as t;
-@use "@carbon/styles";
-@use '@carbon/themes';
-@use '@carbon/type';
-:root {
-  @include themes.theme(t.$g90);
-}
-
-$block-size: 2.7rem;
-
-.cds--side-nav__submenu {
-  block-size: $block-size;
-}
-
-a.cds--side-nav__link {
-  min-block-size: $block-size;
-}
-
-.cds--side-nav__menu a.cds--side-nav__link {
-  block-size: $block-size;
-}
-
-.cds--side-nav__submenu-title,
-a.cds--side-nav__link > .cds--side-nav__link-text {
-  font-size: calc(type.type-scale(4) + 0.5px);
-}
-
-.cds--side-nav__icon > svg {
-  block-size: 20px;
-  inline-size: 20px;
-}
-
-.cds--side-nav--expanded {
-  min-width: 20.8rem !important;
-}
-
-.cds--side-nav__navigation {
-  min-width: 4.2rem;
-}
-
-a.cds--header__menu-item,
-.cds--header__action,
-.cds--header{
-  block-size: 3.9rem;
-  font-size: calc(type.type-scale(4) + 0.5px);
-}
-
-/*** CARBON END ****/
-
+@import './src/styles/carbon-overrides.scss';
 // Angular2-Tree Component
 @import '@circlon/angular-tree-component/css/angular-tree-component.css';
 
