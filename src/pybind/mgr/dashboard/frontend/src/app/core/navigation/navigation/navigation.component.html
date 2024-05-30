@@ -1,10 +1,17 @@
+<div class="cd-navbar-main">
 <!-- ************************ -->
-<!-- HEADER  -->
+<!-- NOTIFICATIONS/ALERTS     -->
 <!-- ************************ -->
-<ng-template #header>
+<cd-pwd-expiration-notification></cd-pwd-expiration-notification>
+<cd-telemetry-notification></cd-telemetry-notification>
+<cd-motd></cd-motd>
+<cd-notifications-sidebar></cd-notifications-sidebar>
+<!-- ************************ -->
+<!-- HEADER                   -->
+<!-- ************************ -->
 <cds-header name="Ceph Dashboard"
-            [brand]="brandTemplate"
-            [isTemplate]="true">
+            class="cd-navbar-top"
+            [brand]="brandTemplate">
   <cds-hamburger [active]="showMenuSidebar"
                  (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
   <cds-header-global>
@@ -19,8 +26,9 @@
     <cds-header-action><cd-identity></cd-identity></cds-header-action>
   </cds-header-global>
 </cds-header>
-</ng-template>
-
+<!-- ***************************** -->
+<!-- UPSTREAM LOGO BRAND TEMPLATE  -->
+<!-- ***************************** -->
 <ng-template #brandTemplate>
   <a class="cds--header__name navbar-brand ms-3"
      href="#">
@@ -28,18 +36,9 @@
          alt="Ceph" />
   </a>
 </ng-template>
-<!-- ************************ -->
-<!-- NOTIFICATIONS/ALERTS  -->
-<!-- ************************ -->
-<cd-pwd-expiration-notification></cd-pwd-expiration-notification>
-<cd-telemetry-notification></cd-telemetry-notification>
-<cd-motd></cd-motd>
-<cd-notifications-sidebar></cd-notifications-sidebar>
-
-<!-- ************************ -->
+<!-- **************************************** -->
 <!-- WRAPPER AROUND SIDENAV AND MAIN CONTAINT -->
-<!-- ************************ -->
-<ng-container *ngTemplateOutlet="header"></ng-container>
+<!-- **************************************** -->
 <div class="wrapper">
   <!-- Content -->
   <nav id="sidebar"
@@ -52,9 +51,8 @@
     <ng-content></ng-content>
   </div>
 </div>
-
 <!-- ************************ -->
-<!-- SIDENAV -->
+<!-- SIDENAV                  -->
 <!-- ************************ -->
 <ng-template #cd_menu>
   <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
@@ -241,3 +239,4 @@
   </div>
   </ng-container>
 </ng-template>
+</div>
