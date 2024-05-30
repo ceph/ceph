@@ -4,6 +4,7 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/types.h"
 #include "common/errno.h"
 #include <iostream>
 #include <boost/program_options.hpp>
@@ -15,16 +16,10 @@ namespace clone {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
-             const char *p_name, const char *p_snapname,
-             librados::IoCtx &c_ioctx, const char *c_name,
-             librbd::ImageOptions& opts) {
-  return rbd.clone3(p_ioctx, p_name, p_snapname, c_ioctx, c_name, opts);
-}
-
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_SOURCE);
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, false);
 }
@@ -36,12 +31,26 @@ int execute(const po::variables_map &vm,
   std::string namespace_name;
   std::string image_name;
   std::string snap_name;
+  uint64_t snap_id = CEPH_NOSNAP;
+
+  if (vm.count(at::SNAPSHOT_ID)) {
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+  }
+
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
-    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    &image_name, &snap_name, true,
+    (snap_id == CEPH_NOSNAP ? utils::SNAPSHOT_PRESENCE_REQUIRED :
+                              utils::SNAPSHOT_PRESENCE_PERMITTED),
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
+  }
+
+  if (!snap_name.empty() && snap_id != CEPH_NOSNAP) {
+    std::cerr << "rbd: trying to access snapshot using both name and id."
+              << std::endl;
+    return -EINVAL;
   }
 
   std::string dst_pool_name;
@@ -77,8 +86,13 @@ int execute(const po::variables_map &vm,
   }
 
   librbd::RBD rbd;
-  r = do_clone(rbd, io_ctx, image_name.c_str(), snap_name.c_str(), dst_io_ctx,
-               dst_image_name.c_str(), opts);
+  if (!snap_name.empty()) {
+    r = rbd.clone3(io_ctx, image_name.c_str(), snap_name.c_str(), dst_io_ctx,
+                   dst_image_name.c_str(), opts);
+  } else {
+    r = rbd.clone4(io_ctx, image_name.c_str(), snap_id, dst_io_ctx,
+                   dst_image_name.c_str(), opts);
+  }
   if (r == -EXDEV) {
     std::cerr << "rbd: clone v2 required for cross-namespace clones."
               << std::endl;
