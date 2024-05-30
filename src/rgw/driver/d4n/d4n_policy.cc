@@ -2,7 +2,8 @@
 
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
-#include "common/dout.h" 
+#include "common/dout.h"
+#include "rgw_perf_counters.h"
 
 namespace rgw { namespace d4n {
 
@@ -324,6 +325,10 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     age = std::max(it->second->localWeight, age);
 
     erase(dpp, key, y);
+
+    if (perfcounter) {
+      perfcounter->inc(l_rgw_d4n_cache_evictions);
+    }
     freeSpace = cacheDriver->get_free_space(dpp);
   }
   
