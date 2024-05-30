@@ -385,14 +385,14 @@ test_clone() {
     rbd clone test1@s1 rbd2/clone
     rbd -p rbd2 ls | grep clone
     rbd -p rbd2 ls -l | grep clone | grep test1@s1
-    rbd ls | grep -v clone
+    test "$(rbd ls)" = 'test1'
     rbd flatten rbd2/clone
     rbd snap create rbd2/clone@s1
     rbd snap protect rbd2/clone@s1
     rbd clone rbd2/clone@s1 clone2
     rbd ls | grep clone2
     rbd ls -l | grep clone2 | grep rbd2/clone@s1
-    rbd -p rbd2 ls | grep -v clone2
+    test "$(rbd -p rbd2 ls)" = 'clone'
 
     rbd clone rbd2/clone clone3 |& grep 'snapshot name was not specified'
     rbd clone rbd2/clone@invalid clone3 |& grep 'failed to open parent image'
