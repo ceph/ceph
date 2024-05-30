@@ -14,7 +14,8 @@ using crimson::common::local_conf;
   {
     LOG_PREFIX(ObjectContextLoader::with_head_obc);
     auto [obc, existed] = obc_registry.get_cached_obc(oid);
-    DEBUGDPP("object {}", dpp, obc->get_oid());
+    DEBUGDPP("object {} existed {}",
+             dpp, obc->get_oid(), existed);
     assert(obc->is_head());
     obc->append_to(obc_set_accessing);
     return obc->with_lock<State, IOInterruptCondition>(
