@@ -473,7 +473,7 @@ void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
-  at::add_snap_id_option(options);
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_no_progress_option(options);
 
   options->add_options()
