@@ -23,11 +23,11 @@ private:
   static constexpr int VERSION = 1;
 
 protected:
-  std::map<NvmeGroupKey, NvmeGwMap> map;
+  std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
   epoch_t                           gwmap_epoch;
 
 public:
-  const std::map<NvmeGroupKey, NvmeGwMap>& get_map() {return map;}
+  const std::map<NvmeGroupKey, NvmeGwMonClientStates>& get_map() {return map;}
   const epoch_t& get_gwmap_epoch() {return gwmap_epoch;}
 
 private:

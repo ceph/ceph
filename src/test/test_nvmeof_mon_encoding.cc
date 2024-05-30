@@ -39,14 +39,14 @@ void test_NVMeofGwMap() {
   pending_map.cfg_add_gw("GW2" ,group_key);
   pending_map.cfg_add_gw("GW3" ,group_key);
   NvmeNonceVector new_nonces = {"abc", "def","hij"};
-  pending_map.Created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
-  pending_map.Created_gws[group_key]["GW1"].performed_full_startup = true;
+  pending_map.created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
+  pending_map.created_gws[group_key]["GW1"].performed_full_startup = true;
   for(int i=0; i< MAX_SUPPORTED_ANA_GROUPS; i++){
-    pending_map.Created_gws[group_key]["GW1"].blocklist_data[i].osd_epoch = i*2;
-    pending_map.Created_gws[group_key]["GW1"].blocklist_data[i].is_failover = false;
+    pending_map.created_gws[group_key]["GW1"].blocklist_data[i].osd_epoch = i*2;
+    pending_map.created_gws[group_key]["GW1"].blocklist_data[i].is_failover = false;
   }
 
-  pending_map.Created_gws[group_key]["GW2"].nonce_map[2] = new_nonces;
+  pending_map.created_gws[group_key]["GW2"].nonce_map[2] = new_nonces;
   dout(0) << " == Dump map before Encode : == " <<dendl;
   dout(0) << pending_map << dendl;
 
@@ -60,12 +60,12 @@ void test_NVMeofGwMap() {
 
 void test_MNVMeofGwMap() {
   dout(0) << __func__ << "\n\n" << dendl;
-  std::map<NvmeGroupKey, NvmeGwMap> map;
+  std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
 
   std::string pool = "pool1";
   std::string group = "grp1";
   std::string gw_id = "GW1";
-  NvmeGwState state(1, 32, GW_AVAILABILITY_E::GW_UNAVAILABLE);
+  NvmeGwClientState state(1, 32, gw_availability_t::GW_UNAVAILABLE);
   std::string nqn = "nqn";
   ANA_STATE ana_state;
   NqnState nqn_state(nqn, ana_state);
@@ -88,14 +88,14 @@ void test_MNVMeofGwMap() {
   pending_map.cfg_add_gw("GW2" ,group_key);
   pending_map.cfg_add_gw("GW3" ,group_key);
   NvmeNonceVector new_nonces = {"abc", "def","hij"};
-  pending_map.Created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
-  pending_map.Created_gws[group_key]["GW1"].subsystems.push_back(sub);
+  pending_map.created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
+  pending_map.created_gws[group_key]["GW1"].subsystems.push_back(sub);
   for(int i=0; i< MAX_SUPPORTED_ANA_GROUPS; i++){
-    pending_map.Created_gws[group_key]["GW1"].blocklist_data[i].osd_epoch = i*2;
-    pending_map.Created_gws[group_key]["GW1"].blocklist_data[i].is_failover = false;
+    pending_map.created_gws[group_key]["GW1"].blocklist_data[i].osd_epoch = i*2;
+    pending_map.created_gws[group_key]["GW1"].blocklist_data[i].is_failover = false;
   }
 
-  pending_map.Created_gws[group_key]["GW2"].nonce_map[2] = new_nonces;
+  pending_map.created_gws[group_key]["GW2"].nonce_map[2] = new_nonces;
   dout(0) << "False pending map: " << pending_map << dendl;
 
   auto msg = make_message<MNVMeofGwMap>(pending_map);
@@ -126,7 +126,7 @@ void test_MNVMeofGwBeacon() {
   std::string gw_id = "GW";
   std::string gw_pool = "pool";
   std::string gw_group = "group";
-  GW_AVAILABILITY_E availability = GW_AVAILABILITY_E::GW_AVAILABLE;
+  gw_availability_t availability = gw_availability_t::GW_AVAILABLE;
   std::string nqn = "nqn";
   BeaconSubsystem sub = { nqn, {}, {} };
   BeaconSubsystems subs = { sub };
@@ -166,17 +166,17 @@ void test_NVMeofGwTimers()
     std::string gwid = "GW1";
     NvmeAnaGrpId  grpid = 2;
     pending_map.start_timer(gwid, group_key, grpid, 30);
-    auto end_time  = pending_map.Gmetadata[group_key][gwid].data[grpid].end_time;
+    auto end_time  = pending_map.fsm_timers[group_key][gwid].data[grpid].end_time;
     uint64_t  millisecondsSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(end_time.time_since_epoch()).count();
-    dout(0) << "Metadata milliseconds " << millisecondsSinceEpoch << " " << (int)pending_map.Gmetadata[group_key][gwid].data[grpid].timer_value << dendl;
+    dout(0) << "Metadata milliseconds " << millisecondsSinceEpoch << " " << (int)pending_map.fsm_timers[group_key][gwid].data[grpid].timer_value << dendl;
     ceph::buffer::list bl;
     pending_map.encode(bl);
     auto p = bl.cbegin();
     pending_map.decode(p);
 
-    end_time  = pending_map.Gmetadata[group_key][gwid].data[2].end_time;
+    end_time  = pending_map.fsm_timers[group_key][gwid].data[2].end_time;
     millisecondsSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(end_time.time_since_epoch()).count();
-    dout(0) << "After encode decode Metadata milliseconds " << millisecondsSinceEpoch << " " <<  (int)pending_map.Gmetadata[group_key][gwid].data[grpid].timer_value<<dendl;
+    dout(0) << "After encode decode Metadata milliseconds " << millisecondsSinceEpoch << " " <<  (int)pending_map.fsm_timers[group_key][gwid].data[grpid].timer_value<<dendl;
 
 }
 

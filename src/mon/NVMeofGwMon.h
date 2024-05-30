@@ -38,11 +38,7 @@ class NVMeofGwMon: public PaxosService,
 {
     NVMeofGwMap map;  //NVMeGWMap
     NVMeofGwMap pending_map;
-
     std::map<LastBeacon, ceph::coarse_mono_clock::time_point> last_beacon;
-
-    // when the mon was not updating us for some period (e.g. during slow
-    // election) to reset last_beacon timeouts
     ceph::coarse_mono_clock::time_point last_tick;
 
 public:
