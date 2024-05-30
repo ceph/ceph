@@ -13,6 +13,7 @@
  *
  */
 
+#include "rgw_perf_counters.h"
 #include "rgw_sal_d4n.h"
 
 namespace rgw { namespace sal {
@@ -524,6 +525,9 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     is_latest_version = false;
   }
   if (!get_obj_attrs_from_cache(dpp, y)) {
+    if(perfcounter) {
+      perfcounter->inc(l_rgw_d4n_cache_misses);
+    }
     std::string head_oid_in_cache;
     rgw::sal::Attrs attrs;
     std::string version;
@@ -569,6 +573,10 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
       }
     } else {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): failed to cache head object in cache backend, ret=" << ret << dendl;
+    }
+  } else {
+    if(perfcounter) {
+      perfcounter->inc(l_rgw_d4n_cache_hits);
     }
   }
 
@@ -670,6 +678,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     is_latest_version = false;
   }
   if (!source->get_obj_attrs_from_cache(dpp, y)) {
+    if(perfcounter) {
+      perfcounter->inc(l_rgw_d4n_cache_misses);
+    }
     std::string head_oid_in_cache;
     rgw::sal::Attrs attrs;
     std::string version;
@@ -726,6 +737,10 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       }
     } else {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): failed to cache head object during eviction, ret=" << ret << dendl;
+    }
+  } else {
+    if(perfcounter) {
+      perfcounter->inc(l_rgw_d4n_cache_hits);
     }
   }
   
@@ -834,6 +849,9 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
   
     offset += bl.length();
     completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+    if(perfcounter) {
+      perfcounter->inc(l_rgw_d4n_cache_hits);
+    }
   }
 
   ldpp_dout(dpp, 20) << "D4NFilterObject::returning from flush:: " << dendl;
@@ -1121,6 +1139,13 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 
   this->cb->set_ofs(ofs);
   auto r = next->iterate(dpp, ofs, end, this->cb.get(), y);
+
+  //calculate the number of blocks read from backend store, and increment the perfcounter using that
+  if(perfcounter) {
+    uint64_t len_to_read_from_store = ((end - ofs) + 1);
+    uint64_t num_blocks = (len_to_read_from_store%obj_max_req_size) == 0 ? len_to_read_from_store/obj_max_req_size : (len_to_read_from_store/obj_max_req_size) + 1;
+    perfcounter->inc(l_rgw_d4n_cache_misses, num_blocks);
+  }
   
   if (r < 0) {
     ldpp_dout(dpp, 0) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to fetch object from backend store, ret=" << r << dendl;
