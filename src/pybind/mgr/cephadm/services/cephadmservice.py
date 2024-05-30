@@ -75,58 +75,59 @@ def simplified_keyring(entity: str, contents: str) -> str:
     return keyring
 
 
-def get_dashboard_eps(svc) -> Tuple[List[str], str]:
-        dashboard_eps: List[str] = []
-        port = None
-        protocol = None
-        mgr_map = svc.mgr.get('mgr_map')
-        url = mgr_map.get('services', {}).get('dashboard', None)
-        if url:
-            p_result = urlparse(url.rstrip('/'))
-            protocol = p_result.scheme
-            port = p_result.port
-            # assume that they are all dashboards on the same port as the active mgr.
-            for dd in svc.mgr.cache.get_daemons_by_service('mgr'):
-                if not port:
-                    continue
-                addr = dd.ip if dd.ip else svc.mgr.inventory.get_addr(dd.hostname)
-                dashboard_eps.append(f'{addr}:{port}')
-
-        return dashboard_eps, protocol
-
-
-def get_dashboard_urls(svc) -> List[str]:
-        # dashboard(s)
-        dashboard_urls: List[str] = []
-        mgr_map = svc.mgr.get('mgr_map')
-        port = None
-        proto = None  # http: or https:
-        url = mgr_map.get('services', {}).get('dashboard', None)
-        if url:
-            p_result = urlparse(url.rstrip('/'))
-            hostname = socket.getfqdn(p_result.hostname)
-            try:
-                ip = ipaddress.ip_address(hostname)
-            except ValueError:
-                pass
-            else:
-                if ip.version == 6:
-                    hostname = f'[{hostname}]'
-            dashboard_urls.append(f'{p_result.scheme}://{hostname}:{p_result.port}{p_result.path}')
-            proto = p_result.scheme
-            port = p_result.port
-
+def get_dashboard_eps(svc: 'CephadmService') -> Tuple[List[str], Optional[str]]:
+    dashboard_eps: List[str] = []
+    port = None
+    protocol = None
+    mgr_map = svc.mgr.get('mgr_map')
+    url = mgr_map.get('services', {}).get('dashboard', None)
+    if url:
+        p_result = urlparse(url.rstrip('/'))
+        protocol = p_result.scheme
+        port = p_result.port
         # assume that they are all dashboards on the same port as the active mgr.
         for dd in svc.mgr.cache.get_daemons_by_service('mgr'):
             if not port:
                 continue
-            if dd.daemon_id == svc.mgr.get_mgr_id():
-                continue
             assert dd.hostname is not None
             addr = svc._inventory_get_fqdn(dd.hostname)
-            dashboard_urls.append(build_url(scheme=proto, host=addr, port=port).rstrip('/'))
+            dashboard_eps.append(f'{addr}:{port}')
 
-        return dashboard_urls
+    return dashboard_eps, protocol
+
+
+def get_dashboard_urls(svc: 'CephadmService') -> List[str]:
+    # dashboard(s)
+    dashboard_urls: List[str] = []
+    mgr_map = svc.mgr.get('mgr_map')
+    port = None
+    proto = None  # http: or https:
+    url = mgr_map.get('services', {}).get('dashboard', None)
+    if url:
+        p_result = urlparse(url.rstrip('/'))
+        hostname = socket.getfqdn(p_result.hostname)
+        try:
+            ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            pass
+        else:
+            if ip.version == 6:
+                hostname = f'[{hostname}]'
+        dashboard_urls.append(f'{p_result.scheme}://{hostname}:{p_result.port}{p_result.path}')
+        proto = p_result.scheme
+        port = p_result.port
+
+    # assume that they are all dashboards on the same port as the active mgr.
+    for dd in svc.mgr.cache.get_daemons_by_service('mgr'):
+        if not port:
+            continue
+        if dd.daemon_id == svc.mgr.get_mgr_id():
+            continue
+        assert dd.hostname is not None
+        addr = svc._inventory_get_fqdn(dd.hostname)
+        dashboard_urls.append(build_url(scheme=proto, host=addr, port=port).rstrip('/'))
+
+    return dashboard_urls
 
 
 class CephadmDaemonDeploySpec:
@@ -393,10 +394,10 @@ class CephadmService(metaclass=ABCMeta):
         return socket.getfqdn(addr)
 
     def _set_value_on_dashboard(self,
-                                      service_name: str,
-                                      get_mon_cmd: str,
-                                      set_mon_cmd: str,
-                                      new_value: str) -> None:
+                                service_name: str,
+                                get_mon_cmd: str,
+                                set_mon_cmd: str,
+                                new_value: str) -> None:
         """A helper to get and set values via Dashboard's MON command.
            If result of get_mon_cmd differs from the new_value, set_mon_cmd will
            be sent to set the service_url.

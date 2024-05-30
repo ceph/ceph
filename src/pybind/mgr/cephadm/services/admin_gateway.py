@@ -1,19 +1,10 @@
-import errno
-import ipaddress
 import logging
-import os
-import socket
 from typing import List, Any, Tuple, Dict, Optional, cast
-from urllib.parse import urlparse
 
-from mgr_module import HandleCommandResult
-from mgr_module import ServiceInfoT
-from ceph.deployment.utils import wrap_ipv6
 from mgr_util import build_url
-
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AdminGatewaySpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls, get_dashboard_eps
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_eps
 from cephadm.ssl_cert_utils import SSLCerts
 
 logger = logging.getLogger(__name__)
@@ -28,7 +19,7 @@ class AdminGatewayService(CephadmService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
-    def get_service_endpoints(self, service_name):
+    def get_service_endpoints(self, service_name: str) -> List[str]:
         srv_entries = []
         for dd in self.mgr.cache.get_daemons_by_service(service_name):
             assert dd.hostname is not None
@@ -45,7 +36,8 @@ class AdminGatewayService(CephadmService):
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         dd = self.get_active_daemon(daemon_descrs)
-        addr = dd.ip if dd.ip else self._inventory_get_fqdn(dd.hostname)
+        assert dd.hostname is not None
+        addr = self._inventory_get_fqdn(dd.hostname)
         spec = cast(AdminGatewaySpec, self.mgr.spec_store[dd.service_name()].spec)
 
         # Grafana has to be configured by using the 'external' URL
@@ -108,7 +100,7 @@ class AdminGatewayService(CephadmService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
 
-        def read_certificate(spec_field):
+        def read_certificate(spec_field: Optional[List[str]]) -> str:
             cert = ''
             if isinstance(spec_field, list):
                 cert = '\n'.join(spec_field)
@@ -135,7 +127,7 @@ class AdminGatewayService(CephadmService):
             'spec': spec,
             'internal_port': self.INTERNAL_SERVICE_PORT,
             'dashboard_scheme': dashboard_scheme,
-            'grafana_scheme': 'https', # TODO(redo): fixme, get current value of grafana scheme
+            'grafana_scheme': 'https',  # TODO(redo): fixme, get current value of grafana scheme
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
             'dashboard_eps': dashboard_eps,
@@ -149,6 +141,9 @@ class AdminGatewayService(CephadmService):
         self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+        # TODO(redo): store/load these certificates by using the new support
+        # a this moment we are generating new certificates each time the service
+        # is reconfigured
         internal_cert, internal_pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
 
         if spec.disable_https:

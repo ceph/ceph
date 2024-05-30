@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer
@@ -41,14 +41,17 @@ class AdminGateway(ContainerDaemonForm):
         self.daemon_id = daemon_id
         self.image = image
         self.files = dict_get(config_json, 'files', {})
-        #self.validate()
 
     @classmethod
-    def init(cls, ctx: CephadmContext, fsid, daemon_id):
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: str
+    ) -> 'AdminGateway':
         return cls(ctx, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod
-    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'AdminGateway':
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'AdminGateway':
         return cls.init(ctx, ctx.fsid, ident.daemon_id)
 
     @property
@@ -68,8 +71,7 @@ class AdminGateway(ContainerDaemonForm):
     def default_entrypoint(self) -> str:
         return ''
 
-    def create_daemon_dirs(self, data_dir, uid, gid):
-        # type: (str, int, int) -> None
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
         if not os.path.isdir(data_dir):
             raise OSError('data_dir is not a directory: %s' % (data_dir))
@@ -81,28 +83,45 @@ class AdminGateway(ContainerDaemonForm):
 
     def _get_container_mounts(self, data_dir: str) -> Dict[str, str]:
         mounts: Dict[str, str] = {}
-        mounts[os.path.join(data_dir, 'nginx.conf')] = '/etc/nginx/nginx.conf:Z'
+        mounts[
+            os.path.join(data_dir, 'nginx.conf')
+        ] = '/etc/nginx/nginx.conf:Z'
         return mounts
 
     @staticmethod
-    def get_version(ctx: CephadmContext, fsid: str, daemon_id: str) -> Optional[str]:
+    def get_version(
+        ctx: CephadmContext, fsid: str, daemon_id: str
+    ) -> Optional[str]:
         """Return the version of the notifier from it's http endpoint"""
-        return "TODO"
+        # Redo(TODO): fix version
+        return 'TODO'
 
-    def customize_container_mounts(self, ctx: CephadmContext, mounts: Dict[str, str]) -> None:
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         mounts.update(
             {
-                os.path.join(data_dir, 'etc/nginx.conf'): '/etc/nginx/nginx.conf:Z',
-                os.path.join(data_dir, 'etc/nginx_internal.crt'):  '/etc/nginx/ssl/nginx_internal.crt:Z',
-                os.path.join(data_dir, 'etc/nginx_internal.key'):  '/etc/nginx/ssl/nginx_internal.key:Z'
+                os.path.join(
+                    data_dir, 'etc/nginx.conf'
+                ): '/etc/nginx/nginx.conf:Z',
+                os.path.join(
+                    data_dir, 'etc/nginx_internal.crt'
+                ): '/etc/nginx/ssl/nginx_internal.crt:Z',
+                os.path.join(
+                    data_dir, 'etc/nginx_internal.key'
+                ): '/etc/nginx/ssl/nginx_internal.key:Z',
             }
         )
 
-        if "nginx.crt" in self.files:
+        if 'nginx.crt' in self.files:
             mounts.update(
                 {
-                    os.path.join(data_dir, 'etc/nginx.crt'):  '/etc/nginx/ssl/nginx.crt:Z',
-                    os.path.join(data_dir, 'etc/nginx.key'): '/etc/nginx/ssl/nginx.key:Z',
+                    os.path.join(
+                        data_dir, 'etc/nginx.crt'
+                    ): '/etc/nginx/ssl/nginx.crt:Z',
+                    os.path.join(
+                        data_dir, 'etc/nginx.key'
+                    ): '/etc/nginx/ssl/nginx.key:Z',
                 }
             )

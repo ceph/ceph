@@ -26,5 +26,5 @@ __all__ = [
     'SNMPGateway',
     'Tracing',
     'NodeProxy',
-    'AdminGateway'
+    'AdminGateway',
 ]

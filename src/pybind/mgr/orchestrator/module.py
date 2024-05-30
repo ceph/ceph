@@ -1770,7 +1770,6 @@ Usage:
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
-
     @_cli_write_command('orch apply nvmeof')
     def _apply_nvmeof(self,
                       pool: str,

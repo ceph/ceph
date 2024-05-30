@@ -257,7 +257,9 @@ class Monitoring(ContainerDaemonForm):
                 if ip_to_bind_to:
                     ip = ip_to_bind_to
                 retention_time = config.get('retention_time', '15d')
-                retention_size = config.get('retention_size', '0')  # default to disabled
+                retention_size = config.get(
+                    'retention_size', '0'
+                )  # default to disabled
                 use_url_prefix = config.get('use_url_prefix', False)
                 r += [f'--storage.tsdb.retention.time={retention_time}']
                 r += [f'--storage.tsdb.retention.size={retention_size}']
@@ -271,8 +273,10 @@ class Monitoring(ContainerDaemonForm):
                     addr = next(iter(ipv4_addrs or ipv6_addrs), None)
                     host = wrap_ipv6(addr) if addr else host
                 if use_url_prefix:
-                    r += [f'--web.external-url={scheme}://{host}:{port}/prometheus']
-                    r += [f'--web.route-prefix=/prometheus/']
+                    r += [
+                        f'--web.external-url={scheme}://{host}:{port}/prometheus'
+                    ]
+                    r += ['--web.route-prefix=/prometheus/']
                 else:
                     r += [f'--web.external-url={scheme}://{host}:{port}']
             r += [f'--web.listen-address={ip}:{port}']
