@@ -3194,6 +3194,8 @@ Then run the following:
     @handle_orch_error
     def get_prometheus_cert(self) -> str:
         prometheus_cert = self.get_store(PrometheusService.PROMETHEUS_CERT_CFG_KEY)
+        if prometheus_cert is None:
+            prometheus_cert = ''
         return prometheus_cert
 
     @handle_orch_error

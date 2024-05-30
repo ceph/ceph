@@ -248,7 +248,7 @@ class MultiCluster(RESTController):
         multicluster_config.update({'current_url': config['url']})
         multicluster_config.update({'current_user': config['user']})
         Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
-        return Settings.MULTICLUSTER_CONFIG
+        return multicluster_config
 
     @Endpoint('PUT')
     @UpdatePermission
@@ -268,11 +268,13 @@ class MultiCluster(RESTController):
                                                           'reconnect')
 
             prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
-                                         token=cluster_token)
+                                         token=cluster_token, verify=ssl_verify,
+                                         cert=ssl_certificate)
 
             prometheus_access_info = self._proxy('GET', url,
                                                  'ui-api/multi-cluster/get_prometheus_access_info',  # noqa E501 #pylint: disable=line-too-long
-                                                 token=cluster_token)
+                                                 token=cluster_token, verify=ssl_verify,
+                                                 cert=ssl_certificate)
 
         if username and cluster_token and prometheus_url and prometheus_access_info:
             if "config" in multicluster_config:
@@ -303,7 +305,7 @@ class MultiCluster(RESTController):
                         cluster['ssl_verify'] = verify
                         cluster['ssl_certificate'] = ssl_certificate if verify else ''
         Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
-        return Settings.MULTICLUSTER_CONFIG
+        return multicluster_config
 
     @Endpoint(method='DELETE')
     @DeletePermission
@@ -343,7 +345,7 @@ class MultiCluster(RESTController):
                     break
 
         Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
-        return Settings.MULTICLUSTER_CONFIG
+        return multicluster_config
 
     @Endpoint()
     @ReadPermission
