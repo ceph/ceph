@@ -402,13 +402,15 @@ class ClusterConfigHandler:
         return list(UsersAndGroupsEntry.ids(self.internal_store))
 
     def all_resources(self) -> List[SMBResource]:
-        return self._search_resources(_Matcher())
+        with _store_transaction(self.internal_store):
+            return self._search_resources(_Matcher())
 
     def matching_resources(self, names: List[str]) -> List[SMBResource]:
         matcher = _Matcher()
         for name in names:
             matcher.parse(name)
-        return self._search_resources(matcher)
+        with _store_transaction(self.internal_store):
+            return self._search_resources(matcher)
 
     def _search_resources(self, matcher: _Matcher) -> List[SMBResource]:
         log.debug("performing search with matcher: %s", matcher)
