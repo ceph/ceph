@@ -586,9 +586,14 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   auto obj = oc.bucket->get_object(obj_key);
 
   RGWObjState* obj_state{nullptr};
+  string etag;
   ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
   if (ret < 0) {
     return ret;
+  }
+  auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
+  if (iter != obj_state->attrset.end()) {
+    etag = rgw_bl_str(iter->second);
   }
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
@@ -624,7 +629,7 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
     // send request to notification manager
     int publish_ret = notify->publish_commit(dpp, obj_state->size,
 				 ceph::real_clock::now(),
-				 obj_state->attrset[RGW_ATTR_ETAG].to_str(),
+				 etag,
 				 version_id);
     if (publish_ret < 0) {
       ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
@@ -890,9 +895,14 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       auto sal_obj = target->get_object(key);
 
       RGWObjState* obj_state{nullptr};
+      string etag;
       ret = sal_obj->get_obj_state(this, &obj_state, null_yield, true);
       if (ret < 0) {
 	return ret;
+      }
+      auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
+      if (iter != obj_state->attrset.end()) {
+        etag = rgw_bl_str(iter->second);
       }
 
       std::unique_ptr<rgw::sal::Notification> notify
@@ -917,7 +927,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
         int publish_ret = notify->publish_commit(
             this, obj_state->size,
 	    ceph::real_clock::now(),
-            obj_state->attrset[RGW_ATTR_ETAG].to_str(),
+            etag,
 	    version_id);
         if (publish_ret < 0) {
           ldpp_dout(wk->get_lc(), 5)
@@ -1410,9 +1420,14 @@ public:
     auto& obj = oc.obj;
 
     RGWObjState* obj_state{nullptr};
+    string etag;
     ret = obj->get_obj_state(oc.dpp, &obj_state, null_yield, true);
     if (ret < 0) {
       return ret;
+    }
+    auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
+    if (iter != obj_state->attrset.end()) {
+      etag = rgw_bl_str(iter->second);
     }
 
     rgw::notify::EventTypeList event_types;
@@ -1450,7 +1465,7 @@ public:
       // send request to notification manager
       int publish_ret =  notify->publish_commit(oc.dpp, obj_state->size,
 				    ceph::real_clock::now(),
-				    obj_state->attrset[RGW_ATTR_ETAG].to_str(),
+				    etag,
 				    version_id);
       if (publish_ret < 0) {
 	ldpp_dout(oc.dpp, 5) <<
