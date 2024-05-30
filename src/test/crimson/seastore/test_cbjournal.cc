@@ -147,8 +147,12 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   /*
    * JournalTrimmer interfaces
    */
-  journal_seq_t get_journal_head() const {
+  journal_seq_t get_journal_head() const final {
     return JOURNAL_SEQ_NULL;
+  }
+
+  segment_seq_t get_journal_head_sequence() const final {
+    return NULL_SEG_SEQ;
   }
 
   journal_seq_t get_dirty_tail() const final {
@@ -160,6 +164,8 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   void set_journal_head(journal_seq_t head) final {}
+
+  void set_journal_head_sequence(segment_seq_t) final {}
 
   void update_journal_tails(
     journal_seq_t dirty_tail,
