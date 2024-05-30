@@ -197,7 +197,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       case 'edit':
         this.subs.add(
           this.multiClusterService
-            .editCluster(this.cluster.url, clusterAlias, this.cluster.user)
+            .editCluster(this.cluster.url, clusterAlias, this.cluster.user, ssl, ssl_certificate)
             .subscribe({
               ...commonSubscribtion,
               complete: () => this.handleSuccess($localize`Cluster updated successfully`)
