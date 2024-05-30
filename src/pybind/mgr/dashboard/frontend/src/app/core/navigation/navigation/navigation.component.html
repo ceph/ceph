@@ -20,11 +20,6 @@
 </ng-template>
 
 <ng-template #brandTemplate>
-  <!-- <a class="cds--header__name">
-    <svg cdsIcon="carbon" size="32" style="stroke:white;fill:white"></svg>
-    <span class="cds--header__name--prefix">IBM</span>
-    [Platform]
-  </a> -->
   <a class="cds--header__name navbar-brand ms-3"
      href="#">
     <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
@@ -170,24 +165,24 @@
       <!-- Object Storage -->
       <cds-sidenav-menu title="Object"
                         *ngIf="permissions.rgw.read && enabledFeature.rgw"
-                        class="tc_menuitem_rgw">
+                        class="nav-item tc_menuitem_rgw">
         <svg cdsIcon="object-storage"
              icon
              size="20"></svg>
         <cds-sidenav-item route="/rgw/overview"
-                          [userouter]="true"
-                          class="tc_submenuitem tc_submenuitem_rgw_overview"><span i18n>Overview</span></cds-sidenav-item>
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_rgw_overview"><span i18n>Overview</span></cds-sidenav-item>        
         <cds-sidenav-item route="/rgw/bucket"
-                          [userouter]="true"
+                          [useRouter]="true"
                           class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Buckets</span></cds-sidenav-item>
         <cds-sidenav-item route="/rgw/user"
-                          [userouter]="true"
+                          [useRouter]="true"
                           class="tc_submenuitem tc_submenuitem_rgw_users"><span i18n>Users</span></cds-sidenav-item>
         <cds-sidenav-item route="/rgw/multisite"
-                          [userouter]="true"
+                          [useRouter]="true"
                           class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Multi-site</span></cds-sidenav-item>
         <cds-sidenav-item route="/rgw/daemon"
-                          [userouter]="true"
+                          [useRouter]="true"
                           class="tc_submenuitem tc_submenuitem_rgw_daemons"><span i18n>Gateways</span></cds-sidenav-item>
         <cds-sidenav-item route="/nfs"
                           [useRouter]="true"
