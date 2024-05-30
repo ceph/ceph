@@ -816,7 +816,15 @@ protected:
   CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&_ptr) : ptr(std::move(_ptr)) {
     length = ptr->length();
+    loaded_length = length;
     assert(length > 0);
+  }
+
+  /// allocate buffer when reading extent
+  CachedExtent(extent_len_t _length)
+    : length(_length),
+      buffer_space(std::in_place) {
+    assert(_length > 0);
   }
 
   /// construct new CachedExtent, will deep copy the buffer
@@ -824,6 +832,7 @@ protected:
     : state(other.state),
       dirty_from_or_retired_at(other.dirty_from_or_retired_at),
       length(other.get_length()),
+      loaded_length(other.get_loaded_length()),
       version(other.version),
       poffset(other.poffset) {
       assert((length % CEPH_PAGE_SIZE) == 0);
@@ -844,6 +853,7 @@ protected:
       dirty_from_or_retired_at(other.dirty_from_or_retired_at),
       ptr(other.ptr),
       length(other.get_length()),
+      loaded_length(other.get_loaded_length()),
       version(other.version),
       poffset(other.poffset) {
         assert(other.is_fully_loaded() || length == 0 /* in case of root */);
@@ -857,11 +867,6 @@ protected:
   CachedExtent(retired_placeholder_t, extent_len_t _length)
     : state(extent_state_t::INVALID),
       length(_length) {
-    assert(length > 0);
-  }
-
-  /// no buffer extent, for lazy read
-  CachedExtent(extent_len_t _length) : length(_length) {
     assert(length > 0);
   }
 

@@ -179,7 +179,9 @@ public:
   template <typename T>
   base_iertr::future<TCachedExtentRef<T>> read_pin(
     Transaction &t,
-    LBAMappingRef pin)
+    LBAMappingRef pin,
+    extent_len_t e_off,
+    extent_len_t e_len)
   {
     auto fut = base_iertr::make_ready_future<LBAMappingRef>();
     if (!pin->is_parent_valid()) {
@@ -192,16 +194,34 @@ public:
       pin->maybe_fix_pos();
       fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
     }
-    return fut.si_then([&t, this](auto npin) mutable {
+    return fut.si_then([&t, this, e_off, e_len](auto npin) {
       // checking the lba child must be atomic with creating
       // and linking the absent child
       auto ret = get_extent_if_linked<T>(t, std::move(npin));
       if (ret.index() == 1) {
-	return std::move(std::get<1>(ret));
+	return std::get<1>(ret).si_then(
+          [e_off, e_len, this](auto extent) {
+          return cache->read_range_in_extent(
+            std::move(extent), e_off, e_len);
+        });
       } else {
-	return this->pin_to_extent<T>(t, std::move(std::get<0>(ret)));
+	return this->pin_to_extent<T>(
+          t, std::move(std::get<0>(ret)), e_off, e_len);
       }
     });
+  }
+
+  template <typename T>
+  base_iertr::future<TCachedExtentRef<T>> read_pin(
+    Transaction &t,
+    LBAMappingRef pin)
+  {
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
+    auto length = pin->is_indirect()
+      ? pin->get_intermediate_length()
+      : pin->get_length();
+    return read_pin<T>(t, std::move(pin), 0, length);
   }
 
   template <typename T>
@@ -857,6 +877,7 @@ private:
    * pin_to_extent
    *
    * Get extent mapped at pin.
+   * partially load buffer from e_off~e_len if not present.
    */
   using pin_to_extent_iertr = base_iertr;
   template <typename T>
@@ -865,18 +886,27 @@ private:
   template <typename T>
   pin_to_extent_ret<T> pin_to_extent(
     Transaction &t,
-    LBAMappingRef pin) {
+    LBAMappingRef pin,
+    extent_len_t e_off,
+    extent_len_t e_len) {
     LOG_PREFIX(TransactionManager::pin_to_extent);
     SUBTRACET(seastore_tm, "getting extent {}", t, *pin);
     static_assert(is_logical_type(T::TYPE));
     using ret = pin_to_extent_ret<T>;
     auto &pref = *pin;
+    auto length = pref.is_indirect() ?
+      pref.get_intermediate_length() :
+      pref.get_length();
+    if (full_extent_integrity_check) {
+      e_off = 0;
+      e_len = length;
+    }
     return cache->get_absent_extent<T>(
       t,
       pref.get_val(),
-      pref.is_indirect() ?
-	pref.get_intermediate_length() :
-	pref.get_length(),
+      length,
+      e_off,
+      e_len,
       [&pref]
       (T &extent) mutable {
 	assert(!extent.has_laddr());
@@ -887,30 +917,33 @@ private:
 	extent.maybe_set_intermediate_laddr(pref);
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
-      auto crc = ref->calc_crc32c();
-      SUBTRACET(
-	seastore_tm,
-	"got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",
-	t,
-	*ref,
-	pin->get_checksum(),
-	crc);
-      assert(ref->is_fully_loaded());
-      bool inconsistent = false;
-      if (full_extent_integrity_check) {
-	inconsistent = (pin->get_checksum() != crc);
-      } else { // !full_extent_integrity_check: remapped extent may be skipped
-	inconsistent = !(pin->get_checksum() == 0 ||
-			 pin->get_checksum() == crc);
-      }
-      if (unlikely(inconsistent)) {
-	SUBERRORT(seastore_tm,
-	  "extent checksum inconsistent, recorded: {}, actual: {}, {}",
+      if (ref->is_fully_loaded()) {
+        auto crc = ref->calc_crc32c();
+        SUBTRACET(
+	  seastore_tm,
+	  "got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",
 	  t,
+	  *ref,
 	  pin->get_checksum(),
-	  crc,
-	  *ref);
-	ceph_abort();
+	  crc);
+        bool inconsistent = false;
+        if (full_extent_integrity_check) {
+	  inconsistent = (pin->get_checksum() != crc);
+        } else { // !full_extent_integrity_check: remapped extent may be skipped
+	  inconsistent = !(pin->get_checksum() == 0 ||
+                           pin->get_checksum() == crc);
+        }
+        if (unlikely(inconsistent)) {
+	  SUBERRORT(seastore_tm,
+	    "extent checksum inconsistent, recorded: {}, actual: {}, {}",
+	    t,
+	    pin->get_checksum(),
+	    crc,
+	    *ref);
+	  ceph_abort();
+        }
+      } else {
+        assert(!full_extent_integrity_check);
       }
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},

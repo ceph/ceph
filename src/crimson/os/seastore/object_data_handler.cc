@@ -1535,9 +1535,12 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
               e_off = 0;
             }
             extent_len_t e_current_off = e_off + l_current - pin_key;
+            extent_len_t e_current_len = l_current_end - l_current;
             return ctx.tm.read_pin<ObjectDataBlock>(
               ctx.t,
-              std::move(pin)
+              std::move(pin),
+              e_current_off,
+              e_current_len
             ).si_then([&ret, &l_current, l_current_end,
 #ifndef NDEBUG
                        e_key, e_len, e_current_off](auto extent) {
@@ -1547,8 +1550,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
               assert(e_key == extent->get_laddr());
               assert(e_len == extent->get_length());
               ret.append(
-                bufferptr(
-                  extent->get_bptr(),
+                extent->get_range(
                   e_current_off,
                   l_current_end - l_current));
               l_current = l_current_end;
