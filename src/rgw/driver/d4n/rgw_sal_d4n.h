@@ -106,6 +106,7 @@ class D4NFilterObject : public FilterObject {
     rgw::sal::Object* dest_object{nullptr}; //for copy-object
     rgw::sal::Bucket* dest_bucket{nullptr}; //for copy-object
     std::string dest_version;
+
   public:
     struct D4NFilterReadOp : FilterReadOp {
       public:
