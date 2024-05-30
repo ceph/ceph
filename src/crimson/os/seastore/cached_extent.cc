@@ -180,4 +180,101 @@ std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)
   return out << ']';
 }
 
+void BufferSpace::add_buffer(extent_len_t offset, ceph::bufferptr&& ptr)
+{
+  ceph::bufferlist buffer;
+  buffer.append(std::move(ptr));
+  const extent_len_t tail = offset + buffer.length();
+  auto i = buffer_map.find(tail);
+  if (i != buffer_map.end()) {
+    buffer.append(i->second);
+    buffer_map.erase(i);
+  }
+  i = buffer_map.lower_bound(offset);
+  ceph_assert(i == buffer_map.end() || i->first > tail);
+  if (i != buffer_map.begin()) {
+    --i;
+    assert(i->first + i->second.length() <= offset);
+  }
+  if (i != buffer_map.end() &&
+    i->first + i->second.length() == offset) {
+    i->second.append(buffer);
+  } else {
+    buffer_map[offset] = buffer;
+  }
+}
+
+ceph::bufferlist BufferSpace::get_data(extent_len_t offset, extent_len_t length)
+{
+  auto i = buffer_map.upper_bound(offset);
+  assert(i != buffer_map.begin());
+  --i;
+  ceph::bufferlist res;
+  assert(i->second.length() >= length + offset - i->first);
+  res.substr_of(i->second, offset - i->first, length);
+  return res;
+}
+
+ceph::bufferptr BufferSpace::build_ptr(extent_len_t length)
+{
+  assert(buffer_map.size() == 1);
+  auto& it = buffer_map[0];
+  if (!it.is_contiguous()) {
+    it.rebuild();
+  }
+  ceph::bufferptr ptr(it.buffers().front());
+  assert(ptr.is_page_aligned());
+  assert(ptr.length() == length);
+  buffer_map.clear();
+  return ptr;
+}
+
+bool BufferSpace::is_range_loaded(extent_len_t offset, extent_len_t length)
+{
+  auto i = buffer_map.upper_bound(offset);
+  if (i == buffer_map.begin()) {
+    return false;
+  }
+  --i;
+  if (i->first + i->second.length() < offset + length) {
+    return false;
+  }
+  return true;
+}
+
+region_list_t BufferSpace::get_unloaded_ranges(extent_len_t offset, extent_len_t length)
+{
+  auto tail = offset + length;
+  region_list_t r2r;
+  auto i = buffer_map.lower_bound(offset);
+  if (i != buffer_map.begin()) {
+    --i;
+    if (i->first + i->second.length() <= offset) {
+      ++i;
+    }
+  }
+  while(offset < tail){
+    if (i == buffer_map.end()) {
+      r2r.emplace_back(offset, length);
+      break;
+    }
+    auto i_off = i->first;
+    auto i_len = i->second.length();
+    if (i_off <= offset) {
+      extent_len_t skip = i_off + i_len - offset;
+      extent_len_t l = std::min(length, skip);
+      offset += l;
+      length -= l;
+    } else {
+      extent_len_t hole = std::min(i_off - offset, length);
+      r2r.emplace_back(offset, hole);
+      extent_len_t l = std::min(length, i_len + hole);
+      offset += l;
+      length -= l;
+    }
+    ++i;
+  }
+  return r2r;
+}
+
 }

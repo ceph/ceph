@@ -153,6 +153,34 @@ struct trans_spec_view_t {
 };
 
 class ExtentIndex;
+
+using region_list_t = std::list<std::pair<extent_len_t, extent_len_t>>;
+/// manage small chunks of extent
+class BufferSpace {
+public:
+  BufferSpace() = default;
+
+  /// Add and merge the buffer ptr, and offset~ptr must be entirely absent in the buffermap
+  void add_buffer(extent_len_t offset, ceph::bufferptr&& ptr);
+
+  /// Returns the bufferlist containing offset~ptr
+  ceph::bufferlist get_data(extent_len_t offset, extent_len_t length);
+
+  /// Converts bufferspace to ptr when fully loaded
+  ceph::bufferptr build_ptr(extent_len_t length);
+
+  /// Returns true if offset+length is fully loaded
+  bool is_range_loaded(extent_len_t offset, extent_len_t length);
+
+  /// Returns the unloaded ranges in offset+length
+  region_list_t get_unloaded_ranges(extent_len_t offset, extent_len_t length);
+
+private:
+  /// map extent range onto buffers.
+  /// key: offset in extent -> value:buffer start from offset
+  std::map<extent_len_t, ceph::bufferlist> buffer_map;
+};
+
 class CachedExtent
   : public boost::intrusive_ref_counter<
       CachedExtent, boost::thread_unsafe_counter>,
@@ -528,7 +556,47 @@ public:
   /// Return true if extent is fully loaded or is about to be fully loaded (call 
   /// wait_io() in this case)
   bool is_fully_loaded() const {
-    return ptr.has_value();
+    if (ptr.has_value()) {
+      assert(length == loaded_length);
+      assert(!buffer_space.has_value());
+      return true;
+    } else {
+      assert(length > loaded_length || length == 0);
+      assert(buffer_space.has_value());
+      return false;
+    }
+  }
+
+  /// Return true if range offset+_length is loaded
+  bool is_range_loaded(extent_len_t offset, extent_len_t _length) {
+    assert(_length > 0);
+    assert(offset + _length <= length);
+    return is_fully_loaded() ||
+      buffer_space->is_range_loaded(offset, _length);
+  }
+
+  /// Check bufferspace and return uncovered ranges(to load)
+  region_list_t get_unloaded_ranges(
+    extent_len_t offset, extent_len_t _length) {
+    assert(_length > 0);
+    assert(offset + _length <= length);
+    if (is_fully_loaded()) {
+      return region_list_t();
+    }
+    return buffer_space->get_unloaded_ranges(offset, _length);
+  }
+
+  /// Get buffer by given offset and _length.
+  ceph::bufferlist get_range(extent_len_t offset, extent_len_t _length) {
+    assert(_length > 0);
+    assert(offset + _length <= length);
+    ceph::bufferlist res;
+    if (is_fully_loaded()) {
+      res.append(ceph::bufferptr(get_bptr(), offset, _length));
+    } else {
+      res = buffer_space->get_data(offset, _length);
+    }
+    return res;
   }
 
   /**
@@ -544,12 +612,12 @@ public:
     return length;
   }
 
+  /// Returns length of extent data in cache
   extent_len_t get_loaded_length() const {
-    if (ptr.has_value()) {
-      return ptr->length();
-    } else {
-      return 0;
+    if (!is_fully_loaded()) {
+        return loaded_length;
     }
+    return length;
   }
 
   /// Returns version, get_version() == 0 iff is_clean()
@@ -688,11 +756,18 @@ private:
    */
   journal_seq_t dirty_from_or_retired_at;
 
-  /// cache data contents, std::nullopt if no data in cache
+  /// cache data contents, std::nullopt if not fully loaded
   std::optional<ceph::bufferptr> ptr;
 
   /// disk data length
   extent_len_t length;
+
+  /// cached data length
+  extent_len_t loaded_length = 0;
+
+  /// manager of buffer pieces for ObjectDataBLock
+  /// must not be std::nullopt when not fully loaded
+  std::optional<BufferSpace> buffer_space;
 
   /// number of deltas since initial write
   extent_version_t version = 0;
@@ -752,6 +827,7 @@ protected:
       version(other.version),
       poffset(other.poffset) {
       assert((length % CEPH_PAGE_SIZE) == 0);
+      assert(other.is_fully_loaded() || length == 0 /* in case of root */);
       if (other.is_fully_loaded()) {
         ptr.emplace(buffer::create_page_aligned(length));
         other.ptr->copy_out(0, length, ptr->c_str());
@@ -769,7 +845,9 @@ protected:
       ptr(other.ptr),
       length(other.get_length()),
       version(other.version),
-      poffset(other.poffset) {}
+      poffset(other.poffset) {
+        assert(other.is_fully_loaded() || length == 0 /* in case of root */);
+      }
 
   // 0 length is only possible for the RootBlock
   struct zero_length_t {};
@@ -857,6 +935,17 @@ protected:
     } else {
       ceph_assert(!addr.is_record_relative() || is_mutation_pending());
       return addr;
+    }
+  }
+
+  /// add buffer to bufferspace if fragmented
+  void load_range(extent_len_t offset, ceph::bufferptr&& bptr) {
+    loaded_length += bptr.length();
+    buffer_space->add_buffer(offset, std::move(bptr));
+    if (length == loaded_length) {
+      set_bptr(buffer_space->build_ptr(length));
+      buffer_space.reset();
+      assert(is_fully_loaded());
     }
   }
 
