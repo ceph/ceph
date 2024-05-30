@@ -194,9 +194,9 @@ $sidebar-width: 20.8rem;
     left: 0;
     overflow-y: auto;
     position: relative;
-    z-index: 999;
     transition: all 0.3s;
     width: $sidebar-width;
+    z-index: 999;
 
     &.active {
       // margin-left: -$sidebar-width;

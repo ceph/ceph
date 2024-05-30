@@ -80,7 +80,7 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
     NgbTimepickerModule,
     UIShellModule,
     ButtonModule,
-    NotificationModule,
+    NotificationModule
   ],
   declarations: [
     SparklineComponent,

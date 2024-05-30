@@ -2,7 +2,9 @@
 <!-- HEADER  -->
 <!-- ************************ -->
 <ng-template #header>
-<cds-header name="Ceph Dashboard" [brand]="brandTemplate" [isTemplate]="true">
+<cds-header name="Ceph Dashboard"
+            [brand]="brandTemplate"
+            [isTemplate]="true">
   <cds-hamburger [active]="showMenuSidebar"
                  (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
   <cds-header-global>
@@ -171,7 +173,7 @@
              size="20"></svg>
         <cds-sidenav-item route="/rgw/overview"
                           [useRouter]="true"
-                          class="tc_submenuitem tc_submenuitem_rgw_overview"><span i18n>Overview</span></cds-sidenav-item>        
+                          class="tc_submenuitem tc_submenuitem_rgw_overview"><span i18n>Overview</span></cds-sidenav-item>
         <cds-sidenav-item route="/rgw/bucket"
                           [useRouter]="true"
                           class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Buckets</span></cds-sidenav-item>
