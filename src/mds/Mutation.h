@@ -15,7 +15,7 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
-#include <limits>
+#include <optional>
 
 #include "include/interval_set.h"
 #include "include/elist.h"
@@ -242,7 +242,7 @@ public:
   void _dump_op_descriptor(std::ostream& stream) const override;
 
   metareqid_t reqid;
-  int result = std::numeric_limits<int>::min();
+  std::optional<int> result;
   __u32 attempt = 0;      // which attempt for this request
   LogSegment *ls = nullptr;  // the log segment i'm committing to
 
@@ -398,6 +398,7 @@ struct MDRequestImpl : public MutationImpl {
   
   More* more();
   More const* more() const;
+  bool is_live() const { return !(killed || dead); }
   bool has_more() const;
   bool has_witnesses();
   bool peer_did_prepare();
@@ -405,7 +406,7 @@ struct MDRequestImpl : public MutationImpl {
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);
-  bool can_auth_pin(MDSCacheObject *object, bool bypassfreezing=false);
+  bool can_auth_pin(MDSCacheObject *object);
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
   void clear_ambiguous_auth();

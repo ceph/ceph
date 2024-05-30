@@ -100,7 +100,7 @@ class QuiesceDbManager {
         return -ESTALE;
       }
 
-      pending_acks.push(std::move(ack));
+      pending_acks.emplace_back(std::move(ack));
       submit_condition.notify_all();
       return 0;
     }
@@ -138,7 +138,7 @@ class QuiesceDbManager {
 
       if (cluster_membership->leader == cluster_membership->me) {
         // local delivery
-        pending_acks.push({ cluster_membership->me, std::move(diff_map) });
+        pending_acks.emplace_back(cluster_membership->me, std::move(diff_map));
         submit_condition.notify_all();
       } else {
         // send to the leader outside of the lock
@@ -201,7 +201,7 @@ class QuiesceDbManager {
     std::optional<AgentCallback> agent_callback;
     std::optional<QuiesceClusterMembership> cluster_membership;
     std::queue<QuiesceDbPeerListing> pending_db_updates;
-    std::queue<QuiesceDbPeerAck> pending_acks;
+    std::deque<QuiesceDbPeerAck> pending_acks;
     std::deque<RequestContext*> pending_requests;
     bool db_thread_should_exit = false;
     bool db_thread_should_clear_db = true;
@@ -227,6 +227,7 @@ class QuiesceDbManager {
     // the database.
     struct Db {
       QuiesceTimePoint time_zero;
+      epoch_t epoch;
       QuiesceSetVersion set_version = 0;
       using Sets = std::unordered_map<QuiesceSetId, QuiesceSet>;
       Sets sets;
@@ -235,25 +236,34 @@ class QuiesceDbManager {
         return QuiesceClock::now() - time_zero;
       }
       void clear() { 
-        set_version = 0; 
+        set_version = 0;
+        epoch = 0;
         sets.clear();
         time_zero = QuiesceClock::now();
       }
-    } db;
 
-    QuiesceDbVersion db_version() const { return {membership.epoch, db.set_version}; }
+      QuiesceDbVersion version() const { return {epoch, set_version}; }
+    } db;
 
     QuiesceClusterMembership membership;
 
     struct PeerInfo {
         QuiesceMap diff_map;
-        QuiesceTimePoint last_seen;
-        PeerInfo(QuiesceMap&& diff_map, QuiesceTimePoint last_seen)
+        QuiesceTimePoint last_activity;
+        QuiesceDbVersion last_sent_version;
+        PeerInfo(QuiesceMap&& diff_map, QuiesceTimePoint last_activity)
             : diff_map(diff_map)
-            , last_seen(last_seen)
+            , last_activity(last_activity)
         {
         }
-        PeerInfo() { }
+        PeerInfo() {
+          last_activity = QuiesceTimePoint::min();
+        }
+        void clear() {
+          diff_map.clear();
+          last_activity = QuiesceTimePoint::min();
+          last_sent_version = {};
+        }
     };
     std::unordered_map<QuiesceInterface::PeerId, PeerInfo> peers;
 
@@ -278,7 +288,8 @@ class QuiesceDbManager {
     std::pair<IsMemberBool, ShouldExitBool> membership_upkeep();
 
     QuiesceTimeInterval replica_upkeep(decltype(pending_db_updates)&& db_updates);
-    bool leader_bootstrap(decltype(pending_db_updates)&& db_updates, QuiesceTimeInterval &next_event_at_age);
+    // returns zero interval if bootstrapped, otherwise the time to sleep while we wait for peer responses
+    QuiesceTimeInterval leader_bootstrap(decltype(pending_db_updates)&& db_updates);
     QuiesceTimeInterval leader_upkeep(decltype(pending_acks)&& acks, decltype(pending_requests)&& requests);
     
 

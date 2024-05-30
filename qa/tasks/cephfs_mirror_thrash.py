@@ -9,18 +9,14 @@ import signal
 import socket
 import time
 
-from gevent import sleep
-from gevent.greenlet import Greenlet
-from gevent.event import Event
-
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
-from tasks.thrasher import Thrasher
+from tasks.thrasher import ThrasherGreenlet
 
 log = logging.getLogger(__name__)
 
 
-class CephFSMirrorThrasher(Thrasher, Greenlet):
+class CephFSMirrorThrasher(ThrasherGreenlet):
     """
     CephFSMirrorThrasher::
 
@@ -71,7 +67,6 @@ class CephFSMirrorThrasher(Thrasher, Greenlet):
 
         self.logger = log
         self.name = 'thrasher.cephfs_mirror.[{cluster}]'.format(cluster = cluster)
-        self.stopping = Event()
 
         self.randomize = bool(self.config.get('randomize', True))
         self.max_thrash = int(self.config.get('max_thrash', 1))
@@ -93,9 +88,6 @@ class CephFSMirrorThrasher(Thrasher, Greenlet):
         """Write data to logger assigned to this CephFSMirrorThrasher"""
         self.logger.info(x)
 
-    def stop(self):
-        self.stopping.set()
-
     def do_thrash(self):
         """
         Perform the random thrashing action
@@ -106,16 +98,14 @@ class CephFSMirrorThrasher(Thrasher, Greenlet):
             "kill": 0,
         }
 
-        while not self.stopping.is_set():
+        while not self.is_stopped:
             delay = self.max_thrash_delay
             if self.randomize:
                 delay = random.randrange(self.min_thrash_delay, self.max_thrash_delay)
 
             if delay > 0.0:
                 self.log('waiting for {delay} secs before thrashing'.format(delay=delay))
-                self.stopping.wait(delay)
-                if self.stopping.is_set():
-                    continue
+                self.sleep_unless_stopped(delay)
 
             killed_daemons = []
 
@@ -149,7 +139,7 @@ class CephFSMirrorThrasher(Thrasher, Greenlet):
                     delay = random.randrange(0.0, self.max_revive_delay)
 
                 self.log('waiting for {delay} secs before reviving daemons'.format(delay=delay))
-                sleep(delay)
+                self.sleep_unless_stopped(delay)
 
                 for daemon in killed_daemons:
                     self.log('waiting for {label}'.format(label=daemon.id_))

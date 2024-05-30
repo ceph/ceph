@@ -54,7 +54,6 @@ public:
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
-                     std::set<MDSCacheObject*> mustpin = {},
 		     bool auth_pin_nonblocking=false,
                      bool skip_quiesce=false);
 
@@ -69,6 +68,10 @@ public:
   void drop_rdlocks_for_early_reply(MutationImpl *mut);
   void drop_lock(MutationImpl* mut, SimpleLock* what);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
+
+  void request_drop_remote_locks(const MDRequestRef& mdr);
+  void request_drop_non_rdlocks(const MDRequestRef& r);
+  void request_drop_locks(const MDRequestRef& r);
 
   int get_cap_bit_for_lock_cache(int op);
   void create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout=nullptr);
