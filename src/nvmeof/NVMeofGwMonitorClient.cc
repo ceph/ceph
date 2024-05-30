@@ -171,7 +171,7 @@ int NVMeofGwMonitorClient::init()
   return 0;
 }
 
-static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMap>& m, const NvmeGroupKey& group_key, const NvmeGwId& gw_id, NvmeGwState& out)
+static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMonClientStates>& m, const NvmeGroupKey& group_key, const NvmeGwId& gw_id, NvmeGwClientState& out)
 {
   auto gw_group = m.find(group_key);
   if (gw_group == m.end()) {
@@ -190,7 +190,7 @@ static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMa
 void NVMeofGwMonitorClient::send_beacon()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
-  GW_AVAILABILITY_E gw_availability = GW_AVAILABILITY_E::GW_CREATED;
+  gw_availability_t gw_availability = gw_availability_t::GW_CREATED;
   BeaconSubsystems subs;
   NVMeofGwClient gw_client(
      grpc::CreateChannel(gateway_address, grpc::InsecureChannelCredentials()));
@@ -216,10 +216,10 @@ void NVMeofGwMonitorClient::send_beacon()
   }
 
   auto group_key = std::make_pair(pool, group);
-  NvmeGwState old_gw_state;
+  NvmeGwClientState old_gw_state;
   // if already got gateway state in the map
   if (get_gw_state("old map", map, group_key, name, old_gw_state))
-    gw_availability = ok ? GW_AVAILABILITY_E::GW_AVAILABLE : GW_AVAILABILITY_E::GW_UNAVAILABLE;
+    gw_availability = ok ? gw_availability_t::GW_AVAILABLE : gw_availability_t::GW_UNAVAILABLE;
   dout(10) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
   auto m = ceph::make_message<MNVMeofGwBeacon>(
@@ -291,9 +291,9 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   auto group_key = std::make_pair(pool, group);
   dout(10) << "handle nvmeof gw map: " << new_map << dendl;
 
-  NvmeGwState old_gw_state;
+  NvmeGwClientState old_gw_state;
   auto got_old_gw_state = get_gw_state("old map", map, group_key, name, old_gw_state); 
-  NvmeGwState new_gw_state;
+  NvmeGwClientState new_gw_state;
   auto got_new_gw_state = get_gw_state("new map", new_map, group_key, name, new_gw_state); 
 
   // ensure that the gateway state has not vanished
@@ -325,8 +325,8 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     // If the monitor previously identified this gateway as accessible but now
     // flags it as unavailable, it suggests that the gateway lost connection
     // to the monitor.
-    if (old_gw_state.availability == GW_AVAILABILITY_E::GW_AVAILABLE &&
-	new_gw_state.availability == GW_AVAILABILITY_E::GW_UNAVAILABLE) {
+    if (old_gw_state.availability == gw_availability_t::GW_AVAILABLE &&
+	new_gw_state.availability == gw_availability_t::GW_UNAVAILABLE) {
       dout(4) << "Triggering a panic upon disconnection from the monitor, gw state - unavailable" << dendl;
       throw std::runtime_error("Lost connection to the monitor (gw map unavailable).");
     }
@@ -355,11 +355,11 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
       const auto& new_agroup_state = new_group_state.first;
       const epoch_t& blocklist_epoch = new_group_state.second;
 
-      if (new_agroup_state == GW_EXPORTED_STATES_PER_AGROUP_E::GW_EXPORTED_OPTIMIZED_STATE &&
+      if (new_agroup_state == gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE &&
           blocklist_epoch != 0) {
         if (blocklist_epoch > max_blocklist_epoch) max_blocklist_epoch = blocklist_epoch;
       }
-      gs.set_state(new_agroup_state == GW_EXPORTED_STATES_PER_AGROUP_E::GW_EXPORTED_OPTIMIZED_STATE ? OPTIMIZED : INACCESSIBLE); // Set the ANA state
+      gs.set_state(new_agroup_state == gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE ? OPTIMIZED : INACCESSIBLE); // Set the ANA state
       nas.mutable_states()->Add(std::move(gs));
       dout(10) << " grpid " << (ana_grp_index + 1) << " state: " << new_gw_state << dendl;
     }

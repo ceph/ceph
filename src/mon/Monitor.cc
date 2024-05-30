@@ -3621,7 +3621,6 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
   if (module == "nvme-gw"){
       nvmegwmon()->dispatch(op);
-      dout(10) << " Dispatching module " << module << " to NVMeofGwMon"  << dendl;
       return;
   }
   if (prefix == "fsid") {
@@ -4452,7 +4451,6 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(m);
-  dout(10) << "Received message: " << op->get_req()->get_type() << dendl;
   bool src_is_mon = op->is_src_mon();
   op->mark_event("mon:_ms_dispatch");
   MonSession *s = op->get_session();
@@ -4558,8 +4556,6 @@ void Monitor::_ms_dispatch(Message *m)
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
-
-  dout(10) << "Received message: " << op->get_req()->get_type() << dendl;
 
   MonSession *s = op->get_session();
   ceph_assert(s);
@@ -5367,7 +5363,6 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       kvmon()->check_sub(s->sub_map[p->first]);
     }
     else if (p->first == "NVMeofGw") {
-        dout(10) << "NVMeofGw->check_sub " << dendl;
         nvmegwmon()->check_sub(s->sub_map[p->first]);
     }
   }

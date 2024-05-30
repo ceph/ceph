@@ -32,7 +32,7 @@ protected:
     std::string       gw_pool;
     std::string       gw_group;
     BeaconSubsystems  subsystems;                           // gateway susbsystem and their state machine states
-    GW_AVAILABILITY_E availability;                         // in absence of  beacon  heartbeat messages it becomes inavailable
+    gw_availability_t availability;                         // in absence of  beacon  heartbeat messages it becomes inavailable
     epoch_t           last_osd_epoch;
     epoch_t           last_gwmap_epoch;
 
@@ -47,7 +47,7 @@ public:
         const std::string& gw_pool_,
         const std::string& gw_group_,
         const BeaconSubsystems& subsystems_,
-        const GW_AVAILABILITY_E& availability_,
+        const gw_availability_t& availability_,
         const epoch_t& last_osd_epoch_,
         const epoch_t& last_gwmap_epoch_
   )
@@ -73,7 +73,7 @@ public:
     return nonce_map;
   }
 
-  const GW_AVAILABILITY_E& get_availability()   const   { return availability; }
+  const gw_availability_t& get_availability()   const   { return availability; }
   const epoch_t&           get_last_osd_epoch() const   { return last_osd_epoch; }
   const epoch_t&           get_last_gwmap_epoch() const { return last_gwmap_epoch; }
   const BeaconSubsystems&  get_subsystems()     const   { return subsystems; };
@@ -91,10 +91,7 @@ public:
     encode(gw_id, payload);
     encode(gw_pool, payload);
     encode(gw_group, payload);
-    encode((uint32_t)subsystems.size(), payload);
-    for (const auto& st: subsystems) {
-      encode(st, payload);
-    }
+    encode(subsystems, payload);
     encode((uint32_t)availability, payload);
     encode(last_osd_epoch, payload);
     encode(last_gwmap_epoch, payload);
@@ -108,17 +105,10 @@ public:
     decode(gw_id, p);
     decode(gw_pool, p);
     decode(gw_group, p);
-    uint32_t n;
-    decode(n, p);
-    subsystems.clear();
-    for (uint32_t i = 0; i < n; i++) {
-      BeaconSubsystem sub;
-      decode(sub, p);
-      subsystems.push_back(sub);
-    }
+    decode(subsystems, p);
     uint32_t tmp;
     decode(tmp, p);
-    availability = static_cast<GW_AVAILABILITY_E>(tmp);
+    availability = static_cast<gw_availability_t>(tmp);
     decode(last_osd_epoch, p);
     decode(last_gwmap_epoch, p);
   }

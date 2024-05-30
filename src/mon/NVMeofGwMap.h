@@ -36,9 +36,9 @@ public:
     epoch_t                             epoch         = 0;      // epoch is for Paxos synchronization  mechanizm
     bool                                delay_propose = false;
 
-    std::map<NvmeGroupKey, NvmeGwCreatedMap>  Created_gws;
-    std::map<NvmeGroupKey, NvmeGwMetaDataMap> Gmetadata;
-    void to_gmap(std::map<NvmeGroupKey, NvmeGwMap>& Gmap) const;
+    std::map<NvmeGroupKey, NvmeGwMonStates>  created_gws;
+    std::map<NvmeGroupKey, NvmeGwTimers> fsm_timers;// map that handles timers started by all Gateway FSMs
+    void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
 
     int   cfg_add_gw                    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
     int   cfg_delete_gw                 (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
@@ -49,10 +49,10 @@ public:
     void  handle_removed_subsystems     (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const std::vector<NvmeNqnId> &current_subsystems, bool &propose_pending);
     void  start_timer (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid, uint8_t value);
 private:
-    NvmeGwCreated&   find_already_created_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
-    void fsm_handle_gw_down    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  GW_STATES_PER_AGROUP_E state, NvmeAnaGrpId grpid,  bool &map_modified);
-    void fsm_handle_gw_delete  (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  GW_STATES_PER_AGROUP_E state, NvmeAnaGrpId grpid,  bool &map_modified);
-    void fsm_handle_gw_alive   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  NvmeGwCreated & gw_state, GW_STATES_PER_AGROUP_E state,
+    NvmeGwMonState&   find_already_created_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+    void fsm_handle_gw_down    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
+    void fsm_handle_gw_delete  (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
+    void fsm_handle_gw_alive   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  NvmeGwMonState & gw_state, gw_states_per_group_t state,
                                                                                    NvmeAnaGrpId grpid, epoch_t& last_osd_epoch, bool &map_modified);
     void fsm_handle_to_expired (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  NvmeAnaGrpId grpid,  bool &map_modified);
 
@@ -73,8 +73,8 @@ public:
         ENCODE_START(1, 1, bl);
         encode(epoch, bl);// global map epoch
 
-        encode(Created_gws, bl); //Encode created GWs
-        encode(Gmetadata, bl);
+        encode(created_gws, bl); //Encode created GWs
+        encode(fsm_timers, bl);
         ENCODE_FINISH(bl);
     }
 
@@ -83,8 +83,8 @@ public:
         DECODE_START(1, bl);
         decode(epoch, bl);
 
-        decode(Created_gws, bl);
-        decode(Gmetadata, bl);
+        decode(created_gws, bl);
+        decode(fsm_timers, bl);
         DECODE_FINISH(bl);
     }
 };
