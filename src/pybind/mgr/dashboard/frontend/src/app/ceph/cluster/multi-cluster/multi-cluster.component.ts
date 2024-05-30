@@ -338,7 +338,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     }
 
     const clusters: ClusterInfo[] = [];
-    this.queriesResults.TOTAL_CAPACITY?.forEach((totalCapacityMetric: any) => {
+    this.queriesResults.TOTAL_CAPACITY?.forEach((totalCapacityMetric: any, index:number) => {
       const clusterName = totalCapacityMetric.metric.cluster;
       const totalCapacity = parseInt(totalCapacityMetric.value[1]);
       const getMgrMetadata = this.findCluster(this.queriesResults?.MGR_METADATA, clusterName);
@@ -351,8 +351,9 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       const osds = this.findClusterData(this.queriesResults?.OSDS, clusterName);
       const status = this.findClusterData(this.queriesResults?.HEALTH_STATUS, clusterName);
       const available_capacity = totalCapacity - usedCapacity;
+      const federateJobName = `federate_${index + 1}`;
       const federateMetrics = this.queriesResults?.FEDERATE_UP_METRIC.filter(
-        (metric: any) => metric.metric.job === 'federate'
+        (metric: any) => metric.metric.job === federateJobName
       );
       this.checkFederateMetricsStatus(federateMetrics);
 

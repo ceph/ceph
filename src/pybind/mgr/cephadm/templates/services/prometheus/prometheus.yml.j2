@@ -151,7 +151,7 @@ scrape_configs:
 {% endif %}
 
 {% for url, details in clusters_credentials.items() %}
-  - job_name: 'federate'
+  - job_name: 'federate_{{ loop.index }}'
     scrape_interval: 15s
     honor_labels: true
     metrics_path: '/federate'
