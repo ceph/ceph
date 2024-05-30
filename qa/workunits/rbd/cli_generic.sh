@@ -394,10 +394,26 @@ test_clone() {
     rbd ls -l | grep clone2 | grep rbd2/clone@s1
     rbd -p rbd2 ls | grep -v clone2
 
+    rbd clone rbd2/clone clone3 |& grep 'snapshot name was not specified'
+    rbd clone rbd2/clone@invalid clone3 |& grep 'failed to open parent image'
+    rbd clone rbd2/clone --snap-id 0 clone3 |& grep 'failed to open parent image'
+    rbd clone rbd2/clone@invalid --snap-id 0 clone3 |&
+        grep 'trying to access snapshot using both name and id'
+    SNAP_ID=$(rbd snap ls rbd2/clone --format json |
+        jq '.[] | select(.name == "s1") | .id')
+    rbd clone --snap-id $SNAP_ID rbd2/clone clone3
+    rbd ls | grep clone3
+    rbd ls -l | grep clone3 | grep rbd2/clone@s1
+    test "$(rbd -p rbd2 ls)" = 'clone'
+    test "$(rbd ls -l | grep -c rbd2/clone@s1)" = '2'
+    rbd flatten clone3
+    test "$(rbd ls -l | grep -c rbd2/clone@s1)" = '1'
+
     rbd rm clone2
     rbd snap unprotect rbd2/clone@s1
     rbd snap rm rbd2/clone@s1
     rbd rm rbd2/clone
+    rbd rm clone3
     rbd snap unprotect test1@s1
     rbd snap rm test1@s1
     rbd rm test1
@@ -752,7 +768,9 @@ test_clone_v2() {
     rbd snap create test1@1
     rbd clone --rbd-default-clone-format=1 test1@1 test2 && exit 1 || true
     rbd clone --rbd-default-clone-format=2 test1@1 test2
-    rbd clone --rbd-default-clone-format=2 test1@1 test3
+    SNAP_ID=$(rbd snap ls test1 --format json |
+        jq '.[] | select(.name == "1") | .id')
+    rbd clone --rbd-default-clone-format=2 --snap-id $SNAP_ID test1 test3
 
     rbd snap protect test1@1
     rbd clone --rbd-default-clone-format=1 test1@1 test4
