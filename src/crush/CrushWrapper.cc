@@ -2186,8 +2186,10 @@ int CrushWrapper::reclassify(
 int CrushWrapper::get_new_bucket_id()
 {
   int id = -1;
-  while (crush->buckets[-1-id] &&
-	 -1-id < crush->max_buckets) {
+  for (int index = 0; index < crush->max_buckets; index++) {
+    if (crush->buckets[index] == nullptr) {
+      return -index - 1;
+    }
     id--;
   }
   if (-1-id == crush->max_buckets) {
