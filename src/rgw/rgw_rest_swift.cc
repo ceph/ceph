@@ -988,7 +988,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
     return r;
   }
 
-  size_bytes = slo_seg->get_obj_size();
+  size_bytes = slo_seg->get_size();
 
   r = rgw_compression_info_from_attrset(slo_seg->get_attrs(), compressed, cs_info);
   if (r < 0) {
@@ -2711,26 +2711,25 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   obj->set_atomic();
   obj->set_prefetch_data();
 
-  RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &state, s->yield, false)) {
+  if (obj->load_obj_state(s, s->yield, false)) {
     return false;
   }
 
   /* A nonexistent object cannot be a considered as a marker representing
    * the emulation of catalog in FS hierarchy. */
-  if (! state->exists) {
+  if (! obj->exists()) {
     return false;
   }
 
   /* Decode the content type. */
   std::string content_type;
-  get_contype_from_attrs(state->attrset, content_type);
+  get_contype_from_attrs(obj->get_attrs(), content_type);
 
   const auto& ws_conf = s->bucket->get_info().website_conf;
   const std::string subdir_marker = ws_conf.subdir_marker.empty()
                                       ? "application/directory"
                                       : ws_conf.subdir_marker;
-  return subdir_marker == content_type && state->size <= 1;
+  return subdir_marker == content_type && obj->get_size() <= 1;
 }
 
 bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
@@ -2740,14 +2739,13 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
   obj->set_atomic();
   obj->set_prefetch_data();
 
-  RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &state, s->yield, false)) {
+  if (obj->load_obj_state(s, s->yield, false)) {
     return false;
   }
 
   /* A nonexistent object cannot be a considered as a viable index. We will
    * try to list the bucket or - if this is impossible - return an error. */
-  return state->exists;
+  return obj->exists();
 }
 
 int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
