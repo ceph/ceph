@@ -38,6 +38,7 @@ import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdTrashPurgeModalComponent } from './rbd-trash-purge-modal/rbd-trash-purge-modal.component';
 import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-trash-restore-modal.component';
+import { NvmeofGatewayComponent } from './nvmeof-gateway/nvmeof-gateway.component';
 
 @NgModule({
   imports: [
@@ -77,7 +78,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     RbdConfigurationListComponent,
     RbdConfigurationFormComponent,
     RbdTabsComponent,
-    RbdPerformanceComponent
+    RbdPerformanceComponent,
+    NvmeofGatewayComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
@@ -197,6 +199,29 @@ const routes: Routes = [
           }
         ]
       }
+    ]
+  },
+  // NVMe/TCP
+  {
+    path: 'nvmeof',
+    canActivate: [ModuleStatusGuardService],
+    data: {
+      breadcrumbs: true,
+      text: 'NVMe/TCP',
+      path: 'nvmeof',
+      disableSplit: true,
+      moduleStatusGuardConfig: {
+        uiApiPath: 'nvmeof',
+        redirectTo: 'error',
+        header: $localize`NVMe/TCP Gateway not configured`,
+        button_name: $localize`Configure NVMe/TCP`,
+        button_route: ['/services', { outlets: { modal: ['create', 'nvmeof'] } }],
+        uiConfig: false
+      }
+    },
+    children: [
+      { path: '', redirectTo: 'gateways', pathMatch: 'full' },
+      { path: 'gateways', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } }
     ]
   }
 ];
