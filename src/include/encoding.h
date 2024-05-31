@@ -861,7 +861,7 @@ inline std::enable_if_t<!traits::supported>
   for (auto p = ls.begin(); p != ls.end(); ++p)
     encode(*p, bl);
 }
-template<class T, class Alloc, typename traits=denc_traits<T>>
+template<class T, class Alloc, typename traits>
 inline void
   encode(const std::list<T, Alloc>& ls, bufferlist& p_bl, bufferlist& d_bl)
 {
@@ -1320,6 +1320,22 @@ decode(std::map<T, U, Comp, Alloc>& m, bufferlist::const_iterator& p)
     U v;
     decode(k, p);
     decode(v, p);
+    m.emplace(std::move(k), std::move(v));
+  }
+}
+template<class T, class U, class Comp, class Alloc,
+	 typename t_traits, typename u_traits>
+inline void
+  decode(std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p, bufferlist::const_iterator& d)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    U v;
+    decode(k, p);
+    decode(v, p, d);
     m.emplace(std::move(k), std::move(v));
   }
 }

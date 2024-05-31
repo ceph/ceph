@@ -10,7 +10,6 @@
 #include "include/buffer.h"
 
 #include "osd/osd_types.h"
-#include "common/debug.h"
 #define OPS_PER_PTR 32
 
 void decode_str_str_map_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::list *out);
