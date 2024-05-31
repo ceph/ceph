@@ -13,6 +13,7 @@
             class="cd-navbar-top"
             [brand]="brandTemplate">
   <cds-hamburger [active]="showMenuSidebar"
+                 data-testid="main-menu-toggler"
                  (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
   <cds-header-global>
     <cds-header-navigation>

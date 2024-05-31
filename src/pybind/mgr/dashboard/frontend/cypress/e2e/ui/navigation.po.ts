@@ -75,7 +75,7 @@ export class NavigationPageHelper extends PageHelper {
   }
 
   getMenuToggler() {
-    return cy.get('[aria-label="toggle sidebar visibility"]');
+    return cy.get('[data-testid="main-menu-toggler"]');
   }
 
   checkNavigations(navs: any) {
@@ -85,7 +85,7 @@ export class NavigationPageHelper extends PageHelper {
     cy.intercept('/ui-api/block/rbd/status', { fixture: 'block-rbd-status.json' });
 
     navs.forEach((nav: any) => {
-      cy.get('.simplebar-content li.nav-item a').each(($link) => {
+      cy.get('cds-sidenav-item').each(($link) => {
         if ($link.text().trim() === nav.menu.trim()) {
           cy.wrap($link).click();
         }
@@ -100,9 +100,9 @@ export class NavigationPageHelper extends PageHelper {
 
   checkNavSubMenu(menu: any, submenu: any) {
     submenu.forEach((nav: any) => {
-      cy.get('.simplebar-content li.nav-item a').each(($link) => {
+      cy.get('cds-sidenav-item').each(($link) => {
         if ($link.text().trim() === menu.trim()) {
-          cy.contains(`ul.list-unstyled li a`, nav.menu).click();
+          cy.contains(`cds-sidenav-menu`, nav.menu).click();
         }
       });
     });
