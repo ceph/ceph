@@ -404,31 +404,16 @@ void RadosTestECPP::TearDown()
     cleanup_default_namespace(ioctx);
     cleanup_namespace(ioctx, nspace);
   }
+  if (ec_overwrites_set) {
+    ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+    ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+    ec_overwrites_set = false;
+  }
   ioctx.close();
 }
 
-void RadosTestECPP::recreate_pool()
+void RadosTestECPP::set_allow_ec_overwrites()
 {
-  ec_overwrites_set = true;
   ASSERT_EQ("", set_allow_ec_overwrites_pp(pool_name, cluster, true));
-
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
-
-  const std::string objname = "RadosTestECPP::set_allow_ec_overwrites:test_obj";
-  ASSERT_EQ(0, ioctx.write(objname, bl, sizeof(buf), 0));
-  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(120);
-  while (true) {
-    if (0 == ioctx.write(objname, bl, sizeof(buf), 0)) {
-      break;
-    }
-    ASSERT_LT(std::chrono::steady_clock::now(), end);
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-  }
+  ec_overwrites_set = true;
 }
-
-void RadosTestECPP::set_allow_ec_overwrites(std::string pool, bool allow)
-{
-  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool, cluster, allow));
