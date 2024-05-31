@@ -68,6 +68,9 @@ a.cds--header__menu-item,
   font-size: calc(type.type-scale(4) + 0.5px);
 }
 
+button.cds--header__menu-trigger.cds--header__action.cds--header__menu-toggle {
+  inline-size: 3.9rem;
+}
 
 /******************************************
 Modals
