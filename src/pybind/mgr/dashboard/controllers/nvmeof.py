@@ -1,15 +1,25 @@
 # -*- coding: utf-8 -*-
+import logging
 from typing import Optional
 
 from ..model import nvmeof as model
 from ..security import Scope
 from ..tools import str_to_bool
-from . import APIDoc, APIRouter, Endpoint, EndpointDoc, Param, ReadPermission, RESTController
+from ..services.orchestrator import OrchClient
+from . import APIDoc, APIRouter, UIRouter, Endpoint, EndpointDoc, Param, ReadPermission, BaseController, RESTController
+
+logger = logging.getLogger()
+
+NVME_SCHEMA = {
+    "available": (bool, "Is NVMe/TCP available?"),
+    "message": (str, "Descriptions")
+}
 
 try:
     from ..services.nvmeof_client import NVMeoFClient, empty_response, \
         handle_nvmeof_error, map_collection, map_model
-except ImportError:
+except ImportError as e:
+    logging.error("Failed to import NVMeoFClient and related components: %s", e)
     pass
 else:
     @APIRouter("/nvmeof/gateway", Scope.NVME_OF)
@@ -380,3 +390,18 @@ else:
             return NVMeoFClient().stub.list_connections(
                 NVMeoFClient.pb2.list_connections_req(subsystem=nqn)
             )
+
+@UIRouter('/nvmeof', Scope.RGW)
+@APIDoc("NVMe/TCP Management API", "NVMe/TCP")
+class NVMeoFStatus(BaseController):
+    @Endpoint()
+    @ReadPermission
+    @EndpointDoc("Display NVMe/TCP service Status",
+                 responses={200: NVME_SCHEMA})
+    def status(self) -> dict:
+        status = {'available': True, 'message': None}
+        orch = OrchClient.instance()
+        if not orch.services.list_daemons(daemon_type='nvmeof'):
+            status["available"] = False
+            status["message"] = 'Create an NVMe/TCP service to get started.'
+        return status

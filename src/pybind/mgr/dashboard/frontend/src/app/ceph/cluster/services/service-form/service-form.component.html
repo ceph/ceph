@@ -222,7 +222,8 @@
           <div class="cd-col-form-input">
             <select id="placement"
                     class="form-select"
-                    formControlName="placement">
+                    formControlName="placement"
+                    (change)="onServiceTypeChange($event.target.value)">
               <option i18n
                       value="hosts">Hosts</option>
               <option i18n

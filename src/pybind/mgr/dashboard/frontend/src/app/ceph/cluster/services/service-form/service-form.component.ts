@@ -424,10 +424,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     });
   }
 
-  ngOnInit(): void {
-    this.action = this.actionLabels.CREATE;
+  resolveRoute() {
     if (this.router.url.includes('services/(modal:create')) {
       this.pageURL = 'services';
+      this.route.params.subscribe((params: { type: string }) => {
+        if (params?.type) {
+          this.serviceType = params.type;
+          this.serviceForm.get('service_type').setValue(this.serviceType);
+        }
+      });
     } else if (this.router.url.includes('services/(modal:edit')) {
       this.editing = true;
       this.pageURL = 'services';
@@ -436,6 +441,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceType = params.type;
       });
     }
+  }
+
+  ngOnInit(): void {
+    this.action = this.actionLabels.CREATE;
+    this.resolveRoute();
 
     this.cephServiceService
       .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }))
@@ -471,6 +481,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.poolService.getList().subscribe((resp: Pool[]) => {
       this.pools = resp;
       this.rbdPools = this.pools.filter(this.rbdService.isRBDPool);
+      if (!this.editing && this.serviceType) {
+        this.onServiceTypeChange(this.serviceType);
+      }
     });
 
     if (this.editing) {
@@ -670,6 +683,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       case 'smb':
         this.serviceForm.get('count').setValue(1);
         break;
+      default:
+        this.serviceForm.get('count').setValue(null);
     }
   }
 
@@ -759,7 +774,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   setNvmeofServiceId(): void {
-    const defaultRbdPool: string = this.rbdPools.find((p: Pool) => p.pool_name === 'rbd')
+    const defaultRbdPool: string = this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')
       ?.pool_name;
     if (defaultRbdPool) {
       this.serviceForm.get('pool').setValue(defaultRbdPool);

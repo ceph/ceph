@@ -180,6 +180,11 @@ const routes: Routes = [
             outlet: 'modal'
           },
           {
+            path: `${URLVerbs.CREATE}/:type`,
+            component: ServiceFormComponent,
+            outlet: 'modal'
+          },
+          {
             path: `${URLVerbs.EDIT}/:type/:name`,
             component: ServiceFormComponent,
             outlet: 'modal'
