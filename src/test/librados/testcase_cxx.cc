@@ -3,6 +3,9 @@
 
 #include "testcase_cxx.h"
 
+#include <chrono>
+#include <thread>
+
 #include <errno.h>
 #include <fmt/format.h>
 #include "test_cxx.h"
@@ -411,6 +414,22 @@ void RadosTestECPP::TearDown()
 
 void RadosTestECPP::set_allow_ec_overwrites()
 {
-  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool_name, cluster, true));
   ec_overwrites_set = true;
+  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool_name, cluster, true));
+
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const std::string objname = "RadosTestECPP::set_allow_ec_overwrites:test_obj";
+  ASSERT_EQ(0, ioctx.write(objname, bl, sizeof(buf), 0));
+  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+  while (true) {
+    if (0 == ioctx.write(objname, bl, sizeof(buf), 0)) {
+      break;
+    }
+    ASSERT_LT(std::chrono::steady_clock::now(), end);
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+  }
 }
