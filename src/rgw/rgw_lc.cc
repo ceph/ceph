@@ -2993,6 +2993,12 @@ void lc_op::dump(Formatter *f) const
 void LCFilter::dump(Formatter *f) const
 {
   f->dump_string("prefix", prefix);
+  if (has_size_gt()) {
+    f->dump_string("obj_size_gt", size_gt);
+  }
+  if (has_size_lt()) {
+    f->dump_string("obj_size_lt", size_lt);
+  }
   f->dump_object("obj_tags", obj_tags);
   if (have_flag(LCFlagType::ArchiveZone)) {
     f->dump_string("archivezone", "");
@@ -3003,6 +3009,9 @@ void LCExpiration::dump(Formatter *f) const
 {
   f->dump_string("days", days);
   f->dump_string("date", date);
+  if (has_newer()) {
+    f->dump_string("newer_noncurrent_versions", newer_noncurrent);
+  }
 }
 
 void LCRule::dump(Formatter *f) const
