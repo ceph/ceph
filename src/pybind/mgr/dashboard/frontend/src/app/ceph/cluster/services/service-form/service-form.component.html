@@ -15,6 +15,7 @@
              (click)="createMultisiteSetup()">
              Click here</a> to create a new Realm/Zone Group/Zone
         </cd-alert-panel>
+
         <!-- Service type -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -25,7 +26,7 @@
                     name="service_type"
                     class="form-select"
                     formControlName="service_type"
-                    (change)="getServiceIds($event.target.value)">
+                    (change)="onServiceTypeChange($event.target.value)">
               <option i18n
                       [ngValue]="null">-- Select a service type --</option>
               <option *ngFor="let serviceType of serviceTypes"
@@ -40,50 +41,90 @@
         </div>
 
         <!-- backend_service -->
-          <div *ngIf="serviceForm.controls.service_type.value === 'ingress'"
-               class="form-group row">
-            <label i18n
-                   class="cd-col-form-label"
-                   [ngClass]="{'required': ['ingress'].includes(serviceForm.controls.service_type.value)}"
-                   for="backend_service">Backend Service</label>
-            <div class="cd-col-form-input">
-              <select id="backend_service"
-                      name="backend_service"
-                      class="form-select"
-                      formControlName="backend_service"
-                      (change)="prePopulateId()">
-                <option *ngIf="services === null"
-                        [ngValue]="null"
-                        i18n>Loading...</option>
-                <option *ngIf="services !== null && services.length === 0"
-                        [ngValue]="null"
-                        i18n>-- No service available --</option>
-                <option *ngIf="services !== null && services.length > 0"
-                        [ngValue]="null"
-                        i18n>-- Select an existing service --</option>
-                <option *ngFor="let service of services"
-                        [value]="service.service_name">{{ service.service_name }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="serviceForm.showError('backend_service', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+        <div *ngIf="serviceForm.controls.service_type.value === 'ingress'"
+             class="form-group row">
+          <label i18n
+                 class="cd-col-form-label"
+                 [ngClass]="{'required': ['ingress'].includes(serviceForm.controls.service_type.value)}"
+                 for="backend_service">Backend Service</label>
+          <div class="cd-col-form-input">
+            <select id="backend_service"
+                    name="backend_service"
+                    class="form-select"
+                    formControlName="backend_service"
+                    (change)="prePopulateId()">
+              <option *ngIf="services === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="services !== null && services.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No service available --</option>
+              <option *ngIf="services !== null && services.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select an existing service --</option>
+              <option *ngFor="let service of services"
+                      [value]="service.service_name">{{ service.service_name }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('backend_service', frm, 'required')"
+                  i18n>This field is required.</span>
           </div>
+        </div>
+
+        <!-- NVMe/TCP -->
+        <!-- Block Pool -->
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'nvmeof'">
+          <label i18n
+                 class="cd-col-form-label required"
+                 for="pool">Block Pool</label>
+          <div class="cd-col-form-input">
+            <select id="pool"
+                    name="pool"
+                    class="form-select"
+                    formControlName="pool"
+                    (change)="onBlockPoolChange()">
+              <option *ngIf="rbdPools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="rbdPools && rbdPools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No block pools available --</option>
+              <option *ngIf="rbdPools && rbdPools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a pool --</option>
+              <option *ngFor="let pool of rbdPools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <cd-help-text i18n>
+              A pool in which the gateway configuration can be managed.
+            </cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('pool', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
 
         <!-- Service id -->
         <div class="form-group row"
              *ngIf="serviceForm.controls.service_type.value !== 'snmp-gateway'">
           <label class="cd-col-form-label"
-                 [ngClass]="{'required': ['mds', 'rgw', 'nfs', 'iscsi', 'smb', 'ingress'].includes(serviceForm.controls.service_type.value)}"
+                 [ngClass]="{'required': ['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(serviceForm.controls.service_type.value)}"
                  for="service_id">
-            <span i18n>Id</span>
-            <cd-helper i18n>Used in the service name which is &lt;service_type.service_id&gt;</cd-helper>
+            <span i18n>Service Name</span>
           </label>
           <div class="cd-col-form-input">
-            <input id="service_id"
-                   class="form-control"
-                   type="text"
-                   formControlName="service_id">
+            <div class="input-group">
+              <span class="input-group-text"
+                    *ngIf="serviceForm.controls.service_type.value && ['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(serviceForm.controls.service_type.value)"
+                    for="userId"
+                    i18n>{{serviceForm.controls.service_type.value}}.
+              </span>
+              <input id="service_id"
+                     class="form-control"
+                     type="text"
+                     formControlName="service_id">
+            </div>
             <span class="invalid-feedback"
                   *ngIf="serviceForm.showError('service_id', frm, 'required')"
                   i18n>This field is required.</span>
@@ -164,11 +205,10 @@
                      id="unmanaged"
                      type="checkbox"
                      formControlName="unmanaged">
-              <label class="custom-control-label"
+              <label class="custom-control-label m-0"
                      for="unmanaged"
                      i18n>Unmanaged</label>
-              <cd-helper i18n>If set to true, the orchestrator will not start nor stop any daemon associated with this service.
-                 Placement and all other properties will be ignored.</cd-helper>
+              <cd-help-text i18n>If Unmanaged is selected, the orchestrator will not stop or stop any daemons associated with this service. Placement and all other properties will be ignored.</cd-help-text>
             </div>
           </div>
         </div>
@@ -226,13 +266,12 @@
           </div>
         </div>
 
-        <!-- count -->
+        <!-- Count -->
         <div *ngIf="!serviceForm.controls.unmanaged.value"
              class="form-group row">
           <label class="cd-col-form-label"
                  for="count">
             <span i18n>Count</span>
-            <cd-helper i18n>Only that number of daemons will be created.</cd-helper>
           </label>
           <div class="cd-col-form-input">
             <input id="count"
@@ -240,6 +279,7 @@
                    type="number"
                    formControlName="count"
                    min="1">
+            <cd-help-text i18n>Number of deamons that will be deployed</cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="serviceForm.showError('count', frm, 'min')"
                   i18n>The value must be at least 1.</span>
