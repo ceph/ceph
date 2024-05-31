@@ -401,18 +401,16 @@ void RadosTestECPP::TearDown()
     cleanup_default_namespace(ioctx);
     cleanup_namespace(ioctx, nspace);
   }
+  if (ec_overwrites_set) {
+    ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+    ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+    ec_overwrites_set = false;
+  }
   ioctx.close();
 }
 
-void RadosTestECPP::recreate_pool()
+void RadosTestECPP::set_allow_ec_overwrites()
 {
-  SKIP_IF_CRIMSON();
-  ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
-  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
-  SetUp();
-}
-
-void RadosTestECPP::set_allow_ec_overwrites(std::string pool, bool allow)
-{
-  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool, cluster, allow));
+  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool_name, cluster, true));
+  ec_overwrites_set = true;
 }
