@@ -832,6 +832,21 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
   ASSERT_EQ(-ENOENT, ioctx.rmxattr("foo_rmxattr", attr2));
 }
 
+TEST_F(LibRadosIoECPP, CrcZeroWrite) {
+  SKIP_IF_CRIMSON();
+  set_allow_ec_overwrites();
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+
+  ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
+  ASSERT_EQ(0, ioctx.write("foo", bl, 0, sizeof(buf)));
+
+  ObjectReadOperation read;
+  read.read(0, bl.length(), NULL, NULL);
+  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+}
+
 TEST_F(LibRadosIoECPP, XattrListPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
