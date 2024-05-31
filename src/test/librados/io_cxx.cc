@@ -883,6 +883,7 @@ TEST_F(LibRadosIoECPP, CrcZeroWrite) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
+  bl.append(buf, sizeof(buf));
 
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, sizeof(buf)));
