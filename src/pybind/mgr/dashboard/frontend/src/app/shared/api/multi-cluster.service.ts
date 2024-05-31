@@ -115,11 +115,19 @@ export class MultiClusterService {
     return this.http.delete(`api/multi-cluster/delete_cluster/${clusterName}/${clusterUser}`);
   }
 
-  editCluster(url: any, clusterAlias: string, username: string) {
+  editCluster(
+    url: any,
+    clusterAlias: string,
+    username: string,
+    verify = false,
+    ssl_certificate = ''
+  ) {
     return this.http.put('api/multi-cluster/edit_cluster', {
       url,
       cluster_alias: clusterAlias,
-      username
+      username: username,
+      verify: verify,
+      ssl_certificate: ssl_certificate
     });
   }
 

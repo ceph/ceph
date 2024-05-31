@@ -7244,10 +7244,15 @@ paths:
               properties:
                 cluster_alias:
                   type: string
+                ssl_certificate:
+                  type: string
                 url:
                   type: string
                 username:
                   type: string
+                verify:
+                  default: false
+                  type: boolean
               required:
               - url
               - cluster_alias
