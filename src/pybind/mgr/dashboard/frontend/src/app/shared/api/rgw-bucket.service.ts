@@ -85,9 +85,7 @@ export class RgwBucketService extends ApiClient {
         paramsObject['placement_target'] = placementTarget;
       }
 
-      return this.http.post(this.url, null, {
-        params: new HttpParams({ fromObject: paramsObject })
-      });
+      return this.http.post(this.url, paramsObject);
     });
   }
 
