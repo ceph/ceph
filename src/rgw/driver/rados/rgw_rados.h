@@ -30,7 +30,7 @@
 #include "rgw_sync_module.h"
 #include "rgw_trim_bilog.h"
 #include "rgw_service.h"
-#include "rgw_sal.h"
+#include "rgw_sal_store.h"
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
 
