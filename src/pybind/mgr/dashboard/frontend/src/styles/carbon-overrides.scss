@@ -21,6 +21,10 @@ to set the body's font-size at 12px.
 Once this component is removed we should be ok to remove the overrides below
 **********************************************************************************/
 
+/******************************************
+Side nav
+******************************************/
+
 $block-size: 2.7rem;
 
 .cds--side-nav__submenu {
@@ -53,9 +57,22 @@ a.cds--side-nav__link > .cds--side-nav__link-text {
   min-width: 4.2rem;
 }
 
+/******************************************
+Header
+******************************************/
+
 a.cds--header__menu-item,
 .cds--header__action,
 .cds--header {
   block-size: 3.9rem;
   font-size: calc(type.type-scale(4) + 0.5px);
+}
+
+
+/******************************************
+Modals
+******************************************/
+
+.modal-dialog {
+  margin-top: 5rem !important;
 }
