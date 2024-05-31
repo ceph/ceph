@@ -107,7 +107,12 @@ private:
   std::map<std::string, std::shared_ptr<RbdMapping>> mappings;
   ceph::mutex map_mutex = ceph::make_mutex("RbdMappingDispatcher::MapMutex");
 
+  std::atomic<bool> stop_requested = false;
+
   void disconnect_cbk(std::string devpath, int ret);
+  int wait_for_mappings_removal(int timeout_ms);
+  std::vector<std::string> get_mapped_devpaths();
+  int get_mappings_count();
 
 public:
   RbdMappingDispatcher(RadosClientCache& _client_cache)
@@ -116,4 +121,7 @@ public:
 
   int create(Config& cfg);
   std::shared_ptr<RbdMapping> get_mapping(std::string& devpath);
+  int stop(bool hard_disconnect,
+           int soft_disconnect_timeout,
+           int worker_count);
 };
