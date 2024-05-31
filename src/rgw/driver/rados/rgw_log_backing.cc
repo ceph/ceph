@@ -243,7 +243,9 @@ asio::awaitable<void> logback_generations::setup(const DoutPrefixProvider *dpp,
   bool must_create = false;
   try {
     // First, read.
-    auto [es, v] = co_await read(dpp);
+    entries_t es;
+    obj_version v;
+    std::tie(es, v) = co_await read(dpp);
     co_await async::async_dispatch(
       strand,
       [&] {
@@ -294,7 +296,9 @@ asio::awaitable<void> logback_generations::setup(const DoutPrefixProvider *dpp,
     }
     // Did someone race us? Then re-read.
     if (ec == sys::errc::file_exists) {
-      auto [es, v] = co_await read(dpp);
+      entries_t es;
+      obj_version v;
+      std::tie(es, v) = co_await read(dpp);
       if (es.empty()) {
 	throw sys::system_error{
 	  EIO, sys::generic_category(),
@@ -343,7 +347,9 @@ asio::awaitable<void> logback_generations::setup(const DoutPrefixProvider *dpp,
 
 asio::awaitable<void> logback_generations::update(const DoutPrefixProvider *dpp)
 {
-  auto [es, v] = co_await read(dpp);
+  entries_t es;
+  obj_version v;
+  std::tie(es, v) = co_await read(dpp);
   auto [do_nothing, highest_empty, new_entries] =
     co_await async::async_dispatch(
       strand,
