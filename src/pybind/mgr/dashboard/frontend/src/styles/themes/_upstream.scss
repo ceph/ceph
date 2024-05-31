@@ -1,9 +1,19 @@
 @use './src/styles/vendor/variables' as vv;
 
 $theme: (
-  text-primary: #f4f4f4,
-  text-secondary: #c6c6c6,
+  text-disabled: vv.$gray-700,
+  text-error: vv.$danger,
+  text-helper: vv.$body-color,
+  text-inverse: vv.$black,
+  text-on-color: vv.$white,
+  text-on-color-disabled: vv.$gray-700,
+  text-placeholder: vv.$gray-700,
+  text-primary: vv.$body-bg-alt,
+  text-secondary: vv.$body-bg-alt,
   btn-primary: vv.$primary,
   border-interactive: vv.$primary,
-  background: vv.$secondary
+  background: vv.$secondary,
+  layer-01: vv.$secondary,
+  icon-primary: vv.$gray-100,
+  icon-secondary: vv.$gray-300
 );
