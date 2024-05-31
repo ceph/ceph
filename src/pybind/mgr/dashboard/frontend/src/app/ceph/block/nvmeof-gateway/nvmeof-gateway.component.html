@@ -1,0 +1,22 @@
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    <a class="nav-link"
+       routerLink="/block/nvmeof/gateways"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       i18n>Gateways</a>
+  </li>
+</ul>
+
+<legend i18n>
+  Gateways
+  <cd-help-text>
+    The NVMe-oF gateway integrates Ceph with the NVMe over TCP (NVMe/TCP) protocol to provide an NVMe/TCP target that exports RADOS Block Device (RBD) images.
+  </cd-help-text>
+</legend>
+<div>
+  <cd-table [data]="gateways"
+            (fetchData)="getGateways()"
+            [columns]="gatewayColumns">
+  </cd-table>
+</div>
