@@ -1,11 +1,12 @@
 <cds-overflow-menu [customTrigger]="customTrigger"
-                   [offset]="{y:0, x:-80}">
+                   [offset]="{y:8, x:-80}">
   <cds-overflow-menu-option i18n>Logged in user</cds-overflow-menu-option>
-  <cds-overflow-menu-option i18n>Signed in as<strong>{{ username }}</strong></cds-overflow-menu-option>
+  <cds-overflow-menu-option i18n>Signed in as <strong>{{ username }}</strong></cds-overflow-menu-option>
   <cds-overflow-menu-option *ngIf="!sso"
                             routerLink="/user-profile/edit"
                             i18n>Change password</cds-overflow-menu-option>
   <cds-overflow-menu-option (click)="logout()"
+                            data-testid="logout"
                             i18n>Sign out</cds-overflow-menu-option>
 </cds-overflow-menu>
 <ng-template #customTrigger>
