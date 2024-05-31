@@ -62,7 +62,7 @@ if(NOT HAVE_CXX11_ATOMIC)
   check_cxx_atomics(HAVE_LIBATOMIC)
   cmake_pop_check_state()
   if(HAVE_LIBATOMIC)
-    set(LIBATOMIC_LINK_FLAGS "-Wl,--as-needed -latomic")
+    set(LIBATOMIC_LINK_FLAGS "-Wl,--as-needed -latomic -lmlx5 -libverbs -lrdmacm")
   else()
     message(FATAL_ERROR
       "Host compiler ${CMAKE_CXX_COMPILER} requires libatomic, but it is not found")
