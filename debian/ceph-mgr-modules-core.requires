@@ -4,5 +4,4 @@ packaging
 pecan
 werkzeug
 requests
-pkg-resources
 python-dateutil
