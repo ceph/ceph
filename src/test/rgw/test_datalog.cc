@@ -93,12 +93,34 @@ protected:
 			   boost::asio::use_awaitable, ver);
   }
 
+  asio::awaitable<void>
+  read_all_sems(int index,
+		bc::flat_map<std::string, uint64_t>* out) {
+    std::string cursor;
+    do {
+      try {
+	co_await rados().execute(
+	  datalog->get_sem_set_oid(index), datalog->loc,
+	  neorados::ReadOp{}.exec(ss::list(datalog->sem_max_keys, cursor, out,
+					   &cursor)),
+	  nullptr, asio::use_awaitable);
+      } catch (const sys::system_error& e) {
+	if (e.code() == sys::errc::no_such_file_or_directory) {
+	  break;
+	} else {
+	  throw;
+	}
+      }
+    } while (!cursor.empty());
+    co_return;
+  }
+
   asio::awaitable<bc::flat_map<std::string, uint64_t>>
   read_all_sems_all_shards() {
     bc::flat_map<std::string, uint64_t> all_sems;
 
     for (auto i = 0; i < datalog->num_shards; ++i) {
-      co_await datalog->read_all_sems(i, &all_sems);
+      co_await read_all_sems(i, &all_sems);
     }
     co_return std::move(all_sems);
   }
