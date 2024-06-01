@@ -512,8 +512,9 @@ public:
   int trim_generations(const DoutPrefixProvider *dpp,
 		       std::optional<uint64_t>& through,
 		       optional_yield y);
-  asio::awaitable<void> read_all_sems(int index,
-				      bc::flat_map<std::string, uint64_t>* out);
+  asio::awaitable<std::pair<bc::flat_map<std::string, uint64_t>,
+			    std::string>>
+  read_sems(int index, std::string cursor);
   asio::awaitable<bool>
   synthesize_entries(const DoutPrefixProvider* dpp, int index,
 		     const bc::flat_map<std::string, uint64_t>& semcount);
