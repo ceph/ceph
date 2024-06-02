@@ -74,7 +74,7 @@ seastar::future<> tri_mutex::lock_for_read()
     return seastar::now();
   }
   DEBUGDPP("can't lock_for_read, adding to waiters", *this);
-  waiters.emplace_back(seastar::promise<>(), type_t::read);
+  waiters.emplace_back(seastar::promise<>(), type_t::read, name);
   return waiters.back().pr.get_future();
 }
 
@@ -127,7 +127,7 @@ seastar::future<> tri_mutex::lock_for_write()
     return seastar::now();
   }
   DEBUGDPP("can't lock_for_write, adding to waiters", *this);
-  waiters.emplace_back(seastar::promise<>(), type_t::write);
+  waiters.emplace_back(seastar::promise<>(), type_t::write, name);
   return waiters.back().pr.get_future();
 }
 
@@ -182,7 +182,7 @@ seastar::future<> tri_mutex::lock_for_excl()
     return seastar::now();
   }
   DEBUGDPP("can't lock_for_excl, adding to waiters", *this);
-  waiters.emplace_back(seastar::promise<>(), type_t::exclusive);
+  waiters.emplace_back(seastar::promise<>(), type_t::exclusive, name);
   return waiters.back().pr.get_future();
 }
 
@@ -251,7 +251,7 @@ void tri_mutex::wake()
     default:
       assert(0);
     }
-    // TODO: DEBUGDPP("waking up {} ", *this);
+    DEBUGDPP("waking up {}", *this, waiter.waiter_name);
     waiter.pr.set_value();
     waiters.pop_front();
   }
