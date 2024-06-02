@@ -142,11 +142,12 @@ private:
     none,
   };
   struct waiter_t {
-    waiter_t(seastar::promise<>&& pr, type_t type)
+    waiter_t(seastar::promise<>&& pr, type_t type, std::string_view waiter_name)
       : pr(std::move(pr)), type(type)
     {}
     seastar::promise<> pr;
     type_t type;
+    std::string_view waiter_name;
   };
   seastar::circular_buffer<waiter_t> waiters;
   const std::string name;
