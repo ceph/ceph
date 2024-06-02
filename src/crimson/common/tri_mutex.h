@@ -5,6 +5,7 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/core/circular_buffer.hh>
+#include "crimson/common/log.h"
 
 class read_lock {
 public:
@@ -62,6 +63,11 @@ class tri_mutex : private read_lock,
 {
 public:
   tri_mutex() = default;
+#ifdef NDEBUG
+  tri_mutex(const std::string obj_name) : name() {}
+#else
+  tri_mutex(const std::string obj_name) : name(obj_name) {}
+#endif
   ~tri_mutex();
 
   read_lock& for_read() {
@@ -120,6 +126,10 @@ public:
     }
   }
 
+  std::string_view get_name() const{
+    return name;
+  }
+
 private:
   void wake();
   unsigned readers = 0;
@@ -139,10 +149,25 @@ private:
     type_t type;
   };
   seastar::circular_buffer<waiter_t> waiters;
+  const std::string name;
   friend class read_lock;
   friend class write_lock;
   friend class excl_lock;
   friend class excl_lock_from_read;
   friend class excl_lock_from_write;
   friend class excl_lock_from_excl;
+  friend std::ostream& operator<<(std::ostream &lhs, const tri_mutex &rhs);
 };
+
+inline std::ostream& operator<<(std::ostream& os, const tri_mutex& tm)
+{
+  os << fmt::format("tri_mutex {} writers {} readers {}"
+                    " exclusively_used {} waiters: {}",
+                    tm.get_name(), tm.get_writers(), tm.get_readers(),
+                    tm.exclusively_used, tm.waiters.size());
+  return os;
+}
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<tri_mutex> : fmt::ostream_formatter {};
+#endif
