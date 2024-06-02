@@ -61,6 +61,10 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
   ceph::common::intrusive_lru_config<
     hobject_t, ObjectContext, obc_to_hoid<ObjectContext>>>
 {
+private:
+  tri_mutex lock;
+  bool recovery_read_marker = false;
+
 public:
   ObjectState obs;
   SnapSetContextRef ssc;
@@ -74,7 +78,8 @@ public:
   // make other users of this obc to await for the loading to complete.
   seastar::shared_mutex loading_mutex;
 
-  ObjectContext(hobject_t hoid) : obs(std::move(hoid)) {}
+  ObjectContext(hobject_t hoid) : lock(hoid.oid.name),
+                                  obs(std::move(hoid)) {}
 
   const hobject_t &get_oid() const {
     return obs.oi.soid;
@@ -130,9 +135,6 @@ public:
   }
 
 private:
-  tri_mutex lock;
-  bool recovery_read_marker = false;
-
   template <typename Lock, typename Func>
   auto _with_lock(Lock& lock, Func&& func) {
     Ref obc = this;
