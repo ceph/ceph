@@ -626,7 +626,9 @@ int cls_rgw_lc_list(librados::IoCtx& io_ctx, const std::string& oid,
 void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op, const std::string& part_key, const RGWUploadPartInfo& info);
 
 /* resharding */
-void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);
+void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
+			 const cls_rgw_reshard_entry& entry,
+			 const bool create_only);
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()

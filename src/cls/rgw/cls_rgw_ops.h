@@ -1480,19 +1480,27 @@ struct cls_rgw_mp_upload_part_info_update_op {
 WRITE_CLASS_ENCODER(cls_rgw_mp_upload_part_info_update_op)
 
 struct cls_rgw_reshard_add_op {
- cls_rgw_reshard_entry entry;
+  cls_rgw_reshard_entry entry;
+
+  // true -> will not overwrite existing entry
+  bool create_only {false};
 
   cls_rgw_reshard_add_op() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(entry, bl);
+    encode(create_only, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(entry, bl);
+    create_only = false;
+    if (struct_v >= 2) {
+      decode(create_only, bl);
+    }
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<cls_rgw_reshard_add_op*>& o);
