@@ -5,7 +5,8 @@
 
 #include <seastar/util/later.hh>
 
-seastar::future<> read_lock::lock()
+std::optional<seastar::future<>>
+read_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_read();
 }
@@ -15,7 +16,8 @@ void read_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_read();
 }
 
-seastar::future<> write_lock::lock()
+std::optional<seastar::future<>>
+write_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_write();
 }
@@ -25,7 +27,8 @@ void write_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_write();
 }
 
-seastar::future<> excl_lock::lock()
+std::optional<seastar::future<>>
+excl_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_excl();
 }
@@ -60,10 +63,11 @@ tri_mutex::~tri_mutex()
   assert(!is_acquired());
 }
 
-seastar::future<> tri_mutex::lock_for_read()
+std::optional<seastar::future<>>
+tri_mutex::lock_for_read()
 {
   if (try_lock_for_read()) {
-    return seastar::now();
+    return std::nullopt;
   }
   waiters.emplace_back(seastar::promise<>(), type_t::read);
   return waiters.back().pr.get_future();
@@ -101,10 +105,11 @@ void tri_mutex::demote_to_read()
   ++readers;
 }
 
-seastar::future<> tri_mutex::lock_for_write()
+std::optional<seastar::future<>>
+tri_mutex::lock_for_write()
 {
   if (try_lock_for_write()) {
-    return seastar::now();
+    return std::nullopt;
   }
   waiters.emplace_back(seastar::promise<>(), type_t::write);
   return waiters.back().pr.get_future();
@@ -142,10 +147,11 @@ void tri_mutex::demote_to_write()
 }
 
 // for exclusive users
-seastar::future<> tri_mutex::lock_for_excl()
+std::optional<seastar::future<>>
+tri_mutex::lock_for_excl()
 {
   if (try_lock_for_excl()) {
-    return seastar::now();
+    return std::nullopt;
   }
   waiters.emplace_back(seastar::promise<>(), type_t::exclusive);
   return waiters.back().pr.get_future();
