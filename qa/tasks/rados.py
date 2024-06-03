@@ -162,6 +162,8 @@ def task(ctx, config):
         args.extend(['--balance-reads'])
     if config.get('localize_reads', False):
         args.extend(['--localize-reads'])
+    if config.get('max_attr_len', None):
+        args.extend(['--max-attr-len', str(config.get('max_attr_len'))])
     args.extend([
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
