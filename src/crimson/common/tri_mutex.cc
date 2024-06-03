@@ -112,11 +112,9 @@ seastar::future<> tri_mutex::lock_for_write()
 
 bool tri_mutex::try_lock_for_write() noexcept
 {
-  if (!readers && !exclusively_used) {
-    if (waiters.empty()) {
-      ++writers;
-      return true;
-    }
+  if (!readers && !exclusively_used && waiters.empty()) {
+    ++writers;
+    return true;
   }
   return false;
 }
