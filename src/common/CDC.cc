@@ -5,6 +5,7 @@
 
 #include "CDC.h"
 #include "FastCDC.h"
+#include "JCCDC.h"
 #include "FixedCDC.h"
 
 std::unique_ptr<CDC> CDC::create(
@@ -12,6 +13,9 @@ std::unique_ptr<CDC> CDC::create(
   int bits,
   int windowbits)
 {
+  if (type == "jc") {
+    return std::unique_ptr<CDC>(new FastCDC(bits, windowbits));
+  }
   if (type == "fastcdc") {
     return std::unique_ptr<CDC>(new FastCDC(bits, windowbits));
   }
@@ -42,4 +46,3 @@ void generate_buffer(int size, bufferlist *outbl, int seed)
     outbl->append(p);
   }
 }
-
