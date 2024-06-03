@@ -3841,6 +3841,14 @@ private:
     CollectionRef c,
     OnodeRef& o,
     WriteContext *wctx);
+  void _maybe_reformat_object(
+    Collection* c,
+    OnodeRef& o,
+    uint64_t offset,
+    size_t length,
+    const bufferlist& bl,
+    uint32_t op_flags,
+    const span_stat_t& span_stat);
   void _wctx_finish(
     TransContext *txc,
     CollectionRef& c,

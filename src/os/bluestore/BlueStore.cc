@@ -12385,126 +12385,7 @@ int BlueStore::read(
     }
   }
   if (might_need_reformatting) {
-    int64_t opt_defragment = 0;
-    int64_t opt_recompress = 0;
-    c->pool_opts.get(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, &opt_defragment);
-    c->pool_opts.get(pool_opts_t::DEEP_SCRUB_RECOMPRESS, &opt_recompress);
-    dout(10) << __func__ << " defragment = " << opt_defragment
-            << " recompress = " << opt_recompress
-            << " span stat {" << span_stat << "}"
-            << dendl;
-    _dump_onode<30>(cct, *o);
-
-    bool might_need_defragment = false;
-    bool might_need_recompress = false;
-    auto need = length;
-    WriteContext wctx;
-
-    if (span_stat.cached == 0 && span_stat.allocated_shared == 0) {
-      if (opt_defragment || opt_recompress) {
-        // will probably need write context
-        _choose_write_options(c, o, op_flags, &wctx);
-      }
-      // do reformat if
-      // - object isn't cached (meaning it's not being written at the moment),
-      // - and there are no shared blobs withing the span.
-      //   as this might result is used space increase.
-      if (opt_recompress) {
-	if (wctx.compress &&
-	    span_stat.allocated > 0) {
-	  ceph_assert(wctx.compressor);
-	  logger->inc(l_bluestore_reformat_compress_attempted);
-	  need = 0;
-	  auto bl_it = bl.begin();
-	  uint64_t offs = offset;
-	  while(bl_it != bl.end()) {
-	    BlobRef blob = c->new_blob();
-
-	    bufferlist from_bl;
-	    size_t l = std::min(wctx.target_blob_size, uint64_t(bl_it.get_remaining()));
-	    bl_it.copy(l, from_bl);
-	    //FIXME: add zero detection
-	    auto& wi = wctx.write(offs, blob, l, 0, from_bl, 0, l, false, true);
-
-	    uint64_t res_len = from_bl.length();
-	    std::optional<int32_t> compressor_message;
-	    bufferlist cbl;
-	    if (l > min_alloc_size &&
-	        wctx.compressor->compress(from_bl, cbl, compressor_message) == 0) {
-	      res_len = cbl.length();
-	      wi.compressor_message = compressor_message;
-	      std::swap(wi.compressed_bl, cbl);
-	      // don't set wi.compress_len and wi.compressed as this is s redundant
-	      // at this point, to be assigned in _do_alloc_write if needed.
-	    }
-	    need += p2roundup(res_len, min_alloc_size);
-	    offs += l;
-	    dout(20) << __func__ << " precompress : 0x"
-	      << std::hex << offs << "~" << l << "->" << res_len
-	      << std::dec << " " << * blob
-	      << dendl;
-	  }
-	  uint64_t allocated = span_stat.allocated + span_stat.allocated_compressed;
-	  dout(10) << __func__
-	    << " recompress info, 0x"
-	    << std::hex << need << " vs. 0x" << allocated
-	    << std::dec << dendl;
-	  if (need < allocated) {
-	    might_need_recompress = true;
-	    wctx.precompressed = true;
-	  } else if (need == allocated) {
-	    wctx.precompressed = true; // may be do compression if defragmenting below
-	  } else {
-	    // don't even try compression if defragmenting below
-	    logger->inc(l_bluestore_reformat_compress_omitted);
-	    wctx.reset();
-	    need = length;
-	  }
-	}
-      }
-      if (!might_need_recompress && opt_defragment) {
-	if (span_stat.frags > 1) {
-	  logger->inc(l_bluestore_reformat_defragment_attempted);
-	  PExtentVector prealloc;
-	  prealloc.reserve(need / min_alloc_size + 1);
-	  auto start = mono_clock::now();
-	  int64_t preallocated = alloc->allocate(
-	    need, min_alloc_size, need,
-	    0, &prealloc);
-	  log_latency("allocator@_prepare_reformat",
-	    l_bluestore_allocator_lat,
-	    mono_clock::now() - start,
-	    cct->_conf->bluestore_log_op_age);
-	  might_need_defragment = preallocated >= (int64_t)need && prealloc.size() < span_stat.frags;
-	  size_t frags = 0;
-	  if (might_need_defragment) {
-	    frags = prealloc.size();
-	    wctx.setup_prealloc(std::move(prealloc), preallocated);
-	  } else {
-	    logger->inc(l_bluestore_reformat_defragment_omitted);
-	  }
-	  dout(10) << __func__ << " preallocated: 0x"
-	    << std::hex << preallocated << std::dec
-	    << " new frags:" << frags
-	    << " defragment: " << might_need_defragment
-	    << dendl;
-	}
-      }
-    }
-
-    if (might_need_defragment || might_need_recompress) {
-      TransContext* txc =
-        _txc_create(c, c->osr.get(), nullptr);
-      txc->bytes += length;
-      if (wctx.precompressed) {
-        o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
-      }
-      logger->inc(l_bluestore_reformat_issued);
-      _txc_exec_reformat_write(txc, c, o, offset, length, bl, wctx);
-    } else if (wctx.precompressed) {
-      logger->inc(l_bluestore_reformat_compress_omitted);
-    }
-    wctx.dispose_remaining_prealloc(alloc);
+    _maybe_reformat_object(c, o, offset, length, bl, op_flags, span_stat);
   }
 
  out:
@@ -16143,18 +16024,10 @@ void BlueStore::_txc_exec_reformat_write(TransContext* txc,
   // object operations
   std::unique_lock l(c->lock);
   ceph_assert(o->exists);
-  _assign_nid(txc, o);
   int r = _do_write(txc, txc->ch, o, offset, length, bl, wctx);
 
   if (r < 0) {
-    const char* msg = "unexpected error code";
-    if (r == -ENOSPC) {
-      // For now, if we hit _any_ ENOSPC, crash, before we do any damage
-      // by partially applying transactions.
-      msg = "ENOSPC from bluestore, misconfigured cluster";
-    }
-    derr << __func__ << " error " << cpp_strerror(r) << dendl;
-    derr << msg << dendl;
+    dout(5) << __func__ << " got an error: " << cpp_strerror(r) << dendl;
     wctx.rewind_prealloc();
     txc->osr->undo_queue(txc);
     delete txc;
@@ -17288,6 +17161,136 @@ int BlueStore::_do_alloc_write(
   ceph_assert(prealloc_pos == pextents.end());
   ceph_assert(prealloc_left == 0);
   return 0;
+}
+
+void BlueStore::_maybe_reformat_object(Collection* c, OnodeRef& o,
+  uint64_t offset, size_t length, const bufferlist& bl, uint32_t op_flags,
+  const span_stat_t& span_stat)
+{
+  int64_t opt_defragment = 0;
+  int64_t opt_recompress = 0;
+  c->pool_opts.get(pool_opts_t::DEEP_SCRUB_DEFRAGMENT, &opt_defragment);
+  c->pool_opts.get(pool_opts_t::DEEP_SCRUB_RECOMPRESS, &opt_recompress);
+  dout(10) << __func__ << " defragment = " << opt_defragment
+    << " recompress = " << opt_recompress
+    << " span stat {" << span_stat << "}"
+    << dendl;
+  _dump_onode<30>(cct, *o);
+
+  bool might_need_defragment = false;
+  bool might_need_recompress = false;
+  auto need = length;
+  WriteContext wctx;
+
+  if (span_stat.cached == 0 && span_stat.allocated_shared == 0) {
+    if (opt_defragment || opt_recompress) {
+      // will probably need write context
+      _choose_write_options(c, o, op_flags, &wctx);
+    }
+    // do reformat if
+    // - object isn't cached (meaning it's not being written at the moment),
+    // - and there are no shared blobs withing the span.
+    //   as this might result is used space increase.
+    if (opt_recompress) {
+      if (wctx.compress &&
+	span_stat.allocated > 0) {
+	ceph_assert(wctx.compressor);
+	logger->inc(l_bluestore_reformat_compress_attempted);
+	need = 0;
+	auto bl_it = bl.begin();
+	uint64_t offs = offset;
+	while (bl_it != bl.end()) {
+	  BlobRef blob = c->new_blob();
+
+	  bufferlist from_bl;
+	  size_t l = std::min(wctx.target_blob_size, uint64_t(bl_it.get_remaining()));
+	  bl_it.copy(l, from_bl);
+	  //FIXME: add zero detection
+	  auto& wi = wctx.write(offs, blob, l, 0, from_bl, 0, l, false, true);
+
+	  uint64_t res_len = from_bl.length();
+	  std::optional<int32_t> compressor_message;
+	  bufferlist cbl;
+	  if (l > min_alloc_size &&
+	    wctx.compressor->compress(from_bl, cbl, compressor_message) == 0) {
+	    res_len = cbl.length();
+	    wi.compressor_message = compressor_message;
+	    std::swap(wi.compressed_bl, cbl);
+	    // don't set wi.compress_len and wi.compressed as this is s redundant
+	    // at this point, to be assigned in _do_alloc_write if needed.
+	  }
+	  need += p2roundup(res_len, min_alloc_size);
+	  offs += l;
+	  dout(20) << __func__ << " precompress : 0x"
+	    << std::hex << offs << "~" << l << "->" << res_len
+	    << std::dec << " " << *blob
+	    << dendl;
+	}
+	uint64_t allocated = span_stat.allocated + span_stat.allocated_compressed;
+	dout(10) << __func__
+	  << " recompress info, 0x"
+	  << std::hex << need << " vs. 0x" << allocated
+	  << std::dec << dendl;
+	if (need < allocated) {
+	  might_need_recompress = true;
+	  wctx.precompressed = true;
+	}
+	else if (need == allocated) {
+	  wctx.precompressed = true; // may be do compression if defragmenting below
+	}
+	else {
+	  // don't even try compression if defragmenting below
+	  logger->inc(l_bluestore_reformat_compress_omitted);
+	  wctx.reset();
+	  need = length;
+	}
+      }
+    }
+    if (!might_need_recompress && opt_defragment) {
+      if (span_stat.frags > 1) {
+	logger->inc(l_bluestore_reformat_defragment_attempted);
+	PExtentVector prealloc;
+	prealloc.reserve(need / min_alloc_size + 1);
+	auto start = mono_clock::now();
+	int64_t preallocated = alloc->allocate(
+	  need, min_alloc_size, need,
+	  0, &prealloc);
+	log_latency("allocator@_prepare_reformat",
+	  l_bluestore_allocator_lat,
+	  mono_clock::now() - start,
+	  cct->_conf->bluestore_log_op_age);
+	might_need_defragment = preallocated >= (int64_t)need && prealloc.size() < span_stat.frags;
+	size_t frags = 0;
+	if (might_need_defragment) {
+	  frags = prealloc.size();
+	  wctx.setup_prealloc(std::move(prealloc), preallocated);
+	}
+	else {
+	  logger->inc(l_bluestore_reformat_defragment_omitted);
+	}
+	dout(10) << __func__ << " preallocated: 0x"
+	  << std::hex << preallocated << std::dec
+	  << " new frags:" << frags
+	  << " defragment: " << might_need_defragment
+	  << dendl;
+      }
+    }
+  }
+
+  if (might_need_defragment || might_need_recompress) {
+    TransContext* txc =
+      _txc_create(c, c->osr.get(), nullptr);
+    txc->bytes += length;
+    if (wctx.precompressed) {
+      o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
+    }
+    logger->inc(l_bluestore_reformat_issued);
+    _txc_exec_reformat_write(txc, c, o, offset, length, bl, wctx);
+  }
+  else if (wctx.precompressed) {
+    logger->inc(l_bluestore_reformat_compress_omitted);
+  }
+  wctx.dispose_remaining_prealloc(alloc);
 }
 
 void BlueStore::_wctx_finish(
