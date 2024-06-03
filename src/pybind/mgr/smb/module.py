@@ -52,7 +52,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self._public_store = (
             public_store or rados_store.RADOSConfigStore.init(self)
         )
-        path_resolver = path_resolver or fs.CephFSPathResolver(self)
+        path_resolver = path_resolver or fs.CachingCephFSPathResolver(self)
         # Why the honk is the cast needed but path_resolver doesn't need it??
         # Sometimes mypy drives me batty.
         authorizer = cast(
