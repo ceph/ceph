@@ -1126,7 +1126,7 @@ std::unique_ptr<LuaManager> MotrStore::get_lua_manager(const DoutPrefixProvider 
   return std::make_unique<MotrLuaManager>(this, dpp, luarocks_path);
 }
 
-int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **_state, optional_yield y, bool follow_olh)
+int MotrObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
   // Get object's metadata (those stored in rgw_bucket_dir_entry).
   bufferlist bl;
@@ -1393,7 +1393,7 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   }
 
   // Skip opening an empty object.
-  if(source->get_obj_size() == 0)
+  if(source->get_size() == 0)
     return 0;
 
   // Open the object here.
@@ -1449,7 +1449,7 @@ MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source) :
   source(_source)
 { }
 
-// Implementation of DELETE OBJ also requires MotrObject::get_obj_state()
+// Implementation of DELETE OBJ also requires MotrObject::load_obj_state()
 // to retrieve and set object's state from object's metadata.
 //
 // TODO:
