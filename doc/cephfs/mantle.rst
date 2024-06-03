@@ -35,10 +35,11 @@ Quickstart with vstart
 .. warning::
 
     Developing balancers with vstart is difficult because running all daemons
-    and clients on one node can overload the system. Let it run for a while, even
-    though you will likely see a bunch of lost heartbeat and laggy MDS warnings.
-    Most of the time this guide will work but sometimes all MDSs lock up and you
-    cannot actually see them spill. It is much better to run this on a cluster.
+    and clients on one node can overload the system. Let the system run for a
+    while, even though there will likely be many lost heartbeat warnings and
+    many laggy MDS warnings. In most cases this guide will work, but sometimes
+    when developing with vstart all MDSs will lock up and you cannot actually
+    see them spill. It is better to run this on a multi-node cluster.
 
 As a prerequisite, we assume you have installed `mdtest
 <https://sourceforge.net/projects/mdtest/>`_ or pulled the `Docker image
