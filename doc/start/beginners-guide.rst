@@ -8,6 +8,9 @@ Ceph is a clustered and distributed storage manager. If that's too cryptic,
 then just think of Ceph as a computer program that stores data and uses a
 network to make sure that there is a backup copy of the data.
 
+Storage Interfaces
+------------------
+
 Ceph offers several "storage interfaces", which is another
 way of saying "ways of storing data". These storage interfaces include: 
 - CephFS (a file system) 
@@ -17,6 +20,9 @@ way of saying "ways of storing data". These storage interfaces include:
 Deep down, though, all three of these are really RADOS object stores. CephFS
 and RBD are just presenting themselves as file systems and block devices.
 
+Storage Manager: What is It?
+----------------------------
+
 Ceph is a clustered and distributed storage manager that offers data
 redundancy. This sentence might be too cryptic for first-time readers of the
 Ceph Beginner's Guide, so let's explain all of the terms in it:
@@ -24,11 +30,11 @@ Ceph Beginner's Guide, so let's explain all of the terms in it:
 - **Storage Manager.** Ceph is a storage manager. This means that Ceph is
   software that helps storage resources store data. Storage resources come in
   several forms: hard disk drives (HDD), solid-state drives (SSD), magnetic
-  tape, floppy disks, punched tape, Hoellerith-style punch cards, and magnetic
+  tape, floppy disks, punched tape, Hollerith-style punch cards, and magnetic
   drum memory are all forms of storage resources. In this beginner's guide,
   we'll focus on hard disk drives (HDD) and solid-state drives (SSD).
-- **Clustered storage manager** Ceph is a clustered storage manager. That means
-  that the storage manager installed not just on a single machine but on
+- **Clustered storage manager.** Ceph is a clustered storage manager. That
+  means that the storage manager installed not just on a single machine but on
   several machines that work together as a system.
 - **Distributed storage manager.** Ceph is a clustered and distributed storage
   manager. That means that the data that is stored and the infrastructure that
