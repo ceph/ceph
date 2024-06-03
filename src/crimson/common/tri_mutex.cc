@@ -85,9 +85,8 @@ bool tri_mutex::try_lock_for_read() noexcept
   if (!writers && !exclusively_used && waiters.empty()) {
     ++readers;
     return true;
-  } else {
-    return false;
   }
+  return false;
 }
 
 void tri_mutex::unlock_for_read()
@@ -135,11 +134,9 @@ bool tri_mutex::try_lock_for_write() noexcept
 {
   LOG_PREFIX(tri_mutex::try_lock_for_write());
   DEBUGDPP("", *this);
-  if (!readers && !exclusively_used) {
-    if (waiters.empty()) {
-      ++writers;
-      return true;
-    }
+  if (!readers && !exclusively_used && waiters.empty()) {
+    ++writers;
+    return true;
   }
   return false;
 }
