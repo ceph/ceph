@@ -919,7 +919,16 @@ void RGWIndexCompletionManager::process()
       RGWRados::BucketShard bs(store);
       RGWBucketInfo bucket_info;
 
-      int r = bs.init(c->obj.bucket, c->obj, &bucket_info, &dpp);
+      std::map<std::string, bufferlist> bucket_attrs;
+      int r = store->get_bucket_info(&store->svc, c->obj.bucket.tenant, c->obj.bucket.name,
+                              bucket_info, nullptr, null_yield, &dpp, &bucket_attrs);
+      if (r < 0) {
+        ldpp_dout(&dpp, 0) << "ERROR: " << __func__ << "(): failed to get_bucket_info, obj=" << c->obj << " r=" << r << dendl;
+        /* not much to do */
+        continue;
+      }
+      c->obj.bucket = bucket_info.bucket;
+      r = bs.init(c->obj.bucket, c->obj, &bucket_info, &dpp);
       if (r < 0) {
         ldpp_dout(&dpp, 0) << "ERROR: " << __func__ << "(): failed to initialize BucketShard, obj=" << c->obj << " r=" << r << dendl;
         /* not much to do */
