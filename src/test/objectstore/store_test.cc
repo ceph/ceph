@@ -12797,7 +12797,7 @@ TEST_P(StoreTest, BasicReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(1, logger->get(l_bluestore_reformat_defragment_attempted));
@@ -12814,7 +12814,7 @@ TEST_P(StoreTest, BasicReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(2, logger->get(l_bluestore_reformat_defragment_attempted));
@@ -12825,7 +12825,7 @@ TEST_P(StoreTest, BasicReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(2, logger->get(l_bluestore_reformat_defragment_attempted));
@@ -12859,7 +12859,7 @@ TEST_P(StoreTest, BasicReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_defragment_attempted));
@@ -12870,7 +12870,7 @@ TEST_P(StoreTest, BasicReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_defragment_attempted));
@@ -12897,7 +12897,7 @@ TEST_P(StoreTest, BasicReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_defragment_attempted));
@@ -13045,7 +13045,7 @@ TEST_P(StoreTest, CompressedReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(2, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13094,7 +13094,7 @@ TEST_P(StoreTest, CompressedReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13107,7 +13107,7 @@ TEST_P(StoreTest, CompressedReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13158,7 +13158,7 @@ TEST_P(StoreTest, CompressedReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13171,7 +13171,7 @@ TEST_P(StoreTest, CompressedReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13246,7 +13246,7 @@ TEST_P(StoreTest, LazyCompressionReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13257,7 +13257,7 @@ TEST_P(StoreTest, LazyCompressionReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13291,7 +13291,7 @@ TEST_P(StoreTest, LazyCompressionReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(2, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13302,7 +13302,7 @@ TEST_P(StoreTest, LazyCompressionReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(2, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13336,7 +13336,7 @@ TEST_P(StoreTest, LazyCompressionReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13385,7 +13385,7 @@ TEST_P(StoreTest, LazyCompressionReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_attempted));
@@ -13398,7 +13398,7 @@ TEST_P(StoreTest, LazyCompressionReformattingTest) {
   {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
-      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(4, logger->get(l_bluestore_reformat_compress_attempted));
