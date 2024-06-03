@@ -49,20 +49,22 @@ TEST(TestRGWReshard, dynamic_reshard_shard_count)
     "821 is prime";
 
   // tests when max dynamic shards is equal to end of prime list
-  ASSERT_EQ(1999u, RGWBucketReshard::get_preferred_shards(1998, 1999));
-  ASSERT_EQ(1999u, RGWBucketReshard::get_preferred_shards(1999, 1999));
-  ASSERT_EQ(1999u, RGWBucketReshard::get_preferred_shards(2000, 1999));
-  ASSERT_EQ(1999u, RGWBucketReshard::get_preferred_shards(2001, 1999));
+  ASSERT_EQ(1999u, RGWBucketReshard::get_prime_shard_count(1998, 1999, 11));
+  ASSERT_EQ(1999u, RGWBucketReshard::get_prime_shard_count(1999, 1999, 11));
+  ASSERT_EQ(1999u, RGWBucketReshard::get_prime_shard_count(2000, 1999, 11));
 
   // tests when max dynamic shards is above end of prime list
-  ASSERT_EQ(1999u, RGWBucketReshard::get_preferred_shards(1998, 3000));
-  ASSERT_EQ(1999u, RGWBucketReshard::get_preferred_shards(1999, 3000));
-  ASSERT_EQ(2000u, RGWBucketReshard::get_preferred_shards(2000, 3000));
-  ASSERT_EQ(2001u, RGWBucketReshard::get_preferred_shards(2001, 3000));
+  ASSERT_EQ(1999u, RGWBucketReshard::get_prime_shard_count(1998, 3000, 11));
+  ASSERT_EQ(1999u, RGWBucketReshard::get_prime_shard_count(1999, 3000, 11));
+  ASSERT_EQ(2000u, RGWBucketReshard::get_prime_shard_count(2000, 3000, 11));
+  ASSERT_EQ(2001u, RGWBucketReshard::get_prime_shard_count(2001, 3000, 11));
 
   // tests when max dynamic shards is below end of prime list
-  ASSERT_EQ(499u, RGWBucketReshard::get_preferred_shards(1998, 500));
-  ASSERT_EQ(499u, RGWBucketReshard::get_preferred_shards(1999, 500));
-  ASSERT_EQ(499u, RGWBucketReshard::get_preferred_shards(2000, 500));
-  ASSERT_EQ(499u, RGWBucketReshard::get_preferred_shards(2001, 500));
+  ASSERT_EQ(500u, RGWBucketReshard::get_prime_shard_count(1998, 500, 11));
+  ASSERT_EQ(500u, RGWBucketReshard::get_prime_shard_count(2001, 500, 11));
+
+  // tests when max dynamic shards is below end of prime list
+  ASSERT_EQ(499u, RGWBucketReshard::get_prime_shard_count(498, 1999, 499));
+  ASSERT_EQ(499u, RGWBucketReshard::get_prime_shard_count(499, 1999, 499));
+  ASSERT_EQ(503u, RGWBucketReshard::get_prime_shard_count(500, 1999, 499));
 }

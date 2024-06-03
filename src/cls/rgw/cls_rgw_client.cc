@@ -1083,11 +1083,14 @@ void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op,
   op.exec(RGW_CLASS, RGW_MP_UPLOAD_PART_INFO_UPDATE, in);
 }
 
-void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
+void cls_rgw_reshard_add(librados::ObjectWriteOperation& op,
+			 const cls_rgw_reshard_entry& entry,
+			 const bool create_only)
 {
   bufferlist in;
   cls_rgw_reshard_add_op call;
   call.entry = entry;
+  call.create_only = create_only;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_RESHARD_ADD, in);
 }
