@@ -1768,7 +1768,7 @@ class AdminGatewaySpec(ServiceSpec):
                  port: Optional[int] = None,
                  ssl_certificate: Optional[List[str]] = None,
                  ssl_certificate_key: Optional[List[str]] = None,
-                 ssl_prefer_server_ciphers: Optional[str] = "on",
+                 ssl_prefer_server_ciphers: Optional[str] = None,
                  ssl_protocols: List[Optional[str]] = None,
                  ssl_ciphers: Optional[List[str]] = None,
                  unmanaged: bool = False,

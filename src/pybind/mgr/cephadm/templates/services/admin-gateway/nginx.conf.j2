@@ -56,7 +56,9 @@ http {
 	{% if spec.ssl_ciphers %}
 	ssl_ciphers	    {{ spec.ssl_ciphers | join(':') }};
 	{% endif %}
-	ssl_prefer_server_ciphers {{ spec.ssl_prefer_server_ciphers }};
+	ssl_prefer_server_ciphers {{ spec.ssl_prefer_server_ciphers or 'on'}};
+	ssl_stapling on;
+	ssl_stapling_verify on;
 {% endif %}
 
 {% if dashboard_eps %}
