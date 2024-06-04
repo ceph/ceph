@@ -476,13 +476,3 @@ int OsdScrub::get_blocked_pgs_count() const
 {
   return m_queue.get_blocked_pgs_count();
 }
-
-bool OsdScrub::set_reserving_now(spg_t reserving_id, utime_t now_is)
-{
-  return m_queue.set_reserving_now(reserving_id, now_is);
-}
-
-void OsdScrub::clear_reserving_now(spg_t reserving_id)
-{
-  m_queue.clear_reserving_now(reserving_id);
-}
