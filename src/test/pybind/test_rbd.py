@@ -592,7 +592,11 @@ class TestImage(object):
 
     def setup_method(self, method):
         self.rbd = RBD()
+        # {create,access,modify}_timestamp() have second precision,
+        # allow for rounding
+        self.time_before_create = datetime.utcnow() - timedelta(seconds=1)
         create_image()
+        self.time_after_create = datetime.utcnow() + timedelta(seconds=1)
         self.image = Image(ioctx, image_name)
 
     def teardown_method(self, method):
@@ -640,19 +644,19 @@ class TestImage(object):
         assert_greater_equal(self.image.data_pool_id(), 0)
 
     def test_create_timestamp(self):
-        timestamp = self.image.create_timestamp()
-        assert_not_equal(0, timestamp.year)
-        assert_not_equal(1970, timestamp.year)
+        time = self.image.create_timestamp()
+        assert self.time_before_create < time
+        assert time < self.time_after_create
 
     def test_access_timestamp(self):
-        timestamp = self.image.access_timestamp()
-        assert_not_equal(0, timestamp.year)
-        assert_not_equal(1970, timestamp.year)
+        time = self.image.access_timestamp()
+        assert self.time_before_create < time
+        assert time < self.time_after_create
 
     def test_modify_timestamp(self):
-        timestamp = self.image.modify_timestamp()
-        assert_not_equal(0, timestamp.year)
-        assert_not_equal(1970, timestamp.year)
+        time = self.image.modify_timestamp()
+        assert self.time_before_create < time
+        assert time < self.time_after_create
 
     def test_invalidate_cache(self):
         self.image.write(b'abc', 0)
@@ -1113,14 +1117,16 @@ class TestImage(object):
         eq(self.image.snap_exists('snap1'), False)
 
     def test_snap_timestamp(self):
+        # get_snap_timestamp() has second precision, allow for rounding
+        time_before = datetime.utcnow() - timedelta(seconds=1)
         self.image.create_snap('snap1')
+        time_after = datetime.utcnow() + timedelta(seconds=1)
         eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
         for snap in self.image.list_snaps():
             snap_id = snap["id"]
         time = self.image.get_snap_timestamp(snap_id)
-        assert_not_equal(b'', time.year)
-        assert_not_equal(0, time.year)
-        assert_not_equal(time.year, '1970')
+        assert time_before < time
+        assert time < time_after
         self.image.remove_snap('snap1')
 
     def test_limit_snaps(self):
