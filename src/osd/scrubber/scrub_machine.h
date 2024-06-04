@@ -564,7 +564,7 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
 
 struct ReservingReplicas : sc::state<ReservingReplicas, Session>, NamedSimply {
   explicit ReservingReplicas(my_context ctx);
-  ~ReservingReplicas();
+  ~ReservingReplicas() = default;
   using reactions = mpl::list<
       sc::custom_reaction<ReplicaGrant>,
       sc::custom_reaction<ReplicaReject>,
