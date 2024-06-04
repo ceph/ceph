@@ -1713,6 +1713,12 @@ options:
   default: 1000
   services:
   - mds
+- name: mds_delay_journal_replay_for_testing
+  type: millisecs
+  level: dev
+  desc: Delay the journal replay to verify the replay time estimate
+  long_desc: Jorunal replay warning is activated if the mds has been in replay state for more than 30 seconds. This config delays replay for validating the replay warning in tests.
+  default: 0
   flags:
   - runtime
 - name: mds_server_dispatch_killpoint_random

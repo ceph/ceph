@@ -221,7 +221,46 @@ uint64_t MDLog::get_safe_pos() const
   return journaler->get_write_safe_pos(); 
 }
 
+// estimate the replay completion time based on mdlog journal pointers
+EstimatedReplayTime MDLog::get_estimated_replay_finish_time() {
+  ceph_assert(mds->is_replay());
 
+  EstimatedReplayTime estimated_time{0, std::chrono::seconds::zero(), std::chrono::seconds::zero()};
+  if (!journaler) {
+    return estimated_time;
+  }
+
+  auto read_pos = journaler->get_read_pos();
+  auto write_pos = journaler->get_write_pos();
+  auto trimmed_pos = journaler->get_trimmed_pos();
+
+  dout(20) << __func__ << ": read_pos=" << read_pos << ", write_pos="
+	   << write_pos << ", trimmed_pos=" << trimmed_pos << dendl;
+
+  if (read_pos == trimmed_pos || write_pos == trimmed_pos) {
+    return estimated_time;
+  }
+
+  auto total_bytes = write_pos - trimmed_pos;
+  double percent_complete = ((double)(read_pos - trimmed_pos)) / (double)total_bytes;
+  auto elapsed_time = std::chrono::duration_cast<std::chrono::seconds>
+    (ceph::coarse_mono_clock::now() - replay_start_time);
+  auto time = ((1 - percent_complete) / percent_complete) * elapsed_time;
+
+  dout(20) << __func__ << "percent_complete=" << percent_complete
+	   << ", elapsed_time=" << elapsed_time
+	   << ", estimated_time=" << std::chrono::round<std::chrono::seconds>(time)
+	   << dendl;
+
+  estimated_time.percent_complete = percent_complete * 100;
+  estimated_time.elapsed_time = elapsed_time;
+  estimated_time.estimated_time = std::chrono::round<std::chrono::seconds>(time);
+  dout(20) << __func__ << "estimated_time.percent_complete=" << estimated_time.percent_complete
+	   << ", estimated_time.elapsed_time=" << estimated_time.elapsed_time
+	   << ", estimated_time.estimated_time=" << estimated_time.estimated_time
+	   << dendl;
+  return estimated_time;
+}
 
 void MDLog::create(MDSContext *c)
 {
@@ -1137,6 +1176,7 @@ void MDLog::_recovery_thread(MDSContext *completion)
   {
     std::lock_guard l(mds->mds_lock);
     journaler = front_journal;
+    replay_start_time = ceph::coarse_mono_clock::now();
   }
 
   C_SaferCond recover_wait;
@@ -1374,11 +1414,17 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 // i am a separate thread
 void MDLog::_replay_thread()
 {
-  dout(10) << "_replay_thread start" << dendl;
+  dout(10) << __func__ << ": start time: " << replay_start_time << ", now: "
+           << ceph::coarse_mono_clock::now() << dendl;
 
   // loop
   int r = 0;
   while (1) {
+    auto sleep_time = g_conf().get_val<std::chrono::milliseconds>("mds_delay_journal_replay_for_testing");
+    if (unlikely(sleep_time > 0ms)) {
+      dout(10) << __func__ << ": sleeping for " << sleep_time << "ms" << dendl;
+      std::this_thread::sleep_for(sleep_time);
+    }
     // wait for read?
     journaler->check_isreadable(); 
     if (journaler->get_error()) {

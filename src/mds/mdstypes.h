@@ -1044,4 +1044,12 @@ inline bool operator==(const MDSCacheObjectInfo& l, const MDSCacheObjectInfo& r)
 }
 WRITE_CLASS_ENCODER(MDSCacheObjectInfo)
 
+struct EstimatedReplayTime {
+  double percent_complete;
+  std::chrono::seconds estimated_time;
+  std::chrono::seconds elapsed_time;
+
+  void print(std::ostream& out);
+};
+
 #endif
