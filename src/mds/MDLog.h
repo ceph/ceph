@@ -53,6 +53,7 @@ enum {
 #include "LogSegment.h"
 #include "MDSMap.h"
 #include "SegmentBoundary.h"
+#include "mdstypes.h"
 
 #include <list>
 #include <map>
@@ -162,6 +163,7 @@ public:
   void reopen(MDSContext *onopen);
   void append();
   void replay(MDSContext *onfinish);
+  EstimatedReplayTime get_estimated_replay_finish_time();
 
   void standby_trim_segments();
 
@@ -328,5 +330,7 @@ private:
   std::atomic<bool> upkeep_log_trim_shutdown{false};
 
   std::map<uint64_t, std::vector<Context*>> waiting_for_expire; // protected by mds_lock
+
+  ceph::coarse_mono_time replay_start_time = ceph::coarse_mono_clock::zero();
 };
 #endif
