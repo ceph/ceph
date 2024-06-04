@@ -1,0 +1,59 @@
+<cd-modal [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>{{ getMode() }} Tag</span>
+
+    <ng-container class="modal-content">
+      <form class="form"
+            #formDir="ngForm"
+            [formGroup]="form">
+        <div class="modal-body">
+          <!-- Key -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="key"
+                   i18n>Key</label>
+            <div class="cd-col-form-input">
+              <input type="text"
+                     class="form-control"
+                     formControlName="key"
+                     id="key">
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('key', formDir, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('key', formDir, 'unique')"
+                    i18n>This key must be unique.</span>
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('key', formDir, 'maxLength')"
+                    i18n>Length of the key must be maximum of 128 characters</span>
+            </div>
+          </div>
+
+          <!-- Value -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="value"
+                   i18n>Value</label>
+            <div class="cd-col-form-input">
+              <input id="value"
+                     class="form-control"
+                     type="text"
+                     formControlName="value">
+              <span *ngIf="form.showError('value', formDir, 'required')"
+                    class="invalid-feedback"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('value', formDir, 'maxLength')"
+                    i18n>Length of the value must be a maximum of 128 characters</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                                [form]="form"
+                                [submitText]="getMode()"></cd-form-button-panel>
+        </div>
+      </form>
+    </ng-container>
+  </cd-modal>
