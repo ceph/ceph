@@ -1,3 +1,4 @@
+import re
 import time
 import signal
 import logging
@@ -341,6 +342,60 @@ class TestClusterResize(CephFSTestCase):
             max_mds = (max_mds+1)%3+1
 
         self.fs.wait_for_daemons(timeout=90)
+
+class TestFailoverBeaconHealth(CephFSTestCase):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    def initiate_journal_replay(self, num_files=100):
+        """ Initiate journal replay by creating files and restarting mds server."""
+
+        self.config_set("mds", "mds_delay_journal_replay_for_testing", "5000")
+        self.mounts[0].test_files = [str(x) for x in range(num_files)]
+        self.mounts[0].create_files()
+        self.fs.fail()
+        self.fs.set_joinable()
+
+    def test_replay_beacon_estimated_time(self):
+        """
+        That beacon emits warning message with estimated time to complete replay
+        """
+        self.initiate_journal_replay()
+        self.wait_for_health("MDS_ESTIMATED_REPLAY_TIME", 60)
+        # remove the config so that replay finishes and the cluster
+        # is HEALTH_OK
+        self.config_rm("mds", "mds_delay_journal_replay_for_testing")
+        self.wait_for_health_clear(timeout=60)
+
+    def test_replay_estimated_time_accuracy(self):
+        self.initiate_journal_replay(250)
+        def replay_complete():
+            health = self.ceph_cluster.mon_manager.get_mon_health(debug=False, detail=True)
+            codes = [s for s in health['checks']]
+            return 'MDS_ESTIMATED_REPLAY_TIME' not in codes
+
+        def get_estimated_time():
+            completion_percentage = 0.0
+            time_duration = pending_duration = 0
+            with safe_while(sleep=5, tries=360) as proceed:
+                while proceed():
+                    health = self.ceph_cluster.mon_manager.get_mon_health(debug=False, detail=True)
+                    codes = [s for s in health['checks']]
+                    if 'MDS_ESTIMATED_REPLAY_TIME' in codes:
+                        message = health['checks']['MDS_ESTIMATED_REPLAY_TIME']['detail'][0]['message']
+                        ### sample warning string: "mds.a(mds.0): replay: 50.0446% complete - elapsed time: 582s, estimated time remaining: 581s"
+                        m = re.match(".* replay: (\d+(\.\d+)?)% complete - elapsed time: (\d+)s, estimated time remaining: (\d+)s", message)
+                        if not m:
+                            continue
+                        completion_percentage = float(m.group(1))
+                        time_duration = int(m.group(3))
+                        pending_duration = int(m.group(4))
+                        log.debug(f"MDS_ESTIMATED_REPLAY_TIME is present in health: {message}, duration: {time_duration}, completion_percentage: {completion_percentage}")
+                        if completion_percentage >= 50:
+                            return (completion_percentage, time_duration, pending_duration)
+        _, _, pending_duration = get_estimated_time()
+        # wait for 25% more time to avoid false negative failures
+        self.wait_until_true(replay_complete, timeout=pending_duration * 1.25)
 
 class TestFailover(CephFSTestCase):
     CLIENTS_REQUIRED = 1
