@@ -386,9 +386,3 @@ void ScrubQueue::clear_reserving_now(spg_t was_reserving_id)
   }
   // otherwise - ignore silently
 }
-
-bool ScrubQueue::is_reserving_now() const
-{
-  // no lock needed, as set_reserving_now() will recheck
-  return reserving_pg.has_value();
-}
