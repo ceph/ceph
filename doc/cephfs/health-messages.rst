@@ -269,3 +269,11 @@ other daemons, please see :ref:`health-checks`.
 
     To evict and permanently block broken clients from connecting to the
     cluster, set the ``required_client_feature`` bit ``client_mds_auth_caps``.
+
+``MDS_ESTIMATED_REPLAY_TIME``
+-----------------------------
+  Message
+    "HEALTH_WARN Replay: x% complete. Estimated time remaining *x* seconds
+
+  Description
+    When an MDS journal replay takes more than 30 seconds, this message indicates the estimated time to completion.
