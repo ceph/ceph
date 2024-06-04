@@ -627,10 +627,14 @@ class TestImage(object):
 
     @require_new_format()
     def test_id(self):
-        assert_not_equal(b'', self.image.id())
+        id = self.image.id()
+        assert isinstance(id, str)
+        assert len(id) > 0
 
     def test_block_name_prefix(self):
-        assert_not_equal(b'', self.image.block_name_prefix())
+        block_name_prefix = self.image.block_name_prefix()
+        assert isinstance(block_name_prefix, str)
+        assert len(block_name_prefix) > 0
 
     def test_data_pool_id(self):
         assert_greater_equal(self.image.data_pool_id(), 0)
