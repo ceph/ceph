@@ -3303,10 +3303,10 @@ class TestAdminGateway:
 
                                              }
                                          }"""),
+                    "nginx_internal.crt": f"{ceph_generated_cert}",
+                    "nginx_internal.key": f"{ceph_generated_key}",
                     "nginx.crt": f"{ceph_generated_cert}",
                     "nginx.key": f"{ceph_generated_key}",
-                    "nginx_internal.crt": f"{ceph_generated_cert}",
-                    "nginx_internal.key": f"{ceph_generated_key}"
                 }
             }
         }
