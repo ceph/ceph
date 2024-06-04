@@ -1,3 +1,24 @@
+overrides:
+  ceph:
+    conf:
+      client:
+      c1.client.0:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        rgw filter: d4n
+        rgw d4n cache cleaning interval: 5
+        rgw local cache address: "127.0.0.1:8001"
+        rgw remote cache address: "127.0.0.1:8002"
+        rgw d4n backend address: "127.0.0.1:8001"
+        d4n writecache enabled: true
+      c2.client.0:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+        rgw filter: d4n
+        rgw local cache address: "127.0.0.1:8002" 
+        d4n writecache enabled: true
 tasks:
 - install:
     # extra packages added for the rgw-d4ntests task
