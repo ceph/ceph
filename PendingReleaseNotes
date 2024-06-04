@@ -324,6 +324,8 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * NFS: The export create/apply of CephFS based exports will now have a additional parameter `cmount_path` under the FSAL block,
   which specifies the path within the CephFS to mount this export on. If this and the other
   `EXPORT { FSAL {} }` options are the same between multiple exports, those exports will share a single CephFS client. If not specified, the default is `/`.
+* CephFS: MDS emits a warning with estimated replay completion time  when replay
+  runs for more than 30 seconds.
 
 >=18.0.0
 
