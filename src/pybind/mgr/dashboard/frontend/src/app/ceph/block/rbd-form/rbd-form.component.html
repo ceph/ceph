@@ -88,6 +88,135 @@
           </div>
         </div>
 
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <!-- Mirroring -->
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="mirroring"
+                     name="mirroring"
+                     (change)="setMirrorMode()"
+                     [(ngModel)]="mirroring && this.currentPoolName"
+                     formControlName="mirroring">
+              <label class="custom-control-label"
+                     for="mirroring">Mirroring</label>
+              <cd-help-text>Allow data to be asynchronously mirrored between two Ceph clusters</cd-help-text>
+              <cd-alert-panel *ngIf="showMirrorDisableMessage"
+                              [showTitle]="false"
+                              type="info">Mirroring can not be disabled on <b>Pool</b> mirror mode.
+                                          You need to change the mirror mode to enable this option.
+              </cd-alert-panel>
+              <cd-alert-panel *ngIf="currentPoolMirrorMode === 'disabled'"
+                              type="info"
+                              [showTitle]="false"
+                              i18n>You need to set <b>mirror mode</b> in the selected pool to enable mirroring.
+                <button class="btn btn-light"
+                        type="button"
+                        [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', rbdForm.getValue('pool')]}}]">Set Mode</button>
+              </cd-alert-panel>
+            </div>
+            <div *ngIf="mirroring && currentPoolMirrorMode !== 'disabled'">
+              <div class="custom-control custom-radio ms-2"
+                   *ngFor="let option of mirroringOptions">
+                <input type="radio"
+                       class="form-check-input"
+                       [id]="option.value"
+                       [value]="option.value"
+                       name="mirroringMode"
+                       (change)="setExclusiveLock()"
+                       formControlName="mirroringMode"
+                       [attr.disabled]="shouldDisable(option.value)">
+                <label class="form-check-label"
+                       [for]="option.value">{{ option.value | titlecase }}</label>
+                <cd-help-text> {{ option.text}} </cd-help-text>
+                <cd-alert-panel *ngIf="shouldDisable(option.value) && mode !== 'editing'"
+                                type="info"
+                                [showTitle]="false"
+                                i18n>You need to set mode as <b>Image</b> in the selected pool to enable snapshot mirroring.
+                  <button class="btn btn-light mx-2"
+                          type="button"
+                          [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', rbdForm.getValue('pool')]}}]">Set Mode</button>
+                </cd-alert-panel>
+              </div>
+            </div><br>
+            <div class="form-group row"
+                 *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
+              <label class="cd-col-form-label required"
+                     [ngClass]="{'required': mode !== 'editing'}"
+                     i18n>Schedule Interval</label>
+              <div class="cd-col-form-input">
+                <input id="schedule"
+                       name="schedule"
+                       class="form-control"
+                       type="text"
+                       formControlName="schedule"
+                       i18n-placeholder
+                       placeholder="12h or 1d or 10m"
+                       [attr.disabled]="(peerConfigured === false) ? true : null">
+                <cd-help-text>
+                  <span i18n>Specify the interval to create mirror snapshots automatically. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively</span>
+                </cd-help-text>
+                <span *ngIf="rbdForm.showError('schedule', formDir, 'required')"
+                      class="invalid-feedback"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+            <!-- Use a dedicated pool -->
+            <div class="custom-control custom-checkbox"
+                 *ngIf="allDataPools.length > 1 || mode === 'editing'">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="useDataPool"
+                     name="useDataPool"
+                     formControlName="useDataPool"
+                     (change)="onUseDataPoolChange()">
+              <label class="custom-control-label"
+                     for="useDataPool"
+                     i18n>Dedicated data pool</label>
+              <cd-help-text>Use a dedicated pool to store the mirror data. If not selected, the mirror data will be stored in the same pool as the image data.</cd-help-text>
+              <cd-helper *ngIf="allDataPools.length <= 1 && mode !== 'editing'">
+                <span i18n>You need more than one pool with the rbd application label use to use a dedicated data pool.</span>
+              </cd-helper>
+            </div>
+            <!-- Data Pool -->
+            <div class="form-group row"
+                 *ngIf="rbdForm.getValue('useDataPool')">
+              <div class="cd-col-form-input pt-2 ms-4">
+                <input class="form-control"
+                       type="text"
+                       placeholder="Data pool name..."
+                       id="dataPool"
+                       name="dataPool"
+                       formControlName="dataPool"
+                       *ngIf="mode === 'editing' || !poolPermission.read">
+                <select id="dataPool"
+                        name="dataPool"
+                        class="form-select"
+                        formControlName="dataPool"
+                        (change)="onDataPoolChange($event.target.value)"
+                        *ngIf="mode !== 'editing' && poolPermission.read">
+                  <option *ngIf="dataPools === null"
+                          [ngValue]="null"
+                          i18n>Loading...</option>
+                  <option *ngIf="dataPools !== null && dataPools.length === 0"
+                          [ngValue]="null"
+                          i18n>-- No data pools available --</option>
+                  <option *ngIf="dataPools !== null && dataPools.length > 0"
+                          [ngValue]="null">-- Select a data pool --
+                  </option>
+                  <option *ngFor="let dataPool of dataPools"
+                          [value]="dataPool.pool_name">{{ dataPool.pool_name }}</option>
+                </select>
+                <cd-help-text>Dedicated pool that stores the object-data of the RBD.</cd-help-text>
+                <span class="invalid-feedback"
+                      *ngIf="rbdForm.showError('dataPool', formDir, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Namespace -->
         <div class="form-group row"
              *ngIf="mode !== 'editing' && rbdForm.getValue('pool') && namespaces === null">
@@ -126,69 +255,8 @@
               <option *ngFor="let namespace of namespaces"
                       [value]="namespace">{{ namespace }}</option>
             </select>
-          </div>
-        </div>
-
-        <!-- Use a dedicated pool -->
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     id="useDataPool"
-                     name="useDataPool"
-                     formControlName="useDataPool"
-                     (change)="onUseDataPoolChange()">
-              <label class="custom-control-label"
-                     for="useDataPool"
-                     i18n>Use a dedicated data pool</label>
-              <cd-helper *ngIf="allDataPools.length <= 1">
-                <span i18n>You need more than one pool with the rbd application label use to use a dedicated data pool.</span>
-              </cd-helper>
-            </div>
-          </div>
-        </div>
-
-        <!-- Data Pool -->
-        <div class="form-group row"
-             *ngIf="rbdForm.getValue('useDataPool')">
-          <label class="cd-col-form-label"
-                 for="dataPool">
-            <span [ngClass]="{'required': mode !== 'editing'}"
-                  i18n>Data pool</span>
-            <cd-helper i18n-html
-                       html="Dedicated pool that stores the object-data of the RBD.">
-            </cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="Data pool name..."
-                   id="dataPool"
-                   name="dataPool"
-                   formControlName="dataPool"
-                   *ngIf="mode === 'editing' || !poolPermission.read">
-            <select id="dataPool"
-                    name="dataPool"
-                    class="form-select"
-                    formControlName="dataPool"
-                    (change)="onDataPoolChange($event.target.value)"
-                    *ngIf="mode !== 'editing' && poolPermission.read">
-              <option *ngIf="dataPools === null"
-                      [ngValue]="null"
-                      i18n>Loading...</option>
-              <option *ngIf="dataPools !== null && dataPools.length === 0"
-                      [ngValue]="null"
-                      i18n>-- No data pools available --</option>
-              <option *ngIf="dataPools !== null && dataPools.length > 0"
-                      [ngValue]="null">-- Select a data pool --
-              </option>
-              <option *ngFor="let dataPool of dataPools"
-                      [value]="dataPool.pool_name">{{ dataPool.pool_name }}</option>
-            </select>
-            <span class="invalid-feedback"
-                  *ngIf="rbdForm.showError('dataPool', formDir, 'required')"
-                  i18n>This field is required.</span>
+            <cd-help-text>Namespace allows you to logically group RBD images within your Ceph Cluster.
+              Choosing a namespace makes it easier to locate and manage related RBD images efficiently</cd-help-text>
           </div>
         </div>
 
@@ -204,7 +272,7 @@
                    type="text"
                    formControlName="size"
                    i18n-placeholder
-                   placeholder="e.g., 10GiB"
+                   placeholder="10 GiB"
                    defaultUnit="GiB"
                    cdDimlessBinary>
             <span class="invalid-feedback"
@@ -216,62 +284,7 @@
             <span *ngIf="rbdForm.showError('size', formDir, 'pattern')"
                   class="invalid-feedback"
                   i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
-          </div>
-        </div>
-
-        <!-- Mirroring -->
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     id="mirroring"
-                     name="mirroring"
-                     (change)="setMirrorMode()"
-                     formControlName="mirroring">
-              <label class="custom-control-label"
-                     for="mirroring">Mirroring</label>
-              <cd-helper *ngIf="mirroring === false && this.currentPoolName">
-                <span i18n>You need to enable a <b>mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
-              </cd-helper>
-            </div>
-            <div *ngIf="mirroring">
-              <div class="custom-control custom-radio ms-2"
-                   *ngFor="let option of mirroringOptions">
-                <input type="radio"
-                       class="form-check-input"
-                       [id]="option"
-                       [value]="option"
-                       name="mirroringMode"
-                       (change)="setExclusiveLock()"
-                       formControlName="mirroringMode"
-                       [attr.disabled]="(poolMirrorMode === 'pool' && option === 'snapshot') ? true : null">
-                <label class="form-check-label"
-                       [for]="option">{{ option | titlecase }}</label>
-                <cd-helper *ngIf="poolMirrorMode === 'pool' && option === 'snapshot'">
-                  <span i18n>You need to enable <b>image mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
-                </cd-helper>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-group row"
-             *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
-          <label class="cd-col-form-label"
-                 i18n>Schedule Interval
-          <cd-helper i18n-html
-                     html="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively. To create mirror snapshots, you must import or create and have available peers to mirror">
-          </cd-helper></label>
-          <div class="cd-col-form-input">
-            <input id="schedule"
-                   name="schedule"
-                   class="form-control"
-                   type="text"
-                   formControlName="schedule"
-                   i18n-placeholder
-                   placeholder="e.g., 12h or 1d or 10m"
-                   [attr.disabled]="(peerConfigured === false) ? true : null">
+            <cd-help-text>Supported Units: KiB, MiB, GiB, TiB, PiB etc</cd-help-text>
           </div>
         </div>
 
@@ -292,10 +305,14 @@
                        name="{{ feature.key }}"
                        formControlName="{{ feature.key }}">
                 <label class="custom-control-label"
-                       for="{{ feature.key }}">{{ feature.desc }}</label>
-                <cd-helper *ngIf="feature.helperHtml"
-                           html="{{ feature.helperHtml }}">
-                </cd-helper>
+                       for="{{ feature.key }}">{{ feature.desc }}</label><br>
+                <cd-help-text *ngIf="feature.helperText">
+                  {{ feature.helperText }}
+                </cd-help-text>
+                <cd-alert-panel type="warning"
+                                *ngIf="feature.helperHtml && rbdForm.getValue(feature.key) === false">
+                 {{ feature.helperHtml }}
+                </cd-alert-panel>
               </div>
             </div>
           </div>

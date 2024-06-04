@@ -635,6 +635,8 @@ paths:
                 force:
                   default: false
                   type: boolean
+                image_mirror_mode:
+                  type: string
                 metadata:
                   type: string
                 mirror_mode:
