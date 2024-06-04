@@ -171,12 +171,6 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 	       << dendl;
       env_conditions.high_priority_only = true;
 
-  } else if (m_queue.is_reserving_now()) {
-    // if there is a PG that is just now trying to reserve scrub replica
-    // resources - we should wait and not initiate a new scrub
-    dout(10) << "scrub resources reservation in progress" << dendl;
-    env_conditions.high_priority_only = true;
-
   } else if (is_recovery_active && !conf->osd_scrub_during_recovery) {
     if (conf->osd_repair_during_recovery) {
       dout(15)
