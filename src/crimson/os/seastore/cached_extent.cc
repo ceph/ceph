@@ -160,10 +160,12 @@ std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
 {
   out << "LBAMapping(" << rhs.get_key() << "~" << rhs.get_length()
       << "->" << rhs.get_val();
-  if (rhs.is_indirect()) {
+  if (rhs.is_full_indirect()) {
     out << " indirect(" << rhs.get_intermediate_base() << "~"
 	<< rhs.get_intermediate_key() << "~"
 	<< rhs.get_intermediate_length() << ")";
+  } else if (rhs.is_half_indirect()) {
+    out << " indirect(" << rhs.get_intermediate_key() << ")";
   }
   out << ")";
   return out;

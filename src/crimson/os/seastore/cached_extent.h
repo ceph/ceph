@@ -1084,6 +1084,8 @@ public:
   virtual uint16_t get_pos() const = 0;
   // An lba pin may be indirect, see comments in lba_manager/btree/btree_lba_manager.h
   virtual bool is_indirect() const { return false; }
+  virtual bool is_half_indirect() const { return false; }
+  virtual bool is_full_indirect() const { return false; }
   virtual key_t get_intermediate_key() const { return min_max_t<key_t>::null; }
   virtual key_t get_intermediate_base() const { return min_max_t<key_t>::null; }
   virtual extent_len_t get_intermediate_length() const { return 0; }
@@ -1280,6 +1282,7 @@ public:
   }
 
   void maybe_set_intermediate_laddr(LBAMapping &mapping) {
+    assert(!mapping.is_half_indirect());
     laddr = mapping.is_indirect()
       ? mapping.get_intermediate_base()
       : mapping.get_key();

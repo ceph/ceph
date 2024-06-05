@@ -1478,6 +1478,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             pins,
             [FNAME, ctx, l_start, l_end,
              &l_current, &ret](auto &pin) -> read_iertr::future<> {
+	    assert(!pin->is_half_indirect());
             auto pin_key = pin->get_key();
             if (l_current == l_start) {
               ceph_assert(l_current >= pin_key);
