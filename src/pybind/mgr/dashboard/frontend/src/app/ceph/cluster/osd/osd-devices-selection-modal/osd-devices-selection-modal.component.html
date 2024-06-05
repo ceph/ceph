@@ -1,0 +1,43 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container class="modal-title"
+                i18n>{{ deviceType }} devices</ng-container>
+
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="formGroup"
+          novalidate>
+      <div class="modal-body">
+        <cd-alert-panel *ngIf="!canSubmit"
+                        type="warning"
+                        size="slim"
+                        [showTitle]="false">
+          <ng-container i18n>At least one of these filters must be applied in order to proceed:</ng-container>
+          <span *ngFor="let filter of requiredFilters"
+                class="badge badge-dark ms-2">
+            {{ filter }}
+          </span>
+        </cd-alert-panel>
+        <cd-inventory-devices #inventoryDevices
+                              [devices]="devices"
+                              [filterColumns]="filterColumns"
+                              [hostname]="hostname"
+                              [diskType]="diskType"
+                              [hiddenColumns]="['available', 'osd_ids']"
+                              (filterChange)="onFilterChange($event)">
+        </cd-inventory-devices>
+        <div *ngIf="canSubmit">
+          <p class="text-center">
+            <span i18n>Number of devices: {{ filteredDevices.length }}. Raw capacity:
+              {{ capacity | dimlessBinary }}.</span>
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="formGroup"
+                              [disabled]="!canSubmit || filteredDevices.length === 0"
+                              [submitText]="action | titlecase"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
