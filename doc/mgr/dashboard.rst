@@ -1441,9 +1441,9 @@ commands:
 
         /var/log/ceph/$cluster-$name.log
 
-#. Ensure the SSL/TSL support is configured properly:
+#. Ensure the SSL/TLS support is configured properly:
 
-   * Check if the SSL/TSL support is enabled:
+   * Check if the SSL/TLS support is enabled:
 
      .. prompt:: bash $
 
