@@ -4,8 +4,6 @@
  Perf counters
 ===============
 
-.. note:: Perf counters were introduced in the Reef release of Ceph.
-
 The perf counters provide generic internal infrastructure for gauges and counters.  The counted values can be both integer and float. There is also an "average" type (normally float) that combines a sum and num counter which can be divided to provide an average.
 
 The intention is that this data will be collected and aggregated by a tool like ``collectd`` or ``statsd`` and fed into a tool like ``graphite`` for graphing and analysis.  Also, note the :doc:`../mgr/prometheus` and the :doc:`../mgr/telemetry`.
@@ -208,6 +206,8 @@ The actual dump is similar to the schema, except that average values are grouped
 
 Labeled Perf Counters
 ---------------------
+
+.. note:: Labeled perf counters were introduced in the Reef release of Ceph.
 
 A Ceph daemon has the ability to emit a set of perf counter instances with varying labels. These counters are intended for visualizing specific metrics in 3rd party tools like Prometheus and Grafana.
 
