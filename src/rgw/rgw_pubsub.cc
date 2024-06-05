@@ -378,6 +378,23 @@ void rgw_pubsub_s3_event::dump(Formatter *f) const {
   encode_json("opaqueData", opaque_data, f);
 }
 
+namespace rgw::notify {
+    void event_entry_t::dump(Formatter *f) const {
+      Formatter::ObjectSection s(*f, "entry");
+      {
+        Formatter::ObjectSection sub_s(*f, "event");
+        event.dump(f);
+      }
+      encode_json("pushEndpoint", push_endpoint, f);
+      encode_json("pushEndpointArgs", push_endpoint_args, f);
+      encode_json("topic", arn_topic, f);
+      encode_json("creationTime", creation_time, f);
+      encode_json("TTL", time_to_live, f);
+      encode_json("maxRetries", max_retries, f);
+      encode_json("retrySleepDuration", retry_sleep_duration, f);
+    }
+}
+
 void rgw_pubsub_topic::dump(Formatter *f) const
 {
   encode_json("owner", owner, f);
