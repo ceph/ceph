@@ -101,7 +101,7 @@ about Ceph, see our `Architecture`_ section.
    :maxdepth: 3
    :hidden:
 
-   start/intro
+   start/index
    install/index
    cephadm/index
    rados/index
