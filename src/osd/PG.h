@@ -20,6 +20,7 @@
 #include "include/mempool.h"
 
 // re-include our assert to clobber boost's
+#include "common/admin_finisher.h"
 #include "include/ceph_assert.h" 
 #include "include/common_fwd.h"
 
@@ -764,7 +765,7 @@ public:
     std::string_view prefix,
     const cmdmap_t& cmdmap,
     const ceph::buffer::list& idata,
-    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) = 0;
+    asok_finisher on_finish) = 0;
 
   virtual bool agent_work(int max) = 0;
   virtual bool agent_work(int max, int agent_flush_quota) = 0;
