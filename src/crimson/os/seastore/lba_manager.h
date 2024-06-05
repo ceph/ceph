@@ -100,8 +100,7 @@ public:
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
-    laddr_t intermediate_key,
-    laddr_t intermediate_base) = 0;
+    laddr_t intermediate_key) = 0;
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,

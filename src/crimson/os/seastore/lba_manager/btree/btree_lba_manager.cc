@@ -764,15 +764,16 @@ BtreeLBAManager::_update_mapping(
     cache,
     c,
     [f=std::move(f), c, addr, nextent](auto &btree) mutable {
-      return btree.lower_bound(
+      return btree.upper_bound_right(
 	c, addr
       ).si_then([&btree, f=std::move(f), c, addr, nextent](auto iter)
 		-> _update_mapping_ret {
-	if (iter.is_end() || iter.get_key() != addr) {
+	if (iter.is_end() || iter.get_key() > addr) {
 	  LOG_PREFIX(BtreeLBAManager::_update_mapping);
 	  ERRORT("laddr={} doesn't exist", c.trans, addr);
 	  return crimson::ct_error::enoent::make();
 	}
+	assert(iter.get_key() + iter.get_val().len > addr);
 
 	auto ret = f(iter.get_val());
 	if (ret.refcount == 0) {

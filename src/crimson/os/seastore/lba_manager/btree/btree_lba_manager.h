@@ -171,7 +171,7 @@ public:
     extent_len_t length,
     laddr_t interkey = L_ADDR_NULL)
   {
-    assert(indirect);
+    assert(is_full_indirect());
     assert(value.is_paddr());
     intermediate_key = (interkey == L_ADDR_NULL ? key : interkey);
     key = new_key;
@@ -282,16 +282,15 @@ public:
     Transaction &t,
     laddr_t laddr,
     extent_len_t len,
-    laddr_t intermediate_key,
-    laddr_t intermediate_base) final
+    laddr_t intermediate_key) final
   {
     return alloc_cloned_mapping(
       t,
       laddr,
       len,
       intermediate_key
-    ).si_then([&t, this, intermediate_base](auto imapping) {
-      return update_refcount(t, intermediate_base, 1, false
+    ).si_then([&t, this, intermediate_key](auto imapping) {
+      return update_refcount(t, intermediate_key, 1, false
       ).si_then([imapping=std::move(imapping)](auto p) mutable {
 	auto mapping = std::move(p.mapping);
 	ceph_assert(mapping->is_stable());
