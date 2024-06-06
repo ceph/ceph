@@ -17,7 +17,6 @@
 
 #include <string>
 #include <string_view>
-#include <set>
 
 #include "include/counter.h"
 #include "include/types.h"
@@ -25,6 +24,7 @@
 #include "include/lru.h"
 #include "include/elist.h"
 #include "include/filepath.h"
+#include <boost/intrusive/set.hpp>
 
 #include "BatchOp.h"
 #include "MDSCacheObject.h"
@@ -34,14 +34,16 @@
 #include "ScrubHeader.h"
 
 class CInode;
-class CDentry;
 class CDir;
 class Locker;
 class CDentry;
 class LogSegment;
 class Session;
 
-struct ClientLease {
+struct ClientLease : public boost::intrusive::set_base_hook<>
+{
+  MEMPOOL_CLASS_HELPERS();
+
   ClientLease(CDentry *p, Session *s) :
     parent(p), session(s),
     item_session_lease(this),
@@ -56,6 +58,13 @@ struct ClientLease {
   utime_t ttl;
   xlist<ClientLease*>::item item_session_lease; // per-session list
   xlist<ClientLease*>::item item_lease;         // global list
+};
+struct client_is_key
+{
+  typedef client_t type;
+  const type operator() (const ClientLease& l) const {
+    return l.get_client();
+  }
 };
 
 // define an ordering
@@ -346,13 +355,13 @@ public:
   const ClientLease *get_client_lease(client_t c) const {
     auto it = client_leases.find(c);
     if (it != client_leases.end())
-      return &it->second;
+      return &(*it);
     return nullptr;
   }
   ClientLease *get_client_lease(client_t c) {
     auto it = client_leases.find(c);
     if (it != client_leases.end())
-      return &it->second;
+      return &(*it);
     return nullptr;
   }
   bool have_client_lease(client_t c) const {
@@ -388,7 +397,10 @@ public:
   SimpleLock lock; // FIXME referenced containers not in mempool
   LocalLockC versionlock; // FIXME referenced containers not in mempool
 
-  mempool::mds_co::map<client_t, ClientLease> client_leases;
+  typedef boost::intrusive::set<
+    ClientLease, boost::intrusive::key_of_value<client_is_key>> ClientLeaseMap;
+  ClientLeaseMap client_leases;
+
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
   ceph_tid_t reintegration_reqid = 0;

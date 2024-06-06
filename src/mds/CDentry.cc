@@ -500,6 +500,8 @@ void CDentry::decode_lock_state(int type, const bufferlist& bl)
 }
 
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(ClientLease, mds_client_lease, mds_co);
+
 client_t ClientLease::get_client() const
 {
   return session->get_client();
@@ -508,17 +510,19 @@ client_t ClientLease::get_client() const
 ClientLease *CDentry::add_client_lease(Session *session)
 {
   client_t client = session->get_client();
-  auto em = client_leases.emplace(std::piecewise_construct,
-				  std::forward_as_tuple(client),
-				  std::forward_as_tuple(this, session));
-  ClientLease *l = &em.first->second;
-  if (em.second) {
+  ClientLease* l = nullptr;
+  auto it = client_leases.lower_bound(client);
+  if (it == client_leases.end() || it->get_client() != client) {
+    l = new ClientLease(this, session);
     dout(20) << __func__ << " client." << client << " on " << lock << dendl;
-    if (client_leases.size() == 1) {
+    if (client_leases.empty()) {
       get(PIN_CLIENTLEASE);
       lock.get_client_lease();
     }
+    client_leases.insert_before(it, *l);
     l->seq = ++session->lease_seq;
+  } else {
+    l = &(*it);
   }
   return l;
 }
@@ -528,12 +532,12 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
   ceph_assert(l->parent == this);
 
   bool gather = false;
-  client_t client = l->get_client();
-  dout(20) << __func__ << " client." << client << " on " << lock << dendl;
+  dout(20) << __func__ << " client." << l->get_client() << " on " << lock << dendl;
 
   l->item_lease.remove_myself();
   l->item_session_lease.remove_myself();
-  client_leases.erase(client);
+  client_leases.erase(client_leases.iterator_to(*l));
+  delete l;
 
   if (client_leases.empty()) {
     gather = !lock.is_stable();
@@ -548,7 +552,7 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
 void CDentry::remove_client_leases(Locker *locker)
 {
   while (!client_leases.empty())
-    remove_client_lease(&client_leases.begin()->second, locker);
+    remove_client_lease(&(*client_leases.begin()), locker);
 }
 
 void CDentry::_put()
