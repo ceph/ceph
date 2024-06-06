@@ -1444,7 +1444,7 @@ options:
   desc: Ops log object name format
   long_desc: Defines the format of the RADOS objects names that ops log uses to store
     ops log data
-  fmt_desc: The logging format for an object name. See ma npage
+  fmt_desc: The logging format for an object name. See man page
     :manpage:`date` for details about format specifiers.
   default: '%Y-%m-%d-%H-%i-%n'
   services:
