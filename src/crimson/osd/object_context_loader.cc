@@ -150,20 +150,46 @@ using crimson::common::local_conf;
              dpp, obc->get_oid(),
              obc->fully_loaded,
              obc->invalidated_by_interval_change);
-    return interruptor::with_lock(obc->loading_mutex,
-    [this, obc, existed, FNAME] {
-      if (existed) {
-        ceph_assert(obc->is_valid() && obc->is_loaded());
-        DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
-        return load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
-      } else {
-        DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
-        return obc->template with_promoted_lock<State, IOInterruptCondition>(
-          [obc, this] {
-          return load_obc(obc);
-        });
-      }
-    });
+    if (existed) {
+      // obc is already loaded - avoid loading_mutex usage
+      DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
+      return get_obc(obc, existed);
+    }
+    // See ObjectContext::_with_lock(),
+    // this function must be able to support atomicity before
+    // acquiring the lock
+    if (obc->loading_mutex.try_lock()) {
+      return _get_or_load_obc<State>(obc, existed
+      ).finally([obc]{
+        obc->loading_mutex.unlock();
+      });
+    } else {
+      return interruptor::with_lock(obc->loading_mutex,
+      [this, obc, existed, FNAME] {
+        // Previous user already loaded the obc
+        DEBUGDPP("{} finished waiting for loader, cache hit on {}",
+                 dpp, FNAME, obc->get_oid());
+        return get_obc(obc, existed);
+      });
+    }
+  }
+
+  template<RWState::State State>
+  ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
+  ObjectContextLoader::_get_or_load_obc(ObjectContextRef obc,
+                                        bool existed)
+  {
+    LOG_PREFIX(ObjectContextLoader::_get_or_load_obc);
+    if (existed) {
+      DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
+      return get_obc(obc, existed);
+    } else {
+      DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
+      return obc->template with_promoted_lock<State, IOInterruptCondition>(
+        [obc, this] {
+        return load_obc(obc);
+      });
+    }
   }
 
   ObjectContextLoader::load_obc_iertr::future<>
