@@ -2327,18 +2327,18 @@ public:
 
 class C_IO_Dir_Commit_Ops : public Context {
 public:
-  C_IO_Dir_Commit_Ops(CDir *d, int pr,
-		      vector<CDir::dentry_commit_item> &&s, bufferlist &&bl,
-		      vector<string> &&r,
-		      mempool::mds_co::compact_set<mempool::mds_co::string> &&stales) :
-    dir(d), op_prio(pr) {
+  C_IO_Dir_Commit_Ops(CDir* d, int pr, auto&& s, auto&& bl, auto&& r, auto&& stales)
+  :
+    dir(d),
+    op_prio(pr),
+    to_set(std::forward<decltype(s)>(s)),
+    dfts(std::forward<decltype(bl)>(bl)),
+    to_remove(std::forward<decltype(r)>(r)),
+    stale_items(std::forward<decltype(stales)>(stales))
+  {
     metapool = dir->mdcache->mds->get_metadata_pool();
     version = dir->get_version();
     is_new = dir->is_new();
-    to_set.swap(s);
-    dfts.swap(bl);
-    to_remove.swap(r);
-    stale_items.swap(stales);
   }
 
   void finish(int r) override {
@@ -2488,9 +2488,9 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       mdcache->mds->heartbeat_reset();
   }
 
-  bufferlist bl;
   using ceph::encode;
   for (auto &item : to_set) {
+    bufferlist bl;
     encode(item.first, bl);
     if (item.is_remote) {
       // remote link
@@ -2510,7 +2510,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       commit_one();
 
     write_size += size;
-    _set[std::move(item.key)].swap(bl);
+    _set[std::move(item.key)] = std::move(bl);
 
     if (!(++count % mdcache->mds->heartbeat_reset_grace()))
       mdcache->mds->heartbeat_reset();
@@ -2621,7 +2621,7 @@ void CDir::_omap_commit(int op_prio)
 
   auto c = new C_IO_Dir_Commit_Ops(this, op_prio, std::move(to_set), std::move(dfts),
                                    std::move(to_remove), std::move(stale_items));
-  stale_items.clear();
+  stale_items.clear(); /* in CDir */
   mdcache->mds->finisher->queue(c);
 }
 
