@@ -29,6 +29,9 @@ public:
       ::crimson::osd::IOInterruptCondition,
       load_obc_ertr>;
 
+  using interruptor = ::crimson::interruptible::interruptor<
+    ::crimson::osd::IOInterruptCondition>;
+
   using with_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
@@ -76,6 +79,18 @@ private:
   load_obc_iertr::future<ObjectContextRef>
   get_or_load_obc(ObjectContextRef obc,
                   bool existed);
+
+  template<RWState::State State>
+  load_obc_iertr::future<ObjectContextRef>
+  _get_or_load_obc(ObjectContextRef obc,
+                  bool existed);
+
+  static inline load_obc_iertr::future<ObjectContextRef>
+  get_obc(ObjectContextRef obc,
+          bool existed) {
+    ceph_assert(existed && obc->is_valid() && obc->is_loaded());
+    return load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
+  }
 
   load_obc_iertr::future<ObjectContextRef>
   load_obc(ObjectContextRef obc);
