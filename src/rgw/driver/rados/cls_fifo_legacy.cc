@@ -1171,7 +1171,7 @@ int FIFO::open(const DoutPrefixProvider *dpp, lr::IoCtx ioctx, std::string oid, 
   fifo::info info;
   std::uint32_t size;
   std::uint32_t over;
-  int r = get_meta(dpp, ioctx, std::move(oid), objv, &info, &size, &over, 0, y,
+  int r = get_meta(dpp, ioctx, oid, objv, &info, &size, &over, 0, y,
 		   probe);
   if (r < 0) {
     if (!(probe && (r == -ENOENT || r == -ENODATA))) {
