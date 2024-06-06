@@ -14,4 +14,4 @@ tasks:
 - rgw-multisite:
 - rgw-multisite-tests:
     config:
-      reconfigure_delay: 60
+      reconfigure_delay: 90
