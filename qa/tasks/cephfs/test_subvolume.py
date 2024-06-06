@@ -193,7 +193,7 @@ class TestSubvolumeReplicated(CephFSTestCase):
         op = self.fs.rank_tell("lock", "path", "/dir1/dir2", "snap:r", rank=1)
         p = self.mount_a.setfattr("dir1/dir2", "ceph.dir.subvolume", "1", wait=False)
         sleep(2)
-        reqid = self._reqid_tostr(op['op']['reqid'])
+        reqid = self._reqid_tostr(op['reqid'])
         self.fs.kill_op(reqid, rank=1)
         p.wait()
 
