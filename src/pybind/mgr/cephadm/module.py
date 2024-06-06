@@ -70,6 +70,7 @@ from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nvmeof import NvmeofService
 from .services.mgmt_gateway import MgmtGatewayService
+from .services.oauth2_proxy import OAuth2ProxyService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -132,6 +133,7 @@ DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_NGINX_IMAGE = 'quay.io/ceph/nginx:1.26.1'
+DEFAULT_OAUTH2_PROXY = 'quay.io/oauth2-proxy/oauth2-proxy:v7.2.0'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
 # ------------------------------------------------------------------------------
@@ -274,6 +276,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_nginx',
             default=DEFAULT_NGINX_IMAGE,
             desc='Nginx container image',
+        ),
+        Option(
+            'container_image_oauth2_proxy',
+            default=DEFAULT_OAUTH2_PROXY,
+            desc='oauth2-proxy container image',
         ),
         Option(
             'container_image_elasticsearch',
@@ -561,6 +568,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
             self.container_image_nginx = ''
+            self.container_image_oauth2_proxy = ''
             self.container_image_elasticsearch = ''
             self.container_image_jaeger_agent = ''
             self.container_image_jaeger_collector = ''
@@ -705,6 +713,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             SMBService,
             SNMPGatewayService,
             MgmtGatewayService,
+            OAuth2ProxyService,
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -915,7 +924,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
-            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway'
+            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway', 'oauth2-proxy'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1648,6 +1657,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'promtail': self.container_image_promtail,
                 'snmp-gateway': self.container_image_snmp_gateway,
                 'mgmt-gateway': self.container_image_nginx,
+                'oauth2-proxy': self.container_image_oauth2_proxy,
                 # The image can't be resolved here, the necessary information
                 # is only available when a container is deployed (given
                 # via spec).
@@ -3335,6 +3345,7 @@ Then run the following:
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
                 'mgmt-gateway': PlacementSpec(count=1),
+                'oauth2-proxy': PlacementSpec(count=1),
                 'elasticsearch': PlacementSpec(count=1),
                 'jaeger-agent': PlacementSpec(host_pattern='*'),
                 'jaeger-collector': PlacementSpec(count=1),
@@ -3478,6 +3489,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_mgmt_gateway(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_oauth2_proxy(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

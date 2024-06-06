@@ -1,5 +1,5 @@
 import logging
-from typing import List, Any, Tuple, Dict, cast
+from typing import List, Any, Tuple, Dict, cast, Optional
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
@@ -35,6 +35,11 @@ class MgmtGatewayService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
+    def get_oauth2_service_url(self) -> Optional[str]:
+        # TODO(redo): check how can we create several servers for HA
+        oauth2_servers = self.get_service_endpoints('oauth2-proxy')
+        return f'http://{oauth2_servers[0]}' if oauth2_servers else None
+
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
@@ -63,6 +68,7 @@ class MgmtGatewayService(CephadmService):
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('prometheus')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('grafana')]
+        #deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')] TODO should we have this automated?
         # secure_monitoring_stack affects the protocol used by monitoring services
         deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
@@ -95,6 +101,7 @@ class MgmtGatewayService(CephadmService):
         }
         external_server_context = {
             'spec': svc_spec,
+            'oauth2_proxy_url': self.get_oauth2_service_url(),
             'dashboard_scheme': dashboard_scheme,
             'grafana_scheme': grafana_protocol,
             'prometheus_scheme': scheme,

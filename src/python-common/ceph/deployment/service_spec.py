@@ -766,6 +766,7 @@ class ServiceSpec(object):
         'grafana',
         'ingress',
         'mgmt-gateway',
+        'oauth2-proxy',
         'iscsi',
         'jaeger-agent',
         'jaeger-collector',
@@ -821,6 +822,7 @@ class ServiceSpec(object):
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'mgmt-gateway': MgmtGatewaySpec,
+            'oauth2-proxy': OAuth2ProxySpec,
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
@@ -1885,6 +1887,57 @@ class MgmtGatewaySpec(ServiceSpec):
 
 yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
 
+
+class OAuth2ProxySpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'oauth2-proxy',
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 https_address: Optional[bool] = False,
+                 provider_display_name: Optional[str]= None,
+                 client_id: Optional[str]= None,
+                 client_secret: Optional[str]= None,
+                 oidc_issuer_url: Optional[str]= None,
+                 ssl_certificate: Optional[List[str]] = None,
+                 ssl_certificate_key: Optional[List[str]] = None,
+                 unmanaged: bool = False,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'oauth2-proxy'
+
+        super(OAuth2ProxySpec, self).__init__(
+            'oauth2-proxy', service_id=service_id,
+            placement=placement, config=config,
+            networks=networks,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs
+        )
+        self.https_address = https_address
+        self.provider_display_name = provider_display_name
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.oidc_issuer_url = oidc_issuer_url
+        self.ssl_certificate = ssl_certificate
+        self.ssl_certificate_key = ssl_certificate_key
+        self.unmanaged = unmanaged
+
+    def get_port_start(self) -> List[int]:
+        ports = [4180]
+        #if self.port is not None:
+        #    ports.append(cast(int, self.port))
+        return ports
+
+    def validate(self) -> None:
+        super(OAuth2ProxySpec, self).validate()
+        # TODO(redo)
+
+
+yaml.add_representer(OAuth2ProxySpec, ServiceSpec.yaml_representer)
 
 class InitContainerSpec(object):
     """An init container is not a service that lives on its own, but rather
