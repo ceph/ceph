@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 class AdminGatewayService(CephadmService):
     TYPE = 'admin-gateway'
     SVC_TEMPLATE_PATH = 'services/admin-gateway/nginx.conf.j2'
+    EXTERNAL_SVC_TEMPLATE_PATH = 'services/admin-gateway/external_server.conf.j2'
+    INTERNAL_SVC_TEMPLATE_PATH = 'services/admin-gateway/internal_server.conf.j2'
     INTERNAL_SERVICE_PORT = 29443
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -142,23 +144,44 @@ class AdminGatewayService(CephadmService):
         svc_spec = cast(AdminGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         dashboard_eps, dashboard_scheme = get_dashboard_eps(self)
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
-        context = {
+
+        prometheus_eps = self.get_service_endpoints('prometheus')
+        alertmanager_eps = self.get_service_endpoints('alertmanager')
+        grafana_eps = self.get_service_endpoints('grafana')
+        main_context = {
+            'dashboard_eps': dashboard_eps,
+            'prometheus_eps': prometheus_eps,
+            'alertmanager_eps': alertmanager_eps,
+            'grafana_eps': grafana_eps
+        }
+        external_server_context = {
             'spec': svc_spec,
-            'internal_port': self.INTERNAL_SERVICE_PORT,
             'dashboard_scheme': dashboard_scheme,
             'grafana_scheme': 'https',  # TODO(redo): fixme, get current value of grafana scheme
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
             'dashboard_eps': dashboard_eps,
-            'prometheus_eps': self.get_service_endpoints('prometheus'),
-            'alertmanager_eps': self.get_service_endpoints('alertmanager'),
-            'grafana_eps': self.get_service_endpoints('grafana')
+            'prometheus_eps': prometheus_eps,
+            'alertmanager_eps': alertmanager_eps,
+            'grafana_eps': grafana_eps
+        }
+        internal_server_context = {
+            'spec': svc_spec,
+            'internal_port': self.INTERNAL_SERVICE_PORT,
+            'grafana_scheme': 'https',  # TODO(redo): fixme, get current value of grafana scheme
+            'prometheus_scheme': scheme,
+            'alertmanager_scheme': scheme,
+            'prometheus_eps': prometheus_eps,
+            'alertmanager_eps': alertmanager_eps,
+            'grafana_eps': grafana_eps
         }
 
         internal_cert, internal_pkey, cert, pkey = self.get_certificates(svc_spec, daemon_spec)
         daemon_config = {
             "files": {
-                "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, context),
+                "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),
+                "nginx_external_server.conf": self.mgr.template.render(self.EXTERNAL_SVC_TEMPLATE_PATH, external_server_context),
+                "nginx_internal_server.conf": self.mgr.template.render(self.INTERNAL_SVC_TEMPLATE_PATH, internal_server_context),
                 "nginx_internal.crt": internal_cert,
                 "nginx_internal.key": internal_pkey
             }

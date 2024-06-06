@@ -7,120 +7,38 @@ events {
 }
 
 http {
-
 {% if dashboard_eps %}
-        upstream dashboard_servers {
-         {% for ep in dashboard_eps %}
-         server {{ ep }};
-         {% endfor %}
-        }
-{% endif %}
-
-{% if grafana_eps %}
-        upstream grafana_servers {
-         {% for ep in grafana_eps %}
-         server {{ ep }};
-         {% endfor %}
-        }
-{% endif %}
-
-{% if prometheus_eps %}
-        upstream prometheus_servers {
-         {% for ep in prometheus_eps %}
-         server {{ ep }};
-         {% endfor %}
-        }
-{% endif %}
-
-{% if alertmanager_eps %}
-        upstream alertmanager_servers {
-         {% for ep in alertmanager_eps %}
-         server {{ ep }};
-         {% endfor %}
-        }
-{% endif %}
-
-
-    server {
-
-{% if spec.disable_https %}
-        listen {{ spec.port or 80 }};
-{% else %}
-        listen                    {{ spec.port or 443 }} ssl;
-        listen                    [::]:{{ spec.port or 443 }} ssl;
-        ssl_certificate            /etc/nginx/ssl/nginx.crt;
-        ssl_certificate_key /etc/nginx/ssl/nginx.key;
-        {% if spec.ssl_protocols %}
-        ssl_protocols            {{ spec.ssl_protocols | join(' ') }};
-        {% else %}
-        ssl_protocols            TLSv1.2 TLSv1.3;
-        {% endif %}
-        {% if spec.ssl_ciphers %}
-        ssl_ciphers            {{ spec.ssl_ciphers | join(':') }};
-        {% endif %}
-        ssl_prefer_server_ciphers {{ spec.ssl_prefer_server_ciphers or 'on'}};
-        ssl_stapling on;
-        ssl_stapling_verify on;
-{% endif %}
-
-{% if dashboard_eps %}
-        location / {
-            proxy_pass {{ dashboard_scheme }}://dashboard_servers;
-            proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
-        }
-{% endif %}
-
-{% if grafana_eps %}
-        location /grafana {
-            rewrite ^/grafana/(.*) /$1 break;
-            proxy_pass {{ grafana_scheme }}://grafana_servers;
-        }
-{% endif %}
-
-{% if prometheus_eps %}
-        location /prometheus {
-            proxy_pass {{ prometheus_scheme }}://prometheus_servers;
-        }
-{% endif %}
-
-{% if alertmanager_eps %}
-        location /alertmanager {
-            proxy_pass {{ alertmanager_scheme }}://alertmanager_servers;
-        }
-{% endif %}
-
+    upstream dashboard_servers {
+     {% for ep in dashboard_eps %}
+     server {{ ep }};
+     {% endfor %}
     }
-
-    server {
-
-        listen              {{ internal_port }} ssl;
-        listen              [::]:{{ internal_port }} ssl;
-        ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
-        ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
-        ssl_protocols       TLSv1.2 TLSv1.3;
-        ssl_ciphers         AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:RC4-MD5;
-        ssl_prefer_server_ciphers on;
+{% endif %}
 
 {% if grafana_eps %}
-        location /internal/grafana {
-            rewrite ^/internal/grafana/(.*) /$1 break;
-            proxy_pass {{ grafana_scheme }}://grafana_servers;
-        }
+    upstream grafana_servers {
+     {% for ep in grafana_eps %}
+     server {{ ep }};
+     {% endfor %}
+    }
 {% endif %}
 
 {% if prometheus_eps %}
-        location /internal/prometheus {
-            rewrite ^/internal/prometheus/(.*) /prometheus/$1 break;
-            proxy_pass {{ prometheus_scheme }}://prometheus_servers;
-        }
+    upstream prometheus_servers {
+     {% for ep in prometheus_eps %}
+     server {{ ep }};
+     {% endfor %}
+    }
 {% endif %}
 
 {% if alertmanager_eps %}
-        location /internal/alertmanager {
-            rewrite ^/internal/alertmanager/(.*) /alertmanager/$1 break;
-            proxy_pass {{ alertmanager_scheme }}://alertmanager_servers;
-        }
+    upstream alertmanager_servers {
+     {% for ep in alertmanager_eps %}
+     server {{ ep }};
+     {% endfor %}
+    }
 {% endif %}
 
-    }
+    include /etc/nginx_external_server.conf;
+    include /etc/nginx_internal_server.conf;
 }

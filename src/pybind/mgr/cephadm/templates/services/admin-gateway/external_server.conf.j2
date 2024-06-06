@@ -1,0 +1,48 @@
+
+server {
+{% if spec.disable_https %}
+    listen {{ spec.port or 80 }};
+{% else %}
+    listen                    {{ spec.port or 443 }} ssl;
+    listen                    [::]:{{ spec.port or 443 }} ssl;
+    ssl_certificate            /etc/nginx/ssl/nginx.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx.key;
+    {% if spec.ssl_protocols %}
+    ssl_protocols            {{ spec.ssl_protocols | join(' ') }};
+    {% else %}
+    ssl_protocols            TLSv1.2 TLSv1.3;
+    {% endif %}
+    {% if spec.ssl_ciphers %}
+    ssl_ciphers            {{ spec.ssl_ciphers | join(':') }};
+    {% endif %}
+    ssl_prefer_server_ciphers {{ spec.ssl_prefer_server_ciphers or 'on'}};
+    ssl_stapling on;
+    ssl_stapling_verify on;
+{% endif %}
+
+{% if dashboard_eps %}
+    location / {
+        proxy_pass {{ dashboard_scheme }}://dashboard_servers;
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+    }
+{% endif %}
+
+{% if grafana_eps %}
+    location /grafana {
+        rewrite ^/grafana/(.*) /$1 break;
+        proxy_pass {{ grafana_scheme }}://grafana_servers;
+    }
+{% endif %}
+
+{% if prometheus_eps %}
+    location /prometheus {
+        proxy_pass {{ prometheus_scheme }}://prometheus_servers;
+    }
+{% endif %}
+
+{% if alertmanager_eps %}
+    location /alertmanager {
+        proxy_pass {{ alertmanager_scheme }}://alertmanager_servers;
+    }
+{% endif %}
+}

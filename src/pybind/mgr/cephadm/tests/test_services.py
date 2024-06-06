@@ -3223,30 +3223,31 @@ class TestAdminGateway:
                                          }
 
                                          http {
+                                             upstream dashboard_servers {
+                                              server ceph-node-2:8443;
+                                              server ceph-node-2:8443;
+                                             }
 
-                                                 upstream dashboard_servers {
-                                                  server ceph-node-2:8443;
-                                                  server ceph-node-2:8443;
-                                                 }
+                                             upstream grafana_servers {
+                                              server ceph-node-2:3000;
+                                              server ceph-node-2:3000;
+                                             }
 
-                                                 upstream grafana_servers {
-                                                  server ceph-node-2:3000;
-                                                  server ceph-node-2:3000;
-                                                 }
+                                             upstream prometheus_servers {
+                                              server 192.168.100.100:9095;
+                                              server 192.168.100.101:9095;
+                                             }
 
-                                                 upstream prometheus_servers {
-                                                  server 192.168.100.100:9095;
-                                                  server 192.168.100.101:9095;
-                                                 }
+                                             upstream alertmanager_servers {
+                                              server 192.168.100.100:9093;
+                                              server 192.168.100.102:9093;
+                                             }
 
-                                                 upstream alertmanager_servers {
-                                                  server 192.168.100.100:9093;
-                                                  server 192.168.100.102:9093;
-                                                 }
-
-
+                                             include /etc/nginx_external_server.conf;
+                                             include /etc/nginx_internal_server.conf;
+                                         }"""),
+                    "nginx_external_server.conf": dedent("""
                                              server {
-
                                                  listen                    5555 ssl;
                                                  listen                    [::]:5555 ssl;
                                                  ssl_certificate            /etc/nginx/ssl/nginx.crt;
@@ -3273,11 +3274,9 @@ class TestAdminGateway:
                                                  location /alertmanager {
                                                      proxy_pass http://alertmanager_servers;
                                                  }
-
-                                             }
-
+                                             }"""),
+                    "nginx_internal_server.conf": dedent("""
                                              server {
-
                                                  listen              29443 ssl;
                                                  listen              [::]:29443 ssl;
                                                  ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
@@ -3300,9 +3299,7 @@ class TestAdminGateway:
                                                      rewrite ^/internal/alertmanager/(.*) /alertmanager/$1 break;
                                                      proxy_pass http://alertmanager_servers;
                                                  }
-
-                                             }
-                                         }"""),
+                                             }"""),
                     "nginx_internal.crt": f"{ceph_generated_cert}",
                     "nginx_internal.key": f"{ceph_generated_key}",
                     "nginx.crt": f"{ceph_generated_cert}",
