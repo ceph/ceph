@@ -375,7 +375,7 @@ struct foo2_only2_t {
   uint32_t c = 55;
 
   DENC(foo2_only2_t, v, p) {
-    DENC_START(2, 2, p);
+    DENC_START_COMPAT_2(2, 2, p);
     ::denc(v.a, p);
     ::denc(v.b, p);
     ::denc(v.c, p);

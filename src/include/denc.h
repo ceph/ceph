@@ -51,6 +51,7 @@
 
 #include "common/convenience.h"
 #include "common/error_code.h"
+#include "ceph_ver.h"
 
 template<typename T, typename=void>
 struct denc_traits {
@@ -1845,11 +1846,26 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 // Helpers for versioning the encoding.  These correspond to the
 // {ENCODE,DECODE}_{START,FINISH} macros.
 
+// DENC_START interface suggests it is checking compatibility,
+// but the feature was unimplemented until SQUID.
+// Due to -2 compatibility rule we cannot bump up compat until U____ release.
+
 #define DENC_START(v, compat, p)					\
   __u8 struct_v = v;							\
   __u8 struct_compat = compat;						\
   char *_denc_pchar;							\
   uint32_t _denc_u32;							\
+  static_assert(CEPH_RELEASE >= 21 || compat == 1);			\
+  _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  do {
+
+// For the only type that is with compat 2, osd_reqid_t, and unittest.
+#define DENC_START_COMPAT_2(v, compat, p)				\
+  __u8 struct_v = v;							\
+  __u8 struct_compat = compat;						\
+  char *_denc_pchar;							\
+  uint32_t _denc_u32;							\
+  static_assert(CEPH_RELEASE >= 21 || compat == 2);			\
   _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
   do {
 
