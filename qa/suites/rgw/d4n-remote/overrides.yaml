@@ -7,6 +7,10 @@ overrides:
         debug rgw: 20
         rgw filter: d4n
         d4n writecache enabled: true
+        rgw d4n cache cleaning interval: 5
+        rgw local cache address: "127.0.0.1:8001"
+        rgw remote cache address: "127.0.0.1:8002"
+        rgw d4n backend address: "127.0.0.1:8001"
       c1.client.0: 
         setuser: ceph
         setgroup: ceph
