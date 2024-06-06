@@ -49,6 +49,7 @@ _prefix(std::ostream* _dout)
 
 // default window size for Zlib 1.2.8, negated for raw deflate
 #define ZLIB_DEFAULT_WIN_SIZE -15
+#define GZIP_WRAPPER 16
 
 // desired memory usage level. increasing to 9 doesn't speed things up
 // significantly (helps only on >=16K blocks) and sometimes degrades
@@ -205,8 +206,8 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, std::optiona
 int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_size, bufferlist &out, std::optional<int32_t> compressor_message)
 {
 #ifdef HAVE_QATZIP
-  // QAT can only decompress with the default window size
-  if (qat_enabled && (!compressor_message || *compressor_message == ZLIB_DEFAULT_WIN_SIZE))
+  // QAT can only decompress with existing header, only for 'QZ_DEFLATE_GZIP_EXT'
+  if (qat_enabled && compressor_message.has_value() && *compressor_message == GZIP_WRAPPER + MAX_WBITS)
     return qat_accel.decompress(p, compressed_size, out, compressor_message);
 #endif
 
@@ -215,6 +216,7 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
   z_stream strm;
   const char* c_in;
   int begin = 1;
+  bool multisteam = false;
 
   /* allocate inflate state */
   strm.zalloc = Z_NULL;
@@ -226,6 +228,7 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
   // choose the variation of compressor
   if (!compressor_message)
     compressor_message = ZLIB_DEFAULT_WIN_SIZE;
+
   ret = inflateInit2(&strm, *compressor_message);
   if (ret != Z_OK) {
     dout(1) << "Decompression init error: init return "
@@ -255,7 +258,10 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
       }
       have = MAX_LEN - strm.avail_out;
       out.append(ptr, 0, have);
-    } while (strm.avail_out == 0);
+      // There may be mutil stream to decompress
+      multisteam = (strm.avail_in != 0 && ret == Z_STREAM_END);
+      if (multisteam) inflateReset(&strm);
+    } while (strm.avail_out == 0 || multisteam);
   }
 
   /* clean up and return */
