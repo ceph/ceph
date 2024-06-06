@@ -405,7 +405,7 @@ omap_file_update_reloads = 10
 allowed_consecutive_spdk_ping_failures = 1
 spdk_ping_interval_in_seconds = 2.0
 ping_spdk_under_lock = False
-enable_monitor_client = False
+enable_monitor_client = True
 
 [gateway-logs]
 log_level = INFO
