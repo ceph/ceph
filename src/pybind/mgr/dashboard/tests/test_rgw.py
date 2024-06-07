@@ -3,7 +3,7 @@ from unittest.mock import Mock, call, patch
 from .. import mgr
 from ..controllers.rgw import Rgw, RgwDaemon, RgwUser
 from ..rest_client import RequestException
-from ..services.rgw_client import RgwClient
+from ..services.rgw_client import RgwClient, RgwMultisite
 from ..tests import ControllerTestCase, RgwStub
 
 
@@ -202,6 +202,105 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
         self._get('/test/api/rgw/daemon')
         self.assertStatus(200)
         self.assertJsonBody([])
+
+    @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
+        return_value='dummy_admin'))
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    @patch.object(RgwMultisite, 'get_all_zonegroups_info', Mock(
+        return_value={'default_zonegroup': 'zonegroup2-id'}))
+    def test_default_zonegroup_when_multiple_daemons(self, send_command):
+        send_command.return_value = ''
+        RgwStub.get_daemons()
+        RgwStub.get_settings()
+        metadata_return_values = [
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon1',
+                'realm_name': 'realm1',
+                'zonegroup_name': 'zg1',
+                'zonegroup_id': 'zg1-id',
+                'zone_name': 'zone1',
+                'frontend_config#0': 'beast port=80'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon2',
+                'realm_name': 'realm2',
+                'zonegroup_name': 'zg2',
+                'zonegroup_id': 'zg2-id',
+                'zone_name': 'zone2',
+                'frontend_config#0': 'beast ssl_port=443'
+            }
+        ]
+        list_servers_return_value = [{
+            'hostname': 'host1',
+            'services': [
+                {'id': '5297', 'type': 'rgw'},
+                {'id': '5356', 'type': 'rgw'},
+            ]
+        }]
+
+        mgr.list_servers.return_value = list_servers_return_value
+        mgr.get_metadata.side_effect = metadata_return_values
+        self._get('/test/api/rgw/daemon')
+        self.assertStatus(200)
+
+        self.assertJsonBody([{
+            'id': 'daemon1',
+            'service_map_id': '5297',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm1',
+            'zonegroup_name': 'zg1',
+            'zonegroup_id': 'zg1-id',
+            'zone_name': 'zone1',
+            'default': False,
+            'port': 80
+        },
+            {
+            'id': 'daemon2',
+            'service_map_id': '5356',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm2',
+            'zonegroup_name': 'zg2',
+            'zonegroup_id': 'zg2-id',
+            'zone_name': 'zone2',
+            'default': True,
+            'port': 443,
+        }])
+
+        # Change the default zonegroup and test if the correct daemon gets picked up
+        RgwMultisite().get_all_zonegroups_info.return_value = {'default_zonegroup': 'zonegroup1-id'}
+        mgr.list_servers.return_value = list_servers_return_value
+        mgr.get_metadata.side_effect = metadata_return_values
+        self._get('/test/api/rgw/daemon')
+        self.assertStatus(200)
+
+        self.assertJsonBody([{
+            'id': 'daemon1',
+            'service_map_id': '5297',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm1',
+            'zonegroup_name': 'zg1',
+            'zonegroup_id': 'zg1-id',
+            'zone_name': 'zone1',
+            'default': True,
+            'port': 80
+        },
+            {
+            'id': 'daemon2',
+            'service_map_id': '5356',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm2',
+            'zonegroup_name': 'zg2',
+            'zonegroup_id': 'zg2-id',
+            'zone_name': 'zone2',
+            'default': False,
+            'port': 443,
+        }])
 
 
 class RgwUserControllerTestCase(ControllerTestCase):
