@@ -409,6 +409,10 @@ class RgwBucket(RgwRESTController):
             multisite.create_dashboard_admin_sync_group(zonegroup_name=zonegroup_name)
         return rgw_client.set_bucket_replication(bucket_name, replication)
 
+    def _get_replication(self, bucket_name: str):
+        rgw_client = RgwClient.admin_instance()
+        return rgw_client.get_bucket_replication(bucket_name)
+
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
         # type (str) -> str
@@ -463,6 +467,7 @@ class RgwBucket(RgwRESTController):
         result['mfa_delete'] = versioning['MfaDelete']
         result['bucket_policy'] = self._get_policy(bucket_name)
         result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
+        result['replication'] = self._get_replication(bucket_name)
 
         # Append the locking configuration.
         locking = self._get_locking(result['owner'], daemon_name, bucket_name)

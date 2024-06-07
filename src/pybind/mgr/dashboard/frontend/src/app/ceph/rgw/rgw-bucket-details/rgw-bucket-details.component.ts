@@ -14,6 +14,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
   selection: any;
 
   aclPermissions: Record<string, string[]> = {};
+  replicationStatus = $localize`Disabled`;
 
   constructor(private rgwBucketService: RgwBucketService) {}
 
@@ -23,6 +24,8 @@ export class RgwBucketDetailsComponent implements OnChanges {
         bucket['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bucket);
         this.selection = bucket;
         this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
+        if (this.selection.replication?.['Rule']?.['Status'])
+          this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
       });
     }
   }
