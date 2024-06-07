@@ -260,6 +260,11 @@ typedef struct {
   char *group_snap_name;
 } rbd_snap_group_namespace_t;
 
+typedef struct {
+  rbd_snap_namespace_type_t original_namespace_type;
+  char *original_name;
+} rbd_snap_trash_namespace_t;
+
 typedef enum {
   RBD_SNAP_MIRROR_STATE_PRIMARY,
   RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED,
@@ -968,6 +973,11 @@ CEPH_RBD_API int rbd_snap_get_trash_namespace(rbd_image_t image,
                                               uint64_t snap_id,
                                               char* original_name,
                                               size_t max_length);
+CEPH_RBD_API int rbd_snap_get_trash_namespace2(
+    rbd_image_t image, uint64_t snap_id,
+    rbd_snap_trash_namespace_t *trash_snap, size_t trash_snap_size);
+CEPH_RBD_API int rbd_snap_trash_namespace_cleanup(
+    rbd_snap_trash_namespace_t *trash_snap, size_t trash_snap_size);
 CEPH_RBD_API int rbd_snap_get_mirror_namespace(
     rbd_image_t image, uint64_t snap_id,
     rbd_snap_mirror_namespace_t *mirror_snap, size_t mirror_snap_size);
