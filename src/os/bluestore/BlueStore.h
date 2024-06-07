@@ -1690,7 +1690,7 @@ private:
     pool_opts_t pool_opts;
     uint32_t segment_size;
     ContextQueue *commit_queue;
-    Estimator* estimator;
+    std::unique_ptr<Estimator> estimator;
 
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
