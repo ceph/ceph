@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/octopus latest
+   install ceph/reef latest
 tasks:
 - install:
-    branch: octopus
+    branch: reef
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -13,7 +13,7 @@ tasks:
       - cephadm
       - ceph-volume
     extra_packages: ['librados2']
-- print: "**** done installing octopus"
+- print: "**** done installing reef"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -35,5 +35,5 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client octopus
+      - ceph osd set-require-min-compat-client reef
 - print: "**** done ceph"
