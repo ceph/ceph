@@ -73,6 +73,11 @@ namespace librbd {
     std::string group_snap_name;
   } snap_group_namespace_t;
 
+  typedef struct {
+    snap_namespace_type_t original_namespace_type;
+    std::string original_name;
+  } snap_trash_namespace_t;
+
   typedef rbd_snap_mirror_state_t snap_mirror_state_t;
 
   typedef struct {
@@ -669,6 +674,9 @@ public:
                                snap_group_namespace_t *group_namespace,
                                size_t snap_group_namespace_size);
   int snap_get_trash_namespace(uint64_t snap_id, std::string* original_name);
+  int snap_get_trash_namespace2(uint64_t snap_id,
+                                snap_trash_namespace_t *trash_namespace,
+                                size_t snap_trash_namespace_size);
   int snap_get_mirror_namespace(
       uint64_t snap_id, snap_mirror_namespace_t *mirror_namespace,
       size_t snap_mirror_namespace_size);

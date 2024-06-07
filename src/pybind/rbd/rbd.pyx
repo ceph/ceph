@@ -5167,28 +5167,26 @@ written." % (self.name, ret, length))
         :type key: int
         :returns: dict - contains the following keys:
 
+            * ``original_namespace_type`` (int) - original snap namespace type
+
             * ``original_name`` (str) - original snap name
         """
         cdef:
+            rbd_snap_trash_namespace_t trash_snap
             uint64_t _snap_id = snap_id
-            size_t _size = 512
-            char *_name = NULL
-        try:
-            while True:
-                _name = <char*>realloc_chk(_name, _size);
-                with nogil:
-                    ret = rbd_snap_get_trash_namespace(self.image, _snap_id,
-                                                       _name, _size)
-                if ret >= 0:
-                    break
-                elif ret != -errno.ERANGE:
-                    raise make_ex(ret, 'error getting snapshot trash '
-                                       'namespace image: %s, snap_id: %d' % (self.name, snap_id))
-            return {
-                    'original_name' : decode_cstr(_name)
-                }
-        finally:
-            free(_name)
+        with nogil:
+            ret = rbd_snap_get_trash_namespace2(self.image, _snap_id,
+                                                &trash_snap, sizeof(trash_snap))
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot trash '
+                               'namespace for image: %s, snap_id: %d' %
+                               (self.name, snap_id))
+        result = {
+            'original_namespace_type' : trash_snap.original_namespace_type,
+            'original_name' : decode_cstr(trash_snap.original_name)
+            }
+        rbd_snap_trash_namespace_cleanup(&trash_snap, sizeof(trash_snap))
+        return result
 
     @requires_not_closed
     def snap_get_mirror_namespace(self, snap_id):

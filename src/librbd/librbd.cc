@@ -2480,8 +2480,29 @@ namespace librbd {
   int Image::snap_get_trash_namespace(uint64_t snap_id,
                                       std::string* original_name) {
     ImageCtx *ictx = (ImageCtx *)ctx;
+
+    snap_trash_namespace_t trash_snap;
+    int r = librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
+                                                         &trash_snap);
+    if (r < 0) {
+      return r;
+    }
+
+    *original_name = trash_snap.original_name;
+    return 0;
+  }
+
+  int Image::snap_get_trash_namespace2(
+      uint64_t snap_id, snap_trash_namespace_t *trash_snap,
+      size_t trash_snap_size) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+
+    if (trash_snap_size != sizeof(snap_trash_namespace_t)) {
+      return -ERANGE;
+    }
+
     return librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
-                                                        original_name);
+                                                        trash_snap);
   }
 
   int Image::snap_get_mirror_namespace(
@@ -7327,18 +7348,50 @@ extern "C" int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
                                             size_t max_length) {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
 
-  std::string cpp_original_name;
+  librbd::snap_trash_namespace_t trash_namespace;
   int r = librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
-                                                       &cpp_original_name);
+                                                       &trash_namespace);
   if (r < 0) {
     return r;
   }
 
-  if (cpp_original_name.length() >= max_length) {
+  if (trash_namespace.original_name.length() >= max_length) {
     return -ERANGE;
   }
 
-  strcpy(original_name, cpp_original_name.c_str());
+  strcpy(original_name, trash_namespace.original_name.c_str());
+  return 0;
+}
+
+extern "C" int rbd_snap_get_trash_namespace2(
+    rbd_image_t image, uint64_t snap_id,
+    rbd_snap_trash_namespace_t *trash_snap,
+    size_t trash_snap_size) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+
+  if (trash_snap_size != sizeof(rbd_snap_trash_namespace_t)) {
+    return -ERANGE;
+  }
+
+  librbd::snap_trash_namespace_t trash_namespace;
+  int r = librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
+                                                       &trash_namespace);
+  if (r < 0) {
+    return r;
+  }
+
+  trash_snap->original_namespace_type = trash_namespace.original_namespace_type;
+  trash_snap->original_name = strdup(trash_namespace.original_name.c_str());
+  return 0;
+}
+
+extern "C" int rbd_snap_trash_namespace_cleanup(
+    rbd_snap_trash_namespace_t *trash_snap, size_t trash_snap_size) {
+  if (trash_snap_size != sizeof(rbd_snap_trash_namespace_t)) {
+    return -ERANGE;
+  }
+
+  free(trash_snap->original_name);
   return 0;
 }
 

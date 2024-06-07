@@ -34,6 +34,7 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_OPERATION_FEATURE_CLONE_CHILD,
+                 RBD_SNAP_NAMESPACE_TYPE_USER,
                  RBD_SNAP_NAMESPACE_TYPE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
                  RBD_SNAP_NAMESPACE_TYPE_MIRROR,
@@ -1842,6 +1843,7 @@ class TestClone(object):
         self.image.remove_snap('snap2')
         trash_snap = self.image.snap_get_trash_namespace(snap_id)
         assert trash_snap == {
+            'original_namespace_type' : RBD_SNAP_NAMESPACE_TYPE_USER,
             'original_name' : 'snap2'
             }
         clone_name3 = get_temp_image_name()
@@ -2138,7 +2140,11 @@ class TestClone(object):
 
         snaps = [s for s in self.image.list_snaps() if s['name'] != 'snap1']
         eq([RBD_SNAP_NAMESPACE_TYPE_TRASH], [s['namespace'] for s in snaps])
-        eq([{'original_name' : 'snap2'}], [s['trash'] for s in snaps])
+        trash_snap = {
+            'original_namespace_type' : RBD_SNAP_NAMESPACE_TYPE_USER,
+            'original_name' : 'snap2'
+            }
+        eq([trash_snap], [s['trash'] for s in snaps])
 
         self.rbd.remove(ioctx, clone_name)
         eq([], [s for s in self.image.list_snaps() if s['name'] != 'snap1'])
@@ -2978,6 +2984,7 @@ class TestGroups(object):
         trash_image_snap_name = image_snaps[0]['name']
         assert image_snaps[0]['id'] == image_snap_id
         assert image_snaps[0]['trash'] == {
+            'original_namespace_type' : RBD_SNAP_NAMESPACE_TYPE_GROUP,
             'original_name' : image_snap_name
             }
         assert trash_image_snap_name != image_snap_name
