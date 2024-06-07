@@ -104,8 +104,8 @@ options:
 - name: public_network_interface
   type: str
   level: advanced
-  desc: Interface name(s) from which to choose an address from a public_network to
-    bind to; public_network must also be specified.
+  desc: Interface name(s) from which to choose an address from a ``public_network`` to
+    bind to; ``public_network`` must also be specified.
   tags:
   - network
   services:
@@ -135,8 +135,8 @@ options:
 - name: cluster_network_interface
   type: str
   level: advanced
-  desc: Interface name(s) from which to choose an address from a cluster_network to
-    bind to; cluster_network must also be specified.
+  desc: Interface name(s) from which to choose an address from a ``cluster_network`` to
+    bind to; ``cluster_network`` must also be specified.
   tags:
   - network
   services:
