@@ -90,6 +90,10 @@ cdef nogil:
         char *group_name
         char *group_snap_name
 
+    ctypedef struct rbd_snap_trash_namespace_t:
+        rbd_snap_namespace_type_t original_namespace_type;
+        char *original_name;
+
     ctypedef enum rbd_snap_mirror_state_t:
         _RBD_SNAP_MIRROR_STATE_PRIMARY "RBD_SNAP_MIRROR_STATE_PRIMARY"
         _RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED "RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED"
@@ -677,8 +681,12 @@ cdef nogil:
     void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_spec,
                                           size_t snap_group_namespace_size):
         pass
-    int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
-                                     char *original_name, size_t max_length):
+    int rbd_snap_get_trash_namespace2(rbd_image_t image, uint64_t snap_id,
+                                      rbd_snap_trash_namespace_t *trash_snap,
+                                      size_t trash_snap_size):
+        pass
+    void rbd_snap_trash_namespace_cleanup(rbd_snap_trash_namespace_t *trash_snap,
+                                          size_t trash_snap_size):
         pass
     int rbd_snap_get_mirror_namespace(
         rbd_image_t image, uint64_t snap_id,
