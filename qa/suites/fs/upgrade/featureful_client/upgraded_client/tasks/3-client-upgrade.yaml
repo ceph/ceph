@@ -1,7 +1,6 @@
 tasks:
 - install.upgrade:
     client.0:
-      branch: quincy
 - print: "**** done install.upgrade on client.0"
 - ceph-fuse:
     client.0:
