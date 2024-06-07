@@ -326,7 +326,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['lock_retention_period_days'],
           xmlStrTags,
           bucketPolicy,
-          cannedAcl
+          cannedAcl,
+          values['replication']
         )
         .subscribe(
           () => {

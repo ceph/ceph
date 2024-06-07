@@ -10533,6 +10533,8 @@ paths:
                   type: string
                 mfa_token_serial:
                   type: string
+                replication:
+                  type: string
                 tags:
                   type: string
                 uid:
