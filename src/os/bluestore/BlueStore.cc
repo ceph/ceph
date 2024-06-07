@@ -1203,7 +1203,7 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
   explicit LruBufferCacheShard(BlueStore* store) : BlueStore::BufferCacheShard(store) {}
 
   void _add(BlueStore::Buffer *b, int level, BlueStore::Buffer *near) override {
-    if (near) {
+    if (near && !near->is_writing()) {
       auto q = lru.iterator_to(*near);
       lru.insert(q, *b);
     } else if (level > 0) {
@@ -1328,8 +1328,12 @@ public:
     dout(20) << __func__ << " level " << level << " near " << near
              << " on " << *b
              << " which has cache_private " << b->cache_private << dendl;
+    ceph_assert(ceph_mutex_is_locked(cache));  // see _txc_finish_io
+    ceph_assert(b->is_clean() || b->is_empty());
     if (near) {
       b->cache_private = near->cache_private;
+    }
+    if (near && !near->is_writing()) {
       switch (b->cache_private) {
       case BUFFER_WARM_IN:
         warm_in.insert(warm_in.iterator_to(*near), *b);
@@ -1344,17 +1348,18 @@ public:
       default:
         ceph_abort_msg("bad cache_private");
       }
-    } else if (b->cache_private == BUFFER_NEW) {
-      b->cache_private = BUFFER_WARM_IN;
-      if (level > 0) {
-        warm_in.push_front(*b);
-      } else {
-        // take caller hint to start at the back of the warm queue
-        warm_in.push_back(*b);
-      }
     } else {
       // we got a hint from discard
       switch (b->cache_private) {
+      case BUFFER_NEW:
+        b->cache_private = BUFFER_WARM_IN;
+        if (level > 0) {
+          warm_in.push_front(*b);
+        } else {
+          // take caller hint to start at the back of the warm queue
+          warm_in.push_back(*b);
+        }
+        break;
       case BUFFER_WARM_IN:
         // stay in warm_in.  move to front, even though 2Q doesn't actually
         // do this.
@@ -1665,6 +1670,8 @@ void BlueStore::BufferSpace::_add_buffer(BufferCacheShard* cache,
   ldout(cache->cct, 20) << __func__ << "? " << b << dendl;
   cache->_audit("_add_buffer start");
   ceph_assert(!b->set_item.is_linked());
+  // illegal to provide both near and cache_private
+  ceph_assert(!(near && cache_private != 0));
   bool add_to_map = true;
   if (b->is_writing()) {
     ceph_assert(b->txc);
