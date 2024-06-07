@@ -3,7 +3,6 @@ import os
 if 'UNITTEST' in os.environ:
     import tests
 
-import bcrypt
 import cephfs
 import contextlib
 import datetime
@@ -516,7 +515,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
 
     :param organisation: String representing the Organisation(O) RDN (default='Ceph')
     :param common_name: String representing the Common Name(CN) RDN (default='mgr')
-    :param dname: Optional dictionary containing RDNs to use for crt/key generation 
+    :param dname: Optional dictionary containing RDNs to use for crt/key generation
 
     :return: ssl crt and key in utf-8 format
 
@@ -870,6 +869,8 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
 
 
 def password_hash(password: Optional[str], salt_password: Optional[str] = None) -> Optional[str]:
+    import bcrypt
+
     if not password:
         return None
     if not salt_password:
