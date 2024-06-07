@@ -24,8 +24,9 @@ export class RgwBucketDetailsComponent implements OnChanges {
         bucket['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bucket);
         this.selection = bucket;
         this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
-        if (this.selection.replication?.['Rule']?.['Status'])
+        if (this.selection.replication?.['Rule']?.['Status']) {
           this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];
+        }
       });
     }
   }
