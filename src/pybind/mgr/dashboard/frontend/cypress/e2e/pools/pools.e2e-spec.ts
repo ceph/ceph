@@ -28,14 +28,14 @@ describe('Pools page', () => {
   });
 
   describe('Create, update and destroy', () => {
-    it('should create a pool', () => {
+    it('should create a pool with mirroring enabled', () => {
       pools.existTableCell(poolName, false);
       pools.navigateTo('create');
       pools.create(poolName, 8, 'rbd');
       pools.existTableCell(poolName);
     });
 
-    it('should edit a pools placement group', () => {
+    it('should edit a pools placement group and check if mirroring is enabled', () => {
       pools.existTableCell(poolName);
       pools.edit_pool_pg(poolName, 32);
     });

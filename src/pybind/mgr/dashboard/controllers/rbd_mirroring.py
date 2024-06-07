@@ -11,7 +11,6 @@ import cherrypy
 import rbd
 
 from .. import mgr
-from ..controllers.pool import RBDPool
 from ..controllers.service import Service
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -507,6 +506,9 @@ class RbdMirroringPoolMode(RESTController):
 
     @RbdMirroringTask('pool/edit', {'pool_name': '{pool_name}'}, 5.0)
     def set(self, pool_name, mirror_mode=None):
+        return self.set_pool_mirror_mode(pool_name, mirror_mode)
+
+    def set_pool_mirror_mode(self, pool_name, mirror_mode):
         def _edit(ioctx, mirror_mode=None):
             if mirror_mode:
                 mode_enum = {x[1]: x[0] for x in
@@ -674,6 +676,8 @@ class RbdMirroringStatus(BaseController):
     @EndpointDoc('Configure RBD Mirroring')
     @CreatePermission
     def configure(self):
+        from ..controllers.pool import RBDPool  # to avoid circular import
+
         rbd_pool = RBDPool()
         service = Service()
 
