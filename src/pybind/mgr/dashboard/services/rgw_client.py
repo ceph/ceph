@@ -59,6 +59,7 @@ class RgwDaemon:
     ssl: bool
     realm_name: str
     zonegroup_name: str
+    zonegroup_id: str
     zone_name: str
 
 
@@ -78,6 +79,7 @@ def _get_daemons() -> Dict[str, RgwDaemon]:
             daemon.name = daemon_map[key]['metadata']['id']
             daemon.realm_name = daemon_map[key]['metadata']['realm_name']
             daemon.zonegroup_name = daemon_map[key]['metadata']['zonegroup_name']
+            daemon.zonegroup_id = daemon_map[key]['metadata']['zonegroup_id']
             daemon.zone_name = daemon_map[key]['metadata']['zone_name']
             daemons[daemon.name] = daemon
             logger.info('Found RGW daemon with configuration: host=%s, port=%d, ssl=%s',
@@ -347,10 +349,18 @@ class RgwClient(RestClient):
         # The API access key and secret key are mandatory for a minimal configuration.
         if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
             configure_rgw_credentials()
-
         if not daemon_name:
-            # Select 1st daemon:
-            daemon_name = next(iter(RgwClient._daemons.keys()))
+            try:
+                multiiste = RgwMultisite()
+                default_zonegroup = multiiste.get_all_zonegroups_info()['default_zonegroup']
+
+                # if default_zonegroup is not None, then iterate through _daemon.values()
+                # and find the daemon which has the same zonegroup_id as default_zonegroup
+                for _, daemon in RgwClient._daemons.items():
+                    if daemon.zonegroup_id == default_zonegroup:
+                        daemon_name = daemon.name
+            except Exception:  # pylint: disable=broad-except
+                daemon_name = next(iter(RgwClient._daemons.keys()))
 
         # Discard all cached instances if any rgw setting has changed
         if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
@@ -358,29 +368,29 @@ class RgwClient(RestClient):
             RgwClient.drop_instance()
 
         if daemon_name not in RgwClient._config_instances:
-            connection_info = RgwClient._get_daemon_connection_info(daemon_name)
-            RgwClient._config_instances[daemon_name] = RgwClient(connection_info['access_key'],
+            connection_info = RgwClient._get_daemon_connection_info(daemon_name)  # type: ignore
+            RgwClient._config_instances[daemon_name] = RgwClient(connection_info['access_key'],  # type: ignore  # noqa E501  #pylint: disable=line-too-long
                                                                  connection_info['secret_key'],
-                                                                 daemon_name)
+                                                                 daemon_name)  # type: ignore
 
-        if not userid or userid == RgwClient._config_instances[daemon_name].userid:
-            return RgwClient._config_instances[daemon_name]
+        if not userid or userid == RgwClient._config_instances[daemon_name].userid:  # type: ignore
+            return RgwClient._config_instances[daemon_name]  # type: ignore
 
         if daemon_name not in RgwClient._user_instances \
                 or userid not in RgwClient._user_instances[daemon_name]:
             # Get the access and secret keys for the specified user.
-            keys = RgwClient._config_instances[daemon_name].get_user_keys(userid)
+            keys = RgwClient._config_instances[daemon_name].get_user_keys(userid)  # type: ignore
             if not keys:
                 raise RequestException(
                     "User '{}' does not have any keys configured.".format(
                         userid))
             instance = RgwClient(keys['access_key'],
                                  keys['secret_key'],
-                                 daemon_name,
+                                 daemon_name,  # type: ignore
                                  userid)
-            RgwClient._user_instances.update({daemon_name: {userid: instance}})
+            RgwClient._user_instances.update({daemon_name: {userid: instance}})  # type: ignore
 
-        return RgwClient._user_instances[daemon_name][userid]
+        return RgwClient._user_instances[daemon_name][userid]  # type: ignore
 
     @staticmethod
     def admin_instance(daemon_name: Optional[str] = None) -> 'RgwClient':
