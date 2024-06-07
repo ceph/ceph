@@ -1040,6 +1040,19 @@ class RgwClient(RestClient):
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
+    @RestClient.api_get('/{bucket_name}?replication')
+    def get_bucket_replication(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
+            return result
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get('Code') == 'ReplicationConfigurationNotFoundError':
+                    return None
+            raise e
+
 
 class SyncStatus(Enum):
     enabled = 'enabled'
