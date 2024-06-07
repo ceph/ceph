@@ -3,7 +3,7 @@ import { PageHelper } from '../page-helper.po';
 export class UrlsCollection extends PageHelper {
   pages = {
     // Cluster expansion
-    welcome: { url: '#/expand-cluster', id: 'cd-create-cluster' },
+    welcome: { url: '#/expand-cluster?welcome=true', id: 'cd-create-cluster' },
 
     // Landing page
     dashboard: { url: '#/dashboard', id: 'cd-dashboard' },

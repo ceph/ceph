@@ -4,7 +4,7 @@ import { HostsPageHelper } from './hosts.po';
 import { ServicesPageHelper } from './services.po';
 
 const pages = {
-  index: { url: '#/expand-cluster', id: 'cd-create-cluster' }
+  index: { url: '#/expand-cluster?welcome=true', id: 'cd-create-cluster' }
 };
 export class CreateClusterWizardHelper extends PageHelper {
   pages = pages;
@@ -28,7 +28,7 @@ export class CreateClusterWizardHelper extends PageHelper {
 
 export class CreateClusterHostPageHelper extends HostsPageHelper {
   pages = {
-    index: { url: '#/expand-cluster', id: 'cd-wizard' },
+    index: { url: '#/expand-cluster?welcome=true', id: 'cd-wizard' },
     add: { url: '', id: 'cd-host-form' }
   };
 
@@ -42,7 +42,7 @@ export class CreateClusterHostPageHelper extends HostsPageHelper {
 
 export class CreateClusterServicePageHelper extends ServicesPageHelper {
   pages = {
-    index: { url: '#/expand-cluster', id: 'cd-wizard' },
+    index: { url: '#/expand-cluster?welcome=true', id: 'cd-wizard' },
     create: { url: '', id: 'cd-service-form' }
   };
 

@@ -26,6 +26,12 @@
                             id="host-actions"
                             [tableActions]="tableActions">
           </cd-table-actions>
+          <cd-table-actions [permission]="permissions.hosts"
+                            [selection]="selection"
+                            btnColor="light"
+                            class="btn-group"
+                            [tableActions]="expandClusterActions">
+          </cd-table-actions>
         </div>
         <cd-host-details cdTableDetail
                          [permissions]="permissions"

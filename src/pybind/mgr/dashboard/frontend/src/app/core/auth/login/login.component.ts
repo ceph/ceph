@@ -70,7 +70,11 @@ export class LoginComponent implements OnInit {
       if (!this.postInstalled && this.route.snapshot.queryParams['returnUrl'] === '/dashboard') {
         url = '/expand-cluster';
       }
-      this.router.navigate([url]);
+      if (url == '/expand-cluster') {
+        this.router.navigate([url], { queryParams: { welcome: true } });
+      } else {
+        this.router.navigate([url]);
+      }
     });
   }
 }
