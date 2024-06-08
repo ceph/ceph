@@ -1007,7 +1007,7 @@ int JournalTool::recover_dentries(
    */
   for (const auto& fb : metablob.roots) {
     inodeno_t ino = fb.inode->ino;
-    dout(4) << "updating root 0x" << std::hex << ino << std::dec << dendl;
+    dout(4) << "updating root " << ino << dendl;
 
     object_t root_oid = InodeStore::get_object_name(ino, frag_t(), ".inode");
     dout(4) << "object id " << root_oid.name << dendl;
@@ -1238,7 +1238,7 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
     {
       const inodeno_t ino = *i;
       if (ino_table.force_consume(ino)) {
-        dout(4) << "Used ino 0x" << std::hex << ino << std::dec
+        dout(4) << "Used ino " << ino
           << " requires inotable update" << dendl;
         inotable_modified = true;
       }
