@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    conf:
+    cluster-conf:
       client:
         client mount timeout: 600
         debug ms: 1
