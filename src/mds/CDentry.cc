@@ -554,6 +554,7 @@ void CDentry::encode_remote(inodeno_t& ino, unsigned char d_type,
 
   // marker, name, ino
   ENCODE_START(2, 1, bl);
+  // WARNING: always put new fields at the end of bl
   encode(ino, bl);
   encode(d_type, bl);
   encode(alternate_name, bl);
