@@ -158,20 +158,11 @@ using crimson::common::local_conf;
     // See ObjectContext::_with_lock(),
     // this function must be able to support atomicity before
     // acquiring the lock
-    if (obc->loading_mutex.try_lock()) {
-      return _get_or_load_obc<State>(obc, existed
-      ).finally([obc]{
-        obc->loading_mutex.unlock();
-      });
-    } else {
-      return interruptor::with_lock(obc->loading_mutex,
-      [this, obc, existed, FNAME] {
-        // Previous user already loaded the obc
-        DEBUGDPP("{} finished waiting for loader, cache hit on {}",
-                 dpp, FNAME, obc->get_oid());
-        return get_obc(obc, existed);
-      });
-    }
+    ceph_assert(obc->loading_mutex.try_lock());
+    return _get_or_load_obc<State>(obc, existed
+    ).finally([obc]{
+      obc->loading_mutex.unlock();
+    });
   }
 
   template<RWState::State State>
