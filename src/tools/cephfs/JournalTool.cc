@@ -863,6 +863,14 @@ int JournalTool::recover_dentries(
       if ((other_pool || write_dentry) && !dry_run) {
         dout(4) << "writing I dentry " << key << " into frag "
           << frag_oid.name << dendl;
+        dout(20) << " dnfirst = " << fb.dnfirst << dendl;
+        if (!fb.alternate_name.empty()) {
+          bufferlist bl, b64;
+          bl.append(fb.alternate_name);
+          bl.encode_base64(b64);
+          auto encoded = std::string_view(b64.c_str(), b64.length());
+          dout(20) << " alternate_name = b64:" << encoded << dendl;
+        }
 
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
