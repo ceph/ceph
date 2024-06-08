@@ -12,27 +12,15 @@ using crimson::common::local_conf;
   ObjectContextLoader::with_head_obc(const hobject_t& oid,
                                      with_obc_func_t&& func)
   {
-    LOG_PREFIX(ObjectContextLoader::with_head_obc);
-    auto [obc, existed] = obc_registry.get_cached_obc(oid);
-    DEBUGDPP("object {} existed {}",
-             dpp, obc->get_oid(), existed);
-    assert(obc->is_head());
-    obc->append_to(obc_set_accessing);
-    return obc->with_lock<State, IOInterruptCondition>(
-      [existed=existed, obc=obc, func=std::move(func), this] {
-      return get_or_load_obc<State>(obc, existed)
-      .safe_then_interruptible(
-        [func = std::move(func)](auto obc) {
+    return with_locked_obc<State, true /* track */>(
+      oid,
+      [func=std::move(func)](auto obc) {
         // The template with_obc_func_t wrapper supports two obcs (head and clone).
         // In the 'with_head_obc' case, however, only the head is in use.
         // Pass the same head obc twice in order to
         // to support the generic with_obc sturcture.
-        return std::move(func)(obc, obc);
+	return std::invoke(std::move(func), obc, obc);
       });
-    }).finally([FNAME, this, obc=std::move(obc)] {
-      DEBUGDPP("released object {}", dpp, obc->get_oid());
-      obc->remove_from(obc_set_accessing);
-    });
   }
 
   template<RWState::State State>
@@ -84,18 +72,12 @@ using crimson::common::local_conf;
       }
       clone_oid = *resolved_oid;
     }
-    auto [clone, existed] = obc_registry.get_cached_obc(clone_oid);
-    return clone->template with_lock<State, IOInterruptCondition>(
-      [existed=existed, clone=std::move(clone),
-       func=std::move(func), head=std::move(head), this]() mutable
-      -> load_obc_iertr::future<> {
-      return get_or_load_obc<State>(clone, existed
-      ).safe_then_interruptible(
-        [func = std::move(func), head=std::move(head)](auto clone) mutable {
+    return with_locked_obc<State, false /* don't track */>(
+      clone_oid,
+      [head=std::move(head), func=std::move(func)](auto clone) {
         clone->set_clone_ssc(head->ssc);
         return std::move(func)(std::move(head), std::move(clone));
       });
-    });
   }
 
   template<RWState::State State>
@@ -110,6 +92,32 @@ using crimson::common::local_conf;
       return with_clone_obc<State>(oid, std::move(func), resolve_clone);
     }
   }
+
+  template<RWState::State State, bool track, typename Func>
+  ObjectContextLoader::load_obc_iertr::future<>
+  ObjectContextLoader::with_locked_obc(const hobject_t& oid,
+		  Func&& func)
+  {
+    LOG_PREFIX(ObjectContextLoader::with_locked_obc);
+    auto [obc, existed] = obc_registry.get_cached_obc(oid);
+    DEBUGDPP("object {} existed {}",
+             dpp, obc->get_oid(), existed);
+    if constexpr (track) {
+      obc->append_to(obc_set_accessing);
+    }
+    return obc->with_lock<State, IOInterruptCondition>(
+      [existed=existed, obc=obc, func=std::move(func), this]() mutable {
+      return get_or_load_obc<State>(
+	obc, existed
+      ).safe_then_interruptible(std::move(func));
+    }).finally([FNAME, this, obc=std::move(obc)] {
+      DEBUGDPP("released object {}", dpp, obc->get_oid());
+      if constexpr (track) {
+	obc->remove_from(obc_set_accessing);
+      }
+    });
+  }
+
 
   ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
   ObjectContextLoader::load_obc(ObjectContextRef obc)
