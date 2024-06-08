@@ -2506,6 +2506,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
       bl.append('i');         // inode
 
       ENCODE_START(2, 1, bl);
+      // WARNING: always put new fields at the end of bl
       encode(item.alternate_name, bl);
       _encode_primary_inode_base(item, dfts, bl);
       ENCODE_FINISH(bl);
