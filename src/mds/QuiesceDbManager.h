@@ -281,7 +281,7 @@ class QuiesceDbManager {
     std::unordered_map<RequestContext*, int> done_requests;
 
     void* quiesce_db_thread_main();
-    bool db_thread_has_work() const;
+    virtual bool db_thread_has_work() const;
 
     using IsMemberBool = bool;
     using ShouldExitBool = bool;
