@@ -194,16 +194,29 @@ TEST(ErasureCodeExample, decode)
   bufferlist out;
   EXPECT_EQ(0, example.decode_concat(encoded, &out));
   bufferlist usable;
+  EXPECT_EQ(2u*encoded[0].length(), out.length());
   usable.substr_of(out, 0, in.length());
   EXPECT_TRUE(usable == in);
 
   // partial chunk decode
-  map<int, bufferlist> partial_decode;
-  partial_decode[0] = encoded[0];
+  map<int, bufferlist> partial_decode = encoded;
   set<int> partial_want_to_read{want_to_encode, want_to_encode+1};
+  EXPECT_EQ(1u, partial_want_to_read.size());
+  out.clear();
   EXPECT_EQ(0, example.decode_concat(partial_want_to_read,
 				     partial_decode,
 				     &out));
+  EXPECT_EQ(out.length(), encoded[0].length());
+
+  // partial degraded chunk decode
+  partial_decode = encoded;
+  partial_decode.erase(0);
+  EXPECT_EQ(1, partial_want_to_read.size());
+  out.clear();
+  EXPECT_EQ(0, example.decode_concat(partial_want_to_read,
+				     partial_decode,
+				     &out));
+  EXPECT_EQ(out.length(), encoded[0].length());
 
   // cannot recover
   map<int, bufferlist> degraded;  
