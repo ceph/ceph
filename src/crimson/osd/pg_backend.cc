@@ -342,8 +342,6 @@ namespace {
     auto init_value_p = init_value_bl.cbegin();
     try {
       decode(init_value, init_value_p);
-      // chop off the consumed part
-      init_value_bl.splice(0, init_value_p.get_off());
     } catch (const ceph::buffer::end_of_buffer&) {
       logger().warn("{}: init value not provided", __func__);
       return crimson::ct_error::invarg::make();
