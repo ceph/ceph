@@ -37,8 +37,8 @@ private:
   std::string group;
   std::string gateway_address;
   std::string monitor_address;
-  std::string server_key;
   std::string server_cert;
+  std::string client_key;
   std::string client_cert;
   grpc::SslCredentialsOptions
               gw_ssl_opts;  // gateway grpc ssl options

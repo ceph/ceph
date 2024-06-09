@@ -67,24 +67,20 @@ std::string read_file(const std::string& filename) {
 
 void NVMeofGwMonitorClient::init_gw_ssl_opts()
 {
-  if (server_key.empty() && server_cert.empty() && client_cert.empty())
+  if (server_cert.empty() && client_key.empty() && client_cert.empty())
     return;
 
   // load the certificates content
-  std::string server_cert_content = read_file(server_cert);
-  std::string server_key_content = read_file(server_key);
-  std::string client_cert_content = read_file(client_cert);
-
   // create SSL/TLS credentials
-  gw_ssl_opts.pem_root_certs = server_cert_content;
-  gw_ssl_opts.pem_private_key = server_key_content;
-  gw_ssl_opts.pem_cert_chain = client_cert_content;
+  gw_ssl_opts.pem_root_certs = read_file(server_cert);
+  gw_ssl_opts.pem_private_key = read_file(client_key);
+  gw_ssl_opts.pem_cert_chain = read_file(client_cert);
 }
 
 std::shared_ptr<grpc::ChannelCredentials> NVMeofGwMonitorClient::gw_creds()
 {
   // use insecure channel if no keys/certs defined
-  if (server_key.empty() && server_cert.empty() && client_cert.empty())
+  if (server_cert.empty() && client_key.empty() && client_cert.empty())
     return grpc::InsecureChannelCredentials();
   else
     return grpc::SslCredentials(gw_ssl_opts);
@@ -109,10 +105,10 @@ int NVMeofGwMonitorClient::init()
       gateway_address = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--monitor-group-address", (char*)NULL)) {
       monitor_address = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--server-key", (char*)NULL)) {
-      server_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--server-cert", (char*)NULL)) {
       server_cert = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-key", (char*)NULL)) {
+      client_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--client-cert", (char*)NULL)) {
       client_cert = val;
     } else {
@@ -127,7 +123,7 @@ int NVMeofGwMonitorClient::init()
   ceph_assert(name != "" && pool != "" && gateway_address != "" && monitor_address != "");
 
   // ensures that either all are empty or all are non-empty.
-  ceph_assert((server_key.empty() == server_cert.empty()) && (server_cert.empty() == client_cert.empty()));
+  ceph_assert((server_cert.empty() == client_key.empty()) && (client_key.empty() == client_cert.empty()));
   init_gw_ssl_opts();
 
   init_async_signal_handler();
