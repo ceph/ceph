@@ -3164,9 +3164,23 @@ cdef class Image(object):
         Get spec of the cloned image's parent
 
         :returns: dict - contains the following keys:
+
+            * ``pool_id`` (int) - parent pool id
+
             * ``pool_name`` (str) - parent pool name
+
             * ``pool_namespace`` (str) - parent pool namespace
+
+            * ``image_id`` (str) - parent image id
+
             * ``image_name`` (str) - parent image name
+
+            * ``trash`` (bool) - True if parent image is in trash bin
+
+            * ``snap_id`` (int) - parent snapshot id
+
+            * ``snap_namespace_type`` (int) - parent snapshot namespace type
+
             * ``snap_name`` (str) - parent snapshot name
 
         :raises: :class:`ImageNotFound` if the image doesn't have a parent
@@ -3179,9 +3193,14 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error getting parent info for image %s' % self.name)
 
-        result = {'pool_name': decode_cstr(parent_spec.pool_name),
+        result = {'pool_id': parent_spec.pool_id,
+                  'pool_name': decode_cstr(parent_spec.pool_name),
                   'pool_namespace': decode_cstr(parent_spec.pool_namespace),
+                  'image_id': decode_cstr(parent_spec.image_id),
                   'image_name': decode_cstr(parent_spec.image_name),
+                  'trash': parent_spec.trash,
+                  'snap_id': snap_spec.id,
+                  'snap_namespace_type': snap_spec.namespace_type,
                   'snap_name': decode_cstr(snap_spec.name)}
 
         rbd_linked_image_spec_cleanup(&parent_spec)
