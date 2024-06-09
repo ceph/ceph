@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "seastar/core/gate.hh"
+#include <seastar/core/gate.hh>
+#include <seastar/core/lowres_clock.hh>
 
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cached_extent.h"
@@ -29,6 +30,10 @@ class ExtentOolWriter {
       crimson::ct_error::input_output_error>;
 public:
   virtual ~ExtentOolWriter() {}
+
+  virtual backend_type_t get_type() const = 0;
+
+  virtual writer_stats_t get_stats() const = 0;
 
   using open_ertr = base_ertr;
   virtual open_ertr::future<> open() = 0;
@@ -67,6 +72,14 @@ public:
                      rewrite_gen_t gen,
                      SegmentProvider &sp,
                      SegmentSeqAllocator &ssa);
+
+  backend_type_t get_type() const final {
+    return backend_type_t::SEGMENTED;
+  }
+
+  writer_stats_t get_stats() const final {
+    return record_submitter.get_stats();
+  }
 
   open_ertr::future<> open() final {
     return record_submitter.open(false).discard_result();
@@ -118,6 +131,15 @@ class RandomBlockOolWriter : public ExtentOolWriter {
 public:
   RandomBlockOolWriter(RBMCleaner* rb_cleaner) :
     rb_cleaner(rb_cleaner) {}
+
+  backend_type_t get_type() const final {
+    return backend_type_t::RANDOM_BLOCK;
+  }
+
+  writer_stats_t get_stats() const final {
+    // TODO: collect stats
+    return {};
+  }
 
   using open_ertr = ExtentOolWriter::open_ertr;
   open_ertr::future<> open() final {
@@ -246,12 +268,11 @@ public:
     auto writer = get_writer(placement_hint_t::REWRITE,
       get_extent_category(extent->get_type()),
       OOL_GENERATION);
-    ceph_assert(writer);
     return writer->can_inplace_rewrite(t, extent);
   }
 
-  journal_type_t get_journal_type() const {
-    return background_process.get_journal_type();
+  backend_type_t get_backend_type() const {
+    return background_process.get_backend_type();
   }
 
   extent_len_t get_block_size() const {
@@ -268,6 +289,10 @@ public:
   store_statfs_t get_stat() const {
     return background_process.get_stat();
   }
+
+  device_stats_t get_device_stats(
+    const writer_stats_t &journal_stats,
+    bool report_detail) const;
 
   using mount_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
@@ -323,9 +348,7 @@ public:
       addr = make_record_relative_paddr(0);
     } else {
       assert(category == data_category_t::METADATA);
-      assert(md_writers_by_gen[generation_to_writer(gen)]);
-      addr = md_writers_by_gen[
-	  generation_to_writer(gen)]->alloc_paddr(length);
+      addr = get_writer(hint, category, gen)->alloc_paddr(length);
     }
     assert(!(category == data_category_t::DATA));
 
@@ -378,9 +401,7 @@ public:
     {
 #endif
       assert(category == data_category_t::DATA);
-      assert(data_writers_by_gen[generation_to_writer(gen)]);
-      auto addrs = data_writers_by_gen[
-          generation_to_writer(gen)]->alloc_paddrs(length);
+      auto addrs = get_writer(hint, category, gen)->alloc_paddrs(length);
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
@@ -593,15 +614,40 @@ private:
                               data_category_t category,
                               rewrite_gen_t gen) {
     assert(hint < placement_hint_t::NUM_HINTS);
+    // TODO: might worth considering the hint
+    return get_writer(category, gen);
+  }
+
+  ExtentOolWriter* get_writer(data_category_t category,
+                              rewrite_gen_t gen) {
     assert(is_rewrite_generation(gen));
     assert(gen != INLINE_GENERATION);
     assert(gen <= dynamic_max_rewrite_generation);
+    ExtentOolWriter* ret = nullptr;
     if (category == data_category_t::DATA) {
-      return data_writers_by_gen[generation_to_writer(gen)];
+      ret = data_writers_by_gen[generation_to_writer(gen)];
     } else {
       assert(category == data_category_t::METADATA);
-      return md_writers_by_gen[generation_to_writer(gen)];
+      ret = md_writers_by_gen[generation_to_writer(gen)];
     }
+    assert(ret != nullptr);
+    return ret;
+  }
+
+  const ExtentOolWriter* get_writer(data_category_t category,
+                                    rewrite_gen_t gen) const {
+    assert(is_rewrite_generation(gen));
+    assert(gen != INLINE_GENERATION);
+    assert(gen <= dynamic_max_rewrite_generation);
+    ExtentOolWriter* ret = nullptr;
+    if (category == data_category_t::DATA) {
+      ret = data_writers_by_gen[generation_to_writer(gen)];
+    } else {
+      assert(category == data_category_t::METADATA);
+      ret = md_writers_by_gen[generation_to_writer(gen)];
+    }
+    assert(ret != nullptr);
+    return ret;
   }
 
   /**
@@ -644,8 +690,8 @@ private:
       }
     }
 
-    journal_type_t get_journal_type() const {
-      return trimmer->get_journal_type();
+    backend_type_t get_backend_type() const {
+      return trimmer->get_backend_type();
     }
 
     bool has_cold_tier() const {
@@ -764,7 +810,7 @@ private:
 
     seastar::future<> stop_background();
     backend_type_t get_main_backend_type() const {
-      return get_journal_type();
+      return get_backend_type();
     }
 
     // Testing interfaces
@@ -1030,6 +1076,9 @@ private:
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
   extent_len_t max_data_allocation_size = 0;
+
+  mutable seastar::lowres_clock::time_point last_tp =
+    seastar::lowres_clock::time_point::min();
 
   friend class ::transaction_manager_test_t;
 };
