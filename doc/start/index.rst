@@ -97,7 +97,3 @@ recover dynamically.
          get-involved
          documenting-ceph
 
-.. toctree::
-   :maxdepth: 2
-
-   intro
