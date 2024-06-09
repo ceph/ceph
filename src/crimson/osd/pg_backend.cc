@@ -236,13 +236,19 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op,
       (op.extent.truncate_size < size)) {
     size = op.extent.truncate_size;
   }
-  if (offset >= size) {
-    // read size was trimmed to zero and it is expected to do nothing,
-    return read_errorator::now();
-  }
   if (!length) {
     // read the whole object if length is 0
     length = size;
+  }
+  if (offset >= size) {
+    // read size was trimmed to zero and it is expected to do nothing,
+    return read_errorator::now();
+  } else if (offset + length > size) {
+    length = size - op.extent.offset;
+    if (!length) {
+      // this is the second trimmed_read case
+      return read_errorator::now();
+    }
   }
   return _read(oi.soid, offset, length, op.flags).safe_then_interruptible_tuple(
     [&delta_stats, &oi, &osd_op](auto&& bl) -> read_errorator::future<> {
