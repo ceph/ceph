@@ -58,6 +58,7 @@
 #include "bluestore_common.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
+#include "common/admin_socket.h"
 
 #ifdef WITH_BLKIN
 #include "common/zipkin_trace.h"
@@ -2530,6 +2531,10 @@ private:
   osd_pools_map osd_pools; // protected by vstatfs_lock as well
 
   bool per_pool_stat_collection = true;
+
+  class SocketHook;
+  friend class SocketHook;
+  AdminSocketHook* asok_hook = nullptr;
 
   struct MempoolThread : public Thread {
   public:
