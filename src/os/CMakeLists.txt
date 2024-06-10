@@ -27,6 +27,7 @@ if(WITH_BLUESTORE)
     bluestore/HybridAllocator.cc
     bluestore/Writer.cc
     bluestore/Compression.cc
+    bluestore/BlueAdmin.cc
   )
 endif(WITH_BLUESTORE)
 
