@@ -61,6 +61,10 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
   ceph::common::intrusive_lru_config<
     hobject_t, ObjectContext, obc_to_hoid<ObjectContext>>>
 {
+private:
+  tri_mutex lock;
+  bool recovery_read_marker = false;
+
 public:
   ObjectState obs;
   SnapSetContextRef ssc;
@@ -70,7 +74,12 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
-  ObjectContext(hobject_t hoid) : obs(std::move(hoid)) {}
+  // obc loading is a concurrent phase. In case this obc is being loaded,
+  // make other users of this obc to await for the loading to complete.
+  seastar::shared_mutex loading_mutex;
+
+  ObjectContext(hobject_t hoid) : lock(hoid.oid.name),
+                                  obs(std::move(hoid)) {}
 
   const hobject_t &get_oid() const {
     return obs.oi.soid;
@@ -103,6 +112,11 @@ public:
     fully_loaded = true;
   }
 
+  void set_clone_ssc(SnapSetContextRef head_ssc) {
+    ceph_assert(!is_head());
+    ssc = head_ssc;
+  }
+
   /// pass the provided exception to any waiting consumers of this ObjectContext
   template<typename Exception>
   void interrupt(Exception ex) {
@@ -112,21 +126,42 @@ public:
     }
   }
 
-  bool is_loaded_and_valid() const {
-    return fully_loaded && !invalidated_by_interval_change;
+  bool is_loaded() const {
+    return fully_loaded;
+  }
+
+  bool is_valid() const {
+    return !invalidated_by_interval_change;
   }
 
 private:
-  tri_mutex lock;
-  bool recovery_read_marker = false;
+  template <typename Lock, typename Func>
+  auto _with_lock(Lock& lock, Func&& func) {
+    Ref obc = this;
+    auto maybe_fut = lock.lock();
+    return seastar::futurize_invoke([
+        maybe_fut=std::move(maybe_fut),
+        func=std::forward<Func>(func)]() mutable {
+      if (maybe_fut) {
+        return std::move(*maybe_fut
+        ).then([func=std::forward<Func>(func)]() mutable {
+          return seastar::futurize_invoke(func);
+        });
+      } else {
+        // atomically calling func upon locking
+        return seastar::futurize_invoke(func);
+      }
+    }).finally([&lock, obc] {
+      lock.unlock();
+    });
+  }
 
   template <typename Lock, typename Func>
-  auto _with_lock(Lock&& lock, Func&& func) {
+  auto _with_promoted_lock(Lock& lock, Func&& func) {
     Ref obc = this;
-    return lock.lock().then([&lock, func = std::forward<Func>(func), obc]() mutable {
-      return seastar::futurize_invoke(func).finally([&lock, obc] {
-	lock.unlock();
-      });
+    lock.lock();
+    return seastar::futurize_invoke(func).finally([&lock, obc] {
+      lock.unlock();
     });
   }
 
@@ -196,11 +231,11 @@ public:
       auto wrapper = ::crimson::interruptible::interruptor<InterruptCond>::wrap_function(std::forward<Func>(func));
       switch (Type) {
       case RWState::RWWRITE:
-	return _with_lock(lock.excl_from_write(), std::move(wrapper));
+	return _with_promoted_lock(lock.excl_from_write(), std::move(wrapper));
       case RWState::RWREAD:
-	return _with_lock(lock.excl_from_read(), std::move(wrapper));
+	return _with_promoted_lock(lock.excl_from_read(), std::move(wrapper));
       case RWState::RWEXCL:
-	return _with_lock(lock.excl_from_excl(), std::move(wrapper));
+	return seastar::futurize_invoke(std::move(wrapper));
       case RWState::RWNONE:
 	return _with_lock(lock.for_excl(), std::move(wrapper));
        default:
@@ -209,11 +244,11 @@ public:
     } else {
       switch (Type) {
       case RWState::RWWRITE:
-	return _with_lock(lock.excl_from_write(), std::forward<Func>(func));
+	return _with_promoted_lock(lock.excl_from_write(), std::forward<Func>(func));
       case RWState::RWREAD:
-	return _with_lock(lock.excl_from_read(), std::forward<Func>(func));
+	return _with_promoted_lock(lock.excl_from_read(), std::forward<Func>(func));
       case RWState::RWEXCL:
-	return _with_lock(lock.excl_from_excl(), std::forward<Func>(func));
+	return seastar::futurize_invoke(std::forward<Func>(func));
       case RWState::RWNONE:
 	return _with_lock(lock.for_excl(), std::forward<Func>(func));
        default:

@@ -275,6 +275,7 @@ endif()
 
 target_link_libraries(rgw_common
   PRIVATE
+    legacy-option-headers
     global
     cls_2pc_queue_client
     cls_cmpomap_client
@@ -301,7 +302,7 @@ target_link_libraries(rgw_common
   PUBLIC
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
-    spawn
+    Boost::context
     ${FMT_LIB}
     OpenSSL::SSL)
 target_include_directories(rgw_common
@@ -426,6 +427,7 @@ endif()
 
 target_link_libraries(rgw_a
   PRIVATE
+    legacy-option-headers
     common_utf8 global
     ${CRYPTO_LIBS}
     ${ARROW_LIBRARIES}
@@ -433,7 +435,7 @@ target_link_libraries(rgw_a
     OATH::OATH
   PUBLIC
     rgw_common
-    spawn)
+    Boost::context)
 
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
@@ -449,7 +451,7 @@ set(rgw_schedulers_srcs
 
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
 target_link_libraries(rgw_schedulers
-  PUBLIC dmclock::dmclock spawn)
+  PUBLIC dmclock::dmclock Boost::context)
 
 set(radosgw_srcs
   rgw_main.cc)
@@ -474,6 +476,7 @@ target_include_directories(radosgw
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(radosgw PRIVATE
+  legacy-option-headers
   ${rgw_libs}
   rgw_schedulers
   kmip
@@ -493,7 +496,9 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 add_executable(radosgw-admin ${radosgw_admin_srcs})
-target_link_libraries(radosgw-admin ${rgw_libs} librados
+target_link_libraries(radosgw-admin
+  legacy-option-headers
+  ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
@@ -523,7 +528,9 @@ install(TARGETS radosgw-es DESTINATION bin)
 set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
-target_link_libraries(radosgw-token librados
+target_link_libraries(radosgw-token
+  legacy-option-headers
+  librados
   global)
 install(TARGETS radosgw-token DESTINATION bin)
 

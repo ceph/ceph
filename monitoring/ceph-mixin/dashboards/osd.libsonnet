@@ -42,9 +42,6 @@ local g = import 'grafonnet/grafana.libsonnet';
     .addTemplate(
       $.addClusterTemplate()
     )
-    .addTemplate(
-      $.addJobTemplate()
-    )
     .addPanels([
       $.simpleGraphPanel(
         { '@95%ile': '#e0752d' },
@@ -317,7 +314,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'count(ceph_bluefs_wal_total_bytes{%(matchers)s})' % $.matchers(), 'bluestore', 'time_series', 2
       ))
       .addTarget($.addTargetSchema(
-        'absent(ceph_bluefs_wal_total_bytes{job=~"$job"}) * count(ceph_osd_metadata{job=~"$job"})' % $.matchers(), 'filestore', 'time_series', 2
+        'absent(ceph_bluefs_wal_total_bytes{%(matchers)s}) * count(ceph_osd_metadata{%(matchers)s})' % $.matchers(), 'filestore', 'time_series', 2
       )),
       $.pieChartPanel('OSD Size Summary', 'The pie chart shows the various OSD sizes used within the cluster', '$datasource', { x: 8, y: 8, w: 4, h: 8 }, 'table', 'bottom', true, ['percent'], { mode: 'single', sort: 'none' }, 'pie', ['percent', 'value'], 'palette-classic')
       .addTarget($.addTargetSchema(
@@ -555,9 +552,6 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addClusterTemplate()
     )
     .addTemplate(
-      $.addJobTemplate()
-    )
-    .addTemplate(
       $.addTemplateSchema('osd',
                           '$datasource',
                           'label_values(ceph_osd_metadata{%(matchers)s}, ceph_daemon)' % $.matchers(),
@@ -577,11 +571,11 @@ local g = import 'grafonnet/grafana.libsonnet';
         's',
         'Read (-) / Write (+)',
         |||
-          rate(ceph_osd_op_r_latency_sum{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval]) /
+          rate(ceph_osd_op_r_latency_sum{ceph_daemon=~"$osd", %(matchers)s}[$__rate_interval]) /
             on (ceph_daemon) rate(ceph_osd_op_r_latency_count{%(matchers)s}[$__rate_interval])
         ||| % $.matchers(),
         |||
-          rate(ceph_osd_op_w_latency_sum{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval]) /
+          rate(ceph_osd_op_w_latency_sum{ceph_daemon=~"$osd", %(matchers)s}[$__rate_interval]) /
             on (ceph_daemon) rate(ceph_osd_op_w_latency_count{%(matchers)s}[$__rate_interval])
         ||| % $.matchers(),
         'read',
@@ -602,8 +596,8 @@ local g = import 'grafonnet/grafana.libsonnet';
         '',
         'short',
         'Read (-) / Write (+)',
-        'rate(ceph_osd_op_r{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % $.matchers(),
-        'rate(ceph_osd_op_w{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % $.matchers(),
+        'rate(ceph_osd_op_r{ceph_daemon=~"$osd", %(matchers)s}[$__rate_interval])' % $.matchers(),
+        'rate(ceph_osd_op_w{ceph_daemon=~"$osd", %(matchers)s}[$__rate_interval])' % $.matchers(),
         'Reads',
         'Writes',
         6,
@@ -619,8 +613,8 @@ local g = import 'grafonnet/grafana.libsonnet';
         '',
         'bytes',
         'Read (-) / Write (+)',
-        'rate(ceph_osd_op_r_out_bytes{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % $.matchers(),
-        'rate(ceph_osd_op_w_in_bytes{%(matchers)s, ceph_daemon=~"$osd"}[$__rate_interval])' % $.matchers(),
+        'rate(ceph_osd_op_r_out_bytes{ceph_daemon=~"$osd", %(matchers)s}[$__rate_interval])' % $.matchers(),
+        'rate(ceph_osd_op_w_in_bytes{ceph_daemon=~"$osd", %(matchers)s}[$__rate_interval])' % $.matchers(),
         'Read Bytes',
         'Write Bytes',
         12,
@@ -640,12 +634,12 @@ local g = import 'grafonnet/grafana.libsonnet';
         |||
           (
             label_replace(
-              rate(node_disk_read_time_seconds_total{%(clusterMatcher)s}[$__rate_interval]) /
-                rate(node_disk_reads_completed_total{%(clusterMatcher)s}[$__rate_interval]),
+              rate(node_disk_read_time_seconds_total[$__rate_interval]) /
+                rate(node_disk_reads_completed_total[$__rate_interval]),
               "instance", "$1", "instance", "([^:.]*).*"
             ) and on (instance, device) label_replace(
               label_replace(
-                ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
+                ceph_disk_occupation_human{ceph_daemon=~"$osd", %(matchers)s},
                 "device", "$1", "device", "/dev/(.*)"
               ), "instance", "$1", "instance", "([^:.]*).*"
             )
@@ -654,12 +648,12 @@ local g = import 'grafonnet/grafana.libsonnet';
         |||
           (
             label_replace(
-              rate(node_disk_write_time_seconds_total{%(clusterMatcher)s}[$__rate_interval]) /
-                rate(node_disk_writes_completed_total{%(clusterMatcher)s}[$__rate_interval]),
+              rate(node_disk_write_time_seconds_total[$__rate_interval]) /
+                rate(node_disk_writes_completed_total[$__rate_interval]),
               "instance", "$1", "instance", "([^:.]*).*") and on (instance, device)
               label_replace(
                 label_replace(
-                  ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
+                  ceph_disk_occupation_human{ceph_daemon=~"$osd", %(matchers)s}, "device", "$1", "device", "/dev/(.*)"
                 ), "instance", "$1", "instance", "([^:.]*).*"
               )
             )
@@ -681,22 +675,22 @@ local g = import 'grafonnet/grafana.libsonnet';
         'Read (-) / Write (+)',
         |||
           label_replace(
-            rate(node_disk_writes_completed_total{%(clusterMatcher)s}[$__rate_interval]),
+            rate(node_disk_writes_completed_total[$__rate_interval]),
             "instance", "$1", "instance", "([^:.]*).*"
           ) and on (instance, device) label_replace(
             label_replace(
-              ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
+              ceph_disk_occupation_human{ceph_daemon=~"$osd", %(matchers)s},
               "device", "$1", "device", "/dev/(.*)"
             ), "instance", "$1", "instance", "([^:.]*).*"
           )
         ||| % $.matchers(),
         |||
           label_replace(
-            rate(node_disk_reads_completed_total{%(clusterMatcher)s}[$__rate_interval]),
+            rate(node_disk_reads_completed_total[$__rate_interval]),
             "instance", "$1", "instance", "([^:.]*).*"
           ) and on (instance, device) label_replace(
             label_replace(
-              ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
+              ceph_disk_occupation_human{ceph_daemon=~"$osd", %(matchers)s},
               "device", "$1", "device", "/dev/(.*)"
             ), "instance", "$1", "instance", "([^:.]*).*"
           )
@@ -718,20 +712,20 @@ local g = import 'grafonnet/grafana.libsonnet';
         'Read (-) / Write (+)',
         |||
           label_replace(
-            rate(node_disk_read_bytes_total{%(clusterMatcher)s}[$__rate_interval]), "instance", "$1", "instance", "([^:.]*).*"
+            rate(node_disk_read_bytes_total[$__rate_interval]), "instance", "$1", "instance", "([^:.]*).*"
           ) and on (instance, device) label_replace(
             label_replace(
-              ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
+              ceph_disk_occupation_human{ceph_daemon=~"$osd", %(matchers)s},
               "device", "$1", "device", "/dev/(.*)"
             ), "instance", "$1", "instance", "([^:.]*).*"
           )
         ||| % $.matchers(),
         |||
           label_replace(
-            rate(node_disk_written_bytes_total{%(clusterMatcher)s}[$__rate_interval]), "instance", "$1", "instance", "([^:.]*).*"
+            rate(node_disk_written_bytes_total[$__rate_interval]), "instance", "$1", "instance", "([^:.]*).*"
           ) and on (instance, device) label_replace(
             label_replace(
-              ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"},
+              ceph_disk_occupation_human{ceph_daemon=~"$osd", %(matchers)s},
               "device", "$1", "device", "/dev/(.*)"
             ), "instance", "$1", "instance", "([^:.]*).*"
           )
@@ -763,11 +757,11 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTarget($.addTargetSchema(
         |||
           label_replace(
-            rate(node_disk_io_time_seconds_total{%(clusterMatcher)s}[$__rate_interval]),
+            rate(node_disk_io_time_seconds_total[$__rate_interval]),
             "instance", "$1", "instance", "([^:.]*).*"
           ) and on (instance, device) label_replace(
             label_replace(
-              ceph_disk_occupation_human{%(matchers)s, ceph_daemon=~"$osd"}, "device", "$1", "device", "/dev/(.*)"
+              ceph_disk_occupation_human{ceph_daemon=~"$osd", %(matchers)s}, "device", "$1", "device", "/dev/(.*)"
             ), "instance", "$1", "instance", "([^:.]*).*"
           )
         ||| % $.matchers(),

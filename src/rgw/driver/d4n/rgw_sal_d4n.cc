@@ -66,7 +66,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   namespace net = boost::asio;
   using boost::redis::config;
 
-  std::string address = cct->_conf->rgw_local_cache_address;
+  std::string address = cct->_conf->rgw_d4n_address;
   config cfg;
   cfg.addr.host = address.substr(0, address.find(":"));
   cfg.addr.port = address.substr(address.find(":") + 1, address.length());
@@ -255,28 +255,29 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
   } else {
     /* Set metadata locally */
     RGWQuotaInfo quota_info;
-    RGWObjState* astate;
-    this->get_obj_state(dpp, &astate, y);
+    this->load_obj_state(dpp, y);
 
     for (auto it = attrs.begin(); it != attrs.end(); ++it) {
       if (it->second.length() > 0) {
 	if (it->first == "mtime") {
-	  parse_time(it->second.c_str(), &astate->mtime);
+	  ceph::real_time mtime;
+	  parse_time(it->second.c_str(), &mtime);
+	  this->set_mtime(mtime);
 	  attrs.erase(it->first);
 	} else if (it->first == "object_size") {
 	  this->set_obj_size(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
 	} else if (it->first == "accounted_size") {
-	  astate->accounted_size = std::stoull(it->second.c_str());
+	  this->set_accounted_size(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
 	} else if (it->first == "epoch") {
-	  astate->epoch = std::stoull(it->second.c_str());
+	  this->set_epoch(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
 	} else if (it->first == "version_id") {
 	  this->set_instance(it->second.c_str());
 	  attrs.erase(it->first);
 	} else if (it->first == "this_zone_short_id") {
-	  astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second.c_str()));
+	  this->set_short_zone_id(static_cast<uint32_t>(std::stoul(it->second.c_str())));
 	  attrs.erase(it->first);
 	} else if (it->first == "user_quota.max_size") {
 	  quota_info.max_size = std::stoull(it->second.c_str());
@@ -293,8 +294,6 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
       }
     }
 
-    this->set_obj_state(*astate);
-   
     /* Set attributes locally */
     if (this->set_attrs(attrs) < 0) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): D4NFilterObject set_attrs method failed." << dendl;
@@ -390,29 +389,29 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): CacheDriver get_attrs method failed." << dendl;
   } else {
     /* Set metadata locally */
-    RGWObjState* astate;
     RGWQuotaInfo quota_info;
-    source->get_obj_state(dpp, &astate, y);
+    source->load_obj_state(dpp, y);
 
     for (auto& attr : attrs) {
       if (attr.second.length() > 0) {
 	if (attr.first == "mtime") {
-	  parse_time(attr.second.c_str(), &astate->mtime);
-	  attrs.erase(attr.first);
+	  ceph::real_time mtime;
+	  parse_time(attr.second.c_str(), &mtime);
+	  source->set_mtime(mtime);
 	} else if (attr.first == "object_size") {
 	  source->set_obj_size(std::stoull(attr.second.c_str()));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "accounted_size") {
-	  astate->accounted_size = std::stoull(attr.second.c_str());
+	  source->set_accounted_size(std::stoull(attr.second.c_str()));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "epoch") {
-	  astate->epoch = std::stoull(attr.second.c_str());
+	  source->set_epoch(std::stoull(attr.second.c_str()));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "version_id") {
 	  source->set_instance(attr.second.c_str());
 	  attrs.erase(attr.first);
 	} else if (attr.first == "source_zone_short_id") {
-	  astate->zone_short_id = static_cast<uint32_t>(std::stoul(attr.second.c_str()));
+	  source->set_short_zone_id(static_cast<uint32_t>(std::stoul(attr.second.c_str())));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "user_quota.max_size") {
 	  quota_info.max_size = std::stoull(attr.second.c_str());
@@ -426,7 +425,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 	  ldpp_dout(dpp, 20) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): Unexpected attribute; not locally set." << dendl;
 	}
       }
-    source->set_obj_state(*astate);
    
     /* Set attributes locally */
     if (source->set_attrs(attrs) < 0)
@@ -435,14 +433,12 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   }
 
   //versioned objects have instance set to versionId, and get_oid() returns oid containing instance, hence using id tag as version for non versioned objects only
-  if (! this->source->have_instance()) {
-    RGWObjState* state = nullptr;
-    if (this->source->get_obj_state(dpp, &state, y) == 0) {
-      auto it = state->attrset.find(RGW_ATTR_ID_TAG);
-      if (it != state->attrset.end()) {
-        bufferlist bl = it->second;
-        this->source->set_object_version(bl.c_str());
-        ldpp_dout(dpp, 20) << __func__ << "id tag version is: " << this->source->get_object_version() << dendl;
+  if (! source->have_instance()) {
+    if (source->load_obj_state(dpp, y) == 0) {
+      bufferlist bl;
+      if (source->get_attr(RGW_ATTR_ID_TAG, bl)) {
+        source->set_object_version(bl.c_str());
+        ldpp_dout(dpp, 20) << __func__ << "id tag version is: " << source->get_object_version() << dendl;
       } else {
         ldpp_dout(dpp, 20) << __func__ << "Failed to find id tag" << dendl;
       }
@@ -699,7 +695,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
   if (write_to_cache) {
     rgw::d4n::CacheBlock block, existing_block;
     rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
-    block.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); 
+    block.hostsList.push_back(blockDir->cct->_conf->rgw_d4n_l1_datacache_address); 
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
     std::stringstream s;
@@ -747,7 +743,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
                   if (blockDir->set(&block, *y) < 0) //new versioned block will have new version, hostsList etc, how about globalWeight?
                     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory set method failed." << dendl;
                 } else {
-                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_local_cache_address, *y) < 0)
+                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_d4n_l1_datacache_address, *y) < 0)
                   ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory update_field method failed for hostsList." << dendl;
                 }
               }
@@ -787,7 +783,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
                   if (blockDir->set(&block, *y) < 0)
                     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory set method failed." << dendl;
               } else {
-                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_local_cache_address, *y) < 0)
+                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_d4n_l1_datacache_address, *y) < 0)
                   ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory update_field method failed for blockHosts." << dendl;
               }
             }
@@ -834,7 +830,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 		    if (blockDir->set(&block, *y) < 0)
 		      ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory set method failed." << dendl;
 		  } else {
-		  if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_local_cache_address, *y) < 0)
+		  if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_d4n_l1_datacache_address, *y) < 0)
 		    ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory update_field method failed." << dendl;
 		  }
 		}
@@ -926,7 +922,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 				 .bucketName = obj->get_bucket()->get_name(),
 				 .creationTime = to_iso_8601(*mtime), 
 				 .dirty = false,
-				 .hostsList = { /*driver->get_block_dir()->cct->_conf->rgw_local_cache_address*/ } //TODO: Object is not currently being cached 
+				 .hostsList = { /*driver->get_block_dir()->cct->_conf->rgw_d4n_l1_datacache_address*/ } //TODO: Object is not currently being cached 
                                };
 
   if (driver->get_obj_dir()->set(&object, y) < 0) 
@@ -942,14 +938,13 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   rgw::sal::Attrs baseAttrs = obj->get_attrs();
   rgw::sal::Attrs attrs_temp = baseAttrs;
   buffer::list bl;
-  RGWObjState* astate;
-  obj->get_obj_state(save_dpp, &astate, rctx.y);
+  obj->load_obj_state(save_dpp, rctx.y);
 
   bl.append(to_iso_8601(obj->get_mtime()));
   baseAttrs.insert({"mtime", bl});
   bl.clear();
 
-  bl.append(std::to_string(obj->get_obj_size()));
+  bl.append(std::to_string(obj->get_size()));
   baseAttrs.insert({"object_size", bl});
   bl.clear();
 
@@ -957,7 +952,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   baseAttrs.insert({"accounted_size", bl});
   bl.clear();
  
-  bl.append(std::to_string(astate->epoch));
+  bl.append(std::to_string(obj->get_epoch()));
   baseAttrs.insert({"epoch", bl});
   bl.clear();
 
@@ -973,7 +968,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   auto iter = attrs_temp.find(RGW_ATTR_SOURCE_ZONE);
   if (iter != attrs_temp.end()) {
-    bl.append(std::to_string(astate->zone_short_id));
+    bl.append(std::to_string(obj->get_short_zone_id()));
     baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   } else {

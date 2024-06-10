@@ -194,6 +194,11 @@ enum {
   l_bluestore_omap_iterator_count,
   l_bluestore_omap_rmkeys_count,
   l_bluestore_omap_rmkey_ranges_count,
+  l_bluestore_omap_setheader_count,
+  l_bluestore_omap_setheader_bytes,
+  l_bluestore_omap_setkeys_count,
+  l_bluestore_omap_setkeys_records,
+  l_bluestore_omap_setkeys_bytes,
   //****************************************
 
   // other client ops latencies
@@ -2840,6 +2845,29 @@ public:
   using  per_pool_statfs =
     mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
 
+  struct pool_fsck_stats_t {
+    uint64_t num_objects = 0;
+    uint64_t shared_blobs = 0;
+    uint64_t omaps = 0;
+    uint64_t omap_key_size = 0;
+    uint64_t omap_val_size = 0;
+    uint64_t stored = 0;
+    uint64_t allocated = 0;
+
+    void add(const pool_fsck_stats_t& other) {
+      num_objects += other.num_objects;
+      shared_blobs += other.shared_blobs;
+      omaps += other.omaps;
+      omap_key_size += other.omap_key_size;
+      omap_val_size += other.omap_val_size;
+      stored += other.stored;
+      allocated += other.allocated;
+    }
+    friend std::ostream& operator<<(std::ostream& out, const pool_fsck_stats_t& s);
+  };
+  using  per_pool_fsck_stats_t =
+    mempool::bluestore_fsck::map<int64_t, pool_fsck_stats_t>; // pool_id -> stats
+
   enum FSCKDepth {
     FSCK_REGULAR,
     FSCK_DEEP,
@@ -2858,6 +2886,7 @@ private:
     uint64_t granularity,
     BlueStoreRepairer* repairer,
     store_statfs_t& expected_statfs,
+    pool_fsck_stats_t& pool_fsck_stat,
     FSCKDepth depth);
 
   void _fsck_check_statfs(
@@ -3775,6 +3804,7 @@ public:
 
     store_statfs_t& expected_store_statfs;
     per_pool_statfs& expected_pool_statfs;
+    per_pool_fsck_stats_t& per_pool_fsck_stats;
     BlueStoreRepairer* repairer;
 
     FSCK_ObjectCtx(int64_t& e,
@@ -3793,6 +3823,7 @@ public:
 		   shared_blob_2hash_tracker_t& _sb_ref_counts,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
+		   per_pool_fsck_stats_t& _per_pool_fsck_stats,
                    BlueStoreRepairer* _repairer) :
       errors(e),
       warnings(w),
@@ -3809,6 +3840,7 @@ public:
       sb_ref_counts(_sb_ref_counts),
       expected_store_statfs(_store_statfs),
       expected_pool_statfs(_pool_statfs),
+      per_pool_fsck_stats(_per_pool_fsck_stats),
       repairer(_repairer) {
     }
   };
@@ -3822,7 +3854,7 @@ public:
     const ceph::buffer::list& value,
     mempool::bluestore_fsck::list<std::string>* expecting_shards,
     std::map<BlobRef, bluestore_blob_t::unused_t>* referenced,
-    const BlueStore::FSCK_ObjectCtx& ctx);
+    BlueStore::FSCK_ObjectCtx& ctx);
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
   int  push_allocation_to_rocksdb();
   int  read_allocation_from_drive_for_bluestore_tool();

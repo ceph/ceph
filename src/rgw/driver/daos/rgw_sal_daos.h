@@ -617,8 +617,8 @@ class DaosObject : public StoreObject {
     return 0;
   }
 
-  virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState** state,
-                            optional_yield y, bool follow_olh = true) override;
+  virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
+                             bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,

@@ -360,6 +360,10 @@ class RbdService(object):
             # snapshots
             stat['snapshots'] = []
             for snap in img.list_snaps():
+                # Skip trash snapshots (cloned-and-then-deleted format v2 snapshots)
+                if snap['namespace'] == rbd.RBD_SNAP_NAMESPACE_TYPE_TRASH:
+                    continue
+
                 try:
                     snap['mirror_mode'] = MIRROR_IMAGE_MODE(img.mirror_image_get_mode()).name
                 except ValueError as ex:
@@ -369,7 +373,7 @@ class RbdService(object):
                     img.get_snap_timestamp(snap['id']).isoformat())
 
                 snap['is_protected'] = None
-                if mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                if snap['namespace'] == rbd.RBD_SNAP_NAMESPACE_TYPE_USER:
                     snap['is_protected'] = img.is_protected_snap(snap['name'])
                 snap['used_bytes'] = None
                 snap['children'] = []

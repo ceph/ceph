@@ -615,42 +615,61 @@ int PGBackend::be_scan_list(
   ceph_assert(pos.pos < pos.ls.size());
   hobject_t& poid = pos.ls[pos.pos];
 
-  struct stat st;
-  int r = store->stat(
-    ch,
-    ghobject_t(
-      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    &st,
-    true);
-  if (r == 0) {
-    ScrubMap::object &o = map.objects[poid];
-    o.size = st.st_size;
-    ceph_assert(!o.negative);
-    store->getattrs(
+  int r = 0;
+  ScrubMap::object &o = map.objects[poid];
+  if (!pos.metadata_done) {
+    struct stat st;
+    r = store->stat(
       ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      o.attrs);
+      &st,
+      true);
 
-    if (pos.deep) {
-      r = be_deep_scrub(poid, map, pos, o);
+    if (r == 0) {
+      o.size = st.st_size;
+      ceph_assert(!o.negative);
+      r = store->getattrs(
+	ch,
+	ghobject_t(
+	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	o.attrs);
     }
+
+    if (r == -ENOENT) {
+      dout(25) << __func__ << "  " << poid << " got " << r
+	       << ", removing from map" << dendl;
+      map.objects.erase(poid);
+    } else if (r == -EIO) {
+      dout(25) << __func__ << "  " << poid << " got " << r
+	       << ", stat_error" << dendl;
+      o.stat_error = true;
+    } else if (r != 0) {
+      derr << __func__ << " got: " << cpp_strerror(r) << dendl;
+      ceph_abort();
+    }
+
+    if (r != 0) {
+      dout(25) << __func__ << "  " << poid << " got " << r
+	       << ", skipping" << dendl;
+      pos.next_object();
+      return 0;
+    }
+
     dout(25) << __func__ << "  " << poid << dendl;
-  } else if (r == -ENOENT) {
-    dout(25) << __func__ << "  " << poid << " got " << r
-	     << ", skipping" << dendl;
-  } else if (r == -EIO) {
-    dout(25) << __func__ << "  " << poid << " got " << r
-	     << ", stat_error" << dendl;
-    ScrubMap::object &o = map.objects[poid];
-    o.stat_error = true;
-  } else {
-    derr << __func__ << " got: " << cpp_strerror(r) << dendl;
-    ceph_abort();
+    pos.metadata_done = true;
   }
-  if (r == -EINPROGRESS) {
-    return -EINPROGRESS;
+
+  if (pos.deep) {
+    r = be_deep_scrub(poid, map, pos, o);
+    if (r == -EINPROGRESS) {
+      return -EINPROGRESS;
+    } else if (r != 0) {
+      derr << __func__ << " be_deep_scrub got: " << cpp_strerror(r) << dendl;
+      ceph_abort();
+    }
   }
+
   pos.next_object();
   return 0;
 }

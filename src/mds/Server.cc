@@ -719,16 +719,10 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	break;
       }
 
-      if (session->auth_caps.root_squash_in_caps() && !client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)) {
-	CachedStackStringStream css;
-	*css << "client lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK needed to enforce 'root_squash' MDS auth caps";
-	send_reject_message(css->strv());
-	mds->clog->warn() << "client session (" << session->info.inst
-                          << ") lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK "
-                          << " needed to enforce 'root_squash' MDS auth caps";
-	session->clear();
-	break;
-
+      std::string_view fs_name = mds->mdsmap->get_fs_name();
+      bool client_caps_check = client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK);
+      if (session->auth_caps.root_squash_in_caps(fs_name) && !client_caps_check) {
+        mds->sessionmap.add_to_broken_root_squash_clients(session);
       }
       // Special case for the 'root' metadata path; validate that the claimed
       // root is actually within the caps of the session
@@ -1585,11 +1579,10 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 	*css << "missing required features '" << missing_features << "'";
 	error_str = css->strv();
       }
-      if (session->auth_caps.root_squash_in_caps() &&
-          !session->info.client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)) {
-	CachedStackStringStream css;
-	*css << "client lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK needed to enforce 'root_squash' MDS auth caps";
-	error_str = css->strv();
+      std::string_view fs_name = mds->mdsmap->get_fs_name();
+      bool client_caps_check = session->info.client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK);
+      if (session->auth_caps.root_squash_in_caps(fs_name) && !client_caps_check) {
+        mds->sessionmap.add_to_broken_root_squash_clients(session);
       }
     }
 
@@ -2344,7 +2337,7 @@ void Server::reply_client_request(const MDRequestRef& mdr, const ref_t<MClientRe
   }
 
   // drop non-rdlocks before replying, so that we can issue leases
-  mdcache->request_drop_non_rdlocks(mdr);
+  mds->locker->request_drop_non_rdlocks(mdr);
 
   // reply at all?
   if (session && !client_inst.name.is_mds()) {
@@ -2651,22 +2644,9 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
   ceph_assert(!mdr->has_more() || mdr->more()->waiting_on_peer.empty());
 
   if (mdr->killed) {
-    dout(10) << "request " << *mdr << " was killed" << dendl;
-    //if the mdr is a "batch_op" and it has followers, pick a follower as
-    //the new "head of the batch ops" and go on processing the new one.
-    if (mdr->is_batch_head()) {
-      int mask = mdr->client_request->head.args.getattr.mask;
-      auto it = mdr->batch_op_map->find(mask);
-      auto new_batch_head = it->second->find_new_head();
-      if (!new_batch_head) {
-	mdr->batch_op_map->erase(it);
-	return;
-      }
-      mds->finisher->queue(new C_MDS_RetryRequest(mdcache, new_batch_head));
-      return;
-    } else {
-      return;
-    }
+    // Should already be reset in request_cleanup().
+    ceph_assert(!mdr->is_batch_head());
+    return;
   } else if (mdr->aborted) {
     mdr->aborted = false;
     mdcache->request_kill(mdr);
@@ -3068,6 +3048,9 @@ void Server::dispatch_peer_request(const MDRequestRef& mdr)
       SimpleLock *lock = mds->locker->get_lock(mdr->peer_request->get_lock_type(),
 					       mdr->peer_request->get_object_info());
 
+      // we shouldn't be getting peer requests about local locks
+      ceph_assert(!lock->is_locallock());
+
       if (!lock) {
 	dout(10) << "don't have object, dropping" << dendl;
 	ceph_abort_msg("don't have object"); // can this happen, if we auth pinned properly.
@@ -3097,8 +3080,14 @@ void Server::dispatch_peer_request(const MDRequestRef& mdr)
 	  break;
 	}
 
-        // don't add quiescelock, let the peer acquire that lock themselves
-	if (!mds->locker->acquire_locks(mdr, lov, nullptr, {}, false, true))
+        // avoid taking the quiesce lock, as we can't communicate a failure to lock it
+        // Without communicating the failure which would make the peer request drop all locks,
+        // blocking on quiesce here will create an opportunity for a deadlock
+        // The current quiesce design shouldn't suffer from this though. The reason quiesce
+        // will want to take other locks is to prevent issuing unwanted client capabilities,
+        // but since replicas can't issue capabilities, it should be fine allowing remote locks
+        // without taking the quiesce lock.
+	if (!mds->locker->acquire_locks(mdr, lov, nullptr, false, true))
 	  return;
 	
 	// ack
@@ -3170,12 +3159,8 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
   list<MDSCacheObject*> objects;
   CInode *auth_pin_freeze = NULL;
   bool nonblocking = mdr->peer_request->is_nonblocking();
-  bool bypassfreezing = mdr->peer_request->is_bypassfreezing();
   bool fail = false, wouldblock = false, readonly = false;
   ref_t<MMDSPeerRequest> reply;
-
-  dout(15) << " nonblocking=" << nonblocking
-           << " bypassfreezing=" << bypassfreezing << dendl;
 
   if (mdcache->is_readonly()) {
     dout(10) << " read-only FS" << dendl;
@@ -3208,7 +3193,7 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
       }
       if (mdr->is_auth_pinned(obj))
 	continue;
-      if (!mdr->can_auth_pin(obj, bypassfreezing)) {
+      if (!mdr->can_auth_pin(obj)) {
 	if (nonblocking) {
 	  dout(10) << " can't auth_pin (freezing?) " << *obj << " nonblocking" << dendl;
 	  fail = true;
@@ -4631,7 +4616,7 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_skip_replaying_inotable);
+    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
 
     dn->pop_projected_linkage();
 
@@ -6208,28 +6193,24 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
      * rdlock.
      */
     if (!mdr->more()->rdonly_checks) {
-      if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
-        lov.add_rdlock(&cur->policylock);
-        if (!mds->locker->acquire_locks(mdr, lov))
-          return;
-        mdr->locking_state |= MutationImpl::ALL_LOCKED;
-      }
+      lov.add_rdlock(&cur->policylock);
+      if (!mds->locker->acquire_locks(mdr, lov))
+        return;
+
       bool is_blocked = cur->get_projected_inode()->get_quiesce_block();
       if (is_blocked == val) {
         dout(20) << "already F_QUIESCE_BLOCK set" << dendl;
         respond_to_request(mdr, 0);
         return;
       }
-      mdr->more()->rdonly_checks = true;
-    }
 
-    if ((mdr->locking_state & MutationImpl::ALL_LOCKED) && !mdr->is_xlocked(&cur->policylock)) {
-      /* drop the rdlock and acquire xlocks */
+      mdr->more()->rdonly_checks = true;
       dout(20) << "dropping rdlocks" << dendl;
       mds->locker->drop_locks(mdr.get());
-      if (!xlock_policylock(mdr, cur, false, true))
-        return;
     }
+
+    if (!xlock_policylock(mdr, cur, false, true))
+      return;
 
     /* repeat rdonly checks in case changed between rdlock -> xlock */
     bool is_blocked = cur->get_projected_inode()->get_quiesce_block();
@@ -6264,28 +6245,24 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
      * rdlock.
      */
     if (!mdr->more()->rdonly_checks) {
-      if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
-        lov.add_rdlock(&cur->snaplock);
-        if (!mds->locker->acquire_locks(mdr, lov))
-          return;
-        mdr->locking_state |= MutationImpl::ALL_LOCKED;
-      }
+      lov.add_rdlock(&cur->snaplock);
+      if (!mds->locker->acquire_locks(mdr, lov))
+        return;
+
       const auto srnode = cur->get_projected_srnode();
       if (val == (srnode && srnode->is_subvolume())) {
         dout(20) << "already marked subvolume" << dendl;
         respond_to_request(mdr, 0);
         return;
       }
-      mdr->more()->rdonly_checks = true;
-    }
 
-    if ((mdr->locking_state & MutationImpl::ALL_LOCKED) && !mdr->is_xlocked(&cur->snaplock)) {
-      /* drop the rdlock and acquire xlocks */
+      mdr->more()->rdonly_checks = true;
       dout(20) << "dropping rdlocks" << dendl;
       mds->locker->drop_locks(mdr.get());
-      if (!xlock_policylock(mdr, cur, false, true))
-        return;
     }
+
+    if (!xlock_policylock(mdr, cur, false, true))
+      return;
 
     /* repeat rdonly checks in case changed between rdlock -> xlock */
     SnapRealm *realm = cur->find_snaprealm();
@@ -6997,7 +6974,7 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_skip_replaying_inotable);
+    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
 
     // link the inode
     dn->pop_projected_linkage();
@@ -7294,7 +7271,7 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   mds->balancer->maybe_fragment(dir, false);
 
   // flush the journal as soon as possible
-  if (g_conf()->mds_kill_skip_replaying_inotable) {
+  if (g_conf()->mds_kill_after_journal_logs_flushed) {
     mdlog->flush();
   }
 }
@@ -10016,14 +9993,14 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
       bool frozen_inode = srcdnl->get_inode()->freeze_inode(allowance);
 
+      if (!frozen_inode) {
+        srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+        return;
+      }
+
       // unfreeze auth pin after freezing the inode to avoid queueing waiters
       if (srcdnl->get_inode()->is_frozen_auth_pin())
-	mdr->unfreeze_auth_pin();
-
-      if (!frozen_inode) {
-	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      }
+        mdr->unfreeze_auth_pin();
 
       /*
        * set ambiguous auth for srci

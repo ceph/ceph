@@ -30,7 +30,7 @@
 #include "rgw_sync_module.h"
 #include "rgw_trim_bilog.h"
 #include "rgw_service.h"
-#include "rgw_sal.h"
+#include "rgw_sal_store.h"
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
 
@@ -1586,6 +1586,12 @@ public:
   int check_quota(const DoutPrefixProvider *dpp, const rgw_owner& bucket_owner, rgw_bucket& bucket,
                   RGWQuota& quota, uint64_t obj_size,
 		  optional_yield y, bool check_size_only = false);
+
+  void calculate_preferred_shards(const DoutPrefixProvider* dpp,
+				  const uint64_t num_objs,
+				  const uint32_t current_shard_count,
+				  bool& need_resharding,
+				  uint32_t* suggested_num_shard_count = nullptr);
 
   int check_bucket_shards(const RGWBucketInfo& bucket_info, uint64_t num_objs,
                           const DoutPrefixProvider *dpp, optional_yield y);

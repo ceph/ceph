@@ -56,13 +56,13 @@ Before you use cephadm to upgrade Ceph, verify that all hosts are currently onli
 
    ceph -s
 
-To upgrade (or downgrade) to a specific release, run the following command:
+To upgrade to a specific release, run a command of the following form:
 
 .. prompt:: bash #
 
   ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v16.2.6, run the following command:
+For example, to upgrade to v16.2.6, run a command of the following form:
 
 .. prompt:: bash #
 

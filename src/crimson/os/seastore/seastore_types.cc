@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/os/seastore/seastore_types.h"
+
+#include <utility>
+
 #include "crimson/common/log.h"
 
 namespace {
@@ -130,7 +133,7 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 }
 
 journal_seq_t journal_seq_t::add_offset(
-      journal_type_t type,
+      backend_type_t type,
       device_off_t off,
       device_off_t roll_start,
       device_off_t roll_size) const
@@ -142,10 +145,10 @@ journal_seq_t journal_seq_t::add_offset(
 
   segment_seq_t jseq = segment_seq;
   device_off_t joff;
-  if (type == journal_type_t::SEGMENTED) {
+  if (type == backend_type_t::SEGMENTED) {
     joff = offset.as_seg_paddr().get_segment_off();
   } else {
-    assert(type == journal_type_t::RANDOM_BLOCK);
+    assert(type == backend_type_t::RANDOM_BLOCK);
     auto boff = offset.as_blk_paddr().get_device_off();
     joff = boff;
   }
@@ -160,7 +163,7 @@ journal_seq_t journal_seq_t::add_offset(
       ++new_jseq;
       joff -= roll_size;
     }
-    assert(new_jseq < MAX_SEG_SEQ);
+    assert(std::cmp_less(new_jseq, MAX_SEG_SEQ));
     jseq = static_cast<segment_seq_t>(new_jseq);
   } else {
     device_off_t mod = (-off) / roll_size;
@@ -169,7 +172,7 @@ journal_seq_t journal_seq_t::add_offset(
       ++mod;
       joff += roll_size;
     }
-    if (jseq >= mod) {
+    if (std::cmp_greater_equal(jseq, mod)) {
       jseq -= mod;
     } else {
       return JOURNAL_SEQ_MIN;
@@ -181,7 +184,7 @@ journal_seq_t journal_seq_t::add_offset(
 }
 
 device_off_t journal_seq_t::relative_to(
-      journal_type_t type,
+      backend_type_t type,
       const journal_seq_t& r,
       device_off_t roll_start,
       device_off_t roll_size) const
@@ -193,11 +196,11 @@ device_off_t journal_seq_t::relative_to(
 
   device_off_t ret = static_cast<device_off_t>(segment_seq) - r.segment_seq;
   ret *= roll_size;
-  if (type == journal_type_t::SEGMENTED) {
+  if (type == backend_type_t::SEGMENTED) {
     ret += (static_cast<device_off_t>(offset.as_seg_paddr().get_segment_off()) -
             static_cast<device_off_t>(r.offset.as_seg_paddr().get_segment_off()));
   } else {
-    assert(type == journal_type_t::RANDOM_BLOCK);
+    assert(type == backend_type_t::RANDOM_BLOCK);
     ret += offset.as_blk_paddr().get_device_off() -
            r.offset.as_blk_paddr().get_device_off();
   }
@@ -873,6 +876,48 @@ std::ostream& operator<<(std::ostream& out, const scan_valid_records_cursor& c)
              << ", pending_record_groups=" << c.pending_record_groups.size()
              << ", num_consumed_records=" << c.num_consumed_records
              << ")";
+}
+
+std::ostream& operator<<(std::ostream& out, const tw_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  double d_num_records = static_cast<double>(p.stats.num_records);
+  out << "rps="
+      << fmt::format(dfmt, d_num_records/p.seconds)
+      << ",bwMiB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/p.seconds/(1<<20))
+      << ",sizeB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/d_num_records)
+      << "("
+      << fmt::format(dfmt, p.stats.data_bytes/d_num_records)
+      << ","
+      << fmt::format(dfmt, p.stats.metadata_bytes/d_num_records)
+      << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const writer_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  auto d_num_io = static_cast<double>(p.stats.io_depth_stats.num_io);
+  out << "iops="
+      << fmt::format(dfmt, d_num_io/p.seconds)
+      << ",depth="
+      << fmt::format(dfmt, p.stats.io_depth_stats.average())
+      << ",batch="
+      << fmt::format(dfmt, p.stats.record_batch_stats.average())
+      << ",bwMiB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/p.seconds/(1<<20))
+      << ",sizeB="
+      << fmt::format(dfmt, p.stats.get_total_bytes()/d_num_io)
+      << "("
+      << fmt::format(dfmt, p.stats.record_group_data_bytes/d_num_io)
+      << ","
+      << fmt::format(dfmt, p.stats.record_group_metadata_bytes/d_num_io)
+      << ","
+      << fmt::format(dfmt, p.stats.record_group_padding_bytes/d_num_io)
+      << ")";
+  return out;
 }
 
 }

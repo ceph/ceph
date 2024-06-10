@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import tempfile
+import time
 import unittest
 from io import StringIO
 import os.path
@@ -107,14 +108,15 @@ class QuiesceTestCase(CephFSTestCase):
             log.info(f"op:\n{op}")
             self._make_archive()
             cache = self.fs.read_cache(path, rank=rank, path=f"/tmp/mds.{rank}-cache", status=status)
-            (fd, path) = tempfile.mkstemp(prefix="cache", dir=self.archive)
+            (fd, path) = tempfile.mkstemp(prefix=f"mds.{rank}-cache_", dir=self.archive)
             with os.fdopen(fd, "wt") as f:
                 os.fchmod(fd, 0o644)
                 f.write(f"{json.dumps(cache, indent=2)}")
                 log.error(f"cache written to {path}")
             ops = self.fs.get_ops(locks=True, rank=rank, path=f"/tmp/mds.{rank}-ops", status=status)
-            (fd, path) = tempfile.mkstemp(prefix="ops", dir=self.archive)
+            (fd, path) = tempfile.mkstemp(prefix=f"mds.{rank}-ops_", dir=self.archive)
             with os.fdopen(fd, "wt") as f:
+                os.fchmod(fd, 0o644)
                 f.write(f"{json.dumps(ops, indent=2)}")
                 log.error(f"ops written to {path}")
             raise
@@ -329,8 +331,13 @@ class QuiesceTestCase(CephFSTestCase):
         # check request/cap count is stopped
         # count inodes under /usr and count subops!
 
-    def reqid_tostr(self, reqid):
-        return f"{reqid['entity']['type']}.{reqid['entity']['num']}:{reqid['tid']}"
+    def quiesce_and_verify(self, path, timeout=120):
+        J = self.fs.rank_tell("quiesce", "path", path)
+        log.debug(f"{J}")
+        reqid = self._reqid_tostr(J['op']['reqid'])
+        self._wait_for_quiesce_complete(reqid, timeout=timeout)
+        self._verify_quiesce(root=path)
+        return reqid
 
 class TestQuiesce(QuiesceTestCase):
     """
@@ -348,7 +355,7 @@ class TestQuiesce(QuiesceTestCase):
         sleep(secrets.randbelow(30)+10)
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
 
         self._verify_quiesce()
@@ -364,7 +371,7 @@ class TestQuiesce(QuiesceTestCase):
         sleep(secrets.randbelow(30)+10)
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
 
         #path = os.path.normpath(os.path.join(self.mntpnt, ".."))
@@ -380,7 +387,7 @@ class TestQuiesce(QuiesceTestCase):
         """
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce()
 
@@ -391,7 +398,7 @@ class TestQuiesce(QuiesceTestCase):
         """
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce()
         ops = self.fs.get_ops()
@@ -422,7 +429,7 @@ class TestQuiesce(QuiesceTestCase):
         log.debug(f"{P}")
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
 
         P = self.fs.rank_tell(["ops"])
@@ -454,18 +461,28 @@ class TestQuiesce(QuiesceTestCase):
 
     def test_quiesce_path_link_terminal(self):
         """
-        That quiesce on path with an terminal link fails with ENOTDIR even
-        pointing to a valid subvolume.
+        That quiesce on path with an terminal link quiesces just the link inode
         """
 
         self._configure_subvolume()
 
-        self.mount_a.run_shell_payload("ln -s ../.. subvol_quiesce")
-        path = self.mount_a.cephfs_mntpt + "/subvol_quiesce"
+        self.mount_a.run_shell_payload("mkdir -p dir/")
+        self.mount_a.write_file("dir/afile", "I'm a file")
+        self.mount_a.run_shell_payload("ln -s dir symlink_to_dir")
+        path = self.mount_a.cephfs_mntpt + "/symlink_to_dir"
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
-        log.debug(f"{J}")
-        self.assertEqual(J['op']['result'], -20) # ENOTDIR: the link is not a directory
+        # MDS doesn't treat symlinks differently from regular inodes,
+        # so quiescing one is allowed
+        self.quiesce_and_verify(path)
+
+        # however, this also means that the directory this symlink points to isn't quiesced
+        ops = self.fs.get_ops()
+        quiesce_inode = 0
+        for op in ops['ops']:
+            op_name = op['type_data'].get('op_name', None)
+            if op_name == "quiesce_inode":
+                quiesce_inode += 1
+        self.assertEqual(1, quiesce_inode)
 
     def test_quiesce_path_link_intermediate(self):
         """
@@ -477,7 +494,7 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("ln -s ../../.. _nogroup")
         path = self.mount_a.cephfs_mntpt + "/_nogroup/" + self.QUIESCE_SUBVOLUME
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", path, '--await'], check_status=False)
         log.debug(f"{J}")
         self.assertEqual(J['op']['result'], -20) # ENOTDIR: path_traverse: the intermediate link is not a directory
 
@@ -491,14 +508,14 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("mkdir dir")
         path = self.mount_a.cephfs_mntpt + "/dir"
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        J = self.fs.rank_tell(["quiesce", "path", path, '--await'], check_status=False)
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid, path=path)
         self._verify_quiesce(root=path)
 
     def test_quiesce_path_regfile(self):
         """
-        That quiesce on a regular file fails with ENOTDIR.
+        That quiesce on a regular file is possible.
         """
 
         self._configure_subvolume()
@@ -506,9 +523,9 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("touch file")
         path = self.mount_a.cephfs_mntpt + "/file"
 
-        J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", path, '--await'], check_status=False)
         log.debug(f"{J}")
-        self.assertEqual(J['op']['result'], -20) # ENOTDIR
+        self.assertEqual(J['op']['result'], 0)
 
     def test_quiesce_path_dup(self):
         """
@@ -518,9 +535,9 @@ class TestQuiesce(QuiesceTestCase):
 
         self._configure_subvolume()
 
-        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume])['op']
-        op1_reqid = self.reqid_tostr(op1['reqid'])
-        op2 = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'])['op']
+        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], check_status=False)['op']
+        op1_reqid = self._reqid_tostr(op1['reqid'])
+        op2 = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--await'], check_status=False)['op']
         op1 = self.fs.get_op(op1_reqid)['type_data'] # for possible dup result
         log.debug(f"op1 = {op1}")
         log.debug(f"op2 = {op2}")
@@ -538,7 +555,7 @@ class TestQuiesce(QuiesceTestCase):
         self.mount_a.run_shell_payload("touch file")
         self.mount_a.setfattr("file", "ceph.quiesce.block", "1")
 
-        J = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'])
+        J = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--await'], check_status=False)
         log.debug(f"{J}")
         self.assertEqual(J['op']['result'], 0)
         self.assertEqual(J['state']['inodes_blocked'], 1)
@@ -553,9 +570,9 @@ class TestQuiesce(QuiesceTestCase):
         self._configure_subvolume()
         self._client_background_workload()
 
-        J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
+        J = self.fs.rank_tell(["quiesce", "path", self.subvolume], check_status=False)
         log.debug(f"{J}")
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce(root=self.subvolume)
 
@@ -575,9 +592,9 @@ class TestQuiesce(QuiesceTestCase):
         # drop cache
         self.fs.rank_tell(["cache", "drop"])
 
-        J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
+        J = self.fs.rank_tell(["quiesce", "path", self.subvolume], check_status=False)
         log.debug(f"{J}")
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce(root=self.subvolume)
 
@@ -594,6 +611,44 @@ class TestQuiesce(QuiesceTestCase):
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce(root=self.subvolume)
 
+    def test_quiesce_dir_fragment(self):
+        """
+        That quiesce completes with fragmentation in the background.
+        """
+
+        # the config should cause continuous merge-split wars
+        self.config_set('mds', 'mds_bal_split_size', '1') # split anything larger than one item ....
+        self.config_set('mds', 'mds_bal_merge_size', '2') # and then merge if only one item ]:-}
+        self.config_set('mds', 'mds_bal_split_bits', '2')
+
+        self._configure_subvolume()
+
+        self.mount_a.run_shell_payload("mkdir -p root/sub1")
+        self.mount_a.write_file("root/sub1/file1", "I'm file 1")
+        self.mount_a.run_shell_payload("mkdir -p root/sub2")
+        self.mount_a.write_file("root/sub2/file2", "I'm file 2")
+        
+        sleep_for = 30
+        log.info(f"Sleeping {sleep_for} seconds to warm up the balancer")
+        time.sleep(sleep_for)
+
+        for _ in range(30):
+            sub1 = f"{self.subvolume}/root/sub1"
+            log.debug(f"Quiescing {sub1}")
+            # with one of the subdirs quiesced, the freezing
+            # of the parent dir (root) can't complete
+            op1 = self.quiesce_and_verify(sub1, timeout=15)
+
+            sub2 = f"{self.subvolume}/root/sub2"
+            log.debug(f"{sub1} quiesced: {op1}. Quiescing {sub2}")
+            # despite the parent dir freezing, we should be able
+            # to quiesce the other subvolume
+            op2 = self.quiesce_and_verify(sub2, timeout=15)
+
+            log.debug(f"{sub2} quiesced: {op2}. Killing the ops.")
+            self.fs.kill_op(op1)
+            self.fs.kill_op(op2)
+            time.sleep(5)
 
 class TestQuiesceMultiRank(QuiesceTestCase):
     """
@@ -639,72 +694,209 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         self._client_background_workload()
         self._wait_distributed_subtrees(2*2, rank="all", path=self.mntpnt)
 
-        op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0)['op']
+        op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--await'], rank=0, check_status=False)['op']
         self.assertEqual(op['result'], -1) # EPERM
+
+    def test_quiesce_drops_remote_authpins_when_done(self):
+        """
+        That a quiesce operation drops remote authpins after marking the node as quiesced
+
+        It's important that a remote quiesce doesn't stall freezing ops on the auth
+        """
+        self._configure_subvolume()
+
+        # create two dirs for pinning
+        self.mount_a.run_shell_payload("mkdir -p pin0 pin1")
+        # enable export by populating the directories
+        self.mount_a.run_shell_payload("touch pin0/export_dummy pin1/export_dummy")
+        # pin the files to different ranks
+        self.mount_a.setfattr("pin0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("pin1", "ceph.dir.pin", "1")
+
+        # prepare the patient at rank 0
+        self.mount_a.write_file("pin0/thefile", "I'm ready, doc")
+
+        # wait for the export to settle
+        self._wait_subtrees([(f"{self.mntpnt}/pin0", 0), (f"{self.mntpnt}/pin1", 1)])
+
+        def reqid(cmd):
+            J = json.loads(cmd.stdout.getvalue())
+            J = J.get('type_data', J)   # for op get
+            J = J.get('op', J)          # for quiesce path
+                                        # lock path returns the op directly
+            return self._reqid_tostr(J['reqid'])
+        
+        def assertQuiesceOpDone(expected_done, quiesce_op, rank):
+            cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:{rank} op get {quiesce_op}", stdout=StringIO())
+
+            J = json.loads(cmd.stdout.getvalue())
+            self.assertEqual(J['type_data']['result'], 0 if expected_done else None)
+
+        # Take the policy lock on the auth to cause a quiesce operation to request the remote authpin
+        # This is needed to cause the next command to block
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:0 lock path {self.mntpnt}/pin0/thefile policy:x --await", stdout=StringIO())
+        policy_block_op = reqid(cmd)
+
+        # Try quiescing on the replica. This should block for the policy lock
+        # As a side effect, it should take the remote authpin
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 quiesce path {self.mntpnt}/pin0/thefile", stdout=StringIO())
+        quiesce_op = reqid(cmd)
+
+        # verify the quiesce is pending
+        assertQuiesceOpDone(False, quiesce_op, rank=1)
+
+        # kill the op that holds the policy lock exclusively and verify the quiesce succeeds
+        self.fs.kill_op(policy_block_op, rank=0)
+        assertQuiesceOpDone(True, quiesce_op, rank=1)
+
+        # If all is good, the ap-freeze operation below should succeed
+        # despite the quiesce_op that's still active.
+        # We payload this with some lock that we know shouldn't block
+        # The call below will block on freezing if the quiesce failed to release
+        # remote authpins, and after the lifetime elapses will return ECANCELED
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 lock path {self.mntpnt}/pin0/thefile policy:r --ap-freeze --await --lifetime 5")
+
+    def test_request_drops_remote_authpins_when_waiting_for_quiescelock(self):
+        """
+        That remote authpins are dropped when the request fails to acquire the quiesce lock
+
+        When the remote authpin is freezing, not dropping it is likely to deadlock a distributed quiesce
+        """
+        self._configure_subvolume()
+
+        # create two dirs for pinning
+        self.mount_a.run_shell_payload("mkdir -p pin0 pin1")
+        # enable export by populating the directories
+        self.mount_a.run_shell_payload("touch pin0/export_dummy pin1/export_dummy")
+        # pin the files to different ranks
+        self.mount_a.setfattr("pin0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("pin1", "ceph.dir.pin", "1")
+
+        # prepare the patient at rank 0
+        self.mount_a.write_file("pin0/thefile", "I'm ready, doc")
+
+        # wait for the export to settle
+        self._wait_subtrees([(f"{self.mntpnt}/pin0", 0), (f"{self.mntpnt}/pin1", 1)])
+
+        # Take the quiesce lock on the replica of the src file.
+        # This is needed to cause the next command to block
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 lock path {self.mntpnt}/pin0/thefile quiesce:x --await")
+        self.assertEqual(cmd.exitstatus, 0)
+
+        # Simulate a rename by remote-auth-pin-freezing the file.
+        # Also try to take the quiesce lock to cause the MDR
+        # to block on quiesce with the remote authpin granted
+        # Don't --await this time because we expect this to block
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 lock path {self.mntpnt}/pin0/thefile quiesce:w --ap-freeze")
+        self.assertEqual(cmd.exitstatus, 0)
+
+        # At this point, if everything works well, we should be able to
+        # autpin and quiesce the file on the auth side.
+        # If the op above fails to release remote authpins, then the inode
+        # will still be authpin frozen, and that will disallow auth pinning the file
+        # We are using a combination of --ap-dont-block and --await
+        # to detect whether the file is authpinnable
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:0 lock path {self.mntpnt}/pin0/thefile quiesce:x --ap-dont-block --await")
+        self.assertEqual(cmd.exitstatus, 0)
 
     def test_quiesce_authpin_wait(self):
         """
         That a quiesce_inode op with outstanding remote authpin requests can be killed.
         """
 
-        self.config_set('mds', 'mds_heartbeat_grace', '60')
-        self._configure_subvolume()
-        self.mount_a.setfattr(".", "ceph.dir.pin.distributed", "1")
-        self._client_background_workload()
-        self._wait_distributed_subtrees(2*2, rank="all", path=self.mntpnt)
-        status = self.fs.status()
+        # create two dirs for pinning
+        self.mount_a.run_shell_payload("mkdir -p pin0 pin1")
+        # enable export by populating the directories
+        self.mount_a.run_shell_payload("touch pin0/export_dummy pin1/export_dummy")
+        # pin the files to different ranks
+        self.mount_a.setfattr("pin0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("pin1", "ceph.dir.pin", "1")
 
-        p = self.mount_a.run_shell_payload("ls", stdout=StringIO())
-        dirs = p.stdout.getvalue().strip().split()
+        # prepare the patient at rank 0
+        self.mount_a.write_file("pin0/thefile", "I'm ready, doc")
 
-        # make rank 0 unresponsive to auth pin requests
-        p = self.run_ceph_cmd("tell", f"mds.{self.fs.id}:1", "lockup", "30000", wait=False)
+        # wait for the export to settle
+        self._wait_subtrees([("/pin0", 0), ("/pin1", 1)])
 
-        qops = []
-        for d in dirs:
-            path = os.path.join(self.mntpnt, d)
-            op = self.fs.rank_tell("quiesce", "path", path, rank=0)['op']
-            reqid = self.reqid_tostr(op['reqid'])
-            log.info(f"created {reqid}")
-            qops.append(reqid)
+        path = "/pin0/thefile"
 
-        def find_quiesce(blocked_on_remote_auth_pin):
-            # verify no quiesce ops
-            ops = self.fs.get_ops(locks=False, rank=0, path="/tmp/mds.0-ops", status=status)['ops']
+        # take the policy lock on the file to cause remote authpin from the replica
+        # when we get to quiescing the path
+        op = self.fs.rank_tell("lock", "path", path, "policy:x", "--await", rank=0)
+        policy_reqid = self._reqid_tostr(op['reqid'])
+
+        # We need to simulate a freezing inode to have quiesce block on the authpin.
+        # This can be done with authpin freeze feature, but it only works when sent from the replica.
+        # We'll rdlock the policy lock, but it doesn't really matter as the quiesce won't get that far
+        op = self.fs.rank_tell("lock", "path", path, "policy:r", "--ap-freeze", rank=1)
+        freeze_reqid = self._reqid_tostr(op['reqid'])
+
+        # we should quiesce the same path from the replica side to cause the remote authpin (due to file xlock)
+        op = self.fs.rank_tell("quiesce", "path", path, rank=1)['op']
+        quiesce_reqid = self._reqid_tostr(op['reqid'])
+
+        def has_quiesce(*, blocked_on_remote_auth_pin):
+            ops = self.fs.get_ops(locks=False, rank=1, path="/tmp/mds.1-ops")['ops']
+            log.debug(ops)
             for op in ops:
                 type_data = op['type_data']
                 flag_point = type_data['flag_point']
-                op_type = type_data['op_type']
-                if op_type == 'client_request' or op_type == 'peer_request':
-                    continue
                 if type_data['op_name'] == "quiesce_inode":
                     if blocked_on_remote_auth_pin:
-                        if flag_point == "requesting remote authpins":
-                            return True
-                    else:
-                        return True
+                        self.assertEqual("requesting remote authpins", flag_point)
+                    return True
             return False
 
-        with safe_while(sleep=1, tries=30, action='wait for quiesce op with outstanding remote authpin requests') as proceed:
-            while proceed():
-                if find_quiesce(True):
-                    break
+        # The quiesce should be pending
+        self.assertTrue(has_quiesce(blocked_on_remote_auth_pin=True))
 
-        # okay, now kill all quiesce ops
-        for reqid in qops:
-            self.fs.kill_op(reqid, rank=0)
+        # even after killing the quiesce op, it should still stay pending
+        self.fs.kill_op(quiesce_reqid, rank=1)
+        self.assertTrue(has_quiesce(blocked_on_remote_auth_pin=True))
 
-        # verify some quiesce_inode ops still exist because authpin acks have not been received
-        if not find_quiesce(True):
-            self.fail("did not find quiesce_inode op blocked on remote authpins!")
+        # first, kill the policy xlock to release the freezing request
+        self.fs.kill_op(policy_reqid, rank=0)
+        time.sleep(1)
 
-        # wait for sleep to complete
-        p.wait()
+        # this should have let the freezing request to progress
+        op = self.fs.rank_tell("op", "get", freeze_reqid, rank=1)
+        log.debug(op)
+        self.assertEqual(0, op['type_data']['result'])
 
-        with safe_while(sleep=1, tries=30, action='wait for quiesce kill') as proceed:
-            while proceed():
-                if not find_quiesce(False):
-                    break
+        # now unfreeze the inode
+        self.fs.kill_op(freeze_reqid, rank=1)
+        time.sleep(1)
+
+        # the quiesce op should be gone
+        self.assertFalse(has_quiesce(blocked_on_remote_auth_pin=False))
+
+    def test_quiesce_block_file_replicated(self):
+        """
+        That a file inode with quiesce.block is replicated.
+        """
+
+        self._configure_subvolume()
+
+        self.mount_a.run_shell_payload("mkdir -p dir1/dir2/dir3/dir4")
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        self.mount_a.setfattr("dir1", "ceph.dir.pin", "1")
+        self.mount_a.setfattr("dir1/dir2/dir3", "ceph.dir.pin", "0") # force dir2 to be replicated
+        status = self._wait_subtrees([(self.mntpnt+"/dir1", 1), (self.mntpnt+"/dir1/dir2/dir3", 0)], status=status, rank=1)
+
+        self.mount_a.setfattr("dir1/dir2", "ceph.quiesce.block", "1")
+
+        ino1 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=1)[0]
+        self.assertTrue(ino1['quiesce_block'])
+        self.assertTrue(ino1['is_auth'])
+        replicas = ino1['auth_state']['replicas']
+        self.assertIn("0", replicas)
+
+        ino0 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=0)[0]
+        self.assertFalse(ino0['is_auth'])
+        self.assertTrue(ino0['quiesce_block'])
 
     def test_quiesce_path_multirank(self):
         """
@@ -727,15 +919,49 @@ class TestQuiesceMultiRank(QuiesceTestCase):
             path = os.path.join(self.mntpnt, d)
             for r in self.ranks:
                 op = self.fs.rank_tell(["quiesce", "path", path], rank=r)['op']
-                reqid = self.reqid_tostr(op['reqid'])
+                reqid = self._reqid_tostr(op['reqid'])
                 log.info(f"created {reqid}")
                 ops.append((r, op, path))
         for rank, op, path in ops:
-            reqid = self.reqid_tostr(op['reqid'])
+            reqid = self._reqid_tostr(op['reqid'])
             log.debug(f"waiting for ({rank}, {reqid})")
             op = self._wait_for_quiesce_complete(reqid, rank=rank, path=path, status=status)
         for rank, op, path in ops:
             self._verify_quiesce(root=path, rank=rank, status=status)
+
+    def test_quiesce_block_replicated(self):
+        """
+        That an inode with quiesce.block is replicated.
+        """
+
+        self._configure_subvolume()
+
+        self.mount_a.run_shell_payload("mkdir -p dir1/dir2/dir3/dir4")
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        self.mount_a.setfattr("dir1", "ceph.dir.pin", "1")
+        self.mount_a.setfattr("dir1/dir2/dir3", "ceph.dir.pin", "0") # force dir2 to be replicated
+        status = self._wait_subtrees([(self.mntpnt+"/dir1", 1), (self.mntpnt+"/dir1/dir2/dir3", 0)], status=status, rank=1)
+
+        op = self.fs.rank_tell("lock", "path", self.mntpnt+"/dir1/dir2", "policy:r", rank=1)
+        p = self.mount_a.setfattr("dir1/dir2", "ceph.quiesce.block", "1", wait=False)
+        sleep(2) # for req to block waiting for xlock on policylock
+        reqid = self._reqid_tostr(op['reqid'])
+        self.fs.kill_op(reqid, rank=1)
+        p.wait()
+
+        ino1 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=1)[0]
+        self.assertTrue(ino1['quiesce_block'])
+        self.assertTrue(ino1['is_auth'])
+        replicas = ino1['auth_state']['replicas']
+        self.assertIn("0", replicas)
+
+        ino0 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=0)[0]
+        self.assertFalse(ino0['is_auth'])
+        self.assertTrue(ino0['quiesce_block'])
+
 
     # TODO: test for quiesce_counter
 
@@ -782,10 +1008,10 @@ class TestQuiesceSplitAuth(QuiesceTestCase):
 
         sleep(2)
 
-        op0 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=0)['op']
-        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=1)['op']
-        reqid0 = self.reqid_tostr(op0['reqid'])
-        reqid1 = self.reqid_tostr(op1['reqid'])
+        op0 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=0, check_status=False)['op']
+        op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=1, check_status=False)['op']
+        reqid0 = self._reqid_tostr(op0['reqid'])
+        reqid1 = self._reqid_tostr(op1['reqid'])
         op0 = self._wait_for_quiesce_complete(reqid0, rank=0, timeout=300)
         op1 = self._wait_for_quiesce_complete(reqid1, rank=1, timeout=300)
         log.debug(f"op0 = {op0}")

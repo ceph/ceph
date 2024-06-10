@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    conf:
+    cluster-conf:
       client:
         debug ms: 1
         debug client: 20

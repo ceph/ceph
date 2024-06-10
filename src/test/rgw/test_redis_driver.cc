@@ -74,7 +74,7 @@ class Environment : public ::testing::Environment {
       cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {});
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
 
-      redisHost = cct->_conf->rgw_d4n_host + ":" + std::to_string(cct->_conf->rgw_d4n_port);
+      redisHost = cct->_conf->rgw_d4n_address; 
     }
 
     std::string redisHost;
@@ -102,8 +102,8 @@ class RedisDriverFixture: public ::testing::Test {
 
       /* Run fixture's connection */
       config cfg;
-      cfg.addr.host = env->cct->_conf->rgw_d4n_host;
-      cfg.addr.port = std::to_string(env->cct->_conf->rgw_d4n_port);
+      cfg.addr.host = env->redisHost.substr(0, env->redisHost.find(":"));
+      cfg.addr.port = env->redisHost.substr(env->redisHost.find(":") + 1, env->redisHost.length()); 
 
       conn->async_run(cfg, {}, net::detached);
     } 
@@ -122,10 +122,14 @@ class RedisDriverFixture: public ::testing::Test {
     rgw::sal::Attrs attrs;
 };
 
+void rethrow(std::exception_ptr eptr) {
+  if (eptr) std::rethrow_exception(eptr);
+}
+
 TEST_F(RedisDriverFixture, PutYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
     cacheDriver->shutdown();
 
     boost::system::error_code ec;
@@ -140,15 +144,15 @@ TEST_F(RedisDriverFixture, PutYield)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ(std::get<0>(resp).value(), "attrVal");
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, GetYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     {
       boost::system::error_code ec;
@@ -165,7 +169,7 @@ TEST_F(RedisDriverFixture, GetYield)
     bufferlist ret;
     rgw::sal::Attrs retAttrs;
 
-    ASSERT_EQ(0, cacheDriver->get(env->dpp, "testName", 0, bl.length(), ret, retAttrs, optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->get(env->dpp, "testName", 0, bl.length(), ret, retAttrs, yield));
     EXPECT_EQ(ret.to_str(), "new data");
     EXPECT_EQ(retAttrs.begin()->second.to_str(), "newVal");
     cacheDriver->shutdown();
@@ -182,16 +186,16 @@ TEST_F(RedisDriverFixture, GetYield)
     }
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, PutAsyncYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(env->cct->_conf->rgw_get_obj_window_size, optional_yield{io, yield});
-    auto completed = cacheDriver->put_async(env->dpp, optional_yield{io, yield}, aio.get(), "testName", bl, bl.length(), attrs, 0, 0);
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(env->cct->_conf->rgw_get_obj_window_size, yield);
+    auto completed = cacheDriver->put_async(env->dpp, yield, aio.get(), "testName", bl, bl.length(), attrs, 0, 0);
     drain(env->dpp, aio.get());
 
     cacheDriver->shutdown();
@@ -208,18 +212,18 @@ TEST_F(RedisDriverFixture, PutAsyncYield)
     EXPECT_EQ(std::get<0>(resp).value()[0], "attrVal");
     EXPECT_EQ(std::get<0>(resp).value()[1], "test data");
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, GetAsyncYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
-    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(env->cct->_conf->rgw_get_obj_window_size, optional_yield{io, yield});
-    auto completed = cacheDriver->get_async(env->dpp, optional_yield{io, yield}, aio.get(), "testName", 0, bl.length(), 0, 0);
+    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(env->cct->_conf->rgw_get_obj_window_size, yield);
+    auto completed = cacheDriver->get_async(env->dpp, yield, aio.get(), "testName", 0, bl.length(), 0, 0);
     drain(env->dpp, aio.get());
 
     cacheDriver->shutdown();
@@ -236,15 +240,15 @@ TEST_F(RedisDriverFixture, GetAsyncYield)
     EXPECT_EQ(std::get<0>(resp).value()[0], "attrVal");
     EXPECT_EQ(std::get<0>(resp).value()[1], "test data");
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, DelYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     {
       boost::system::error_code ec;
@@ -258,7 +262,7 @@ TEST_F(RedisDriverFixture, DelYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, cacheDriver->del(env->dpp, "testName", optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->del(env->dpp, "testName", yield));
     cacheDriver->shutdown();
 
     {
@@ -275,15 +279,15 @@ TEST_F(RedisDriverFixture, DelYield)
     }
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, AppendDataYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     {
       boost::system::error_code ec;
@@ -300,7 +304,7 @@ TEST_F(RedisDriverFixture, AppendDataYield)
     bufferlist val;
     val.append(" has been written");
 
-    ASSERT_EQ(0, cacheDriver->append_data(env->dpp, "testName", val, optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->append_data(env->dpp, "testName", val, yield));
     cacheDriver->shutdown();
 
     {
@@ -317,15 +321,15 @@ TEST_F(RedisDriverFixture, AppendDataYield)
     }
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, DeleteDataYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     {
       boost::system::error_code ec;
@@ -339,7 +343,7 @@ TEST_F(RedisDriverFixture, DeleteDataYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testName", optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testName", yield));
     cacheDriver->shutdown();
 
     {
@@ -356,15 +360,15 @@ TEST_F(RedisDriverFixture, DeleteDataYield)
     }
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, SetAttrsYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     rgw::sal::Attrs newAttrs;
     bufferlist newVal;
@@ -375,7 +379,7 @@ TEST_F(RedisDriverFixture, SetAttrsYield)
     newVal.append("nextVal");
     newAttrs.insert({"nextAttr", newVal});
 
-    ASSERT_EQ(0, cacheDriver->set_attrs(env->dpp, "testName", newAttrs, optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->set_attrs(env->dpp, "testName", newAttrs, yield));
     cacheDriver->shutdown();
 
     boost::system::error_code ec;
@@ -392,20 +396,20 @@ TEST_F(RedisDriverFixture, SetAttrsYield)
     EXPECT_EQ(std::get<0>(resp).value()[0], "newVal");
     EXPECT_EQ(std::get<0>(resp).value()[1], "nextVal");
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, GetAttrsYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     rgw::sal::Attrs nextAttrs = attrs;
     bufferlist nextVal;
     nextVal.append("nextVal");
     nextAttrs.insert({"nextAttr", nextVal});
 
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), nextAttrs, optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), nextAttrs, yield));
 
     {
       boost::system::error_code ec;
@@ -421,7 +425,7 @@ TEST_F(RedisDriverFixture, GetAttrsYield)
 
     rgw::sal::Attrs retAttrs;
 
-    ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "testName", retAttrs, optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "testName", retAttrs, yield));
    
     auto it = retAttrs.begin();
     EXPECT_EQ(it->second.to_str(), "newVal1");
@@ -441,22 +445,22 @@ TEST_F(RedisDriverFixture, GetAttrsYield)
     }
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, UpdateAttrsYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     rgw::sal::Attrs newAttrs;
     bufferlist newVal;
     newVal.append("newVal");
     newAttrs.insert({"attr", newVal});
 
-    ASSERT_EQ(0, cacheDriver->update_attrs(env->dpp, "testName", newAttrs, optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->update_attrs(env->dpp, "testName", newAttrs, yield));
     cacheDriver->shutdown();
 
     boost::system::error_code ec;
@@ -471,15 +475,15 @@ TEST_F(RedisDriverFixture, UpdateAttrsYield)
     EXPECT_EQ(std::get<0>(resp).value(), "newVal");
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, DeleteAttrsYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     {
       boost::system::error_code ec;
@@ -497,7 +501,7 @@ TEST_F(RedisDriverFixture, DeleteAttrsYield)
     bufferlist delVal;
     delAttrs.insert({"attr", delVal});
 
-    ASSERT_GE(cacheDriver->delete_attrs(env->dpp, "testName", delAttrs, optional_yield{io, yield}), 0);
+    ASSERT_GE(cacheDriver->delete_attrs(env->dpp, "testName", delAttrs, yield), 0);
     cacheDriver->shutdown();
 
     {
@@ -514,16 +518,16 @@ TEST_F(RedisDriverFixture, DeleteAttrsYield)
     }
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, SetAttrYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
-    ASSERT_GE(cacheDriver->set_attr(env->dpp, "testName", "newAttr", "newVal", optional_yield{io, yield}), 0);
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
+    ASSERT_GE(cacheDriver->set_attr(env->dpp, "testName", "newAttr", "newVal", yield), 0);
     cacheDriver->shutdown();
 
     boost::system::error_code ec;
@@ -538,15 +542,15 @@ TEST_F(RedisDriverFixture, SetAttrYield)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ(std::get<0>(resp).value(), "newVal");
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(RedisDriverFixture, GetAttrYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, yield));
 
     {
       boost::system::error_code ec;
@@ -560,7 +564,7 @@ TEST_F(RedisDriverFixture, GetAttrYield)
       EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
     std::string attr_val;
-    ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "testName", "attr", attr_val, optional_yield{io, yield}));
+    ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "testName", "attr", attr_val, yield));
     ASSERT_EQ("newVal", attr_val);
     cacheDriver->shutdown();
 
@@ -576,7 +580,7 @@ TEST_F(RedisDriverFixture, GetAttrYield)
     }
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }

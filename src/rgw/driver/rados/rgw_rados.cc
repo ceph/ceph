@@ -1356,19 +1356,22 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_notification_thread) {
-    ret = rgw::notify::init(cct, driver, *svc.site, dpp);
-    if (ret < 0 ) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to initialize notification manager" << dendl;
-      return ret;
+    if (!rgw::notify::init(dpp, driver, *svc.site)) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to initialize notification manager" << dendl;
     }
 
     using namespace rgw;
     if (svc.site->is_meta_master() &&
         all_zonegroups_support(*svc.site, zone_features::notification_v2)) {
-      spawn::spawn(v1_topic_migration, [this] (spawn::yield_context yield) {
+      boost::asio::spawn(v1_topic_migration, [this] (boost::asio::yield_context yield) {
             DoutPrefix dpp{cct, dout_subsys, "v1 topic migration: "};
             rgwrados::topic_migration::migrate(&dpp, driver, v1_topic_migration, yield);
+          }, [] (std::exception_ptr eptr) {
+            if (eptr) std::rethrow_exception(eptr);
           });
+      // TODO: we run this on a separate thread so shutdown can cancel it with
+      // v1_topic_migration.stop(), but we could run it on the global thread
+      // pool and cancel spawn() with a cancellation_signal instead
       v1_topic_migration.start(1);
     }
   }
@@ -10322,66 +10325,96 @@ int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBuck
   return 0;
 }
 
+
+// uses information that the store has easy access to transition to the shard calculatoin logic
+void RGWRados::calculate_preferred_shards(const DoutPrefixProvider* dpp,
+					  const uint64_t num_objs,
+					  const uint32_t num_source_shards,
+					  bool& need_resharding,
+					  uint32_t* suggested_num_shards)
+{
+  const uint32_t max_dynamic_shards =
+    uint32_t(cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards"));
+  const uint64_t max_objs_per_shard =
+    cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
+  const bool is_multisite = svc.zone->need_to_log_data();
+
+  RGWBucketReshard::calculate_preferred_shards(dpp,
+					       max_dynamic_shards,
+					       max_objs_per_shard,
+					       is_multisite,
+					       num_objs,
+					       num_source_shards,
+					       need_resharding,
+					       suggested_num_shards);
+}
+
+
+// Check whether a bucket is a candidate for dynamic resharding and if
+// so, add it to the reshard queue (log).
+//
+// We implement dynamic reshard reduction (where the number of shards
+// can be reduced) in the following manner. In addition to the maximum
+// number of desired entries per shard, we now set a minimum
 int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,
 				  uint64_t num_objs,
-                                  const DoutPrefixProvider *dpp, optional_yield y)
+                                  const DoutPrefixProvider* dpp, optional_yield y)
 {
   if (! cct->_conf.get_val<bool>("rgw_dynamic_resharding")) {
-      return 0;
+    return 0;
   }
 
   if (! is_layout_reshardable(bucket_info.layout)) {
     return 0;
   }
 
-  bool need_resharding = false;
-  uint32_t num_source_shards = rgw::current_num_shards(bucket_info.layout);
-  const uint32_t max_dynamic_shards =
-    uint32_t(cct->_conf.get_val<uint64_t>("rgw_max_dynamic_shards"));
-
-  if (num_source_shards >= max_dynamic_shards) {
-    return 0;
-  }
-
-  uint32_t suggested_num_shards = 0;
-  const uint64_t max_objs_per_shard =
-    cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
-
   // TODO: consider per-bucket sync policy here?
-  const bool is_multisite = svc.zone->need_to_log_data();
 
-  quota_handler->check_bucket_shards(dpp, max_objs_per_shard, num_source_shards,
-				     num_objs, is_multisite, need_resharding,
-				     &suggested_num_shards);
+  bool need_resharding = false;
+  uint32_t suggested_num_shards = 0;
+  const uint32_t num_source_shards =
+    rgw::current_num_shards(bucket_info.layout);
+
+  calculate_preferred_shards(dpp, num_objs, num_source_shards,
+			     need_resharding, &suggested_num_shards);
   if (! need_resharding) {
     return 0;
   }
 
-  const uint32_t final_num_shards =
-    RGWBucketReshard::get_preferred_shards(suggested_num_shards,
-					   max_dynamic_shards);
   // final verification, so we don't reduce number of shards
-  if (final_num_shards <= num_source_shards) {
+  const bool may_reduce =
+    uint32_t(cct->_conf.get_val<bool>("rgw_dynamic_resharding_may_reduce"));
+  if (! may_reduce && suggested_num_shards <= num_source_shards) {
     return 0;
   }
 
-  ldpp_dout(dpp, 1) << "RGWRados::" << __func__ << " bucket " << bucket_info.bucket.name <<
-    " needs resharding; current num shards " << bucket_info.layout.current_index.layout.normal.num_shards <<
-    "; new num shards " << final_num_shards << " (suggested " <<
-    suggested_num_shards << ")" << dendl;
+  ldpp_dout(dpp, 1) << "RGWRados::" << __func__ <<
+    " bucket " << bucket_info.bucket.name <<
+    " needs resharding; current num shards " << num_source_shards <<
+    "; new num shards " << suggested_num_shards << dendl;
 
-  return add_bucket_to_reshard(dpp, bucket_info, final_num_shards, y);
+  return add_bucket_to_reshard(dpp, bucket_info, suggested_num_shards, y);
 }
 
-int RGWRados::add_bucket_to_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, uint32_t new_num_shards, optional_yield y)
+int RGWRados::add_bucket_to_reshard(const DoutPrefixProvider *dpp,
+				    const RGWBucketInfo& bucket_info,
+				    uint32_t new_num_shards,
+				    optional_yield y)
 {
   RGWReshard reshard(this->driver, dpp);
 
-  uint32_t num_source_shards = rgw::current_num_shards(bucket_info.layout);
-
+  const uint32_t num_source_shards = rgw::current_num_shards(bucket_info.layout);
+  const bool may_reduce =
+    uint32_t(cct->_conf.get_val<bool>("rgw_dynamic_resharding_may_reduce"));
   new_num_shards = std::min(new_num_shards, get_max_bucket_shards());
-  if (new_num_shards <= num_source_shards) {
-    ldpp_dout(dpp, 20) << "not resharding bucket name=" << bucket_info.bucket.name << ", orig_num=" << num_source_shards << ", new_num_shards=" << new_num_shards << dendl;
+
+  if ((! may_reduce && new_num_shards < num_source_shards) ||
+      new_num_shards == num_source_shards) {
+    ldpp_dout(dpp, 10) << "WARNING: " << __func__ <<
+      ": rejecting resharding request for bucket name=" <<
+      bucket_info.bucket.name << ", shard count=" << num_source_shards <<
+      ", new shard count=" << new_num_shards <<
+      ", rgw_dynamic_resharding_may_reduce=" << may_reduce << dendl;
     return 0;
   }
 
@@ -10392,6 +10425,7 @@ int RGWRados::add_bucket_to_reshard(const DoutPrefixProvider *dpp, const RGWBuck
   entry.bucket_id = bucket_info.bucket.bucket_id;
   entry.old_num_shards = num_source_shards;
   entry.new_num_shards = new_num_shards;
+  entry.initiator = cls_rgw_reshard_initiator::Dynamic;
 
   return reshard.add(dpp, entry, y);
 }

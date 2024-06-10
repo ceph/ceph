@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <aio.h>
 
+#include <boost/asio/spawn.hpp>
+
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/async/completion.h"
@@ -95,29 +97,33 @@ struct D3nL1CacheRequest {
     }
   };
 
-  template <typename ExecutionContext, typename CompletionToken>
-  auto async_read(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& location,
+  template <typename Executor, typename CompletionToken>
+  auto async_read(const DoutPrefixProvider *dpp, const Executor& ex, const std::string& location,
                   off_t read_ofs, off_t read_len, CompletionToken&& token) {
     using Op = AsyncFileReadOp;
     using Signature = typename Op::Signature;
-    boost::asio::async_completion<CompletionToken, Signature> init(token);
-    auto p = Op::create(ctx.get_executor(), init.completion_handler);
-    auto& op = p->user_data;
+    return boost::asio::async_initiate<CompletionToken, Signature>(
+        [] (auto handler, const DoutPrefixProvider *dpp,
+            const Executor& ex, const std::string& location,
+            off_t read_ofs, off_t read_len) {
+          auto p = Op::create(ex, std::move(handler));
+          auto& op = p->user_data;
 
-    ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): location=" << location << dendl;
-    int ret = op.init_async_read(dpp, location, read_ofs, read_len, p.get());
-    if(0 == ret) {
-      ret = ::aio_read(op.aio_cb.get());
-    }
-    ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
-    if(ret < 0) {
-      auto ec = boost::system::error_code{-ret, boost::system::system_category()};
-      ceph::async::post(std::move(p), ec, bufferlist{});
-    } else {
-      // coverity[leaked_storage:SUPPRESS]
-      (void)p.release();
-    }
-    return init.result.get();
+          ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): location=" << location << dendl;
+          int ret = op.init_async_read(dpp, location, read_ofs, read_len, p.get());
+          if(0 == ret) {
+            ret = ::aio_read(op.aio_cb.get());
+          }
+          ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
+          if(ret < 0) {
+            auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+            ceph::async::post(std::move(p), ec, bufferlist{});
+          } else {
+            // coverity[leaked_storage:SUPPRESS]
+            (void)p.release();
+          }
+
+        }, token, dpp, ex, location, read_ofs, read_len);
   }
 
   struct d3n_libaio_handler {
@@ -131,15 +137,12 @@ struct D3nL1CacheRequest {
     }
   };
 
-  void file_aio_read_abstract(const DoutPrefixProvider *dpp, boost::asio::io_context& context, spawn::yield_context yield,
+  void file_aio_read_abstract(const DoutPrefixProvider *dpp, boost::asio::yield_context yield,
                               std::string& cache_location, off_t read_ofs, off_t read_len,
                               rgw::Aio* aio, rgw::AioResult& r) {
-    using namespace boost::asio;
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
-
+    auto ex = yield.get_executor();
     ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): oid=" << r.obj.oid << dendl;
-    async_read(dpp, context, cache_location+"/"+url_encode(r.obj.oid, true), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
+    async_read(dpp, ex, cache_location+"/"+url_encode(r.obj.oid, true), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
   }
 
 };

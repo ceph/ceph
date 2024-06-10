@@ -40,11 +40,12 @@ ReplicatedRecoveryBackend::recover_object(
       recovery_waiter.obc = obc;
       recovery_waiter.obc->wait_recovery_read();
       return maybe_push_shards(head, soid, need);
-    }).handle_error_interruptible(
+    }, false).handle_error_interruptible(
       crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       // TODO: may need eio handling?
       logger().error("recover_object saw error code {}, ignoring object {}",
                      code, soid);
+      return seastar::now();
     }));
   });
 }
@@ -429,8 +430,12 @@ void ReplicatedRecoveryBackend::prepare_pull(
 
   pg_missing_tracker_t local_missing = pg.get_local_missing();
   const auto missing_iter = local_missing.get_items().find(soid);
-  auto m = pg.get_missing_loc_shards();
-  pg_shard_t fromshard = *(m[soid].begin());
+  auto &m = pg.get_missing_loc_shards();
+  assert(m.contains(soid));
+  auto &locs = m.at(soid);
+  auto iter = locs.begin();
+  assert(iter != locs.end());
+  pg_shard_t fromshard = *(iter);
 
   pull_op.recovery_info =
     set_recovery_info(soid, head_obc->ssc);
@@ -824,7 +829,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
                            pull_info.obc->ssc);
         }
         return crimson::osd::PG::load_obc_ertr::now();
-      }).handle_error_interruptible(crimson::ct_error::assert_all{});
+      }, false).handle_error_interruptible(crimson::ct_error::assert_all{});
   };
   return prepare_waiter.then_interruptible(
     [this, &pull_info, &push_op, t, response]() mutable {

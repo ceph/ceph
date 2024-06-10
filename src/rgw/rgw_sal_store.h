@@ -17,6 +17,81 @@
 
 #include "rgw_sal.h"
 
+/**
+ * @brief State for a StoreObject
+ */
+struct RGWObjState {
+  rgw_obj obj;
+  bool is_atomic{false};
+  bool has_attrs{false};
+  bool exists{false};
+  uint64_t size{0}; //< size of raw object
+  uint64_t accounted_size{0}; //< size before compression, encryption
+  ceph::real_time mtime;
+  uint64_t epoch{0};
+  bufferlist obj_tag;
+  bufferlist tail_tag;
+  std::string write_tag;
+  bool fake_tag{false};
+  std::string shadow_obj;
+  bool has_data{false};
+  bufferlist data;
+  bool prefetch_data{false};
+  bool keep_tail{false};
+  bool is_olh{false};
+  bufferlist olh_tag;
+  uint64_t pg_ver{false};
+  uint32_t zone_short_id{0};
+  bool compressed{false};
+
+  /* important! don't forget to update copy constructor */
+
+  RGWObjVersionTracker objv_tracker;
+
+  std::map<std::string, ceph::buffer::list> attrset;
+
+  RGWObjState() {};
+  RGWObjState(const RGWObjState &rhs) : obj(rhs.obj) {
+    is_atomic = rhs.is_atomic;
+    has_attrs = rhs.has_attrs;
+    exists = rhs.exists;
+    size = rhs.size;
+    accounted_size = rhs.accounted_size;
+    mtime = rhs.mtime;
+    epoch = rhs.epoch;
+    if (rhs.obj_tag.length()) {
+      obj_tag = rhs.obj_tag;
+    }
+    if (rhs.tail_tag.length()) {
+      tail_tag = rhs.tail_tag;
+    }
+    write_tag = rhs.write_tag;
+    fake_tag = rhs.fake_tag;
+    shadow_obj = rhs.shadow_obj;
+    has_data = rhs.has_data;
+    if (rhs.data.length()) {
+      data = rhs.data;
+    }
+    prefetch_data = rhs.prefetch_data;
+    keep_tail = rhs.keep_tail;
+    is_olh = rhs.is_olh;
+    objv_tracker = rhs.objv_tracker;
+    pg_ver = rhs.pg_ver;
+    compressed = rhs.compressed;
+  }
+
+  ~RGWObjState() {};
+
+  bool get_attr(std::string name, bufferlist& dest) {
+    auto iter = attrset.find(name);
+    if (iter != attrset.end()) {
+      dest = iter->second;
+      return true;
+    }
+    return false;
+  }
+};
+
 namespace rgw { namespace sal {
 
 class StoreDriver : public Driver {
@@ -223,15 +298,29 @@ class StoreObject : public Object {
 
     virtual bool empty() const override { return state.obj.empty(); }
     virtual const std::string &get_name() const override { return state.obj.key.name; }
-    virtual void set_obj_state(RGWObjState& _state) override {
-      state = _state;
-    }
     virtual Attrs& get_attrs(void) override { return state.attrset; }
     virtual const Attrs& get_attrs(void) const override { return state.attrset; }
     virtual int set_attrs(Attrs a) override { state.attrset = a; state.has_attrs = true; return 0; }
     virtual bool has_attrs(void) override { return state.has_attrs; }
+    virtual bool get_attr(const std::string& name, bufferlist &dest) override {
+      if (!has_attrs())
+	return false;
+      auto iter = state.attrset.find(name);
+      if (iter != state.attrset.end()) {
+        dest = iter->second;
+        return true;
+      }
+      return false;
+    }
     virtual ceph::real_time get_mtime(void) const override { return state.mtime; }
-    virtual uint64_t get_obj_size(void) const override { return state.size; }
+    virtual void set_mtime(ceph::real_time& mtime) override { state.mtime = mtime; }
+    virtual uint64_t get_size(void) const override { return state.size; }
+    virtual uint64_t get_accounted_size(void) const override { return state.accounted_size; }
+    virtual void set_accounted_size(uint64_t size) override { state.accounted_size = size; }
+    virtual uint64_t get_epoch(void) const override { return state.epoch; }
+    virtual void set_epoch(uint64_t epoch) override { state.epoch = epoch; }
+    virtual uint32_t get_short_zone_id(void) const override { return state.zone_short_id; }
+    virtual void set_short_zone_id(uint32_t id) override { state.zone_short_id = id; }
     virtual Bucket* get_bucket(void) const override { return bucket; }
     virtual void set_bucket(Bucket* b) override { bucket = b; state.obj.bucket = b->get_key(); }
     virtual std::string get_hash_source(void) override { return state.obj.index_hash_source; }
@@ -239,6 +328,7 @@ class StoreObject : public Object {
     virtual std::string get_oid(void) const override { return state.obj.key.get_oid(); }
     virtual bool get_delete_marker(void) override { return delete_marker; }
     virtual bool get_in_extra_data(void) override { return state.obj.is_in_extra_data(); }
+    virtual bool exists(void) override { return state.exists; }
     virtual void set_in_extra_data(bool i) override { state.obj.set_in_extra_data(i); }
     int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
     virtual void set_obj_size(uint64_t s) override { state.size = s; }

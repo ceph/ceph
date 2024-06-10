@@ -354,7 +354,11 @@ class MetadataHandler : public RGWMetadataHandler {
     }
     if (!info.dest.push_endpoint.empty() && info.dest.persistent &&
         !info.dest.persistent_queue.empty()) {
-      r = rgw::notify::add_persistent_topic(info.dest.persistent_queue, y);
+      librados::IoCtx ioctx;
+      r = rgw_init_ioctx(dpp, &rados, zone.notif_pool, ioctx, true, false);
+      if (r >= 0) {
+        r = rgw::notify::add_persistent_topic(dpp, ioctx, info.dest.persistent_queue, y);
+      }
       if (r < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to create queue for persistent topic "
             << info.dest.persistent_queue << " with: " << cpp_strerror(r) << dendl;
@@ -388,7 +392,11 @@ class MetadataHandler : public RGWMetadataHandler {
     if (!dest.push_endpoint.empty() && dest.persistent &&
         !dest.persistent_queue.empty()) {
       // delete persistent topic queue
-      r = rgw::notify::remove_persistent_topic(dest.persistent_queue, y);
+      librados::IoCtx ioctx;
+      r = rgw_init_ioctx(dpp, &rados, zone.notif_pool, ioctx, true, false);
+      if (r >= 0) {
+        r = rgw::notify::remove_persistent_topic(dpp, ioctx, dest.persistent_queue, y);
+      }
       if (r < 0 && r != -ENOENT) {
         ldpp_dout(dpp, 1) << "Failed to delete queue for persistent topic: "
                           << name << " with error: " << r << dendl;

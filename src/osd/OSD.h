@@ -19,6 +19,7 @@
 
 #include "msg/Dispatcher.h"
 
+#include "common/admin_finisher.h"
 #include "common/async/context_pool.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -712,6 +713,7 @@ public:
   void start_shutdown();
   void shutdown_reserver();
   void shutdown();
+  void fast_shutdown();
 
   // -- stats --
   ceph::mutex stat_lock = ceph::make_mutex("OSDService::stat_lock");
@@ -1123,13 +1125,13 @@ protected:
     std::stringstream& ss,
     const bufferlist& inbl,
     bufferlist& outbl,
-    std::function<void(int, const std::string&, bufferlist&)> on_finish);
+    asok_finisher on_finish);
   void asok_command(
     std::string_view prefix,
     const cmdmap_t& cmdmap,
     ceph::Formatter *f,
     const ceph::buffer::list& inbl,
-    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish);
+    asok_finisher on_finish);
 
 public:
   int get_nodeid() { return whoami; }

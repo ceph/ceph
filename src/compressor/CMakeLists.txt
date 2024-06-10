@@ -1,6 +1,6 @@
 add_library(compressor_objs OBJECT Compressor.cc)
 add_dependencies(compressor_objs common-objs)
-add_dependencies(compressor_objs legacy-option-headers)
+target_link_libraries(compressor_objs legacy-option-headers)
 
 if(HAVE_QATZIP AND HAVE_QAT)
   add_library(qat_compressor OBJECT QatAccel.cc)

@@ -1577,10 +1577,10 @@ class CephadmAgent(DaemonForm):
                                               data=data,
                                               endpoint='/data',
                                               ssl_ctx=self.ssl_ctx)
-                response_json = json.loads(response)
                 if status != 200:
                     logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
-                    raise RuntimeError
+                    raise RuntimeError(f'non-200 response <{status}> from agent endpoint: {response}')
+                response_json = json.loads(response)
                 total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
                 logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
             except Exception as e:
@@ -2695,8 +2695,9 @@ def rollback(func: FuncT) -> FuncT:
             # another cluster with the provided fsid already exists: don't remove.
             raise
         except (KeyboardInterrupt, Exception) as e:
-            logger.error(f'{type(e).__name__}: {e}')
-            if ctx.no_cleanup_on_failure:
+            # If ctx.fsid is None it would print meaningless message suggesting
+            # running "cephadm rm-cluster --force --fsid None"
+            if ctx.no_cleanup_on_failure and ctx.fsid is not None:
                 logger.info('\n\n'
                             '\t***************\n'
                             '\tCephadm hit an issue during cluster installation. Current cluster files will NOT BE DELETED automatically. To change\n'
@@ -2706,7 +2707,10 @@ def rollback(func: FuncT) -> FuncT:
                             '\t   > cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
                             '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
                             '\t***************\n\n')
-            else:
+            if not ctx.no_cleanup_on_failure:
+                # The logger.error() used to be called before these conditions, which resulted in the error being printed twice.
+                # Moving it inside this condition to print the error if _rm_cluster() is called and also fails.
+                logger.error(f'{type(e).__name__}: {e}')
                 logger.info('\n\n'
                             '\t***************\n'
                             '\tCephadm hit an issue during cluster installation. Current cluster files will be deleted automatically.\n'
@@ -2733,6 +2737,13 @@ def command_bootstrap(ctx):
         ctx.output_keyring = os.path.join(ctx.output_dir, CEPH_KEYRING)
     if not ctx.output_pub_ssh_key:
         ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, CEPH_PUBKEY)
+
+    if ctx.apply_spec and not os.path.exists(ctx.apply_spec):
+        # Given that nothing has been deployed at this point, setting `ctx.no_cleanup_on_failure = True`
+        # as there's no need to call _rm_cluster() which would generate the message:
+        # "ERROR: must select the cluster to delete by passing --fsid to proceed"
+        ctx.no_cleanup_on_failure = True
+        raise Error(f"--apply-spec has been specified but {ctx.apply_spec} doesn't exist.")
 
     if (
         (bool(ctx.ssh_private_key) is not bool(ctx.ssh_public_key))
@@ -2775,6 +2786,11 @@ def command_bootstrap(ctx):
                 os.makedirs(dirname, 0o755)
             except PermissionError:
                 raise Error(f'Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.')
+
+    if getattr(ctx, 'custom_prometheus_alerts', None):
+        ctx.custom_prometheus_alerts = os.path.abspath(ctx.custom_prometheus_alerts)
+        if not os.path.isfile(ctx.custom_prometheus_alerts):
+            raise Error(f'No custom prometheus alerts file found at {ctx.custom_prometheus_alerts}')
 
     (user_conf, _) = get_config_and_keyring(ctx)
 
@@ -2848,6 +2864,8 @@ def command_bootstrap(ctx):
             admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
             tmp_config.name: '/etc/ceph/ceph.conf:z',
         }
+        if getattr(ctx, 'custom_prometheus_alerts', None):
+            mounts[ctx.custom_prometheus_alerts] = '/etc/ceph/custom_alerts.yml:z'
         for k, v in extra_mounts.items():
             mounts[k] = v
         timeout = timeout or ctx.timeout
@@ -2991,6 +3009,9 @@ def command_bootstrap(ctx):
 
     if getattr(ctx, 'deploy_cephadm_agent', None):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'true'])
+
+    if getattr(ctx, 'custom_prometheus_alerts', None):
+        cli(['orch', 'prometheus', 'set-custom-alerts', '-i', '/etc/ceph/custom_alerts.yml'])
 
     return ctx.error_code
 
@@ -5014,6 +5035,11 @@ def _get_parser():
         action='store_true',
         default=CONTAINER_INIT,
         help=argparse.SUPPRESS)
+    parser_adopt.add_argument(
+        '--no-cgroups-split',
+        action='store_true',
+        default=False,
+        help='Do not run containers with --cgroups=split (currently only relevant when using podman)')
 
     parser_rm_daemon = subparsers.add_parser(
         'rm-daemon', help='remove daemon instance')
@@ -5394,6 +5420,9 @@ def _get_parser():
         '--deploy-cephadm-agent',
         action='store_true',
         help='deploy the cephadm-agent')
+    parser_bootstrap.add_argument(
+        '--custom-prometheus-alerts',
+        help='provide a file with custom prometheus alerts')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')

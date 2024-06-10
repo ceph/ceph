@@ -184,7 +184,7 @@ class TestForwardScrub(CephFSTestCase):
         # inotable versions (due to scan_links)
         self.fs.flush()
         self.fs.fail()
-        self.fs.journal_tool(["journal", "reset", "--force"], 0)
+        self.fs.journal_tool(["journal", "reset", "--force", "--yes-i-really-really-mean-it"], 0)
 
         # Run cephfs-data-scan targeting only orphans
         self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
@@ -411,7 +411,7 @@ class TestForwardScrub(CephFSTestCase):
 
         self.fs.radosm(["rm", "{0:x}.00000000".format(dir_ino)])
 
-        self.fs.journal_tool(['journal', 'reset'], 0)
+        self.fs.journal_tool(['journal', 'reset', '--yes-i-really-really-mean-it'], 0)
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
         self.mount_a.mount_wait()

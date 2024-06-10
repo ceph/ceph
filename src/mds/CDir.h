@@ -403,10 +403,7 @@ public:
   void split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, bool replay);
   void merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool replay);
 
-  bool should_split() const {
-    return g_conf()->mds_bal_split_size > 0 &&
-      ((int)get_frag_size() + (int)get_num_snap_items()) > g_conf()->mds_bal_split_size;
-  }
+  bool should_split() const;
   bool should_split_fast() const;
   bool should_merge() const;
 
@@ -527,7 +524,7 @@ public:
   void abort_import();
 
   // -- auth pins --
-  bool can_auth_pin(int *err_ret=nullptr, bool bypassfreezing=false) const override;
+  bool can_auth_pin(int *err_ret=nullptr) const override;
   int get_auth_pins() const { return auth_pins; }
   int get_dir_auth_pins() const { return dir_auth_pins; }
   void auth_pin(void *who) override;

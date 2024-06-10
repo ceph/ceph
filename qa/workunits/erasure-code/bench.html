@@ -9,6 +9,7 @@
     <script language="javascript" type="text/javascript" src="jquery.flot.categories.js"></script>
     <script language="javascript" type="text/javascript" src="bench.js"></script>
     <script language="javascript" type="text/javascript" src="plot.js"></script>
+    <script language="javascript" type="text/javascript" src="tables.js"></script>
   </head>
   <body>
 
@@ -21,12 +22,45 @@
       <div class="demo-container">
 	<div id="encode" class="demo-placeholder"></div>
       </div>
-      <p>encode: Y = GB/s, X = K/M</p>
+      <h2>Encode:</h2>
+      <p>Y = GB/s, X = K/M</p>
+      <details>
+        <summary>Bench Data</summary>
+        <table id="encode-table">
+          <tr>
+            <th>Plugin</th>
+            <th>Technique</th>
+            <th>Time</th>
+            <th>Total Size</th>
+            <th>k</th>
+            <th>m</th>
+            <th>Iteration</th>
+            <th>Packet Size</th>
+          </tr>
+        </table>
+      </details>
 
       <div class="demo-container">
 	<div id="decode" class="demo-placeholder"></div>
       </div>
-      <p>decode: Y = GB/s, X = K/M/erasures</p>
+      <h2>Decode:</h2>
+      <p>Y = GB/s, X = K/M/erasures</p>
+      <details>
+        <summary>Bench Data</summary>
+        <table id="decode-table">
+          <tr>
+            <th>Plugin</th>
+            <th>Technique</th>
+            <th>Time</th>
+            <th>Total Size</th>
+            <th>k</th>
+            <th>m</th>
+            <th>Iteration</th>
+            <th>Packet Size</th>
+            <th>Erasures</th>
+          </tr>
+        </table>
+      </details>
 
     </div>
 

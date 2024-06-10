@@ -252,3 +252,20 @@ other daemons, please see :ref:`health-checks`.
     dirty data for cap revokes). If ``defer_client_eviction_on_laggy_osds`` is
     set to true (default true), client eviction will not take place and thus
     this health warning will be generated.
+
+``MDS_CLIENTS_BROKEN_ROOTSQUASH``
+---------------------------------
+  Message
+    "X client(s) with broken root_squash implementation (MDS_CLIENTS_BROKEN_ROOTSQUASH)"
+
+  Description
+    A bug was discovered in root_squash which would potentially lose changes made by a
+    client restricted with root_squash caps. The fix required a change to the protocol
+    and a client upgrade is required.
+
+    This is a HEALTH_ERR warning because of the danger of inconsistency and lost
+    data. It is recommended to either upgrade your clients, discontinue using
+    root_squash in the interim, or silence the warning if desired.
+
+    To evict and permanently block broken clients from connecting to the
+    cluster, set the ``required_client_feature`` bit ``client_mds_auth_caps``.

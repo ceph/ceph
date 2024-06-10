@@ -30,9 +30,6 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addClusterTemplate()
     )
     .addTemplate(
-      $.addJobTemplate()
-    )
-    .addTemplate(
       g.template.custom(label='TopK',
                         name='topk',
                         current='15',
@@ -57,7 +54,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'Pools with Compression',
         'Count of the pools that have compression enabled',
         'current',
-        'count(ceph_pool_metadata{%(matchers)s, compression_mode!="none"})' % $.matchers(),
+        'count(ceph_pool_metadata{compression_mode!="none", %(matchers)s})' % $.matchers(),
         null,
         '',
         3,
@@ -510,7 +507,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             true
           ),
           $.addTargetSchema(
-            'ceph_pool_metadata{%(matchers)s, compression_mode!="none"}' % $.matchers(), 'K', 'table', 1, true
+            'ceph_pool_metadata{compression_mode!="none", %(matchers)s}' % $.matchers(), 'K', 'table', 1, true
           ),
           $.addTargetSchema('', 'L', '', '', null),
         ]
@@ -623,9 +620,6 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addClusterTemplate()
     )
     .addTemplate(
-      $.addJobTemplate()
-    )
-    .addTemplate(
       $.addTemplateSchema('pool_name',
                           '$datasource',
                           'label_values(ceph_pool_metadata{%(matchers)s}, name)' % $.matchers(),
@@ -648,7 +642,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         '.7,.8',
         |||
           (ceph_pool_stored{%(matchers)s} / (ceph_pool_stored{%(matchers)s} + ceph_pool_max_avail{%(matchers)s})) *
-            on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+            on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
         ||| % $.matchers(),
         'time_series',
         0,
@@ -668,7 +662,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'current',
         |||
           (ceph_pool_max_avail{%(matchers)s} / deriv(ceph_pool_stored{%(matchers)s}[6h])) *
-            on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"} > 0
+            on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s} > 0
         ||| % $.matchers(),
         'time_series',
         7,
@@ -689,7 +683,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         null,
         |||
           deriv(ceph_pool_objects{%(matchers)s}[1m]) *
-            on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+            on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
         ||| % $.matchers(),
         'Objects per second',
         12,
@@ -709,7 +703,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         null,
         |||
           rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) *
-            on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+            on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
         ||| % $.matchers(),
         'reads',
         0,
@@ -722,7 +716,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         $.addTargetSchema(
           |||
             rate(ceph_pool_wr{%(matchers)s}[$__rate_interval]) *
-              on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
           ||| % $.matchers(),
           'writes'
         )
@@ -739,7 +733,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         null,
         |||
           rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
-            on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+            on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
         ||| % $.matchers(),
         'reads',
         12,
@@ -752,7 +746,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         $.addTargetSchema(
           |||
             rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval]) +
-              on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
           ||| % $.matchers(),
           'writes'
         )
@@ -769,7 +763,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         null,
         |||
           ceph_pool_objects{%(matchers)s} *
-            on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s, name=~"$pool_name"}
+            on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
         ||| % $.matchers(),
         'Number of Objects',
         0,

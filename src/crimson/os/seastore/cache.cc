@@ -58,6 +58,7 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
+// TODO: this method can probably be removed in the future
 Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
@@ -102,6 +103,33 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   t.add_to_read_set(ext);
   t.add_to_retired_set(ext);
   return retire_extent_iertr::now();
+}
+
+void Cache::retire_absent_extent_addr(
+  Transaction &t, paddr_t addr, extent_len_t length)
+{
+  CachedExtentRef ext;
+#ifndef NDEBUG
+  auto result = t.get_extent(addr, &ext);
+  assert(result != Transaction::get_extent_ret::PRESENT
+    && result != Transaction::get_extent_ret::RETIRED);
+  assert(!query_cache(addr, nullptr));
+#endif
+  LOG_PREFIX(Cache::retire_absent_extent_addr);
+  // add a new placeholder to Cache
+  ext = CachedExtent::make_cached_extent_ref<
+    RetiredExtentPlaceholder>(length);
+  ext->init(CachedExtent::extent_state_t::CLEAN,
+	    addr,
+	    PLACEMENT_HINT_NULL,
+	    NULL_GENERATION,
+	    TRANS_ID_NULL);
+  DEBUGT("retire {}~{} as placeholder, add extent -- {}",
+	 t, addr, length, *ext);
+  const auto t_src = t.get_src();
+  add_extent(ext, &t_src);
+  t.add_to_read_set(ext);
+  t.add_to_retired_set(ext);
 }
 
 void Cache::dump_contents()
@@ -801,7 +829,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next);
   }
 
-  next->on_replace_prior(t);
+  next->on_replace_prior();
   invalidate_extent(t, *prev);
 }
 
@@ -1015,13 +1043,15 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   switch (type) {
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
-      auto extents = alloc_new_data_extents<ObjectDataBlock>(t, length, hint, gen);
+      auto extents = alloc_new_data_extents<
+	ObjectDataBlock>(t, length, hint, gen);
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
   case extent_types_t::TEST_BLOCK:
     {
-      auto extents = alloc_new_data_extents<TestBlock>(t, length, hint, gen);
+      auto extents = alloc_new_data_extents<
+	TestBlock>(t, length, hint, gen);
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
@@ -1043,7 +1073,7 @@ CachedExtentRef Cache::duplicate_for_write(
   if (i->is_exist_clean()) {
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
-    i->last_committed_crc = i->get_crc32c();
+    i->last_committed_crc = i->calc_crc32c();
     // deepcopy the buffer of exist clean extent beacuse it shares
     // buffer with original clean extent.
     auto bp = i->get_bptr();
@@ -1081,7 +1111,8 @@ record_t Cache::prepare_record(
   const journal_seq_t &journal_dirty_tail)
 {
   LOG_PREFIX(Cache::prepare_record);
-  SUBTRACET(seastore_t, "enter", t);
+  SUBTRACET(seastore_t, "enter, journal_head={}, dirty_tail={}",
+            t, journal_head, journal_dirty_tail);
 
   auto trans_src = t.get_src();
   assert(!t.is_weak());
@@ -1155,7 +1186,7 @@ record_t Cache::prepare_record(
     i->prepare_commit();
 
     assert(i->get_version() > 0);
-    auto final_crc = i->get_crc32c();
+    auto final_crc = i->calc_crc32c();
     if (i->get_type() == extent_types_t::ROOT) {
       SUBTRACET(seastore_t, "writing out root delta {}B -- {}",
                 t, delta_length, *i);
@@ -1520,7 +1551,7 @@ void Cache::complete_commit(
             t, final_block_start, start_seq);
 
   std::vector<backref_entry_ref> backref_list;
-  t.for_each_fresh_block([&](const CachedExtentRef &i) {
+  t.for_each_finalized_fresh_block([&](const CachedExtentRef &i) {
     if (!i->is_valid()) {
       return;
     }
@@ -1530,11 +1561,12 @@ void Cache::complete_commit(
       is_inline = true;
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
-    i->last_committed_crc = i->get_crc32c();
+    assert(i->get_last_committed_crc() == i->calc_crc32c());
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
+    i->prior_instance.reset();
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     const auto t_src = t.get_src();

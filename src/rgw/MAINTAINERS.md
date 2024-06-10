@@ -14,7 +14,6 @@ Maintainers are the default assignee for related tracker issues and pull request
 | lua scripting                   | Yuval Lifshitz                  |
 | multisite                       | Casey Bodley                    |
 | object i/o                      | Casey Bodley                    |
-| rgw orchestration, admin APIs   | Ali Maredia                     |
 | radosgw-admin                   | Daniel Gryniewicz               |
 | rest ops                        | Daniel Gryniewicz               |
 | rgw-nfs                         | Matt Benjamin                   |
@@ -26,3 +25,5 @@ Maintainers are the default assignee for related tracker issues and pull request
 
 * security (crypto, SSE, CVEs)
 * swift api
+* rgw orchestration
+* admin APIs

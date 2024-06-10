@@ -35,12 +35,9 @@ public:
   using remove_or_update_iertr =
     crimson::interruptible::interruptible_errorator<
       IOInterruptCondition, remove_or_update_ertr>;
-  using snap_trim_ertr = remove_or_update_ertr::extend<
-    crimson::ct_error::eagain>;
-  using snap_trim_iertr = remove_or_update_iertr::extend<
-    crimson::ct_error::eagain>;
+  using snap_trim_iertr = remove_or_update_iertr;
   using snap_trim_event_ret_t =
-    snap_trim_ertr::future<seastar::stop_iteration>;
+    snap_trim_iertr::future<seastar::stop_iteration>;
   using snap_trim_obj_subevent_ret_t =
       remove_or_update_iertr::future<>;
 

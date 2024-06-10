@@ -868,13 +868,11 @@ std::unique_ptr<LuaManager> DaosStore::get_lua_manager(const DoutPrefixProvider 
   return std::make_unique<DaosLuaManager>(this, dpp, luarocks_path);
 }
 
-int DaosObject::get_obj_state(const DoutPrefixProvider* dpp,
-                              RGWObjState** _state, optional_yield y,
-                              bool follow_olh) {
+int DaosObject::load_obj_state(const DoutPrefixProvider* dpp,
+                              optional_yield y, bool follow_olh) {
   // Get object's metadata (those stored in rgw_bucket_dir_entry)
-  ldpp_dout(dpp, 20) << "DEBUG: get_obj_state" << dendl;
+  ldpp_dout(dpp, 20) << "DEBUG: load_obj_state" << dendl;
   rgw_bucket_dir_entry ent;
-  *_state = &state;  // state is required even if a failure occurs
 
   int ret = get_dir_entry_attrs(dpp, &ent);
   if (ret != 0) {
@@ -1158,7 +1156,7 @@ std::unique_ptr<Object::DeleteOp> DaosObject::get_delete_op() {
 
 DaosObject::DaosDeleteOp::DaosDeleteOp(DaosObject* _source) : source(_source) {}
 
-// Implementation of DELETE OBJ also requires DaosObject::get_obj_state()
+// Implementation of DELETE OBJ also requires DaosObject::load_obj_state()
 // to retrieve and set object's state from object's metadata.
 //
 // TODO:

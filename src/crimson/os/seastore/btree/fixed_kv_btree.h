@@ -505,6 +505,7 @@ public:
       Transaction::get_extent_ret ret;
 
       if constexpr (std::is_base_of_v<typename internal_node_t::base_t, child_node_t>) {
+        assert(i->get_val() != P_ADDR_ZERO);
         ret = c.trans.get_extent(
           i->get_val().maybe_relative_to(node->get_paddr()),
           &child_node);
@@ -515,6 +516,9 @@ public:
         ret = c.trans.get_extent(
           i->get_val().pladdr.get_paddr().maybe_relative_to(node->get_paddr()),
           &child_node);
+        if (i->get_val().pladdr.get_paddr() == P_ADDR_ZERO) {
+          assert(ret == Transaction::get_extent_ret::ABSENT);
+        }
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
         if (child_node->is_stable_written()) {
@@ -533,7 +537,7 @@ public:
           }
         } else if (child_node->is_pending()) {
           if (child_node->is_mutation_pending()) {
-            auto &prior = (child_node_t &)*child_node->prior_instance;
+            auto &prior = (child_node_t &)*child_node->get_prior_instance();
             assert(prior.is_valid());
             assert(prior.is_parent_valid());
             if (node->is_mutation_pending()) {
@@ -565,18 +569,8 @@ public:
           auto pos = n.lower_bound_offset(i->get_key());
           assert(pos < n.get_node_size());
           child = n.children[pos];
-          if (is_valid_child_ptr(child)) {
-            auto c = (child_node_t*)child;
-            assert(c->has_parent_tracker());
-            assert(c->get_parent_node().get() == &n);
-          }
         } else {
           child = node->children[i->get_offset()];
-          if (is_valid_child_ptr(child)) {
-            auto c = (child_node_t*)child;
-            assert(c->has_parent_tracker());
-            assert(c->get_parent_node().get() == node.get());
-          }
         }
 
         if (!is_valid_child_ptr(child)) {
@@ -592,6 +586,23 @@ public:
                 : true);
             }
           }
+          if (child == get_reserved_ptr()) {
+            if constexpr(
+              !std::is_base_of_v<typename internal_node_t::base_t,
+                                 child_node_t>) {
+              assert(i->get_val().pladdr.is_paddr());
+              assert(i->get_val().pladdr.get_paddr() == P_ADDR_ZERO);
+            } else {
+              ceph_abort();
+            }
+          }
+        } else {
+          auto c = (child_node_t*)child;
+          assert(c->has_parent_tracker());
+          assert(c->get_parent_node().get() == node.get()
+            || (node->is_pending() && c->is_stable()
+                && c->get_parent_node().get() == &node->get_stable_for_key(
+                  i->get_key())));
         }
       } else {
         ceph_abort("impossible");
@@ -1034,45 +1045,7 @@ public:
         fixed_kv_extent.get_user_hint(),
         // get target rewrite generation
         fixed_kv_extent.get_rewrite_generation());
-      fixed_kv_extent.get_bptr().copy_out(
-        0,
-        fixed_kv_extent.get_length(),
-        n_fixed_kv_extent->get_bptr().c_str());
-      n_fixed_kv_extent->set_modify_time(fixed_kv_extent.get_modify_time());
-      n_fixed_kv_extent->range = n_fixed_kv_extent->get_node_meta();
-
-      if (fixed_kv_extent.get_type() == internal_node_t::TYPE ||
-          leaf_node_t::do_has_children) {
-        if (!fixed_kv_extent.is_pending()) {
-          n_fixed_kv_extent->copy_sources.emplace(&fixed_kv_extent);
-          n_fixed_kv_extent->prior_instance = &fixed_kv_extent;
-        } else {
-          ceph_assert(fixed_kv_extent.is_mutation_pending());
-          n_fixed_kv_extent->copy_sources.emplace(
-            (typename internal_node_t::base_t*
-             )fixed_kv_extent.get_prior_instance().get());
-          n_fixed_kv_extent->children = std::move(fixed_kv_extent.children);
-          n_fixed_kv_extent->prior_instance = fixed_kv_extent.get_prior_instance();
-          n_fixed_kv_extent->adjust_ptracker_for_children();
-        }
-      }
-      
-      /* This is a bit underhanded.  Any relative addrs here must necessarily
-       * be record relative as we are rewriting a dirty extent.  Thus, we
-       * are using resolve_relative_addrs with a (likely negative) block
-       * relative offset to correct them to block-relative offsets adjusted
-       * for our new transaction location.
-       *
-       * Upon commit, these now block relative addresses will be interpretted
-       * against the real final address.
-       */
-      if (!n_fixed_kv_extent->get_paddr().is_absolute()) {
-	// backend_type_t::SEGMENTED
-	assert(n_fixed_kv_extent->get_paddr().is_record_relative());
-	n_fixed_kv_extent->resolve_relative_addrs(
-	  make_record_relative_paddr(0).block_relative_to(
-	    n_fixed_kv_extent->get_paddr()));
-      } // else: backend_type_t::RANDOM_BLOCK
+      n_fixed_kv_extent->rewrite(fixed_kv_extent, 0);
       
       SUBTRACET(
         seastore_fixedkv_tree,
@@ -1275,6 +1248,17 @@ private:
       init_internal
     ).si_then([FNAME, c, offset, init_internal, depth, begin, end](
               typename internal_node_t::Ref ret) {
+      if (unlikely(ret->get_in_extent_checksum()
+          != ret->get_last_committed_crc())) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "internal fixedkv extent checksum inconsistent, "
+          "recorded: {}, actually: {}",
+          c.trans,
+          ret->get_in_extent_checksum(),
+          ret->get_last_committed_crc());
+        ceph_abort();
+      }
       SUBTRACET(
         seastore_fixedkv_tree,
         "read internal at offset {} {}",
@@ -1349,6 +1333,16 @@ private:
       init_leaf
     ).si_then([FNAME, c, offset, init_leaf, begin, end]
       (typename leaf_node_t::Ref ret) {
+      if (unlikely(ret->get_in_extent_checksum()
+          != ret->get_last_committed_crc())) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "leaf fixedkv extent checksum inconsistent, recorded: {}, actually: {}",
+          c.trans,
+          ret->get_in_extent_checksum(),
+          ret->get_last_committed_crc());
+        ceph_abort();
+      }
       SUBTRACET(
         seastore_fixedkv_tree,
         "read leaf at offset {} {}",
@@ -1494,6 +1488,8 @@ private:
     };
 
     auto v = parent->template get_child<internal_node_t>(c, node_iter);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     if (v.has_child()) {
       return v.get_child_fut().safe_then(
         [on_found=std::move(on_found), node_iter, c,
@@ -1562,6 +1558,8 @@ private:
     };
 
     auto v = parent->template get_child<leaf_node_t>(c, node_iter);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     if (v.has_child()) {
       return v.get_child_fut().safe_then(
         [on_found=std::move(on_found), node_iter, c,
@@ -2115,6 +2113,8 @@ private:
     };
 
     auto v = parent_pos.node->template get_child<NodeType>(c, donor_iter);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     if (v.has_child()) {
       return v.get_child_fut().safe_then(
         [do_merge=std::move(do_merge), &pos,

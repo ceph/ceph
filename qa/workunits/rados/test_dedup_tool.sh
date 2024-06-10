@@ -34,11 +34,13 @@ if [ -n "$CEPH_BIN" ] ; then
    RADOS_TOOL="$CEPH_BIN/rados"
    CEPH_TOOL="$CEPH_BIN/ceph"
    DEDUP_TOOL="$CEPH_BIN/ceph-dedup-tool"
+   DEDUP_DAEMON="$CEPH_BIN/ceph-dedup-daemon"
 else
    # executables should be installed by the QA env 
    RADOS_TOOL=$(which rados)
    CEPH_TOOL=$(which ceph)
    DEDUP_TOOL=$(which ceph-dedup-tool)
+   DEDUP_DAEMON=$(which ceph-dedup-daemon)
 fi
 
 POOL=dedup_pool
@@ -374,7 +376,15 @@ function test_sample_dedup()
   sleep 2
 
   # Execute dedup crawler
-  RESULT=$($DEDUP_TOOL --pool $POOL --chunk-pool $CHUNK_POOL --op sample-dedup --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --chunk-dedup-threshold 3 --sampling-ratio 50)
+  $DEDUP_DAEMON --pool $POOL --chunk-pool $CHUNK_POOL --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --chunk-dedup-threshold 3 --sampling-ratio 50 --run-once
+  sleep 2
+  PID=$(pidof ceph-dedup-daemon)
+  COUNT=1
+  while [ -n "$PID" ] && [ $COUNT -le 30 ]; do
+    sleep 15
+    PID=$(pidof ceph-dedup-daemon)
+    ((COUNT++))
+  done
 
   CHUNK_OID_1=$(echo $CONTENT_1 | sha1sum | awk '{print $1}')
   CHUNK_OID_3=$(echo $CONTENT_3 | sha1sum | awk '{print $1}')
@@ -395,6 +405,8 @@ function test_sample_dedup()
     die "Chunk object has no reference of first meta object"
   fi
 
+  sleep 2
+
   # 7 Duplicated objects but less than chunk dedup threshold
   CONTENT_2="There hiHI2"
   echo $CONTENT_2 > foo2
@@ -404,7 +416,15 @@ function test_sample_dedup()
   done
   CHUNK_OID_2=$(echo $CONTENT_2 | sha1sum | awk '{print $1}')
 
-  RESULT=$($DEDUP_TOOL --pool $POOL --chunk-pool $CHUNK_POOL --op sample-dedup --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --sampling-ratio 100 --chunk-dedup-threshold 2)
+  RESULT=$($DEDUP_DAEMON --pool $POOL --chunk-pool $CHUNK_POOL --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --sampling-ratio 100 --chunk-dedup-threshold 2 --max-thread 1 --run-once)
+  sleep 2
+  PID=$(pidof ceph-dedup-daemon)
+  COUNT=1
+  while [ -n "$PID" ] && [ $COUNT -le 30 ]; do
+    sleep 15
+    PID=$(pidof ceph-dedup-daemon)
+    ((COUNT++))
+  done
 
   # Objects duplicates less than chunk dedup threshold should be deduplicated because of they satisfies object-dedup-threshold
   # The only object, which is crawled at the very first, should not be deduplicated because it was not duplicated at initial time
@@ -486,7 +506,15 @@ function test_sample_dedup_snap()
   sleep 2
 
   # Execute dedup crawler
-  RESULT=$($DEDUP_TOOL --pool $POOL --chunk-pool $CHUNK_POOL --op sample-dedup --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --chunk-dedup-threshold 1 --sampling-ratio 100 --snap)
+  RESULT=$($DEDUP_DAEMON --pool $POOL --chunk-pool $CHUNK_POOL --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --sampling-ratio 100 --chunk-dedup-threshold 1 --snap --run-once)
+  sleep 2
+  PID=$(pidof ceph-dedup-daemon)
+  COUNT=1
+  while [ -n "$PID" ] && [ $COUNT -le 20 ]; do
+    sleep 5
+    PID=$(pidof ceph-dedup-daemon)
+    ((COUNT++))
+  done
 
   CHUNK_OID_2=$(echo $CONTENT_2 | sha1sum | awk '{print $1}')
   SNAP_CONTENT_OID=$(echo $SNAP_CONTENT | sha1sum | awk '{print $1}')
@@ -558,7 +586,15 @@ function test_dedup_memory_limit()
   sleep 2
 
   # Execute dedup crawler
-  RESULT=$($DEDUP_TOOL --pool $POOL --chunk-pool $CHUNK_POOL --op sample-dedup --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --chunk-dedup-threshold 2 --sampling-ratio 100 --fpstore-threshold 100)
+  RESULT=$($DEDUP_DAEMON --pool $POOL --chunk-pool $CHUNK_POOL --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --sampling-ratio 100 --chunk-dedup-threshold 2 --run-once)
+  sleep 2
+  PID=$(pidof ceph-dedup-daemon)
+  COUNT=1
+  while [ -n "$PID" ] && [ $COUNT -le 30 ]; do
+    sleep 15
+    PID=$(pidof ceph-dedup-daemon)
+    ((COUNT++))
+  done
 
   CHUNK_OID_1=$(echo $CONTENT_1 | sha1sum | awk '{print $1}')
   CHUNK_OID_2=$(echo $CONTENT_2 | sha1sum | awk '{print $1}')

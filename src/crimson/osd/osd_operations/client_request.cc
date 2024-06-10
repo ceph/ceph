@@ -73,6 +73,9 @@ void ClientRequest::dump_detail(Formatter *f) const
   std::apply([f] (auto... event) {
     (..., event.dump(f));
   }, tracking_events);
+  std::apply([f] (auto... event) {
+    (..., event.dump(f));
+  }, get_instance_handle()->pg_tracking_events);
 }
 
 ConnectionPipeline &ClientRequest::get_connection_pipeline()
@@ -253,6 +256,31 @@ ClientRequest::process_pg_op(
 }
 
 ClientRequest::interruptible_future<>
+ClientRequest::recover_missing_snaps(
+  Ref<PG> pg,
+  instance_handle_t &ihref,
+  ObjectContextRef head,
+  std::set<snapid_t> &snaps)
+{
+  co_await ihref.enter_stage<interruptor>(
+    client_pp(*pg).recover_missing_snaps, *this);
+  for (auto &snap : snaps) {
+    auto coid = head->obs.oi.soid;
+    coid.snap = snap;
+    auto oid = resolve_oid(head->get_head_ss(), coid);
+    /* Rollback targets may legitimately not exist if, for instance,
+     * the object is an rbd block which happened to be sparse and
+     * therefore non-existent at the time of the specified snapshot.
+     * In such a case, rollback will simply delete the object.  Here,
+     * we skip the oid as there is no corresponding clone to recover.
+     * See https://tracker.ceph.com/issues/63821 */
+    if (oid) {
+      co_await do_recover_missing(pg, *oid, m->get_reqid());
+    }
+  }
+}
+
+ClientRequest::interruptible_future<>
 ClientRequest::process_op(
   instance_handle_t &ihref, Ref<PG> pg, unsigned this_instance_id)
 {
@@ -260,8 +288,28 @@ ClientRequest::process_op(
   co_await ihref.enter_stage<interruptor>(
     client_pp(*pg).recover_missing, *this
   );
-  co_await recover_missings(pg, m->get_hobj(),
-                            snaps_need_to_recover(), m->get_reqid());
+  if (!pg->is_primary()) {
+    DEBUGDPP(
+      "Skipping recover_missings on non primary pg for soid {}",
+      *pg, m->get_hobj());
+  } else {
+    co_await do_recover_missing(pg, m->get_hobj().get_head(), m->get_reqid());
+    std::set<snapid_t> snaps = snaps_need_to_recover();
+    if (!snaps.empty()) {
+      // call with_obc() in order, but wait concurrently for loading.
+      ihref.enter_stage_sync(
+          client_pp(*pg).recover_missing_lock_obc, *this);
+      auto with_obc = pg->obc_loader.with_obc<RWState::RWREAD>(
+        m->get_hobj().get_head(),
+        [&snaps, &ihref, pg, this](auto head, auto) {
+        return recover_missing_snaps(pg, ihref, head, snaps);
+      }).handle_error_interruptible(
+        crimson::ct_error::assert_all("unexpected error")
+      );
+      // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401
+      co_await std::move(with_obc);
+    }
+  }
 
   DEBUGDPP("{}.{}: checking already_complete",
 	   *pg, *this, this_instance_id);
@@ -298,6 +346,9 @@ ClientRequest::process_op(
 
   DEBUGDPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
+  // call with_locked_obc() in order, but wait concurrently for loading.
+  ihref.enter_stage_sync(
+      client_pp(*pg).lock_obc, *this);
   auto process = pg->with_locked_obc(
     m->get_hobj(), op_info,
     [FNAME, this, pg, this_instance_id, &ihref] (

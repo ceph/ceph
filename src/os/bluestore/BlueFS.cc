@@ -712,10 +712,27 @@ void BlueFS::_init_alloc()
 {
   dout(20) << __func__ << dendl;
 
+  // 'changed' should keep its previous value if no actual modification occurred
+  auto change_alloc_size = [this](uint64_t& max_alloc_size,
+                                  uint64_t new_alloc, bool& changed) {
+    if (max_alloc_size == 0 ||
+        (max_alloc_size > new_alloc && ((new_alloc & (new_alloc -1)) == 0))) {
+      max_alloc_size = new_alloc;
+      changed = true;
+      dout(5) << " changed alloc_size to 0x" << std::hex << new_alloc << dendl;
+    } else if (max_alloc_size != new_alloc) {
+      derr << " can not change current alloc_size 0x" << std::hex
+           << max_alloc_size << " to new alloc_size 0x" << new_alloc << dendl;
+    }
+  };
+
+  bool alloc_size_changed = false;
   size_t wal_alloc_size = 0;
   if (bdev[BDEV_WAL]) {
     wal_alloc_size = cct->_conf->bluefs_alloc_size;
     alloc_size[BDEV_WAL] = wal_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_WAL],
+                      wal_alloc_size, alloc_size_changed);
   }
   logger->set(l_bluefs_wal_alloc_unit, wal_alloc_size);
 
@@ -731,18 +748,38 @@ void BlueFS::_init_alloc()
   if (bdev[BDEV_SLOW]) {
     alloc_size[BDEV_DB] = cct->_conf->bluefs_alloc_size;
     alloc_size[BDEV_SLOW] = shared_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
+                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_SLOW],
+                      shared_alloc_size, alloc_size_changed);
   } else {
     alloc_size[BDEV_DB] = shared_alloc_size;
     alloc_size[BDEV_SLOW] = 0;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
+                      shared_alloc_size, alloc_size_changed);
   }
   logger->set(l_bluefs_db_alloc_unit, alloc_size[BDEV_DB]);
   logger->set(l_bluefs_slow_alloc_unit, alloc_size[BDEV_SLOW]);
   // new wal and db devices are never shared
   if (bdev[BDEV_NEWWAL]) {
     alloc_size[BDEV_NEWWAL] = cct->_conf->bluefs_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_NEWWAL],
+                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
   }
+  if (alloc_size_changed) {
+    dout(1) << __func__ << " alloc_size changed, the new super is:" << super << dendl;
+    _write_super(BDEV_DB);
+  }
+
+  alloc_size_changed = false;
   if (bdev[BDEV_NEWDB]) {
     alloc_size[BDEV_NEWDB] = cct->_conf->bluefs_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_NEWDB],
+                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
+  }
+  if (alloc_size_changed) {
+    dout(1) << __func__ << " alloc_size changed, the new super is:" << super << dendl;
+    _write_super(BDEV_NEWDB);
   }
 
   for (unsigned id = 0; id < bdev.size(); ++id) {
@@ -750,6 +787,7 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
+    ceph_assert(super.bluefs_max_alloc_size[id]);
     if (is_shared_alloc(id)) {
       dout(1) << __func__ << " shared, id " << id << std::hex
               << ", capacity 0x" << bdev[id]->get_size()
@@ -769,10 +807,11 @@ void BlueFS::_init_alloc()
               << ", capacity 0x" << bdev[id]->get_size()
               << ", reserved 0x" << block_reserved[id]
               << ", block size 0x" << alloc_size[id]
+              << ", max alloc size 0x" << super.bluefs_max_alloc_size[id]
               << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				    bdev[id]->get_size(),
-				    alloc_size[id],
+				    super.bluefs_max_alloc_size[id],
 				    name);
       alloc[id]->init_add_free(
         block_reserved[id],
@@ -992,6 +1031,7 @@ int BlueFS::mount()
 
   _init_alloc();
 
+  dout(5) << __func__ << " super: " << super << dendl;
   r = _replay(false, false);
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
@@ -2429,7 +2469,7 @@ uint64_t BlueFS::_estimate_log_size_N()
   int avg_file_size = 12;
   uint64_t size = 4096 * 2;
   size += nodes.file_map.size() * (1 + sizeof(bluefs_fnode_t));
-  size += nodes.dir_map.size() + (1 + avg_dir_size);
+  size += nodes.dir_map.size() * (1 + avg_dir_size);
   size += nodes.file_map.size() * (1 + avg_dir_size + avg_file_size);
   return round_up_to(size, super.block_size);
 }

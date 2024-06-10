@@ -3,13 +3,16 @@ mgrmodules:
     - exec:
         mon.a:
           - ceph mgr module enable snap_schedule
-          - ceph config set mgr mgr/snap_schedule/allow_m_granularity true
-          - ceph config set mgr mgr/snap_schedule/dump_on_update true
 overrides:
   ceph:
-    conf:
+    mgr-modules:
+      - snap_schedule
+    cluster-conf:
       mgr:
         debug cephsqlite: 20
+        mgr/snap_schedule/log_level: debug
+        mgr/snap_schedule/allow_m_granularity: true
+        mgr/snap_schedule/dump_on_update: true
   check-counter:
     counters:
       mds:

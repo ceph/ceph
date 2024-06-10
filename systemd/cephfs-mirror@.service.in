@@ -5,9 +5,8 @@ Wants=network-online.target local-fs.target
 PartOf=cephfs-mirror.target
 
 [Service]
-Environment=CLUSTER=ceph
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
-ExecStart=/usr/bin/cephfs-mirror --id %i --cluster ${CLUSTER} -f --setuser ceph --setgroup ceph
+ExecStart=/usr/bin/cephfs-mirror --id %i -f --setuser ceph --setgroup ceph
 LimitNOFILE=1048576
 LimitNPROC=1048576
 LockPersonality=true

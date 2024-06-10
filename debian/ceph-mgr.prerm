@@ -5,7 +5,6 @@ set -e
 
 case "$1" in
     remove)
-	[ -x /sbin/stop ] && stop ceph-mgr-all || :
 	invoke-rc.d ceph stop mgr || {
 	    RESULT=$?
 	    if [ $RESULT != 100 ]; then

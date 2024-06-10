@@ -328,6 +328,8 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessJournal) {
   ASSERT_TRUE(mock_journal_state_builder.remote_journaler != nullptr);
   ASSERT_EQ(cls::journal::CLIENT_STATE_DISCONNECTED,
             mock_journal_state_builder.remote_client_state);
+  // owned by StateBuilder, normally freed in StateBuilder::close()
+  delete mock_journal_state_builder.remote_journaler;
 }
 
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessSnapshot) {
@@ -431,6 +433,8 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
   ASSERT_TRUE(mock_journal_state_builder.remote_journaler != nullptr);
   ASSERT_EQ(cls::journal::CLIENT_STATE_CONNECTED,
             mock_journal_state_builder.remote_client_state);
+  // owned by StateBuilder, normally freed in StateBuilder::close()
+  delete mock_journal_state_builder.remote_journaler;
 }
 
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetMirrorImageIdError) {

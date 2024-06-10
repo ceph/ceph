@@ -53,6 +53,7 @@ class Config:
     domain_member: bool
     clustered: bool
     join_sources: List[str]
+    user_sources: List[str]
     custom_dns: List[str]
     smb_port: int
     ceph_config_entity: str
@@ -68,6 +69,7 @@ class Config:
         samba_debug_level: int = 0,
         debug_delay: int = 0,
         join_sources: Optional[List[str]] = None,
+        user_sources: Optional[List[str]] = None,
         custom_dns: Optional[List[str]] = None,
         smb_port: int = 0,
         ceph_config_entity: str = 'client.admin',
@@ -80,6 +82,7 @@ class Config:
         self.samba_debug_level = samba_debug_level
         self.debug_delay = debug_delay
         self.join_sources = join_sources or []
+        self.user_sources = user_sources or []
         self.custom_dns = custom_dns or []
         self.smb_port = smb_port
         self.ceph_config_entity = ceph_config_entity
@@ -92,6 +95,11 @@ class Config:
             f' domain_member={self.domain_member},'
             f' clustered={self.clustered}]'
         )
+
+    def config_uris(self) -> List[str]:
+        uris = [self.source_config]
+        uris.extend(self.user_sources or [])
+        return uris
 
 
 def _container_dns_args(cfg: Config) -> List[str]:
@@ -114,10 +122,9 @@ class SambaContainerCommon:
         raise NotImplementedError('samba container name')
 
     def envs(self) -> Dict[str, str]:
-        cfg_uris = [self.cfg.source_config]
         environ = {
             'SAMBA_CONTAINER_ID': self.cfg.instance_id,
-            'SAMBACC_CONFIG': json.dumps(cfg_uris),
+            'SAMBACC_CONFIG': json.dumps(self.cfg.config_uris()),
         }
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
@@ -238,6 +245,7 @@ class SMB(ContainerDaemonForm):
         instance_id = configs.get('cluster_id', '')
         source_config = configs.get('config_uri', '')
         join_sources = configs.get('join_sources', [])
+        user_sources = configs.get('user_sources', [])
         custom_dns = configs.get('custom_dns', [])
         instance_features = configs.get('features', [])
         files = data_utils.dict_get(configs, 'files', {})
@@ -267,6 +275,7 @@ class SMB(ContainerDaemonForm):
             instance_id=instance_id,
             source_config=source_config,
             join_sources=join_sources,
+            user_sources=user_sources,
             custom_dns=custom_dns,
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,

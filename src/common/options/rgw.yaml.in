@@ -290,7 +290,7 @@ options:
   desc: Max number of items in RGW metadata cache.
   long_desc: When full, the RGW metadata cache evicts least recently used entries.
   fmt_desc: The number of entries in the Ceph Object Gateway cache.
-  default: 10000
+  default: 25000
   services:
   - rgw
   see_also:
@@ -1460,7 +1460,7 @@ options:
   desc: Ops log object name format
   long_desc: Defines the format of the RADOS objects names that ops log uses to store
     ops log data
-  fmt_desc: The logging format for an object name. See ma npage
+  fmt_desc: The logging format for an object name. See man page
     :manpage:`date` for details about format specifiers.
   default: '%Y-%m-%d-%H-%i-%n'
   services:
@@ -2409,6 +2409,15 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_enable_mdsearch
+  type: bool
+  level: basic
+  desc: Enable elastic metadata search APIs
+  long_desc: This configurable controls whether RGW handles the elastic metadata search APIs.
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_user_unique_email
   type: bool
   level: basic
@@ -3227,6 +3236,36 @@ options:
   see_also:
   - rgw_max_objs_per_shard
   - rgw_max_dynamic_shards
+- name: rgw_dynamic_resharding_may_reduce
+  type: bool
+  level: advanced
+  desc: Whether dynamic resharding can reduce the number of shards
+  long_desc: If true, RGW's dynamic resharding ability is allowed to
+    reduce the number of shards if it appears there are too many.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_dynamic_resharding
+- name: rgw_dynamic_resharding_reduction_wait
+  type: uint
+  level: advanced
+  desc: Number of hours to delay bucket index shard reduction.
+  long_desc: >-
+    In order to avoid resharding buckets with object
+    counts that fluctuate up and down regularly, we implemement a delay
+    between noting a shard reduction might be appropriate and when it's
+    actually done. This allows us to cancel the reshard operation if the
+    number of object significantly increases during this delay.
+    WARNING: Setting this value too low could result in significantly reduced
+    cluster performance.
+  default: 120
+  min: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_dynamic_resharding_may_reduce
 - name: rgw_max_objs_per_shard
   type: uint
   level: basic
@@ -3262,6 +3301,23 @@ options:
   services:
   - rgw
   min: 10
+- name: rgw_reshard_debug_interval
+  type: int
+  level: dev
+  desc: The number of seconds that simulate one "day" in order to debug RGW dynamic resharding.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW dynamic resharding, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change dynamic resharding behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_reshard_thread_interval
+  - rgw_dynamic_resharding_reduction_wait
 - name: rgw_cache_expiry_interval
   type: uint
   level: advanced
@@ -3640,7 +3696,12 @@ options:
 - name: rgw_d4n_l1_datacache_persistent_path
   type: str
   level: advanced
-  desc: path for the directory for storing the local cache objects data for d4n
+  desc: path used for storing locally cached object data
+  long_desc: One cache backend option for D4N is the local SSD, which uses this path to
+    write and read object data. This is the default cache backend chosen by the D4N filter.
+    Only the SSD cache backend uses this path for object data storage since the RedisDriver
+    uses a Redis server instead and there are no additional cache backend implementations
+    available at the moment. 
   default: /tmp/rgw_d4n_datacache/
   services:
   - rgw
@@ -3648,7 +3709,9 @@ options:
 - name: rgw_d4n_l1_datacache_size
   type: size
   level: advanced
-  desc: datacache maximum size on disk in bytes
+  desc: maximum size on disk for datacache
+  long_desc: The local SSD cache uses this option to configure its size in bytes. This 
+    option is not used by the Redis cache backend. 
   default: 1_G
   services:
   - rgw
@@ -3656,7 +3719,10 @@ options:
 - name: rgw_d4n_l1_evict_cache_on_start
   type: bool
   level: advanced
-  desc: clear the content of the persistent data cache directory on start
+  desc: clear the contents of the persistent datacache on start
+  long_desc: The local SSD cache uses this option to clear the contents of the path supplied
+    by the rgw_d4n_l1_datacache_persistent_path config option on start. If false, the path's 
+    contents will be retained. 
   default: true
   services:
   - rgw
@@ -3665,7 +3731,7 @@ options:
   type: int
   level: advanced
   desc: posix_fadvise() flag for access pattern of cache files
-  long_desc: for example to bypass the page-cache -
+  long_desc: For example, to bypass the page-cache -
     POSIX_FADV_DONTNEED=4
   default: 4
   services:
@@ -3675,6 +3741,8 @@ options:
   type: int
   level: advanced
   desc: specifies the maximum number of worker threads that may be used by libaio
+  long_desc: This option is used by the SSD cache backend during initialization to set the maximum
+    number of worker threads libaio may use. It does not apply to the Redis cache backend. 
   default: 20
   services:
   - rgw
@@ -3685,6 +3753,9 @@ options:
   type: int
   level: advanced
   desc: specifies the maximum number of simultaneous I/O requests that libaio expects to enqueue
+  long_desc: This option is used by the SSD cache backend during initialization to set the maximum
+    number of simultaneous I/O requests that libaio can expect to enqueue. It
+    does not apply to the Redis cache backend. 
   default: 64
   services:
   - rgw
@@ -3695,6 +3766,12 @@ options:
   type: int
   level: advanced
   desc: LFUDA variables' sync frequency in seconds 
+  long_desc: By default, the D4N cache uses the Least Frequently Used with Dynamic Aging (LFUDA) 
+    cache replacement policy. This class globally stores values that are used by the policy's 
+    algorithm. However, strong consistency for these values is not necessary and adds additional
+    overhead to support. As a result, a thread periodically retrieves these global values and posts
+    updates when certain conditions are satisfied. This Redis thread completes this logic in a loop
+    that is called once every interval, with the interval being set by this option.  
   default: 60
   services:
   - rgw
@@ -3948,21 +4025,15 @@ options:
   default: true
   services:
   - rgw
-- name: rgw_d4n_host
+- name: rgw_d4n_address
   type: str
   level: advanced
-  desc: The rgw directory host
-  default: 127.0.0.1
-  services: 
-  - rgw
-  flags:
-  - startup
-  with_legacy: true
-- name: rgw_d4n_port
-  type: int
-  level: advanced
-  desc: The rgw directory port
-  default: 6379
+  desc: address for the D4N Redis connection
+  long_desc: The current D4N implementation supports one Redis node
+    which the D4N directory, policy, and overall filter communicate
+    with. This default value is also the address that a Redis server 
+    with no additional configuration will use.
+  default: 127.0.0.1:6379
   services: 
   - rgw
   flags:
@@ -4105,12 +4176,15 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_local_cache_address
+- name: rgw_d4n_l1_datacache_address
   type: str
   level: advanced
-  desc: Local CacheDriver address 
+  desc: local Redis cache address 
+  long_desc: This is the address used to configure the Redis cache backend connection. The default
+    value is the same address used by Redis without any additional configuration. The SSD cache 
+    does not use this option.
   default: 127.0.0.1:6379
-  services: 
+  services:
   - rgw
   flags:
   - startup

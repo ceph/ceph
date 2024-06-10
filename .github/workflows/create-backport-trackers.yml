@@ -1,7 +1,8 @@
 ---
-name: Create backport trackers for trackers in "Pending Backport" state
+name: Issue Backporting
 on:
   # To manually trigger this: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch
+  # View past runs and output: https://github.com/ceph/ceph/actions/workflows/create-backport-trackers.yml
   workflow_dispatch:
     inputs:
       issues:

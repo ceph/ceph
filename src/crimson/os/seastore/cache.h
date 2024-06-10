@@ -218,7 +218,7 @@ public:
       ++next_id
     );
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
-             *ret, name, src, is_weak);
+              *ret, name, src, is_weak);
     assert(!is_weak || src == Transaction::src_t::READ);
     return ret;
   }
@@ -227,7 +227,7 @@ public:
   void reset_transaction_preserve_handle(Transaction &t) {
     LOG_PREFIX(Cache::reset_transaction_preserve_handle);
     if (t.did_reset()) {
-      SUBTRACET(seastore_t, "reset", t);
+      SUBDEBUGT(seastore_t, "reset", t);
       ++(get_by_src(stats.trans_created_by_src, t.get_src()));
     }
     t.reset_preserve_handle(last_commit);
@@ -244,6 +244,9 @@ public:
   using retire_extent_iertr = base_iertr;
   using retire_extent_ret = base_iertr::future<>;
   retire_extent_ret retire_extent_addr(
+    Transaction &t, paddr_t addr, extent_len_t length);
+
+  void retire_absent_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
   /**
@@ -450,6 +453,15 @@ public:
     assert(extent);
     auto view = extent->get_transactional_view(t);
     return view->is_stable();
+  }
+
+  bool is_viewable_extent_data_stable(
+    Transaction &t,
+    CachedExtentRef extent)
+  {
+    assert(extent);
+    auto view = extent->get_transactional_view(t);
+    return view->is_data_stable();
   }
 
   using get_extent_ertr = base_ertr;
@@ -918,7 +930,7 @@ public:
     paddr_t remap_paddr,
     extent_len_t remap_length,
     laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &&original_bptr) {
+    std::optional<ceph::bufferptr> &original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
     assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
@@ -1502,9 +1514,6 @@ private:
     }
   };
 
-  template <typename CounterT>
-  using counter_by_src_t = std::array<CounterT, TRANSACTION_TYPE_MAX>;
-
   static constexpr std::size_t NUM_SRC_COMB =
       TRANSACTION_TYPE_MAX * (TRANSACTION_TYPE_MAX + 1) / 2;
 
@@ -1542,14 +1551,6 @@ private:
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
   } stats;
-
-  template <typename CounterT>
-  CounterT& get_by_src(
-      counter_by_src_t<CounterT>& counters_by_src,
-      Transaction::src_t src) {
-    assert(static_cast<std::size_t>(src) < counters_by_src.size());
-    return counters_by_src[static_cast<std::size_t>(src)];
-  }
 
   template <typename CounterT>
   CounterT& get_by_ext(
@@ -1652,16 +1653,15 @@ private:
         LOG_PREFIX(Cache::read_extent);
 	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
 	  extent->state = CachedExtent::extent_state_t::CLEAN;
-	  /* TODO: crc should be checked against LBA manager */
-	  extent->last_committed_crc = extent->get_crc32c();
-
+	}
+	ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
+	  || extent->state == CachedExtent::extent_state_t::CLEAN
+	  || !extent->is_valid());
+	if (extent->is_valid()) {
+	  // crc will be checked against LBA leaf entry for logical extents,
+	  // or check against in-extent crc for physical extents.
+	  extent->last_committed_crc = extent->calc_crc32c();
 	  extent->on_clean_read();
-	} else if (extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
-          extent->state == CachedExtent::extent_state_t::CLEAN) {
-	  /* TODO: crc should be checked against LBA manager */
-	  extent->last_committed_crc = extent->get_crc32c();
-        } else {
-	  ceph_assert(!extent->is_valid());
 	}
         extent->complete_io();
         SUBDEBUG(seastore_cache, "read extent done -- {}", *extent);

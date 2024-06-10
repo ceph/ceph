@@ -17,23 +17,18 @@
 #include <boost/range/begin.hpp>
 #include <boost/range/end.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
 
 #include "acconfig.h"
 
-#include <spawn/spawn.hpp>
-
-/// optional-like wrapper for a spawn::yield_context and its associated
-/// boost::asio::io_context. operations that take an optional_yield argument
-/// will, when passed a non-empty yield context, suspend this coroutine instead
-/// of the blocking the thread of execution
+/// optional-like wrapper for a boost::asio::yield_context. operations that take
+/// an optional_yield argument will, when passed a non-empty yield context,
+/// suspend this coroutine instead of the blocking the thread of execution
 class optional_yield {
-  boost::asio::io_context *c = nullptr;
-  spawn::yield_context *y = nullptr;
+  boost::asio::yield_context *y = nullptr;
  public:
   /// construct with a valid io and yield_context
-  explicit optional_yield(boost::asio::io_context& c,
-                          spawn::yield_context& y) noexcept
-    : c(&c), y(&y) {}
+  optional_yield(boost::asio::yield_context& y) noexcept : y(&y) {}
 
   /// type tag to construct an empty object
   struct empty_t {};
@@ -42,11 +37,8 @@ class optional_yield {
   /// implicit conversion to bool, returns true if non-empty
   operator bool() const noexcept { return y; }
 
-  /// return a reference to the associated io_context. only valid if non-empty
-  boost::asio::io_context& get_io_context() const noexcept { return *c; }
-
   /// return a reference to the yield_context. only valid if non-empty
-  spawn::yield_context& get_yield_context() const noexcept { return *y; }
+  boost::asio::yield_context& get_yield_context() const noexcept { return *y; }
 };
 
 // type tag object to construct an empty optional_yield

@@ -364,9 +364,9 @@ void MDRequestImpl::clear_ambiguous_auth()
   more()->is_ambiguous_auth = false;
 }
 
-bool MDRequestImpl::can_auth_pin(MDSCacheObject *object, bool bypassfreezing)
+bool MDRequestImpl::can_auth_pin(MDSCacheObject *object)
 {
-  return object->can_auth_pin(nullptr, bypassfreezing) ||
+  return object->can_auth_pin(nullptr) ||
          (is_auth_pinned(object) && has_more() &&
 	  more()->is_freeze_authpin &&
 	  more()->rename_inode == object);
@@ -478,7 +478,11 @@ void MDRequestImpl::print(ostream &out) const
 void MDRequestImpl::_dump(Formatter *f, bool has_mds_lock) const
 {
   std::lock_guard l(lock);
-  f->dump_int("result", result);
+  if (result) {
+    f->dump_int("result", *result);
+  } else {
+    f->dump_null("result");
+  }
   f->dump_string("flag_point", _get_state_string());
   f->dump_object("reqid", reqid);
   if (client_request) {

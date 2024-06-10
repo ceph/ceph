@@ -85,17 +85,36 @@ endif(WITH_CCACHE)
 
 option(WITH_SCCACHE "Build with sccache.")
 if(WITH_SCCACHE)
-  if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
-    message(WARNING "Compiler launcher already set. stop configuring sccache")
-  else()
-    find_program(SCCACHE_EXECUTABLE sccache)
-    if(NOT SCCACHE_EXECUTABLE)
-      message(FATAL_ERROR "Can't find sccache. Is it installed?")
-    endif()
-    message(STATUS "Building with sccache: ${SCCACHE_EXECUTABLE}, SCCACHE_CONF=$ENV{SCCACHE_CONF}")
-    set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
+  find_program(SCCACHE_EXECUTABLE sccache)
+  if(NOT SCCACHE_EXECUTABLE)
+    message(FATAL_ERROR "Can't find sccache. Is it installed?")
   endif()
+  if(NOT NINJA_MAX_COMPILE_JOBS)
+    if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
+      execute_process(
+        COMMAND "sccache" "--dist-status"
+        OUTPUT_VARIABLE sccache_dist_status
+      )
+      string(
+        JSON sccache_cores
+        ERROR_VARIABLE sccache_dist_status_error
+        GET "${sccache_dist_status}" SchedulerStatus 1 num_cpus
+      )
+      string(FIND "${sccache_dist_status}" "disabled" find_result)
+      if(find_result EQUAL -1)
+        message(STATUS "Using sccache with distributed compilation. Effective cores: ${sccache_cores}")
+        set(NINJA_MAX_COMPILE_JOBS ${sccache_cores})
+        set(NINJA_MAX_LINK_JOBS ${sccache_cores})
+      else()
+        message(WARNING "Using sccache, but it is not configured for distributed complilation")
+      endif()
+    else()
+      message(WARNING "Using sccache, but cannot determine maximum job value since cmake version is <3.19")
+    endif()
+  endif()
+  message(STATUS "Building with sccache: ${SCCACHE_EXECUTABLE}, SCCACHE_CONF=$ENV{SCCACHE_CONF}")
+  set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
+  set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
 endif(WITH_SCCACHE)
 
 option(WITH_MANPAGE "Build man pages." ON)
@@ -323,11 +342,11 @@ endif()
 option(WITH_BLUEFS "libbluefs library" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_QATLIB "Enable QAT with qatlib" ON
-  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+  "CMAKE_SYSTEM_PROCESSOR MATCHES amd64|x86_64|AMD64" OFF)
 option(WITH_SYSTEM_QATLIB "Use system packages for qatlib" OFF)
 option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
 CMAKE_DEPENDENT_OPTION(WITH_QATZIP "Enable QATzip" ON
-  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+  "CMAKE_SYSTEM_PROCESSOR MATCHES amd64|x86_64|AMD64" OFF)
 option(WITH_SYSTEM_QATZIP "Use system packages for QATzip" OFF)
 
 if(WITH_QATDRV)
@@ -618,7 +637,6 @@ if(WITH_BABELTRACE)
 endif(WITH_BABELTRACE)
 
 option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
-option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)

@@ -516,6 +516,15 @@ void OSDService::shutdown()
   next_osdmap = OSDMapRef();
 }
 
+void OSDService::fast_shutdown()
+{
+  mono_timer.suspend();
+  {
+    std::lock_guard l(watch_lock);
+    watch_timer.shutdown();
+  }
+}
+
 void OSDService::init()
 {
   reserver_finisher.start();
@@ -2589,7 +2598,7 @@ public:
     const cmdmap_t& cmdmap,
     Formatter *f,
     const bufferlist& inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
+    asok_finisher on_finish) override {
     try {
       osd->asok_command(prefix, cmdmap, f, inbl, on_finish);
     } catch (const TOPNSPC::common::bad_cmd_get& e) {
@@ -2651,7 +2660,7 @@ int OSD::asok_route_to_pg(
   stringstream& ss,
   const bufferlist& inbl,
   bufferlist& outbl,
-  std::function<void(int, const std::string&, bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   auto [target_pg, ret] = locate_asok_target(cmdmap, ss, only_primary);
 
@@ -2678,7 +2687,7 @@ void OSD::asok_command(
   std::string_view prefix, const cmdmap_t& cmdmap,
   Formatter *f,
   const bufferlist& inbl,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   int ret = 0;
   stringstream ss;   // stderr error message stream
@@ -4600,6 +4609,7 @@ int OSD::shutdown()
 
     utime_t  start_time_umount = ceph_clock_now();
     store->prepare_for_fast_shutdown();
+    service.fast_shutdown();
     std::lock_guard lock(osd_lock);
     // TBD: assert in allocator that nothing is being add
     store->umount();

@@ -426,7 +426,7 @@ int RGWLCStreamRead::init() {
   }
 
   attrs = obj->get_attrs();
-  obj_size = obj->get_obj_size();
+  obj_size = obj->get_size();
 
   ret = init_rest_obj();
   if (ret < 0) {

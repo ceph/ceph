@@ -296,6 +296,7 @@ public:
   feature_bitset_t(const feature_bitset_t& other) : _vec(other._vec) {}
   feature_bitset_t(feature_bitset_t&& other) : _vec(std::move(other._vec)) {}
   feature_bitset_t(unsigned long value = 0);
+  feature_bitset_t(std::string_view);
   feature_bitset_t(const std::vector<size_t>& array);
   feature_bitset_t& operator=(const feature_bitset_t& other) {
     _vec = other._vec;
@@ -349,6 +350,8 @@ public:
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
 private:
+  void init_array(const std::vector<size_t>& v);
+
   std::vector<block_type> _vec;
 };
 WRITE_CLASS_ENCODER(feature_bitset_t)
@@ -970,7 +973,7 @@ struct mds_load_t {
 
   double cpu_load_avg = 0.0;
 
-  double mds_load() const;  // defiend in MDBalancer.cc
+  double mds_load(int64_t bal_mode) const;  // defiend in MDBalancer.cc
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;

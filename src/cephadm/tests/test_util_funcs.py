@@ -558,7 +558,7 @@ class FakeContext:
     with_cephadm_ctx is not appropriate (it enables too many mocks, etc).
     """
 
-    timeout = 60
+    timeout = 300
 
 
 def _has_non_zero_exit(clog):

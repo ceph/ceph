@@ -45,7 +45,35 @@ from nose.tools import assert_not_equal, assert_equal, assert_in, assert_true
 import boto.s3.tagging
 
 # configure logging for the tests module
-log = logging.getLogger(__name__)
+class LogWrapper:
+    def __init__(self):
+        self.log = logging.getLogger(__name__)
+        self.errors = 0
+
+    def info(self, msg, *args, **kwargs):
+        try:
+            self.log.info(msg, *args, **kwargs)
+        except BlockingIOError:
+            self.errors += 1
+
+    def warning(self, msg, *args, **kwargs):
+        try:
+            self.log.warning(msg, *args, **kwargs)
+        except BlockingIOError:
+            self.errors += 1
+
+    def error(self, msg, *args, **kwargs):
+        try:
+            self.log.error(msg, *args, **kwargs)
+        except BlockingIOError:
+            self.errors += 1
+
+    def __del__(self):
+        if self.errors > 0:
+            self.log.error("%d logs were lost", self.errors)
+
+
+log = LogWrapper()
 
 TOPIC_SUFFIX = "_topic"
 NOTIFICATION_SUFFIX = "_notif"
@@ -138,6 +166,11 @@ class HTTPPostHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         """implementation of POST handler"""
         content_length = int(self.headers['Content-Length'])
+        if content_length == 0:
+            log.info('HTTP Server received iempty event')
+            self.send_response(200)
+            self.end_headers()
+            return
         body = self.rfile.read(content_length)
         if self.server.cloudevents:
             event = from_http(self.headers, body) 
@@ -159,6 +192,7 @@ class HTTPPostHandler(BaseHTTPRequestHandler):
             time.sleep(self.server.delay)
         self.end_headers()
 
+import requests
 
 class HTTPServerWithEvents(ThreadingHTTPServer):
     """multithreaded HTTP server used by the handler to store events"""
@@ -167,10 +201,12 @@ class HTTPServerWithEvents(ThreadingHTTPServer):
         self.delay = delay
         self.cloudevents = cloudevents
         self.addr = addr
+        self.request_queue_size = 100
         self.lock = threading.Lock()
         ThreadingHTTPServer.__init__(self, addr, HTTPPostHandler)
-        log.info('http server created on %s', str(self.addr))
+        log.info('http server created on %s', self.addr)
         self.proc = threading.Thread(target=self.run)
+        self.proc.daemon = True
         self.proc.start()
         retries = 0
         while self.proc.is_alive() == False and retries < 5:
@@ -181,6 +217,10 @@ class HTTPServerWithEvents(ThreadingHTTPServer):
             log.error('http server on %s failed to start. closing...', str(self.addr))
             self.close()
             assert False
+        # make sure that http handler is able to consume requests
+        url = 'http://{}:{}'.format(self.addr[0], self.addr[1])
+        response = requests.post(url, {})
+        assert response.status_code == 200
 
 
     def run(self):
@@ -199,12 +239,12 @@ class HTTPServerWithEvents(ThreadingHTTPServer):
         self.events.append(event)
         self.lock.release()
     
-    def verify_s3_events(self, keys, exact_match=False, deletions=False, expected_sizes={}):
+    def verify_s3_events(self, keys, exact_match=False, deletions=False, expected_sizes={}, etags=[]):
         """verify stored s3 records agains a list of keys"""
         self.acquire_lock()
         log.info('verify_s3_events: http server has %d events', len(self.events))
         try:
-            verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, expected_sizes=expected_sizes)
+            verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, expected_sizes=expected_sizes, etags=etags)
         except AssertionError as err:
             self.close()
             raise err
@@ -220,7 +260,7 @@ class HTTPServerWithEvents(ThreadingHTTPServer):
         self.lock.release()
         return events
 
-    def close(self):
+    def close(self, task=None):
         log.info('http server on %s starting shutdown', str(self.addr))
         t = threading.Thread(target=self.shutdown)
         t.start()
@@ -294,15 +334,18 @@ class AMQPReceiver(object):
         self.events.append(json.loads(body))
 
     # TODO create a base class for the AMQP and HTTP cases
-    def verify_s3_events(self, keys, exact_match=False, deletions=False, expected_sizes={}):
+    def verify_s3_events(self, keys, exact_match=False, deletions=False, expected_sizes={}, etags=[]):
         """verify stored s3 records agains a list of keys"""
-        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, expected_sizes=expected_sizes)
+        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, expected_sizes=expected_sizes, etags=etags)
         self.events = []
 
     def get_and_reset_events(self):
         tmp = self.events
         self.events = []
         return tmp
+
+    def close(self, task):
+        stop_amqp_receiver(self, task)
 
 
 def amqp_receiver_thread_runner(receiver):
@@ -396,10 +439,18 @@ class KafkaReceiver(object):
         self.topic = topic
         self.stop = False
 
-    def verify_s3_events(self, keys, exact_match=False, deletions=False, etags=[]):
+    def verify_s3_events(self, keys, exact_match=False, deletions=False, expected_sizes={}, etags=[]):
         """verify stored s3 records agains a list of keys"""
-        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, etags=etags)
+        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, expected_sizes=expected_sizes, etags=etags)
         self.events = []
+
+    def get_and_reset_events(self):
+        tmp = self.events
+        self.events = []
+        return tmp
+
+    def close(self, task):
+        stop_kafka_receiver(self, task)
 
 def kafka_receiver_thread_runner(receiver):
     """main thread function for the kafka receiver"""
@@ -500,6 +551,114 @@ def another_user(user=None, tenant=None, account=None):
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
     return conn, arn
 
+
+def list_topics(assert_len=None, tenant=''):
+    if tenant == '':
+        result = admin(['topic', 'list'], get_config_cluster())
+    else:
+        result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
+    parsed_result = json.loads(result[0])
+    if assert_len:
+        assert_equal(len(parsed_result['topics']), assert_len)
+    return parsed_result
+
+
+def get_stats_persistent_topic(topic_name, assert_entries_number=None):
+    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+    assert_equal(result[1], 0)
+    parsed_result = json.loads(result[0])
+    if assert_entries_number:
+        assert_equal(parsed_result['Topic Stats']['Entries'], assert_entries_number)
+    return parsed_result
+
+
+def get_topic(topic_name, tenant='', allow_failure=False):
+    if tenant == '':
+        result = admin(['topic', 'get', '--topic', topic_name], get_config_cluster())
+    else:
+        result = admin(['topic', 'get', '--topic', topic_name, '--tenant', tenant], get_config_cluster())
+    if allow_failure:
+        return result
+    assert_equal(result[1], 0)
+    parsed_result = json.loads(result[0])
+    return parsed_result
+
+
+def remove_topic(topic_name, tenant='', allow_failure=False):
+    if tenant == '':
+        result = admin(['topic', 'rm', '--topic', topic_name], get_config_cluster())
+    else:
+        result = admin(['topic', 'rm', '--topic', topic_name, '--tenant', tenant], get_config_cluster())
+    if not allow_failure:
+        assert_equal(result[1], 0)
+    return result[1]
+
+
+def list_notifications(bucket_name, assert_len=None, tenant=''):
+    if tenant == '':
+        result = admin(['notification', 'list', '--bucket', bucket_name], get_config_cluster())
+    else:
+        result = admin(['notification', 'list', '--bucket', bucket_name, '--tenant', tenant], get_config_cluster())
+    parsed_result = json.loads(result[0])
+    if assert_len:
+        assert_equal(len(parsed_result['notifications']), assert_len)
+    return parsed_result
+
+
+def get_notification(bucket_name,  notification_name, tenant=''):
+    if tenant == '':
+        result = admin(['notification', 'get', '--bucket', bucket_name, '--notification-id', notification_name], get_config_cluster())
+    else:
+        result = admin(['notification', 'get', '--bucket', bucket_name, '--notification-id', notification_name, '--tenant', tenant], get_config_cluster())
+    assert_equal(result[1], 0)
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Id'], notification_name)
+    return parsed_result
+
+
+def remove_notification(bucket_name, notification_name='', tenant='', allow_failure=False):
+    args = ['notification', 'rm', '--bucket', bucket_name]
+    if notification_name != '':
+        args.extend(['--notification-id', notification_name])
+    if tenant != '':
+        args.extend(['--tenant', tenant])
+    result = admin(args, get_config_cluster())
+    if not allow_failure:
+        assert_equal(result[1], 0)
+    return result[1]
+
+
+zonegroup_feature_notification_v2 = 'notification_v2'
+
+
+def zonegroup_modify_feature(enable, feature_name):
+    if enable:
+        command = '--enable-feature='+feature_name
+    else:
+        command = '--disable-feature='+feature_name
+    result = admin(['zonegroup', 'modify', command], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+
+def connect_random_user(tenant=''):
+    access_key = str(time.time())
+    secret_key = str(time.time())
+    uid = UID_PREFIX + str(time.time())
+    if tenant == '':
+        _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+    else:
+        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+    assert_equal(result, 0)
+    conn = S3Connection(aws_access_key_id=access_key,
+                        aws_secret_access_key=secret_key,
+                        is_secure=False, port=get_config_port(), host=get_config_host(),
+                        calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    return conn
+
 ##############
 # bucket notifications tests
 ##############
@@ -509,16 +668,8 @@ def another_user(user=None, tenant=None, account=None):
 def test_ps_s3_topic_on_master():
     """ test s3 topics set/get/delete on master """
     
-    access_key = str(time.time())
-    secret_key = str(time.time())
-    uid = UID_PREFIX + str(time.time())
     tenant = 'kaboom'
-    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
-    assert_equal(result, 0)
-    conn = S3Connection(aws_access_key_id=access_key,
-                  aws_secret_access_key=secret_key,
-                      is_secure=False, port=get_config_port(), host=get_config_host(), 
-                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = connect_random_user(tenant)
     
     # make sure there are no leftover topics
     delete_all_topics(conn, tenant, get_config_cluster())
@@ -583,16 +734,8 @@ def test_ps_s3_topic_on_master():
 def test_ps_s3_topic_admin_on_master():
     """ test s3 topics set/get/delete on master """
     
-    access_key = str(time.time())
-    secret_key = str(time.time())
-    uid = UID_PREFIX + str(time.time())
     tenant = 'kaboom'
-    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
-    assert_equal(result, 0)
-    conn = S3Connection(aws_access_key_id=access_key,
-                  aws_secret_access_key=secret_key,
-                      is_secure=False, port=get_config_port(), host=get_config_host(), 
-                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = connect_random_user(tenant)
     
     # make sure there are no leftover topics
     delete_all_topics(conn, tenant, get_config_cluster())
@@ -610,7 +753,7 @@ def test_ps_s3_topic_admin_on_master():
                  'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_1')
 
     endpoint_address = 'http://127.0.0.1:9001'
-    endpoint_args = 'push-endpoint='+endpoint_address
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
     topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
     topic_arn2 = topic_conf2.set_config()
     assert_equal(topic_arn2,
@@ -623,57 +766,48 @@ def test_ps_s3_topic_admin_on_master():
                  'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_3')
 
     # get topic 3 via commandline
-    result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant], get_config_cluster())
-    parsed_result = json.loads(result[0])
+    parsed_result = get_topic(topic_name+'_3', tenant)
     assert_equal(parsed_result['arn'], topic_arn3)
     matches = [tenant, UID_PREFIX]
     assert_true( all([x in parsed_result['owner'] for x in matches]))
 
     # delete topic 3
-    _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant], get_config_cluster())
-    assert_equal(result, 0)
+    remove_topic(topic_name + '_3', tenant)
 
     # try to get a deleted topic
-    _, result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant], get_config_cluster())
+    _, result = get_topic(topic_name + '_3', tenant, allow_failure=True)
     print('"topic not found" error is expected')
     assert_equal(result, 2)
 
     # get the remaining 2 topics
-    result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(len(parsed_result['topics']), 2)
+    list_topics(2, tenant)
 
     # delete topics
-    _, result = admin(['topic', 'rm', '--topic', topic_name+'_1', '--tenant', tenant], get_config_cluster())
-    assert_equal(result, 0)
-    _, result = admin(['topic', 'rm', '--topic', topic_name+'_2', '--tenant', tenant], get_config_cluster())
-    assert_equal(result, 0)
+    remove_topic(topic_name + '_1', tenant)
+    remove_topic(topic_name + '_2', tenant)
 
     # get topic list, make sure it is empty
-    result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(len(parsed_result['topics']), 0)
+    list_topics(0, tenant)
 
 
-@attr('basic_test')
-def test_ps_s3_notification_configuration_admin_on_master():
-    """ test s3 notification list/get/delete on master """
+def notification_configuration(with_cli):
     conn = connection()
     zonegroup = get_config_zonegroup()
     bucket_name = gen_bucket_name()
+    # create bucket
     bucket = conn.create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX
-    
+
     # make sure there are no leftover topics
     delete_all_topics(conn, '', get_config_cluster())
 
     # create s3 topics
-    endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
+    endpoint_address = 'amqp://127.0.0.1:7001'
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
-    topic_conf = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     assert_equal(topic_arn,
-                 'arn:aws:sns:' + zonegroup + '::' + topic_name + '_1')
+                 'arn:aws:sns:' + zonegroup + '::' + topic_name)
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     topic_conf_list = [{'Id': notification_name+'_1',
@@ -692,37 +826,57 @@ def test_ps_s3_notification_configuration_admin_on_master():
     _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
-    # list notification
-    result = admin(['notification', 'list', '--bucket', bucket_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(len(parsed_result['notifications']), 3)
-    assert_equal(result[1], 0)
-
     # get notification 1
-    result = admin(['notification', 'get', '--bucket', bucket_name, '--notification-id', notification_name+'_1'], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Id'], notification_name+'_1')
-    assert_equal(result[1], 0)
-
-    # remove notification 3
-    _, result = admin(['notification', 'rm', '--bucket', bucket_name, '--notification-id', notification_name+'_3'], get_config_cluster())
-    assert_equal(result, 0)
+    if with_cli:
+        get_notification(bucket_name, notification_name+'_1')
+    else:
+        response, status = s3_notification_conf.get_config(notification=notification_name+'_1')
+        assert_equal(status/100, 2)
+        assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
 
     # list notification
-    result = admin(['notification', 'list', '--bucket', bucket_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(len(parsed_result['notifications']), 2)
-    assert_equal(result[1], 0)
+    if with_cli:
+        list_notifications(bucket_name, 3)
+    else:
+        result, status = s3_notification_conf.get_config()
+        assert_equal(status, 200)
+        assert_equal(len(result['TopicConfigurations']), 3)
+
+    # delete notification 2
+    if with_cli:
+        remove_notification(bucket_name, notification_name + '_2')
+    else:
+        _, status = s3_notification_conf.del_config(notification=notification_name+'_2')
+        assert_equal(status/100, 2)
+
+    # list notification
+    if with_cli:
+        list_notifications(bucket_name, 2)
+    else:
+        result, status = s3_notification_conf.get_config()
+        assert_equal(status, 200)
+        assert_equal(len(result['TopicConfigurations']), 2)
 
     # delete notifications
-    _, result = admin(['notification', 'rm', '--bucket', bucket_name], get_config_cluster())
-    assert_equal(result, 0)
+    if with_cli:
+        remove_notification(bucket_name)
+    else:
+        _, status = s3_notification_conf.del_config()
+        assert_equal(status/100, 2)
 
     # list notification, make sure it is empty
-    result = admin(['notification', 'list', '--bucket', bucket_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(len(parsed_result['notifications']), 0)
-    assert_equal(result[1], 0)
+    list_notifications(bucket_name, 0)
+
+    # cleanup
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+
+@attr('basic_test')
+def test_notification_configuration_admin():
+    """ test notification list/set/get/delete, with admin cli """
+    notification_configuration(True)
 
 
 @attr('modification_required')
@@ -777,64 +931,9 @@ def test_ps_s3_topic_with_secret_on_master():
 
 
 @attr('basic_test')
-def test_ps_s3_notification_on_master():
-    """ test s3 notification set/get/delete on master """
-    conn = connection()
-    zonegroup = get_config_zonegroup()
-    bucket_name = gen_bucket_name()
-    # create bucket
-    bucket = conn.create_bucket(bucket_name)
-    topic_name = bucket_name + TOPIC_SUFFIX
-    # create s3 topic
-    endpoint_address = 'amqp://127.0.0.1:7001'
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
-    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
-    topic_arn = topic_conf.set_config()
-    # create s3 notification
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name+'_1',
-                        'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectCreated:*']
-                       },
-                       {'Id': notification_name+'_2',
-                        'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectRemoved:*']
-                       },
-                       {'Id': notification_name+'_3',
-                        'TopicArn': topic_arn,
-                        'Events': []
-                       }]
-    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-    _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-
-    # get notifications on a bucket
-    response, status = s3_notification_conf.get_config(notification=notification_name+'_1')
-    assert_equal(status/100, 2)
-    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
-
-    # delete specific notifications
-    _, status = s3_notification_conf.del_config(notification=notification_name+'_1')
-    assert_equal(status/100, 2)
-
-    # get the remaining 2 notifications on a bucket
-    response, status = s3_notification_conf.get_config()
-    assert_equal(status/100, 2)
-    assert_equal(len(response['TopicConfigurations']), 2)
-    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
-    assert_equal(response['TopicConfigurations'][1]['TopicArn'], topic_arn)
-
-    # delete remaining notifications
-    _, status = s3_notification_conf.del_config()
-    assert_equal(status/100, 2)
-
-    # make sure that the notifications are now deleted
-    _, status = s3_notification_conf.get_config()
-
-    # cleanup
-    topic_conf.del_config()
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
+def test_notification_configuration():
+    """ test s3 notification set/get/deleter """
+    notification_configuration(False)
 
 
 @attr('basic_test')
@@ -1168,108 +1267,143 @@ def test_ps_s3_notification_errors_on_master():
     conn.delete_bucket(bucket_name)
 
 
-@attr('amqp_test')
-def test_ps_s3_notification_push_amqp_on_master():
-    """ test pushing amqp s3 notification on master """
-
-    hostname = get_ip()
-    conn = connection()
+def notification_push(endpoint_type, conn, account=None, cloudevents=False):
+    """ test pushinging notification """
     zonegroup = get_config_zonegroup()
-
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
-    topic_name1 = bucket_name + TOPIC_SUFFIX + '_1'
-    topic_name2 = bucket_name + TOPIC_SUFFIX + '_2'
+    topic_name = bucket_name + TOPIC_SUFFIX
 
-    # start amqp receivers
-    exchange = 'ex1'
-    task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name1)
-    task2, receiver2 = create_amqp_receiver_thread(exchange, topic_name2)
-    task1.start()
-    task2.start()
+    host = get_ip()
+    task = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        host = get_ip_http()
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port), cloudevents=cloudevents)
+        endpoint_address = 'http://'+host+':'+str(port)
+        if cloudevents:
+            endpoint_args = 'push-endpoint='+endpoint_address+'&cloudevents=true'
+        else:
+            endpoint_args = 'push-endpoint='+endpoint_address
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [{'Id': notification_name,
+                            'TopicArn': topic_arn,
+                            'Events': []
+                            }]
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status/100, 2)
+    elif endpoint_type == 'amqp':
+        # start amqp receiver
+        exchange = 'ex1'
+        task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+        task.start()
+        endpoint_address = 'amqp://' + host
+        # with acks from broker
+        exchange = 'ex1'
+        endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+        # create two s3 topic
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [{'Id': notification_name,
+                            'TopicArn': topic_arn,
+                            'Events': []
+                            }]
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status/100, 2)
+    elif endpoint_type == 'kafka':
+        # start amqp receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + kafka_server
+        # without acks from broker
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'
+        # create s3 topic
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [{'Id': notification_name,
+                            'TopicArn': topic_arn,
+                            'Events': []
+                            }]
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status/100, 2)
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
 
-    # create two s3 topic
-    endpoint_address = 'amqp://' + hostname
-    # with acks from broker
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
-    topic_conf1 = PSTopicS3(conn, topic_name1, zonegroup, endpoint_args=endpoint_args)
-    topic_arn1 = topic_conf1.set_config()
-    # without acks from broker
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=routable'
-    topic_conf2 = PSTopicS3(conn, topic_name2, zonegroup, endpoint_args=endpoint_args)
-    topic_arn2 = topic_conf2.set_config()
-    # create s3 notification
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name+'_1', 'TopicArn': topic_arn1,
-                         'Events': []
-                       },
-                       {'Id': notification_name+'_2', 'TopicArn': topic_arn2,
-                         'Events': ['s3:ObjectCreated:*']
-                       }]
-
-    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-    response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-
-    # create objects in the bucket (async)
+    # create objects in the bucket
     number_of_objects = 100
+    if cloudevents:
+        number_of_objects = 10
     client_threads = []
+    etags = []
+    objects_size = {}
     start_time = time.time()
     for i in range(number_of_objects):
-        key = bucket.new_key(str(i))
         content = str(os.urandom(1024*1024))
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        etag = hashlib.md5(content.encode()).hexdigest()
+        etags.append(etag)
+        object_size = len(content)
+        key = bucket.new_key(str(i))
+        objects_size[key.name] = object_size
+        thr = threading.Thread(target=set_contents_from_string, args=(key, content,))
         thr.start()
         client_threads.append(thr)
     [thr.join() for thr in client_threads]
 
     time_diff = time.time() - start_time
-    print('average time for creation + qmqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    print('average time for creation + ' + endpoint_type + ' notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
 
-    # check amqp receiver
+    # check receiver
     keys = list(bucket.list())
-    print('total number of objects: ' + str(len(keys)))
-    receiver1.verify_s3_events(keys, exact_match=True)
-    receiver2.verify_s3_events(keys, exact_match=True)
+    receiver.verify_s3_events(keys, exact_match=True, deletions=False, expected_sizes=objects_size, etags=etags)
 
     # delete objects from the bucket
     client_threads = []
     start_time = time.time()
     for key in bucket.list():
-        thr = threading.Thread(target = key.delete, args=())
+        thr = threading.Thread(target=key.delete, args=())
         thr.start()
         client_threads.append(thr)
     [thr.join() for thr in client_threads]
 
     time_diff = time.time() - start_time
-    print('average time for deletion + amqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    print('average time for deletion + ' + endpoint_type + ' notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     print('wait for 5sec for the messages...')
     time.sleep(5)
 
-    # check amqp receiver 1 for deletions
-    receiver1.verify_s3_events(keys, exact_match=True, deletions=True)
-    # check amqp receiver 2 has no deletions
-    try:
-        receiver1.verify_s3_events(keys, exact_match=False, deletions=True)
-    except:
-        pass
-    else:
-        err = 'amqp receiver 2 should have no deletions'
-        assert False, err
+    # check receiver
+    receiver.verify_s3_events(keys, exact_match=True, deletions=True, expected_sizes=objects_size, etags=etags)
 
     # cleanup
-    stop_amqp_receiver(receiver1, task1)
-    stop_amqp_receiver(receiver2, task2)
     s3_notification_conf.del_config()
-    topic_conf1.del_config()
-    topic_conf2.del_config()
+    topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
+    receiver.close(task)
+
+
+@attr('amqp_test')
+def test_notification_push_amqp():
+    """ test pushing amqp notification """
+    return SkipTest("Running into an issue with amqp when we make exact_match=true")
+    conn = connection()
+    notification_push('amqp', conn)
 
 
 @attr('manual_test')
@@ -1404,102 +1538,10 @@ def test_ps_s3_notification_push_amqp_idleness_check():
 
 
 @attr('kafka_test')
-def test_ps_s3_notification_push_kafka_on_master():
+def test_notification_push_kafka():
     """ test pushing kafka s3 notification on master """
     conn = connection()
-    zonegroup = get_config_zonegroup()
-
-    # create bucket
-    bucket_name = gen_bucket_name()
-    bucket = conn.create_bucket(bucket_name)
-    # name is constant for manual testing
-    topic_name = bucket_name+'_topic'
-    # create consumer on the topic
-
-    try:
-        s3_notification_conf = None
-        topic_conf1 = None
-        topic_conf2 = None
-        receiver = None
-        task, receiver = create_kafka_receiver_thread(topic_name+'_1')
-        task.start()
-
-        # create s3 topic
-        endpoint_address = 'kafka://' + kafka_server
-        # without acks from broker
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'
-        topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
-        topic_arn1 = topic_conf1.set_config()
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=none'
-        topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
-        topic_arn2 = topic_conf2.set_config()
-        # create s3 notification
-        notification_name = bucket_name + NOTIFICATION_SUFFIX
-        topic_conf_list = [{'Id': notification_name + '_1', 'TopicArn': topic_arn1,
-                         'Events': []
-                       },
-                       {'Id': notification_name + '_2', 'TopicArn': topic_arn2,
-                         'Events': []
-                       }]
-
-        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-        response, status = s3_notification_conf.set_config()
-        assert_equal(status/100, 2)
-
-        # create objects in the bucket (async)
-        number_of_objects = 10
-        client_threads = []
-        etags = []
-        start_time = time.time()
-        for i in range(number_of_objects):
-            key = bucket.new_key(str(i))
-            content = str(os.urandom(1024*1024))
-            etag = hashlib.md5(content.encode()).hexdigest()
-            etags.append(etag)
-            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
-            thr.start()
-            client_threads.append(thr)
-        [thr.join() for thr in client_threads]
-
-        time_diff = time.time() - start_time
-        print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-
-        print('wait for 10sec for the messages...')
-        time.sleep(10)
-        keys = list(bucket.list())
-        receiver.verify_s3_events(keys, exact_match=True, etags=etags)
-
-        # delete objects from the bucket
-        client_threads = []
-        start_time = time.time()
-        for key in bucket.list():
-            thr = threading.Thread(target = key.delete, args=())
-            thr.start()
-            client_threads.append(thr)
-        [thr.join() for thr in client_threads]
-
-        time_diff = time.time() - start_time
-        print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-
-        print('wait for 10sec for the messages...')
-        time.sleep(10)
-        receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
-    except Exception as e:
-        assert False, str(e)
-    finally:
-        # cleanup
-        if s3_notification_conf is not None:
-            s3_notification_conf.del_config()
-        if topic_conf1 is not None:
-            topic_conf1.del_config()
-        if topic_conf2 is not None:
-            topic_conf2.del_config()
-        # delete the bucket
-        for key in bucket.list():
-            key.delete()
-        conn.delete_bucket(bucket_name)
-        if receiver is not None:
-            stop_kafka_receiver(receiver, task)
+    notification_push('kafka', conn)
 
 
 @attr('http_test')
@@ -1571,171 +1613,18 @@ def test_ps_s3_notification_multi_delete_on_master():
 
 
 @attr('http_test')
-def test_ps_s3_notification_push_http_on_master():
-    """ test pushing http s3 notification on master """
-    hostname = get_ip_http()
+def test_notification_push_http():
+    """ test pushing http s3 notification """
     conn = connection()
-    zonegroup = get_config_zonegroup()
-
-    # create random port for the http server
-    host = get_ip()
-    port = random.randint(10000, 20000)
-    # start an http server in a separate thread
-    number_of_objects = 10
-    http_server = HTTPServerWithEvents((host, port))
-
-    # create bucket
-    bucket_name = gen_bucket_name()
-    bucket = conn.create_bucket(bucket_name)
-    topic_name = bucket_name + TOPIC_SUFFIX
-
-    # create s3 topic
-    endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address
-    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
-    topic_arn = topic_conf.set_config()
-    # create s3 notification
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name,
-                        'TopicArn': topic_arn,
-                        'Events': []
-                       }]
-    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-    response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-
-    # create objects in the bucket
-    client_threads = []
-    objects_size = {}
-    start_time = time.time()
-    for i in range(number_of_objects):
-        content = str(os.urandom(randint(1, 1024)))
-        object_size = len(content)
-        key = bucket.new_key(str(i))
-        objects_size[key.name] = object_size
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-
-    time_diff = time.time() - start_time
-    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-
-    # check http receiver
-    keys = list(bucket.list())
-    http_server.verify_s3_events(keys, exact_match=True, deletions=False, expected_sizes=objects_size)
-
-    # delete objects from the bucket
-    client_threads = []
-    start_time = time.time()
-    for key in bucket.list():
-        thr = threading.Thread(target = key.delete, args=())
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-
-    time_diff = time.time() - start_time
-    print('average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-
-    # check http receiver
-    http_server.verify_s3_events(keys, exact_match=True, deletions=True, expected_sizes=objects_size)
-
-    # cleanup
-    topic_conf.del_config()
-    s3_notification_conf.del_config(notification=notification_name)
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
-    http_server.close()
+    notification_push('http', conn)
 
 
 @attr('http_test')
-def test_ps_s3_notification_push_cloudevents_on_master():
-    """ test pushing cloudevents notification on master """
-    hostname = get_ip_http()
+def test_notification_push_cloudevents():
+    """ test pushing cloudevents notification """
     conn = connection()
-    zonegroup = get_config_zonegroup()
+    notification_push('http', conn, cloudevents=True)
 
-    # create random port for the http server
-    host = get_ip()
-    port = random.randint(10000, 20000)
-    # start an http server in a separate thread
-    number_of_objects = 10
-    http_server = HTTPServerWithEvents((host, port), cloudevents=True)
-
-    # create bucket
-    bucket_name = gen_bucket_name()
-    bucket = conn.create_bucket(bucket_name)
-    topic_name = bucket_name + TOPIC_SUFFIX
-
-    # create s3 topic
-    endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&cloudevents=true'
-    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
-    topic_arn = topic_conf.set_config()
-    # create s3 notification
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name,
-                        'TopicArn': topic_arn,
-                        'Events': []
-                       }]
-    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-    response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-
-    # create objects in the bucket
-    client_threads = []
-    objects_size = {}
-    start_time = time.time()
-    for i in range(number_of_objects):
-        content = str(os.urandom(randint(1, 1024)))
-        object_size = len(content)
-        key = bucket.new_key(str(i))
-        objects_size[key.name] = object_size
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-
-    time_diff = time.time() - start_time
-    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-
-    # check http receiver
-    keys = list(bucket.list())
-    http_server.verify_s3_events(keys, exact_match=True, deletions=False, expected_sizes=objects_size)
-
-    # delete objects from the bucket
-    client_threads = []
-    start_time = time.time()
-    for key in bucket.list():
-        thr = threading.Thread(target = key.delete, args=())
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-
-    time_diff = time.time() - start_time
-    print('average time for deletion + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-
-    # check http receiver
-    http_server.verify_s3_events(keys, exact_match=True, deletions=True, expected_sizes=objects_size)
-
-    # cleanup
-    topic_conf.del_config()
-    s3_notification_conf.del_config(notification=notification_name)
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
-    http_server.close()
 
 
 @attr('http_test')
@@ -1807,38 +1696,51 @@ def test_ps_s3_opaque_data_on_master():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
-@attr('http_test')
-def test_ps_s3_lifecycle_on_master():
-    """ test that when object is deleted due to lifecycle policy, notification is sent on master """
-    hostname = get_ip()
-    conn = connection()
-    zonegroup = get_config_zonegroup()
 
-    # create random port for the http server
-    host = get_ip()
-    port = random.randint(10000, 20000)
-    # start an http server in a separate thread
-    number_of_objects = 10
-    http_server = HTTPServerWithEvents((host, port))
+def lifecycle(endpoint_type, conn, number_of_objects, topic_events, create_thread, rules_creator, record_events,
+              expected_abortion=False):
+    zonegroup = get_config_zonegroup()
 
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX
 
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'amqp':
+        # start amqp receiver
+        exchange = 'ex1'
+        task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+        task.start()
+        endpoint_address = 'amqp://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange='+exchange+'&amqp-ack-level=broker&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
     # create s3 topic
-    endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address
-    opaque_data = 'http://1.2.3.4:8888'
-    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args, opaque_data=opaque_data)
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     topic_conf_list = [{'Id': notification_name,
                         'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectLifecycle:Expiration:*',
-                                   's3:LifecycleExpiration:*']
-                       }]
+                        'Events': topic_events
+                        }]
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
@@ -1849,53 +1751,46 @@ def test_ps_s3_lifecycle_on_master():
     start_time = time.time()
     content = 'bar'
     for i in range(number_of_objects):
-        key = bucket.new_key(obj_prefix + str(i))
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr = create_thread(bucket, obj_prefix, i, content)
         thr.start()
         client_threads.append(thr)
     [thr.join() for thr in client_threads]
 
     time_diff = time.time() - start_time
-    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    print('average time for creation + '+endpoint_type+' notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    keys = list(bucket.list())
 
     # create lifecycle policy
     client = boto3.client('s3',
-            endpoint_url='http://'+conn.host+':'+str(conn.port),
-            aws_access_key_id=conn.aws_access_key_id,
-            aws_secret_access_key=conn.aws_secret_access_key)
+                          endpoint_url='http://'+conn.host+':'+str(conn.port),
+                          aws_access_key_id=conn.aws_access_key_id,
+                          aws_secret_access_key=conn.aws_secret_access_key)
     yesterday = datetime.date.today() - datetime.timedelta(days=1)
     response = client.put_bucket_lifecycle_configuration(Bucket=bucket_name,
-            LifecycleConfiguration={'Rules': [
-                {
-                    'ID': 'rule1',
-                    'Expiration': {'Date': yesterday.isoformat()},
-                    'Filter': {'Prefix': obj_prefix},
-                    'Status': 'Enabled',
-                }
-            ]
-        }
-    )
+                                                         LifecycleConfiguration={'Rules': rules_creator(yesterday, obj_prefix)}
+                                                         )
 
     # start lifecycle processing
     admin(['lc', 'process'], get_config_cluster())
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
+    print('wait for 20s for the lifecycle...')
+    time.sleep(20)
+    print('wait for sometime for the messages...')
 
-    # check http receiver does not have messages
-    keys = list(bucket.list())
-    print('total number of objects: ' + str(len(keys)))
+    no_keys = list(bucket.list())
+    wait_for_queue_to_drain(topic_name, http_port=port)
+    assert_equal(len(no_keys), 0)
     event_keys = []
-    events = http_server.get_and_reset_events()
-    assert_equal(number_of_objects * 2, len(events))
+    events = receiver.get_and_reset_events()
+    if not expected_abortion:
+        assert number_of_objects * 2 <= len(events)
     for event in events:
-        assert_in(event['Records'][0]['eventName'],
-                  ['LifecycleExpiration:Delete',
-                   'ObjectLifecycle:Expiration:Current'])
+        assert_in(event['Records'][0]['eventName'], record_events)
         event_keys.append(event['Records'][0]['s3']['object']['key'])
     for key in keys:
         key_found = False
         for event_key in event_keys:
-            if event_key == key:
+            if event_key == key.name:
                 key_found = True
                 break
         if not key_found:
@@ -1906,121 +1801,80 @@ def test_ps_s3_lifecycle_on_master():
     # cleanup
     for key in keys:
         key.delete()
-    [thr.join() for thr in client_threads]
+    if not expected_abortion:
+        [thr.join() for thr in client_threads]
     topic_conf.del_config()
     s3_notification_conf.del_config(notification=notification_name)
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    http_server.close()
+    receiver.close(task)
+
+
+def rules_creator(yesterday, obj_prefix):
+    return [
+        {
+            'ID': 'rule1',
+            'Expiration': {'Date': yesterday.isoformat()},
+            'Filter': {'Prefix': obj_prefix},
+            'Status': 'Enabled',
+        }
+    ]
+
+
+def create_thread(bucket, obj_prefix, i, content):
+    key = bucket.new_key(obj_prefix + str(i))
+    return threading.Thread(target = set_contents_from_string, args=(key, content,))
+
+
+@attr('http_test')
+def test_lifecycle_http():
+    """ test that when object is deleted due to lifecycle policy, http endpoint """
+
+    conn = connection()
+    lifecycle('http', conn, 10, ['s3:ObjectLifecycle:Expiration:*', 's3:LifecycleExpiration:*'], create_thread,
+              rules_creator, ['LifecycleExpiration:Delete', 'ObjectLifecycle:Expiration:Current'])
+
+
+@attr('kafka_test')
+def test_lifecycle_kafka():
+    """ test that when object is deleted due to lifecycle policy, kafka endpoint """
+
+    conn = connection()
+    lifecycle('kafka', conn, 10, ['s3:ObjectLifecycle:Expiration:*', 's3:LifecycleExpiration:*'], create_thread,
+              rules_creator, ['LifecycleExpiration:Delete', 'ObjectLifecycle:Expiration:Current'])
+
 
 def start_and_abandon_multipart_upload(bucket, key_name, content):
     try:
         mp = bucket.initiate_multipart_upload(key_name)
         part_data = io.StringIO(content)
         mp.upload_part_from_file(part_data, 1)
-        # mp.complete_upload()
     except Exception as e:
         print('Error: ' + str(e))
 
+
 @attr('http_test')
-def test_ps_s3_lifecycle_abort_mpu_on_master():
-    """ test that when a multipart upload is aborted by lifecycle policy, notification is sent on master """
-    hostname = get_ip()
+def test_lifecycle_abort_mpu():
+    """ test that when a multipart upload is aborted by lifecycle policy, http endpoint """
+
+    def rules_creator(yesterday, obj_prefix):
+        return [
+            {
+                'ID': 'abort1',
+                'Filter': {'Prefix': obj_prefix},
+                'Status': 'Enabled',
+                'AbortIncompleteMultipartUpload': {'DaysAfterInitiation': 1},
+            }
+        ]
+
+    def create_thread(bucket, obj_prefix, i, content):
+        key_name = obj_prefix + str(i)
+        return threading.Thread(target = start_and_abandon_multipart_upload, args=(bucket, key_name, content,))
+
     conn = connection()
-    zonegroup = get_config_zonegroup()
+    lifecycle('http', conn, 1, ['s3:ObjectLifecycle:Expiration:*'], create_thread, rules_creator,
+              ['ObjectLifecycle:Expiration:AbortMultipartUpload'], True)
 
-    # create random port for the http server
-    host = get_ip()
-    port = random.randint(10000, 20000)
-    # start an http server in a separate thread
-    number_of_objects = 1
-    http_server = HTTPServerWithEvents((host, port))
-
-    # create bucket
-    bucket_name = gen_bucket_name()
-    bucket = conn.create_bucket(bucket_name)
-    topic_name = bucket_name + TOPIC_SUFFIX
-
-    # create s3 topic
-    endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address
-    opaque_data = 'http://1.2.3.4:8888'
-    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args, opaque_data=opaque_data)
-    topic_arn = topic_conf.set_config()
-    # create s3 notification
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name,
-                        'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectLifecycle:Expiration:*']
-                       }]
-    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-    response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-
-    # start and abandon a multpart upload
-    # create objects in the bucket
-    obj_prefix = 'ooo'
-    start_time = time.time()
-    content = 'bar'
-
-    key_name = obj_prefix + str(1)
-    thr = threading.Thread(target = start_and_abandon_multipart_upload, args=(bucket, key_name, content,))
-    thr.start()
-    thr.join()    
-
-    time_diff = time.time() - start_time
-    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-    
-    # create lifecycle policy -- assume rgw_lc_debug_interval=10 is in effect
-    client = boto3.client('s3',
-            endpoint_url='http://'+conn.host+':'+str(conn.port),
-            aws_access_key_id=conn.aws_access_key_id,
-            aws_secret_access_key=conn.aws_secret_access_key)
-    response = client.put_bucket_lifecycle_configuration(Bucket=bucket_name, 
-            LifecycleConfiguration={'Rules': [
-                {
-                    'ID': 'abort1',
-                    'Filter': {'Prefix': obj_prefix},
-                    'Status': 'Enabled',
-                    'AbortIncompleteMultipartUpload': {'DaysAfterInitiation': 1},
-                }
-            ]
-        }
-    )
-
-    # start lifecycle processing
-    admin(['lc', 'process'], get_config_cluster())
-    print('wait for 20s (2 days) for the messages...')
-    time.sleep(20)
-
-    # check http receiver does not have messages
-    keys = list(bucket.list())
-    print('total number of objects: ' + str(len(keys)))
-    event_keys = []
-    events = http_server.get_and_reset_events()
-    for event in events:
-        # I hope Boto doesn't gak on the unknown eventName
-        assert_equal(event['Records'][0]['eventName'], 'ObjectLifecycle:Expiration:AbortMultipartUpload')
-        event_keys.append(event['Records'][0]['s3']['object']['key'])
-    for key in keys:
-        key_found = False
-        for event_key in event_keys:
-            if event_key == key:
-                key_found = True
-                break
-        if not key_found:
-            err = 'no lifecycle event found for key: ' + str(key)
-            log.error(events)
-            assert False, err
-
-    # cleanup
-    for key in keys:
-        key.delete()
-    topic_conf.del_config()
-    s3_notification_conf.del_config(notification=notification_name)
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
-    http_server.close()
 
 def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_location=None, verify_ssl='true'):
     """ test object creation s3 notifications in using put/copy/post on master"""
@@ -2329,35 +2183,49 @@ def test_http_post_object_upload():
     conn1.delete_bucket(Bucket=bucket_name)
 
 
-@attr('mpu_test')
-def test_ps_s3_multipart_on_master_http():
-    """ test http multipart object upload on master"""
-    conn = connection()
-    zonegroup = 'default'
-
-    # create random port for the http server
-    host = get_ip()
-    port = random.randint(10000, 20000)
-    # start an http server in a separate thread
-    http_server = HTTPServerWithEvents((host, port))
+def multipart_endpoint_agnostic(endpoint_type, conn):
+    hostname = get_ip()
+    zonegroup = get_config_zonegroup()
 
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX
 
+    host = get_ip()
+    task = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((hostname, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address
+    elif endpoint_type == 'amqp':
+        # start amqp receiver
+        exchange = 'ex1'
+        task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+        task.start()
+        endpoint_address = 'amqp://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange='+exchange+'&amqp-ack-level=broker'
+    elif endpoint_type == 'kafka':
+        # start amqp receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
     # create s3 topic
-    endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address
-    opaque_data = 'http://1.2.3.4:8888'
-    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args, opaque_data=opaque_data)
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name,
-                        'TopicArn': topic_arn,
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
                         'Events': []
                         }]
+
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
@@ -2366,7 +2234,7 @@ def test_ps_s3_multipart_on_master_http():
     client_threads = []
     content = str(os.urandom(20*1024*1024))
     key = bucket.new_key('obj')
-    thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+    thr = threading.Thread(target=set_contents_from_string, args=(key, content,))
     thr.start()
     client_threads.append(thr)
     [thr.join() for thr in client_threads]
@@ -2376,133 +2244,75 @@ def test_ps_s3_multipart_on_master_http():
 
     # check http receiver
     keys = list(bucket.list())
-    print('total number of objects: ' + str(len(keys)))
-    events = http_server.get_and_reset_events()
-    for event in events:
-        assert_equal(event['Records'][0]['opaqueData'], opaque_data)
-        assert_true(event['Records'][0]['s3']['object']['eTag'] != '')
+    receiver.verify_s3_events(keys, exact_match=True, deletions=False)
 
     # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete objects
     for key in keys:
         key.delete()
-    [thr.join() for thr in client_threads]
-    topic_conf.del_config()
-    s3_notification_conf.del_config(notification=notification_name)
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    http_server.close()
+    receiver.close(task)
+
+
+@attr('http_test')
+def test_multipart_http():
+    """ test http multipart object upload """
+    conn = connection()
+    multipart_endpoint_agnostic('http', conn)
+
+
+@attr('kafka_test')
+def test_multipart_kafka():
+    """ test kafka multipart object upload """
+    conn = connection()
+    multipart_endpoint_agnostic('kafka', conn)
 
 
 @attr('amqp_test')
-def test_ps_s3_multipart_on_master():
-    """ test multipart object upload on master"""
-
-    hostname = get_ip()
+def test_multipart_ampq():
+    """ test ampq multipart object upload """
     conn = connection()
-    zonegroup = get_config_zonegroup()
+    multipart_endpoint_agnostic('ampq', conn)
 
-    # create bucket
-    bucket_name = gen_bucket_name()
-    bucket = conn.create_bucket(bucket_name)
-    topic_name = bucket_name + TOPIC_SUFFIX
 
-    # start amqp receivers
-    exchange = 'ex1'
-    task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name+'_1')
-    task1.start()
-    task2, receiver2 = create_amqp_receiver_thread(exchange, topic_name+'_2')
-    task2.start()
-    task3, receiver3 = create_amqp_receiver_thread(exchange, topic_name+'_3')
-    task3.start()
-
-    # create s3 topics
-    endpoint_address = 'amqp://' + hostname
-    endpoint_args = 'push-endpoint=' + endpoint_address + '&amqp-exchange=' + exchange + '&amqp-ack-level=broker'
-    topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
-    topic_arn1 = topic_conf1.set_config()
-    topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
-    topic_arn2 = topic_conf2.set_config()
-    topic_conf3 = PSTopicS3(conn, topic_name+'_3', zonegroup, endpoint_args=endpoint_args)
-    topic_arn3 = topic_conf3.set_config()
-
-    # create s3 notifications
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name+'_1', 'TopicArn': topic_arn1,
-                        'Events': ['s3:ObjectCreated:*']
-                       },
-                       {'Id': notification_name+'_2', 'TopicArn': topic_arn2,
-                        'Events': ['s3:ObjectCreated:Post']
-                       },
-                       {'Id': notification_name+'_3', 'TopicArn': topic_arn3,
-                        'Events': ['s3:ObjectCreated:CompleteMultipartUpload']
-                       }]
-    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
-    response, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-
-    # create objects in the bucket using multi-part upload
-    fp = tempfile.NamedTemporaryFile(mode='w+b')
-    object_size = 1024
-    content = bytearray(os.urandom(object_size))
-    fp.write(content)
-    fp.flush()
-    fp.seek(0)
-    uploader = bucket.initiate_multipart_upload('multipart')
-    uploader.upload_part_from_file(fp, 1)
-    uploader.complete_upload()
-    fp.close()
-
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-
-    # check amqp receiver
-    events = receiver1.get_and_reset_events()
-    assert_equal(len(events), 1)
-
-    events = receiver2.get_and_reset_events()
-    assert_equal(len(events), 0)
-
-    events = receiver3.get_and_reset_events()
-    assert_equal(len(events), 1)
-    assert_equal(events[0]['Records'][0]['eventName'], 'ObjectCreated:CompleteMultipartUpload')
-    assert_equal(events[0]['Records'][0]['s3']['configurationId'], notification_name+'_3')
-    assert_equal(events[0]['Records'][0]['s3']['object']['size'], object_size)
-    assert events[0]['Records'][0]['eventTime'] != '0.000000', 'invalid eventTime'
-
-    # cleanup
-    stop_amqp_receiver(receiver1, task1)
-    stop_amqp_receiver(receiver2, task2)
-    stop_amqp_receiver(receiver3, task3)
-    s3_notification_conf.del_config()
-    topic_conf1.del_config()
-    topic_conf2.del_config()
-    topic_conf3.del_config()
-    for key in bucket.list():
-        key.delete()
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
-
-@attr('amqp_test')
-def test_ps_s3_metadata_filter_on_master():
-    """ test s3 notification of metadata on master """
-
-    hostname = get_ip()
-    conn = connection()
-    zonegroup = get_config_zonegroup()
-
+def metadata_filter(endpoint_type, conn):
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX 
 
-    # start amqp receivers
-    exchange = 'ex1'
-    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
+    # start endpoint receiver
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'amqp':
+        # start amqp receiver
+        exchange = 'ex1'
+        task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+        task.start()
+        endpoint_address = 'amqp://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=routable&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
 
     # create s3 topic
-    endpoint_address = 'amqp://' + hostname
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=routable'
+    zonegroup = get_config_zonegroup()
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
@@ -2559,8 +2369,8 @@ def test_ps_s3_metadata_filter_on_master():
     fp.close()
     expected_keys.append(key_name)
 
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
+    print('wait for the messages...')
+    wait_for_queue_to_drain(topic_name, http_port=port)
     # check amqp receiver
     events = receiver.get_and_reset_events()
     assert_equal(len(events), len(expected_keys))
@@ -2570,20 +2380,41 @@ def test_ps_s3_metadata_filter_on_master():
     # delete objects
     for key in bucket.list():
         key.delete()
-    print('wait for 5sec for the messages...')
-    time.sleep(5)
-    # check amqp receiver
+    print('wait for the messages...')
+    wait_for_queue_to_drain(topic_name, http_port=port)
+    # check endpoint receiver
     events = receiver.get_and_reset_events()
     assert_equal(len(events), len(expected_keys))
     for event in events:
         assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
 
     # cleanup
-    stop_amqp_receiver(receiver, task)
+    receiver.close(task)
     s3_notification_conf.del_config()
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
+
+
+@attr('kafka_test')
+def test_metadata_filter_kafka():
+    """ test notification of filtering metadata, kafka endpoint """
+    conn = connection()
+    metadata_filter('kafka', conn)
+
+
+@attr('http_test')
+def test_metadata_filter_http():
+    """ test notification of filtering metadata, http endpoint """
+    conn = connection()
+    metadata_filter('http', conn)
+
+
+@attr('amqp_test')
+def test_metadata_filter_ampq():
+    """ test notification of filtering metadata, ampq endpoint """
+    conn = connection()
+    metadata_filter('amqp', conn)
 
 
 @attr('amqp_test')
@@ -3070,7 +2901,17 @@ def test_ps_s3_persistent_cleanup():
     http_server.close()
 
 
-def wait_for_queue_to_drain(topic_name, tenant=None, account=None):
+def check_http_server(http_port):
+    str_port = str(http_port)
+    cmd = 'netstat -tlnnp | grep python | grep '+str_port
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True)
+    out = proc.communicate()[0]
+    assert len(out) > 0, 'http python server NOT listening on port '+str_port
+    log.info("http python server listening on port "+str_port)
+    log.info(out.decode('utf-8'))
+
+
+def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=None):
     retries = 0
     entries = 1
     start_time = time.time()
@@ -3081,13 +2922,16 @@ def wait_for_queue_to_drain(topic_name, tenant=None, account=None):
     if account:
         cmd += ['--account-id', account]
     while entries > 0:
+        if http_port:
+            check_http_server(http_port)
         result = admin(cmd, get_config_cluster())
         assert_equal(result[1], 0)
         parsed_result = json.loads(result[0])
         entries = parsed_result['Topic Stats']['Entries']
         retries += 1
+        time_diff = time.time() - start_time
+        log.info('queue %s has %d entries after %ds', topic_name, entries, time_diff)
         if retries > 30:
-            time_diff = time.time() - start_time
             log.warning('queue %s still has %d entries after %ds', topic_name, entries, time_diff)
             assert_equal(entries, 0)
         time.sleep(5)
@@ -3112,7 +2956,8 @@ def test_ps_s3_persistent_topic_stats():
 
     # create s3 topic
     endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
@@ -3126,13 +2971,10 @@ def test_ps_s3_persistent_topic_stats():
     assert_equal(status/100, 2)
 
     # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, 0)
 
     # create objects in the bucket (async)
-    number_of_objects = 100
+    number_of_objects = 20
     client_threads = []
     start_time = time.time()
     for i in range(number_of_objects):
@@ -3146,10 +2988,7 @@ def test_ps_s3_persistent_topic_stats():
     print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, number_of_objects)
 
     # delete objects from the bucket
     client_threads = []
@@ -3163,15 +3002,12 @@ def test_ps_s3_persistent_topic_stats():
     print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 2*number_of_objects)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, 2 * number_of_objects)
 
     # start an http server in a separate thread
     http_server = HTTPServerWithEvents((host, port))
 
-    wait_for_queue_to_drain(topic_name)
+    wait_for_queue_to_drain(topic_name, http_port=port)
 
     # cleanup
     s3_notification_conf.del_config()
@@ -3215,18 +3051,13 @@ def ps_s3_persistent_topic_configs(persistency_time, config_dict):
     time.sleep(delay)
     http_server.close()
     # topic get
-    result = admin(['topic', 'get', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
+    parsed_result = get_topic(topic_name)
     parsed_result_dest = parsed_result["dest"]
     for key, value in config_dict.items():
         assert_equal(parsed_result_dest[key], str(value))
-    assert_equal(result[1], 0)
 
     # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, 0)
 
     # create objects in the bucket (async)
     number_of_objects = 10
@@ -3243,17 +3074,11 @@ def ps_s3_persistent_topic_configs(persistency_time, config_dict):
     print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, number_of_objects)
 
     # wait as much as ttl and check if the persistent topics have expired
     time.sleep(persistency_time)
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, 0)
 
     # delete objects from the bucket
     client_threads = []
@@ -3272,17 +3097,11 @@ def ps_s3_persistent_topic_configs(persistency_time, config_dict):
             start_time = time.time()
 
     # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, number_of_objects)
 
     # wait as much as ttl and check if the persistent topics have expired
     time.sleep(persistency_time)
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, 0)
 
     # cleanup
     s3_notification_conf.del_config()
@@ -3749,11 +3568,13 @@ def test_ps_s3_persistent_multiple_endpoints():
 
     # create two s3 topics
     endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
     topic_arn1 = topic_conf1.set_config()
     endpoint_address = 'http://kaboom:9999'
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
     topic_arn2 = topic_conf2.set_config()
 
@@ -3787,7 +3608,7 @@ def test_ps_s3_persistent_multiple_endpoints():
 
     wait_for_queue_to_drain(topic_name+'_1')
 
-    http_server.verify_s3_events(keys, exact_match=False, deletions=False)
+    http_server.verify_s3_events(keys, exact_match=True, deletions=False)
 
     # delete objects from the bucket
     client_threads = []
@@ -3800,7 +3621,7 @@ def test_ps_s3_persistent_multiple_endpoints():
 
     wait_for_queue_to_drain(topic_name+'_1')
 
-    http_server.verify_s3_events(keys, exact_match=False, deletions=True)
+    http_server.verify_s3_events(keys, exact_match=True, deletions=True)
 
     # cleanup
     s3_notification_conf1.del_config()
@@ -3819,8 +3640,8 @@ def persistent_notification(endpoint_type, conn, account=None):
     bucket = conn.create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX
 
-    receiver = {}
     host = get_ip()
+    task = None
     if endpoint_type == 'http':
         # create random port for the http server
         host = get_ip_http()
@@ -3829,8 +3650,6 @@ def persistent_notification(endpoint_type, conn, account=None):
         receiver = HTTPServerWithEvents((host, port))
         endpoint_address = 'http://'+host+':'+str(port)
         endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
-        # the http server does not guarantee order, so duplicates are expected
-        exact_match = False
     elif endpoint_type == 'amqp':
         # start amqp receiver
         exchange = 'ex1'
@@ -3838,16 +3657,12 @@ def persistent_notification(endpoint_type, conn, account=None):
         task.start()
         endpoint_address = 'amqp://' + host
         endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange='+exchange+'&amqp-ack-level=broker'+'&persistent=true'
-        # amqp broker guarantee ordering
-        exact_match = True
     elif endpoint_type == 'kafka':
-        # start amqp receiver
+        # start kafka receiver
         task, receiver = create_kafka_receiver_thread(topic_name)
         task.start()
         endpoint_address = 'kafka://' + host
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'+'&persistent=true'
-        # amqp broker guarantee ordering
-        exact_match = True
     else:
         return SkipTest('Unknown endpoint type: ' + endpoint_type)
 
@@ -3884,7 +3699,7 @@ def persistent_notification(endpoint_type, conn, account=None):
 
     wait_for_queue_to_drain(topic_name, account=account)
 
-    receiver.verify_s3_events(keys, exact_match=exact_match, deletions=False)
+    receiver.verify_s3_events(keys, exact_match=False, deletions=False)
 
     # delete objects from the bucket
     client_threads = []
@@ -3900,17 +3715,14 @@ def persistent_notification(endpoint_type, conn, account=None):
 
     wait_for_queue_to_drain(topic_name, account=account)
 
-    receiver.verify_s3_events(keys, exact_match=exact_match, deletions=True)
+    receiver.verify_s3_events(keys, exact_match=False, deletions=True)
 
     # cleanup
     s3_notification_conf.del_config()
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    if endpoint_type == 'http':
-        receiver.close()
-    else:
-        stop_amqp_receiver(receiver, task)
+    receiver.close(task)
 
 
 @attr('http_test')
@@ -4094,7 +3906,7 @@ def test_ps_s3_topic_update():
     #zone_bucket_checkpoint(ps_zone.zone, master_zone.zone, bucket_name)
     keys = list(bucket.list())
     # TODO: use exact match
-    receiver.verify_s3_events(keys, exact_match=False)
+    receiver.verify_s3_events(keys, exact_match=True)
     # update the same topic with new endpoint
     #topic_conf = PSTopic(ps_zone.conn, topic_name,endpoint='http://'+ hostname + ':' + str(port))
     topic_conf = PSTopicS3(conn, topic_name, endpoint_args='http://'+ hostname + ':' + str(port))
@@ -4526,7 +4338,7 @@ def test_ps_s3_topic_no_permissions():
     conn2.delete_bucket(bucket_name)
 
 
-def kafka_security(security_type, mechanism='PLAIN'):
+def kafka_security(security_type, mechanism='PLAIN', use_topic_attrs_for_creds=False):
     """ test pushing kafka s3 notification securly to master """
     conn = connection()
     zonegroup = get_config_zonegroup()
@@ -4537,7 +4349,10 @@ def kafka_security(security_type, mechanism='PLAIN'):
     topic_name = bucket_name+'_topic'
     # create s3 topic
     if security_type == 'SASL_SSL':
-        endpoint_address = 'kafka://alice:alice-secret@' + kafka_server + ':9094'
+        if not use_topic_attrs_for_creds:
+            endpoint_address = 'kafka://alice:alice-secret@' + kafka_server + ':9094'
+        else:
+            endpoint_address = 'kafka://' + kafka_server + ':9094'
     elif security_type == 'SSL':
         endpoint_address = 'kafka://' + kafka_server + ':9093'
     elif security_type == 'SASL_PLAINTEXT':
@@ -4550,6 +4365,8 @@ def kafka_security(security_type, mechanism='PLAIN'):
     elif security_type == 'SASL_SSL':
         KAFKA_DIR = os.environ['KAFKA_DIR']
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt&mechanism='+mechanism
+        if use_topic_attrs_for_creds:
+            endpoint_args += '&user-name=alice&password=alice-secret'
     else:
         KAFKA_DIR = os.environ['KAFKA_DIR']
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt'
@@ -4623,6 +4440,11 @@ def test_ps_s3_notification_push_kafka_security_ssl_sasl():
 
 
 @attr('kafka_security_test')
+def test_ps_s3_notification_push_kafka_security_ssl_sasl_attrs():
+    kafka_security('SASL_SSL', use_topic_attrs_for_creds=True)
+
+
+@attr('kafka_security_test')
 def test_ps_s3_notification_push_kafka_security_sasl():
     kafka_security('SASL_PLAINTEXT')
 
@@ -4637,9 +4459,115 @@ def test_ps_s3_notification_push_kafka_security_sasl_scram():
     kafka_security('SASL_PLAINTEXT', mechanism='SCRAM-SHA-256')
 
 
+@attr('http_test')
+def test_persistent_ps_s3_reload():
+    """ do a realm reload while we send notifications """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for reload test')
+
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # make sure there is nothing to migrate
+    print('delete all topics')
+    delete_all_topics(conn, '', get_config_cluster())
+
+    # disable v2 notification
+    zonegroup_modify_feature(enable=False, feature_name=zonegroup_feature_notification_v2)
+
+    # create random port for the http server
+    host = get_ip()
+    http_port = random.randint(10000, 20000)
+    print('start http server')
+    http_server = HTTPServerWithEvents((host, http_port), delay=2)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name1 = bucket_name + TOPIC_SUFFIX + '_1'
+
+    # create s3 topics
+    endpoint_address = 'http://'+host+':'+str(http_port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
+    topic_conf1 = PSTopicS3(conn, topic_name1, zonegroup, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+    # 2nd topic is unused
+    topic_name2 = bucket_name + TOPIC_SUFFIX + '_2'
+    topic_conf2 = PSTopicS3(conn, topic_name2, zonegroup, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
+
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn1,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # topic stats
+    get_stats_persistent_topic(topic_name1, 0)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    wait_for_queue_to_drain(topic_name1, http_port=http_port)
+
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('another-key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    # do a reload
+    print('do reload')
+    zonegroup_modify_feature(enable=True, feature_name=zonegroup_feature_notification_v2)
+
+    wait_for_queue_to_drain(topic_name1, http_port=http_port)
+    # verify events
+    keys = list(bucket.list())
+    http_server.verify_s3_events(keys, exact_match=False)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    topic_conf2.del_config()
+    # delete objects from the bucket
+    client_threads = []
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    http_server.close()
+
+
 @attr('data_path_v2_test')
 def test_persistent_ps_s3_data_path_v2_migration():
     """ test data path v2 persistent migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4648,12 +4576,7 @@ def test_persistent_ps_s3_data_path_v2_migration():
     http_port = random.randint(10000, 20000)
 
     # disable v2 notification
-    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+    zonegroup_modify_feature(enable=False, feature_name=zonegroup_feature_notification_v2)
 
     # create bucket
     bucket_name = gen_bucket_name()
@@ -4662,7 +4585,8 @@ def test_persistent_ps_s3_data_path_v2_migration():
 
     # create s3 topic
     endpoint_address = 'http://'+host+':'+str(http_port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
@@ -4676,10 +4600,7 @@ def test_persistent_ps_s3_data_path_v2_migration():
     assert_equal(status/100, 2)
 
     # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
-    assert_equal(result[1], 0)
+    get_stats_persistent_topic(topic_name, 0)
 
     # create objects in the bucket (async)
     number_of_objects = 10
@@ -4698,34 +4619,23 @@ def test_persistent_ps_s3_data_path_v2_migration():
     http_server = None
     try:
         # topic stats
-        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-        parsed_result = json.loads(result[0])
-        assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
-        assert_equal(result[1], 0)
+        get_stats_persistent_topic(topic_name, number_of_objects)
 
         # create topic to poll on
         topic_name_1 = topic_name + '_1'
         topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
 
         # enable v2 notification
-        result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
-        assert_equal(result[1], 0)
-        result = admin(['period', 'update'], get_config_cluster())
-        assert_equal(result[1], 0)
-        result = admin(['period', 'commit'], get_config_cluster())
-        assert_equal(result[1], 0)
+        zonegroup_modify_feature(enable=True, feature_name=zonegroup_feature_notification_v2)
 
         # poll on topic_1
         result = 1
         while result != 0:
             time.sleep(1)
-            result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
+            result = remove_topic(topic_name_1, allow_failure=True)
 
         # topic stats
-        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-        parsed_result = json.loads(result[0])
-        assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
-        assert_equal(result[1], 0)
+        get_stats_persistent_topic(topic_name, number_of_objects)
 
         # create more objects in the bucket (async)
         client_threads = []
@@ -4741,17 +4651,15 @@ def test_persistent_ps_s3_data_path_v2_migration():
         print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
         # topic stats
-        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-        parsed_result = json.loads(result[0])
-        assert_equal(parsed_result['Topic Stats']['Entries'], 2*number_of_objects)
-        assert_equal(result[1], 0)
+        get_stats_persistent_topic(topic_name, 2 * number_of_objects)
 
         # start an http server in a separate thread
         http_server = HTTPServerWithEvents((host, http_port))
 
-        wait_for_queue_to_drain(topic_name)
+        wait_for_queue_to_drain(topic_name, http_port=http_port)
         # verify events
         keys = list(bucket.list())
+        # exact match is false because the notifications are persistent.
         http_server.verify_s3_events(keys, exact_match=False)
 
     except Exception as e:
@@ -4776,6 +4684,8 @@ def test_persistent_ps_s3_data_path_v2_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_migration():
     """ test data path v2 migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     zonegroup = get_config_zonegroup()
 
@@ -4787,12 +4697,7 @@ def test_ps_s3_data_path_v2_migration():
     http_server = HTTPServerWithEvents((host, http_port))
 
     # disable v2 notification
-    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+    zonegroup_modify_feature(enable=False, feature_name=zonegroup_feature_notification_v2)
 
     # create bucket
     bucket_name = gen_bucket_name()
@@ -4831,27 +4736,20 @@ def test_ps_s3_data_path_v2_migration():
     try:
         # verify events
         keys = list(bucket.list())
-        http_server.verify_s3_events(keys, exact_match=False)
+        http_server.verify_s3_events(keys, exact_match=True)
 
         # create topic to poll on
         topic_name_1 = topic_name + '_1'
         topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
 
         # enable v2 notification
-        result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
-        assert_equal(result[1], 0)
-        result = admin(['period', 'update'], get_config_cluster())
-        assert_equal(result[1], 0)
-        result = admin(['period', 'commit'], get_config_cluster())
-        assert_equal(result[1], 0)
-
+        zonegroup_modify_feature(enable=True, feature_name=zonegroup_feature_notification_v2)
 
         # poll on topic_1
         result = 1
         while result != 0:
             time.sleep(1)
-            result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
-
+            result = remove_topic(topic_name_1, allow_failure=True)
 
         # create more objects in the bucket (async)
         client_threads = []
@@ -4891,6 +4789,8 @@ def test_ps_s3_data_path_v2_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_large_migration():
     """ test data path v2 large migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     connections_list = []
     connections_list.append(conn)
@@ -4900,29 +4800,15 @@ def test_ps_s3_data_path_v2_large_migration():
     # make sure there are no leftover topics
     delete_all_topics(conn, '', get_config_cluster())
     for i in ['1', '2']:
-        access_key = str(time.time())
-        secret_key = str(time.time())
-        uid = UID_PREFIX + str(time.time())
         tenant_id = 'kaboom_' + i
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], 
-                          get_config_cluster())
-        assert_equal(result, 0)
         tenants_list.append(tenant_id)
-        conn = S3Connection(aws_access_key_id=access_key,
-                            aws_secret_access_key=secret_key,
-                            is_secure=False, port=get_config_port(), host=get_config_host(),
-                            calling_format='boto.s3.connection.OrdinaryCallingFormat')
+        conn = connect_random_user(tenant_id)
         connections_list.append(conn)
         # make sure there are no leftover topics
         delete_all_topics(conn, tenant_id, get_config_cluster())
 
     # disable v2 notification
-    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+    zonegroup_modify_feature(enable=False, feature_name=zonegroup_feature_notification_v2)
 
     # create random port for the http server
     host = get_ip()
@@ -4966,23 +4852,15 @@ def test_ps_s3_data_path_v2_large_migration():
         polling_topics_conf.append(topic_conf)
 
     # enable v2 notification
-    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+    zonegroup_modify_feature(enable=True, feature_name=zonegroup_feature_notification_v2)
 
     # poll on topic_1
     for tenant, topic_conf in zip(tenants_list, polling_topics_conf):
         while True:
-            if tenant == '':
-                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name], get_config_cluster())
-            else:
-                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name, '--tenant', tenant], get_config_cluster())
+            result = remove_topic(topic_conf.topic_name, tenant, allow_failure=True)
 
-            if result[1] != 0:
-                print('migration in process... error: '+str(result[1]))
+            if result != 0:
+                print('migration in process... error: '+str(result))
             else:
                 break
 
@@ -4990,21 +4868,11 @@ def test_ps_s3_data_path_v2_large_migration():
 
     # check if we migrated all the topics
     for tenant in tenants_list:
-        if tenant == '':
-            topics_result = admin(['topic', 'list'], get_config_cluster())
-        else:
-            topics_result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-        topics_json = json.loads(topics_result[0])
-        assert_equal(len(topics_json['topics']), 1)
+        list_topics(1, tenant)
 
     # check if we migrated all the notifications
     for tenant, bucket in zip(tenants_list, buckets_list):
-        if tenant == '':
-            result = admin(['notification', 'list', '--bucket', bucket.name], get_config_cluster())
-        else:
-            result = admin(['notification', 'list', '--bucket', bucket.name, '--tenant', tenant], get_config_cluster())
-        parsed_result = json.loads(result[0])
-        assert_equal(len(parsed_result['notifications']), num_of_s3_notifications)
+        list_notifications(bucket.name, num_of_s3_notifications)
 
     # cleanup
     for s3_notification_conf in s3_notification_conf_list:
@@ -5019,6 +4887,8 @@ def test_ps_s3_data_path_v2_large_migration():
 @attr('data_path_v2_test')
 def test_ps_s3_data_path_v2_mixed_migration():
     """ test data path v2 mixed migration """
+    if get_config_cluster() == 'noname':
+        return SkipTest('realm is needed for migration test')
     conn = connection()
     connections_list = []
     connections_list.append(conn)
@@ -5029,26 +4899,12 @@ def test_ps_s3_data_path_v2_mixed_migration():
     delete_all_topics(conn, '', get_config_cluster())
     
     # make sure that we start at v2
-    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+    zonegroup_modify_feature(enable=True, feature_name=zonegroup_feature_notification_v2)
 
     for i in ['1', '2']:
-        access_key = str(time.time())
-        secret_key = str(time.time())
-        uid = UID_PREFIX + str(time.time())
         tenant_id = 'kaboom_' + i
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], 
-                          get_config_cluster())
-        assert_equal(result, 0)
         tenants_list.append(tenant_id)
-        conn = S3Connection(aws_access_key_id=access_key,
-                            aws_secret_access_key=secret_key,
-                            is_secure=False, port=get_config_port(), host=get_config_host(),
-                            calling_format='boto.s3.connection.OrdinaryCallingFormat')
+        conn = connect_random_user(tenant_id)
         connections_list.append(conn)
         # make sure there are no leftover topics
         delete_all_topics(conn, tenant_id, get_config_cluster())
@@ -5088,12 +4944,7 @@ def test_ps_s3_data_path_v2_mixed_migration():
         assert_equal(status / 100, 2)
 
     # disable v2 notification
-    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+    zonegroup_modify_feature(enable=False, feature_name=zonegroup_feature_notification_v2)
 
     # create s3 topic
     created_version = '_created_v1'
@@ -5126,22 +4977,14 @@ def test_ps_s3_data_path_v2_mixed_migration():
         polling_topics_conf.append(topic_conf)
 
     # enable v2 notification
-    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+    zonegroup_modify_feature(enable=True, feature_name=zonegroup_feature_notification_v2)
 
     # poll on topic_1
     for tenant, topic_conf in zip(tenants_list, polling_topics_conf):
         while True:
-            if tenant == '':
-                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name], get_config_cluster())
-            else:
-                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name, '--tenant', tenant], get_config_cluster())
+            result = remove_topic(topic_conf.topic_name, tenant, allow_failure=True)
 
-            if result[1] != 0:
+            if result != 0:
                 print(result)
             else:
                 break
@@ -5150,21 +4993,11 @@ def test_ps_s3_data_path_v2_mixed_migration():
 
     # check if we migrated all the topics
     for tenant in tenants_list:
-        if tenant == '':
-            topics_result = admin(['topic', 'list'], get_config_cluster())
-        else:
-            topics_result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-        topics_json = json.loads(topics_result[0])
-        assert_equal(len(topics_json['topics']), 2)
+        list_topics(2, tenant)
 
     # check if we migrated all the notifications
     for tenant, bucket in zip(tenants_list, buckets_list):
-        if tenant == '':
-            notifications_result = admin(['notification', 'list', '--bucket', bucket.name], get_config_cluster())
-        else:
-            notifications_result = admin(['notification', 'list', '--bucket', bucket.name, '--tenant', tenant], get_config_cluster())
-        notifications_json = json.loads(notifications_result[0])
-        assert_equal(len(notifications_json['notifications']), 2)
+        list_notifications(bucket.name, 2)
 
     # cleanup
     for s3_notification_conf in s3_notification_conf_list:

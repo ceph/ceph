@@ -84,6 +84,8 @@ seastar::future<> InternalClientRequest::start()
             [[maybe_unused]] const int ret = op_info.set_from_op(
               std::as_const(osd_ops), pg->get_pgid().pgid, *pg->get_osdmap());
             assert(ret == 0);
+            // call with_locked_obc() in order, but wait concurrently for loading.
+            enter_stage_sync(client_pp().lock_obc);
             return pg->with_locked_obc(get_target_oid(), op_info,
               [&osd_ops, this](auto, auto obc) {
               return enter_stage<interruptor>(client_pp().process

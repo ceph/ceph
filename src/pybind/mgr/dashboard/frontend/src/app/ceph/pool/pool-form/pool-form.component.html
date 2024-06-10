@@ -191,6 +191,25 @@
             </i>
           </div>
         </div>
+        <!-- Mirroring -->
+        <div class="form-group row"
+             *ngIf="data.applications.selected.includes('rbd')">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="rbdMirroring"
+                     name="rbdMirroring"
+                     type="checkbox"
+                     formControlName="rbdMirroring">
+              <label class="custom-control-label"
+                     for="rbdMirroring"
+                     i18n>Mirroring</label>
+              <cd-help-text>
+                <span i18n>Check this option to enable Pool based mirroring on a Block(RBD) pool.</span>
+              </cd-help-text>
+            </div>
+          </div>
+        </div>
         <!-- CRUSH -->
         <div *ngIf="isErasure || isReplicated">
 
@@ -421,9 +440,10 @@
 
           <!-- Compression Mode -->
           <div class="form-group row">
-            <label i18n
-                   class="cd-col-form-label"
-                   for="mode">Mode</label>
+            <label class="cd-col-form-label"
+                   for="mode"
+                   i18n>Mode
+            </label>
             <div class="cd-col-form-input">
               <select class="form-select"
                       id="mode"
@@ -434,14 +454,16 @@
                   {{ mode }}
                 </option>
               </select>
+              <cd-help-text>Policy used for compression algorithm</cd-help-text>
             </div>
           </div>
           <div *ngIf="hasCompressionEnabled()">
             <!-- Compression algorithm selection -->
             <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="algorithm">Algorithm</label>
+              <label class="cd-col-form-label"
+                     for="algorithm">
+                <ng-container i18n>Algorithm</ng-container>
+              </label>
               <div class="cd-col-form-input">
                 <select class="form-select"
                         id="algorithm"
@@ -458,14 +480,18 @@
                     {{ algorithm }}
                   </option>
                 </select>
+                <cd-help-text>
+                  <span i18n>Compression algorithm used</span>
+                </cd-help-text>
               </div>
             </div>
 
             <!-- Compression min blob size -->
             <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="minBlobSize">Minimum blob size</label>
+              <label class="cd-col-form-label"
+                     for="minBlobSize">
+                <ng-container i18n>Minimum blob size</ng-container>
+              </label>
               <div class="cd-col-form-input">
                 <input id="minBlobSize"
                        name="minBlobSize"
@@ -477,6 +503,9 @@
                        placeholder="e.g., 128KiB"
                        defaultUnit="KiB"
                        cdDimlessBinary>
+                <cd-help-text>
+                  <span i18n>Chunks smaller than Minimum blob size are never compressed</span>
+                </cd-help-text>
                 <span class="invalid-feedback"
                       *ngIf="form.showError('minBlobSize', formDir, 'min')"
                       i18n>Value should be greater than 0</span>
@@ -491,9 +520,10 @@
 
             <!-- Compression max blob size -->
             <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="maxBlobSize">Maximum blob size</label>
+              <label class="cd-col-form-label"
+                     for="maxBlobSize">
+                <ng-container i18n>Maximum blob size</ng-container>
+              </label>
               <div class="cd-col-form-input">
                 <input id="maxBlobSize"
                        type="text"
@@ -504,6 +534,9 @@
                        placeholder="e.g., 512KiB"
                        defaultUnit="KiB"
                        cdDimlessBinary>
+                <cd-help-text>
+                  <span i18n>Chunks larger than `Maximum Blob Size` are broken into smaller blobs of size mentioned before being compressed.</span>
+                </cd-help-text>
                 <span class="invalid-feedback"
                       *ngIf="form.showError('maxBlobSize', formDir, 'min')"
                       i18n>Value should be greater than 0</span>
@@ -518,9 +551,10 @@
 
             <!-- Compression ratio -->
             <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="ratio">Ratio</label>
+              <label class="cd-col-form-label"
+                     for="ratio">
+                <ng-container i18n>Ratio</ng-container>
+              </label>
               <div class="cd-col-form-input">
                 <input id="ratio"
                        name="ratio"
@@ -529,9 +563,10 @@
                        min="0"
                        max="1"
                        step="0.1"
-                       class="form-control"
-                       i18n-placeholder
-                       placeholder="Compression ratio">
+                       class="form-control">
+                <cd-help-text>
+                  <span i18n>The ratio of the size of the data chunk after compression relative to the original size must be at least this small in order to store the compressed version</span>
+                </cd-help-text>
                 <span class="invalid-feedback"
                       *ngIf="form.showError('ratio', formDir, 'min') || form.showError('ratio', formDir, 'max')"
                       i18n>Value should be between 0.0 and 1.0</span>
@@ -550,11 +585,6 @@
             <label class="cd-col-form-label"
                    for="max_bytes">
               <ng-container i18n>Max bytes</ng-container>
-              <cd-helper>
-                <span i18n>Leave it blank or specify 0 to disable this quota.</span>
-                <br>
-                <span i18n>A valid quota should be greater than 0.</span>
-              </cd-helper>
             </label>
             <div class="cd-col-form-input">
               <input class="form-control"
@@ -566,6 +596,11 @@
                      placeholder="e.g., 10GiB"
                      defaultUnit="GiB"
                      cdDimlessBinary>
+              <cd-help-text>
+                <span i18n>Leave it blank or specify 0 to disable this quota.</span>
+                <br>
+                <span i18n>A valid quota should be greater than 0.</span>
+              </cd-help-text>
               <span *ngIf="form.showError('max_bytes', formDir, 'pattern')"
                     class="invalid-feedback"
                     i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
@@ -577,11 +612,6 @@
             <label class="cd-col-form-label"
                    for="max_objects">
               <ng-container i18n>Max objects</ng-container>
-              <cd-helper>
-                <span i18n>Leave it blank or specify 0 to disable this quota.</span>
-                <br>
-                <span i18n>A valid quota should be greater than 0.</span>
-              </cd-helper>
             </label>
             <div class="cd-col-form-input">
               <input class="form-control"
@@ -590,6 +620,11 @@
                      name="max_objects"
                      type="number"
                      formControlName="max_objects">
+              <cd-help-text>
+                <span i18n>Leave it blank or specify 0 to disable this quota.</span>
+                <br>
+                <span i18n>A valid quota should be greater than 0.</span>
+              </cd-help-text>
               <span class="invalid-feedback"
                     *ngIf="form.showError('max_objects', formDir, 'min')"
                     i18n>The value should be greater or equal to 0</span>

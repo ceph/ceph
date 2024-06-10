@@ -1042,7 +1042,7 @@ void CephContext::notify_pre_fork()
 
 void CephContext::notify_post_fork()
 {
-  ceph::spin_unlock(&_fork_watchers_lock);
+  std::lock_guard lg(_fork_watchers_lock);
   for (auto &&t : _fork_watchers)
     t->handle_post_fork();
 }

@@ -643,6 +643,21 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
   return out << ")";
 }
 
+//pool_fsck_stats_t
+
+std::ostream& operator<<(std::ostream& out, const BlueStore::pool_fsck_stats_t& s)
+{
+  out << "(" << s.num_objects << " objects, "
+      << s.shared_blobs << " shared blobs, "
+      << s.omaps << " omaps, "
+      << s.omap_key_size << " bytes in omap keys, "
+      << s.omap_val_size << " bytes in omap vals, "
+      << s.stored << " bytes stored, "
+      << s.allocated << " bytes allocated"
+      << ")";
+  return out;
+}
+
 namespace {
 
 /*
@@ -6326,10 +6341,21 @@ void BlueStore::_init_logger()
   //****************************************
   b.add_u64_counter(l_bluestore_omap_iterator_count, "omap_iterator_count",
     "Open omap iterators count");
+  b.add_u64_counter(l_bluestore_omap_setheader_count, "omap_setheader_count",
+    "amount of omap setheader calls");
+  b.add_u64_counter(l_bluestore_omap_setheader_bytes, "omap_setheader_bytes",
+    "amount of bytes set by omap setheader calls");
+  b.add_u64_counter(l_bluestore_omap_setkeys_count, "omap_setkeys_count",
+    "amount of omap setkeys calls");
+  b.add_u64_counter(l_bluestore_omap_setkeys_records, "omap_setkeys_records",
+    "amount of keys set by omap setkeys calls");
+  b.add_u64_counter(l_bluestore_omap_setkeys_bytes, "omap_setkeys_bytes",
+    "amount of bytes set by omap setkeys calls");
   b.add_u64_counter(l_bluestore_omap_rmkeys_count, "omap_rmkeys_count",
     "amount of omap keys removed via rmkeys");
   b.add_u64_counter(l_bluestore_omap_rmkey_ranges_count, "omap_rmkey_range_count",
     "amount of omap key ranges removed via rmkeys");
+
   //****************************************
   // other client ops latencies
   //****************************************
@@ -8910,12 +8936,14 @@ int BlueStore::cold_close()
 int _fsck_sum_extents(
   const PExtentVector& extents,
   bool compressed,
-  store_statfs_t& expected_statfs)
+  store_statfs_t& expected_statfs,
+  BlueStore::pool_fsck_stats_t& pool_fsck_stat)
 {
   for (auto e : extents) {
     if (!e.is_valid())
       continue;
     expected_statfs.allocated += e.length;
+    pool_fsck_stat.allocated += e.length;
     if (compressed) {
       expected_statfs.data_compressed_allocated += e.length;
     }
@@ -8931,6 +8959,7 @@ int BlueStore::_fsck_check_extents(
   uint64_t granularity,
   BlueStoreRepairer* repairer,
   store_statfs_t& expected_statfs,
+  BlueStore::pool_fsck_stats_t& pool_fsck_stat,
   FSCKDepth depth)
 {
   dout(30) << __func__ << " " << ctx_descr << ", extents " << extents << dendl;
@@ -8939,6 +8968,7 @@ int BlueStore::_fsck_check_extents(
     if (!e.is_valid())
       continue;
     expected_statfs.allocated += e.length;
+    pool_fsck_stat.allocated += e.length;
     if (compressed) {
       expected_statfs.data_compressed_allocated += e.length;
     }
@@ -9239,7 +9269,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   const bufferlist& value,
   mempool::bluestore_fsck::list<string>* expecting_shards,
   map<BlobRef, bluestore_blob_t::unused_t>* referenced,
-  const BlueStore::FSCK_ObjectCtx& ctx)
+  BlueStore::FSCK_ObjectCtx& ctx)
 {
   auto& errors = ctx.errors;
   auto& num_objects = ctx.num_objects;
@@ -9252,6 +9282,8 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   auto& sb_info = ctx.sb_info;
   auto& sb_ref_counts = ctx.sb_ref_counts;
   auto repairer = ctx.repairer;
+  pool_fsck_stats_t* pool_fsck_stat =
+    &ctx.per_pool_fsck_stats[c->cid.is_pg() ? c->cid.pool() : META_POOL_ID];
 
   store_statfs_t* res_statfs = (per_pool_stat_collection || repairer) ?
     &ctx.expected_pool_statfs[pool_id] :
@@ -9262,7 +9294,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   OnodeRef o;
   o.reset(Onode::create_decode(c, oid, key, value));
   ++num_objects;
-
+  ++pool_fsck_stat->num_objects;
   num_spanning_blobs += o->extent_map.spanning_blob_map.size();
 
   o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
@@ -9310,6 +9342,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
     }
     pos = l.logical_offset + l.length;
     res_statfs->data_stored += l.length;
+    pool_fsck_stat->stored += l.length;
     ceph_assert(l.blob);
     const bluestore_blob_t& blob = l.blob->get_blob();
 
@@ -9415,14 +9448,16 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
         blob.is_compressed(),
         *used_blocks,
         fm->get_alloc_size(),
-	repairer,
+        repairer,
         *res_statfs,
+        *pool_fsck_stat,
         depth);
     } else {
       errors += _fsck_sum_extents(
         blob.get_extents(),
         blob.is_compressed(),
-        *res_statfs);
+        *res_statfs,
+        *pool_fsck_stat);
     }
   } // for (auto& i : ref_map)
 
@@ -9512,6 +9547,7 @@ public:
       uint64_t num_spanning_blobs = 0;
       store_statfs_t expected_store_statfs;
       BlueStore::per_pool_statfs expected_pool_statfs;
+      BlueStore::per_pool_fsck_stats_t per_pool_fsck_stats;
     };
 
     size_t batchCount;
@@ -9595,6 +9631,7 @@ public:
 	*sb_ref_counts,
         batch->expected_store_statfs,
         batch->expected_pool_statfs,
+        batch->per_pool_fsck_stats,
         repairer);
 
       for (size_t i = 0; i < batch->entry_count; i++) {
@@ -9708,6 +9745,11 @@ public:
           it++) {
           ctx.expected_pool_statfs[it->first].add(it->second);
         }
+        for (auto it = batch.per_pool_fsck_stats.begin();
+          it != batch.per_pool_fsck_stats.end();
+          it++) {
+          ctx.per_pool_fsck_stats[it->first].add(it->second);
+	}
       }
     }
   };
@@ -10227,6 +10269,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   KeyValueDB::Iterator it;
   store_statfs_t expected_store_statfs;
   per_pool_statfs expected_pool_statfs;
+  per_pool_fsck_stats_t per_pool_fsck_stats;
 
   sb_info_space_efficient_map_t sb_info;
   shared_blob_2hash_tracker_t sb_ref_counts(
@@ -10382,6 +10425,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       sb_ref_counts,
       expected_store_statfs,
       expected_pool_statfs,
+      per_pool_fsck_stats,
       repair ? &repairer : nullptr);
 
     _fsck_check_objects(depth, ctx);
@@ -10486,6 +10530,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	}
 	std::stringstream ss;
 	ss << "sbid 0x" << std::hex << sbid << std::dec;
+
+	pool_fsck_stats_t& ppfs = per_pool_fsck_stats[sbi.pool_id];
+	ppfs.shared_blobs++;
 	errors += _fsck_check_extents(ss.str(),
 	  extents,
 	  sbi.allocated_chunks < 0,
@@ -10493,6 +10540,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  fm->get_alloc_size(),
 	  repair ? &repairer : nullptr,
 	  *expected_statfs,
+	  ppfs,
 	  depth);
       }
     }
@@ -10731,9 +10779,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     it = db->get_iterator(PREFIX_PGMETA_OMAP, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       uint64_t last_omap_head = 0;
+      pool_fsck_stats_t& ppfs = per_pool_fsck_stats[META_POOL_ID];
       for (it->lower_bound(string()); it->valid(); it->next()) {
         uint64_t omap_head;
         _key_decode_u64(it->key().c_str(), &omap_head);
+        ppfs.omaps++;
+        ppfs.omap_key_size += it->key().size();
+        ppfs.omap_val_size += it->value().length();
         if (used_omap_head.count(omap_head) == 0 &&
 	    omap_head != last_omap_head) {
           pair<string,string> rk = it->raw_key();
@@ -10758,6 +10810,15 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         const char *c = k.c_str();
         c = _key_decode_u64(c, &pool);
         c = _key_decode_u64(c, &omap_head);
+        auto p =
+	  pool > 0 ? pool : META_POOL_ID; // we erroneously use pool==0 for
+	                                  // meta (aka pool==-1) objects
+					  // (see #64153)
+					  // hence treat it as meta
+        pool_fsck_stats_t& ppfs = per_pool_fsck_stats[p];
+        ppfs.omaps++;
+        ppfs.omap_key_size += it->key().size();
+        ppfs.omap_val_size += it->value().length();
         if (used_omap_head.count(omap_head) == 0 &&
           omap_head != last_omap_head) {
           pair<string,string> rk = it->raw_key();
@@ -10784,6 +10845,15 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         c = _key_decode_u64(c, &pool);
         c = _key_decode_u32(c, &hash);
         c = _key_decode_u64(c, &omap_head);
+        auto p =
+	  pool > 0 ? pool : META_POOL_ID; // we erroneously use pool==0 for
+	                                  // meta (aka pool==-1) objects
+					  // (see #64153)
+					  // hence treat it as meta
+        pool_fsck_stats_t& ppfs = per_pool_fsck_stats[p];
+        ppfs.omaps++;
+        ppfs.omap_key_size += it->key().size();
+        ppfs.omap_val_size += it->value().length();
         if (used_omap_head.count(omap_head) == 0 &&
           omap_head != last_omap_head) {
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
@@ -10925,6 +10995,14 @@ out_scan:
 	  << num_spanning_blobs << " spanning, "
 	  << num_shared_blobs << " shared."
 	  << dendl;
+  dout(2) << __func__ << " Per-pool stats:"
+    << dendl;
+  for (auto& p : per_pool_fsck_stats) {
+    dout(2) << __func__
+            << " pool "
+            << p.first << " -> " << p.second
+            << dendl;
+  }
 
   utime_t duration = ceph_clock_now() - start;
   dout(1) << __func__ << " <<<FINISH>>> with " << errors << " errors, "
@@ -12559,6 +12637,7 @@ int BlueStore::getattrs(
       r = -ENOENT;
       goto out;
     }
+    aset.clear();
     for (auto& i : o->onode.attrs) {
       aset.emplace(i.first.c_str(), i.second);
     }
@@ -12664,7 +12743,6 @@ int BlueStore::_collection_list(
   Collection *c, const ghobject_t& start, const ghobject_t& end, int max,
   bool legacy, vector<ghobject_t> *ls, ghobject_t *pnext)
 {
-
   if (!c->exists)
     return -ENOENT;
 
@@ -12672,8 +12750,7 @@ int BlueStore::_collection_list(
   std::unique_ptr<CollectionListIterator> it;
   ghobject_t coll_range_temp_start, coll_range_temp_end;
   ghobject_t coll_range_start, coll_range_end;
-  ghobject_t pend;
-  bool temp;
+  std::vector<std::tuple<ghobject_t, ghobject_t>> ranges;
 
   if (!pnext)
     pnext = &static_next;
@@ -12707,82 +12784,59 @@ int BlueStore::_collection_list(
     << " and " << coll_range_start
     << " to " << coll_range_end
     << " start " << start << dendl;
-  if (legacy) {
-    it = std::make_unique<SimpleCollectionListIterator>(
-      cct, db->get_iterator(PREFIX_OBJ));
-  } else {
-    it = std::make_unique<SortedCollectionListIterator>(
-      db->get_iterator(PREFIX_OBJ));
+
+  // if specified start is not specifically in the pg normal range, we should start with temp iter
+ if ((start == ghobject_t() ||
+      start.hobj == hobject_t() ||
+      start == c->cid.get_min_hobj() ||
+      start.hobj.is_temp())
+    && coll_range_temp_start != coll_range_temp_end) {
+    ranges.push_back(std::tuple(std::move(coll_range_temp_start), std::move(coll_range_temp_end)));
   }
-  if (start == ghobject_t() ||
-    start.hobj == hobject_t() ||
-    start == c->cid.get_min_hobj()) {
-    it->upper_bound(coll_range_temp_start);
-    temp = true;
-  } else {
-    if (start.hobj.is_temp()) {
-      temp = true;
-      ceph_assert(start >= coll_range_temp_start && start < coll_range_temp_end);
-    } else {
-      temp = false;
-      ceph_assert(start >= coll_range_start && start < coll_range_end);
+  // if end param is in temp section, then we do not need to proceed to the normal section
+  if (!end.hobj.is_temp()) {
+    ranges.push_back(std::tuple(std::move(coll_range_start), std::move(coll_range_end)));
+  }
+
+  for (const auto & [cur_range_start, cur_range_end] : ranges) {
+    dout(30) << __func__ << " cur_range " << cur_range_start << " to " << cur_range_end << dendl;
+
+    const ghobject_t low = start > cur_range_start ? start : cur_range_start;
+    const ghobject_t high = end < cur_range_end ? end : cur_range_end;
+    if (low >= high) {
+      continue;
     }
-    dout(20) << __func__ << " temp=" << (int)temp << dendl;
-    it->lower_bound(start);
-  }
-  if (end.hobj.is_max()) {
-    pend = temp ? coll_range_temp_end : coll_range_end;
-  } else {
-    if (end.hobj.is_temp()) {
-      if (temp) {
-        pend = end;
-      } else {
-        *pnext = ghobject_t::get_max();
-        return 0;
-      }
+
+    std::string kv_low_key, kv_high_key;
+    _key_encode_prefix(low, &kv_low_key);
+    _key_encode_prefix(high, &kv_high_key);
+    kv_high_key.push_back('\xff');
+    dout(30) << __func__ << " kv_low_key: " << kv_low_key << " kv_high_key: " << kv_high_key << dendl;
+    const KeyValueDB::IteratorBounds bounds = KeyValueDB::IteratorBounds{std::move(kv_low_key), std::move(kv_high_key)};
+    if (legacy) {
+      it = std::make_unique<SimpleCollectionListIterator>(
+              cct, db->get_iterator(PREFIX_OBJ, 0, std::move(bounds)));
     } else {
-      pend = temp ? coll_range_temp_end : end;
+      it = std::make_unique<SortedCollectionListIterator>(
+              db->get_iterator(PREFIX_OBJ, 0, std::move(bounds)));
     }
-  }
-  dout(20) << __func__ << " pend " << pend << dendl;
-  while (true) {
-    if (!it->valid() || it->is_ge(pend)) {
-      if (!it->valid())
-	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
-      else
-	dout(20) << __func__ << " oid " << it->oid() << " >= " << pend << dendl;
-      if (temp) {
-	if (end.hobj.is_temp()) {
-          if (it->valid() && it->is_lt(coll_range_temp_end)) {
-            *pnext = it->oid();
-            return 0;
-          }
-	  break;
-	}
-	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
-	temp = false;
-	it->upper_bound(coll_range_start);
-        if (end.hobj.is_max())
-          pend = coll_range_end;
-        else
-          pend = end;
-	dout(30) << __func__ << " pend " << pend << dendl;
-	continue;
+    it->lower_bound(low);
+    while (it->valid()) {
+      if (it->oid() < low) {
+        it->next();
+        continue;
       }
-      if (it->valid() && it->is_lt(coll_range_end)) {
+      if (it->oid() > high) {
+        break;
+      }
+      if (ls->size() >= (unsigned)max || it->oid() == high) {
         *pnext = it->oid();
         return 0;
       }
-      break;
+      dout(20) << __func__ << " oid " << it->oid() << dendl;
+      ls->push_back(it->oid());
+      it->next();
     }
-    dout(20) << __func__ << " oid " << it->oid() << " end " << end << dendl;
-    if (ls->size() >= (unsigned)max) {
-      dout(20) << __func__ << " reached max " << max << dendl;
-      *pnext = it->oid();
-      return 0;
-    }
-    ls->push_back(it->oid());
-    it->next();
   }
   *pnext = ghobject_t::get_max();
   return 0;
@@ -17230,6 +17284,8 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   o->get_omap_key(string(), &final_key);
   size_t base_key_len = final_key.size();
   decode(num, p);
+  auto num0 = num;
+  uint64_t total_bytes = 0;
   while (num--) {
     string key;
     bufferlist value;
@@ -17240,7 +17296,11 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     dout(20) << __func__ << "  " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
     txc->t->set(prefix, final_key, value);
+    total_bytes += value.length();
   }
+  logger->inc(l_bluestore_omap_setkeys_count);
+  logger->inc(l_bluestore_omap_setkeys_records, num0);
+  logger->inc(l_bluestore_omap_setkeys_bytes, total_bytes);
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -17273,6 +17333,8 @@ int BlueStore::_omap_setheader(TransContext *txc,
   const string& prefix = o->get_omap_prefix();
   o->get_omap_header(&key);
   txc->t->set(prefix, key, bl);
+  logger->inc(l_bluestore_omap_setheader_count);
+  logger->inc(l_bluestore_omap_setheader_bytes, bl.length());
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;

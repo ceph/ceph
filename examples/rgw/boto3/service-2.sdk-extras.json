@@ -46,6 +46,40 @@
                 }
             }
         },
+        "ReplicationRule":{
+            "members":{
+		"Source": {
+		    "shape":"S3RepSource",
+		    "documentation":"<p>A container for information about the replication source.<p>",
+		    "locationName":"Source"
+		}
+	    }
+	},
+	"S3RepSource": {
+	    "type": "structure",
+	    "members": {
+                "Zones": {
+                    "shape":"ZoneList",
+                    "documentation":"<p>Array of replication source zone names.</p>",
+		    "locationName":"Zone"
+                }
+            }
+        },
+	"Destination": {
+	    "members": {
+                "Zones": {
+                    "shape":"ZoneList",
+                    "documentation":"<p>Array of replication destination zone names.</p>",
+		    "locationName":"Zone"
+                }
+            }
+        },
+	"ZoneList": {
+	    "type":"list",
+	    "member":{"shape":"Zone"},
+	    "flattened":true
+	},
+        "Zone":{"type":"string"},
         "AllowUnordered":{"type":"boolean"},
         "PutObjectRequest": {
             "members": {

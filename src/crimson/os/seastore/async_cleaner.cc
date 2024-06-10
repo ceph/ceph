@@ -349,18 +349,18 @@ void JournalTrimmerImpl::config_t::validate() const
 
 JournalTrimmerImpl::config_t
 JournalTrimmerImpl::config_t::get_default(
-  std::size_t roll_size, journal_type_t type)
+  std::size_t roll_size, backend_type_t type)
 {
   assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
   std::size_t max_journal_bytes = 0;
-  if (type == journal_type_t::SEGMENTED) {
+  if (type == backend_type_t::SEGMENTED) {
     target_dirty_bytes = 12 * roll_size;
     target_alloc_bytes = 2 * roll_size;
     max_journal_bytes = 16 * roll_size;
   } else {
-    assert(type == journal_type_t::RANDOM_BLOCK);
+    assert(type == backend_type_t::RANDOM_BLOCK);
     target_dirty_bytes = roll_size / 4;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
@@ -376,18 +376,18 @@ JournalTrimmerImpl::config_t::get_default(
 
 JournalTrimmerImpl::config_t
 JournalTrimmerImpl::config_t::get_test(
-  std::size_t roll_size, journal_type_t type)
+  std::size_t roll_size, backend_type_t type)
 {
   assert(roll_size);
   std::size_t target_dirty_bytes = 0;
   std::size_t target_alloc_bytes = 0;
   std::size_t max_journal_bytes = 0;
-  if (type == journal_type_t::SEGMENTED) {
+  if (type == backend_type_t::SEGMENTED) {
     target_dirty_bytes = 2 * roll_size;
     target_alloc_bytes = 2 * roll_size;
     max_journal_bytes = 4 * roll_size;
   } else {
-    assert(type == journal_type_t::RANDOM_BLOCK);
+    assert(type == backend_type_t::RANDOM_BLOCK);
     target_dirty_bytes = roll_size / 36;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
@@ -404,12 +404,12 @@ JournalTrimmerImpl::config_t::get_test(
 JournalTrimmerImpl::JournalTrimmerImpl(
   BackrefManager &backref_manager,
   config_t config,
-  journal_type_t type,
+  backend_type_t type,
   device_off_t roll_start,
   device_off_t roll_size)
   : backref_manager(backref_manager),
     config(config),
-    journal_type(type),
+    backend_type(type),
     roll_start(roll_start),
     roll_size(roll_size),
     reserved_usage(0)
@@ -441,6 +441,18 @@ void JournalTrimmerImpl::set_journal_head(journal_seq_t head)
           head, journal_head, stat_printer_t{*this, false});
   }
   background_callback->maybe_wake_background();
+}
+
+void JournalTrimmerImpl::set_journal_head_sequence(
+  segment_seq_t seq)
+{
+  if (journal_head != JOURNAL_SEQ_NULL) {
+    ceph_assert(seq == journal_head.segment_seq + 1);
+  }
+  if (journal_head_seq != NULL_SEG_SEQ) {
+    ceph_assert(seq == journal_head_seq + 1);
+  }
+  journal_head_seq = seq;
 }
 
 void JournalTrimmerImpl::update_journal_tails(
@@ -495,7 +507,7 @@ journal_seq_t JournalTrimmerImpl::get_tail_limit() const
 {
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
-      journal_type,
+      backend_type,
       -static_cast<device_off_t>(config.max_journal_bytes),
       roll_start,
       roll_size);
@@ -506,7 +518,7 @@ journal_seq_t JournalTrimmerImpl::get_dirty_tail_target() const
 {
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
-      journal_type,
+      backend_type,
       -static_cast<device_off_t>(config.target_journal_dirty_bytes),
       roll_start,
       roll_size);
@@ -517,7 +529,7 @@ journal_seq_t JournalTrimmerImpl::get_alloc_tail_target() const
 {
   assert(background_callback->is_ready());
   auto ret = journal_head.add_offset(
-      journal_type,
+      backend_type,
       -static_cast<device_off_t>(config.target_journal_alloc_bytes),
       roll_start,
       roll_size);
@@ -530,7 +542,7 @@ std::size_t JournalTrimmerImpl::get_dirty_journal_size() const
     return 0;
   }
   auto ret = journal_head.relative_to(
-      journal_type,
+      backend_type,
       journal_dirty_tail,
       roll_start,
       roll_size);
@@ -544,7 +556,7 @@ std::size_t JournalTrimmerImpl::get_alloc_journal_size() const
     return 0;
   }
   auto ret = journal_head.relative_to(
-      journal_type,
+      backend_type,
       journal_alloc_tail,
       roll_start,
       roll_size);
@@ -976,6 +988,10 @@ segment_id_t SegmentCleaner::allocate_segment(
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
       segments.mark_open(seg_id, seq, type, category, generation);
+      if (type == segment_type_t::JOURNAL) {
+        assert(trimmer != nullptr);
+        trimmer->set_journal_head_sequence(seq);
+      }
       background_callback->maybe_wake_background();
       auto new_usage = calc_utilization(seg_id);
       adjust_segment_util(old_usage, new_usage);
@@ -1162,7 +1178,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
-    INFO("reclaim {} {} start, usage={}, time_bound={}",
+    INFO("reclaim start... {} {}, usage={}, time_bound={}",
          seg_id, segment_info,
          space_tracker->calc_utilization(seg_id),
          sea_time_point_printer_t{segments.get_time_bound()});
@@ -1239,7 +1255,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
               d, pavail_ratio, runs);
         if (reclaim_state->is_complete()) {
           auto segment_to_release = reclaim_state->get_segment_id();
-          INFO("reclaim {} finish, reclaimed alive/total={}",
+          INFO("reclaim finish {}, reclaimed alive/total={}",
                segment_to_release,
                stats.reclaiming_bytes/(double)segments.get_segment_size());
           stats.reclaimed_bytes += stats.reclaiming_bytes;
@@ -1263,7 +1279,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
             segments.mark_empty(segment_to_release);
             auto new_usage = calc_utilization(segment_to_release);
             adjust_segment_util(old_usage, new_usage);
-            INFO("released {}, {}",
+            INFO("reclaim released {}, {}",
                  segment_to_release, stat_printer_t{*this, false});
             background_callback->maybe_wake_blocked_io();
           });

@@ -37,7 +37,7 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
 bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct,
-                                         const RGWEnv& env, std::string& message)
+                                         const req_info& ri, std::string& message)
 {
   if (dest.push_endpoint.empty()) {
     return true;
@@ -48,11 +48,31 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     message = "Malformed URL for push-endpoint";
     return false;
   }
+
+  const auto& args=ri.args;
+  auto topic_user_name=args.get_optional("user-name");
+  auto topic_password=args.get_optional("password");
+
+  // check if username/password was already supplied via topic attributes
+  // and if also provided as part of the endpoint URL issue a warning
+  if (topic_user_name.has_value()) {
+    if (!user.empty()) {
+      message = "Username provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    user = topic_user_name.get();
+  }
+  if (topic_password.has_value()) {
+    if (!password.empty()) {
+      message = "Password provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    password = topic_password.get();
+  }
+
   // this should be verified inside parse_url()
   ceph_assert(user.empty() == password.empty());
   if (!user.empty()) {
     dest.stored_secret = true;
-    if (!verify_transport_security(cct, env)) {
+    if (!verify_transport_security(cct, *ri.env)) {
       message = "Topic contains secrets that must be transmitted over a secure transport";
       return false;
     }
@@ -241,7 +261,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
 
-    if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
+    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
       return -EINVAL;
     }
     // Store topic Policy.
@@ -395,7 +415,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
     dest.persistent_queue = string_cat_reserve(
         get_account_or_tenant(s->owner.id), ":", topic_name);
 
-    op_ret = rgw::notify::add_persistent_topic(dest.persistent_queue, s->yield);
+    op_ret = driver->add_persistent_topic(this, y, dest.persistent_queue);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "CreateTopic Action failed to create queue for "
                             "persistent topics. error:"
@@ -729,7 +749,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                            rgw::notify::DEFAULT_GLOBAL_VALUE);
     } else if (attribute_name == "push-endpoint") {
       dest.push_endpoint = s->info.args.get("AttributeValue");
-      if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
+      if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
         return -EINVAL;
       }
     } else if (attribute_name == "Policy") {
@@ -755,7 +775,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       };
       static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
-          "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents"};
+          "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents",
+          "user-name",     "password"};
       if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;
@@ -853,7 +874,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
     dest.persistent_queue = string_cat_reserve(
         get_account_or_tenant(s->owner.id), ":", topic_name);
 
-    op_ret = rgw::notify::add_persistent_topic(dest.persistent_queue, s->yield);
+    op_ret = driver->add_persistent_topic(this, y, dest.persistent_queue);
     if (op_ret < 0) {
       ldpp_dout(this, 4)
           << "SetTopicAttributes Action failed to create queue for "
@@ -863,7 +884,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
     }
   } else if (already_persistent) {
     // changing the persistent topic to non-persistent.
-    op_ret = rgw::notify::remove_persistent_topic(result.dest.persistent_queue, s->yield);
+    op_ret = driver->remove_persistent_topic(this, y, result.dest.persistent_queue);
     if (op_ret != -ENOENT && op_ret < 0) {
       ldpp_dout(this, 4) << "SetTopicAttributes Action failed to remove queue "
                             "for persistent topics. error:"
@@ -1318,48 +1339,49 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
     op_ret = -ERR_SERVICE_UNAVAILABLE;
     return;
   }
-
-  if (configurations.list.empty()) {
-    op_ret = remove_notification_v2(this, driver, s->bucket.get(),
-                                    /*delete all notif=true*/ "", y);
-    return;
-  }
-  rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = get_bucket_notifications(this, s->bucket.get(), bucket_topics);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1)
-        << "failed to load existing bucket notification on bucket: "
-        << s->bucket << ", ret = " << op_ret << dendl;
-    return;
-  }
-  for (const auto& c : configurations.list) {
-    const auto& notif_name = c.id;
-
-    const auto arn = rgw::ARN::parse(c.topic_arn);
-    if (!arn) { // already validated above
-      continue;
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    if (configurations.list.empty()) {
+      return remove_notification_v2(this, driver, s->bucket.get(),
+                                    /*delete all notif=true*/"", y);
     }
-    const auto& topic_name = arn->resource;
-
-    auto t = topics.find(*arn);
-    if (t == topics.end()) {
-      continue;
+    rgw_pubsub_bucket_topics bucket_topics;
+    int ret = get_bucket_notifications(this, s->bucket.get(), bucket_topics);
+    if (ret < 0) {
+      ldpp_dout(this, 1)
+            << "failed to load existing bucket notification on bucket: "
+              << s->bucket << ", ret = " << ret << dendl;
+      return ret;
     }
-    auto& topic_info = t->second;
+    for (const auto &c : configurations.list) {
+      const auto &notif_name = c.id;
 
-    auto& topic_filter =
+      const auto arn = rgw::ARN::parse(c.topic_arn);
+      if (!arn) { // already validated above
+        continue;
+      }
+      const auto &topic_name = arn->resource;
+
+      auto t = topics.find(*arn);
+      if (t == topics.end()) {
+        continue;
+      }
+      auto &topic_info = t->second;
+
+      auto &topic_filter =
         bucket_topics.topics[topic_to_unique(topic_name, notif_name)];
-    topic_filter.topic = topic_info;
-    topic_filter.events = c.events;
-    topic_filter.s3_id = notif_name;
-    topic_filter.s3_filter = c.filter;
-  }
-  // finally store all the bucket notifications as attr.
-  bufferlist bl;
-  bucket_topics.encode(bl);
-  rgw::sal::Attrs& attrs = s->bucket->get_attrs();
-  attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
-  op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
+      topic_filter.topic = topic_info;
+      topic_filter.events = c.events;
+      topic_filter.s3_id = notif_name;
+      topic_filter.s3_filter = c.filter;
+    }
+    // finally store all the bucket notifications as attr.
+    bufferlist bl;
+    bucket_topics.encode(bl);
+    rgw::sal::Attrs &attrs = s->bucket->get_attrs();
+    attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
+    return s->bucket->merge_and_store_attrs(this, attrs, y);
+  }, y);
+
   if (op_ret < 0) {
     ldpp_dout(this, 4)
         << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="

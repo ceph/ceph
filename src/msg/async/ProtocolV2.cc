@@ -431,12 +431,15 @@ void ProtocolV2::send_message(Message *m) {
   // TODO: Currently not all messages supports reencode like MOSDMap, so here
   // only let fast dispatch support messages prepare message
   const bool can_fast_prepare = messenger->ms_can_fast_dispatch(m);
-  if (can_fast_prepare) {
+  bool is_prepared;
+  if (can_fast_prepare && f) {
     prepare_send_message(f, m);
+    is_prepared = can_fast_prepare;
+  } else {
+    is_prepared = false;
   }
 
   std::lock_guard<std::mutex> l(connection->write_lock);
-  bool is_prepared = can_fast_prepare;
   // "features" changes will change the payload encoding
   if (can_fast_prepare && (!can_write || connection->get_features() != f)) {
     // ensure the correctness of message encoding

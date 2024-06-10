@@ -7,15 +7,15 @@ from teuthology import misc
 from tasks.ceph_test_case import CephTestCase
 
 # TODO move definition of CephCluster away from the CephFS stuff
-from tasks.cephfs.filesystem import CephCluster
+from tasks.cephfs.filesystem import CephClusterBase
 
 
 log = logging.getLogger(__name__)
 
 
-class MgrCluster(CephCluster):
+class MgrClusterBase(CephClusterBase):
     def __init__(self, ctx):
-        super(MgrCluster, self).__init__(ctx)
+        super(MgrClusterBase, self).__init__(ctx)
         self.mgr_ids = list(misc.all_roles_of_type(ctx.cluster, 'mgr'))
 
         if len(self.mgr_ids) == 0:
@@ -35,6 +35,17 @@ class MgrCluster(CephCluster):
         else:
             self.mon_manager.raw_cluster_cmd("mgr", "fail", mgr_id)
 
+    def set_down(self, yes='true'):
+        self.mon_manager.raw_cluster_cmd('mgr', 'set', 'down', str(yes))
+
+    def mgr_tell(self, *args, mgr_id=None, mgr_map=None):
+        if mgr_id is None:
+            if mgr_map is None:
+                mgr_map = self.get_mgr_map()
+            mgr_id = self.get_active_id(mgr_map=mgr_map)
+        J = self.mon_manager.raw_cluster_cmd("tell", f"mgr.{mgr_id}", *args)
+        return json.loads(J)
+
     def mgr_restart(self, mgr_id):
         self.mgr_daemons[mgr_id].restart()
 
@@ -50,11 +61,20 @@ class MgrCluster(CephCluster):
                 return c['addrvec']
         return None
 
-    def get_active_id(self):
-        return self.get_mgr_map()["active_name"]
+    def get_active_gid(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return mgr_map["active_gid"]
 
-    def get_standby_ids(self):
-        return [s['name'] for s in self.get_mgr_map()["standbys"]]
+    def get_active_id(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return mgr_map["active_name"]
+
+    def get_standby_ids(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return [s['name'] for s in mgr_map["standbys"]]
 
     def set_module_conf(self, module, key, val):
         self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
@@ -69,7 +89,7 @@ class MgrCluster(CephCluster):
         if force:
             cmd.append("--force")
         self.mon_manager.raw_cluster_cmd(*cmd)
-
+MgrCluster = MgrClusterBase
 
 class MgrTestCase(CephTestCase):
     MGRS_REQUIRED = 1

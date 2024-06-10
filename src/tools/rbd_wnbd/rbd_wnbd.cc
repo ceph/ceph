@@ -482,74 +482,6 @@ int restart_registered_mappings(
   return err;
 }
 
-int disconnect_all_mappings(
-  bool unregister,
-  bool hard_disconnect,
-  int soft_disconnect_timeout,
-  int worker_count)
-{
-  // Although not generally recommended, soft_disconnect_timeout can be 0,
-  // which means infinite timeout.
-  ceph_assert(soft_disconnect_timeout >= 0);
-  ceph_assert(worker_count > 0);
-  int64_t timeout_ms = soft_disconnect_timeout * 1000;
-
-  Config cfg;
-  WNBDActiveDiskIterator iterator;
-  int r;
-  std::atomic<int> err = 0;
-
-  boost::asio::thread_pool pool(worker_count);
-  LARGE_INTEGER start_t, counter_freq;
-  QueryPerformanceFrequency(&counter_freq);
-  QueryPerformanceCounter(&start_t);
-  while (iterator.get(&cfg)) {
-    boost::asio::post(pool,
-      [cfg, start_t, counter_freq, timeout_ms,
-       hard_disconnect, unregister, &err]() mutable
-      {
-        LARGE_INTEGER curr_t, elapsed_ms;
-        QueryPerformanceCounter(&curr_t);
-        elapsed_ms.QuadPart = curr_t.QuadPart - start_t.QuadPart;
-        elapsed_ms.QuadPart *= 1000;
-        elapsed_ms.QuadPart /= counter_freq.QuadPart;
-
-        int64_t time_left_ms = max((int64_t)0, timeout_ms - elapsed_ms.QuadPart);
-
-        cfg.hard_disconnect = hard_disconnect || !time_left_ms;
-        cfg.hard_disconnect_fallback = true;
-        cfg.soft_disconnect_timeout = time_left_ms / 1000;
-
-        dout(1) << "Removing mapping: " << cfg.devpath
-                << ". Timeout: " << cfg.soft_disconnect_timeout
-                << "s. Hard disconnect: " << cfg.hard_disconnect
-                << dendl;
-
-        int r = do_unmap(&cfg, unregister);
-        if (r) {
-          err = r;
-          derr << "Could not remove mapping: " << cfg.devpath
-               << ". Error: " << r << dendl;
-        } else {
-          dout(1) << "Successfully removed mapping: " << cfg.devpath << dendl;
-        }
-      });
-  }
-  pool.join();
-
-  r = iterator.get_error();
-  if (r == -ENOENT) {
-    dout(0) << __func__ << ": wnbd adapter unavailable, "
-            << "assuming that no wnbd mappings exist." << dendl;
-    err = 0;
-  } else if (r) {
-    derr << "Could not fetch all mappings. Error: " << r << dendl;
-    err = r;
-  }
-
-  return err;
-}
-
 class RBDService : public ServiceBase {
   private:
     bool hard_disconnect;
@@ -565,7 +497,7 @@ class RBDService : public ServiceBase {
     ceph::mutex start_hook_lock = ceph::make_mutex("RBDService::StartLocker");
     ceph::mutex stop_hook_lock = ceph::make_mutex("RBDService::ShutdownLocker");
     bool started = false;
-    std::atomic<bool> stop_requsted = false;
+    std::atomic<bool> stop_requested = false;
 
   public:
     RBDService(bool _hard_disconnect,
@@ -743,7 +675,7 @@ exit:
       dout(0) << "monitoring wnbd adapter state changes" << dendl;
       // The event watcher will wait at most WMI_EVENT_TIMEOUT (2s)
       // and exit the loop if the service is being stopped.
-      while (!stop_requsted) {
+      while (!stop_requested) {
         IWbemClassObject* object;
         ULONG returned = 0;
 
@@ -826,10 +758,10 @@ exit:
     int stop_hook() override {
       std::unique_lock l{stop_hook_lock};
 
-      stop_requsted = true;
+      stop_requested = true;
 
-      int r = disconnect_all_mappings(
-        false, hard_disconnect, soft_disconnect_timeout, thread_count);
+      int r = mapping_dispatcher.stop(
+        hard_disconnect, soft_disconnect_timeout, thread_count);
 
       if (adapter_monitor_thread.joinable()) {
         dout(10) << "waiting for wnbd event monitor thread" << dendl;

@@ -86,6 +86,8 @@ void ServiceBase::shutdown(bool ignore_errors)
   DWORD original_state = status.dwCurrentState;
   set_status(SERVICE_STOP_PENDING);
 
+  dout(0) << "Shutdown requested." << dendl;
+
   int err = shutdown_hook();
   if (err) {
     derr << "Shutdown service hook failed. Error code: " << err << dendl;
@@ -107,6 +109,8 @@ void ServiceBase::stop()
 {
   DWORD original_state = status.dwCurrentState;
   set_status(SERVICE_STOP_PENDING);
+
+  dout(0) << "Service stop requested." << dendl;
 
   int err = stop_hook();
   if (err) {

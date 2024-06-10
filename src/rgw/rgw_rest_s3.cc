@@ -2097,6 +2097,8 @@ void RGWGetBucketLogging_ObjStore_S3::send_response()
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
   dump_errno(s);
+  dump_header(s, "x-rgw-bucket-placement-target", 
+    s->bucket->get_info().placement_rule.name);
   end_header(s, this);
   dump_start(s);
 
@@ -4226,8 +4228,7 @@ void RGWDeleteMultiObj_ObjStore_S3::begin_response()
 void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(const rgw_obj_key& key,
 							  bool delete_marker,
 							  const string& marker_version_id,
-                                                          int ret,
-                                                          boost::asio::deadline_timer *formatter_flush_cond)
+                                                          int ret)
 {
   if (!key.empty()) {
     delete_multi_obj_entry ops_log_entry;
@@ -4273,17 +4274,11 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(const rgw_obj_key& key
     }
 
     ops_log_entries.push_back(std::move(ops_log_entry));
-    if (formatter_flush_cond) {
-      formatter_flush_cond->cancel();
-    } else {
-      rgw_flush_formatter(s, s->formatter);
-    }
   }
 }
 
 void RGWDeleteMultiObj_ObjStore_S3::end_response()
 {
-
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -4602,6 +4597,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWGetBucketMetaSearch_ObjStore_S3;
   }
 
@@ -4724,6 +4722,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWDelBucketMetaSearch_ObjStore_S3;
   }
 
@@ -4737,6 +4738,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWConfigBucketMetaSearch_ObjStore_S3;
   }
 
@@ -5174,8 +5178,6 @@ void update_attribute_map(const std::string& input, AttributeMap& map) {
 void parse_post_action(const std::string& post_body, req_state* s)
 {
   if (post_body.size() > 0) {
-    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
-
     if (post_body.find("Action") != string::npos) {
       const boost::char_separator<char> sep("&");
       const boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
@@ -5284,14 +5286,10 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   obj->set_atomic();
 
-  RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &state, s->yield) < 0) {
+  if (obj->load_obj_state(s, s->yield) < 0) {
     return false;
   }
-  if (! state->exists) {
-    return false;
-  }
-  return state->exists;
+  return obj->exists();
 }
 
 int RGWHandler_REST_S3Website::init(rgw::sal::Driver* driver, req_state *s,

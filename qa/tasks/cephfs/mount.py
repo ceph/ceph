@@ -21,11 +21,10 @@ from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
-
 UMOUNT_TIMEOUT = 300
 
 
-class CephFSMount(object):
+class CephFSMountBase(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
                  cephfs_name=None, cephfs_mntpt=None, brxnet=None,
@@ -545,30 +544,21 @@ class CephFSMount(object):
                 raise RuntimeError('value of attributes should be either str '
                                    f'or None. {k} - {v}')
 
-    def update_attrs(self, client_id=None, client_keyring_path=None,
-                     client_remote=None, hostfs_mntpt=None, cephfs_name=None,
-                     cephfs_mntpt=None):
-        if not (client_id or client_keyring_path or client_remote or
-                cephfs_name or cephfs_mntpt or hostfs_mntpt):
-            return
+    def update_attrs(self, **kwargs):
+        verify_keys = [
+          'client_id',
+          'client_keyring_path',
+          'hostfs_mntpt',
+          'cephfs_name',
+          'cephfs_mntpt',
+        ]
 
-        self._verify_attrs(client_id=client_id,
-                           client_keyring_path=client_keyring_path,
-                           hostfs_mntpt=hostfs_mntpt, cephfs_name=cephfs_name,
-                           cephfs_mntpt=cephfs_mntpt)
+        self._verify_attrs(**{key: kwargs[key] for key in verify_keys if key in kwargs})
 
-        if client_id:
-            self.client_id = client_id
-        if client_keyring_path:
-            self.client_keyring_path = client_keyring_path
-        if client_remote:
-            self.client_remote = client_remote
-        if hostfs_mntpt:
-            self.hostfs_mntpt = hostfs_mntpt
-        if cephfs_name:
-            self.cephfs_name = cephfs_name
-        if cephfs_mntpt:
-            self.cephfs_mntpt = cephfs_mntpt
+        for k in verify_keys:
+            v = kwargs.get(k)
+            if v is not None:
+                setattr(self, k, v)
 
     def remount(self, **kwargs):
         """
@@ -591,7 +581,7 @@ class CephFSMount(object):
 
         self.update_attrs(**kwargs)
 
-        retval = self.mount(mntopts=mntopts, check_status=check_status)
+        retval = self.mount(mntopts=mntopts, check_status=check_status, **kwargs)
         # avoid this scenario (again): mount command might've failed and
         # check_status might have silenced the exception, yet we attempt to
         # wait which might lead to an error.
@@ -1579,11 +1569,11 @@ class CephFSMount(object):
         :param val: xattr value
         :return: None
         """
-        kwargs['args'] = ["setfattr", "-n", key, "-v", val, path]
+        kwargs['args'] = ["setfattr", "-n", str(key), "-v", str(val), path]
         if kwargs.pop('sudo', False):
             kwargs['args'].insert(0, 'sudo')
             kwargs['omit_sudo'] = False
-        self.run_shell(**kwargs)
+        return self.run_shell(**kwargs)
 
     def getfattr(self, path, attr, **kwargs):
         """
@@ -1650,3 +1640,5 @@ class CephFSMount(object):
             subvol_paths = self.ctx.created_subvols[self.cephfs_name]
             path_to_mount = subvol_paths[mount_subvol_num]
             self.cephfs_mntpt = path_to_mount
+
+CephFSMount = CephFSMountBase

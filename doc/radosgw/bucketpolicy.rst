@@ -2,7 +2,7 @@
 Bucket Policies
 ===============
 
-.. versionadded:: Luminous
+*Bucket policies were added in the Luminous release of Ceph.*
 
 The Ceph Object Gateway supports a subset of the Amazon S3 policy
 language applied to buckets.
@@ -124,7 +124,8 @@ For all requests, condition keys we support are:
 
 We support certain s3 condition keys for bucket and object requests.
 
-.. versionadded:: Mimic
+*Support for the following bucket-related operations was added in the Mimic
+release of Ceph.*
 
 Bucket Related Operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

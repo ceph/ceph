@@ -45,7 +45,7 @@ seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
   return store.read(coll,
                     osdmap_oid(e), 0, 0,
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).handle_error(
-    read_errorator::all_same_way([e] {
+    read_errorator::assert_all_func([e](const auto&) {
       ceph_abort_msg(fmt::format("{} read gave enoent on {}",
                                  __func__, osdmap_oid(e)));
     }));
@@ -97,7 +97,7 @@ OSDMeta::load_final_pool_info(int64_t pool) {
       std::make_tuple(std::move(pi),
 		      std::move(name),
 		      std::move(ec_profile)));
-  },read_errorator::all_same_way([pool] {
+  },read_errorator::assert_all_func([pool](const auto&) {
     throw std::runtime_error(fmt::format("read gave enoent on {}",
                                          final_pool_info_oid(pool)));
   }));

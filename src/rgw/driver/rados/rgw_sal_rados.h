@@ -319,6 +319,12 @@ class RadosStore : public StoreDriver {
                             std::string_view marker,
                             uint32_t max_items,
                             TopicList& listing) override;
+    int add_persistent_topic(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const std::string& topic_queue) override;
+    int remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                const std::string& topic_queue) override;
     int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                     const std::string& bucket_key,
                                     bool add_mapping,
@@ -585,9 +591,12 @@ class RadosObject : public StoreObject {
       StoreObject::set_compressed();
     }
 
+
     virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
       const ceph::real_time& obj_mtime) override;
-    virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
+    /* For rgw_admin.cc */
+    RGWObjState& get_state() { return state; }
+    virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;

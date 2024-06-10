@@ -95,3 +95,21 @@ input[type=checkbox] {
 .legend table {
 	border-spacing: 5px;
 }
+
+#encode-table, #decode-table {
+  margin: 0px 0px 15px 15px;
+  font-size: 12px;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+#encode-table td, #decode-table td, #encode-table th, #decode-table th {
+  border: 1px solid #ddd;
+  padding: 4px;
+}
+
+#encode-table th, #decode-table th {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  text-align: left;
+}

@@ -58,7 +58,7 @@ ErasureCodeShecTableCache::~ErasureCodeShecTableCache()
             for (table_it = tables_it__->second.begin(); table_it != tables_it__->second.end(); ++table_it) {
               if (table_it->second) {
                 if (*(table_it->second)) {
-                  delete *(table_it->second);
+                  free(*(table_it->second));
                 }
                 delete table_it->second;
               }
@@ -130,7 +130,7 @@ ErasureCodeShecTableCache::getEncodingTableNoLock(int technique, int k, int m, i
   // create a pointer to store an encoding table address
   if (!encoding_table[technique][k][m][c][w]) {
     encoding_table[technique][k][m][c][w] = new (int*);
-    *encoding_table[technique][k][m][c][w] = 0;
+    *encoding_table[technique][k][m][c][w] = nullptr;
   }
   return encoding_table[technique][k][m][c][w];
 }

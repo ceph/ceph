@@ -81,18 +81,58 @@ int MDBalancer::proc_message(const cref_t<Message> &m)
 MDBalancer::MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) :
     mds(m), messenger(msgr), mon_client(monc)
 {
+  bal_export_pin = g_conf().get_val<bool>("mds_bal_export_pin");
   bal_fragment_dirs = g_conf().get_val<bool>("mds_bal_fragment_dirs");
+  bal_fragment_fast_factor = g_conf().get_val<double>("mds_bal_fragment_fast_factor");
   bal_fragment_interval = g_conf().get_val<int64_t>("mds_bal_fragment_interval");
+  bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
+  bal_max_until = g_conf().get_val<int64_t>("mds_bal_max_until");
+  bal_merge_size = g_conf().get_val<int64_t>("mds_bal_merge_size");
+  bal_mode = g_conf().get_val<int64_t>("mds_bal_mode");
+  bal_replicate_threshold = g_conf().get_val<double>("mds_bal_replicate_threshold");
+  bal_sample_interval = g_conf().get_val<double>("mds_bal_sample_interval");
+  bal_split_rd = g_conf().get_val<double>("mds_bal_split_rd");
+  bal_split_bits = g_conf().get_val<int64_t>("mds_bal_split_bits");
+  bal_split_size = g_conf().get_val<int64_t>("mds_bal_split_size");
+  bal_split_wr = g_conf().get_val<double>("mds_bal_split_wr");
+  bal_unreplicate_threshold = g_conf().get_val<double>("mds_bal_unreplicate_threshold");
+  num_bal_times = g_conf().get_val<int64_t>("mds_bal_max");
 }
 
 void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
-  if (changed.count("mds_bal_fragment_dirs")) {
+  if (changed.count("mds_bal_export_pin"))
+    bal_export_pin = g_conf().get_val<bool>("mds_bal_export_pin");
+  if (changed.count("mds_bal_fragment_dirs"))
     bal_fragment_dirs = g_conf().get_val<bool>("mds_bal_fragment_dirs");
-  }
-  if (changed.count("mds_bal_fragment_interval")) {
+  if (changed.count("mds_bal_fragment_fast_factor"))
+    bal_fragment_fast_factor = g_conf().get_val<double>("mds_bal_fragment_fast_factor");
+  if (changed.count("mds_bal_fragment_interval"))
     bal_fragment_interval = g_conf().get_val<int64_t>("mds_bal_fragment_interval");
-  }
+  if (changed.count("mds_bal_interval"))
+    bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
+  if (changed.count("mds_bal_max_until"))
+    bal_max_until = g_conf().get_val<int64_t>("mds_bal_max_until");
+  if (changed.count("mds_bal_merge_size"))
+    bal_merge_size = g_conf().get_val<int64_t>("mds_bal_merge_size");
+  if (changed.count("mds_bal_mode"))
+    bal_mode = g_conf().get_val<int64_t>("mds_bal_mode");
+  if (changed.count("mds_bal_replicate_threshold"))
+    bal_replicate_threshold = g_conf().get_val<double>("mds_bal_replicate_threshold");
+  if (changed.count("mds_bal_sample_interval"))
+    bal_sample_interval = g_conf().get_val<double>("mds_bal_sample_interval");
+  if (changed.count("mds_bal_split_rd"))
+    bal_split_rd = g_conf().get_val<double>("mds_bal_split_rd");
+  if (changed.count("mds_bal_split_bits"))
+    bal_split_bits = g_conf().get_val<int64_t>("mds_bal_split_bits");
+  if (changed.count("mds_bal_split_size"))
+    bal_split_size = g_conf().get_val<int64_t>("mds_bal_split_size");
+  if (changed.count("mds_bal_split_wr"))
+    bal_split_wr = g_conf().get_val<double>("mds_bal_split_wr");
+  if (changed.count("mds_bal_unreplicate_threshold"))
+    bal_unreplicate_threshold = g_conf().get_val<double>("mds_bal_unreplicate_threshold");
+  if (changed.count("mds_bal_max"))
+    num_bal_times = g_conf().get_val<int64_t>("mds_bal_max");
 }
 
 bool MDBalancer::test_rank_mask(mds_rank_t rank)
@@ -229,19 +269,16 @@ void MDBalancer::handle_export_pins(void)
 
 void MDBalancer::tick()
 {
-  static int num_bal_times = g_conf()->mds_bal_max;
   bool balance_automate = mds->mdsmap->allows_balance_automate();
-  auto bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
-  auto bal_max_until = g_conf().get_val<int64_t>("mds_bal_max_until");
   time now = clock::now();
 
-  if (g_conf()->mds_bal_export_pin) {
+  if (bal_export_pin) {
     handle_export_pins();
   }
 
   // sample?
   if (chrono::duration<double>(now-last_sample).count() >
-    g_conf()->mds_bal_sample_interval) {
+    bal_sample_interval) {
     dout(15) << "tick last_sample now " << now << dendl;
     last_sample = now;
   }
@@ -275,9 +312,9 @@ public:
 };
 
 
-double mds_load_t::mds_load() const
+double mds_load_t::mds_load(int64_t bal_mode) const
 {
-  switch(g_conf()->mds_bal_mode) {
+  switch(bal_mode) {
   case 0:
     return
       .8 * auth.meta_load() +
@@ -397,7 +434,6 @@ int MDBalancer::localize_balancer()
 
   /* timeout: if we waste half our time waiting for RADOS, then abort! */
   std::cv_status ret_t = [&] {
-    auto bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
     std::unique_lock locker{lock};
     return cond.wait_for(locker, std::chrono::seconds(bal_interval / 2));
   }();
@@ -434,7 +470,7 @@ void MDBalancer::send_heartbeat()
 
   // my load
   mds_load_t load = get_load();
-  mds->logger->set(l_mds_load_cent, 100 * load.mds_load());
+  mds->logger->set(l_mds_load_cent, 100 * load.mds_load(bal_mode));
   mds->logger->set(l_mds_dispatch_queue_len, load.queue_len);
 
   auto em = mds_load.emplace(std::piecewise_construct, std::forward_as_tuple(mds->get_nodeid()), std::forward_as_tuple(load));
@@ -607,7 +643,7 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
     // Pass on to MDCache: note that the split might still not
     // happen if the checks in MDCache::can_fragment fail.
     dout(10) << _func_ << " splitting " << *dir << dendl;
-    int bits = g_conf()->mds_bal_split_bits;
+    int bits = bal_split_bits;
     if (dir->inode->is_ephemeral_dist()) {
       unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
       if (df.frag.bits() + bits < min_frag_bits)
@@ -741,9 +777,9 @@ void MDBalancer::prep_rebalance(int beat)
     // rescale!  turn my mds_load back into meta_load units
     double load_fac = 1.0;
     map<mds_rank_t, mds_load_t>::iterator m = mds_load.find(whoami);
-    if ((m != mds_load.end()) && (m->second.mds_load() > 0)) {
+    if ((m != mds_load.end()) && (m->second.mds_load(bal_mode) > 0)) {
       double metald = m->second.auth.meta_load();
-      double mdsld = m->second.mds_load();
+      double mdsld = m->second.mds_load(bal_mode);
       load_fac = metald / mdsld;
       dout(7) << " load_fac is " << load_fac
 	      << " <- " << m->second.auth << " " << metald
@@ -758,13 +794,13 @@ void MDBalancer::prep_rebalance(int beat)
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
       mds_load_t& load = mds_load.at(i);
 
-      double l = load.mds_load() * load_fac;
+      double l = load.mds_load(bal_mode) * load_fac;
       mds_meta_load[i] = l;
 
       if (whoami == 0)
 	dout(7) << "  mds." << i
 		<< " " << load
-		<< " = " << load.mds_load()
+		<< " = " << load.mds_load(bal_mode)
 		<< " ~ " << l << dendl;
 
       if (whoami == i) my_load = l;
@@ -781,9 +817,9 @@ void MDBalancer::prep_rebalance(int beat)
 	    << dendl;
 
     // under or over?
+    auto bal_min_rebalance = g_conf().get_val<double>("mds_bal_min_rebalance");
     for (const auto& [load, rank] : load_map) {
-      if (test_rank_mask(rank) &&
-          load < target_load * (1.0 + g_conf()->mds_bal_min_rebalance)) {
+      if (test_rank_mask(rank) && load < target_load * (1.0 + bal_min_rebalance)) {
 	dout(7) << " mds." << rank << " is underloaded or barely overloaded." << dendl;
 	mds_last_epoch_under_map[rank] = beat_epoch;
       }
@@ -962,8 +998,9 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 
     mds_rank_t from = diri->authority().first;
     double pop = dir->pop_auth_subtree.meta_load();
-    if (g_conf()->mds_bal_idle_threshold > 0 &&
-	pop < g_conf()->mds_bal_idle_threshold &&
+    const auto bal_idle_threshold = g_conf().get_val<double>("mds_bal_idle_threshold");
+    if (bal_idle_threshold > 0 &&
+	pop < bal_idle_threshold &&
 	diri != mds->mdcache->get_root() &&
 	from != mds->get_nodeid()) {
       dout(5) << " exporting idle (" << pop << ") import " << *dir
@@ -1125,13 +1162,14 @@ void MDBalancer::find_exports(CDir *dir,
   ceph_assert(dir->is_auth());
 
   double need = amount - have;
-  if (need < amount * g_conf()->mds_bal_min_start)
+  const auto bal_min_start = g_conf().get_val<double>("mds_bal_min_start");
+  if (need < amount * bal_min_start)
     return;   // good enough!
 
-  double needmax = need * g_conf()->mds_bal_need_max;
-  double needmin = need * g_conf()->mds_bal_need_min;
-  double midchunk = need * g_conf()->mds_bal_midchunk;
-  double minchunk = need * g_conf()->mds_bal_minchunk;
+  double needmax = need * g_conf().get_val<double>("mds_bal_need_max");
+  double needmin = need * g_conf().get_val<double>("mds_bal_need_min");
+  double midchunk = need * g_conf().get_val<double>("mds_bal_midchunk");
+  double minchunk = need * g_conf().get_val<double>("mds_bal_minchunk");
 
   std::vector<CDir*> bigger_rep, bigger_unrep;
   multimap<double, CDir*> smaller;
@@ -1285,8 +1323,8 @@ void MDBalancer::hit_dir(CDir *dir, int type, double amount)
   // hit me
   double v = dir->pop_me.get(type).hit(amount);
 
-  const bool hot = (v > g_conf()->mds_bal_split_rd && type == META_POP_IRD) ||
-                   (v > g_conf()->mds_bal_split_wr && type == META_POP_IWR);
+  const bool hot = (v > bal_split_rd && type == META_POP_IRD) ||
+                   (v > bal_split_wr && type == META_POP_IWR);
 
   dout(20) << type << " pop is " << v << ", frag " << dir->get_frag()
            << " size " << dir->get_frag_size() << " " << dir->pop_me << dendl;
@@ -1303,7 +1341,7 @@ void MDBalancer::hit_dir(CDir *dir, int type, double amount)
 
     dout(20) << type << " pop " << dir_pop << " spread in " << *dir << dendl;
     if (dir->is_auth() && !dir->is_ambiguous_auth() && dir->can_rep()) {
-      if (dir_pop >= g_conf()->mds_bal_replicate_threshold) {
+      if (dir_pop >= bal_replicate_threshold) {
 	// replicate
 	double rdp = dir->pop_me.get(META_POP_IRD).get();
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
@@ -1321,7 +1359,7 @@ void MDBalancer::hit_dir(CDir *dir, int type, double amount)
 
       if (dir->ino() != 1 &&
 	  dir->is_rep() &&
-	  dir_pop < g_conf()->mds_bal_unreplicate_threshold) {
+	  dir_pop < bal_unreplicate_threshold) {
 	// unreplicate
 	dout(5) << "unreplicating dir " << *dir << " pop " << dir_pop << dendl;
 
@@ -1488,12 +1526,12 @@ int MDBalancer::dump_loads(Formatter *f, int64_t depth) const
   f->open_object_section("mds_load");
   {
 
-    auto dump_mds_load = [f](const mds_load_t& load) {
+    auto dump_mds_load = [f](const mds_load_t& load, int64_t bal_mode) {
       f->dump_float("request_rate", load.req_rate);
       f->dump_float("cache_hit_rate", load.cache_hit_rate);
       f->dump_float("queue_length", load.queue_len);
       f->dump_float("cpu_load", load.cpu_load_avg);
-      f->dump_float("mds_load", load.mds_load());
+      f->dump_float("mds_load", load.mds_load(bal_mode));
 
       f->open_object_section("auth_dirfrags");
       load.auth.dump(f);
@@ -1507,7 +1545,7 @@ int MDBalancer::dump_loads(Formatter *f, int64_t depth) const
       CachedStackStringStream css;
       *css << "mds." << rank;
       f->open_object_section(css->strv());
-      dump_mds_load(load);
+      dump_mds_load(load, bal_mode);
       f->close_section();
     }
   }

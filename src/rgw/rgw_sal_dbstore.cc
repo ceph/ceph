@@ -494,7 +494,7 @@ namespace rgw::sal {
     return std::make_unique<DBLuaManager>(this);
   }
 
-  int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
+  int DBObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
   {
     RGWObjState* astate;
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
@@ -509,7 +509,6 @@ namespace rgw::sal {
     bool prefetch_data = state.prefetch_data;
 
     state = *astate;
-    *pstate = &state;
 
     state.obj = obj;
     state.is_atomic = is_atomic;
@@ -552,7 +551,7 @@ namespace rgw::sal {
     }
     set_atomic();
     state.attrset[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &state.attrset, nullptr, y, 0);
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
   }
 
   int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -562,7 +561,7 @@ namespace rgw::sal {
 
     set_atomic();
     rmattr[attr_name] = bl;
-    return set_obj_attrs(dpp, nullptr, &rmattr, y, 0);
+    return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
   }
 
   bool DBObject::is_expired() {
@@ -1908,6 +1907,20 @@ namespace rgw::sal {
                                    std::string_view marker,
                                    uint32_t max_items,
                                    TopicList& listing)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::add_persistent_topic(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const std::string& topic_queue)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const std::string& topic_queue)
   {
     return -ENOTSUP;
   }

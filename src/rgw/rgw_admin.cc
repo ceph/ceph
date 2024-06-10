@@ -1643,7 +1643,7 @@ int check_min_obj_stripe_size(rgw::sal::Driver* driver, rgw::sal::Object* obj, u
   map<string, bufferlist>::iterator iter;
   iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
   if (iter == obj->get_attrs().end()) {
-    *need_rewrite = (obj->get_obj_size() >= min_stripe_size);
+    *need_rewrite = (obj->get_size() >= min_stripe_size);
     return 0;
   }
 
@@ -7789,14 +7789,14 @@ next:
 
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
 
-    RGWObjState *state;
-
-    ret = obj->get_obj_state(dpp(), &state, null_yield);
+    ret = obj->load_obj_state(dpp(), null_yield);
     if (ret < 0) {
       return -ret;
     }
 
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), *state, obj->get_obj(), 0, &log, &is_truncated, null_yield);
+    RGWObjState& state = static_cast<rgw::sal::RadosObject*>(obj.get())->get_state();
+
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), state, obj->get_obj(), 0, &log, &is_truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8346,7 +8346,9 @@ next:
     } else if (inject_delay_at) {
       fault.inject(*inject_delay_at, InjectDelay{inject_delay, dpp()});
     }
-    ret = br.execute(num_shards, fault, max_entries, dpp(), null_yield,
+    ret = br.execute(num_shards, fault, max_entries,
+		     cls_rgw_reshard_initiator::Admin,
+		     dpp(), null_yield,
                      verbose, &cout, formatter.get());
     return -ret;
   }
@@ -8374,6 +8376,7 @@ next:
     entry.bucket_id = bucket->get_info().bucket.bucket_id;
     entry.old_num_shards = num_source_shards;
     entry.new_num_shards = num_shards;
+    entry.initiator = cls_rgw_reshard_initiator::Admin;
 
     return reshard.add(dpp(), entry, null_yield);
   }
@@ -8562,7 +8565,7 @@ next:
     }
     formatter->open_object_section("object_metadata");
     formatter->dump_string("name", object);
-    formatter->dump_unsigned("size", obj->get_obj_size());
+    formatter->dump_unsigned("size", obj->get_size());
 
     map<string, bufferlist>::iterator iter;
     map<string, bufferlist> other_attrs;
@@ -8633,7 +8636,7 @@ next:
     }
 
     formatter->open_object_section("outer");  // name not displayed since top level
-    formatter->dump_unsigned("size", obj->get_obj_size());
+    formatter->dump_unsigned("size", obj->get_size());
 
     auto attr_iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
     if (attr_iter == obj->get_attrs().end()) {

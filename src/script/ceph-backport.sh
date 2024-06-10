@@ -1580,7 +1580,7 @@ else
 fi
 
 debug "Looking up release/milestone of $redmine_url"
-milestone="$(echo "$remote_api_output" | jq -r '.issue.custom_fields[0].value')"
+milestone="$(echo "$remote_api_output" | jq -r '.issue.custom_fields[] | select(.id == 16) | .value')"
 if [ "$milestone" ] ; then
     debug "Release/milestone: $milestone"
 else
@@ -1749,9 +1749,9 @@ if [ "$TRACKER_PHASE" ] ; then
     desc_should_be="${backport_pr_url}"
     assignee_should_be="${redmine_user_id}"
     if [ "$EXISTING_PR" ] ; then
-        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be}}}"
+        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
     else
-        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be},\"assigned_to_id\":${assignee_should_be}}}"
+        data_binary="{\"issue\":{\"description\":\"${desc_should_be}\",\"status_id\":${status_should_be},\"assigned_to_id\":${assignee_should_be},\"custom_fields\":[{\"id\":21,\"value\":\"${backport_pr_number}\"}]}}"
     fi
     remote_api_status_code="$(curl --write-out '%{http_code}' --output /dev/null --silent -X PUT --header "Content-type: application/json" --data-binary "${data_binary}" "${redmine_url}.json?key=$redmine_key")"
     if [ "$FORCE" ] || [ "$EXISTING_PR" ] ; then 

@@ -1,12 +1,29 @@
+#include "common/ceph_argparse.h"
+#include "common/config.h"
+#include "common/config_proxy.h"
+#include <gmock/gmock.h>
 #include "gtest/gtest.h"
+#include "common/ceph_context.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
 #include "exporter/util.h"
 #include "exporter/DaemonMetricCollector.h"
 
+#include <regex>
 #include <string>
 #include <vector>
 #include <utility>
 
 typedef std::map<std::string, std::string> labels_t;
+using ::testing::DoAll;
+using ::testing::Return;
+using ::testing::Pointee;
+using ::testing::Matcher;
+using ::testing::_;
+using ::testing::SetArgReferee;
+using ::testing::Invoke;
+using ::testing::WithArgs;
+using ::testing::AtLeast;
 
 // 17.2.6's memento mori:
 // This data was gathered from the python implementation of the promethize method
@@ -657,6 +674,23 @@ static std::vector<std::pair<std::string, std::string>> promethize_data = {
   {"rocksdb.submit_sync_latency_sum", "ceph_rocksdb_submit_sync_latency_sum"}
 };
 
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+
+  auto args = argv_to_vec(argc, argv);
+
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY, CINIT_FLAG_NO_MON_CONFIG);
+
+  g_conf().set_val("exporter_sort_metrics", "true");
+  g_conf().set_val("exporter_prio_limit", "5");
+  common_init_finish(g_ceph_context);
+
+  int r = RUN_ALL_TESTS();
+  return r;
+}
+
 TEST(Exporter, promethize) {
   for (auto &test_case : promethize_data) {
     std::string path = test_case.first;
@@ -691,4 +725,730 @@ TEST(Exporter, check_labels_and_metric_name) {
   // This is a special case, the daemon name is not of the required size for fetching instance_id.
   // So no labels should be added.
   ASSERT_TRUE(fail_result.empty());
+}
+
+enum LabelType {
+  UNLABELED,
+  LABELED_RGW,
+  LABELED_RBD_MIRROR,
+};
+
+void setup_test_data(std::map<std::string, AdminSocketClient> clients, std::string daemon, LabelType label, DaemonMetricCollector &collector) {
+  std::string asok_path = "/tmp/" + daemon + ".asok";
+  AdminSocketClient client(asok_path);
+  clients.insert({daemon, std::move(client)});
+  collector.clients = clients;
+  std::string expectedCounterDump = "";
+  std::string expectedCounterSchema = "";
+
+  if (label == UNLABELED) {
+    expectedCounterDump = R"(
+    {
+      "mon": [
+          {
+              "labels": {},
+              "counters": {
+                  "num_sessions": 1,
+                  "session_add": 1,
+                  "session_rm": 577,
+                  "session_trim": 9,
+                  "num_elections": 2
+              }
+          }
+      ]
+    })";
+    expectedCounterSchema = R"(
+    {
+      "mon": [
+          {
+              "labels": {},
+              "counters": {
+                  "num_sessions": {
+                      "type": 2,
+                      "metric_type": "gauge",
+                      "value_type": "integer",
+                      "description": "Open sessions",
+                      "nick": "sess",
+                      "priority": 5,
+                      "units": "none"
+                  },
+                  "session_add": {
+                      "type": 10,
+                      "metric_type": "counter",
+                      "value_type": "integer",
+                      "description": "Created sessions",
+                      "nick": "sadd",
+                      "priority": 8,
+                      "units": "none"
+                  },
+                  "session_rm": {
+                      "type": 10,
+                      "metric_type": "counter",
+                      "value_type": "integer",
+                      "description": "Removed sessions",
+                      "nick": "srm",
+                      "priority": 8,
+                      "units": "none"
+                  },
+                  "session_trim": {
+                      "type": 10,
+                      "metric_type": "counter",
+                      "value_type": "integer",
+                      "description": "Trimmed sessions",
+                      "nick": "strm",
+                      "priority": 5,
+                      "units": "none"
+                  },
+                  "num_elections": {
+                      "type": 10,
+                      "metric_type": "counter",
+                      "value_type": "integer",
+                      "description": "Elections participated in",
+                      "nick": "ecnt",
+                      "priority": 5,
+                      "units": "none"
+                  }
+              }
+          }
+      ]})";
+  }
+  else if(label == LABELED_RGW) {
+    expectedCounterDump = R"(
+    {
+      "rgw_op": [
+        {
+            "labels": {
+                "Bucket": "bucket1"
+            },
+            "counters": {
+                "put_obj_ops": 2,
+                "put_obj_bytes": 5327,
+                "put_obj_lat": {
+                    "avgcount": 2,
+                    "sum": 2.818064835,
+                    "avgtime": 1.409032417
+                },
+                "get_obj_ops": 5,
+                "get_obj_bytes": 5325,
+                "get_obj_lat": {
+                    "avgcount": 2,
+                    "sum": 0.003000069,
+                    "avgtime": 0.001500034
+                },
+                "list_buckets_ops": 1,
+                "list_buckets_lat": {
+                    "avgcount": 1,
+                    "sum": 0.002300000,
+                    "avgtime": 0.002300000
+                }
+            }
+        },
+        {
+            "labels": {
+                "User": "dashboard"
+            },
+            "counters": {
+                "put_obj_ops": 0,
+                "put_obj_bytes": 0,
+                "put_obj_lat": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                },
+                "get_obj_ops": 0,
+                "get_obj_bytes": 0,
+                "get_obj_lat": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                },
+                "del_obj_ops": 0,
+                "del_obj_bytes": 0,
+                "del_obj_lat": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                },
+                "del_bucket_ops": 0,
+                "del_bucket_lat": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                },
+                "copy_obj_ops": 0,
+                "copy_obj_bytes": 0,
+                "copy_obj_lat": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                },
+                "list_obj_ops": 0,
+                "list_obj_lat": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                },
+                "list_buckets_ops": 1,
+                "list_buckets_lat": {
+                    "avgcount": 1,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                }
+            }
+        }
+    ]})";
+    expectedCounterSchema = R"(
+      {
+        "rgw_op": [
+          {
+            "labels": {
+                "Bucket": "bucket1"
+            },
+            "counters": {
+                "put_obj_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Puts",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "put_obj_bytes": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Size of puts",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "put_obj_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Put latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "get_obj_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Gets",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "get_obj_bytes": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Size of gets",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "get_obj_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Get latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "list_buckets_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "List buckets",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "list_buckets_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "List buckets latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                }
+            }
+        },
+        {
+            "labels": {
+                "User": "dashboard"
+            },
+            "counters": {
+                "put_obj_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Puts",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "put_obj_bytes": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Size of puts",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "put_obj_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Put latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "get_obj_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Gets",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "get_obj_bytes": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Size of gets",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "get_obj_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Get latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "del_obj_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Delete objects",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "del_obj_bytes": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Size of delete objects",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "del_obj_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Delete object latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "del_bucket_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Delete Buckets",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "del_bucket_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Delete bucket latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "copy_obj_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Copy objects",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "copy_obj_bytes": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Size of copy objects",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "copy_obj_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Copy object latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "list_obj_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "List objects",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "list_obj_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "List objects latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "list_buckets_ops": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "List buckets",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "list_buckets_lat": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "List buckets latency",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                }
+            }
+        }
+        ]
+      }
+
+    )";
+
+  }
+
+  else if(label == LABELED_RBD_MIRROR) {
+    expectedCounterSchema = R"(
+      {
+        "rbd_mirror_snapshot_image": [
+          {
+            "labels": {
+                "image": "image1",
+                "namespace": "",
+                "pool": "data"
+            },
+            "counters": {
+                "snapshots": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Number of snapshots synced",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "sync_time": {
+                    "type": 5,
+                    "metric_type": "gauge",
+                    "value_type": "real-integer-pair",
+                    "description": "Average sync time",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "sync_bytes": {
+                    "type": 10,
+                    "metric_type": "counter",
+                    "value_type": "integer",
+                    "description": "Total bytes synced",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "bytes"
+                },
+                "remote_timestamp": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "Timestamp of the remote snapshot",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "local_timestamp": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "Timestamp of the local snapshot",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "last_sync_time": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "Time taken to sync the last snapshot",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "none"
+                },
+                "last_sync_bytes": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "Bytes synced for the last snapshot",
+                    "nick": "",
+                    "priority": 5,
+                    "units": "bytes"
+                }
+            }
+          }
+        ]
+      })";
+
+      expectedCounterDump = R"(
+      {
+        "rbd_mirror_snapshot_image": [
+        {
+            "labels": {
+                "image": "image1",
+                "namespace": "",
+                "pool": "data"
+            },
+            "counters": {
+                "snapshots": 1,
+                "sync_time": {
+                    "avgcount": 1,
+                    "sum": 0.194675703,
+                    "avgtime": 0.194675703
+                },
+                "sync_bytes": 52428800,
+                "remote_timestamp": 1702884232.559626929,
+                "local_timestamp": 1702884232.559626929,
+                "last_sync_time": 0.194675703,
+                "last_sync_bytes": 52428800
+            }
+        }
+      ]
+    })";
+  }
+  collector.dump_asok_metrics(true, 5, false, expectedCounterDump, expectedCounterSchema, false);
+}
+
+TEST(Exporter, dump_asok_metrics) {
+  std::map<std::string, AdminSocketClient> clients;
+  DaemonMetricCollector &collector = collector_instance();
+  collector.metrics = "";
+
+  // Test for unlabeled metrics
+  std::string daemon = "mon.a";
+  setup_test_data(clients, daemon, UNLABELED, collector);
+
+  std::string expectedMetrics = R"(
+# HELP ceph_mon_num_elections Elections participated in
+# TYPE ceph_mon_num_elections counter
+ceph_mon_num_elections{ceph_daemon="mon.a"} 2
+# HELP ceph_mon_num_sessions Open sessions
+# TYPE ceph_mon_num_sessions gauge
+ceph_mon_num_sessions{ceph_daemon="mon.a"} 1
+# HELP ceph_mon_session_add Created sessions
+# TYPE ceph_mon_session_add counter
+ceph_mon_session_add{ceph_daemon="mon.a"} 1
+# HELP ceph_mon_session_rm Removed sessions
+# TYPE ceph_mon_session_rm counter
+ceph_mon_session_rm{ceph_daemon="mon.a"} 577
+# HELP ceph_mon_session_trim Trimmed sessions
+# TYPE ceph_mon_session_trim counter
+ceph_mon_session_trim{ceph_daemon="mon.a"} 9
+)";
+  
+  ASSERT_TRUE(collector.metrics.find(expectedMetrics) != std::string::npos);
+
+  // Test for labeled metrics - RGW
+  daemon = "ceph-client.rgw.foo.ceph-node-00.aayrrj.2.93993527376064";
+  setup_test_data(clients, daemon, LABELED_RGW, collector);
+  expectedMetrics = R"(
+# HELP ceph_rgw_op_copy_obj_bytes Size of copy objects
+# TYPE ceph_rgw_op_copy_obj_bytes counter
+ceph_rgw_op_copy_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_copy_obj_lat_count Copy object latency Count
+# TYPE ceph_rgw_op_copy_obj_lat_count counter
+ceph_rgw_op_copy_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_copy_obj_lat_sum Copy object latency Total
+# TYPE ceph_rgw_op_copy_obj_lat_sum gauge
+ceph_rgw_op_copy_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
+# HELP ceph_rgw_op_copy_obj_ops Copy objects
+# TYPE ceph_rgw_op_copy_obj_ops counter
+ceph_rgw_op_copy_obj_ops{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_del_bucket_lat_count Delete bucket latency Count
+# TYPE ceph_rgw_op_del_bucket_lat_count counter
+ceph_rgw_op_del_bucket_lat_count{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_del_bucket_lat_sum Delete bucket latency Total
+# TYPE ceph_rgw_op_del_bucket_lat_sum gauge
+ceph_rgw_op_del_bucket_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
+# HELP ceph_rgw_op_del_bucket_ops Delete Buckets
+# TYPE ceph_rgw_op_del_bucket_ops counter
+ceph_rgw_op_del_bucket_ops{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_del_obj_bytes Size of delete objects
+# TYPE ceph_rgw_op_del_obj_bytes counter
+ceph_rgw_op_del_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_del_obj_lat_count Delete object latency Count
+# TYPE ceph_rgw_op_del_obj_lat_count counter
+ceph_rgw_op_del_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_del_obj_lat_sum Delete object latency Total
+# TYPE ceph_rgw_op_del_obj_lat_sum gauge
+ceph_rgw_op_del_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
+# HELP ceph_rgw_op_del_obj_ops Delete objects
+# TYPE ceph_rgw_op_del_obj_ops counter
+ceph_rgw_op_del_obj_ops{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_get_obj_bytes Size of gets
+# TYPE ceph_rgw_op_get_obj_bytes counter
+ceph_rgw_op_get_obj_bytes{Bucket="bucket1",instance_id="aayrrj"} 5325
+ceph_rgw_op_get_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_get_obj_lat_count Get latency Count
+# TYPE ceph_rgw_op_get_obj_lat_count counter
+ceph_rgw_op_get_obj_lat_count{Bucket="bucket1",instance_id="aayrrj"} 2
+ceph_rgw_op_get_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_get_obj_lat_sum Get latency Total
+# TYPE ceph_rgw_op_get_obj_lat_sum gauge
+ceph_rgw_op_get_obj_lat_sum{Bucket="bucket1",instance_id="aayrrj"} 0.003000
+ceph_rgw_op_get_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
+# HELP ceph_rgw_op_get_obj_ops Gets
+# TYPE ceph_rgw_op_get_obj_ops counter
+ceph_rgw_op_get_obj_ops{Bucket="bucket1",instance_id="aayrrj"} 5
+ceph_rgw_op_get_obj_ops{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_list_buckets_lat_count List buckets latency Count
+# TYPE ceph_rgw_op_list_buckets_lat_count counter
+ceph_rgw_op_list_buckets_lat_count{Bucket="bucket1",instance_id="aayrrj"} 1
+ceph_rgw_op_list_buckets_lat_count{User="dashboard",instance_id="aayrrj"} 1
+# HELP ceph_rgw_op_list_buckets_lat_sum List buckets latency Total
+# TYPE ceph_rgw_op_list_buckets_lat_sum gauge
+ceph_rgw_op_list_buckets_lat_sum{Bucket="bucket1",instance_id="aayrrj"} 0.002300
+ceph_rgw_op_list_buckets_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
+# HELP ceph_rgw_op_list_buckets_ops List buckets
+# TYPE ceph_rgw_op_list_buckets_ops counter
+ceph_rgw_op_list_buckets_ops{Bucket="bucket1",instance_id="aayrrj"} 1
+ceph_rgw_op_list_buckets_ops{User="dashboard",instance_id="aayrrj"} 1
+# HELP ceph_rgw_op_list_obj_lat_count List objects latency Count
+# TYPE ceph_rgw_op_list_obj_lat_count counter
+ceph_rgw_op_list_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_list_obj_lat_sum List objects latency Total
+# TYPE ceph_rgw_op_list_obj_lat_sum gauge
+ceph_rgw_op_list_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
+# HELP ceph_rgw_op_list_obj_ops List objects
+# TYPE ceph_rgw_op_list_obj_ops counter
+ceph_rgw_op_list_obj_ops{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_put_obj_bytes Size of puts
+# TYPE ceph_rgw_op_put_obj_bytes counter
+ceph_rgw_op_put_obj_bytes{Bucket="bucket1",instance_id="aayrrj"} 5327
+ceph_rgw_op_put_obj_bytes{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_put_obj_lat_count Put latency Count
+# TYPE ceph_rgw_op_put_obj_lat_count counter
+ceph_rgw_op_put_obj_lat_count{Bucket="bucket1",instance_id="aayrrj"} 2
+ceph_rgw_op_put_obj_lat_count{User="dashboard",instance_id="aayrrj"} 0
+# HELP ceph_rgw_op_put_obj_lat_sum Put latency Total
+# TYPE ceph_rgw_op_put_obj_lat_sum gauge
+ceph_rgw_op_put_obj_lat_sum{Bucket="bucket1",instance_id="aayrrj"} 2.818065
+ceph_rgw_op_put_obj_lat_sum{User="dashboard",instance_id="aayrrj"} 0.000000
+# HELP ceph_rgw_op_put_obj_ops Puts
+# TYPE ceph_rgw_op_put_obj_ops counter
+ceph_rgw_op_put_obj_ops{Bucket="bucket1",instance_id="aayrrj"} 2
+ceph_rgw_op_put_obj_ops{User="dashboard",instance_id="aayrrj"} 0
+)";
+
+  ASSERT_TRUE(collector.metrics.find(expectedMetrics) != std::string::npos);
+
+  // Test for labeled metrics - RBD_MIRROR
+  daemon = "rbd-mirror.a";
+  setup_test_data(clients, daemon, LABELED_RBD_MIRROR, collector);
+
+  expectedMetrics = R"(
+# HELP ceph_rbd_mirror_snapshot_image_last_sync_bytes Bytes synced for the last snapshot
+# TYPE ceph_rbd_mirror_snapshot_image_last_sync_bytes gauge
+ceph_rbd_mirror_snapshot_image_last_sync_bytes{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 52428800
+# HELP ceph_rbd_mirror_snapshot_image_last_sync_time Time taken to sync the last snapshot
+# TYPE ceph_rbd_mirror_snapshot_image_last_sync_time gauge
+ceph_rbd_mirror_snapshot_image_last_sync_time{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 0.194676
+# HELP ceph_rbd_mirror_snapshot_image_local_timestamp Timestamp of the local snapshot
+# TYPE ceph_rbd_mirror_snapshot_image_local_timestamp gauge
+ceph_rbd_mirror_snapshot_image_local_timestamp{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1702884232.559627
+# HELP ceph_rbd_mirror_snapshot_image_remote_timestamp Timestamp of the remote snapshot
+# TYPE ceph_rbd_mirror_snapshot_image_remote_timestamp gauge
+ceph_rbd_mirror_snapshot_image_remote_timestamp{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1702884232.559627
+# HELP ceph_rbd_mirror_snapshot_image_snapshots Number of snapshots synced
+# TYPE ceph_rbd_mirror_snapshot_image_snapshots counter
+ceph_rbd_mirror_snapshot_image_snapshots{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1
+# HELP ceph_rbd_mirror_snapshot_image_sync_bytes Total bytes synced
+# TYPE ceph_rbd_mirror_snapshot_image_sync_bytes counter
+ceph_rbd_mirror_snapshot_image_sync_bytes{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 52428800
+# HELP ceph_rbd_mirror_snapshot_image_sync_time_count Average sync time Count
+# TYPE ceph_rbd_mirror_snapshot_image_sync_time_count counter
+ceph_rbd_mirror_snapshot_image_sync_time_count{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 1
+# HELP ceph_rbd_mirror_snapshot_image_sync_time_sum Average sync time Total
+# TYPE ceph_rbd_mirror_snapshot_image_sync_time_sum gauge
+ceph_rbd_mirror_snapshot_image_sync_time_sum{ceph_daemon="rbd-mirror.a",image="image1",namespace="",pool="data"} 0.194676
+)";
+  ASSERT_TRUE(collector.metrics.find(expectedMetrics) != std::string::npos);
+}
+
+TEST(Exporter, add_fixed_name_metrics) {
+    std::vector<std::string> metrics = {
+      "ceph_data_sync_from_zone2-zg1-realm1_fetch_bytes",
+      "ceph_data_sync_from_zone2-zg1-realm1_fetch_bytes_sum",
+      "ceph_data_sync_from_zone2-zg1-realm1_poll_latency_sum",
+    };
+    std::vector<std::string> expected_metrics = {
+      "ceph_data_sync_from_zone_fetch_bytes",
+      "ceph_data_sync_from_zone_fetch_bytes_sum",
+      "ceph_data_sync_from_zone_poll_latency_sum",
+    };
+    std::string metric_name;
+    std::pair<labels_t, std::string> new_metric;
+    labels_t expected_labels;
+    std::string expected_metric_name;
+    for (std::size_t index = 0; index < metrics.size(); ++index) {
+        std::string &metric_name = metrics[index];
+        DaemonMetricCollector &collector = collector_instance();
+        auto new_metric = collector.add_fixed_name_metrics(metric_name);
+        expected_labels = {{"source_zone", "\"zone2-zg1-realm1\""}};
+        std::string expected_metric_name = expected_metrics[index];
+        EXPECT_EQ(new_metric.first, expected_labels);
+        ASSERT_EQ(new_metric.second, expected_metric_name);
+    }
+
+    metric_name = "ceph_data_sync_from_zone2_fetch_bytes_count";
+    DaemonMetricCollector &collector = collector_instance();
+    new_metric = collector.add_fixed_name_metrics(metric_name);
+    expected_labels = {{"source_zone", "\"zone2\""}};
+    expected_metric_name = "ceph_data_sync_from_zone_fetch_bytes_count";
+    EXPECT_EQ(new_metric.first, expected_labels);
+    ASSERT_TRUE(new_metric.second == expected_metric_name);
 }

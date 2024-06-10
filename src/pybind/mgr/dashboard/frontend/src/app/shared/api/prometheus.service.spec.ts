@@ -30,7 +30,7 @@ describe('PrometheusService', () => {
 
   it('should get alerts', () => {
     service.getAlerts().subscribe();
-    const req = httpTesting.expectOne('api/prometheus');
+    const req = httpTesting.expectOne('api/prometheus?cluster_filter=false');
     expect(req.request.method).toBe('GET');
   });
 

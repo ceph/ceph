@@ -173,12 +173,12 @@ public:
 
   string get_acct_name() const override {
     abort();
-    return 0;
+    return string{};
   }
 
   string get_subuser() const override {
     abort();
-    return 0;
+    return string{};
   }
 
   const std::string& get_tenant() const override {

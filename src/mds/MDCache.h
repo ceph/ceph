@@ -426,9 +426,6 @@ class MDCache {
   void request_finish(const MDRequestRef& mdr);
   void request_forward(const MDRequestRef& mdr, mds_rank_t mds, int port=0);
   void dispatch_request(const MDRequestRef& mdr);
-  void request_drop_foreign_locks(const MDRequestRef& mdr);
-  void request_drop_non_rdlocks(const MDRequestRef& r);
-  void request_drop_locks(const MDRequestRef& r);
   void request_cleanup(const MDRequestRef& r);
   
   void request_kill(const MDRequestRef& r);  // called when session closes
@@ -628,6 +625,17 @@ private:
     }
   }
   void add_quiesce(CInode* parent, CInode* in);
+
+  struct LockPathConfig {
+    using Lifetime = std::chrono::milliseconds;
+    filepath fpath;
+    std::vector<std::string> locks;
+    std::optional<Lifetime> lifetime;
+    bool ap_dont_block = false;
+    bool ap_freeze = false;
+  };
+
+  MDRequestRef lock_path(LockPathConfig config, std::function<void(MDRequestRef const& mdr)> on_locked = {});
 
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
@@ -951,7 +959,7 @@ private:
    */
   int path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		    const filepath& path, int flags,
-		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr);
+		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr, CDir **pdir = nullptr);
 
   int maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
 				    MDSCacheObject *p);
@@ -1362,6 +1370,19 @@ private:
   StrayManager stray_manager;
 
  private:
+  enum dirfrag_killpoint : std::int8_t {
+    FRAGMENT_FREEZE = 1,
+    FRAGMENT_HANDLE_NOTIFY,
+    FRAGMENT_HANDLE_NOTIFY_POSTACK,
+    FRAGMENT_STORED_POST_NOTIFY,
+    FRAGMENT_STORED_POST_JOURNAL,
+    FRAGMENT_HANDLE_NOTIFY_ACK,
+    FRAGMENT_MAYBE_FINISH,
+    FRAGMENT_LOGGED,
+    FRAGMENT_COMMITTED,
+    FRAGMENT_OLD_PURGED,
+  };
+
   std::set<inodeno_t> replay_taken_inos; // the inos have been taken when replaying
 
   // -- fragmenting --
@@ -1456,7 +1477,7 @@ private:
   void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
   void fragment_maybe_finish(const fragment_info_iterator& it);
-  void dispatch_fragment_dir(const MDRequestRef& mdr);
+  void dispatch_fragment_dir(const MDRequestRef& mdr, bool abort_if_freezing=false);
   void _fragment_logged(const MDRequestRef& mdr);
   void _fragment_stored(const MDRequestRef& mdr);
   void _fragment_committed(dirfrag_t f, const MDRequestRef& mdr);
@@ -1470,8 +1491,11 @@ private:
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
+  void quiesce_overdrive_fragmenting_async(CDir* dir);
   void dispatch_quiesce_path(const MDRequestRef& mdr);
   void dispatch_quiesce_inode(const MDRequestRef& mdr);
+
+  void dispatch_lock_path(const MDRequestRef& mdr);
 
   void upkeep_main(void);
 
@@ -1488,6 +1512,7 @@ private:
 
   // Stores the symlink target on the file object's head
   bool symlink_recovery;
+  enum dirfrag_killpoint kill_dirfrag_at;
 
   // File size recovery
   RecoveryQueue recovery_queue;

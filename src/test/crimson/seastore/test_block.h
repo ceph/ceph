@@ -82,7 +82,7 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   }
 
   test_extent_desc_t get_desc() {
-    return { get_length(), get_crc32c() };
+    return { get_length(), calc_crc32c() };
   }
 
   void apply_delta(const ceph::bufferlist &bl) final;
@@ -110,6 +110,8 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
   using Ref = TCachedExtentRef<TestBlockPhysical>;
 
   std::vector<test_block_delta_t> delta = {};
+
+  void on_rewrite(CachedExtent&, extent_len_t) final {}
 
   TestBlockPhysical(ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)) {}

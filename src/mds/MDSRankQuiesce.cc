@@ -45,7 +45,7 @@
   }           \
   while (0)
 
-void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   // validate the command:
   using ceph::common::cmd_getval;
@@ -111,7 +111,7 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
   }
 
   struct Ctx : public QuiesceDbManager::RequestContext {
-    std::function<void(int, const std::string&, bufferlist&)> on_finish;
+    asok_finisher on_finish;
     bool all = false;
     mds_gid_t me;
 
@@ -197,9 +197,9 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
     } else if (op_reset) {
       r.reset_roots(roots);
     } else if (op_release) {
-      r.release_roots();
+      r.release();
     } else if (op_cancel) {
-      r.cancel_roots();
+      r.cancel();
     }
 
     double timeout;
@@ -319,7 +319,7 @@ void MDSRank::quiesce_cluster_update() {
     struct CancelAll: public QuiesceDbManager::RequestContext {
       mds_rank_t whoami;
       CancelAll(mds_rank_t whoami) : whoami(whoami) {
-        request.cancel_roots();
+        request.cancel();
       }
       void finish(int rc) override {
         dout(rc == 0 ? 15 : 3) << "injected cancel all completed with rc: " << rc << dendl;
@@ -432,7 +432,11 @@ void MDSRank::quiesce_agent_setup() {
 
   using RequestHandle = QuiesceInterface::RequestHandle;
   using QuiescingRoot = std::pair<RequestHandle, Context*>;
-  auto dummy_requests = std::make_shared<std::unordered_map<QuiesceRoot, QuiescingRoot>>();
+
+  std::shared_ptr<std::unordered_map<QuiesceRoot, QuiescingRoot>> dummy_requests;
+#ifdef QUIESCE_ROOT_DEBUG_PARAMS
+  dummy_requests = std::make_shared<std::unordered_map<QuiesceRoot, QuiescingRoot>>();
+#endif
 
   QuiesceAgent::ControlInterface ci;
 
@@ -447,7 +451,9 @@ void MDSRank::quiesce_agent_setup() {
 
     dout(10) << "submit_request: " << uri << dendl;
 
+    bool the_real_deal = true;
     std::chrono::milliseconds quiesce_delay_ms = 0ms;
+#ifdef QUIESCE_ROOT_DEBUG_PARAMS
     if (auto pit = uri->params().find("delayms"); pit != uri->params().end()) {
       try {
         quiesce_delay_ms = std::chrono::milliseconds((*pit).has_value ? std::stoul((*pit).value) : 1000);
@@ -496,12 +502,14 @@ void MDSRank::quiesce_agent_setup() {
         return std::nullopt;
     }
 
+    the_real_deal = !debug_quiesce_after && !debug_fail_after && !debug_rank;
+#endif
+
     auto path = uri->path();
 
     std::lock_guard l(mds_lock);
 
-    if (!debug_quiesce_after && !debug_fail_after && !debug_rank) {
-      // the real deal!
+    if (the_real_deal) {
       if (mdsmap->is_degraded()) {
         dout(3) << "DEGRADED: refusing to quiesce" << dendl;
         c->complete(EPERM);
@@ -511,6 +519,9 @@ void MDSRank::quiesce_agent_setup() {
       auto mdr = mdcache->quiesce_path(filepath(path), qc, nullptr, quiesce_delay_ms);
       return mdr ? mdr->reqid : std::optional<RequestHandle>();
     } else {
+#ifndef QUIESCE_ROOT_DEBUG_PARAMS
+      ceph_abort("quiesce debug parameters are disabled");
+#else
       /* we use this branch to allow for quiesce emulation for testing purposes */
       // always create a new request id
       auto req_id = metareqid_t(entity_name_t::MDS(whoami), issue_tid());
@@ -562,6 +573,7 @@ void MDSRank::quiesce_agent_setup() {
         timer.add_event_after(delay, quiesce_task);
       }
       return it->second.first;
+#endif // QUIESCE_ROOT_DEBUG_PARAMS
     }
   };
 
@@ -575,6 +587,7 @@ void MDSRank::quiesce_agent_setup() {
       return 0;
     }
 
+#ifdef QUIESCE_ROOT_DEBUG_PARAMS
     // if we get here then it could be a test (dummy) quiesce
     auto it = std::ranges::find(*dummy_requests, h, [](auto x) { return x.second.first; });
     if (it != dummy_requests->end()) {
@@ -585,6 +598,7 @@ void MDSRank::quiesce_agent_setup() {
       dummy_requests->erase(it);
       return 0;
     }
+#endif // QUIESCE_ROOT_DEBUG_PARAMS
 
     // we must indicate that the handle wasn't found
     // so that the agent can properly report a missing

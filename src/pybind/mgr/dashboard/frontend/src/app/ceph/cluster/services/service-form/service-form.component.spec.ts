@@ -387,6 +387,27 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
     });
 
+    describe('should test service smb', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'smb');
+        formHelper.setValue('service_id', 'foo');
+        formHelper.setValue('cluster_id', 'cluster_foo');
+        formHelper.setValue('config_uri', 'rados://.smb/foo/scc.toml');
+      });
+
+      it('should submit smb', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'smb',
+          placement: {},
+          unmanaged: false,
+          service_id: 'foo',
+          cluster_id: 'cluster_foo',
+          config_uri: 'rados://.smb/foo/scc.toml'
+        });
+      });
+    });
+
     describe('should test service ingress', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'ingress');

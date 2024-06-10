@@ -1728,6 +1728,22 @@ int RadosStore::list_account_topics(const DoutPrefixProvider* dpp,
                                 listing.topics, listing.next_marker);
 }
 
+int RadosStore::add_persistent_topic(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     const std::string& topic_queue)
+{
+  return rgw::notify::add_persistent_topic(
+      dpp, getRados()->get_notif_pool_ctx(), topic_queue, y);
+}
+
+int RadosStore::remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        const std::string& topic_queue)
+{
+  return rgw::notify::remove_persistent_topic(
+      dpp, getRados()->get_notif_pool_ctx(), topic_queue, y);
+}
+
 int RadosStore::remove_bucket_mapping_from_topics(
     const rgw_pubsub_bucket_topics& bucket_topics,
     const std::string& bucket_key,
@@ -2274,9 +2290,11 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
   return earliest_marker.timestamp > obj_mtime;
 }
 
-int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
+int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
-  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), pstate, &manifest, follow_olh, y);
+  RGWObjState *pstate{nullptr};
+
+  int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
   if (ret < 0) {
     return ret;
   }
@@ -2286,7 +2304,7 @@ int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **psta
   bool is_atomic = state.is_atomic;
   bool prefetch_data = state.prefetch_data;
 
-  state = **pstate;
+  state = *pstate;
 
   state.obj = obj;
   state.is_atomic = is_atomic;
@@ -2307,12 +2325,16 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
 int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   Attrs empty;
+  const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
+  // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
+  // won't return ERR_NOT_MODIFIED when syncing the modified object
+  const auto mtime = log_op ? state.mtime + std::chrono::nanoseconds(1) : state.mtime;
   return store->getRados()->set_attrs(dpp, rados_ctx,
 			bucket->get_info(),
 			get_obj(),
 			setattrs ? *setattrs : empty,
 			delattrs ? delattrs : nullptr,
-			y, flags & rgw::sal::FLAG_LOG_OP);
+			y, log_op, mtime);
 }
 
 int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
@@ -2619,6 +2641,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Write obj_op(&op_target);
 
+  set_atomic();
   obj_op.meta.modify_tail = true;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.category = RGWObjCategory::CloudTiered;

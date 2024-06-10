@@ -120,7 +120,7 @@ static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 }
 
 void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t count,
-			   std::string fp_algo = NULL)
+			   std::string fp_algo = std::string{})
 {
   bufferlist t;
   int size = foid.length();
@@ -148,7 +148,7 @@ void check_fp_oid_refcount(librados::IoCtx& ioctx, std::string foid, uint64_t co
   ASSERT_LE(count, refs.count());
 }
 
-string get_fp_oid(string oid, std::string fp_algo = NULL)
+string get_fp_oid(string oid, std::string fp_algo = std::string{})
 {
   if (fp_algo == "sha1") {
     unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE + 1];

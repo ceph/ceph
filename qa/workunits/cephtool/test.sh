@@ -855,6 +855,47 @@ function without_test_dup_command()
   fi
 }
 
+function test_tell_output_file()
+{
+  name="$1"
+  shift
+
+  # Test --daemon-output-file
+  # N.B.: note this only works if $name is on the same node as this script!
+  J=$(ceph tell --format=json --daemon-output-file=/tmp/foo "$name" version)
+  expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
+  expect_true test -e /tmp/foo
+  # only one line of json
+  expect_true sed '2q1' < /tmp/foo > /dev/null
+  expect_true jq -e '.version | length > 0' < /tmp/foo
+  rm -f /tmp/foo
+
+  J=$(ceph tell --format=json-pretty --daemon-output-file=/tmp/foo "$name" version)
+  expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
+  expect_true test -e /tmp/foo
+  # more than one line of json
+  expect_false sed '2q1' < /tmp/foo > /dev/null
+  expect_true jq -e '.version | length > 0' < /tmp/foo
+  rm -f /tmp/foo
+
+  # Test --daemon-output-file=:tmp:
+  J=$(ceph tell --format=json --daemon-output-file=":tmp:" "$name" version)
+  path=$(jq -r .path <<<"$J")
+  expect_true test -e "$path"
+  # only one line of json
+  expect_true sed '2q1' < "$path" > /dev/null
+  expect_true jq -e '.version | length > 0' < "$path"
+  rm -f "$path"
+
+  J=$(ceph tell --format=json-pretty --daemon-output-file=":tmp:" "$name" version)
+  path=$(jq -r .path <<<"$J")
+  expect_true test -e "$path"
+  # only one line of json
+  expect_false sed '2q1' < "$path" > /dev/null
+  expect_true jq -e '.version | length > 0' < "$path"
+  rm -f "$path"
+}
+
 function test_mds_tell()
 {
   local FS_NAME=cephfs
@@ -895,6 +936,8 @@ function test_mds_tell()
       new_mds_gids=$(get_mds_gids $FS_NAME)
   done
   echo New GIDs: $new_mds_gids
+
+  test_tell_output_file mds."$FS_NAME":0
 
   remove_all_fs
   ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
@@ -2628,6 +2671,8 @@ function test_mon_tell()
     ceph_watch_wait "${m} \[DBG\] from.*cmd='sessions' args=\[\]: dispatch"
   done
   expect_false ceph tell mon.foo version
+
+  test_tell_output_file mon.0
 }
 
 function test_mon_ping()

@@ -35,9 +35,9 @@ struct initiate_exec {
   {
     auto h = boost::asio::consign(std::move(handler), conn);
     return boost::asio::dispatch(get_executor(),
-        [c=conn, &req, &resp, h=std::move(h)] {
+        [c=conn, &req, &resp, h=std::move(h)] () mutable {
           return c->async_exec(req, resp, std::move(h));
-          });
+        });
   } 
 };
 
@@ -68,7 +68,7 @@ int RedisDriver::initialize(const DoutPrefixProvider* dpp)
     partition_info.location += "/";
   }
 
-  std::string address = dpp->get_cct()->_conf->rgw_local_cache_address;
+  std::string address = dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address;
 
   config cfg;
   cfg.addr.host = address.substr(0, address.find(":"));
@@ -555,9 +555,8 @@ Aio::OpFunc RedisDriver::redis_read_op(optional_yield y, std::shared_ptr<connect
 {
   return [y, conn, &key] (Aio* aio, AioResult& r) mutable {
     using namespace boost::asio;
-    spawn::yield_context yield = y.get_yield_context();
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
+    yield_context yield = y.get_yield_context();
+    auto ex = yield.get_executor();
 
     // TODO: Make unique pointer once support is added
     auto s = std::make_shared<RedisDriver::redis_response>();
@@ -574,9 +573,8 @@ Aio::OpFunc RedisDriver::redis_write_op(optional_yield y, std::shared_ptr<connec
 {
   return [y, conn, &bl, &attrs, &key] (Aio* aio, AioResult& r) mutable {
     using namespace boost::asio;
-    spawn::yield_context yield = y.get_yield_context();
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
+    yield_context yield = y.get_yield_context();
+    auto ex = yield.get_executor();
 
     auto redisAttrs = build_attrs(attrs);
 

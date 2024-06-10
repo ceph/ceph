@@ -63,8 +63,8 @@ using lba_node_meta_le_t = fixed_kv_node_meta_le_t<laddr_le_t>;
  * LBA Tree.
  *
  * Layout (4k):
+ *   checksum   :                            4b
  *   size       : uint32_t[1]                4b
- *   (padding)  :                            4b
  *   meta       : lba_node_meta_le_t[3]      (1*24)b
  *   keys       : laddr_t[255]               (254*8)b
  *   values     : paddr_t[255]               (254*8)b
@@ -101,8 +101,8 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  * LBA Tree.
  *
  * Layout (4k):
+ *   checksum   :                            4b
  *   size       : uint32_t[1]                4b
- *   (padding)  :                            4b
  *   meta       : lba_node_meta_le_t[3]      (1*24)b
  *   keys       : laddr_t[170]               (140*8)b
  *   values     : lba_map_val_t[170]         (140*21)b
@@ -171,6 +171,8 @@ struct LBALeafNode
 
     for (auto i : *this) {
       auto child = (LogicalCachedExtent*)this->children[i.get_offset()];
+      // Children may not be marked as stable yet,
+      // the specific order is undefined in the transaction prepare record phase.
       if (is_valid_child_ptr(child) && child->get_laddr() != i.get_key()) {
 	SUBERROR(seastore_fixedkv_tree,
 	  "stable child not valid: child {}, key {}",
@@ -194,7 +196,11 @@ struct LBALeafNode
 	iter.get_offset(),
 	*nextent);
       // child-ptr may already be correct, see LBAManager::update_mappings()
-      this->update_child_ptr(iter, nextent);
+      if (!nextent->has_parent_tracker()) {
+	this->update_child_ptr(iter, nextent);
+      }
+      assert(nextent->has_parent_tracker()
+	&& nextent->get_parent_node<LBALeafNode>().get() == this);
     }
     if (val.pladdr.is_paddr()) {
       val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());

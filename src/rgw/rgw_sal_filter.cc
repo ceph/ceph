@@ -463,6 +463,20 @@ std::unique_ptr<Notification> FilterDriver::get_notification(
   return std::make_unique<FilterNotification>(std::move(n));
 }
 
+int FilterDriver::add_persistent_topic(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const std::string& topic_queue)
+{
+  return next->add_persistent_topic(dpp, y, topic_queue);
+}
+
+int FilterDriver::remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                          optional_yield y,
+                                          const std::string& topic_queue)
+{
+  return next->remove_persistent_topic(dpp, y, topic_queue);
+}
+
 RGWLC* FilterDriver::get_rgwlc()
 {
   return next->get_rgwlc();
@@ -1030,10 +1044,9 @@ RGWAccessControlPolicy& FilterObject::get_acl()
   return next->get_acl();
 }
 
-int FilterObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate,
-				optional_yield y, bool follow_olh)
-{
-  return next->get_obj_state(dpp, pstate, y, follow_olh);
+int FilterObject::load_obj_state(const DoutPrefixProvider *dpp,
+                                 optional_yield y, bool follow_olh) {
+  return next->load_obj_state(dpp, y, follow_olh);
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,

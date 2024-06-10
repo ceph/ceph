@@ -153,11 +153,15 @@ protected:
     get_event<EventT>().trigger(*that(), std::forward<Args>(args)...);
   }
 
+  template <class BlockingEventT>
+  typename BlockingEventT::template Trigger<T>
+  get_trigger() {
+    return {get_event<BlockingEventT>(), *that()};
+  }
+
   template <class BlockingEventT, class InterruptorT=void, class F>
   auto with_blocking_event(F&& f) {
-    auto ret = std::forward<F>(f)(typename BlockingEventT::template Trigger<T>{
-      get_event<BlockingEventT>(), *that()
-    });
+    auto ret = std::forward<F>(f)(get_trigger<BlockingEventT>());
     if constexpr (std::is_same_v<InterruptorT, void>) {
       return ret;
     } else {
@@ -194,6 +198,12 @@ protected:
         // for ConnectionPipeline).
         return that()->get_handle().template enter<T>(stage, std::move(trigger));
     });
+  }
+
+  template <class StageT>
+  void enter_stage_sync(StageT& stage) {
+    that()->get_handle().template enter_sync<T>(
+        stage, this->template get_trigger<typename StageT::BlockingEvent>());
   }
 
   template <class OpT>
@@ -256,7 +266,10 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
     crimson::osd::scheduler::params_t params,
     F &&f) {
     return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
-      return cont ? with_throttle_while(op, params, f) : seastar::now();
+      return cont
+	? seastar::yield().then([params, op, f, this] {
+	  return with_throttle_while(op, params, f); })
+	: seastar::now();
     });
   }
 
