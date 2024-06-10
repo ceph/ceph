@@ -187,6 +187,11 @@ class PgScrubber : public ScrubPgIF,
   /// are we waiting for resource reservation grants form our replicas?
   [[nodiscard]] bool is_reserving() const final;
 
+  Scrub::schedule_result_t start_scrub_session(
+      Scrub::OSDRestrictions osd_restrictions,
+      Scrub::ScrubPGPreconds,
+      std::optional<requested_scrub_t> temp_request) final;
+
   void initiate_regular_scrub(epoch_t epoch_queued) final;
 
   void initiate_scrub_after_repair(epoch_t epoch_queued) final;
@@ -560,6 +565,11 @@ class PgScrubber : public ScrubPgIF,
 
   // 'query' command data for an active scrub
   void dump_active_scrubber(ceph::Formatter* f, bool is_deep) const;
+
+  /// calls penalize_next_scrub() to push the 'not before' to a later time
+  /// (for now. The fuller implementation will also push the scrub job back
+  /// into the queue).
+  void requeue_penalized(Scrub::delay_cause_t cause);
 
   // -----     methods used to verify the relevance of incoming events:
 
