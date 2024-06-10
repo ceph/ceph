@@ -269,6 +269,85 @@ public:
     }
   }
 
+  /**
+   * load_then_with_lock
+   *
+   * Takes two functions as arguments -- load_func to be invoked
+   * with an exclusive lock, and func to be invoked under the
+   * lock type specified by the Type template argument.
+   *
+   * Caller must ensure that *this is not already locked, presumably
+   * by invoking load_then_with_lock immediately after construction.
+   *
+   * @param [in] load_func Function to be invoked under excl lock
+   * @param [in] func Function to be invoked after load_func under
+   *             lock of type Type.
+   */
+  template<RWState::State Type, typename Func, typename Func2>
+  auto load_then_with_lock(Func &&load_func, Func2 &&func) {
+    class lock_state_t {
+      tri_mutex *lock = nullptr;
+      bool excl = false;
+
+    public:
+      lock_state_t(tri_mutex &lock) : lock(&lock), excl(true) {
+	ceph_assert(lock.try_lock_for_excl());
+      }
+      lock_state_t(lock_state_t &&o) : lock(o.lock), excl(o.excl) {
+	o.lock = nullptr;
+	o.excl = false;
+      }
+      lock_state_t() = delete;
+      lock_state_t &operator=(lock_state_t &&o) = delete;
+      lock_state_t(const lock_state_t &o) = delete;
+      lock_state_t &operator=(const lock_state_t &o) = delete;
+
+      void demote() {
+	ceph_assert(excl);
+	ceph_assert(lock);
+	if constexpr (Type == RWState::RWWRITE) {
+	  lock->demote_to_write();
+	} else if constexpr (Type == RWState::RWREAD) {
+	  lock->demote_to_read();
+	} else if constexpr (Type == RWState::RWNONE) {
+	  lock->unlock_for_excl();
+	}
+	excl = false;
+      }
+
+      ~lock_state_t() {
+	if (!lock)
+	  return;
+
+	if constexpr (Type == RWState::RWEXCL) {
+	  lock->unlock_for_excl();
+	} else {
+	  if (excl) {
+	    lock->unlock_for_excl();
+	    return;
+	  }
+
+	  if constexpr (Type == RWState::RWWRITE) {
+	    lock->unlock_for_write();
+	  } else if constexpr (Type == RWState::RWREAD) {
+	    lock->unlock_for_read();
+	  }
+	}
+      }
+    };
+
+    return seastar::do_with(
+      lock_state_t{lock},
+      [load_func=std::move(load_func), func=std::move(func)](auto &ls) mutable {
+	return std::invoke(
+	  std::move(load_func)
+	).si_then([func=std::move(func), &ls]() mutable {
+	  ls.demote();
+	  return std::invoke(std::move(func));
+	});
+      });
+  }
+
   bool empty() const {
     return !lock.is_acquired();
   }

@@ -105,28 +105,43 @@ using crimson::common::local_conf;
     if constexpr (track) {
       obc->append_to(obc_set_accessing);
     }
-    return obc->with_lock<State, IOInterruptCondition>(
-      [existed=existed, obc=obc, func=std::move(func), this]() mutable {
-      return get_or_load_obc<State>(
-	obc, existed
-      ).safe_then_interruptible(std::move(func));
-    }).finally([FNAME, this, obc=std::move(obc)] {
-      DEBUGDPP("released object {}", dpp, obc->get_oid());
-      if constexpr (track) {
-	obc->remove_from(obc_set_accessing);
-      }
-    });
+    if (existed) {
+      return obc->with_lock<State, IOInterruptCondition>(
+	[func=std::move(func), obc=ObjectContextRef(obc)] {
+	  return std::invoke(std::move(func), obc);
+	}
+      ).finally([FNAME, this, obc=ObjectContextRef(obc)] {
+	DEBUGDPP("released object {}", dpp, obc->get_oid());
+	if constexpr (track) {
+	  obc->remove_from(obc_set_accessing);
+	}
+      });
+    } else {
+      return obc->load_then_with_lock<State> (
+	[this, obc=ObjectContextRef(obc)] {
+	  return load_obc(obc);
+	},
+	[func=std::move(func), obc=ObjectContextRef(obc)] {
+	  return std::invoke(std::move(func), obc);
+	}
+      ).finally([FNAME, this, obc=ObjectContextRef(obc)] {
+	DEBUGDPP("released object {}", dpp, obc->get_oid());
+	if constexpr (track) {
+	  obc->remove_from(obc_set_accessing);
+	}
+      });
+    }
   }
 
 
-  ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
+  ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::load_obc(ObjectContextRef obc)
   {
     LOG_PREFIX(ObjectContextLoader::load_obc);
     return backend.load_metadata(obc->get_oid())
     .safe_then_interruptible(
       [FNAME, this, obc=std::move(obc)](auto md)
-      -> load_obc_ertr::future<ObjectContextRef> {
+      -> load_obc_ertr::future<> {
       const hobject_t& oid = md->os.oi.soid;
       DEBUGDPP("loaded obs {} for {}", dpp, md->os.oi, oid);
       if (oid.is_head()) {
@@ -142,8 +157,8 @@ using crimson::common::local_conf;
         // See set_clone_ssc
         obc->set_clone_state(std::move(md->os));
       }
-      DEBUGDPP("returning obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
-      return load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
+      DEBUGDPP("loaded obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
+      return seastar::now();
     });
   }
 
