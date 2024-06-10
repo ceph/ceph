@@ -59,7 +59,6 @@ class D4NFilterDriver : public FilterDriver {
     virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
     int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                   std::unique_ptr<Bucket>* bucket, optional_yield y) override;
-
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -98,6 +97,10 @@ class D4NFilterBucket : public FilterBucket {
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
                        optional_yield y) override;
+    virtual std::unique_ptr<MultipartUpload> get_multipart_upload(
+				const std::string& oid,
+				std::optional<std::string> upload_id=std::nullopt,
+				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
 };
 
 class D4NFilterObject : public FilterObject {
@@ -108,7 +111,7 @@ class D4NFilterObject : public FilterObject {
     rgw_obj obj;
     rgw::sal::Object* dest_object{nullptr}; //for copy-object
     rgw::sal::Bucket* dest_bucket{nullptr}; //for copy-object
-    std::string dest_version;
+    bool multipart{false};
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -118,12 +121,14 @@ class D4NFilterObject : public FilterObject {
 	    D4NFilterDriver* filter;
 	    D4NFilterObject* source;
 	    RGWGetDataCB* client_cb;
-	    uint64_t ofs = 0, len = 0;
+	    int64_t ofs = 0, len = 0;
+      int64_t adjusted_start_ofs{0};
 	    bufferlist bl_rem;
 	    bool last_part{false};
 	    bool write_to_cache{true};
 	    const DoutPrefixProvider* dpp;
 	    optional_yield* y;
+      int part_count{0};
 
 	  public:
 	    D4NFilterGetCB(D4NFilterDriver* _filter, D4NFilterObject* _source) : filter(_filter),
@@ -136,6 +141,8 @@ class D4NFilterObject : public FilterObject {
               this->y = y;
             }
 	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
+      void set_adjusted_start_ofs(uint64_t adjusted_start_ofs) { this->adjusted_start_ofs = adjusted_start_ofs; }
+      void set_part_num(uint64_t part_num) { this->part_count = part_num; }
 	    int flush_last_part();
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
@@ -229,6 +236,7 @@ class D4NFilterObject : public FilterObject {
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
+    //virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh = true) override;
 
     void set_object_version(const std::string& version) { this->version = version; }
     const std::string get_object_version() { return this->version; }
@@ -236,12 +244,16 @@ class D4NFilterObject : public FilterObject {
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
-    void set_obj_state_attrs(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
-    int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version);
+    void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
+    int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
     int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool is_latest_version = true, bool dirty = false);
+    int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
+    int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y);
     rgw::sal::Bucket* get_destination_bucket(const DoutPrefixProvider* dpp) { return dest_bucket;}
     rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
+    bool is_multipart() { return multipart; }
+    int set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
 };
 
 class D4NFilterWriter : public FilterWriter {
@@ -280,6 +292,27 @@ class D4NFilterWriter : public FilterWriter {
 			 uint32_t flags) override;
    bool is_atomic() { return atomic; };
    const DoutPrefixProvider* get_dpp() { return this->dpp; } 
+};
+
+class D4NFilterMultipartUpload : public FilterMultipartUpload {
+private:
+  D4NFilterDriver* driver;
+public:
+  D4NFilterMultipartUpload(std::unique_ptr<MultipartUpload> _next, Bucket* _b, D4NFilterDriver* driver) :
+    FilterMultipartUpload(std::move(_next), _b),
+    driver(driver) {}
+  virtual ~D4NFilterMultipartUpload() = default;
+
+  virtual int complete(const DoutPrefixProvider *dpp,
+				    optional_yield y, CephContext* cct,
+				    std::map<int, std::string>& part_etags,
+				    std::list<rgw_obj_index_key>& remove_objs,
+				    uint64_t& accounted_size, bool& compressed,
+				    RGWCompressionInfo& cs_info, off_t& ofs,
+				    std::string& tag, ACLOwner& owner,
+				    uint64_t olh_epoch,
+				    rgw::sal::Object* target_obj,
+            prefix_map_t& processed_prefixes) override;
 };
 
 } } // namespace rgw::sal
