@@ -65,6 +65,7 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Writer.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/Compression.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_debug.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueAdmin.cc
   ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
 add_library(crimson-alienstore STATIC
   ${alien_store_srcs})
