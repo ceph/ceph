@@ -74,10 +74,6 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
-  // obc loading is a concurrent phase. In case this obc is being loaded,
-  // make other users of this obc to await for the loading to complete.
-  seastar::shared_mutex loading_mutex;
-
   ObjectContext(hobject_t hoid) : lock(hoid.oid.name),
                                   obs(std::move(hoid)) {}
 
