@@ -83,9 +83,8 @@ def test_host_facts_security(cephadm_fs):
         '/usr/bin/man (enforce)',
         '1password (unconfined)',
         'Discord (unconfined)',
-        # These examples with spaces in the name fail currently
-        # 'MongoDB Compass (unconfined)',
-        # 'profile name with spaces (enforce)',
+        'MongoDB Compass (unconfined)',
+        'profile name with spaces (enforce)',
     ]
     cephadm_fs.create_file(
         '/sys/kernel/security/apparmor/profiles',
@@ -105,5 +104,5 @@ def test_host_facts_security(cephadm_fs):
     assert ksec['type'] == 'AppArmor'
     assert ksec['type'] == 'AppArmor'
     assert ksec['complain'] == 0
-    assert ksec['enforce'] == 0
-    assert ksec['unconfined'] == 1
+    assert ksec['enforce'] == 1
+    assert ksec['unconfined'] == 2
