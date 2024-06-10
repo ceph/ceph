@@ -611,6 +611,7 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket,
 						listen_addr.is_msgr2(), false);
   conn->accept(std::move(cli_socket), listen_addr, peer_addr);
   accepting_conns.insert(conn);
+  w->get_perf_counter()->inc(l_msgr_active_connections);
 }
 
 AsyncConnectionRef AsyncMessenger::create_connect(
@@ -865,7 +866,6 @@ int AsyncMessenger::accept_conn(const AsyncConnectionRef& conn)
       conn->policy.lossy &&
       !conn->policy.register_lossy_clients) {
     anon_conns.insert(conn);
-    conn->get_perf_counter()->inc(l_msgr_active_connections);
     return 0;
   }
   auto it = conns.find(*conn->peer_addrs);
@@ -884,7 +884,6 @@ int AsyncMessenger::accept_conn(const AsyncConnectionRef& conn)
   }
   ldout(cct, 10) << __func__ << " " << conn << " " << *conn->peer_addrs << dendl;
   conns[*conn->peer_addrs] = conn;
-  conn->get_perf_counter()->inc(l_msgr_active_connections);
   accepting_conns.erase(conn);
   return 0;
 }
