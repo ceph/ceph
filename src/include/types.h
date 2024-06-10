@@ -482,6 +482,10 @@ struct byte_u_t {
   explicit byte_u_t(uint64_t _v) : v(_v) {};
 };
 
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<byte_u_t> : fmt::ostream_formatter {};
+#endif
+
 inline std::ostream& operator<<(std::ostream& out, const byte_u_t& b)
 {
   uint64_t n = b.v;

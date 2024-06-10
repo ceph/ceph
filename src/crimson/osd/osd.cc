@@ -677,6 +677,7 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_admin_commands();
     asok->register_command(make_asok_hook<OsdStatusHook>(std::as_const(*this)));
     asok->register_command(make_asok_hook<SendBeaconHook>(*this));
+    asok->register_command(make_asok_hook<RunOSDBenchHook>(*this));
     asok->register_command(make_asok_hook<FlushPgStatsHook>(*this));
     asok->register_command(
       make_asok_hook<DumpPGStateHistory>(std::as_const(pg_shard_manager)));
@@ -1416,6 +1417,82 @@ seastar::future<> OSD::send_beacon()
   beacon->pgs = min_last_epoch_clean_pgs;
   DEBUG("{}", *beacon);
   return monc->send_message(std::move(beacon));
+}
+
+seastar::future<double> OSD::run_bench(int64_t count, int64_t bsize, int64_t osize, int64_t onum) {
+    LOG_PREFIX(OSD::run_bench);
+    DEBUG();
+    std::vector<seastar::future<>> futures;
+    std::vector<seastar::future<>> cleanup_futures;
+    
+    auto collection_future = store.get_sharded_store().open_collection(
+      coll_t::meta());
+    auto collection_ref = co_await std::move(collection_future);
+    ceph::os::Transaction cleanup_t;
+
+    if (osize && onum) {
+      std::string data(osize, 'a');
+      ceph::buffer::list bl;
+      bl.append(data);
+
+      for (int i = 0; i < onum; ++i) {
+        ceph::os::Transaction t;
+        std::string oid_str = fmt::format("disk_bw_test_{}", i);
+        ghobject_t oid(hobject_t(sobject_t(object_t(oid_str), 0)),
+                        ghobject_t::NO_GEN,
+                        shard_id_t::NO_SHARD);
+        t.write(coll_t::meta(), oid, 0, data.size(), bl);
+        futures.push_back(store.get_sharded_store().do_transaction(
+          collection_ref, std::move(t)));
+        cleanup_t.remove(coll_t::meta(), oid);
+        cleanup_futures.push_back(store.get_sharded_store().do_transaction(
+          collection_ref, std::move(cleanup_t)));
+      }
+    }
+
+    co_await seastar::when_all_succeed(futures.begin(), futures.end());
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 255);
+    std::vector<seastar::future<>> futures_bench;
+    auto start = std::chrono::steady_clock::now();
+
+    for (int i = 0; i < count / bsize; ++i) {
+      ceph::os::Transaction t;
+      ceph::buffer::ptr bp(bsize);
+      std::generate_n(bp.c_str(), bp.length(), [&dis, &gen]() {
+          return static_cast<char>(dis(gen));
+      });
+      ceph::buffer::list bl(bsize);
+      bl.push_back(std::move(bp));
+      bl.rebuild_page_aligned();
+
+      std::string oid_str;
+      uint64_t offset = 0;
+      if (onum && osize) {
+        oid_str = fmt::format("disk_bw_test_{}", dis(gen) % onum);
+        offset = (dis(gen) % (osize / bsize)) * bsize;
+      } else {
+        oid_str = fmt::format("disk_bw_test_{}", i * bsize);
+      }
+      ghobject_t oid(hobject_t(sobject_t(object_t(oid_str), 0)));
+
+      t.write(coll_t::meta(), oid, offset, bsize, bl);
+
+      futures_bench.push_back(store.get_sharded_store().do_transaction(
+        collection_ref, std::move(t)));
+
+      if (!onum || !osize) {
+        cleanup_t.remove(coll_t::meta(), oid);
+        cleanup_futures.push_back(store.get_sharded_store().do_transaction(
+          collection_ref, std::move(cleanup_t)));
+      }
+    }
+    co_await seastar::when_all_succeed(futures_bench.begin(), futures_bench.end());
+    auto end = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(end - start).count();
+    co_await seastar::when_all_succeed(cleanup_futures.begin(), cleanup_futures.end());
+    co_return co_await seastar::make_ready_future<double>(elapsed);
 }
 
 seastar::future<> OSD::update_heartbeat_peers()
