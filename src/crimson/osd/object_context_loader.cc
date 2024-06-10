@@ -162,50 +162,6 @@ using crimson::common::local_conf;
     });
   }
 
-  template<RWState::State State>
-  ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
-  ObjectContextLoader::get_or_load_obc(ObjectContextRef obc,
-                                       bool existed)
-  {
-    LOG_PREFIX(ObjectContextLoader::get_or_load_obc);
-    DEBUGDPP("{} -- fully_loaded={}, "
-             "invalidated_by_interval_change={}",
-             dpp, obc->get_oid(),
-             obc->fully_loaded,
-             obc->invalidated_by_interval_change);
-    if (existed) {
-      // obc is already loaded - avoid loading_mutex usage
-      DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
-      return get_obc(obc, existed);
-    }
-    // See ObjectContext::_with_lock(),
-    // this function must be able to support atomicity before
-    // acquiring the lock
-    ceph_assert(obc->loading_mutex.try_lock());
-    return _get_or_load_obc<State>(obc, existed
-    ).finally([obc]{
-      obc->loading_mutex.unlock();
-    });
-  }
-
-  template<RWState::State State>
-  ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
-  ObjectContextLoader::_get_or_load_obc(ObjectContextRef obc,
-                                        bool existed)
-  {
-    LOG_PREFIX(ObjectContextLoader::_get_or_load_obc);
-    if (existed) {
-      DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
-      return get_obc(obc, existed);
-    } else {
-      DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
-      return obc->template with_promoted_lock<State, IOInterruptCondition>(
-        [obc, this] {
-        return load_obc(obc);
-      });
-    }
-  }
-
   ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::reload_obc(ObjectContext& obc) const
   {
