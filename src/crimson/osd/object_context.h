@@ -168,15 +168,6 @@ private:
     });
   }
 
-  template <typename Lock, typename Func>
-  auto _with_promoted_lock(Lock& lock, Func&& func) {
-    Ref obc = this;
-    lock.lock();
-    return seastar::futurize_invoke(func).finally([&lock, obc] {
-      lock.unlock();
-    });
-  }
-
   boost::intrusive::list_member_hook<> obc_accessing_hook;
   uint64_t list_link_cnt = 0;
   bool fully_loaded = false;
@@ -233,37 +224,6 @@ public:
       case RWState::RWNONE:
 	return seastar::futurize_invoke(std::forward<Func>(func));
       default:
-	assert(0 == "noop");
-      }
-    }
-  }
-  template<RWState::State Type, typename InterruptCond = void, typename Func>
-  auto with_promoted_lock(Func&& func) {
-    if constexpr (!std::is_void_v<InterruptCond>) {
-      auto wrapper = ::crimson::interruptible::interruptor<InterruptCond>::wrap_function(std::forward<Func>(func));
-      switch (Type) {
-      case RWState::RWWRITE:
-	return _with_promoted_lock(lock.excl_from_write(), std::move(wrapper));
-      case RWState::RWREAD:
-	return _with_promoted_lock(lock.excl_from_read(), std::move(wrapper));
-      case RWState::RWEXCL:
-	return seastar::futurize_invoke(std::move(wrapper));
-      case RWState::RWNONE:
-	return _with_lock(lock.for_excl(), std::move(wrapper));
-       default:
-	assert(0 == "noop");
-      }
-    } else {
-      switch (Type) {
-      case RWState::RWWRITE:
-	return _with_promoted_lock(lock.excl_from_write(), std::forward<Func>(func));
-      case RWState::RWREAD:
-	return _with_promoted_lock(lock.excl_from_read(), std::forward<Func>(func));
-      case RWState::RWEXCL:
-	return seastar::futurize_invoke(std::forward<Func>(func));
-      case RWState::RWNONE:
-	return _with_lock(lock.for_excl(), std::forward<Func>(func));
-       default:
 	assert(0 == "noop");
       }
     }
