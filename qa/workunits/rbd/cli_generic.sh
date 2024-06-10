@@ -782,7 +782,7 @@ test_clone_v2() {
     rbd snap unprotect test1@1
 
     rbd snap remove test1@1
-    rbd snap list --all test1 | grep -E "trash \(1\) *$"
+    rbd snap list --all test1 | grep -E "trash \(user 1\) *$"
 
     rbd snap create test1@2
     rbd rm test1 2>&1 | grep 'image has snapshots'
