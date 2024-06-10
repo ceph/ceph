@@ -83,8 +83,8 @@ class NvmeofService(CephService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
         if not hasattr(self, 'gws'):
-            self.gws = {} # id -> name map of gateways for this service.
-        self.gws[nvmeof_gw_id] = name # add to map of service's gateway names
+            self.gws = {}  # id -> name map of gateways for this service.
+        self.gws[nvmeof_gw_id] = name  # add to map of service's gateway names
         return daemon_spec
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
