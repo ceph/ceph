@@ -46,6 +46,9 @@ public:
   {
     foreach_internal(notify);
   }
+  const uint64_t* get_as_bitmap(size_t* out_count) const override {
+    return get_as_bitmap_internal(out_count);
+  }
   double get_fragmentation() override
   {
     return get_fragmentation_internal();
