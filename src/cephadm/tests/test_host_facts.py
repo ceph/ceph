@@ -98,9 +98,7 @@ def test_host_facts_security(cephadm_fs):
         contents='\n'.join(profiles_lines),
     )
 
-    from cephadmlib.host_facts import HostFacts
-
-    class TestHostFacts(HostFacts):
+    class TestHostFacts(_cephadm.HostFacts):
         def _populate_sysctl_options(self):
             return {}
 
