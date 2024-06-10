@@ -63,7 +63,9 @@ class CephNvmeof(ContainerDaemonForm):
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
-    def _get_container_mounts(data_dir: str, log_dir: str) -> Dict[str, str]:
+    def _get_container_mounts(
+        data_dir: str, log_dir: str, mtls_dir: Optional[str] = None
+    ) -> Dict[str, str]:
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
@@ -74,6 +76,8 @@ class CephNvmeof(ContainerDaemonForm):
         mounts['/dev/hugepages'] = '/dev/hugepages'
         mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
         mounts[log_dir] = '/var/log/ceph:z'
+        if mtls_dir:
+            mounts[mtls_dir] = '/src/mtls:z'
         return mounts
 
     def _get_tls_cert_key_mounts(
@@ -98,8 +102,15 @@ class CephNvmeof(ContainerDaemonForm):
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         log_dir = os.path.join(ctx.log_dir, self.identity.fsid)
-        mounts.update(self._get_container_mounts(data_dir, log_dir))
-        mounts.update(self._get_tls_cert_key_mounts(data_dir, self.files))
+        mtls_dir = os.path.join(ctx.data_dir, self.identity.fsid, 'mtls')
+        if os.path.exists(mtls_dir):
+            mounts.update(
+                self._get_container_mounts(
+                    data_dir, log_dir, mtls_dir=mtls_dir
+                )
+            )
+        else:
+            mounts.update(self._get_container_mounts(data_dir, log_dir))
 
     def customize_container_binds(
         self, ctx: CephadmContext, binds: List[List[str]]

@@ -7,7 +7,7 @@ from ipaddress import ip_address, IPv6Address
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import NvmeofServiceSpec
 
-from orchestrator import DaemonDescription, DaemonDescriptionStatus
+from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .. import utils
 
@@ -20,10 +20,16 @@ class NvmeofService(CephService):
 
     def config(self, spec: NvmeofServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
-        assert spec.pool
-        self.pool = spec.pool
-        assert spec.group is not None
-        self.group = spec.group
+        # Looking at src/pybind/mgr/cephadm/services/iscsi.py
+        # asserting spec.pool/spec.group might be appropriate
+        if not spec.pool:
+            raise OrchestratorError("pool should be in the spec")
+        if spec.group is None:
+            raise OrchestratorError("group should be in the spec")
+        # unlike some other config funcs, if this fails we can't
+        # go forward deploying the daemon and then retry later. For
+        # that reason we make no attempt to catch the OrchestratorError
+        # this may raise
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -80,34 +86,33 @@ class NvmeofService(CephService):
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
-        if not hasattr(self, 'gws'):
-            self.gws = {} # id -> name map of gateways for this service.
-        self.gws[nvmeof_gw_id] = name # add to map of service's gateway names
         return daemon_spec
 
     def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
         """ Overrides the daemon_check_post to add nvmeof gateways safely
         """
         self.mgr.log.info(f"nvmeof daemon_check_post {daemon_descrs}")
-        # Assert configured
-        assert self.pool
-        assert self.group is not None
+        spec = cast(NvmeofServiceSpec,
+                    self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
+        if not spec:
+            self.mgr.log.error(f'Failed to find spec for {daemon_descrs[0].name()}')
+            return
+        pool = spec.pool
+        group = spec.group
         for dd in daemon_descrs:
-            self.mgr.log.info(f"nvmeof daemon_descr {dd}")
-            assert dd.daemon_id in self.gws
-            name = self.gws[dd.daemon_id]
-            self.mgr.log.info(f"nvmeof daemon name={name}")
             # Notify monitor about this gateway creation
             cmd = {
                 'prefix': 'nvme-gw create',
-                'id': name,
-                'group': self.group,
-                'pool': self.pool
+                'id': f'{utils.name_to_config_section("nvmeof")}.{dd.daemon_id}',
+                'group': group,
+                'pool': pool
             }
             self.mgr.log.info(f"create gateway: monitor command {cmd}")
             _, _, err = self.mgr.mon_command(cmd)
             if err:
-                self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
+                err_msg = (f"Unable to send monitor command {cmd}, error {err}")
+                logger.error(err_msg)
+                raise OrchestratorError(err_msg)
         super().daemon_check_post(daemon_descrs)
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
@@ -116,10 +121,13 @@ class NvmeofService(CephService):
             cmd_dicts = []
 
             for dd in daemon_descrs:
-                assert dd.hostname is not None
                 spec = cast(NvmeofServiceSpec,
                             self.mgr.spec_store.all_specs.get(dd.service_name(), None))
                 service_name = dd.service_name()
+                if dd.hostname is None:
+                    err_msg = ('Trying to config_dashboard nvmeof but no hostname is defined')
+                    logger.error(err_msg)
+                    raise OrchestratorError(err_msg)
 
                 if not spec:
                     logger.warning(f'No ServiceSpec found for {service_name}')
@@ -185,41 +193,22 @@ class NvmeofService(CephService):
         if not ret:
             logger.info(f'{daemon_name} removed from nvmeof gateways dashboard config')
 
-        # Assert configured
-        assert self.pool
-        assert self.group is not None
-        assert daemon.daemon_id in self.gws
-        name = self.gws[daemon.daemon_id]
-        self.gws.pop(daemon.daemon_id)
+        spec = cast(NvmeofServiceSpec,
+                    self.mgr.spec_store.all_specs.get(daemon.service_name(), None))
+        if not spec:
+            self.mgr.log.error(f'Failed to find spec for {daemon.name()}')
+            return
+        pool = spec.pool
+        group = spec.group
+
         # Notify monitor about this gateway deletion
         cmd = {
             'prefix': 'nvme-gw delete',
-            'id': name,
-            'group': self.group,
-            'pool': self.pool
+            'id': f'{utils.name_to_config_section("nvmeof")}.{daemon.daemon_id}',
+            'group': group,
+            'pool': pool
         }
         self.mgr.log.info(f"delete gateway: monitor command {cmd}")
         _, _, err = self.mgr.mon_command(cmd)
         if err:
             self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
-
-    def purge(self, service_name: str) -> None:
-        """Make sure no zombie gateway is left behind
-        """
-        # Assert configured
-        assert self.pool
-        assert self.group is not None
-        for daemon_id in self.gws:
-            name = self.gws[daemon_id]
-            self.gws.pop(daemon_id)
-            # Notify monitor about this gateway deletion
-            cmd = {
-                'prefix': 'nvme-gw delete',
-                'id': name,
-                'group': self.group,
-                'pool': self.pool
-            }
-            self.mgr.log.info(f"purge delete gateway: monitor command {cmd}")
-            _, _, err = self.mgr.mon_command(cmd)
-            if err:
-                self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
