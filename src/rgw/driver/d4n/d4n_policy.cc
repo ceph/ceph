@@ -53,8 +53,10 @@ int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_
   response<int, int, int, int> resp;
 
   driver = _driver;
-  tc = std::thread(&CachePolicy::cleaning, this, dpp);
-  tc.detach();
+  if (dpp->get_cct()->_conf->d4n_writecache_enabled) {
+    tc = std::thread(&CachePolicy::cleaning, this, dpp);
+    tc.detach();
+  }
 
   try {
     boost::system::error_code ec;
@@ -448,26 +450,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     }
     ldpp_dout(dpp, 10) <<__LINE__ << " " << __func__ << "(): e->key=" << e->key << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->dirty=" << e->dirty << dendl;
+    ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->version=" << e->version << dendl;
     l.unlock();
     if (!e->key.empty() && (e->dirty == true) && (std::difftime(time(NULL), e->creationTime) > interval)) { //if block is dirty and written more than interval seconds ago
-      name = e->key;
       rgw_user c_rgw_user = e->user;
-
-      size_t pos = 0;
-      std::string delimiter = "_";
-      int count = 0;
-      while ((pos = name.find(delimiter)) != std::string::npos) {
-        if (count == 0) {
-          b_name = name.substr(0, pos);
-          ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): b_name=" << b_name << dendl;
-              name.erase(0, pos + delimiter.length());
-          ldpp_dout(dpp, 10) << __LINE__ <<  " " << __func__ << "(): name=" << name << dendl;
-          break;
-        }
-        count++;
-        ldpp_dout(dpp, 10) << __LINE__ <<  " " << __func__ << "(): count=" << b_name << dendl;
-      }
-      key = name;
       //writing data to the backend
       //we need to create an atomic_writer
       std::unique_ptr<rgw::sal::User> c_user = driver->get_user(c_rgw_user);
@@ -481,7 +467,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
       int ret = driver->load_bucket(dpp, c_rgw_bucket, &c_bucket, null_yield);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << __func__ << "(): load_bucket() returned ret=" << ret << dendl;
-        break;
+        //delete the object from the cache and update all internal metadata?
+        //TODO: clean up all dirty blocks from cache and update metadata
+        eraseObj(dpp, e->key, null_yield);
+        continue;
       }
 
       std::unique_ptr<rgw::sal::Object> c_obj = c_bucket->get_object(e->obj_key);
@@ -500,10 +489,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
       int op_ret = processor->prepare(null_yield);
       if (op_ret < 0) {
 	ldpp_dout(dpp, 20) << __func__ << "processor->prepare() returned ret=" << op_ret << dendl;
-	break;
+        eraseObj(dpp, e->key, null_yield);
       }
 
-      std::string prefix = b_name + "_" + e->version + "_" + c_obj->get_name();
+      std::string prefix = e->bucket_name + "_" + e->version + "_" + c_obj->get_name();
       off_t lst = e->size;
       off_t fst = 0;
       off_t ofs = 0;
@@ -543,7 +532,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         if (op_ret < 0) {
 	  ldpp_dout(dpp, 20) << __func__ << "processor->process() returned ret="
 	  << op_ret << dendl;
-	  return;
+          eraseObj(dpp, e->key, null_yield);
         }
 
         ofs += len;
@@ -558,6 +547,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
                               nullptr, nullptr, nullptr,
                               rctx, rgw::sal::FLAG_LOG_OP);
 
+      if (op_ret < 0) {
+        ldpp_dout(dpp, 20) << __func__ << "processor->complete() returned ret=" << op_ret << dendl;
+        eraseObj(dpp, e->key, null_yield);
+      }
       //invoke update() with dirty flag set to false, to update in-memory metadata for each block
       // reset values
       lst = e->size;
@@ -585,7 +578,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         op_ret = blockDir->update_field(dpp, &block, "dirty", "false", null_yield);
         if (op_ret < 0) {
 	  ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory failed, ret=" << op_ret << dendl;
-	  return;
         }
         fst += cur_len;
       } while(fst < lst);
@@ -607,14 +599,12 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
           op_ret = blockDir->update_field(dpp, &block, "dirty", "false", null_yield);
           if (op_ret < 0) {
               ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for head failed!" << dendl;
-              //return;
           }
         }
       } else { //non-versioned case
         op_ret = blockDir->update_field(dpp, &block, "dirty", "false", null_yield);
         if (op_ret < 0) {
             ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for head failed!" << dendl;
-            //return;
         }
       }
       //In case of distributed cache, we may have to update this for every instance
@@ -627,14 +617,12 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         op_ret = blockDir->update_field(dpp, &instance_block, "dirty", "false", null_yield);
         if (op_ret < 0) {
             ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for instance block failed!" << dendl;
-            //return;
         }
       }
 
       op_ret = blockDir->update_field(dpp, &block, "dirty", "false", null_yield);
       if (op_ret < 0) {
 	  ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory for head failed, ret=" << op_ret << dendl;
-	  return;
       }
 
       //remove entry from map and queue, eraseObj locks correctly
