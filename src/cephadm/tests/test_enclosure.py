@@ -1,7 +1,7 @@
 import pytest
 
 from unittest import mock
-from tests.fixtures import host_sysfs, import_cephadm
+from tests.fixtures import host_sysfs, import_cephadm, cephadm_fs
 
 from cephadmlib.host_facts import Enclosure
 
@@ -72,3 +72,38 @@ class TestEnclosure:
 
         for serial, slot in enclosure.device_lookup.items():
             assert enclosure.slot_map[slot].get('serial') == serial
+
+
+def test_host_facts_security(cephadm_fs):
+    cephadm_fs.create_file('/sys/kernel/security/lsm', contents='apparmor\n')
+    cephadm_fs.create_file('/etc/apparmor', contents='foo\n')
+    # List from https://tracker.ceph.com/issues/66389
+    profiles_lines = [
+        'foo (complain)',
+        '/usr/bin/man (enforce)',
+        '1password (unconfined)',
+        'Discord (unconfined)',
+        # These examples with spaces in the name fail currently
+        # 'MongoDB Compass (unconfined)',
+        # 'profile name with spaces (enforce)',
+    ]
+    cephadm_fs.create_file(
+        '/sys/kernel/security/apparmor/profiles',
+        contents='\n'.join(profiles_lines),
+    )
+
+    from cephadmlib.host_facts import HostFacts
+
+    class TestHostFacts(HostFacts):
+        def _populate_sysctl_options(self):
+            return {}
+
+    ctx = mock.MagicMock()
+    hfacts = TestHostFacts(ctx)
+    ksec = hfacts.kernel_security
+    assert ksec
+    assert ksec['type'] == 'AppArmor'
+    assert ksec['type'] == 'AppArmor'
+    assert ksec['complain'] == 0
+    assert ksec['enforce'] == 0
+    assert ksec['unconfined'] == 1
