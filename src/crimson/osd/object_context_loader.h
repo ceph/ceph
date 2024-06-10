@@ -96,7 +96,6 @@ private:
     return load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
   }
 
-  load_obc_iertr::future<ObjectContextRef>
-  load_obc(ObjectContextRef obc);
+  load_obc_iertr::future<> load_obc(ObjectContextRef obc);
 };
 }
