@@ -63,7 +63,9 @@ class CephNvmeof(ContainerDaemonForm):
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
-    def _get_container_mounts(data_dir: str, log_dir: str, mtls_dir: Optional[str] = None) -> Dict[str, str]:
+    def _get_container_mounts(
+        data_dir: str, log_dir: str, mtls_dir: Optional[str] = None
+    ) -> Dict[str, str]:
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
@@ -102,7 +104,11 @@ class CephNvmeof(ContainerDaemonForm):
         log_dir = os.path.join(ctx.log_dir, self.identity.fsid)
         mtls_dir = os.path.join(ctx.data_dir, self.identity.fsid, 'mtls')
         if os.path.exists(mtls_dir):
-            mounts.update(self._get_container_mounts(data_dir, log_dir, mtls_dir=mtls_dir))
+            mounts.update(
+                self._get_container_mounts(
+                    data_dir, log_dir, mtls_dir=mtls_dir
+                )
+            )
         else:
             mounts.update(self._get_container_mounts(data_dir, log_dir))
 
