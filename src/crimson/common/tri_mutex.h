@@ -27,20 +27,6 @@ public:
   void unlock();
 };
 
-// promote from read to excl
-class excl_lock_from_read {
-public:
-  void lock();
-  void unlock();
-};
-
-// promote from write to excl
-class excl_lock_from_write {
-public:
-  void lock();
-  void unlock();
-};
-
 /// shared/exclusive mutual exclusion
 ///
 /// Unlike reader/write lock, tri_mutex does not enforce the exclusive access
@@ -54,14 +40,9 @@ public:
 /// - readers
 /// - writers
 /// - exclusive users
-///
-/// For lock promotion, a read or a write lock is only allowed to be promoted
-/// atomically upon the first locking.
 class tri_mutex : private read_lock,
                           write_lock,
-                          excl_lock,
-                          excl_lock_from_read,
-                          excl_lock_from_write
+                          excl_lock
 {
 public:
   tri_mutex() = default;
@@ -81,18 +62,11 @@ public:
   excl_lock& for_excl() {
     return *this;
   }
-  excl_lock_from_read& excl_from_read() {
-    return *this;
-  }
-  excl_lock_from_write& excl_from_write() {
-    return *this;
-  }
 
   // for shared readers
   std::optional<seastar::future<>> lock_for_read();
   bool try_lock_for_read() noexcept;
   void unlock_for_read();
-  void promote_from_read();
   void demote_to_read();
   unsigned get_readers() const {
     return readers;
@@ -102,7 +76,6 @@ public:
   std::optional<seastar::future<>> lock_for_write();
   bool try_lock_for_write() noexcept;
   void unlock_for_write();
-  void promote_from_write();
   void demote_to_write();
   unsigned get_writers() const {
     return writers;
@@ -156,9 +129,6 @@ private:
   friend class read_lock;
   friend class write_lock;
   friend class excl_lock;
-  friend class excl_lock_from_read;
-  friend class excl_lock_from_write;
-  friend class excl_lock_from_excl;
   friend std::ostream& operator<<(std::ostream &lhs, const tri_mutex &rhs);
 };
 
