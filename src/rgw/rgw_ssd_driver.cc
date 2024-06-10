@@ -114,7 +114,7 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const 
 int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
 {
     char buffer[len];
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
 
     ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
     FILE *cache_file = nullptr;
@@ -156,7 +156,7 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
 int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y)
 {
     bufferlist src = bl_data;
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
 
     ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
     FILE *cache_file = nullptr;
@@ -214,7 +214,7 @@ auto SSDDriver::get_async(const DoutPrefixProvider *dpp, const Executor& ex, con
     auto p = Op::create(ex, handler);
     auto& op = p->user_data;
 
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     int ret = op.prepare_libaio_read_op(dpp, location, read_ofs, read_len, p.get());
@@ -244,7 +244,7 @@ void SSDDriver::put_async(const DoutPrefixProvider *dpp, const Executor& ex, con
     auto p = Op::create(ex, handler);
     auto& op = p->user_data;
 
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     int r = 0;
@@ -323,7 +323,7 @@ rgw::AioResultList SSDDriver::put_async(const DoutPrefixProvider* dpp, optional_
 
 int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
 
     if (!efs::remove(location)) {
         ldpp_dout(dpp, 0) << "ERROR: delete_data::remove has failed to remove the file: " << location << dendl;
@@ -337,12 +337,12 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
 }
 
 int SSDDriver::rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y)
-{
+{ 
     std::string location = partition_info.location;
 
-    int ret = std::rename((location+oldKey).c_str(), (location+newKey).c_str());
+    int ret = std::rename((location + "/" + url_encode(oldKey, true)).c_str(), (location + "/" + url_encode(newKey, true)).c_str());
     if (ret < 0) {
-        ldpp_dout(dpp, 0) << "SSDDriver: ERROR: failed to rename the file: " << location+oldKey << dendl;
+        ldpp_dout(dpp, 0) << "SSDDriver: ERROR: failed to rename the file: " << location + "/" + url_encode(oldKey, true) << dendl;
         return ret;
     }
 
@@ -352,7 +352,7 @@ int SSDDriver::rename(const DoutPrefixProvider* dpp, const::std::string& oldKey,
 
 int SSDDriver::AsyncWriteRequest::prepare_libaio_write_op(const DoutPrefixProvider *dpp, bufferlist& bl, unsigned int len, std::string key, std::string cache_location)
 {
-    std::string location = cache_location + key;
+    std::string location = cache_location + "/" + url_encode(key, true);
     int r = 0;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Write To Cache, location=" << location << dendl;
     cb.reset(new struct aiocb);
@@ -407,8 +407,8 @@ void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval) {
     efs::space_info space = efs::space(partition_info.location);
     op.priv_data->set_free_space(op.dpp, space.available);
 
-    std::string new_path = partition_info.location + op.key;
-    std::string old_path = partition_info.location + op.temp_key;
+    std::string new_path = partition_info.location + "/" + url_encode(op.key, true);
+    std::string old_path = partition_info.location + "/" + url_encode(op.temp_key, true);
 
     ldpp_dout(op.dpp, 20) << "INFO: AsyncWriteRequest::libaio_write_yield_cb: temp_key: " << op.temp_key << dendl;
 
@@ -465,7 +465,7 @@ void SSDDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
 
 int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     for (auto& it : attrs) {
@@ -490,7 +490,7 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
 
 int SSDDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     for (auto& it : del_attrs) {
@@ -509,7 +509,7 @@ int SSDDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& ke
 
 int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     char namebuf[64 * 1024];
@@ -543,7 +543,7 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
 
 int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     for (auto& [attr_name, attr_val_bl] : attrs) {
@@ -565,7 +565,7 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
 
 int SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_val, optional_yield y)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): get_attr: key: " << attr_name << dendl;
@@ -596,7 +596,7 @@ int SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, c
 
 int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): set_attr: key: " << attr_name << " val: " << attr_val << dendl;
@@ -615,7 +615,7 @@ int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, c
 
 int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name)
 {
-    std::string location = partition_info.location + key;
+    std::string location = partition_info.location + "/" + url_encode(key, true);
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     auto ret = removexattr(location.c_str(), attr_name.c_str());
