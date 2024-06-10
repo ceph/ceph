@@ -10,10 +10,6 @@
 #include "rgw_sal_d4n.h"
 #include "rgw_cache_driver.h"
 
-namespace rgw::sal {
-  class D4NFilterObject;
-}
-
 namespace rgw { namespace d4n {
 
 namespace asio = boost::asio;
