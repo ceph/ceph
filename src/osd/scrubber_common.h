@@ -90,6 +90,22 @@ struct OSDRestrictions {
 };
 static_assert(sizeof(Scrub::OSDRestrictions) <= sizeof(uint32_t));
 
+/// concise passing of PG state affecting scrub to the
+/// scrubber at the initiation of a scrub
+struct ScrubPGPreconds {
+  bool allow_shallow{true};
+  bool allow_deep{true};
+  bool has_deep_errors{false};
+  bool can_autorepair{false};
+};
+static_assert(sizeof(Scrub::ScrubPGPreconds) <= sizeof(uint32_t));
+
+/// possible outcome when trying to select a PG and scrub it
+enum class schedule_result_t {
+  scrub_initiated,	    // successfully started a scrub
+  target_specific_failure,  // failed to scrub this specific target
+  osd_wide_failure	    // failed to scrub any target
+};
 }  // namespace Scrub
 
 namespace fmt {
@@ -388,6 +404,26 @@ struct ScrubPgIF {
   virtual void map_from_replica(OpRequestRef op) = 0;
 
   virtual void replica_scrub_op(OpRequestRef op) = 0;
+
+  /**
+   * attempt to initiate a scrub session.
+   * @param osd_restrictions limitations on the types of scrubs that can
+   *   be initiated on this OSD at this time.
+   * @param preconds the PG state re scrubbing at the time of the request,
+   *   affecting scrub parameters.
+   * @param temp_request the set of flags that determine the scrub type
+   *   and attributes (to be removed in the next iteration). A nullopt
+   *   if no scrubs can be performed at this time. If set to nullopt,
+   *   the scrubber will not start a scrub session, but will update the
+   *   not_before to delay the next attempt to scrub this PG.
+   * @return the result of the scrub initiation attempt. A success,
+   *   or either a failure due to the specific PG, or a failure due to
+   *   external reasons.
+   */
+  virtual Scrub::schedule_result_t start_scrub_session(
+      Scrub::OSDRestrictions osd_restrictions,
+      Scrub::ScrubPGPreconds,
+      std::optional<requested_scrub_t> temp_request) = 0;
 
   virtual void set_op_parameters(const requested_scrub_t&) = 0;
 

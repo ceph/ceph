@@ -2043,6 +2043,89 @@ void PgScrubber::on_digest_updates()
   }
 }
 
+
+// a placeholder. requeue_penalized() is fully implemented in the
+// following commits of this PR
+void PgScrubber::requeue_penalized(Scrub::delay_cause_t cause)
+{
+  penalize_next_scrub(cause);
+}
+
+
+Scrub::schedule_result_t PgScrubber::start_scrub_session(
+    Scrub::OSDRestrictions osd_restrictions,
+    Scrub::ScrubPGPreconds,
+    std::optional<requested_scrub_t> suggested_flags)
+{
+  if (is_queued_or_active()) {
+    // not a real option when the queue entry is the whole ScrubJob, but
+    // will be possible when using level-specific targets
+    dout(10) << __func__ << ": scrub already in progress" << dendl;
+    return schedule_result_t::target_specific_failure;
+  }
+
+  // for all other failures - we must reinstate our entry in the Scrub Queue
+  if (!is_primary() || !m_pg->is_active() || !m_pg->is_clean()) {
+    dout(10) << __func__ << ": cannot scrub (not a clean and active primary)"
+	     << dendl;
+    requeue_penalized(Scrub::delay_cause_t::pg_state);
+    return schedule_result_t::target_specific_failure;
+  }
+
+  if (!suggested_flags) {
+    // the stars do not align for starting a scrub for this PG at this time
+    // (due to configuration or priority issues)
+    // The reason was already reported by the call to validate_scrub_mode()
+    // in our callee.
+    dout(10) << __func__ << ": failed to initiate a scrub" << dendl;
+    requeue_penalized(Scrub::delay_cause_t::scrub_params);
+    return schedule_result_t::target_specific_failure;
+  }
+
+  // if only explicitly requested repairing is allowed - skip other types
+  // of scrubbing
+  if (osd_restrictions.allow_requested_repair_only &&
+      !suggested_flags->must_repair) {
+    dout(10) << __func__
+	     << ": skipping this PG as repairing was not explicitly "
+		"requested for it"
+	     << dendl;
+    requeue_penalized(Scrub::delay_cause_t::scrub_params);
+    return schedule_result_t::target_specific_failure;
+  }
+
+  if (state_test(PG_STATE_SNAPTRIM) || state_test(PG_STATE_SNAPTRIM_WAIT)) {
+    // note that the trimmer checks scrub status when setting 'snaptrim_wait'
+    // (on the transition from NotTrimming to Trimming/WaitReservation),
+    // i.e. some time before setting 'snaptrim'.
+    dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
+    requeue_penalized(Scrub::delay_cause_t::pg_state);
+    return schedule_result_t::target_specific_failure;
+  }
+
+  // try to reserve the local OSD resources. If failing: no harm. We will
+  // be retried by the OSD later on.
+  if (!reserve_local()) {
+    dout(10) << __func__ << ": failed to reserve locally" << dendl;
+    requeue_penalized(Scrub::delay_cause_t::local_resources);
+    return schedule_result_t::osd_wide_failure;
+  }
+
+  // can commit to the updated flags now, as nothing will stop the scrub
+  m_planned_scrub = *suggested_flags;
+
+  // An interrupted recovery repair could leave this set.
+  state_clear(PG_STATE_REPAIR);
+
+  set_op_parameters(m_planned_scrub);
+
+  // using the OSD queue, as to not execute the scrub code as part of the tick.
+  dout(10) << __func__ << ": queueing" << dendl;
+  m_osds->queue_for_scrub(m_pg, Scrub::scrub_prio_t::low_priority);
+  return schedule_result_t::scrub_initiated;
+}
+
+
 /*
  * note that the flags-set fetched from the PG (m_pg->m_planned_scrub)
  * is cleared once scrubbing starts; Some of the values dumped here are
