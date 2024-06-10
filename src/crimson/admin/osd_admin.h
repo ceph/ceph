@@ -17,6 +17,7 @@ class InjectDataErrorHook;
 class InjectMDataErrorHook;
 class OsdStatusHook;
 class SendBeaconHook;
+class RunOSDBenchHook;
 class DumpInFlightOpsHook;
 class DumpHistoricOpsHook;
 class DumpSlowestHistoricOpsHook;

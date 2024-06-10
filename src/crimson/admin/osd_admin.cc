@@ -19,6 +19,7 @@
 #include "crimson/osd/pg.h"
 #include "crimson/osd/shard_services.h"
 
+SET_SUBSYS(osd);
 namespace {
 seastar::logger& logger()
 {
@@ -92,6 +93,105 @@ private:
 };
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<SendBeaconHook>(crimson::osd::OSD& osd);
+
+/**
+ * An OSD admin hook: run bench
+ * Usage parameters:
+ *   count=Count of bytes to write
+ *   bsize=block size
+ *   osize=Object size
+ *   onum=Number of objects
+ */
+class RunOSDBenchHook : public AdminSocketHook {
+public:
+  explicit RunOSDBenchHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"bench",
+      "name=count,type=CephInt,req=false "
+      "name=size,type=CephInt,req=false "
+      "name=object_size,type=CephInt,req=false "
+      "name=object_num,type=CephInt,req=false",
+      "run OSD bench"},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+              std::string_view format,
+              ceph::bufferlist&& input) const final
+  {
+    LOG_PREFIX(RunOSDBenchHook::call);
+    int64_t count = cmd_getval_or<int64_t>(cmdmap, "count", 1LL << 30);
+    int64_t bsize = cmd_getval_or<int64_t>(cmdmap, "size", 4LL << 20);
+    int64_t osize = cmd_getval_or<int64_t>(cmdmap, "object_size", 0);
+    int64_t onum = cmd_getval_or<int64_t>(cmdmap, "object_num", 0);
+    auto duration = local_conf()->osd_bench_duration;
+    auto max_block_size = local_conf()->osd_bench_max_block_size;
+    if (bsize > static_cast<int64_t>(max_block_size)) {
+      // let us limit the block size because the next checks rely on it
+      // having a sane value.  If we allow any block size to be set things
+      // can still go sideways.
+      INFO("block 'size' values are capped at {}. If you wish to use"
+        " a higher value, please adjust 'osd_bench_max_block_size'",
+        byte_u_t(max_block_size));
+      return seastar::make_ready_future<tell_result_t>(-EINVAL, "block size too large");
+    } else if (bsize < (1LL << 20)) {
+      // entering the realm of small block sizes.
+      // limit the count to a sane value, assuming a configurable amount of
+      // IOPS and duration, so that the OSD doesn't get hung up on this,
+      // preventing timeouts from going off
+      int64_t max_count = bsize * duration * local_conf()->osd_bench_small_size_max_iops;
+      if (count > max_count) {
+        INFO("bench count {} > osd_bench_small_size_max_iops {}",
+          count, max_count);
+        return seastar::make_ready_future<tell_result_t>(-EINVAL, "count too large");
+      }
+    } else {
+      // 1MB block sizes are big enough so that we get more stuff done.
+      // However, to avoid the osd from getting hung on this and having
+      // timers being triggered, we are going to limit the count assuming
+      // a configurable throughput and duration.
+      // NOTE: max_count is the total amount of bytes that we believe we
+      //       will be able to write during 'duration' for the given
+      //       throughput.  The block size hardly impacts this unless it's
+      //       way too big.  Given we already check how big the block size
+      //       is, it's safe to assume everything will check out.
+      int64_t max_count = local_conf()->osd_bench_large_size_max_throughput * duration;
+      if (count > max_count) {
+        INFO("'count' values greater than {} for a block size of {},"
+          " assuming {} IOPS, for {} seconds, can cause ill effects"
+          " on osd. Please adjust 'osd_bench_small_size_max_iops'"
+          " with a higher value if you wish to use a higher 'count'.",
+          max_count, byte_u_t(bsize), local_conf()->osd_bench_small_size_max_iops,
+          duration);
+        return seastar::make_ready_future<tell_result_t>(-EINVAL, "count too large");
+      }
+    }
+    if (osize && bsize > osize) {
+      bsize = osize;
+    }
+
+    return osd.run_bench(count, bsize, osize, onum).then(
+      [format, bsize, count](double elapsed) {
+      if (elapsed < 0) {
+        return seastar::make_ready_future<tell_result_t>
+          (elapsed, "bench failed with error");
+      }
+
+      unique_ptr<Formatter> f{Formatter::create(format, "json-pretty", "json-pretty")};
+      f->open_object_section("osd_bench_results");
+      f->dump_int("bytes_written", count);
+      f->dump_int("blocksize", bsize);
+      f->dump_float("elapsed_sec", elapsed);
+      f->dump_float("bytes_per_sec", (elapsed > 0) ? count / elapsed : 0);
+      f->dump_float("iops", (elapsed > 0) ? (count / elapsed) / bsize : 0);
+      f->close_section();
+      
+      return seastar::make_ready_future<tell_result_t>(std::move(f));
+    });
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<RunOSDBenchHook>(crimson::osd::OSD& osd);
 
 /**
  * send the latest pg stats to mgr
