@@ -13,7 +13,8 @@ def enclosure(host_sysfs):
     e = Enclosure(
         enc_id='1',
         enc_path='/sys/class/scsi_generic/sg2/device/enclosure/0:0:1:0',
-        dev_path='/sys/class/scsi_generic/sg2')
+        dev_path='/sys/class/scsi_generic/sg2',
+    )
     yield e
 
 
@@ -21,7 +22,7 @@ class TestEnclosure:
 
     def test_enc_metadata(self, enclosure):
         """Check metadata for the enclosure e.g. vendor and model"""
-       
+
         assert enclosure.vendor == "EnclosuresInc"
         assert enclosure.components == '12'
         assert enclosure.model == "D12"
@@ -38,14 +39,19 @@ class TestEnclosure:
     def test_enc_slot_format(self, enclosure):
         """Check the attributes of a slot are as expected"""
 
-        assert all(k in ['fault', 'locate', 'serial', 'status'] 
-                   for k, _v in enclosure.slot_map['0'].items())
+        assert all(
+            k in ['fault', 'locate', 'serial', 'status']
+            for k, _v in enclosure.slot_map['0'].items()
+        )
 
     def test_enc_slot_status(self, enclosure):
         """Check the number of occupied slots is correct"""
 
-        occupied_slots = [slot_id for slot_id in enclosure.slot_map 
-                          if enclosure.slot_map[slot_id].get('status').upper() == 'OK']
+        occupied_slots = [
+            slot_id
+            for slot_id in enclosure.slot_map
+            if enclosure.slot_map[slot_id].get('status').upper() == 'OK'
+        ]
 
         assert len(occupied_slots) == 6
 
@@ -57,15 +63,18 @@ class TestEnclosure:
 
     def test_enc_device_serial(self, enclosure):
         """Check the device serial numbers are as expected"""
-        
-        assert all(fake_serial in enclosure.device_lookup.keys() 
-                   for fake_serial in [
-                       'fake000',
-                       'fake001',
-                       'fake002',
-                       'fake003',
-                       'fake004',
-                       'fake005'])
+
+        assert all(
+            fake_serial in enclosure.device_lookup.keys()
+            for fake_serial in [
+                'fake000',
+                'fake001',
+                'fake002',
+                'fake003',
+                'fake004',
+                'fake005',
+            ]
+        )
 
     def test_enc_slot_to_serial(self, enclosure):
         """Check serial number to slot matches across slot_map and device_lookup"""
