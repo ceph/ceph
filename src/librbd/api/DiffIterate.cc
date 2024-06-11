@@ -312,12 +312,12 @@ int DiffIterate<I>::execute() {
   if (from_snap_id == CEPH_NOSNAP) {
     return -ENOENT;
   }
-  if (from_snap_id == end_snap_id) {
+  if (from_snap_id > end_snap_id) {
+    return -EINVAL;
+  }
+  if (from_snap_id == end_snap_id || m_length == 0) {
     // no diff.
     return 0;
-  }
-  if (from_snap_id >= end_snap_id) {
-    return -EINVAL;
   }
 
   int r;
