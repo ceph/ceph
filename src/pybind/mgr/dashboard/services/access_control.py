@@ -360,7 +360,7 @@ class User(object):
         if input_salt is None:
             salt = os.urandom(SCRYPT_SALT_LEN)
         else:
-            salt = base64.b64decode(salt)[:SCRYPT_SALT_LEN]
+            salt = base64.b64decode(input_salt)[:SCRYPT_SALT_LEN]
         hash = hashlib.scrypt(password.encode('utf8'), salt=salt, n=2**14, r=8, p=1)
         return base64.b64encode(salt + hash).decode('utf8')
 
@@ -382,7 +382,7 @@ class User(object):
         :return: `True` if the passwords are equal, otherwise `False`.
         :rtype: bool
         """
-        pass_hash = self.calculate_password_hash(password, salt_password=self.password)
+        pass_hash = self.calculate_password_hash(password, input_salt=self.password)
         return hmac.compare_digest(pass_hash, self.password)
 
     def is_pwd_expired(self):
