@@ -293,7 +293,7 @@ static void dump_status(req_state *s, int status,
   }
   try {
     RESTFUL_IO(s)->send_status(status, status_name);
-  } catch (rgw::io::Exception& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(s, 0) << "ERROR: s->cio->send_status() returned err="
                      << e.what() << dendl;
   }
@@ -349,7 +349,7 @@ void dump_header(req_state* const s,
 {
   try {
     RESTFUL_IO(s)->send_header(name, val);
-  } catch (rgw::io::Exception& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(s, 0) << "ERROR: s->cio->send_header() returned err="
                      << e.what() << dendl;
   }
@@ -388,7 +388,7 @@ void dump_content_length(req_state* const s, const uint64_t len)
 {
   try {
     RESTFUL_IO(s)->send_content_length(len);
-  } catch (rgw::io::Exception& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(s, 0) << "ERROR: s->cio->send_content_length() returned err="
                      << e.what() << dendl;
   }
@@ -399,7 +399,7 @@ static void dump_chunked_encoding(req_state* const s)
 {
   try {
     RESTFUL_IO(s)->send_chunked_transfer_encoding();
-  } catch (rgw::io::Exception& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(s, 0) << "ERROR: RESTFUL_IO(s)->send_chunked_transfer_encoding()"
                      << " returned err=" << e.what() << dendl;
   }
@@ -638,7 +638,7 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
 
   try {
     RESTFUL_IO(s)->complete_header();
-  } catch (rgw::io::Exception& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(s, 0) << "ERROR: RESTFUL_IO(s)->complete_header() returned err="
 		     << e.what() << dendl;
   }
@@ -741,7 +741,7 @@ void dump_continue(req_state * const s)
 {
   try {
     RESTFUL_IO(s)->send_100_continue();
-  } catch (rgw::io::Exception& e) {
+  } catch (const std::exception& e) {
     ldpp_dout(s, 0) << "ERROR: RESTFUL_IO(s)->send_100_continue() returned err="
 		     << e.what() << dendl;
   }
@@ -787,7 +787,9 @@ int dump_body(req_state* const s,
   }
   try {
     return RESTFUL_IO(s)->send_body(buf, len);
-  } catch (rgw::io::Exception& e) {
+  } catch (const rgw::io::Exception& e) {
+    return -e.code().value();
+  } catch (const boost::system::system_error& e) {
     return -e.code().value();
   }
 }
@@ -809,7 +811,9 @@ int recv_body(req_state* const s,
   int len;
   try {
     len = RESTFUL_IO(s)->recv_body(buf, max);
-  } catch (rgw::io::Exception& e) {
+  } catch (const rgw::io::Exception& e) {
+    return -e.code().value();
+  } catch (const boost::system::system_error& e) {
     return -e.code().value();
   }
   bool healthcheck = false;
