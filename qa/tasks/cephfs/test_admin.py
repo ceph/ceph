@@ -5,6 +5,8 @@ import time
 import uuid
 from io import StringIO
 from os.path import join as os_path_join
+import re
+from time import sleep
 
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError
@@ -70,6 +72,107 @@ class TestAdminCommands(CephFSTestCase):
                 if health_warn in health_report['checks']:
                     return
 
+class TestMdsLastSeen(CephFSTestCase):
+    """
+    Tests for `mds last-seen` command.
+    """
+
+    MDSS_REQUIRED = 2
+
+    def test_in_text(self):
+        """
+        That `mds last-seen` returns 0 for an MDS currently in the map.
+        """
+
+        status = self.fs.status()
+        r0 = self.fs.get_rank(0, status=status)
+        s = self.get_ceph_cmd_stdout("mds", "last-seen", r0['name'])
+        seconds = int(re.match(r"^(\d+)s$", s).group(1))
+        self.assertEqual(seconds, 0)
+
+    def test_in_json(self):
+        """
+        That `mds last-seen` returns 0 for an MDS currently in the map.
+        """
+
+        status = self.fs.status()
+        r0 = self.fs.get_rank(0, status=status)
+        s = self.get_ceph_cmd_stdout("--format=json", "mds", "last-seen", r0['name'])
+        J = json.loads(s)
+        seconds = int(re.match(r"^(\d+)s$", J['last-seen']).group(1))
+        self.assertEqual(seconds, 0)
+
+    def test_unknown(self):
+        """
+        That `mds last-seen` returns ENOENT for an mds not in recent maps.
+        """
+
+        try:
+            self.get_ceph_cmd_stdout("--format=json", "mds", "last-seen", 'foo')
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            self.fail("non-existent mds should fail ENOENT")
+
+    def test_standby(self):
+        """
+        That `mds last-seen` returns 0 for a standby.
+        """
+
+        status = self.fs.status()
+        for info in status.get_standbys():
+            s = self.get_ceph_cmd_stdout("--format=json", "mds", "last-seen", info['name'])
+            J = json.loads(s)
+            seconds = int(re.match(r"^(\d+)s$", J['last-seen']).group(1))
+            self.assertEqual(seconds, 0)
+
+    def test_stopped(self):
+        """
+        That `mds last-seen` returns >0 for mds that is stopped.
+        """
+
+        status = self.fs.status()
+        r0 = self.fs.get_rank(0, status=status)
+        self.fs.mds_stop(mds_id=r0['name'])
+        self.fs.rank_fail()
+        sleep(2)
+        with safe_while(sleep=1, tries=self.fs.beacon_timeout, action='wait for last-seen >0') as proceed:
+            while proceed():
+                s = self.get_ceph_cmd_stdout("--format=json", "mds", "last-seen", r0['name'])
+                J = json.loads(s)
+                seconds = int(re.match(r"^(\d+)s$", J['last-seen']).group(1))
+                if seconds == 0:
+                    continue
+                self.assertGreater(seconds, 1)
+                break
+
+    def test_gc(self):
+        """
+        That historical mds information is eventually garbage collected.
+        """
+
+        prune_time = 20
+        sleep_time = 2
+        self.config_set('mon', 'mon_fsmap_prune_threshold', prune_time)
+        status = self.fs.status()
+        r0 = self.fs.get_rank(0, status=status)
+        self.fs.mds_stop(mds_id=r0['name'])
+        self.fs.rank_fail()
+        last = 0
+        for i in range(prune_time):
+            sleep(sleep_time) # we will sleep twice prune_time
+            try:
+                s = self.get_ceph_cmd_stdout("--format=json", "mds", "last-seen", r0['name'])
+                J = json.loads(s)
+                seconds = int(re.match(r"^(\d+)s$", J['last-seen']).group(1))
+                self.assertGreater(seconds, last)
+                log.debug("last_seen: %ds", seconds)
+                last = seconds
+            except CommandFailedError as e:
+                self.assertEqual(e.exitstatus, errno.ENOENT)
+                self.assertGreaterEqual(last + sleep_time + 1, prune_time) # rounding error add 1
+                return
+        self.fail("map was no garbage collected as expected")
 
 @classhook('_add_valid_tell')
 class TestValidTell(TestAdminCommands):
