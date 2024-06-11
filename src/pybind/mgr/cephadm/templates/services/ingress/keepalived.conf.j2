@@ -1,4 +1,9 @@
 # {{ cephadm_managed }}
+global_defs {
+    enable_script_security
+    script_user root
+}
+
 vrrp_script check_backend {
     script "{{ script }}"
     weight -20
