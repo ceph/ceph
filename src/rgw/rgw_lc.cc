@@ -1247,7 +1247,7 @@ public:
   int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
-                               {rgw::notify::ObjectExpirationNoncurrent});
+                               {rgw::notify::ObjectExpirationNonCurrent});
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 			   << oc.bucket << ":" << o.key
@@ -1390,7 +1390,7 @@ public:
                               << "flags: " << oc.o.flags << dendl;
       } else {
         ret = remove_expired_obj(oc.dpp, oc, true,
-                                 {rgw::notify::ObjectTransitionNoncurrent});
+                                 {rgw::notify::ObjectTransitionNonCurrent});
         ldpp_dout(oc.dpp, 20)
             << "delete_tier_obj Object(key:" << oc.o.key << ") not current "
             << "versioned_epoch:  " << oc.o.versioned_epoch
@@ -1427,7 +1427,7 @@ public:
                          {rgw::notify::ObjectTransitionCurrent,
                           rgw::notify::LifecycleTransition});
     } else {
-      event_types.push_back(rgw::notify::ObjectTransitionNoncurrent);
+      event_types.push_back(rgw::notify::ObjectTransitionNonCurrent);
     }
 
     std::unique_ptr<rgw::sal::Notification> notify =
