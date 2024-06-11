@@ -2027,7 +2027,7 @@ class RgwMultisite:
             exit_code, out, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
             if exit_code > 0:
                 raise DashboardException(f'Unable to get sync policy group: {err}',
-                                         http_status_code=500, component='rgw')
+                                         http_status_code=404, component='rgw')
             return out
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')

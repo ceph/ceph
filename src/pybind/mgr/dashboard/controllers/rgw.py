@@ -151,7 +151,7 @@ class RgwMultisiteController(RESTController):
     @Endpoint(path='/sync-policy')
     @EndpointDoc("Get the sync policy")
     @ReadPermission
-    def get_sync_policy(self, bucket_name='', zonegroup_name='', all_policy=None):
+    def get_sync_policy(self, bucket_name='', zonegroup_name='', all_policy='false'):
         multisite_instance = RgwMultisite()
         all_policy = str_to_bool(all_policy)
         if all_policy:
