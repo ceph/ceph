@@ -60,9 +60,11 @@ roles:
   - mgr.x
 - - mon.b
   - mon.c
+  - mds.b
   - osd.3
   - osd.4
   - osd.5
+  - mgr.y
   - client.0
 - - client.1
 openstack:
@@ -76,10 +78,9 @@ tasks:
     # line below can be removed its from jewel test
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
 - print: "**** done v18.2.0 install"
-- ceph:
-   fs: xfs
-   add_osds_to_crush: true
-- print: "**** done ceph xfs"
+- cephadm:
+    image: quay.io/ceph/ceph:v18.2.0
+    compiled_cephadm_branch: reef
 - sequential:
    - workload
 - print: "**** done workload v18.2.0"
@@ -92,6 +93,14 @@ tasks:
       tag: v18.2.1
     mon.b:
       tag: v18.2.1
+- cephadm.shell:
+    mon.a:
+      - ceph orch upgrade start --image quay.io/ceph/ceph:v18.2.1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; ceph health detail ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep 18.2.1
 - parallel:
    - workload_reef
    - upgrade-sequence_reef
@@ -101,6 +110,15 @@ tasks:
 - install.upgrade:
     mon.a:
     mon.b:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; ceph health detail ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
 - parallel:
    - workload_reef
    - upgrade-sequence_reef
@@ -136,38 +154,70 @@ workload_reef:
 
 upgrade-sequence_reef:
    sequential:
-   - print: "**** done branch: reef install.upgrade"
-   - ceph.restart: [mds.a]
+   - print: "**** done branch: reef upgrade"
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart mds.a
    - sleep:
        duration: 60
-   - ceph.restart: [osd.0]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart mds.b
+   - sleep:
+       duration: 60
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart osd.0
    - sleep:
        duration: 30
-   - ceph.restart: [osd.1]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart osd.1
    - sleep:
        duration: 30
-   - ceph.restart: [osd.2]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart osd.2
    - sleep:
        duration: 30
-   - ceph.restart: [osd.3]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart osd.3
    - sleep:
        duration: 30
-   - ceph.restart: [osd.4]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart osd.4
    - sleep:
        duration: 30
-   - ceph.restart: [osd.5]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart osd.5
    - sleep:
        duration: 60
-   - ceph.restart: [mgr.x]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart mgr.x
    - sleep:
        duration: 60
-   - ceph.restart: [mon.a]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart mgr.y
    - sleep:
        duration: 60
-   - ceph.restart: [mon.b]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart mon.a
    - sleep:
        duration: 60
-   - ceph.restart: [mon.c]
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart mon.b
    - sleep:
        duration: 60
-   - print: "**** done ceph.restart all reef branch mds/osd/mon"
+   - cephadm.shell:
+       mon.a:
+         - ceph orch daemon restart mon.c
+   - sleep:
+       duration: 60
+   - print: "**** done restart all reef branch mds/osd/mon"
