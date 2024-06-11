@@ -1004,12 +1004,27 @@ struct FixedKVLeafNode
       node_layout_t(this->get_bptr().c_str()) {}
   FixedKVLeafNode(const FixedKVLeafNode &rhs)
     : FixedKVNode<NODE_KEY>(rhs),
-      node_layout_t(this->get_bptr().c_str()) {}
+      node_layout_t(this->get_bptr().c_str()),
+      modifications(rhs.modifications) {}
 
   static constexpr bool do_has_children = has_children;
+  // for the stable extent, modifications is always 0;
+  // it will increase for each transaction-local change, so that
+  // modifications can be detected (see BtreeLBAMapping.parent_modifications)
+  uint64_t modifications = 0;
+
 
   bool have_children() const final {
     return do_has_children;
+  }
+
+  void on_modify() {
+    modifications++;
+  }
+
+  bool modified_since(uint64_t v) const {
+    ceph_assert(v <= modifications);
+    return v != modifications;
   }
 
   bool is_leaf_and_has_children() const final {
@@ -1108,6 +1123,7 @@ struct FixedKVLeafNode
 	this->copy_sources.clear();
       }
     }
+    modifications = 0;
     assert(this->is_initial_pending()
       ? this->copy_sources.empty():
       true);
@@ -1129,6 +1145,7 @@ struct FixedKVLeafNode
     } else {
       this->set_parent_tracker_from_prior_instance();
     }
+    modifications = 0;
   }
 
   uint16_t lower_bound_offset(NODE_KEY key) const final {

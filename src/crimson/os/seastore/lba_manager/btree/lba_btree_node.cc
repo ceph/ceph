@@ -31,6 +31,7 @@ std::ostream &LBALeafNode::_print_detail(std::ostream &out) const
 {
   out << ", size=" << this->get_size()
       << ", meta=" << this->get_meta()
+      << ", modifications=" << this->modifications
       << ", my_tracker=" << (void*)this->my_tracker;
   if (this->my_tracker) {
     out << ", my_tracker->parent=" << (void*)this->my_tracker->get_parent().get();
