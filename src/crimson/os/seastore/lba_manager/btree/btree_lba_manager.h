@@ -25,6 +25,8 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
+struct LBALeafNode;
+
 class BtreeLBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
 // To support cloning, there are two kinds of lba mappings:
 // 	1. physical lba mapping: the pladdr in the value of which is the paddr of
@@ -166,6 +168,14 @@ public:
     return p.modified_since(parent_modifications);
   }
 
+  void maybe_fix_pos() final {
+    assert(is_parent_valid());
+    if (!parent_modified()) {
+      return;
+    }
+    auto &p = static_cast<LBALeafNode&>(*parent);
+    p.maybe_fix_mapping_pos(*this);
+  }
 protected:
   std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
     op_context_t<laddr_t> ctx) const final {
@@ -181,6 +191,10 @@ protected:
     return pin;
   }
 private:
+  void _new_pos(uint16_t pos) {
+    this->pos = pos;
+  }
+
   laddr_t key = L_ADDR_NULL;
   bool indirect = false;
   laddr_t intermediate_key = L_ADDR_NULL;
@@ -189,6 +203,7 @@ private:
   pladdr_t raw_val;
   lba_map_val_t map_val;
   uint64_t parent_modifications = 0;
+  friend struct LBALeafNode;
 };
 
 using BtreeLBAMappingRef = std::unique_ptr<BtreeLBAMapping>;
