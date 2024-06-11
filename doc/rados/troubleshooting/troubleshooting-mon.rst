@@ -316,6 +316,12 @@ detail`` returns a message similar to the following::
 
 **What does it mean when a Monitor's state is ``leader`` or ``peon``?**
 
+  During normal Ceph operations when the cluster is in the ``HEALTH_OK`` state,
+  one monitor in the Ceph cluster is in the ``leader`` state and the rest of
+  the monitors are in the ``peon`` state. The state of a given monitor can be
+  determined by examining the value of the state key returned by the command
+  ``ceph tell <mon_name> mon_status``.
+
   If ``ceph health detail`` shows that the Monitor is in the ``leader`` state
   or in the ``peon`` state, it is likely that clock skew is present. Follow the
   instructions in `Clock Skews`_. If you have followed those instructions and
