@@ -18,8 +18,6 @@ import smb.enums
         (smb.enums.State.UPDATED, "updated"),
         (smb.enums.AuthMode.USER, "user"),
         (smb.enums.AuthMode.ACTIVE_DIRECTORY, "active-directory"),
-        (smb.enums.JoinSourceType.PASSWORD, "password"),
-        (smb.enums.UserGroupSourceType.INLINE, "inline"),
     ],
 )
 def test_stringified(value, strval):

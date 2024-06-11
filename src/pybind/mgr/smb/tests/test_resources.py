@@ -117,10 +117,6 @@ domain_settings:
   join_sources:
     - source_type: resource
       ref: bob
-    - source_type: password
-      auth:
-        username: Administrator
-        password: fallb4kP4ssw0rd
 ---
 resource_type: ceph.smb.share
 cluster_id: chacha
@@ -168,13 +164,10 @@ def test_load_yaml_resource_yaml1():
     assert cluster.intent == enums.Intent.PRESENT
     assert cluster.auth_mode == enums.AuthMode.ACTIVE_DIRECTORY
     assert cluster.domain_settings.realm == 'CEPH.SINK.TEST'
-    assert len(cluster.domain_settings.join_sources) == 2
+    assert len(cluster.domain_settings.join_sources) == 1
     jsrc = cluster.domain_settings.join_sources
     assert jsrc[0].source_type == enums.JoinSourceType.RESOURCE
     assert jsrc[0].ref == 'bob'
-    assert jsrc[1].source_type == enums.JoinSourceType.PASSWORD
-    assert jsrc[1].auth.username == 'Administrator'
-    assert jsrc[1].auth.password == 'fallb4kP4ssw0rd'
 
     assert isinstance(loaded[1], smb.resources.Share)
     assert isinstance(loaded[2], smb.resources.Share)
@@ -427,7 +420,7 @@ domain_settings:
             "exc_type": ValueError,
             "error": "not supported",
         },
-        # u/g inline missing
+        # u/g empty with extra ref
         {
             "yaml": """
 resource_type: ceph.smb.cluster
@@ -435,89 +428,11 @@ cluster_id: randolph
 intent: present
 auth_mode: user
 user_group_settings:
-  - source_type: inline
-""",
-            "exc_type": ValueError,
-            "error": "requires values",
-        },
-        # u/g inline extra uri
-        {
-            "yaml": """
-resource_type: ceph.smb.cluster
-cluster_id: randolph
-intent: present
-auth_mode: user
-user_group_settings:
-  - source_type: inline
-    values:
-      users: []
-      groups: []
-    uri: http://foo.bar.example.com/baz.txt
-""",
-            "exc_type": ValueError,
-            "error": "does not take",
-        },
-        # u/g inline extra ref
-        {
-            "yaml": """
-resource_type: ceph.smb.cluster
-cluster_id: randolph
-intent: present
-auth_mode: user
-user_group_settings:
-  - source_type: inline
-    values:
-      users: []
-      groups: []
+  - source_type: empty
     ref: xyz
 """,
             "exc_type": ValueError,
-            "error": "does not take",
-        },
-        # u/g uri missing
-        {
-            "yaml": """
-resource_type: ceph.smb.cluster
-cluster_id: randolph
-intent: present
-auth_mode: user
-user_group_settings:
-  - source_type: http_uri
-""",
-            "exc_type": ValueError,
-            "error": "requires",
-        },
-        # u/g uri extra values
-        {
-            "yaml": """
-resource_type: ceph.smb.cluster
-cluster_id: randolph
-intent: present
-auth_mode: user
-user_group_settings:
-  - source_type: http_uri
-    values:
-      users: []
-      groups: []
-    uri: http://foo.bar.example.com/baz.txt
-""",
-            "exc_type": ValueError,
-            "error": "does not take",
-        },
-        # u/g uri extra ref
-        {
-            "yaml": """
-resource_type: ceph.smb.cluster
-cluster_id: randolph
-intent: present
-auth_mode: user
-user_group_settings:
-  - source_type: http_uri
-    uri: http://boop.example.net
-    ref: xyz
-""",
-            "exc_type": ValueError,
-            "error": "does not take",
+            "error": "ref may not be",
         },
         # u/g resource missing
         {
@@ -530,39 +445,7 @@ user_group_settings:
   - source_type: resource
 """,
             "exc_type": ValueError,
-            "error": "requires",
-        },
-        # u/g resource extra values
-        {
-            "yaml": """
-resource_type: ceph.smb.cluster
-cluster_id: randolph
-intent: present
-auth_mode: user
-user_group_settings:
-  - source_type: resource
-    ref: xyz
-    uri: http://example.net/foo
-""",
-            "exc_type": ValueError,
-            "error": "does not take",
-        },
-        # u/g resource extra resource
-        {
-            "yaml": """
-resource_type: ceph.smb.cluster
-cluster_id: randolph
-intent: present
-auth_mode: user
-user_group_settings:
-  - source_type: resource
-    ref: xyz
-    values:
-      users: []
-      groups: []
-""",
-            "exc_type": ValueError,
-            "error": "does not take",
+            "error": "reference value must be",
         },
     ],
 )

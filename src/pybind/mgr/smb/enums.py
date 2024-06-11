@@ -41,15 +41,12 @@ class AuthMode(_StrEnum):
 
 
 class JoinSourceType(_StrEnum):
-    PASSWORD = 'password'
-    HTTP_URI = 'http_uri'
     RESOURCE = 'resource'
 
 
 class UserGroupSourceType(_StrEnum):
-    INLINE = 'inline'
-    HTTP_URI = 'http_uri'
     RESOURCE = 'resource'
+    EMPTY = 'empty'
 
 
 class ConfigNS(_StrEnum):
