@@ -4770,7 +4770,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       const int64_t pool = in->get_backtrace_pool();
       inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
       in->build_backtrace(pool, memory_backtrace);
-      bool equivalent, divergent;
+      bool divergent;
       int memory_newer;
 
       MDCache *mdcache = in->mdcache;  // For the benefit of dout
@@ -4822,7 +4822,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       }
 
       memory_newer = memory_backtrace.compare(results->backtrace.ondisk_value,
-					      &equivalent, &divergent);
+					      &divergent);
 
       if (divergent || memory_newer < 0) {
         // we're divergent, or on-disk version is newer

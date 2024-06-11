@@ -131,12 +131,10 @@ TEST(inode_backtrace_t, compare_equal)
   bar = foo;
   
   int compare_r;
-  bool equivalent;
   bool divergent;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(0, compare_r);
-  EXPECT_TRUE(equivalent);
   EXPECT_FALSE(divergent);
 }
 
@@ -176,32 +174,27 @@ TEST(inode_backtrace_t, compare_newer)
   bar.ancestors.push_back(foop);
 
   int compare_r;
-  bool equivalent;
   bool divergent;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(1, compare_r);
-  EXPECT_TRUE(equivalent);
   EXPECT_FALSE(divergent);
 
-  compare_r = bar.compare(foo, &equivalent, &divergent);
+  compare_r = bar.compare(foo, &divergent);
   EXPECT_EQ(-1, compare_r);
-  EXPECT_TRUE(equivalent);
   EXPECT_FALSE(divergent);
 
   bar.ancestors.back().dirino = 75;
   bar.ancestors.back().dname = "l1-old";
   bar.ancestors.back().version = 70;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(1, compare_r);
-  EXPECT_FALSE(equivalent);
-  EXPECT_FALSE(divergent);
+  EXPECT_TRUE(divergent);
 
-  compare_r = bar.compare(foo, &equivalent, &divergent);
+  compare_r = bar.compare(foo, &divergent);
   EXPECT_EQ(-1, compare_r);
-  EXPECT_FALSE(equivalent);
-  EXPECT_FALSE(divergent);
+  EXPECT_TRUE(divergent);
 }
 
 TEST(inode_backtrace_t, compare_divergent)
@@ -240,13 +233,12 @@ TEST(inode_backtrace_t, compare_divergent)
   bar.ancestors.push_back(foop);
 
   int compare_r;
-  bool equivalent;
   bool divergent;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(1, compare_r);
   EXPECT_TRUE(divergent);
-  compare_r = bar.compare(foo, &equivalent, &divergent);
+  compare_r = bar.compare(foo, &divergent);
   EXPECT_EQ(-1, compare_r);
   EXPECT_TRUE(divergent);
 }

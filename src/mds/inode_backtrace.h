@@ -63,15 +63,12 @@ struct inode_backtrace_t {
    * @pre The backtraces are for the same inode
    *
    * @param other The backtrace to compare ourselves with
-   * @param equivalent A bool pointer which will be set to true if
-   * the other backtrace is equivalent to our own (has the same dentries)
    * @param divergent A bool pointer which will be set to true if
    * the backtraces have differing entries without versions supporting them
    *
    * @returns 1 if we are newer than the other, 0 if equal, -1 if older
    */
-  int compare(const inode_backtrace_t& other,
-               bool *equivalent, bool *divergent) const;
+  int compare(const inode_backtrace_t& other, bool *divergent) const;
 
   void clear() {
     ancestors.clear();
