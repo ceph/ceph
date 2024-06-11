@@ -190,7 +190,7 @@ class PgScrubber : public ScrubPgIF,
   Scrub::schedule_result_t start_scrub_session(
       Scrub::OSDRestrictions osd_restrictions,
       Scrub::ScrubPGPreconds,
-      std::optional<requested_scrub_t> temp_request) final;
+      const requested_scrub_t& requested_flags) final;
 
   void initiate_regular_scrub(epoch_t epoch_queued) final;
 
@@ -802,6 +802,31 @@ class PgScrubber : public ScrubPgIF,
    */
   Scrub::sched_params_t determine_scrub_time(
       const pool_opts_t& pool_conf) const;
+
+  /// should we perform deep scrub?
+  bool is_time_for_deep(
+      Scrub::ScrubPGPreconds pg_cond,
+      const requested_scrub_t& planned) const;
+
+  /**
+   * Validate the various 'next scrub' flags against configuration
+   * and scrub-related timestamps.
+   *
+   * @returns an updated copy of the m_planned_flags (or nothing if no scrubbing)
+   */
+  std::optional<requested_scrub_t> validate_scrub_mode(
+      Scrub::OSDRestrictions osd_restrictions,
+      Scrub::ScrubPGPreconds pg_cond) const;
+
+  std::optional<requested_scrub_t> validate_periodic_mode(
+      Scrub::ScrubPGPreconds pg_cond,
+      bool time_for_deep,
+      const requested_scrub_t& planned) const;
+
+  std::optional<requested_scrub_t> validate_initiated_scrub(
+      Scrub::ScrubPGPreconds pg_cond,
+      bool time_for_deep,
+      const requested_scrub_t& planned) const;
 
   /*
    * Select a range of objects to scrub.
