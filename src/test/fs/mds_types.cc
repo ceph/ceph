@@ -115,6 +115,7 @@ TEST(inode_backtrace_t, compare_equal)
   foo.old_pools.push_back(5);
 
   inode_backpointer_t foop;
+  foop.is_auth = 1;
   foop.dirino = 3;
   foop.dname = "l3";
   foop.version = 15;
@@ -153,6 +154,7 @@ TEST(inode_backtrace_t, compare_newer)
   bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
+  foop.is_auth = 1;
   foop.dirino = 3;
   foop.dname = "l3";
   foop.version = 15;
@@ -212,6 +214,7 @@ TEST(inode_backtrace_t, compare_divergent)
   bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
+  foop.is_auth = 1;
   foop.dirino = 3;
   foop.dname = "l3";
   foop.version = 15;

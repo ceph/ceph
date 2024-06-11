@@ -38,6 +38,12 @@ void inode_backpointer_t::dump(ceph::Formatter *f) const
   f->dump_unsigned("dirino", dirino);
   f->dump_string("dname", dname);
   f->dump_unsigned("version", version);
+  if (is_auth > 0)
+    f->dump_string("auth", "yes");
+  else if (is_auth == 0)
+    f->dump_string("auth", "no");
+  else
+    f->dump_string("auth", "unknown");
 }
 
 void inode_backpointer_t::generate_test_instances(std::list<inode_backpointer_t*>& ls)
@@ -47,6 +53,7 @@ void inode_backpointer_t::generate_test_instances(std::list<inode_backpointer_t*
   ls.back()->dirino = 1;
   ls.back()->dname = "foo";
   ls.back()->version = 123;
+  ls.back()->is_auth = 1;
 }
 
 
@@ -114,11 +121,18 @@ void inode_backtrace_t::generate_test_instances(std::list<inode_backtrace_t*>& l
   ls.back()->ancestors.back().dirino = 123;
   ls.back()->ancestors.back().dname = "bar";
   ls.back()->ancestors.back().version = 456;
+  ls.back()->ancestors.back().is_auth = 1;
   ls.back()->pool = 0;
   ls.back()->old_pools.push_back(10);
   ls.back()->old_pools.push_back(7);
 }
 
+/*
+ * The consequence of the scrub will not acquire nest locks which would update
+ * the iversion for the in-memory inode prior to comparing to on-disk values.
+ *
+ * Only compare the versions when the inode is auth locally
+ */
 int inode_backtrace_t::compare(const inode_backtrace_t& other,
                                bool *divergent) const
 {
@@ -127,26 +141,37 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
   if (min_size == 0)
     return 0;
   int comparator = 0;
-  if (ancestors[0].version > other.ancestors[0].version)
-    comparator = 1;
-  else if (ancestors[0].version < other.ancestors[0].version)
-    comparator = -1;
-  if (ancestors[0].dirino != other.ancestors[0].dirino ||
-      ancestors[0].dname != other.ancestors[0].dname)
-    *divergent = true;
-  for (int i = 1; i < min_size; ++i) {
-    if (*divergent) {
-      /**
-       * we already know the dentries and versions are
-       * incompatible; no point checking farther
-       */
-      break;
+  int i;
+
+  // find the first auth inode
+  for (i = 0; i < min_size && !(*divergent) && !comparator; ++i) {
+    if (ancestors[i].dirino != other.ancestors[i].dirino ||
+	ancestors[i].dname != other.ancestors[i].dname) {
+      *divergent = true;
+      continue;
     }
+
+    if (ancestors[i].is_auth <= 0 && other.ancestors[i].is_auth <= 0)
+      continue;
+    if (ancestors[i].version > other.ancestors[i].version) {
+      comparator = 1;
+      continue;
+    } else if (ancestors[i].version < other.ancestors[i].version) {
+      comparator = -1;
+      continue;
+    }
+  }
+  // compare the rest auth inodes
+  for (; i < min_size && !(*divergent); ++i) {
     if (ancestors[i].dirino != other.ancestors[i].dirino ||
         ancestors[i].dname != other.ancestors[i].dname) {
       *divergent = true;
       return comparator;
-    } else if (ancestors[i].version > other.ancestors[i].version) {
+    }
+
+    if (ancestors[i].is_auth <= 0 && other.ancestors[i].is_auth <= 0)
+      continue;
+    if (ancestors[i].version > other.ancestors[i].version) {
       if (comparator < 0)
         *divergent = true;
       comparator = 1;
