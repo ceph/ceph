@@ -515,8 +515,8 @@ int PyModule::load_notify_types()
 {
   PyObject *ls = PyObject_GetAttrString(pClass, "NOTIFY_TYPES");
   if (ls == nullptr) {
-    derr << "Module " << get_name() << " has missing NOTIFY_TYPES member" << dendl;
-    return -EINVAL;
+    dout(10) << "Module " << get_name() << " has no NOTIFY_TYPES member" << dendl;
+    return 0;
   }
   if (!PyObject_TypeCheck(ls, &PyList_Type)) {
     // Relatively easy mistake for human to make, e.g. defining COMMANDS
