@@ -63,6 +63,10 @@ struct BeaconNamespace {
     }
 };
 
+// Beacon Listener represents an NVME Subsystem listener,
+// which generally does not have to use TCP/IP.
+// It is derived from the SPDK listener JSON RPC representation.
+// For more details, see https://spdk.io/doc/jsonrpc.html#rpc_nvmf_listen_address.
 struct BeaconListener {
     std::string address_family; // IPv4 or IPv6
     std::string address;        //
