@@ -28,7 +28,7 @@ BtreeNodeMapping<key_t, val_t>::get_logical_extent(
 template <typename key_t, typename val_t>
 bool BtreeNodeMapping<key_t, val_t>::is_stable() const
 {
-  assert(is_parent_valid());
+  assert(!this->parent_modified());
   assert(pos != std::numeric_limits<uint16_t>::max());
   auto &p = (FixedKVNode<key_t>&)*parent;
   return p.is_child_stable(ctx, pos);
@@ -37,7 +37,7 @@ bool BtreeNodeMapping<key_t, val_t>::is_stable() const
 template <typename key_t, typename val_t>
 bool BtreeNodeMapping<key_t, val_t>::is_data_stable() const
 {
-  assert(is_parent_valid());
+  assert(!this->parent_modified());
   assert(pos != std::numeric_limits<uint16_t>::max());
   auto &p = (FixedKVNode<key_t>&)*parent;
   return p.is_child_data_stable(ctx, pos);

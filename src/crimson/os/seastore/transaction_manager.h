@@ -221,7 +221,7 @@ public:
     LBAMappingRef pin,
     extent_types_t type)
   {
-    ceph_assert(pin->is_parent_valid());
+    ceph_assert(!pin->parent_modified());
     auto v = pin->get_logical_extent(t);
     // checking the lba child must be atomic with creating
     // and linking the absent child
