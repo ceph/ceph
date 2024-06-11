@@ -527,8 +527,11 @@ public:
       // when a new connection is added.
       connections.max_load_factor(10.0);
       // give the runner thread a name for easier debugging
-      const auto rc = ceph_pthread_setname(runner.native_handle(), "kafka_manager");
-      ceph_assert(rc==0);
+      const char* thread_name = "kafka_manager";
+      if (const auto rc = ceph_pthread_setname(runner.native_handle(), thread_name); rc != 0) {
+        ldout(cct, 1) << "ERROR: failed to set kafka manager thread name to: " << thread_name
+          << ". error: " << rc << dendl;
+      }
   }
 
   // non copyable
