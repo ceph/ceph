@@ -1157,6 +1157,10 @@ public:
     return false;
   };
 
+  virtual void maybe_fix_pos() {
+    ceph_abort("impossible");
+  }
+
   virtual ~PhysicalNodeMapping() {}
 protected:
   std::optional<child_pos_t> child_pos = std::nullopt;

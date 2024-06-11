@@ -26,6 +26,8 @@ namespace crimson::os::seastore::lba_manager::btree {
 using base_iertr = LBAManager::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
 
+class BtreeLBAMapping;
+
 /**
  * lba_map_val_t
  *
@@ -290,6 +292,8 @@ struct LBALeafNode
   }
 
   std::ostream &_print_detail(std::ostream &out) const final;
+
+  void maybe_fix_mapping_pos(BtreeLBAMapping &mapping);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 

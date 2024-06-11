@@ -265,8 +265,14 @@ struct FixedKVNode : ChildableCachedExtent {
     set_child_ptracker(child);
   }
 
-  virtual bool is_child_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
-  virtual bool is_child_data_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
+  virtual bool is_child_stable(
+    op_context_t<node_key_t>,
+    uint16_t pos,
+    node_key_t key) const = 0;
+  virtual bool is_child_data_stable(
+    op_context_t<node_key_t>,
+    uint16_t pos,
+    node_key_t key) const = 0;
 
   template <typename T>
   get_child_ret_t<T> get_child(
@@ -275,6 +281,7 @@ struct FixedKVNode : ChildableCachedExtent {
     node_key_t key)
   {
     assert(children.capacity());
+    assert(key == get_key_from_idx(pos));
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
@@ -632,11 +639,17 @@ struct FixedKVInternalNode
     }
   }
 
-  bool is_child_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
+  bool is_child_stable(
+    op_context_t<NODE_KEY>,
+    uint16_t pos,
+    NODE_KEY key) const final {
     ceph_abort("impossible");
     return false;
   }
-  bool is_child_data_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
+  bool is_child_data_stable(
+    op_context_t<NODE_KEY>,
+    uint16_t pos,
+    NODE_KEY key) const final {
     ceph_abort("impossible");
     return false;
   }
@@ -1040,14 +1053,25 @@ struct FixedKVLeafNode
   // 2. The child extent is stable
   //
   // For reserved mappings, the return values are undefined.
-  bool is_child_stable(op_context_t<NODE_KEY> c, uint16_t pos) const final {
-    return _is_child_stable(c, pos);
+  bool is_child_stable(
+    op_context_t<NODE_KEY> c,
+    uint16_t pos,
+    NODE_KEY key) const final {
+    return _is_child_stable(c, pos, key);
   }
-  bool is_child_data_stable(op_context_t<NODE_KEY> c, uint16_t pos) const final {
-    return _is_child_stable(c, pos, true);
+  bool is_child_data_stable(
+    op_context_t<NODE_KEY> c,
+    uint16_t pos,
+    NODE_KEY key) const final {
+    return _is_child_stable(c, pos, key, true);
   }
 
-  bool _is_child_stable(op_context_t<NODE_KEY> c, uint16_t pos, bool data_only = false) const {
+  bool _is_child_stable(
+    op_context_t<NODE_KEY> c,
+    uint16_t pos,
+    NODE_KEY key,
+    bool data_only = false) const {
+    assert(key == get_key_from_idx(pos));
     auto child = this->children[pos];
     if (is_reserved_ptr(child)) {
       return true;
