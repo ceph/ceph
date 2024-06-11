@@ -522,7 +522,13 @@ class TestScrubChecks(CephFSTestCase):
         out_json = self.fs.run_scrub(["start", "/", "recursive"])
         self.assertNotEqual(out_json, None)
 
-        self.wait_for_health("MDS_DAMAGE", 60)
+        # There should no MDS_DAMAGE health error reported.
+        try:
+            self.wait_for_health("MDS_DAMAGE", 60)
+        except TestTimeoutError:
+            pass
+        else:
+            raise Exception("Scrub backtrace divergent test failed!")
 
     def test_stray_evaluation_with_scrub(self):
         """
