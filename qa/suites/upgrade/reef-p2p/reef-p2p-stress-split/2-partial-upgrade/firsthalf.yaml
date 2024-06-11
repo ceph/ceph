@@ -1,13 +1,38 @@
 meta:
 - desc: |
-   install upgrade ceph/-x on one node only
+   install upgrade ceph/-x on one node only (with the exception of the mgr on the other host)
    1st half
    restart : osd.0,1,2,3
 tasks:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; ceph health detail ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.mgr | length == 1'
+      - ceph versions | jq -e '.mgr | keys' | grep $sha1
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - HOSTNAME=$(ceph orch ps --format json | jq -r '.[] | select( .daemon_name == "mon.vm-00" ) | .hostname')
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --hosts $HOSTNAME
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; ceph health detail ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.mon | length == 1'
+      - ceph versions | jq -e '.mon | keys' | grep $sha1
+      - ceph versions | jq -e '.osd | length == 2'
 - install.upgrade:
     osd.0:
 - print: "**** done install.upgrade osd.0"
-- ceph.restart:
-    daemons: [mon.a,mon.b,mon.c,mgr.x,osd.0,osd.1,osd.2,osd.3]
-    mon-health-to-clog: false
+- cephadm.shell:
+    mon.a:
+      - ceph orch restart mon
+      - ceph orch restart mgr
+      - ceph orch daemon restart osd.0
+      - ceph orch daemon restart osd.1
+      - ceph orch daemon restart osd.2
+      - ceph orch daemon restart osd.3
 - print: "**** done ceph.restart 1st half"

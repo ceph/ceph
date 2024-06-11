@@ -8,7 +8,9 @@ tasks:
     exclude_packages: ['librados3']
     extra_packages: ['librados2']
 - print: "**** done install reef v18.2.0"
-- ceph:
+- cephadm:
+    image: quay.io/ceph/ceph:v18.2.0
+    compiled_cephadm_branch: reef
 - exec:
     osd.0:
       - ceph osd require-osd-release reef

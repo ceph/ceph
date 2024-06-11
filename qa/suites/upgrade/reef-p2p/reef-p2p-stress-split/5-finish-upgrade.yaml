@@ -1,8 +1,19 @@
 tasks:
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; ceph health detail ; sleep 30 ; done
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
 - install.upgrade:
     osd.4:
     client.0:
-- ceph.restart:
-    daemons: [osd.4, osd.5, osd.6, osd.7]
-    wait-for-healthy: false
-    wait-for-osds-up: true
+- cephadm.shell:
+    mon.a:
+      - ceph orch daemon restart osd.4
+      - ceph orch daemon restart osd.5
+      - ceph orch daemon restart osd.6
+      - ceph orch daemon restart osd.7

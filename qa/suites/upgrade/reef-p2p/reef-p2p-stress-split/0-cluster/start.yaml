@@ -30,4 +30,5 @@ roles:
   - osd.5
   - osd.6
   - osd.7
+  - mgr.y
 - - client.0
