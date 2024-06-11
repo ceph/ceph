@@ -4,6 +4,7 @@
 #pragma once
 
 #include <seastar/core/future.hh>
+#include <seastar/core/sleep.hh>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive_ptr.hpp>
@@ -321,6 +322,18 @@ public:
   };
 
   void put_historic() const;
+  static interruptible_future<> maybe_inject_delay() {
+    if (common::local_conf()->osd_debug_inject_dispatch_delay_probability > 0) {
+      if (rand() % 10000 <
+        common::local_conf()->osd_debug_inject_dispatch_delay_probability * 10000) {
+        auto delay_duration = std::chrono::duration<double>(
+          common::local_conf()->osd_debug_inject_dispatch_delay_duration);
+        auto a_while = std::chrono::duration_cast<std::chrono::seconds>(delay_duration);
+        return seastar::sleep(a_while);
+      }
+    }
+    return seastar::now();
+  }
 };
 
 }
