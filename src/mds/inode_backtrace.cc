@@ -120,10 +120,9 @@ void inode_backtrace_t::generate_test_instances(std::list<inode_backtrace_t*>& l
 }
 
 int inode_backtrace_t::compare(const inode_backtrace_t& other,
-                               bool *equivalent, bool *divergent) const
+                               bool *divergent) const
 {
   int min_size = std::min(ancestors.size(),other.ancestors.size());
-  *equivalent = true;
   *divergent = false;
   if (min_size == 0)
     return 0;
@@ -145,7 +144,7 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
     }
     if (ancestors[i].dirino != other.ancestors[i].dirino ||
         ancestors[i].dname != other.ancestors[i].dname) {
-      *equivalent = false;
+      *divergent = true;
       return comparator;
     } else if (ancestors[i].version > other.ancestors[i].version) {
       if (comparator < 0)
@@ -157,7 +156,5 @@ int inode_backtrace_t::compare(const inode_backtrace_t& other,
       comparator = -1;
     }
   }
-  if (*divergent)
-    *equivalent = false;
   return comparator;
 }
