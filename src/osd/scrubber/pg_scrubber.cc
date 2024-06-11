@@ -2562,10 +2562,10 @@ bool PgScrubber::is_time_for_deep(
     Scrub::ScrubPGPreconds pg_cond,
     const requested_scrub_t& planned) const
 {
+  const auto last_deep = m_pg->info.history.last_deep_scrub_stamp;  // shorthand
   dout(10) << fmt::format(
 		  "{}: pg_cond:({}) need-auto?{} last_deep_scrub_stamp:{}",
-		  __func__, pg_cond, planned.need_auto,
-		  m_pg->info.history.last_deep_scrub_stamp)
+		  __func__, pg_cond, planned.need_auto, last_deep)
 	   << dendl;
 
   if (!pg_cond.allow_deep)
@@ -2576,11 +2576,13 @@ bool PgScrubber::is_time_for_deep(
     return true;
   }
 
-  auto next_deep = m_pg->next_deepscrub_interval();
-  if (ceph_clock_now() >= next_deep) {
+  const auto sched_conf = populate_config_params();
+  const auto next_deep = last_deep + sched_conf.deep_interval;
+  const auto timenow = ceph_clock_now();
+  if (timenow >= next_deep) {
     dout(20) << fmt::format(
-		    "{}: now ({}) >= time for deep ({})", __func__,
-		    ceph_clock_now(), next_deep)
+		    "{}: now ({}) >= time for deep ({})", __func__, timenow,
+		    next_deep)
 	     << dendl;
     return true;
   }
@@ -2588,8 +2590,7 @@ bool PgScrubber::is_time_for_deep(
   if (pg_cond.has_deep_errors) {
     // note: the text below is matched by 'standalone' tests
     get_clog()->info() << fmt::format(
-	"osd.{} pg {} Deep scrub errors, "
-	"upgrading scrub to deep-scrub",
+	"osd.{} pg {} Deep scrub errors, upgrading scrub to deep-scrub",
 	get_whoami(), m_pg_id);
     return true;
   }
@@ -2598,9 +2599,8 @@ bool PgScrubber::is_time_for_deep(
   // this function is called often, we will probably be deep-scrubbing most of
   // the time.
   if (pg_cond.allow_shallow) {
-    // RRR we have the conf already
-    const bool deep_coin_flip = random_bool_with_probability(
-	get_pg_cct()->_conf->osd_deep_scrub_randomize_ratio);
+    const bool deep_coin_flip =
+	random_bool_with_probability(sched_conf.deep_randomize_ratio);
     if (deep_coin_flip) {
       dout(10) << fmt::format(
 		      "{}: scrub upgraded to deep (coin flip)", __func__)
