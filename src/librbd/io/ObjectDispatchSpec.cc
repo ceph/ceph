@@ -22,6 +22,7 @@ void ObjectDispatchSpec::C_Dispatcher::complete(int r) {
   case DISPATCH_RESULT_COMPLETE:
     finish(r);
     break;
+  case DISPATCH_RESULT_INIT:
   case DISPATCH_RESULT_INVALID:
   case DISPATCH_RESULT_RESTART:
     ceph_abort();
@@ -30,6 +31,7 @@ void ObjectDispatchSpec::C_Dispatcher::complete(int r) {
 }
 
 void ObjectDispatchSpec::C_Dispatcher::finish(int r) {
+  object_dispatch_spec->object_dispatcher->finished(this->object_dispatch_spec);
   on_finish->complete(r);
   delete object_dispatch_spec;
 }
