@@ -1570,6 +1570,7 @@ redmine_url="$(number_to_url "redmine" "${issue}")"
 debug "Considering Redmine issue: $redmine_url - is it in the Backport tracker?"
 
 remote_api_output="$(curl --silent "${redmine_url}.json")"
+debug $remote_api_output
 tracker="$(echo "$remote_api_output" | jq -r '.issue.tracker.name')"
 if [ "$tracker" = "Backport" ]; then
     debug "Yes, $redmine_url is a Backport issue"
