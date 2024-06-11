@@ -258,7 +258,7 @@ inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl) {
     ENCODE_START(1, 1, bl);
     encode((uint32_t)MAX_SUPPORTED_ANA_GROUPS, bl);
     for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
-        int    tick = state.data[i].timer_started;
+        uint32_t tick = state.data[i].timer_started;
         uint8_t val = state.data[i].timer_value;
         encode(tick, bl);
         encode(val,  bl);
@@ -277,7 +277,7 @@ inline  void decode(NvmeGwTimerState& state,  ceph::bufferlist::const_iterator& 
     decode(s, bl);
     ceph_assert(s == (uint32_t)MAX_SUPPORTED_ANA_GROUPS);
     for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
-        int tick;
+        uint32_t tick;
         uint8_t val;
         decode(tick, bl);
         decode(val,  bl);

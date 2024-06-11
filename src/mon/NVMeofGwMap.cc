@@ -67,7 +67,7 @@ int  NVMeofGwMap::cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_ke
         }
     }
     dout(1) << __func__ << " ERROR create GW: " << gw_id << "   ANA groupId was not allocated "   << dendl;
-    return -ENOENT;
+    return -EINVAL;
 }
 
 int NVMeofGwMap::cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key) {
@@ -92,7 +92,7 @@ int NVMeofGwMap::cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_
         }
     }
 
-    return -ENOENT;
+    return -EINVAL;
 }
 
 
