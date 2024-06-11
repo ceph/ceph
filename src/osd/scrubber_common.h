@@ -110,15 +110,29 @@ enum class schedule_result_t {
 
 namespace fmt {
 template <>
+struct formatter<Scrub::ScrubPGPreconds> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const Scrub::ScrubPGPreconds& conds, FormatContext& ctx) const
+  {
+    return fmt::format_to(
+	ctx.out(), "allowed(shallow/deep):{:1}/{:1},deep-err:{:1},can-autorepair:{:1}",
+	conds.allow_shallow, conds.allow_deep, conds.has_deep_errors,
+	conds.can_autorepair);
+  }
+};
+
+template <>
 struct formatter<Scrub::OSDRestrictions> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx)
+  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const
   {
     return fmt::format_to(
       ctx.out(),
-      "priority-only:{} overdue-only:{} load:{} time:{} repair-only:{}",
+      "priority-only:{},overdue-only:{},load:{},time:{},repair-only:{}",
         conds.high_priority_only,
         conds.only_deadlined,
         conds.load_is_low ? "ok" : "high",
@@ -411,11 +425,8 @@ struct ScrubPgIF {
    *   be initiated on this OSD at this time.
    * @param preconds the PG state re scrubbing at the time of the request,
    *   affecting scrub parameters.
-   * @param temp_request the set of flags that determine the scrub type
-   *   and attributes (to be removed in the next iteration). A nullopt
-   *   if no scrubs can be performed at this time. If set to nullopt,
-   *   the scrubber will not start a scrub session, but will update the
-   *   not_before to delay the next attempt to scrub this PG.
+   * @param requested_flags the set of flags that determine the scrub type
+   *   and attributes (to be removed in the next iteration).
    * @return the result of the scrub initiation attempt. A success,
    *   or either a failure due to the specific PG, or a failure due to
    *   external reasons.
@@ -423,7 +434,7 @@ struct ScrubPgIF {
   virtual Scrub::schedule_result_t start_scrub_session(
       Scrub::OSDRestrictions osd_restrictions,
       Scrub::ScrubPGPreconds,
-      std::optional<requested_scrub_t> temp_request) = 0;
+      const requested_scrub_t& requested_flags) = 0;
 
   virtual void set_op_parameters(const requested_scrub_t&) = 0;
 

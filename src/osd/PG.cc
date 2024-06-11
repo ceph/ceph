@@ -1347,12 +1347,8 @@ Scrub::schedule_result_t PG::start_scrubbing(
       (cct->_conf->osd_scrub_auto_repair &&
        get_pgbackend()->auto_repair_supported());
 
-  // analyze the combination of the requested scrub flags, the osd/pool
-  // configuration and the PG status to determine whether we should scrub
-  // now, and what type of scrub should that be.
-  auto updated_flags = validate_scrub_mode();
-
-  return m_scrubber->start_scrub_session(osd_restrictions, pg_cond, updated_flags);
+  return m_scrubber->start_scrub_session(
+      osd_restrictions, pg_cond, m_planned_scrub);
 }
 
 
