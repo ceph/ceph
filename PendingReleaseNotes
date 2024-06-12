@@ -224,6 +224,8 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * Monitoring: RGW S3 Analytics: A new Grafana dashboard is now available, enabling you to
   visualize per bucket and user analytics data, including total GETs, PUTs, Deletes,
   Copies, and list metrics.
+* RBD: `Image::access_timestamp` and `Image::modify_timestamp` Python APIs now
+  return timestamps in UTC.
 
 >=18.0.0
 
