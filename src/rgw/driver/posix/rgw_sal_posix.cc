@@ -2175,7 +2175,7 @@ int POSIXObject::generate_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 
 int POSIXObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int64_t count = 0;
+  int32_t count = 0;
   char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
   std::string etag;
@@ -2231,7 +2231,7 @@ int POSIXObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield 
   buf_to_hex((unsigned char *)etag_buf, sizeof(etag_buf), final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],
 	   sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)count);
+           "-%" PRId32, count);
   etag = final_etag_str;
   ldpp_dout(dpp, 10) << "calculated etag: " << etag << dendl;
 
