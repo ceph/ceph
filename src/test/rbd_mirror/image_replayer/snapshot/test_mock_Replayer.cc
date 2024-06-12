@@ -161,6 +161,9 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
                                          const SnapSeqs& snap_seqs,
+                                         uint64_t local_group_pool_id,
+                                         const std::string &local_group_id,
+                                         const std::string &local_group_snap_id,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
@@ -284,6 +287,11 @@ namespace {
 
 struct MockReplayerListener : public image_replayer::ReplayerListener {
   MOCK_METHOD0(handle_notification, void());
+  MOCK_METHOD5(create_mirror_snapshot_start,
+               void(const cls::rbd::MirrorSnapshotNamespace &,
+                    int64_t *, std::string *, std::string *, Context *));
+  MOCK_METHOD3(create_mirror_snapshot_finish, void(const std::string &,
+                                                   uint64_t, Context *));
 };
 
 } // anonymous namespace
@@ -489,6 +497,18 @@ public:
     EXPECT_CALL(mock_image_ctx, notify_update(_))
       .WillOnce(Invoke([this](Context* ctx) {
         m_threads->work_queue->queue(ctx, 0);
+      }));
+  }
+
+  void expect_unlink_group_snapshot(librbd::MockTestImageCtx& mock_image_ctx,
+                                    uint64_t snap_id) {
+    EXPECT_CALL(mock_image_ctx, get_snap_info(snap_id))
+      .WillOnce(Invoke([&mock_image_ctx](uint64_t snap_id) -> librbd::SnapInfo* {
+        auto it = mock_image_ctx.snap_info.find(snap_id);
+        if (it == mock_image_ctx.snap_info.end()) {
+          return nullptr;
+        }
+        return &it->second;
       }));
   }
 
@@ -909,6 +929,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
          "", CEPH_NOSNAP, true, 0, {}},
        0, {}, 0, 0, {}}}
     }, 0);
+  expect_unlink_group_snapshot(mock_local_image_ctx, 11);
   expect_prune_non_primary_snapshot(mock_local_image_ctx, 11, 0);
 
   // idle

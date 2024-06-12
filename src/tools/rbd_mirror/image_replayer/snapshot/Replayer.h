@@ -8,6 +8,7 @@
 #include "common/ceph_mutex.h"
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "include/rados/librados.hpp"
 #include "librbd/mirror/snapshot/Types.h"
 #include "tools/rbd_mirror/image_replayer/TimeRollingMean.h"
 #include <boost/accumulators/accumulators.hpp>
@@ -121,7 +122,10 @@ private:
    * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
    *    | (unused non-primary snapshot)                 |
-   *    |\--------------> PRUNE_NON_PRIMARY_SNAPSHOT---/|
+   *    |\--------------> UNLINK_GROUP_SNAPSHOT         |
+   *    |                       | (skip if no group)    |
+   *    |                       v                       |
+   *    |                 PRUNE_NON_PRIMARY_SNAPSHOT---/|
    *    |                                               |
    *    | (interrupted sync)                            |
    *    |\--------------> GET_LOCAL_IMAGE_STATE ------\ |
@@ -132,8 +136,14 @@ private:
    *    |                       v                     | |
    *    |                 GET_REMOTE_IMAGE_STATE      | |
    *    |                       |                     | |
+   *    |                       v (skip if no group)  | |
+   *    |                 CREATE_GROUP_SNAP_START     | |
+   *    |                       |                     | |
    *    |                       v                     | |
    *    |                 CREATE_NON_PRIMARY_SNAPSHOT | |
+   *    |                       |                     | |
+   *    |                       v (skip if no group)  | |
+   *    |                 CREATE_GROUP_SNAP_FINISH    | |
    *    |                       |                     | |
    *    |                       v (skip if not needed)| |
    *    |                 UPDATE_MIRROR_IMAGE_STATE   | |
@@ -234,6 +244,10 @@ private:
   uint64_t m_remote_snap_id_end = CEPH_NOSNAP;
   cls::rbd::MirrorSnapshotNamespace m_remote_mirror_snap_ns;
 
+  int64_t m_local_group_pool_id = -1;
+  std::string m_local_group_id;
+  std::string m_local_group_snap_id;
+
   librbd::mirror::snapshot::ImageState m_image_state;
   DeepCopyHandler* m_deep_copy_handler = nullptr;
 
@@ -257,6 +271,9 @@ private:
 
   PerfCounters *m_perf_counters = nullptr;
 
+  uint64_t m_prune_snap_id = CEPH_NOSNAP;
+  librados::IoCtx m_group_io_ctx;
+
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);
 
@@ -269,7 +286,10 @@ private:
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
-  void prune_non_primary_snapshot(uint64_t snap_id);
+  void unlink_group_snapshot();
+  void handle_unlink_group_snapshot(int r);
+
+  void prune_non_primary_snapshot();
   void handle_prune_non_primary_snapshot(int r);
 
   void copy_snapshots();
@@ -281,8 +301,17 @@ private:
   void get_local_image_state();
   void handle_get_local_image_state(int r);
 
+  void refresh_remote_group_snapshot_list();
+  void handle_refresh_remote_group_snapshot_list(int r);
+
+  void create_group_snap_start();
+  void handle_create_group_snap_start(int r);
+
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
+
+  void create_group_snap_finish();
+  void handle_create_group_snap_finish(int r);
 
   void update_mirror_image_state();
   void handle_update_mirror_image_state(int r);

@@ -104,7 +104,7 @@ TEST_F(TestGroup, add_image)
   rbd_group_info_cleanup(&group_info, sizeof(group_info));
 
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
-                                   m_image_name.c_str()));
+                                   m_image_name.c_str(), 0));
 
   ASSERT_EQ(-ERANGE, rbd_get_group(image, &group_info, 0));
   ASSERT_EQ(0, rbd_get_group(image, &group_info, sizeof(group_info)));
@@ -137,7 +137,7 @@ TEST_F(TestGroup, add_image)
                                             sizeof(rbd_group_image_info_t),
                                             num_images));
   ASSERT_EQ(0, rbd_group_image_remove(ioctx, group_name, ioctx,
-                                      m_image_name.c_str()));
+                                      m_image_name.c_str(), 0));
 
   ASSERT_EQ(0, rbd_get_features(image, &features));
   ASSERT_TRUE((features & RBD_FEATURE_OPERATIONS) == 0ULL);
@@ -180,7 +180,7 @@ TEST_F(TestGroup, add_imagePP)
   ASSERT_EQ(RBD_GROUP_INVALID_POOL, group_info.pool);
 
   ASSERT_EQ(0, rbd.group_image_add(ioctx, group_name, ioctx,
-                                   m_image_name.c_str()));
+                                   m_image_name.c_str(), 0));
 
   ASSERT_EQ(-ERANGE, image.get_group(&group_info, 0));
   ASSERT_EQ(0, image.get_group(&group_info, sizeof(group_info)));
@@ -202,7 +202,7 @@ TEST_F(TestGroup, add_imagePP)
   ASSERT_EQ(ioctx.get_id(), images[0].pool);
 
   ASSERT_EQ(0, rbd.group_image_remove(ioctx, group_name, ioctx,
-                                      m_image_name.c_str()));
+                                      m_image_name.c_str(), 0));
 
   ASSERT_EQ(0, image.features(&features));
   ASSERT_TRUE((features & RBD_FEATURE_OPERATIONS) == 0ULL);
@@ -247,7 +247,7 @@ TEST_F(TestGroup, add_snapshot)
   ASSERT_EQ(0, rbd_group_create(ioctx, group_name));
 
   ASSERT_EQ(0, rbd_group_image_add(ioctx, group_name, ioctx,
-                                   m_image_name.c_str()));
+                                   m_image_name.c_str(), 0));
 
   struct Watcher {
     static void quiesce_cb(void *arg) {
@@ -377,7 +377,7 @@ TEST_F(TestGroup, add_snapshotPP)
   ASSERT_EQ(0, rbd.group_create(ioctx, group_name));
 
   ASSERT_EQ(0, rbd.group_image_add(ioctx, group_name, ioctx,
-                                   m_image_name.c_str()));
+                                   m_image_name.c_str(), 0));
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, m_image_name.c_str(), NULL));
@@ -442,4 +442,78 @@ TEST_F(TestGroup, add_snapshotPP)
 
   ASSERT_EQ(0, rbd.group_snap_remove(ioctx, group_name, snap_name));
   ASSERT_EQ(0, rbd.group_remove(ioctx, group_name));
+}
+
+TEST_F(TestGroup, mirrorPP)
+{
+  REQUIRE_FORMAT_V2();
+
+  std::string peer_uuid;
+  ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_IMAGE));
+  ASSERT_EQ(0, m_rbd.mirror_peer_site_add(m_ioctx, &peer_uuid,
+                                          RBD_MIRROR_PEER_DIRECTION_RX_TX,
+                                          "cluster", "client"));
+  const char *group_name = "snap_group";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, group_name));
+  ASSERT_EQ(0, m_rbd.group_image_add(m_ioctx, group_name, m_ioctx,
+                                     m_image_name.c_str(), 0));
+
+  std::vector<librbd::group_snap_info_t> group_snaps;
+  ASSERT_EQ(0, m_rbd.group_snap_list(m_ioctx, group_name, &group_snaps,
+                                     sizeof(librbd::group_snap_info_t)));
+  ASSERT_EQ(0U, group_snaps.size());
+
+  std::string snap_id;
+
+  ASSERT_EQ(-EINVAL, m_rbd.mirror_group_create_snapshot(m_ioctx, group_name, 0,
+                                                        &snap_id));
+  ASSERT_EQ(0, m_rbd.group_snap_list(m_ioctx, group_name, &group_snaps,
+                                     sizeof(librbd::group_snap_info_t)));
+  ASSERT_EQ(0U, group_snaps.size());
+
+  ASSERT_EQ(0, m_rbd.mirror_group_enable(m_ioctx, group_name,
+                                         RBD_MIRROR_IMAGE_MODE_SNAPSHOT, 0));
+
+  librbd::Image image;
+  ASSERT_EQ(0, m_rbd.open(m_ioctx, image, m_image_name.c_str()));
+
+  librbd::mirror_image_mode_t mode;
+  ASSERT_EQ(0, image.mirror_image_get_mode(&mode));
+  ASSERT_EQ(RBD_MIRROR_IMAGE_MODE_SNAPSHOT, mode);
+
+  std::vector<librbd::snap_info_t> snaps;
+  ASSERT_EQ(0, image.snap_list(snaps));
+  ASSERT_EQ(1U, snaps.size());
+
+  ASSERT_EQ(0, m_rbd.mirror_group_create_snapshot(m_ioctx, group_name, 0,
+                                                  &snap_id));
+  snaps.clear();
+  ASSERT_EQ(0, image.snap_list(snaps));
+  ASSERT_EQ(2U, snaps.size());
+  librbd::snap_namespace_type_t snap_ns_type;
+  ASSERT_EQ(0, image.snap_get_namespace_type(snaps[1].id, &snap_ns_type));
+  ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_MIRROR, snap_ns_type);
+  librbd::snap_mirror_namespace_t mirror_snap;
+  ASSERT_EQ(0, image.snap_get_mirror_namespace(snaps[1].id, &mirror_snap,
+                                               sizeof(mirror_snap)));
+
+  ASSERT_EQ(0, m_rbd.group_snap_list(m_ioctx, group_name, &group_snaps,
+                                     sizeof(librbd::group_snap_info_t)));
+  ASSERT_EQ(2U, group_snaps.size());
+
+  ASSERT_EQ(0, m_rbd.mirror_group_demote(m_ioctx, group_name, 0));
+
+  librbd::mirror_image_info_t mirror_info;
+  ASSERT_EQ(0, image.mirror_image_get_info(&mirror_info, sizeof(mirror_info)));
+  ASSERT_FALSE(mirror_info.primary);
+
+  ASSERT_EQ(0, m_rbd.mirror_group_resync(m_ioctx, group_name));
+
+  ASSERT_EQ(0, m_rbd.mirror_group_promote(m_ioctx, group_name, 0, false));
+  ASSERT_EQ(0, image.mirror_image_get_info(&mirror_info, sizeof(mirror_info)));
+  ASSERT_TRUE(mirror_info.primary);
+
+  ASSERT_EQ(0, m_rbd.mirror_group_disable(m_ioctx, group_name, false));
+
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, group_name));
 }

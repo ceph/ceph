@@ -102,10 +102,11 @@ public:
 
   static void is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner,
                            Context *on_finish);
-  static void is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+  static void is_tag_owner(librados::IoCtx& io_ctx, const std::string& image_id,
                            bool *is_tag_owner, asio::ContextWQ *op_work_queue,
                            Context *on_finish);
-  static void get_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+  static void get_tag_owner(librados::IoCtx& io_ctx,
+                            const std::string& image_id,
                             std::string *mirror_uuid,
                             asio::ContextWQ *op_work_queue, Context *on_finish);
   static int request_resync(ImageCtxT *image_ctx);

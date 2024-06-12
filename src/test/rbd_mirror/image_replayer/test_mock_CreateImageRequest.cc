@@ -339,7 +339,7 @@ public:
 					 const std::string &local_image_id,
                                          librbd::MockTestImageCtx &mock_remote_image_ctx,
                                          Context *on_finish) {
-    return new MockCreateImageRequest(mock_threads, m_local_io_ctx,
+    return new MockCreateImageRequest(mock_threads, m_local_io_ctx, nullptr,
                                       global_image_id, remote_mirror_uuid,
                                       local_image_name, local_image_id,
                                       &mock_remote_image_ctx,

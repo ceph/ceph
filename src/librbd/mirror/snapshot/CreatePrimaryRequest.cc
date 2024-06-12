@@ -29,11 +29,13 @@ template <typename I>
 CreatePrimaryRequest<I>::CreatePrimaryRequest(
     I *image_ctx, const std::string& global_image_id,
     uint64_t clean_since_snap_id, uint64_t snap_create_flags, uint32_t flags,
-    uint64_t *snap_id, Context *on_finish)
+    int64_t group_pool_id, const std::string &group_id,
+    const std::string &group_snap_id, uint64_t *snap_id, Context *on_finish)
   : m_image_ctx(image_ctx), m_global_image_id(global_image_id),
     m_clean_since_snap_id(clean_since_snap_id),
-    m_snap_create_flags(snap_create_flags), m_flags(flags), m_snap_id(snap_id),
-    m_on_finish(on_finish) {
+    m_snap_create_flags(snap_create_flags), m_flags(flags),
+    m_group_pool_id(group_pool_id), m_group_id(group_id),
+    m_group_snap_id(group_snap_id), m_snap_id(snap_id), m_on_finish(on_finish) {
   m_default_ns_ctx.dup(m_image_ctx->md_ctx);
   m_default_ns_ctx.set_namespace("");
 }
@@ -115,6 +117,8 @@ void CreatePrimaryRequest<I>::create_snapshot() {
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED :
       cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY),
     m_mirror_peer_uuids, "", m_clean_since_snap_id};
+  ns.group_spec = {m_group_id, m_group_pool_id};
+  ns.group_snap_id = m_group_snap_id;
 
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << "name=" << m_snap_name << ", "
@@ -184,6 +188,7 @@ void CreatePrimaryRequest<I>::unlink_peer() {
 
   std::string peer_uuid;
   uint64_t snap_id = CEPH_NOSNAP;
+  CephContext *cct = m_image_ctx->cct;
 
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
@@ -206,6 +211,8 @@ void CreatePrimaryRequest<I>::unlink_peer() {
     for (const auto& peer : m_mirror_peer_uuids) {
       size_t count = 0;
       uint64_t unlink_snap_id = 0;
+      uint64_t prev_snap_id = 0;
+      std::string prev_group_snap_id;
       for (const auto& snap_info_pair : m_image_ctx->snap_info) {
         auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
           &snap_info_pair.second.snap_namespace);
@@ -217,11 +224,47 @@ void CreatePrimaryRequest<I>::unlink_peer() {
           // promotion
           count = 0;
           unlink_snap_id = 0;
+          prev_snap_id = 0;
           continue;
         }
         if (info->mirror_peer_uuids.count(peer) == 0) {
           // snapshot is not linked with this peer
           continue;
+        }
+        if (prev_snap_id) {
+          librados::IoCtx m_group_io_ctx;
+          int r = librbd::util::create_ioctx(m_image_ctx->md_ctx,
+                                             "group", info->group_spec.pool_id,
+                                             {}, &m_group_io_ctx);
+          if (r < 0) {
+            return;
+          }
+          cls::rbd::GroupSnapshot prev_group_snap;
+          std::string group_header_oid = librbd::util::group_header_name(
+                                                 info->group_spec.group_id);
+          r = cls_client::group_snap_get_by_id(&m_group_io_ctx,
+                                               group_header_oid,
+                                               prev_group_snap_id,
+                                               &prev_group_snap);
+          if (r < 0) {
+            lderr(cct) << "failed to retrieve group snapshot: "
+                       << cpp_strerror(r) << dendl;
+            prev_snap_id = snap_info_pair.first;
+            prev_group_snap_id = info->group_snap_id;
+            continue;
+          }
+          if (prev_group_snap.state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+            peer_uuid = peer;
+            snap_id = prev_snap_id;
+            r = cls_client::group_snap_remove(&m_group_io_ctx,
+                                              group_header_oid,
+                                              prev_group_snap.id);
+            if (r < 0) {
+              lderr(cct) << "failed to remove group snapshot metadata: "
+                         << cpp_strerror(r) << dendl;
+            }
+            goto do_unlink;
+          }
         }
         count++;
         if (count == max_snapshots) {
@@ -232,6 +275,11 @@ void CreatePrimaryRequest<I>::unlink_peer() {
           snap_id = unlink_snap_id;
           goto do_unlink;
         }
+        prev_snap_id = 0;
+        if (info->group_spec.is_valid() && !info->group_snap_id.empty()) {
+          prev_snap_id = snap_info_pair.first;
+          prev_group_snap_id = info->group_snap_id;
+        }
       }
     }
   }
@@ -240,7 +288,6 @@ void CreatePrimaryRequest<I>::unlink_peer() {
   return;
 
 do_unlink:
-  CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << "peer=" << peer_uuid << ", snap_id=" << snap_id << dendl;
 
   auto ctx = create_context_callback<

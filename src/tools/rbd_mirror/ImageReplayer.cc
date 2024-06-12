@@ -24,7 +24,6 @@
 #include "Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayerListener.h"
-#include "tools/rbd_mirror/image_replayer/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
@@ -200,27 +199,64 @@ template <typename I>
 struct ImageReplayer<I>::ReplayerListener
   : public image_replayer::ReplayerListener {
   ImageReplayer<I>* image_replayer;
+  GroupCtx *local_group_ctx;
 
-  ReplayerListener(ImageReplayer<I>* image_replayer)
-    : image_replayer(image_replayer) {
+  ReplayerListener(ImageReplayer<I>* image_replayer, GroupCtx *local_group_ctx)
+    : image_replayer(image_replayer), local_group_ctx(local_group_ctx) {
   }
 
   void handle_notification() override {
     image_replayer->handle_replayer_notification();
   }
+
+  void list_remote_group_snapshots(Context *on_finish) override {
+    if (local_group_ctx == nullptr) {
+      on_finish->complete(0);
+      return;
+    }
+
+    local_group_ctx->listener->list_remote_group_snapshots(on_finish);
+  }
+
+  void create_mirror_snapshot_start(
+      const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
+      int64_t *local_group_pool_id, std::string *local_group_id,
+      std::string *local_group_snap_id, Context *on_finish) override {
+    if (local_group_ctx == nullptr) {
+      on_finish->complete(0);
+      return;
+    }
+
+    local_group_ctx->listener->create_mirror_snapshot_start(
+        remote_group_snap_ns, image_replayer, local_group_pool_id,
+        local_group_id, local_group_snap_id, on_finish);
+  }
+
+  void create_mirror_snapshot_finish(const std::string &remote_group_snap_id,
+                                     uint64_t snap_id,
+                                     Context *on_finish) override {
+    if (local_group_ctx == nullptr) {
+      on_finish->complete(0);
+      return;
+    }
+
+    local_group_ctx->listener->create_mirror_snapshot_finish(
+        remote_group_snap_id, image_replayer, snap_id, on_finish);
+  }
 };
 
 template <typename I>
 ImageReplayer<I>::ImageReplayer(
-    librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+    librados::IoCtx &local_io_ctx, GroupCtx *local_group_ctx,
+    const std::string &local_mirror_uuid,
     const std::string &global_image_id, Threads<I> *threads,
     InstanceWatcher<I> *instance_watcher,
     MirrorStatusUpdater<I>* local_status_updater,
     journal::CacheManagerHandler *cache_manager_handler,
     PoolMetaCache* pool_meta_cache) :
-  m_local_io_ctx(local_io_ctx), m_local_mirror_uuid(local_mirror_uuid),
-  m_global_image_id(global_image_id), m_threads(threads),
-  m_instance_watcher(instance_watcher),
+  m_local_io_ctx(local_io_ctx), m_local_group_ctx(local_group_ctx),
+  m_local_mirror_uuid(local_mirror_uuid), m_global_image_id(global_image_id),
+  m_threads(threads), m_instance_watcher(instance_watcher),
   m_local_status_updater(local_status_updater),
   m_cache_manager_handler(cache_manager_handler),
   m_pool_meta_cache(pool_meta_cache),
@@ -228,8 +264,7 @@ ImageReplayer<I>::ImageReplayer(
   m_lock(ceph::make_mutex("rbd::mirror::ImageReplayer " +
       stringify(local_io_ctx.get_id()) + " " + global_image_id)),
   m_progress_cxt(this),
-  m_replayer_listener(new ReplayerListener(this))
-{
+  m_replayer_listener(new ReplayerListener(this, local_group_ctx)) {
   // Register asok commands using a temporary "remote_pool_name/global_image_id"
   // name.  When the image name becomes known on start the asok commands will be
   // re-registered using "remote_pool_name/remote_image_name" name.
@@ -352,8 +387,8 @@ void ImageReplayer<I>::bootstrap() {
   auto ctx = create_context_callback<
       ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
   auto request = image_replayer::BootstrapRequest<I>::create(
-      m_threads, m_local_io_ctx, m_remote_image_peer.io_ctx, m_instance_watcher,
-      m_global_image_id, m_local_mirror_uuid,
+      m_threads, m_local_io_ctx, m_remote_image_peer.io_ctx, m_local_group_ctx,
+      m_instance_watcher, m_global_image_id, m_local_mirror_uuid,
       m_remote_image_peer.remote_pool_meta, m_cache_manager_handler,
       m_pool_meta_cache, &m_progress_cxt, &m_state_builder, &m_resync_requested,
       ctx);
@@ -878,11 +913,22 @@ void ImageReplayer<I>::set_mirror_image_status_update(
   }
 
   dout(15) << "status=" << status << dendl;
-  m_local_status_updater->set_mirror_image_status(m_global_image_id, status,
-                                                  force);
-  if (m_remote_image_peer.mirror_status_updater != nullptr) {
-    m_remote_image_peer.mirror_status_updater->set_mirror_image_status(
-      m_global_image_id, status, force);
+  if (m_local_group_ctx != nullptr) {
+    m_local_status_updater->set_mirror_group_image_status(
+        m_local_group_ctx->global_group_id, m_local_io_ctx.get_id(),
+        m_global_image_id, status, force);
+    if (m_remote_image_peer.mirror_status_updater != nullptr) {
+      m_remote_image_peer.mirror_status_updater->set_mirror_group_image_status(
+          m_local_group_ctx->global_group_id, m_remote_image_peer.io_ctx.get_id(),
+          m_global_image_id, status, force);
+    }
+  } else {
+    m_local_status_updater->set_mirror_image_status(m_global_image_id, status,
+                                                    force);
+    if (m_remote_image_peer.mirror_status_updater != nullptr) {
+      m_remote_image_peer.mirror_status_updater->set_mirror_image_status(
+        m_global_image_id, status, force);
+    }
   }
 
   m_in_flight_op_tracker.finish_op();
@@ -991,6 +1037,57 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     });
     remove_image_status(m_delete_in_progress, ctx);
     return;
+  }
+
+  if (m_local_group_ctx != nullptr) {
+    if (m_local_status_updater->mirror_group_image_exists(
+            m_local_group_ctx->global_group_id, m_local_io_ctx.get_id(),
+            m_global_image_id)) {
+      dout(15) << "removing local mirror group image status" << dendl;
+      auto ctx = new LambdaContext([this, r](int) {
+          handle_shut_down(r);
+        });
+      m_local_status_updater->remove_mirror_group_image_status(
+          m_local_group_ctx->global_group_id, m_local_io_ctx.get_id(),
+          m_global_image_id, ctx);
+      return;
+    }
+
+    if (m_remote_image_peer.mirror_status_updater != nullptr &&
+        m_remote_image_peer.mirror_status_updater->mirror_group_image_exists(
+            m_local_group_ctx->global_group_id,
+            m_remote_image_peer.io_ctx.get_id(), m_global_image_id)) {
+      dout(15) << "removing remote mirror group image status" << dendl;
+      auto ctx = new LambdaContext([this, r](int) {
+          handle_shut_down(r);
+        });
+      m_remote_image_peer.mirror_status_updater->remove_mirror_group_image_status(
+          m_local_group_ctx->global_group_id,
+          m_remote_image_peer.io_ctx.get_id(), m_global_image_id, ctx);
+      return;
+    }
+  } else {
+    if (m_local_status_updater->mirror_image_exists(m_global_image_id)) {
+      dout(15) << "removing local mirror image status" << dendl;
+      auto ctx = new LambdaContext([this, r](int) {
+          handle_shut_down(r);
+        });
+      m_local_status_updater->remove_mirror_image_status(m_global_image_id,
+                                                         true, ctx);
+      return;
+    }
+
+    if (m_remote_image_peer.mirror_status_updater != nullptr &&
+        m_remote_image_peer.mirror_status_updater->mirror_image_exists(
+            m_global_image_id)) {
+      dout(15) << "removing remote mirror image status" << dendl;
+      auto ctx = new LambdaContext([this, r](int) {
+          handle_shut_down(r);
+        });
+      m_remote_image_peer.mirror_status_updater->remove_mirror_image_status(
+          m_global_image_id, true, ctx);
+      return;
+    }
   }
 
   if (m_state_builder != nullptr) {
@@ -1152,7 +1249,7 @@ void ImageReplayer<I>::remove_image_status(bool force, Context *on_finish)
     remove_image_status_remote(force, on_finish);
   });
 
-  if (m_local_status_updater->exists(m_global_image_id)) {
+  if (m_local_status_updater->mirror_image_exists(m_global_image_id)) {
     dout(15) << "removing local mirror image status" << dendl;
     if (force) {
       m_local_status_updater->remove_mirror_image_status(
@@ -1171,7 +1268,7 @@ template <typename I>
 void ImageReplayer<I>::remove_image_status_remote(bool force, Context *on_finish)
 {
   if (m_remote_image_peer.mirror_status_updater != nullptr &&
-      m_remote_image_peer.mirror_status_updater->exists(m_global_image_id)) {
+      m_remote_image_peer.mirror_status_updater->mirror_image_exists(m_global_image_id)) {
     dout(15) << "removing remote mirror image status" << dendl;
     if (force) {
       m_remote_image_peer.mirror_status_updater->remove_mirror_image_status(

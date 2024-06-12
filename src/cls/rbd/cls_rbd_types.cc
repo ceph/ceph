@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/variant.hpp>
+#include <boost/variant/static_visitor.hpp>
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
 
@@ -127,16 +128,17 @@ std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer) {
 }
 
 void MirrorImage::encode(bufferlist &bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(global_image_id, bl);
   encode(static_cast<uint8_t>(state), bl);
   encode(static_cast<uint8_t>(mode), bl);
+  encode(group_spec, bl);
   ENCODE_FINISH(bl);
 }
 
 void MirrorImage::decode(bufferlist::const_iterator &it) {
   uint8_t int_state;
-  DECODE_START(2, it);
+  DECODE_START(3, it);
   decode(global_image_id, it);
   decode(int_state, it);
   state = static_cast<MirrorImageState>(int_state);
@@ -145,26 +147,34 @@ void MirrorImage::decode(bufferlist::const_iterator &it) {
     decode(int_mode, it);
     mode = static_cast<MirrorImageMode>(int_mode);
   }
+  if (struct_v >= 3) {
+    decode(group_spec, it);
+  }
   DECODE_FINISH(it);
 }
 
 void MirrorImage::dump(Formatter *f) const {
   f->dump_stream("mode") << mode;
   f->dump_string("global_image_id", global_image_id);
+  if (group_spec.is_valid()) {
+    f->open_object_section("group");
+    group_spec.dump(f);
+    f->close_section();
+  }
   f->dump_stream("state") << state;
 }
 
 void MirrorImage::generate_test_instances(std::list<MirrorImage*> &o) {
   o.push_back(new MirrorImage());
-  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_JOURNAL, "uuid-123",
+  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_JOURNAL, "uuid-123", {},
                               MIRROR_IMAGE_STATE_ENABLED));
-  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_SNAPSHOT, "uuid-abc",
+  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_SNAPSHOT, "uuid-abc", {"g1", 1},
                               MIRROR_IMAGE_STATE_DISABLING));
 }
 
 bool MirrorImage::operator==(const MirrorImage &rhs) const {
   return mode == rhs.mode && global_image_id == rhs.global_image_id &&
-         state == rhs.state;
+         group_spec == rhs.group_spec && state == rhs.state;
 }
 
 bool MirrorImage::operator<(const MirrorImage &rhs) const {
@@ -173,6 +183,9 @@ bool MirrorImage::operator<(const MirrorImage &rhs) const {
   }
   if (global_image_id != rhs.global_image_id) {
     return global_image_id < rhs.global_image_id;
+  }
+  if (group_spec != rhs.group_spec) {
+    return group_spec < rhs.group_spec;
   }
   return state < rhs.state;
 }
@@ -203,6 +216,9 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageState& mirror_state)
   case MIRROR_IMAGE_STATE_DISABLED:
     os << "disabled";
     break;
+  case MIRROR_IMAGE_STATE_CREATING:
+    os << "creating";
+    break;
   default:
     os << "unknown (" << static_cast<uint32_t>(mirror_state) << ")";
     break;
@@ -214,6 +230,7 @@ std::ostream& operator<<(std::ostream& os, const MirrorImage& mirror_image) {
   os << "["
      << "mode=" << mirror_image.mode << ", "
      << "global_image_id=" << mirror_image.global_image_id << ", "
+     << "group_spec=" << mirror_image.group_spec << ", "
      << "state=" << mirror_image.state << "]";
   return os;
 }
@@ -500,6 +517,362 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
+void MirrorGroup::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(global_group_id, bl);
+  encode(static_cast<uint8_t>(mirror_image_mode), bl);
+  encode(static_cast<uint8_t>(state), bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroup::decode(bufferlist::const_iterator &it) {
+  uint8_t tmp;
+  DECODE_START(1, it);
+  decode(global_group_id, it);
+  decode(tmp, it);
+  mirror_image_mode = static_cast<MirrorImageMode>(tmp);
+  decode(tmp, it);
+  state = static_cast<MirrorGroupState>(tmp);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroup::dump(Formatter *f) const {
+  f->dump_string("global_group_id", global_group_id);
+  f->dump_stream("mirror_image_mode") << mirror_image_mode;
+  f->dump_stream("state") << state;
+}
+
+void MirrorGroup::generate_test_instances(std::list<MirrorGroup*> &o) {
+  o.push_back(new MirrorGroup());
+  o.push_back(new MirrorGroup("uuid-123", MIRROR_IMAGE_MODE_SNAPSHOT,
+                              MIRROR_GROUP_STATE_ENABLED));
+}
+
+bool MirrorGroup::operator==(const MirrorGroup &rhs) const {
+  return global_group_id == rhs.global_group_id &&
+         mirror_image_mode == rhs.mirror_image_mode &&
+         state == rhs.state;
+}
+
+bool MirrorGroup::operator<(const MirrorGroup &rhs) const {
+  if (global_group_id != rhs.global_group_id) {
+    return global_group_id < rhs.global_group_id;
+  }
+  if (mirror_image_mode != rhs.mirror_image_mode) {
+    return mirror_image_mode < rhs.mirror_image_mode;
+  }
+  return state < rhs.state;
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupState& state) {
+  switch (state) {
+  case MIRROR_GROUP_STATE_DISABLING:
+    os << "disabling";
+    break;
+  case MIRROR_GROUP_STATE_ENABLING:
+    os << "enabling";
+    break;
+  case MIRROR_GROUP_STATE_ENABLED:
+    os << "enabled";
+    break;
+  case MIRROR_GROUP_STATE_DISABLED:
+    os << "disabled";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroup& group) {
+  os << "["
+     << "global_group_id=" << group.global_group_id << ", "
+     << "mirror_image_mode=" << group.mirror_image_mode << ", "
+     << "state=" << group.state << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupStatusState& state) {
+  switch (state) {
+  case MIRROR_GROUP_STATUS_STATE_UNKNOWN:
+    os << "unknown";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_ERROR:
+    os << "error";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_STARTING_REPLAY:
+    os << "starting_replay";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_REPLAYING:
+    os << "replaying";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_STOPPING_REPLAY:
+    os << "stopping_replay";
+    break;
+  case MIRROR_GROUP_STATUS_STATE_STOPPED:
+    os << "stopped";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
+void MirrorGroupImageSpec::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(pool_id, bl);
+  encode(global_image_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupImageSpec::decode(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  decode(pool_id, it);
+  decode(global_image_id, it);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupImageSpec::dump(Formatter *f) const {
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("global_image_id", global_image_id);
+}
+
+void MirrorGroupImageSpec::generate_test_instances(
+    std::list<MirrorGroupImageSpec*> &o) {
+  o.push_back(new MirrorGroupImageSpec());
+  o.push_back(new MirrorGroupImageSpec(1, "global_id"));
+}
+
+std::ostream& operator<<(std::ostream& os, const MirrorGroupImageSpec& spec) {
+  os << "{"
+     << "pool_id=" << spec.pool_id << ", "
+     << "global_image_id=" << spec.global_image_id
+     << "}";
+  return os;
+}
+
+const std::string MirrorGroupSiteStatus::LOCAL_MIRROR_UUID(""); // empty mirror uuid
+
+void MirrorGroupSiteStatus::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ceph::encode(mirror_uuid, bl);
+  cls::rbd::encode(state, bl);
+  ceph::encode(description, bl);
+  ceph::encode(mirror_images, bl);
+  ceph::encode(last_update, bl);
+  ceph::encode(up, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupSiteStatus::decode(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  ceph::decode(mirror_uuid, it);
+  cls::rbd::decode(state, it);
+  ceph::decode(description, it);
+  ceph::decode(mirror_images, it);
+  ::decode(last_update, it);
+  ceph::decode(up, it);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupSiteStatus::dump(Formatter *f) const {
+  f->dump_string("mirror_uuid", mirror_uuid);
+  f->dump_string("state", state_to_string());
+  f->dump_string("description", description);
+  f->open_array_section("images");
+  for (auto &[spec, image] : mirror_images) {
+    f->open_object_section("image");
+    spec.dump(f);
+    image.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+ f->dump_stream("last_update") << last_update;
+}
+
+std::string MirrorGroupSiteStatus::state_to_string() const {
+  std::stringstream ss;
+  ss << (up ? "up+" : "down+") << state;
+  return ss.str();
+}
+
+void MirrorGroupSiteStatus::generate_test_instances(
+  std::list<MirrorGroupSiteStatus*> &o) {
+  o.push_back(new MirrorGroupSiteStatus());
+  o.push_back(new MirrorGroupSiteStatus("", MIRROR_GROUP_STATUS_STATE_REPLAYING,
+                                        "", {}));
+  o.push_back(new MirrorGroupSiteStatus("", MIRROR_GROUP_STATUS_STATE_ERROR,
+                                        "error", {{{}, {}}}));
+  o.push_back(new MirrorGroupSiteStatus("2fb68ca9-1ba0-43b3-8cdf-8c5a9db71e65",
+                                        MIRROR_GROUP_STATUS_STATE_STOPPED, "", {{{}, {}}}));
+}
+
+bool MirrorGroupSiteStatus::operator==(const MirrorGroupSiteStatus &rhs) const {
+  return mirror_uuid == rhs.mirror_uuid &&
+         state == rhs.state && up == rhs.up &&
+         description == rhs.description &&
+         mirror_images == rhs.mirror_images;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupSiteStatus& status) {
+  os << "{"
+     << "mirror_uuid=" << status.mirror_uuid << ", "
+     << "state=" << status.state_to_string() << ", "
+     << "description=" << status.description << ", "
+     << "images=[";
+  std::string delimiter;
+  for (auto &[spec, image] : status.mirror_images) {
+    os << delimiter << "{" << spec << ": " << image << "}";
+    delimiter = ", ";
+  }
+  os << "], "
+     << "last_update=" << status.last_update << "}";
+  return os;
+}
+
+void MirrorGroupSiteStatusOnDisk::encode_meta(bufferlist &bl,
+                                              uint64_t features) const {
+  ENCODE_START(1, 1, bl);
+  auto sanitized_origin = origin;
+  sanitize_entity_inst(&sanitized_origin);
+  encode(sanitized_origin, bl, features);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupSiteStatusOnDisk::encode(bufferlist &bl,
+                                         uint64_t features) const {
+  encode_meta(bl, features);
+  cls::rbd::MirrorGroupSiteStatus::encode(bl);
+}
+
+void MirrorGroupSiteStatusOnDisk::decode_meta(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  decode(origin, it);
+  sanitize_entity_inst(&origin);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupSiteStatusOnDisk::decode(bufferlist::const_iterator &it) {
+  decode_meta(it);
+  cls::rbd::MirrorGroupSiteStatus::decode(it);
+}
+
+void MirrorGroupSiteStatusOnDisk::generate_test_instances(
+    std::list<MirrorGroupSiteStatusOnDisk*> &o) {
+  o.push_back(new MirrorGroupSiteStatusOnDisk());
+  o.push_back(new MirrorGroupSiteStatusOnDisk(
+    {"", MIRROR_GROUP_STATUS_STATE_ERROR, "error", {{{}, {}}}}));
+  o.push_back(new MirrorGroupSiteStatusOnDisk(
+    {"siteA", MIRROR_GROUP_STATUS_STATE_STOPPED, "", {{{}, {}}}}));
+}
+
+int MirrorGroupStatus::get_local_mirror_group_site_status(
+    MirrorGroupSiteStatus* status) const {
+  auto it = std::find_if(
+    mirror_group_site_statuses.begin(),
+    mirror_group_site_statuses.end(),
+    [](const MirrorGroupSiteStatus& status) {
+      return status.mirror_uuid == MirrorGroupSiteStatus::LOCAL_MIRROR_UUID;
+    });
+  if (it == mirror_group_site_statuses.end()) {
+    return -ENOENT;
+  }
+
+  *status = *it;
+  return 0;
+}
+
+void MirrorGroupStatus::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ceph::encode(mirror_group_site_statuses, bl);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorGroupStatus::decode(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  decode(mirror_group_site_statuses, it);
+  DECODE_FINISH(it);
+}
+
+void MirrorGroupStatus::dump(Formatter *f) const {
+  MirrorGroupSiteStatus local_status;
+  int r = get_local_mirror_group_site_status(&local_status);
+  if (r >= 0) {
+    local_status.dump(f);
+  }
+
+  f->open_array_section("remotes");
+  for (auto& status : mirror_group_site_statuses) {
+    if (status.mirror_uuid == MirrorGroupSiteStatus::LOCAL_MIRROR_UUID) {
+      continue;
+    }
+
+    f->open_object_section("remote");
+    status.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool MirrorGroupStatus::operator==(const MirrorGroupStatus &rhs) const {
+  return (mirror_group_site_statuses == rhs.mirror_group_site_statuses);
+}
+
+void MirrorGroupStatus::generate_test_instances(
+    std::list<MirrorGroupStatus*> &o) {
+  o.push_back(new MirrorGroupStatus());
+  o.push_back(new MirrorGroupStatus({{"", MIRROR_GROUP_STATUS_STATE_ERROR, "", {}}}));
+  o.push_back(new MirrorGroupStatus({{"", MIRROR_GROUP_STATUS_STATE_STOPPED, "", {}},
+                                     {"siteA", MIRROR_GROUP_STATUS_STATE_REPLAYING, "",
+                                      {{{}, {}}}}}));
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupStatus& status) {
+  os << "{";
+  MirrorGroupSiteStatus local_status;
+  int r = status.get_local_mirror_group_site_status(&local_status);
+  if (r >= 0) {
+    os << "state=" << local_status.state_to_string() << ", "
+       << "description=" << local_status.description << ", "
+       << "images=[";
+    std::string delimiter;
+    for (auto &[spec, image] : local_status.mirror_images) {
+      os << delimiter << "{" << spec << ": " << image << "}";
+      delimiter = ", ";
+    }
+    os << "], "
+       << "last_update=" << local_status.last_update << ", ";
+  }
+
+  os << "remotes=[";
+  for (auto& remote_status : status.mirror_group_site_statuses) {
+    if (remote_status.mirror_uuid == MirrorGroupSiteStatus::LOCAL_MIRROR_UUID) {
+      continue;
+    }
+
+    os << "{"
+       << "mirror_uuid=" << remote_status.mirror_uuid<< ", "
+       << "state=" << remote_status.state_to_string() << ", "
+       << "description=" << remote_status.description << ", "
+       << "images=[";
+    std::string delimiter;
+    for (auto &[spec, image] : remote_status.mirror_images) {
+      os << delimiter << "{" << spec << ": " << image << "}";
+      delimiter = ", ";
+    }
+    os << "], "
+       << "last_update=" << remote_status.last_update
+       << "}";
+  }
+  os << "]}";
+  return os;
+}
+
 void ParentImageSpec::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   encode(pool_id, bl);
@@ -690,8 +1063,8 @@ void GroupSpec::decode(bufferlist::const_iterator &it) {
 }
 
 void GroupSpec::dump(Formatter *f) const {
-  f->dump_string("group_id", group_id);
   f->dump_int("pool_id", pool_id);
+  f->dump_string("group_id", group_id);
 }
 
 bool GroupSpec::is_valid() const {
@@ -703,21 +1076,27 @@ void GroupSpec::generate_test_instances(std::list<GroupSpec *> &o) {
   o.push_back(new GroupSpec("1018643c9869", 3));
 }
 
-void GroupSnapshotNamespace::encode(bufferlist& bl) const {
+std::ostream& operator<<(std::ostream& os, const GroupSpec& gs) {
+  os << "{pool_id=" << gs.pool_id << ", group_id=" << gs.group_id << "}";
+  return os;
+}
+
+void GroupImageSnapshotNamespace::encode(bufferlist& bl) const {
   using ceph::encode;
   encode(group_pool, bl);
   encode(group_id, bl);
   encode(group_snapshot_id, bl);
 }
 
-void GroupSnapshotNamespace::decode(bufferlist::const_iterator& it) {
+void GroupImageSnapshotNamespace::decode(uint8_t version,
+                                         bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(group_pool, it);
   decode(group_id, it);
   decode(group_snapshot_id, it);
 }
 
-void GroupSnapshotNamespace::dump(Formatter *f) const {
+void GroupImageSnapshotNamespace::dump(Formatter *f) const {
   f->dump_int("group_pool", group_pool);
   f->dump_string("group_id", group_id);
   f->dump_string("group_snapshot_id", group_snapshot_id);
@@ -729,7 +1108,8 @@ void TrashSnapshotNamespace::encode(bufferlist& bl) const {
   encode(static_cast<uint32_t>(original_snapshot_namespace_type), bl);
 }
 
-void TrashSnapshotNamespace::decode(bufferlist::const_iterator& it) {
+void TrashSnapshotNamespace::decode(uint8_t version,
+                                    bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(original_name, it);
   uint32_t snap_type;
@@ -753,9 +1133,12 @@ void MirrorSnapshotNamespace::encode(bufferlist& bl) const {
   encode(primary_snap_id, bl);
   encode(last_copied_object_number, bl);
   encode(snap_seqs, bl);
+  encode(group_spec, bl);
+  encode(group_snap_id, bl);
 }
 
-void MirrorSnapshotNamespace::decode(bufferlist::const_iterator& it) {
+void MirrorSnapshotNamespace::decode(uint8_t version,
+                                     bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(state, it);
   decode(complete, it);
@@ -764,6 +1147,10 @@ void MirrorSnapshotNamespace::decode(bufferlist::const_iterator& it) {
   decode(primary_snap_id, it);
   decode(last_copied_object_number, it);
   decode(snap_seqs, it);
+  if (version >= 2) {
+    decode(group_spec, it);
+    decode(group_snap_id, it);
+  }
 }
 
 void MirrorSnapshotNamespace::dump(Formatter *f) const {
@@ -781,6 +1168,12 @@ void MirrorSnapshotNamespace::dump(Formatter *f) const {
     f->dump_unsigned("primary_snap_id", primary_snap_id);
     f->dump_unsigned("last_copied_object_number", last_copied_object_number);
     f->dump_stream("snap_seqs") << snap_seqs;
+  }
+  if (group_spec.is_valid()) {
+    f->open_object_section("group_spec");
+    group_spec.dump(f);
+    f->close_section();
+    f->dump_string("group_snap_id", group_snap_id);
   }
 }
 
@@ -802,15 +1195,17 @@ private:
 
 class DecodeSnapshotNamespaceVisitor {
 public:
-  DecodeSnapshotNamespaceVisitor(bufferlist::const_iterator &iter)
-    : m_iter(iter) {
+  DecodeSnapshotNamespaceVisitor(uint8_t version,
+                                 bufferlist::const_iterator &iter)
+    : m_version(version), m_iter(iter) {
   }
 
   template <typename T>
   inline void operator()(T& t) const {
-    t.decode(m_iter);
+    t.decode(m_version, m_iter);
   }
 private:
+  uint8_t m_version;
   bufferlist::const_iterator &m_iter;
 };
 
@@ -880,7 +1275,7 @@ void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
   o.push_back(new SnapshotInfo(1ULL, UserSnapshotNamespace{}, "snap1", 123,
                                {123456, 0}, 12));
   o.push_back(new SnapshotInfo(2ULL,
-                               GroupSnapshotNamespace{567, "group1", "snap1"},
+                               GroupImageSnapshotNamespace{567, "group1", "snap1"},
                                "snap1", 123, {123456, 0}, 987));
   o.push_back(new SnapshotInfo(3ULL,
                                TrashSnapshotNamespace{
@@ -897,14 +1292,14 @@ void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
 }
 
 void SnapshotNamespace::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   visit(EncodeSnapshotNamespaceVisitor(bl));
   ENCODE_FINISH(bl);
 }
 
 void SnapshotNamespace::decode(bufferlist::const_iterator &p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   uint32_t snap_type;
   decode(snap_type, p);
   switch (snap_type) {
@@ -912,7 +1307,7 @@ void SnapshotNamespace::decode(bufferlist::const_iterator &p)
       *this = UserSnapshotNamespace();
       break;
     case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_GROUP:
-      *this = GroupSnapshotNamespace();
+      *this = GroupImageSnapshotNamespace();
       break;
     case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
       *this = TrashSnapshotNamespace();
@@ -924,7 +1319,7 @@ void SnapshotNamespace::decode(bufferlist::const_iterator &p)
       *this = UnknownSnapshotNamespace();
       break;
   }
-  visit(DecodeSnapshotNamespaceVisitor(p));
+  visit(DecodeSnapshotNamespaceVisitor(struct_v, p));
   DECODE_FINISH(p);
 }
 
@@ -934,10 +1329,10 @@ void SnapshotNamespace::dump(Formatter *f) const {
 
 void SnapshotNamespace::generate_test_instances(std::list<SnapshotNamespace*> &o) {
   o.push_back(new SnapshotNamespace(UserSnapshotNamespace()));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a",
-                                                           "2118643c9732")));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869",
-                                                           "33352be8933c")));
+  o.push_back(new SnapshotNamespace(GroupImageSnapshotNamespace(0, "10152ae8944a",
+                                                                "2118643c9732")));
+  o.push_back(new SnapshotNamespace(GroupImageSnapshotNamespace(5, "1018643c9869",
+                                                                "33352be8933c")));
   o.push_back(new SnapshotNamespace(TrashSnapshotNamespace()));
   o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_PRIMARY,
                                                             {"peer uuid"},
@@ -985,7 +1380,8 @@ std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns) {
+std::ostream& operator<<(std::ostream& os,
+                         const GroupImageSnapshotNamespace& ns) {
   os << "[" << SNAPSHOT_NAMESPACE_TYPE_GROUP << " "
      << "group_pool=" << ns.group_pool << ", "
      << "group_id=" << ns.group_id << ", "
@@ -1014,6 +1410,11 @@ std::ostream& operator<<(std::ostream& os, const MirrorSnapshotNamespace& ns) {
         << "last_copied_object_number=" << ns.last_copied_object_number << ", "
         << "snap_seqs=" << ns.snap_seqs;
   }
+  if (ns.group_spec.is_valid()) {
+    os << ", "
+       << "group_spec=" << ns.group_spec << ", "
+       << "group_snap_id=" << ns.group_snap_id;
+  }
   os << "]";
   return os;
 }
@@ -1023,8 +1424,8 @@ std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns) {
   return os;
 }
 
-std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type) {
-  switch (type) {
+std::ostream& operator<<(std::ostream& os, MirrorSnapshotState state) {
+  switch (state) {
   case MIRROR_SNAPSHOT_STATE_PRIMARY:
     os << "primary";
     break;
@@ -1039,6 +1440,194 @@ std::ostream& operator<<(std::ostream& os, MirrorSnapshotState type) {
     break;
   default:
     os << "unknown";
+    break;
+  }
+  return os;
+}
+
+void MirrorGroupSnapshotNamespace::encode(bufferlist& bl) const {
+  using ceph::encode;
+  encode(state, bl);
+  encode(mirror_peer_uuids, bl);
+  encode(primary_mirror_uuid, bl);
+  encode(primary_snap_id, bl);
+}
+
+void MirrorGroupSnapshotNamespace::decode(uint8_t version,
+                                          bufferlist::const_iterator& it) {
+  using ceph::decode;
+  decode(state, it);
+  decode(mirror_peer_uuids, it);
+  decode(primary_mirror_uuid, it);
+  decode(primary_snap_id, it);
+}
+
+void MirrorGroupSnapshotNamespace::dump(Formatter *f) const {
+  f->dump_stream("state") << state;
+  f->open_array_section("mirror_peer_uuids");
+  for (auto &peer : mirror_peer_uuids) {
+    f->dump_string("mirror_peer_uuid", peer);
+  }
+  f->close_section();
+  if (is_non_primary()) {
+    f->dump_string("primary_mirror_uuid", primary_mirror_uuid);
+    f->dump_string("primary_snap_id", primary_snap_id);
+  }
+}
+
+class EncodeGroupSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+public:
+  explicit EncodeGroupSnapshotNamespaceVisitor(bufferlist &bl) : m_bl(bl) {
+  }
+
+  template <typename T>
+  inline void operator()(const T& t) const {
+    using ceph::encode;
+    encode(static_cast<uint32_t>(T::GROUP_SNAPSHOT_NAMESPACE_TYPE), m_bl);
+    t.encode(m_bl);
+  }
+
+private:
+  bufferlist &m_bl;
+};
+
+class DecodeGroupSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+public:
+  DecodeGroupSnapshotNamespaceVisitor(uint8_t version,
+                                      bufferlist::const_iterator &iter)
+    : m_version(version), m_iter(iter) {
+  }
+
+  template <typename T>
+  inline void operator()(T& t) const {
+    t.decode(m_version, m_iter);
+  }
+private:
+  uint8_t m_version;
+  bufferlist::const_iterator &m_iter;
+};
+
+class DumpGroupSnapshotNamespaceVisitor : public boost::static_visitor<void> {
+public:
+  explicit DumpGroupSnapshotNamespaceVisitor(Formatter *formatter,
+                                             const std::string &key)
+    : m_formatter(formatter), m_key(key) {
+  }
+
+  template <typename T>
+  inline void operator()(const T& t) const {
+    auto type = T::GROUP_SNAPSHOT_NAMESPACE_TYPE;
+    m_formatter->dump_stream(m_key.c_str()) << type;
+    t.dump(m_formatter);
+  }
+private:
+  ceph::Formatter *m_formatter;
+  std::string m_key;
+};
+
+class GetGroupSnapshotNamespaceTypeVisitor
+  : public boost::static_visitor<GroupSnapshotNamespaceType> {
+public:
+  template <typename T>
+  inline GroupSnapshotNamespaceType operator()(const T&) const {
+    return static_cast<GroupSnapshotNamespaceType>(
+        T::GROUP_SNAPSHOT_NAMESPACE_TYPE);
+  }
+};
+
+GroupSnapshotNamespaceType get_group_snap_namespace_type(
+    const GroupSnapshotNamespace& snapshot_namespace) {
+  return static_cast<GroupSnapshotNamespaceType>(snapshot_namespace.visit(
+    GetGroupSnapshotNamespaceTypeVisitor()));
+}
+
+void GroupSnapshotNamespace::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  visit(EncodeGroupSnapshotNamespaceVisitor(bl));
+  ENCODE_FINISH(bl);
+}
+
+void GroupSnapshotNamespace::decode(bufferlist::const_iterator &p)
+{
+  DECODE_START(1, p);
+  uint32_t snap_type;
+  decode(snap_type, p);
+  switch (snap_type) {
+    case cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER:
+      *this = UserGroupSnapshotNamespace();
+      break;
+    case cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR:
+      *this = MirrorGroupSnapshotNamespace();
+      break;
+    default:
+      *this = UnknownGroupSnapshotNamespace();
+      break;
+  }
+  visit(DecodeGroupSnapshotNamespaceVisitor(struct_v, p));
+  DECODE_FINISH(p);
+}
+
+void GroupSnapshotNamespace::dump(Formatter *f) const {
+  visit(DumpGroupSnapshotNamespaceVisitor(f, "snapshot_namespace_type"));
+}
+
+void GroupSnapshotNamespace::generate_test_instances(
+    std::list<GroupSnapshotNamespace*> &o) {
+  o.push_back(new GroupSnapshotNamespace(UserGroupSnapshotNamespace()));
+  o.push_back(new GroupSnapshotNamespace(MirrorGroupSnapshotNamespace(
+                                             MIRROR_SNAPSHOT_STATE_PRIMARY,
+                                             {"peer uuid"}, "", "")));
+}
+
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceType& type) {
+  switch (type) {
+  case GROUP_SNAPSHOT_NAMESPACE_TYPE_USER:
+    os << "user";
+    break;
+  case GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR:
+    os << "mirror";
+    break;
+  default:
+    os << "unknown";
+    break;
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const UserGroupSnapshotNamespace& ns) {
+  os << "[" << GROUP_SNAPSHOT_NAMESPACE_TYPE_USER << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorGroupSnapshotNamespace& ns) {
+  os << "[" << GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR << " "
+     << "state=" << ns.state << ", "
+     << "mirror_peer_uuids=" << ns.mirror_peer_uuids;
+  if (ns.is_non_primary()) {
+    os << ", "
+       << "primary_mirror_uuid=" << ns.primary_mirror_uuid << ", "
+       << "primary_snap_id=" << ns.primary_snap_id;
+  }
+  os << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const UnknownGroupSnapshotNamespace& ns) {
+  os << "[unknown]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, GroupSnapshotState state) {
+  switch (state) {
+  case GROUP_SNAPSHOT_STATE_INCOMPLETE:
+    os << "incomplete";
+    break;
+  case GROUP_SNAPSHOT_STATE_COMPLETE:
+    os << "complete";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
     break;
   }
   return os;
@@ -1075,34 +1664,54 @@ void ImageSnapshotSpec::generate_test_instances(std::list<ImageSnapshotSpec *> &
 
 void GroupSnapshot::encode(bufferlist& bl) const {
   using ceph::encode;
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(id, bl);
   encode(name, bl);
   encode(state, bl);
   encode(snaps, bl);
+  encode(snapshot_namespace, bl);
   ENCODE_FINISH(bl);
 }
 
 void GroupSnapshot::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
-  DECODE_START(1, it);
+  DECODE_START(2, it);
   decode(id, it);
   decode(name, it);
   decode(state, it);
   decode(snaps, it);
+  if (struct_v >= 2) {
+    decode(snapshot_namespace, it);
+  }
   DECODE_FINISH(it);
 }
 
 void GroupSnapshot::dump(Formatter *f) const {
   f->dump_string("id", id);
+  f->open_object_section("namespace");
+  snapshot_namespace.visit(DumpGroupSnapshotNamespaceVisitor(f, "type"));
+  f->close_section();
   f->dump_string("name", name);
-  f->dump_int("state", state);
+  f->dump_stream("state") << state;
+  f->open_array_section("image_snapshots");
+  for (auto &snap : snaps) {
+    snap.dump(f);
+  }
+  f->close_section();
 }
 
 void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
-  o.push_back(new GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_INCOMPLETE));
-  o.push_back(new GroupSnapshot("1018643c9869", "groupsnapshot2", GROUP_SNAPSHOT_STATE_COMPLETE));
+  o.push_back(new GroupSnapshot("10152ae8944a", UserGroupSnapshotNamespace{},
+                                "groupsnapshot1",
+                                GROUP_SNAPSHOT_STATE_INCOMPLETE));
+  o.push_back(new GroupSnapshot("1018643c9869",
+                                MirrorGroupSnapshotNamespace{
+                                    MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
+                                    "uuid", "id"},
+                                "groupsnapshot2",
+                                GROUP_SNAPSHOT_STATE_COMPLETE));
 }
+
 void TrashImageSpec::encode(bufferlist& bl) const {
   ENCODE_START(2, 1, bl);
   encode(source, bl);

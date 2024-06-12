@@ -95,6 +95,9 @@ struct CreateNonPrimaryRequest<MockTestImageCtx> {
                                          const std::string &primary_mirror_uuid,
                                          uint64_t primary_snap_id,
                                          SnapSeqs snap_seqs,
+                                         int64_t group_pool_id,
+                                         const std::string &group_id,
+                                         const std::string &group_snap_id,
                                          const ImageState &image_state,
                                          uint64_t *snap_id,
                                          Context *on_finish) {
@@ -124,7 +127,11 @@ struct CreatePrimaryRequest<MockTestImageCtx> {
                                       const std::string& global_image_id,
                                       uint64_t clean_since_snap_id,
                                       uint64_t snap_create_flags,
-                                      uint32_t flags, uint64_t *snap_id,
+                                      uint32_t flags,
+                                      int64_t group_pool_id,
+                                      const std::string &group_id,
+                                      const std::string &group_snap_id,
+                                      uint64_t *snap_id,
                                       Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->demoted = ((flags & CREATE_PRIMARY_FLAG_DEMOTED) != 0);
@@ -280,7 +287,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, Success) {
   expect_create_promote_snapshot(mock_image_ctx, mock_create_primary_request,
                                  0);
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
+  auto req = MockPromoteRequest::create(&mock_image_ctx, "gid", &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -318,7 +325,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessForce) {
   expect_release_lock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
+  auto req = MockPromoteRequest::create(&mock_image_ctx, "gid", &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -357,7 +364,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, SuccessRollback) {
   expect_release_lock(mock_image_ctx, 0);
 
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
+  auto req = MockPromoteRequest::create(&mock_image_ctx, "gid", &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -378,7 +385,7 @@ TEST_F(TestMockMirrorSnapshotPromoteRequest, ErrorCannotRollback) {
                                      false);
 
   C_SaferCond ctx;
-  auto req = new MockPromoteRequest(&mock_image_ctx, "gid", &ctx);
+  auto req = MockPromoteRequest::create(&mock_image_ctx, "gid", &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
