@@ -5039,7 +5039,6 @@ BlueStore::Collection::Collection(BlueStore *store_, OnodeCacheShard *oc, Buffer
     segment_size(0),
     commit_queue(nullptr)
 {
-  estimator.reset(store->create_estimator());
 }
 
 bool BlueStore::Collection::flush_commit(Context *c)
@@ -17083,6 +17082,9 @@ int BlueStore::_do_write_v2_compressed(
   dout(20) << __func__ << " on: " << o->print(P::NICK + P::SDISK + P::SUSE) << dendl;
   uint32_t max_blob_size = c->pool_opts.value_or(
     pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, (int64_t)comp_max_blob_size.load());
+  if (!c->estimator) {
+    c->estimator.reset(create_estimator());
+  }
   Estimator* estimator = c->estimator.get();
   estimator->reset();
   scanner.write_lookaround(&o->extent_map, offset, length, scan_left,
