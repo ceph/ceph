@@ -619,11 +619,8 @@ def test_cmd_show_resource_json(tmodule):
     "realm": "dom1.example.com",
     "join_sources": [
       {
-        "source_type": "password",
-        "auth": {
-          "username": "testadmin",
-          "password": "Passw0rd"
-        }
+        "source_type": "resource",
+        "ref": "foo"
       }
     ]
   }
@@ -649,9 +646,7 @@ intent: present
 domain_settings:
   realm: dom1.example.com
   join_sources:
-  - source_type: password
-    auth:
-      username: testadmin
-      password: Passw0rd
+  - source_type: resource
+    ref: foo
 """.strip()
     )
