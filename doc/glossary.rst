@@ -460,6 +460,14 @@
                 provides a gateway to both the Amazon S3 RESTful API and the
                 OpenStack Swift API. 
 
+        S3
+                In the context of Ceph, S3 is one of the two APIs supported by
+                the Ceph Object Store. The other API supported by the Ceph
+                Object Store is OpenStack Swift.
+
+                See `the Amazon S3 overview page
+                <https://aws.amazon.com/s3/>`_.
+
         scrubs
 
                 The processes by which Ceph ensures data integrity. During the
