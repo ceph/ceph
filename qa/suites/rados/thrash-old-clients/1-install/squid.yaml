@@ -4,7 +4,7 @@ overrides:
       - \(MON_DOWN\)
 tasks:
 - install:
-    branch: octopus
+    branch: squid
     exclude_packages:
       - ceph-mgr-dashboard
       - ceph-mgr-diskprediction-local
