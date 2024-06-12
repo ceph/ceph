@@ -42,7 +42,7 @@ from ceph.deployment.service_spec import (
     RGWSpec,
     SMBSpec,
     SNMPGatewaySpec,
-    AdminGatewaySpec,
+    MgmtGatewaySpec,
     ServiceSpec,
     TunedProfileSpec,
 )
@@ -585,7 +585,7 @@ class Orchestrator(object):
             'snmp-gateway': self.apply_snmp_gateway,
             'host': self.add_host,
             'smb': self.apply_smb,
-            'admin-gateway': self.apply_admin_gateway,
+            'mgmt-gateway': self.apply_mgmt_gateway,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -827,7 +827,7 @@ class Orchestrator(object):
         """Update an existing snmp gateway service"""
         raise NotImplementedError()
 
-    def apply_admin_gateway(self, spec: AdminGatewaySpec) -> OrchResult[str]:
+    def apply_mgmt_gateway(self, spec: MgmtGatewaySpec) -> OrchResult[str]:
         """Update an existing cluster gateway service"""
         raise NotImplementedError()
 
@@ -914,7 +914,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'keepalived': 'ingress',
         'iscsi': 'iscsi',
         'nvmeof': 'nvmeof',
-        'admin-gateway': 'admin-gateway',
+        'mgmt-gateway': 'mgmt-gateway',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
         'nfs': 'nfs',
@@ -950,7 +950,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'ingress': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
         'nvmeof': ['nvmeof'],
-        'admin-gateway': ['admin-gateway'],
+        'mgmt-gateway': ['mgmt-gateway'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
         'nfs': ['nfs'],

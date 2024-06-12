@@ -18,10 +18,10 @@ logger = logging.getLogger()
 
 
 @register_daemon_form
-class AdminGateway(ContainerDaemonForm):
+class MgmtGateway(ContainerDaemonForm):
     """Define the configs for the jaeger tracing containers"""
 
-    daemon_type = 'admin-gateway'
+    daemon_type = 'mgmt-gateway'
     required_files = ['nginx.conf']
     default_image = DEFAULT_NGINX_IMAGE
 
@@ -45,13 +45,13 @@ class AdminGateway(ContainerDaemonForm):
     @classmethod
     def init(
         cls, ctx: CephadmContext, fsid: str, daemon_id: str
-    ) -> 'AdminGateway':
+    ) -> 'MgmtGateway':
         return cls(ctx, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod
     def create(
         cls, ctx: CephadmContext, ident: DaemonIdentity
-    ) -> 'AdminGateway':
+    ) -> 'MgmtGateway':
         return cls.init(ctx, ctx.fsid, ident.daemon_id)
 
     @property
@@ -75,7 +75,7 @@ class AdminGateway(ContainerDaemonForm):
         """Create files under the container data dir"""
         if not os.path.isdir(data_dir):
             raise OSError('data_dir is not a directory: %s' % (data_dir))
-        logger.info('Writing admin-gateway config...')
+        logger.info('Writing mgmt-gateway config...')
         config_dir = os.path.join(data_dir, 'etc/')
         makedirs(config_dir, uid, gid, 0o755)
         recursive_chown(config_dir, uid, gid)

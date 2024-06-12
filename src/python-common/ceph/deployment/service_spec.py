@@ -765,7 +765,7 @@ class ServiceSpec(object):
         'elasticsearch',
         'grafana',
         'ingress',
-        'admin-gateway',
+        'mgmt-gateway',
         'iscsi',
         'jaeger-agent',
         'jaeger-collector',
@@ -820,7 +820,7 @@ class ServiceSpec(object):
             'nvmeof': NvmeofServiceSpec,
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
-            'admin-gateway': AdminGatewaySpec,
+            'mgmt-gateway': MgmtGatewaySpec,
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
@@ -1757,9 +1757,9 @@ class IngressSpec(ServiceSpec):
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
-class AdminGatewaySpec(ServiceSpec):
+class MgmtGatewaySpec(ServiceSpec):
     def __init__(self,
-                 service_type: str = 'admin-gateway',
+                 service_type: str = 'mgmt-gateway',
                  service_id: Optional[str] = None,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
@@ -1776,10 +1776,10 @@ class AdminGatewaySpec(ServiceSpec):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
-        assert service_type == 'admin-gateway'
+        assert service_type == 'mgmt-gateway'
 
-        super(AdminGatewaySpec, self).__init__(
-            'admin-gateway', service_id=service_id,
+        super(MgmtGatewaySpec, self).__init__(
+            'mgmt-gateway', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
             extra_container_args=extra_container_args,
@@ -1802,11 +1802,11 @@ class AdminGatewaySpec(ServiceSpec):
         return ports
 
     def validate(self) -> None:
-        super(AdminGatewaySpec, self).validate()
+        super(MgmtGatewaySpec, self).validate()
         # TODO(redo)
 
 
-yaml.add_representer(AdminGatewaySpec, ServiceSpec.yaml_representer)
+yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
 
 
 class InitContainerSpec(object):

@@ -3,18 +3,18 @@ from typing import List, Any, Tuple, Dict, Optional, cast
 
 from mgr_util import build_url
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import AdminGatewaySpec
+from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_eps
 from cephadm.ssl_cert_utils import SSLCerts
 
 logger = logging.getLogger(__name__)
 
 
-class AdminGatewayService(CephadmService):
-    TYPE = 'admin-gateway'
-    SVC_TEMPLATE_PATH = 'services/admin-gateway/nginx.conf.j2'
-    EXTERNAL_SVC_TEMPLATE_PATH = 'services/admin-gateway/external_server.conf.j2'
-    INTERNAL_SVC_TEMPLATE_PATH = 'services/admin-gateway/internal_server.conf.j2'
+class MgmtGatewayService(CephadmService):
+    TYPE = 'mgmt-gateway'
+    SVC_TEMPLATE_PATH = 'services/mgmt-gateway/nginx.conf.j2'
+    EXTERNAL_SVC_TEMPLATE_PATH = 'services/mgmt-gateway/external_server.conf.j2'
+    INTERNAL_SVC_TEMPLATE_PATH = 'services/mgmt-gateway/internal_server.conf.j2'
     INTERNAL_SERVICE_PORT = 29443
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -41,26 +41,26 @@ class AdminGatewayService(CephadmService):
         dd = self.get_active_daemon(daemon_descrs)
         assert dd.hostname is not None
         addr = self._inventory_get_fqdn(dd.hostname)
-        spec = cast(AdminGatewaySpec, self.mgr.spec_store[dd.service_name()].spec)
+        spec = cast(MgmtGatewaySpec, self.mgr.spec_store[dd.service_name()].spec)
 
         # Grafana has to be configured by using the 'external' URL
         protocol = 'http' if spec.disable_https else 'https'
         port = dd.ports[0] if dd.ports else None
-        admin_gw_external_ep = build_url(scheme=protocol, host=addr, port=port)
+        mgmt_gw_external_ep = build_url(scheme=protocol, host=addr, port=port)
         self._set_value_on_dashboard(
             'Grafana',
             'dashboard get-grafana-api-url',
             'dashboard set-grafana-api-url',
-            f'{admin_gw_external_ep}/grafana'
+            f'{mgmt_gw_external_ep}/grafana'
         )
 
         # configure prometheus
-        admin_gw_internal_ep = build_url(scheme='https', host=addr, port=self.INTERNAL_SERVICE_PORT)
+        mgmt_gw_internal_ep = build_url(scheme='https', host=addr, port=self.INTERNAL_SERVICE_PORT)
         self._set_value_on_dashboard(
             'Prometheus',
             'dashboard get-prometheus-api-host',
             'dashboard set-prometheus-api-host',
-            f'{admin_gw_internal_ep}/internal/prometheus'
+            f'{mgmt_gw_internal_ep}/internal/prometheus'
         )
 
         # configure alertmanager
@@ -68,7 +68,7 @@ class AdminGatewayService(CephadmService):
             'AlertManager',
             'dashboard get-alertmanager-api-host',
             'dashboard set-alertmanager-api-host',
-            f'{admin_gw_internal_ep}/internal/alertmanager'
+            f'{mgmt_gw_internal_ep}/internal/alertmanager'
         )
 
         # Disable SSL verification on all the monitoring services
@@ -96,7 +96,7 @@ class AdminGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
-    def get_certificates(self, svc_spec: AdminGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str]:
+    def get_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str]:
 
         def read_certificate(spec_field: Optional[List[str]]) -> str:
             cert = ''
@@ -124,8 +124,8 @@ class AdminGatewayService(CephadmService):
 
         return internal_cert, internal_pkey, cert, pkey
 
-    def get_admin_gatway_deps(self) -> List[str]:
-        # url_prefix for the following services depends on the presence of admin-gateway
+    def get_mgmt_gateway_deps(self) -> List[str]:
+        # url_prefix for the following services depends on the presence of mgmt-gateway
         deps: List[str] = []
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('prometheus')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
@@ -141,13 +141,18 @@ class AdminGatewayService(CephadmService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        svc_spec = cast(AdminGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        svc_spec = cast(MgmtGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         dashboard_eps, dashboard_scheme = get_dashboard_eps(self)
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
 
         prometheus_eps = self.get_service_endpoints('prometheus')
         alertmanager_eps = self.get_service_endpoints('alertmanager')
         grafana_eps = self.get_service_endpoints('grafana')
+        grafana_protocol = None
+        if grafana_eps:
+            grafana_spec = cast(GrafanaSpec, self.mgr.spec_store['grafana'].spec)
+            grafana_protocol = grafana_spec.protocol
+
         main_context = {
             'dashboard_eps': dashboard_eps,
             'prometheus_eps': prometheus_eps,
@@ -157,7 +162,7 @@ class AdminGatewayService(CephadmService):
         external_server_context = {
             'spec': svc_spec,
             'dashboard_scheme': dashboard_scheme,
-            'grafana_scheme': 'https',  # TODO(redo): fixme, get current value of grafana scheme
+            'grafana_scheme': grafana_protocol,
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
             'dashboard_eps': dashboard_eps,
@@ -168,7 +173,7 @@ class AdminGatewayService(CephadmService):
         internal_server_context = {
             'spec': svc_spec,
             'internal_port': self.INTERNAL_SERVICE_PORT,
-            'grafana_scheme': 'https',  # TODO(redo): fixme, get current value of grafana scheme
+            'grafana_scheme': grafana_protocol,
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
             'prometheus_eps': prometheus_eps,
@@ -190,11 +195,11 @@ class AdminGatewayService(CephadmService):
             daemon_config["files"]["nginx.crt"] = cert
             daemon_config["files"]["nginx.key"] = pkey
 
-        return daemon_config, sorted(self.get_admin_gatway_deps())
+        return daemon_config, sorted(self.get_mgmt_gateway_deps())
 
     def pre_remove(self, daemon: DaemonDescription) -> None:
         """
-        Called before admin-gateway daemon is removed.
+        Called before mgmt-gateway daemon is removed.
         """
         # reset the standby dashboard redirection behaviour
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')

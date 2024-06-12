@@ -70,7 +70,7 @@ from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nvmeof import NvmeofService
-from .services.admin_gateway import AdminGatewayService
+from .services.mgmt_gateway import MgmtGatewayService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -705,7 +705,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             RgwService,
             SMBService,
             SNMPGatewayService,
-            AdminGatewayService,
+            MgmtGatewayService,
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -916,7 +916,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
-            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'admin-gateway'
+            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1648,7 +1648,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'prometheus': self.container_image_prometheus,
                 'promtail': self.container_image_promtail,
                 'snmp-gateway': self.container_image_snmp_gateway,
-                'admin-gateway': self.container_image_nginx,
+                'mgmt-gateway': self.container_image_nginx,
                 # The image can't be resolved here, the necessary information
                 # is only available when a container is deployed (given
                 # via spec).
@@ -2925,18 +2925,18 @@ Then run the following:
                 deps.append('ingress')
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
-            deps += [d.name() for d in self.cache.get_daemons_by_service('admin-gateway')]
+            deps += [d.name() for d in self.cache.get_daemons_by_service('mgmt-gateway')]
             if self.secure_monitoring_stack:
                 if prometheus_user and prometheus_password:
                     deps.append(f'{hash(prometheus_user + prometheus_password)}')
                 if alertmanager_user and alertmanager_password:
                     deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'grafana':
-            deps += get_daemon_names(['prometheus', 'loki', 'admin-gateway'])
+            deps += get_daemon_names(['prometheus', 'loki', 'mgmt-gateway'])
             if self.secure_monitoring_stack and prometheus_user and prometheus_password:
                 deps.append(f'{hash(prometheus_user + prometheus_password)}')
         elif daemon_type == 'alertmanager':
-            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'admin-gateway'])
+            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'mgmt-gateway'])
             if self.secure_monitoring_stack and alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
@@ -2947,15 +2947,15 @@ Then run the following:
                 port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
                 deps.append(build_url(host=dd.hostname, port=port).lstrip('/'))
             deps = sorted(deps)
-        elif daemon_type == 'admin-gateway':
-            # url_prefix for monitoring daemons depends on the presence of admin-gateway
+        elif daemon_type == 'mgmt-gateway':
+            # url_prefix for monitoring daemons depends on the presence of mgmt-gateway
             # while dashboard urls depend on the mgr daemons
             deps += get_daemon_names(['mgr', 'grafana', 'prometheus', 'alertmanager'])
         else:
             # this daemon type doesn't need deps mgmt
             pass
 
-        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana', 'admin-gateway']:
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana', 'mgmt-gateway']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
 
         return sorted(deps)
@@ -3333,7 +3333,7 @@ Then run the following:
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
-                'admin-gateway': PlacementSpec(count=1),
+                'mgmt-gateway': PlacementSpec(count=1),
                 'elasticsearch': PlacementSpec(count=1),
                 'jaeger-agent': PlacementSpec(host_pattern='*'),
                 'jaeger-collector': PlacementSpec(count=1),
@@ -3473,7 +3473,7 @@ Then run the following:
         return self._apply(spec)
 
     @handle_orch_error
-    def apply_admin_gateway(self, spec: ServiceSpec) -> str:
+    def apply_mgmt_gateway(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

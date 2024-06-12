@@ -46,7 +46,7 @@ from ._interface import (
     RGWSpec,
     SMBSpec,
     SNMPGatewaySpec,
-    AdminGatewaySpec,
+    MgmtGatewaySpec,
     ServiceDescription,
     TunedProfileSpec,
     _cli_read_command,
@@ -1747,8 +1747,8 @@ Usage:
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
-    @_cli_write_command('orch apply admin-gateway')
-    def _apply_admin_gateway(self,
+    @_cli_write_command('orch apply mgmt-gateway')
+    def _apply_mgmt_gateway(self,
                              port: Optional[int] = None,
                              disable_https: Optional[bool] = False,
                              placement: Optional[str] = None,
@@ -1759,7 +1759,7 @@ Usage:
                              inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add a cluster gateway service (cephadm only)"""
 
-        spec = AdminGatewaySpec(
+        spec = MgmtGatewaySpec(
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             port=port,

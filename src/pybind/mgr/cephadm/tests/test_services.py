@@ -35,7 +35,7 @@ from ceph.deployment.service_spec import (
     SNMPGatewaySpec,
     ServiceSpec,
     TracingSpec,
-    AdminGatewaySpec,
+    MgmtGatewaySpec,
 )
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
@@ -3171,13 +3171,13 @@ class TestSMB:
                 )
 
 
-class TestAdminGateway:
+class TestMgmtGateway:
     @patch("cephadm.serve.CephadmServe._run_cephadm")
-    @patch("cephadm.services.admin_gateway.AdminGatewayService.get_service_endpoints")
+    @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.ssl_cert_utils.SSLCerts.generate_cert', lambda instance, fqdn, ip: (ceph_generated_cert, ceph_generated_key))
-    @patch("cephadm.services.admin_gateway.get_dashboard_eps", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
-    def test_admin_gateway_config(self, get_service_eps_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_eps", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    def test_mgmt_gateway_config(self, get_service_eps_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
 
         def get_services_eps(name):
             if name == 'prometheus':
@@ -3192,18 +3192,18 @@ class TestAdminGateway:
         get_service_eps_mock.side_effect = get_services_eps
 
         server_port = 5555
-        spec = AdminGatewaySpec(port=server_port,
+        spec = MgmtGatewaySpec(port=server_port,
                                 ssl_certificate=ceph_generated_cert,
                                 ssl_certificate_key=ceph_generated_key)
 
         expected = {
             "fsid": "fsid",
-            "name": "admin-gateway.ceph-node",
+            "name": "mgmt-gateway.ceph-node",
             "image": "",
             "deploy_arguments": [],
             "params": {"tcp_ports": [server_port]},
             "meta": {
-                "service_name": "admin-gateway",
+                "service_name": "mgmt-gateway",
                 "ports": [server_port],
                 "ip": None,
                 "deployed_by": [],
@@ -3312,7 +3312,7 @@ class TestAdminGateway:
             with with_service(cephadm_module, spec):
                 _run_cephadm.assert_called_with(
                     'ceph-node',
-                    'admin-gateway.ceph-node',
+                    'mgmt-gateway.ceph-node',
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
