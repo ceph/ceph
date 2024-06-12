@@ -1554,7 +1554,7 @@ void PeerReplayer::sync_snaps(const std::string &dir_root,
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {
   dout(10) << ": snapshot replayer=" << replayer << dendl;
 
-  time last_directory_scan = clock::zero();
+  monotime last_directory_scan = clock::zero();
   auto scan_interval = g_ceph_context->_conf.get_val<uint64_t>(
     "cephfs_mirror_directory_scan_interval");
 
