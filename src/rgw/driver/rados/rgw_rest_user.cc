@@ -157,6 +157,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   std::string op_mask_str;
   std::string default_placement_str;
   std::string placement_tags_str;
+  std::string default_storage_class_str;
 
   bool gen_key;
   bool suspended;
@@ -188,6 +189,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
+  RESTArgs::get_string(s, "default-storage-class", default_storage_class_str, &default_storage_class_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
   RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
   RESTArgs::get_string(s, "path", "", &op_state.path);
@@ -251,7 +253,10 @@ void RGWOp_User_Create::execute(optional_yield y)
 
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
-    target_rule.from_str(default_placement_str);
+    target_rule.name = default_placement_str;
+    if (!default_storage_class_str.empty()){
+      target_rule.storage_class = default_storage_class_str;
+    }
     if (!driver->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
@@ -309,6 +314,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   std::string op_mask_str;
   std::string default_placement_str;
   std::string placement_tags_str;
+  std::string default_storage_class_str;
 
   bool gen_key;
   bool suspended;
@@ -336,6 +342,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_bool(s, "account-root", false, &account_root);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
+  RESTArgs::get_string(s, "default-storage-class", default_storage_class_str, &default_storage_class_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
   RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
   RESTArgs::get_string(s, "path", "", &op_state.path);
@@ -404,7 +411,10 @@ void RGWOp_User_Modify::execute(optional_yield y)
 
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
-    target_rule.from_str(default_placement_str);
+    target_rule.name = default_placement_str;
+    if (!default_storage_class_str.empty()){
+      target_rule.storage_class = default_storage_class_str;
+    }
     if (!driver->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
