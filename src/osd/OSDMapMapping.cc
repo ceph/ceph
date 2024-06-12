@@ -158,7 +158,6 @@ void ParallelPGMapper::WQ::_process(Item *i, ThreadPool::TPHandle &h)
   else
     i->job->process(i->pool, i->begin, i->end);
   i->job->finish_one();
-  delete i;
 }
 
 void ParallelPGMapper::queue(
