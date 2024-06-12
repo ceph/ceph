@@ -2642,6 +2642,29 @@ cdef class Group(object):
 
     def __exit__(self, type_, value, traceback):
         return False
+    
+    def id(self):
+        """
+        Get group's id.
+
+        :returns: str - group id
+        """
+        cdef:
+            size_t size = 32
+            char *id = NULL
+        try:
+            while True:
+                id = <char *>realloc_chk(id, size)
+                with nogil:
+                    ret = rbd_group_get_id(self._ioctx, self._name, id, &size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error getting id for group %s' % self._name,
+                                  group_errno_to_exception)
+            return decode_cstr(id)
+        finally:
+            free(id)
 
     def add_image(self, image_ioctx, image_name):
         """

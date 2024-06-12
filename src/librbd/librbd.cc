@@ -1292,6 +1292,11 @@ namespace librbd {
     return r;
   }
 
+  int RBD::group_get_id(IoCtx& io_ctx, const char *group_name, std::string *group_id)
+  {
+    return librbd::api::Group<>::get_id(io_ctx, group_name, group_id);
+  }
+
   int RBD::group_rename(IoCtx& io_ctx, const char *src_name,
                         const char *dest_name)
   {
@@ -6921,6 +6926,31 @@ extern "C" int rbd_group_rename(rados_ioctx_t p, const char *src_name,
   int r = librbd::api::Group<>::rename(io_ctx, src_name, dest_name);
   tracepoint(librbd, group_rename_exit, r);
   return r;
+}
+
+extern "C" int rbd_group_get_id(rados_ioctx_t p,
+                                const char *group_name,
+                                char *group_id,
+                                size_t *size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::string cpp_id;
+  int r = librbd::api::Group<>::get_id(io_ctx, group_name, &cpp_id);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = cpp_id.size() + 1;
+  if (*size < total_len) {
+    *size = total_len;
+    return -ERANGE;
+  }
+  *size = total_len;
+
+  strcpy(group_id, cpp_id.c_str());
+  return 0;
 }
 
 extern "C" int rbd_group_image_add(rados_ioctx_t group_p,
