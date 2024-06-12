@@ -1769,6 +1769,12 @@ class MgmtGatewaySpec(ServiceSpec):
                  ssl_certificate: Optional[List[str]] = None,
                  ssl_certificate_key: Optional[List[str]] = None,
                  ssl_prefer_server_ciphers: Optional[str] = None,
+                 ssl_session_tickets: Optional[str] = None,
+                 ssl_session_timeout: Optional[str] = None,
+                 ssl_session_cache: Optional[str] = None,
+                 server_tokens: Optional[str] = None,
+                 ssl_stapling: Optional[str] = None,
+                 ssl_stapling_verify: Optional[str] = None,
                  ssl_protocols: List[Optional[str]] = None,
                  ssl_ciphers: Optional[List[str]] = None,
                  unmanaged: bool = False,
@@ -1791,6 +1797,12 @@ class MgmtGatewaySpec(ServiceSpec):
         self.ssl_certificate = ssl_certificate
         self.ssl_certificate_key = ssl_certificate_key
         self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
+        self.ssl_session_tickets = ssl_session_tickets
+        self.ssl_session_timeout = ssl_session_timeout
+        self.ssl_session_cache = ssl_session_cache
+        self.server_tokens = server_tokens
+        self.ssl_stapling = ssl_stapling
+        self.ssl_stapling_verify = ssl_stapling_verify
         self.ssl_protocols = ssl_protocols
         self.ssl_ciphers = ssl_ciphers
         self.unmanaged = unmanaged
