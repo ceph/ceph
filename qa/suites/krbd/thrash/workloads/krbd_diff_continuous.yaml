@@ -1,0 +1,12 @@
+overrides:
+  install:
+    ceph:
+      extra_system_packages:
+        - pv
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/diff_continuous.sh
+    env:
+      RBD_DEVICE_TYPE: "krbd"

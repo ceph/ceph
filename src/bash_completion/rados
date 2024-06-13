@@ -1,0 +1,40 @@
+#
+# Ceph - scalable distributed file system
+#
+# Copyright (C) 2011 Wido den Hollander <wido@widodh.nl>
+#
+# This is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License version 2.1, as published by the Free Software
+# Foundation.  See file COPYING.
+#
+
+_rados()
+{
+        local cur prev
+
+        COMPREPLY=()
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+        if [[ ${cur} == -* ]] ; then
+            COMPREPLY=( $(compgen -W "-c --conf -m -d -f -p --pool -b --snap -i -o --create" -- ${cur}) )
+            return 0
+        fi
+
+        case "${prev}" in
+            --conf | -c | -o | -i)
+                COMPREPLY=( $(compgen -f ${cur}) )
+                return 0
+                ;;
+            -m)
+                COMPREPLY=( $(compgen -A hostname ${cur}) )
+                return 0
+                ;;
+            rados)
+                COMPREPLY=( $(compgen -W "lspools df ls chown get put create rm listxattr getxattr setxattr rmxattr stat stat2 mapext lssnap mksnap rmsnap rollback bench" -- ${cur}) )
+                return 0
+            ;;
+        esac
+}
+complete -F _rados rados

@@ -1,0 +1,22 @@
+@forward 'style-overrides';
+@forward 'variables';
+
+@use 'sass:meta';
+@use 'variables';
+
+@function custom-property-name($name) {
+  @return '--' + $name;
+}
+
+@mixin define-custom-property($name, $value) {
+  #{custom-property-name($name)}: meta.inspect($value);
+}
+
+:root {
+  // Make vendor variables accessible to JS/TS code via CSS custom property definition.
+  @each $key_name, $value in meta.module-variables('variables') {
+    @if type-of($value) != 'map' {
+      @include define-custom-property($key_name, $value);
+    }
+  }
+}
