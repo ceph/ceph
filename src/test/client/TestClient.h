@@ -224,6 +224,103 @@ public:
 #endif
       return 0;
     }
+    void ll_write_n_bytes(struct Fh *fh, size_t to_write, size_t block_size,
+                            int iov_cnt, off_t *offset) {
+      /// @brief Write N bytes of data asynchronously.
+      /// @param fh - File handle
+      /// @param to_write - bytes to write
+      /// @param block_size - Total size of each iovec structs array
+      /// @param iov_cnt - Number of elements in iovec structs array
+      /// @param offset - location to start writing from
+
+      const size_t DATA_PER_BLOCK = size_t(block_size / iov_cnt);
+
+      // create a single large buffer upto block_size
+      std::vector<char> buffer(block_size, 'X');
+      struct iovec iov_buf_out[iov_cnt];
+      for (int i = 0; i < iov_cnt; ++i) {
+        iov_buf_out[i].iov_base = buffer.data() + (i * DATA_PER_BLOCK);
+        iov_buf_out[i].iov_len = DATA_PER_BLOCK;
+      }
+
+      int64_t rc = 0, bytes_written = 0, num_iov = iov_cnt, bytes_expected = block_size;
+      iovec *input_buffer_ptr = iov_buf_out;
+
+      // small buffer for writing bytes less than block_size
+      std::vector<char> small_buf;
+      struct iovec iov_small_buf_out[1];
+
+      while (to_write > 0) {
+        if (to_write < block_size) {
+          // fill the small buffer for writing the remaining bytes
+          small_buf.assign(to_write, 'Y');
+          iov_small_buf_out[0] = {small_buf.data(), to_write};
+          input_buffer_ptr = iov_small_buf_out;
+          bytes_expected = to_write;
+          num_iov = 1;
+        }
+        C_SaferCond writefinish("writefinish-upto-blocksize");
+        rc = ll_preadv_pwritev(fh, input_buffer_ptr, num_iov, *offset,
+                              true, &writefinish, nullptr);
+        ASSERT_EQ(rc, 0);
+        bytes_written = writefinish.wait();
+        ASSERT_EQ(bytes_written, bytes_expected);
+        *offset += bytes_written;
+        to_write -= bytes_written;
+        if (num_iov == 1) {
+          ASSERT_EQ(to_write, 0);
+        }
+      }
+    }
+
+    bool is_data_pool_full(int64_t data_pool) {
+      /* check if data pool is reported as full with a specified timeout 
+      and period to sleep */
+      return objecter->with_osdmap([&](const OSDMap &o) {
+        for (const auto& kv : o.get_pools()) {
+          if (kv.first == data_pool && kv.second.has_flag(pg_pool_t::FLAG_FULL)) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
+
+    bool wait_until_true(std::function<bool()> condition, int32_t timeout = 600,
+                        int32_t period = 5) {
+      // wait for the condition to be true until timeout
+      while(true) {
+        if (condition()) {
+          return true;
+        }
+        timeout -= period;
+        timeout = std::max(timeout, 0);
+        if (!timeout) {
+          return false;
+        }
+        sleep(period);
+      }
+    }
+
+    bool wait_for_osdmap_epoch_update(const epoch_t initial_osd_epoch,
+                                      int32_t timeout = 10,
+                                      int32_t period = 5) {
+      // wait for timeout and check for osdmap epoch increment
+
+      bs::error_code ec;
+      objecter->wait_for_latest_osdmap(ca::use_blocked[ec]);
+      ldout(cct, 20) << __func__ << ": latest osdmap: " << ec << dendl;
+
+      while(timeout) {
+        if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) > initial_osd_epoch) {
+          return true;
+        } else {
+          sleep(period);
+          timeout -= period;
+        }
+      }
+      return false;
+    }
 };
 
 class TestClient : public ::testing::Test {
