@@ -716,24 +716,40 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
     opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
 
-    int r = clone(p_ioctx, nullptr, p_name, p_snap_name, c_ioctx, nullptr,
-                  c_name, opts, "", "");
+    int r = clone(p_ioctx, nullptr, p_name, CEPH_NOSNAP, p_snap_name,
+                  c_ioctx, nullptr, c_name, opts, "", "");
     opts.get(RBD_IMAGE_OPTION_ORDER, &order);
     *c_order = order;
     return r;
   }
 
   int clone(IoCtx& p_ioctx, const char *p_id, const char *p_name,
-            const char *p_snap_name, IoCtx& c_ioctx, const char *c_id,
-            const char *c_name, ImageOptions& c_opts,
+            uint64_t p_snap_id, const char *p_snap_name, IoCtx& c_ioctx,
+            const char *c_id, const char *c_name, ImageOptions& c_opts,
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid)
   {
-    ceph_assert((p_id == nullptr) ^ (p_name == nullptr));
-
     CephContext *cct = (CephContext *)p_ioctx.cct();
-    if (p_snap_name == nullptr) {
-      lderr(cct) << "image to be cloned must be a snapshot" << dendl;
+    ldout(cct, 10) << __func__
+                   << " p_id=" << (p_id ?: "")
+                   << ", p_name=" << (p_name ?: "")
+                   << ", p_snap_id=" << p_snap_id
+                   << ", p_snap_name=" << (p_snap_name ?: "")
+                   << ", c_id=" << (c_id ?: "")
+                   << ", c_name=" << c_name
+                   << ", c_opts=" << c_opts
+                   << ", non_primary_global_image_id=" << non_primary_global_image_id
+                   << ", primary_mirror_uuid=" << primary_mirror_uuid
+                   << dendl;
+
+    if (((p_id == nullptr) ^ (p_name == nullptr)) == 0) {
+      lderr(cct) << "must specify either parent image id or parent image name"
+                 << dendl;
+      return -EINVAL;
+    }
+    if (((p_snap_id == CEPH_NOSNAP) ^ (p_snap_name == nullptr)) == 0) {
+      lderr(cct) << "must specify either parent snap id or parent snap name"
+                 << dendl;
       return -EINVAL;
     }
 
@@ -766,10 +782,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       clone_id = c_id;
     }
 
-    ldout(cct, 10) << __func__ << " "
-		   << "c_name=" << c_name << ", "
-		   << "c_id= " << clone_id << ", "
-		   << "c_opts=" << c_opts << dendl;
+    ldout(cct, 10) << __func__ << " parent_id=" << parent_id
+		   << ", clone_id=" << clone_id << dendl;
 
     ConfigProxy config{reinterpret_cast<CephContext *>(c_ioctx.cct())->_conf};
     api::Config<>::apply_pool_overrides(c_ioctx, &config);
@@ -778,8 +792,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
-      config, p_ioctx, parent_id, p_snap_name,
-      {cls::rbd::UserSnapshotNamespace{}}, CEPH_NOSNAP, c_ioctx, c_name,
+      config, p_ioctx, parent_id, (p_snap_name ?: ""),
+      {cls::rbd::UserSnapshotNamespace{}}, p_snap_id, c_ioctx, c_name,
       clone_id, c_opts, cls::rbd::MIRROR_IMAGE_MODE_JOURNAL,
       non_primary_global_image_id, primary_mirror_uuid,
       asio_engine.get_work_queue(), &cond);
