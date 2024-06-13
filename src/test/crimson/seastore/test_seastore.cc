@@ -394,17 +394,18 @@ struct seastore_test_t :
     SeaStoreShard::attrs_t get_attrs(
       SeaStoreShard &sharded_seastore) {
       return sharded_seastore.get_attrs(coll, oid)
-		     .handle_error(SeaStoreShard::get_attrs_ertr::discard_all{})
-		     .get();
+	.handle_error(
+	  SeaStoreShard::get_attrs_ertr::assert_all{"unexpected error"})
+	.get();
     }
 
     ceph::bufferlist get_attr(
       SeaStoreShard& sharded_seastore,
       std::string_view name) {
       return sharded_seastore.get_attr(coll, oid, name)
-		      .handle_error(
-			SeaStoreShard::get_attr_errorator::discard_all{})
-		      .get();
+	.handle_error(
+	  SeaStoreShard::get_attr_errorator::assert_all{"unexpected error"})
+	.get();
     }
 
     void check_omap_key(
