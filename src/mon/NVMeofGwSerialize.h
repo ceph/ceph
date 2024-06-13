@@ -184,7 +184,7 @@ inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
     return os;
 }
 
-inline void encode(const ANA_STATE& st,  ceph::bufferlist &bl) {
+inline void encode(const ana_state_t& st,  ceph::bufferlist &bl) {
     ENCODE_START(1, 1, bl);
     encode((uint32_t)st.size(), bl);
     for (const auto& gr: st){
@@ -194,7 +194,7 @@ inline void encode(const ANA_STATE& st,  ceph::bufferlist &bl) {
     ENCODE_FINISH(bl);
 }
 
-inline void decode(ANA_STATE& st, ceph::buffer::list::const_iterator &bl) {
+inline void decode(ana_state_t& st, ceph::buffer::list::const_iterator &bl) {
     uint32_t n;
     DECODE_START(1, bl);
     decode(n, bl);
@@ -227,7 +227,7 @@ inline  void decode(GwSubsystems& subsystems,  ceph::bufferlist::const_iterator&
   for (uint32_t i=0; i<num_subsystems; i++){
      std::string  nqn;
      decode(nqn, bl);
-     ANA_STATE st;
+     ana_state_t st;
      decode(st, bl);
      subsystems.insert({nqn, NqnState(nqn, st)});
   }
