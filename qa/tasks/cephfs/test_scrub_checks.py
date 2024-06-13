@@ -7,6 +7,7 @@ import time
 from teuthology.exceptions import CommandFailedError
 from teuthology.contextutil import safe_while
 import os
+from tasks.ceph_test_case import TestTimeoutError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
@@ -230,7 +231,7 @@ class TestScrubChecks(CephFSTestCase):
     it uses that value to generate unique folder and file names.
     """
 
-    MDSS_REQUIRED = 1
+    MDSS_REQUIRED = 2
     CLIENTS_REQUIRED = 1
     def get_dsplits(self, dir_ino):
         return self.fs.rank_asok(['dump', 'inode', str(dir_ino)])['dirfragtree']['splits']
@@ -476,6 +477,52 @@ class TestScrubChecks(CephFSTestCase):
             lambda: len(self.get_dsplits(dir_ino)) > 0,
             timeout=30
         )
+
+    def test_scrub_backtrace_divergent_newer(self):
+        """
+        The consequence of the scrub will not acquire nest locks which would update
+        the iversion for the in-memory inode prior to comparing to on-disk values.
+        """
+
+        self.run_ceph_cmd('fs', 'set', self.fs.name, 'balance_automate', 'false')
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+
+        test_path1 = "testdir1"
+        test_path2 = "testdir1/testdir2"
+        test_path3 = f"{test_path2}/testdir3"
+        test_path4 = f"{test_path3}/testdir4"
+        test_file = f"{test_path3}/file_0"
+
+        # Make sure all the ancestors' auth is in rank 0
+        self.mount_a.run_shell(["mkdir", "-p", test_path4])
+        self.mount_a.setfattr(test_path1, "ceph.dir.pin", "0") # no surprise migrations
+        self._wait_subtrees([(f"/{test_path1}", 0)])
+
+        # Will trigger to load ancestor inodes in mds.1
+        self.mount_a.setfattr(test_path4, "ceph.dir.pin", "1")
+        self._wait_subtrees([(f"/{test_path4}", 1)])
+        # Will trigger to load ancestor inodes in mds.1
+        self.mount_a.run_shell_payload(f"cd {test_path4} && for i in `seq 1 10`; do touch file_$i; done;")
+
+        # Dirty the ancestor inodes in mds.0 and then the version in mds.1 will become older
+        self.mount_a.run_shell(["touch", f"{test_file}"])
+        self.mount_a.run_shell_payload(f"cd {test_path3} && for i in `seq 1 32`; do mkdir dir_$i; done;")
+
+        # Flush path 'testdir3/file_0' and this will persist the backtrace to disk
+        self.fs.rank_asok(["flush_path", f"/{test_file}"], rank=0)
+
+        # Export testdir3 to mds.1
+        self.mount_a.setfattr(test_path1, "ceph.dir.pin", "-1")
+        self.fs.rank_asok(["export", "dir", f"/{test_path3}", "1"], rank=0)
+        self._wait_subtrees([(f"/{test_path3}", 1)])
+
+        # Scrub 'testdir3/file_0' and it will detect the backtrace in memory will be older and
+        # metadata damage will be reported via cluster health warnings.
+        out_json = self.fs.run_scrub(["start", "/", "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        self.wait_for_health("MDS_DAMAGE", 60)
 
     def test_stray_evaluation_with_scrub(self):
         """
