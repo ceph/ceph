@@ -16879,17 +16879,6 @@ int BlueStore::_do_alloc_write(
     return 0;
   }
 
-  CompressorRef c;
-  double crr = 0;
-  if (wctx->compress) {
-    c = coll->compression_algorithm.has_value() ?
-      compressors[*(coll->compression_algorithm)]:
-      compressors[def_compressor_alg];
-    crr = coll->compression_req_ratio.has_value() ?
-      *(coll->compression_req_ratio) :
-      cct->_conf->bluestore_compression_required_ratio;
-  }
-
   // checksum
   int64_t csum = wctx->csum_type;
 
@@ -16909,7 +16898,7 @@ int BlueStore::_do_alloc_write(
 
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   for (auto& wi : wctx->writes) {
-    if (c && wi.blob_length > min_alloc_size) {
+    if (wctx->compressor && wi.blob_length > min_alloc_size) {
       auto start = mono_clock::now();
 
       // compress
@@ -16919,8 +16908,8 @@ int BlueStore::_do_alloc_write(
       // FIXME: memory alignment here is bad
       bufferlist t;
       std::optional<int32_t> compressor_message;
-      int r = c->compress(wi.bl, t, compressor_message);
-      uint64_t want_len_raw = wi.blob_length * crr;
+      int r = wctx->compressor->compress(wi.bl, t, compressor_message);
+      uint64_t want_len_raw = wi.blob_length * wctx->crr;
       uint64_t want_len = p2roundup(want_len_raw, min_alloc_size);
       bool rejected = false;
       uint64_t compressed_len = t.length();
@@ -16929,7 +16918,7 @@ int BlueStore::_do_alloc_write(
       uint64_t result_len = p2roundup(compressed_len, min_alloc_size);
       if (r == 0 && result_len <= want_len && result_len < wi.blob_length) {
 	bluestore_compression_header_t chdr;
-	chdr.type = c->get_type();
+	chdr.type = wctx->compressor->get_type();
 	chdr.length = t.length();
 	chdr.compressor_message = compressor_message;
 	encode(chdr, wi.compressed_bl);
@@ -16946,7 +16935,7 @@ int BlueStore::_do_alloc_write(
 	  logger->inc(l_bluestore_write_pad_bytes, result_len - compressed_len);
 	  dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
 		   << " -> 0x" << compressed_len << " => 0x" << result_len
-		   << " with " << c->get_type()
+		   << " with " << wctx->compressor->get_type()
 		   << std::dec << dendl;
 	  txc->statfs_delta.compressed() += compressed_len;
 	  txc->statfs_delta.compressed_original() += wi.blob_length;
@@ -16959,7 +16948,7 @@ int BlueStore::_do_alloc_write(
 	}
       } else if (r != 0) {
 	dout(5) << __func__ << std::hex << "  0x" << wi.blob_length
-		 << " bytes compressed using " << c->get_type_name()
+		 << " bytes compressed using " << wctx->compressor->get_type_name()
 		 << std::dec
 		 << " failed with errcode = " << r
 		 << ", leaving uncompressed"
@@ -16974,7 +16963,7 @@ int BlueStore::_do_alloc_write(
       if (rejected) {
 	dout(20) << __func__ << std::hex << "  0x" << wi.blob_length
 		 << " compressed to 0x" << compressed_len << " -> 0x" << result_len
-		 << " with " << c->get_type()
+		 << " with " << wctx->compressor->get_type()
 		 << ", which is more than required 0x" << want_len_raw
 		 << " -> 0x" << want_len
 		 << ", leaving uncompressed"
@@ -17365,6 +17354,14 @@ void BlueStore::_choose_write_options(
   if (wctx->compress &&
       wctx->target_blob_size < min_alloc_size * 2) {
     wctx->target_blob_size = min_alloc_size * 2;
+  }
+  if (wctx->compress) {
+    wctx->compressor = c->compression_algorithm.has_value() ?
+      compressors[*(c->compression_algorithm)]:
+      compressors[def_compressor_alg];
+    wctx->crr = c->compression_req_ratio.has_value() ?
+      *(c->compression_req_ratio) :
+      cct->_conf->bluestore_compression_required_ratio;
   }
 
   dout(20) << __func__ << " prefer csum_order " << wctx->csum_order
