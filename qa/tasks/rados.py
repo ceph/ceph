@@ -168,6 +168,8 @@ def task(ctx, config):
         args.extend(['--balance-reads'])
     if config.get('localize_reads', False):
         args.extend(['--localize-reads'])
+    if config.get('max_attr_len', None):
+        args.extend(['--max-attr-len', str(config.get('max_attr_len'))])
     args.extend([
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
@@ -175,8 +177,7 @@ def task(ctx, config):
         '--size', str(object_size),
         '--min-stride-size', str(config.get('min_stride_size', object_size // 10)),
         '--max-stride-size', str(config.get('max_stride_size', object_size // 5)),
-        '--max-seconds', str(config.get('max_seconds', 0)),
-        '--max-attr-len', str(config.get('max_attr_len', 20000))
+        '--max-seconds', str(config.get('max_seconds', 0))
         ])
 
     weights = {}
