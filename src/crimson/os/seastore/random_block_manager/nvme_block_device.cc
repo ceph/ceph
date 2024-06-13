@@ -42,10 +42,7 @@ open_ertr::future<> NVMeBlockDevice::open(
         // Do identify_controller first, and then identify_namespace.
         return identify_controller(device).safe_then([this, in_path, mode](
           auto id_controller_data) {
-          support_multistream = id_controller_data.oacs.support_directives;
-          if (support_multistream) {
-            stream_id_count = WRITE_LIFE_MAX;
-          }
+	  // TODO: enable multi-stream if the nvme device supports
           awupf = id_controller_data.awupf + 1;
           return identify_namespace(device).safe_then([this, in_path, mode] (
             auto id_namespace_data) {
@@ -75,12 +72,7 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
       auto file) {
       assert(io_device.size() > stream_index_to_open);
       io_device[stream_index_to_open] = std::move(file);
-      return io_device[stream_index_to_open].fcntl(
-        F_SET_FILE_RW_HINT,
-        (uintptr_t)&stream_index_to_open).then([this](auto ret) {
-        stream_index_to_open++;
-        return seastar::now();
-      });
+      return seastar::now();
     });
   });
 }
