@@ -67,7 +67,7 @@ Where:
 
 :Type: String
 :Required: No.
-:Default: jerasure
+:Default: isa
 
 ``{stripe_unit=stripe_unit}``
 
