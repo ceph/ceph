@@ -31,6 +31,15 @@ options:
   desc: CPU cores on which alienstore threads will run in cpuset(7) format
   flags:
   - startup
+- name: crimson_seastar_num_threads
+  type: uint
+  level: advanced
+  default: 0
+  desc: The number of threads for serving seastar reactors without CPU pinning, overridden if crimson_seastar_cpu_cores is set
+  flags:
+  - startup
+  min: 0
+  max: 32
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
