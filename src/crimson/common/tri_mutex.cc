@@ -8,8 +8,7 @@
 SET_SUBSYS(osd);
 //TODO: SET_SUBSYS(crimson_tri_mutex);
 
-std::optional<seastar::future<>>
-read_lock::lock()
+seastar::future<> read_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_read();
 }
@@ -19,8 +18,7 @@ void read_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_read();
 }
 
-std::optional<seastar::future<>>
-write_lock::lock()
+seastar::future<> write_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_write();
 }
@@ -30,8 +28,7 @@ void write_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_write();
 }
 
-std::optional<seastar::future<>>
-excl_lock::lock()
+seastar::future<> excl_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_excl();
 }
@@ -48,14 +45,13 @@ tri_mutex::~tri_mutex()
   assert(!is_acquired());
 }
 
-std::optional<seastar::future<>>
-tri_mutex::lock_for_read()
+seastar::future<> tri_mutex::lock_for_read()
 {
   LOG_PREFIX(tri_mutex::lock_for_read());
   DEBUGDPP("", *this);
   if (try_lock_for_read()) {
     DEBUGDPP("lock_for_read successfully", *this);
-    return std::nullopt;
+    return seastar::now();
   }
   DEBUGDPP("can't lock_for_read, adding to waiters", *this);
   waiters.emplace_back(seastar::promise<>(), type_t::read, name);
@@ -92,14 +88,13 @@ void tri_mutex::demote_to_read()
   ++readers;
 }
 
-std::optional<seastar::future<>>
-tri_mutex::lock_for_write()
+seastar::future<> tri_mutex::lock_for_write()
 {
   LOG_PREFIX(tri_mutex::lock_for_write());
   DEBUGDPP("", *this);
   if (try_lock_for_write()) {
     DEBUGDPP("lock_for_write successfully", *this);
-    return std::nullopt;
+    return seastar::now();
   }
   DEBUGDPP("can't lock_for_write, adding to waiters", *this);
   waiters.emplace_back(seastar::promise<>(), type_t::write, name);
@@ -137,14 +132,13 @@ void tri_mutex::demote_to_write()
 }
 
 // for exclusive users
-std::optional<seastar::future<>>
-tri_mutex::lock_for_excl()
+seastar::future<> tri_mutex::lock_for_excl()
 {
   LOG_PREFIX(tri_mutex::lock_for_excl());
   DEBUGDPP("", *this);
   if (try_lock_for_excl()) {
     DEBUGDPP("lock_for_excl, successfully", *this);
-    return std::nullopt;
+    return seastar::now();
   }
   DEBUGDPP("can't lock_for_excl, adding to waiters", *this);
   waiters.emplace_back(seastar::promise<>(), type_t::exclusive, name);
