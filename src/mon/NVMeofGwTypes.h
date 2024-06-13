@@ -50,7 +50,7 @@ enum class gw_availability_t {
 
 typedef gw_states_per_group_t          SM_STATE         [MAX_SUPPORTED_ANA_GROUPS];
 
-using ANA_STATE = std::vector<std::pair<gw_exported_states_per_group_t, epoch_t>>;
+using ana_state_t = std::vector<std::pair<gw_exported_states_per_group_t, epoch_t>>;
 
 struct BeaconNamespace {
     NvmeAnaGrpId anagrpid;
@@ -137,10 +137,10 @@ struct NvmeGwMonState {
 
 struct NqnState {
     std::string   nqn;          // subsystem NQN
-    ANA_STATE     ana_state;    // subsystem's ANA state
+    ana_state_t     ana_state;    // subsystem's ANA state
 
     // constructors
-    NqnState(const std::string& _nqn, const ANA_STATE& _ana_state):
+    NqnState(const std::string& _nqn, const ana_state_t& _ana_state):
         nqn(_nqn), ana_state(_ana_state)  {}
     NqnState(const std::string& _nqn, const SM_STATE& sm_state, const NvmeGwMonState & gw_created) : nqn(_nqn)  {
         for (int i=0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
