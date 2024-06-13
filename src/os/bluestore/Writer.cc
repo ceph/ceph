@@ -572,11 +572,11 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full_compressed(
   blob->dirty_blob_use_tracker().init_and_ref_compressed(object_length);
   PExtentVector blob_allocs;
   _get_disk_space(disk_length, blob_allocs);
-  _schedule_io(blob_allocs, 0, disk_data); //have to do before move()
+  _schedule_io(blob_allocs, disk_data); //have to do before move()
   //todo: we are setting blob's logical length twice
   bblob.allocated_full(object_length, std::move(blob_allocs));
   //no unused in compressed //bblob.mark_used(0, disk_length);
-  bstore->_buffer_cache_write(txc, blob, 0, object_data,
+  bstore->_buffer_cache_write(txc, onode, 0, object_data,
     wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   statfs_delta.compressed_allocated() += disk_length;
   statfs_delta.compressed_original() += object_length;
