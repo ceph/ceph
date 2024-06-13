@@ -132,9 +132,6 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 SB id -> shared_blob_t
 
 const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
-#define OBJECT_MAX_SIZE 0xffffffff // 32 bits
-
-
 /*
  * extent map blob encoding
  *

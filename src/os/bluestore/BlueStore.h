@@ -272,6 +272,7 @@ public:
     virtual ~AioContext() {}
   };
 
+  static constexpr uint32_t OBJECT_MAX_SIZE = 0xffffffff; // 32 bits
   struct printer {
     static constexpr uint16_t PTR = 1;   // pointer to Blob
     static constexpr uint16_t NICK = 2;  // a nickname of this Blob
