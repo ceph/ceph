@@ -24,6 +24,22 @@ static const std::string ALL_NAME("all");
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+std::string get_snap_namespace_name(librbd::snap_namespace_type_t type)
+{
+  switch (type) {
+  case RBD_SNAP_NAMESPACE_TYPE_USER:
+    return "user";
+  case RBD_SNAP_NAMESPACE_TYPE_GROUP:
+    return "group";
+  case RBD_SNAP_NAMESPACE_TYPE_TRASH:
+    return "trash";
+  case RBD_SNAP_NAMESPACE_TYPE_MIRROR:
+    return "mirror";
+  default:
+    return "unknown (" + stringify(type) + ")";
+  }
+}
+
 int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::Rados& rados)
 {
   std::vector<librbd::snap_info_t> snaps;
@@ -86,24 +102,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       return r;
     }
 
-    std::string snap_namespace_name = "Unknown";
-    switch (snap_namespace) {
-    case RBD_SNAP_NAMESPACE_TYPE_USER:
-      snap_namespace_name = "user";
-      break;
-    case RBD_SNAP_NAMESPACE_TYPE_GROUP:
-      snap_namespace_name = "group";
-      break;
-    case RBD_SNAP_NAMESPACE_TYPE_TRASH:
-      snap_namespace_name = "trash";
-      break;
-    case RBD_SNAP_NAMESPACE_TYPE_MIRROR:
-      snap_namespace_name = "mirror";
-      break;
-    }
-
     int get_trash_res = -ENOENT;
-    std::string trash_original_name;
+    librbd::snap_trash_namespace_t trash_snap;
     int get_group_res = -ENOENT;
     librbd::snap_group_namespace_t group_snap;
     int get_mirror_res = -ENOENT;
@@ -113,8 +113,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       get_group_res = image.snap_get_group_namespace(s->id, &group_snap,
                                                      sizeof(group_snap));
     } else if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_TRASH) {
-      get_trash_res = image.snap_get_trash_namespace(
-        s->id, &trash_original_name);
+      get_trash_res = image.snap_get_trash_namespace2(
+        s->id, &trash_snap, sizeof(trash_snap));
     } else if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_MIRROR) {
       get_mirror_res = image.snap_get_mirror_namespace(
         s->id, &mirror_snap, sizeof(mirror_snap));
@@ -152,14 +152,17 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       f->dump_string("timestamp", tt_str);
       if (all_snaps) {
         f->open_object_section("namespace");
-        f->dump_string("type", snap_namespace_name);
+        f->dump_string("type", get_snap_namespace_name(snap_namespace));
         if (get_group_res == 0) {
           std::string pool_name = pool_map[group_snap.group_pool];
           f->dump_string("pool", pool_name);
           f->dump_string("group", group_snap.group_name);
           f->dump_string("group snap", group_snap.group_snap_name);
         } else if (get_trash_res == 0) {
-          f->dump_string("original_name", trash_original_name);
+          f->dump_string("original_namespace_type",
+                         get_snap_namespace_name(
+                           trash_snap.original_namespace_type));
+          f->dump_string("original_name", trash_snap.original_name);
         } else if (get_mirror_res == 0) {
           f->dump_string("state", mirror_snap_state);
           f->open_array_section("mirror_peer_uuids");
@@ -187,7 +190,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
 
       if (all_snaps) {
         std::ostringstream oss;
-        oss << snap_namespace_name;
+        oss << get_snap_namespace_name(snap_namespace);
 
         if (get_group_res == 0) {
           std::string pool_name = pool_map[group_snap.group_pool];
@@ -195,7 +198,9 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
                       << group_snap.group_name << "@"
                       << group_snap.group_snap_name << ")";
         } else if (get_trash_res == 0) {
-          oss << " (" << trash_original_name << ")";
+          oss << " ("
+              << get_snap_namespace_name(trash_snap.original_namespace_type)
+              << " " << trash_snap.original_name << ")";
         } else if (get_mirror_res == 0) {
           oss << " (" << mirror_snap_state << " "
                       << "peer_uuids:[" << mirror_snap.mirror_peer_uuids << "]";
@@ -473,7 +478,7 @@ void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
-  at::add_snap_id_option(options);
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_no_progress_option(options);
 
   options->add_options()
