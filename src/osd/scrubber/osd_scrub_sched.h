@@ -4,77 +4,78 @@
 #pragma once
 // clang-format off
 /*
-┌───────────────────────┐
-│ OSD                   │
-│ OSDService            │
-│                       │
-│ ┌─────────────────────│
-│ │                     │
-│ │   OsdScrub          │
-│ │                    ─┼───┐
-│ │                     │   │
-└───────────────────────┘   │   Ownes & uses the following
-                            │   ScrubQueue interfaces:
-                            │
-                            │
-                            │   - resource management (*1)
-                            │
-                            │   - environment conditions (*2)
-                            │
-                            │   - scrub scheduling (*3)
-                            │
-                            │
-                            │
- ScrubQueue                 │
-┌───────────────────────────▼────────────┐
-│                                        │
-│                                        │
-│  ScrubQContainer    to_scrub <>────────┼────────┐
-│                                        │        │
-│                                        │        │
-│  OSD_wide resource counters            │        │
-│                                        │        │
-│                                        │        │
-│  "env scrub conditions" monitoring     │        │
-│                                        │        │
-│                                        │        │
-│                                        │        │
-│                                        │        │
-└─▲──────────────────────────────────────┘        │
-  │                                               │
-  │                                               │
-  │uses interface <4>                             │
-  │                                               │
-  │                                               │
-  │            ┌──────────────────────────────────┘
-  │            │                 shared ownership of jobs
-  │            │
-  │      ┌─────▼──────┐
-  │      │ScrubJob    │
-  │      │            ├┐
-  │      │            ││
-  │      │            │┼┐
-  │      │            │┼│
-  └──────┤            │┼┤◄──────┐
-         │            │┼│       │
-         │            │┼│       │
-         │            │┼│       │
-         └┬───────────┼┼│       │shared ownership
-          └─┼┼┼┼┼┼┼┼┼┼┼┼│       │
-            └───────────┘       │
-                                │
-                                │
-                                │
-                                │
-┌───────────────────────────────┼─┐
-│                               <>│
-│PgScrubber                       │
-│                                 │
-│                                 │
-│                                 │
-│                                 │
-│                                 │
-└─────────────────────────────────┘
+  ┌───────────────────────┐
+  │ OSD                   │
+  │ OSDService            │
+  │                       │
+  │ ┌─────────────────────┤
+  │ │                     │
+  │ │   OsdScrub          │
+  │ │                    ─┼───┐
+  │ │                     │   │
+  └─┴─────────────────────┘   │   Owns & uses the following
+                              │   ScrubQueue interfaces:
+                              │
+                              │
+                              │   - resource management (*1)
+                              │
+                              │   - environment conditions (*2)
+                              │
+                              │   - scrub scheduling (*3)
+                              │
+                              │
+                              │
+   ScrubQueue                 │
+  ┌───────────────────────────▼────────────┐
+  │                                        │
+  │                                        │
+  │  ScrubQContainer    to_scrub <>────────┼────────┐
+  │                                        │        │
+  │                                        │        │
+  │  OSD_wide resource counters            │        │
+  │                                        │        │
+  │                                        │        │
+  │  "env scrub conditions" monitoring     │        │
+  │                                        │        │
+  │                                        │        │
+  │                                        │        │
+  │                                        │        │
+  └─▲──────────────────────────────────────┘        │
+    │                                               │
+    │                                               │
+    │uses interface <4>                             │
+    │                                               │
+    │                                               │
+    │            ┌──────────────────────────────────┘
+    │            │
+    │            │
+    │      ┌─────▼──────┐
+    │      │Copy of     │
+    │      │job's       ├┐
+    │      │sched params││
+    │      │(*)         │┼┐
+    │      │            │┼┘◄────────────────────────┐
+    └──────┤            ││                          │
+           │            ││   (*) for now - a copy   │
+           │            ││       of the whole SJ    │
+           │            ││                          │
+           └┬───────────┼│                          │
+            └─┼┼┼┼┼┼┼┼┼┼┼│                          │
+              └──────────┘                          │
+                                                    │
+                                                    │                                                    │
+                                                    │
+  ┌─────────────────────────────────┐               │
+  │                               <>│               │
+  │PgScrubber                       │               │
+  │               ┌─────────────────┴───┐           │
+  │               │ScrubJob             │           │
+  │               │                     │           │
+  │               │     ┌───────────────┤           │
+  │               │     │Sched params   ├───────────┘
+  └───────────────┤     └───────────────┤
+                  │                     │
+                  └─────────────────────┘
 
 
 ScrubQueue interfaces (main functions):
