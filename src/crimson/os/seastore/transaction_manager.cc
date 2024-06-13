@@ -542,12 +542,12 @@ TransactionManager::rewrite_logical_extent(
         ceph_assert(left >= nextent->get_length());
         auto nlextent = nextent->template cast<LogicalCachedExtent>();
         lextent->get_bptr().copy_out(
-          0,
+          off,
           nlextent->get_length(),
           nlextent->get_bptr().c_str());
         nlextent->set_laddr(lextent->get_laddr() + off);
         nlextent->set_modify_time(lextent->get_modify_time());
-        nlextent->set_last_committed_crc(nlextent->calc_crc32c());
+        nlextent->set_last_committed_crc(lextent->get_last_committed_crc());
         DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
         /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
