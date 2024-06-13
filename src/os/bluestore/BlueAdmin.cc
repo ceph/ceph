@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "BlueAdmin.h"
+#include "Compression.h"
 #include "common/pretty_binary.h"
 #include "common/debug.h"
 #include <asm-generic/errno-base.h>
@@ -41,6 +42,12 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "name=object_name,type=CephString,req=true",
       this,
       "print object internals");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore compression stats "
+      "name=collection,type=CephString,req=false",
+      this,
+      "print compression stats, per collection");
     ceph_assert(r == 0);
   }
 }
@@ -142,6 +149,34 @@ int BlueStore::SocketHook::call(
     }
     r = -ENOENT;
     ss << "No collection that can hold such object" << std::endl;
+  } else if (command == "bluestore compression stats") {
+    std::vector<CollectionRef> copied;
+    {
+      std::shared_lock l(store.coll_lock);
+      copied.reserve(store.coll_map.size());
+      for (const auto& c : store.coll_map) {
+        copied.push_back(c.second);
+      }
+    }
+    std::string coll;
+    cmd_getval(cmdmap, "collection", coll);
+    f->open_array_section("compression");
+    for (const auto& c : copied) {
+      std::shared_lock l(c->lock);
+      if ((coll.empty() && bool(c->estimator))
+        || coll == c->get_cid().c_str()) {
+        f->open_object_section("collection");
+        f->dump_string("cid", c->get_cid().c_str());
+        f->open_object_section("estimator");
+        if (c->estimator) {
+          c->estimator->dump(f);
+        }
+        f->close_section();
+        f->close_section();
+      }
+    }
+    f->close_section();
+    return 0;
   } else {
     ss << "Invalid command" << std::endl;
     r = -ENOSYS;
