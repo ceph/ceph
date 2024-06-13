@@ -534,20 +534,22 @@ void PG::on_active_actmap()
           const auto needs_pause = !snap_trimq.empty();
           return trim_snap(to_trim, needs_pause);
         }
-      ).finally([this] {
+      ).then_interruptible([this] {
         logger().debug("{}: PG::on_active_actmap() finished trimming",
                        *this);
         peering_state.state_clear(PG_STATE_SNAPTRIM);
         peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-        publish_stats_to_osd();
+        return seastar::now();
       });
     }, [this](std::exception_ptr eptr) {
       logger().debug("{}: snap trimming interrupted", *this);
-      peering_state.state_clear(PG_STATE_SNAPTRIM);
-    }, pg_ref);
+      ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
+    }, pg_ref).finally([pg_ref, this] {
+      publish_stats_to_osd();
+    });
   } else {
     logger().debug("{}: pg not clean, skipping snap trim");
-    assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
+    ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
   }
 }
 
@@ -1586,6 +1588,11 @@ void PG::on_change(ceph::os::Transaction &t) {
   }
   scrubber.on_interval_change();
   obc_registry.invalidate_on_interval_change();
+  // snap trim events are all going to be interrupted,
+  // clearing PG_STATE_SNAPTRIM/PG_STATE_SNAPTRIM_ERROR here
+  // is save and in time.
+  peering_state.state_clear(PG_STATE_SNAPTRIM);
+  peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
 }
 
 void PG::context_registry_on_change() {
