@@ -39,6 +39,8 @@ CRUSH algorithm.
 	erasure-code
 	cache-tiering
 	placement-groups
+        pg-states
+        pg-concepts
 	upmap
         read-balancer
         balancer
