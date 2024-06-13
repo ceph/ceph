@@ -4,11 +4,12 @@
 #include "./scrub_job.h"
 #include "pg_scrubber.h"
 
-using qu_state_t = Scrub::qu_state_t;
 using must_scrub_t = Scrub::must_scrub_t;
 using ScrubQContainer = Scrub::ScrubQContainer;
 using sched_params_t = Scrub::sched_params_t;
 using OSDRestrictions = Scrub::OSDRestrictions;
+using sched_conf_t = Scrub::sched_conf_t;
+using scrub_schedule_t = Scrub::scrub_schedule_t;
 using ScrubJob = Scrub::ScrubJob;
 
 
@@ -28,8 +29,7 @@ static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
 }
 
 ScrubJob::ScrubJob(CephContext* cct, const spg_t& pg, int node_id)
-    : RefCountedObject{cct}
-    , pgid{pg}
+    : pgid{pg}
     , whoami{node_id}
     , cct{cct}
     , log_msg_prefix{fmt::format("osd.{}: scrub-job:pg[{}]:", node_id, pgid)}
@@ -51,7 +51,7 @@ void ScrubJob::update_schedule(
 		  "was: nb:{:s}({:s}). Called with: rest?{} {:s} ({})",
 		  schedule.not_before, schedule.scheduled_at,
 		  reset_failure_penalty, adjusted.scheduled_at,
-		  registration_state())
+		  state_desc())
 	   << dendl;
   schedule.scheduled_at = adjusted.scheduled_at;
   schedule.deadline = adjusted.deadline;
@@ -59,11 +59,9 @@ void ScrubJob::update_schedule(
   if (reset_failure_penalty || (schedule.not_before < schedule.scheduled_at)) {
     schedule.not_before = schedule.scheduled_at;
   }
-
-  updated = true;
   dout(10) << fmt::format(
 		  "adjusted: nb:{:s} ({:s}) ({})", schedule.not_before,
-		  schedule.scheduled_at, registration_state())
+		  schedule.scheduled_at, state_desc())
 	   << dendl;
 }
 
@@ -81,7 +79,7 @@ std::string ScrubJob::scheduling_state(utime_t now_is, bool is_deep_expected)
     const
 {
   // if not in the OSD scheduling queues, not a candidate for scrubbing
-  if (state != qu_state_t::registered) {
+  if (!registered) {
     return "no scrub is scheduled";
   }
 
@@ -100,19 +98,6 @@ std::ostream& ScrubJob::gen_prefix(std::ostream& out, std::string_view fn) const
 {
   return out << log_msg_prefix << fn << ": ";
 }
-
-// clang-format off
-std::string_view ScrubJob::qu_state_text(qu_state_t st)
-{
-  switch (st) {
-    case qu_state_t::not_registered: return "not registered w/ OSD"sv;
-    case qu_state_t::registered: return "registered"sv;
-    case qu_state_t::unregistering: return "unregistering"sv;
-  }
-  // g++ (unlike CLANG), requires an extra 'return' here
-  return "(unknown)"sv;
-}
-// clang-format on
 
 void ScrubJob::dump(ceph::Formatter* f) const
 {

@@ -480,24 +480,25 @@ void PgScrubber::on_new_interval()
 
 bool PgScrubber::is_scrub_registered() const
 {
-  return m_scrub_job && m_scrub_job->in_queues;
+  return m_scrub_job && m_scrub_job->is_registered();
 }
 
 std::string_view PgScrubber::registration_state() const
 {
   if (m_scrub_job) {
-    return m_scrub_job->registration_state();
+    return m_scrub_job->state_desc();
   }
   return "(no sched job)"sv;
 }
 
 void PgScrubber::rm_from_osd_scrubbing()
 {
-  if (m_scrub_job && m_scrub_job->is_state_registered()) {
+  if (m_scrub_job && m_scrub_job->is_registered()) {
     dout(15) << fmt::format(
 		    "{}: prev. state: {}", __func__, registration_state())
 	     << dendl;
-    m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
+    m_osds->get_scrub_services().remove_from_osd_queue(m_pg_id);
+    m_scrub_job->registered = false;
   }
 }
 
@@ -547,17 +548,17 @@ void PgScrubber::schedule_scrub_with_osd()
   ceph_assert(is_primary());
   ceph_assert(m_scrub_job);
 
-  auto pre_state = m_scrub_job->state_desc();
   auto pre_reg = registration_state();
+  m_scrub_job->registered = true;
 
   auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
-  m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
+  m_osds->get_scrub_services().register_with_osd(*m_scrub_job, suggested);
 
   dout(10) << fmt::format(
 		  "{}: <flags:{}> {} <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
 		  __func__, m_planned_scrub,
 		  (is_primary() ? "Primary" : "Replica/other"), pre_reg,
-		  pre_state, registration_state(), m_scrub_job->state_desc())
+		  pre_reg, registration_state(), m_scrub_job->state_desc())
 	   << dendl;
 }
 
@@ -582,18 +583,38 @@ void PgScrubber::on_primary_active_clean()
 */
 void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 {
-  dout(10) << fmt::format("{}: flags:<{}>", __func__, request_flags) << dendl;
-  // verify that the 'in_q' status matches our "Primariority"
-  if (m_scrub_job && is_primary() && !m_scrub_job->in_queues) {
-    dout(1) << __func__ << " !!! primary but not scheduled! " << dendl;
+  if (!is_primary() || !m_scrub_job) {
+    dout(10) << fmt::format(
+		    "{}: pg[{}]: not Primary or no scrub-job", __func__,
+		    m_pg_id)
+	     << dendl;
+    return;
   }
 
-  if (is_primary() && m_scrub_job) {
-    ceph_assert(m_pg->is_locked());
-    auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
-    m_osds->get_scrub_services().update_job(m_scrub_job, suggested, true);
-    m_pg->publish_stats_to_osd();
+  // if we were marked as 'not registered' - do not try to push into
+  // the queue. And if we are already in the queue - do not push again.
+  if (!m_scrub_job->registered) {
+    dout(10) << fmt::format("{}: PG[{}] not registered", __func__, m_pg_id)
+	     << dendl;
+    return;
   }
+
+  dout(15) << fmt::format(
+		  "{}: flags:<{}> job on entry:{}", __func__, request_flags,
+		  *m_scrub_job)
+	   << dendl;
+  if (m_scrub_job->target_queued) {
+    m_osds->get_scrub_services().remove_from_osd_queue(*m_scrub_job);
+    dout(20) << fmt::format(
+		    "{}: PG[{}] dequeuing for an update", __func__, m_pg_id)
+	     << dendl;
+  }
+
+
+  ceph_assert(m_pg->is_locked());
+  auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
+  m_osds->get_scrub_services().update_job(*m_scrub_job, suggested, true);
+  m_pg->publish_stats_to_osd();
 
   dout(15) << __func__ << ": done " << registration_state() << dendl;
 }
@@ -2037,7 +2058,7 @@ void PgScrubber::scrub_finish()
 void PgScrubber::penalize_next_scrub(Scrub::delay_cause_t cause)
 {
   m_osds->get_scrub_services().delay_on_failure(
-      m_scrub_job, 5s, cause, ceph_clock_now());
+      *m_scrub_job, 5s, cause, ceph_clock_now());
 }
 
 void PgScrubber::on_digest_updates()
@@ -2262,7 +2283,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	  false /* is periodic? unknown, actually */};
     }
   }
-  if (m_scrub_job->state != Scrub::qu_state_t::registered) {
+  if (!m_scrub_job->is_registered()) {
     return pg_scrubbing_status_t{utime_t{},
 				 0,
 				 pg_scrub_sched_status_t::not_queued,
@@ -2342,7 +2363,7 @@ PgScrubber::PgScrubber(PG* pg)
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
   m_fsm->initiate();
 
-  m_scrub_job = ceph::make_ref<Scrub::ScrubJob>(
+  m_scrub_job = std::make_optional<Scrub::ScrubJob>(
       m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
 }
 

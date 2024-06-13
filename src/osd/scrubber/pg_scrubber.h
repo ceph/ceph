@@ -499,8 +499,11 @@ class PgScrubber : public ScrubPgIF,
   virtual void _scrub_clear_state() {}
 
   utime_t m_scrub_reg_stamp;		///< stamp we registered for
-  Scrub::ScrubJobRef m_scrub_job;	///< the scrub-job used by the OSD to
-					///< schedule us
+
+  /// the sub-object that manages this PG's scheduling parameters.
+  /// An Optional instead of a regular member, as we wish to directly
+  /// control the order of construction/destruction.
+  std::optional<Scrub::ScrubJob> m_scrub_job;
 
   ostream& show(ostream& out) const override;
 
