@@ -234,6 +234,12 @@ void Estimator::finish()
            << " exp_pad_exp=" << expected_pad_expansion << dendl;
 }
 
+void Estimator::dump(Formatter *f) const {
+  f->dump_float("expected_compression_now", expected_compression_factor);
+  f->dump_float("expected_recompression_error", expected_recompression_error);
+  f->dump_float("expected_pad_expansion", expected_pad_expansion);
+}
+
 Estimator* BlueStore::create_estimator()
 {
   return new Estimator(this);
