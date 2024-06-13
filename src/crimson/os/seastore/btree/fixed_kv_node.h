@@ -227,6 +227,7 @@ struct FixedKVNode : ChildableCachedExtent {
   }
 
   virtual bool is_child_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
+  virtual bool is_child_data_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
 
   template <typename T>
   get_child_ret_t<T> get_child(
@@ -594,6 +595,10 @@ struct FixedKVInternalNode
   }
 
   bool is_child_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
+    ceph_abort("impossible");
+    return false;
+  }
+  bool is_child_data_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
     ceph_abort("impossible");
     return false;
   }
@@ -986,6 +991,13 @@ struct FixedKVLeafNode
   //
   // For reserved mappings, the return values are undefined.
   bool is_child_stable(op_context_t<NODE_KEY> c, uint16_t pos) const final {
+    return _is_child_stable(c, pos);
+  }
+  bool is_child_data_stable(op_context_t<NODE_KEY> c, uint16_t pos) const final {
+    return _is_child_stable(c, pos, true);
+  }
+
+  bool _is_child_stable(op_context_t<NODE_KEY> c, uint16_t pos, bool data_only = false) const {
     auto child = this->children[pos];
     if (is_reserved_ptr(child)) {
       return true;
@@ -994,7 +1006,11 @@ struct FixedKVLeafNode
       ceph_assert(
 	child->is_pending_in_trans(c.trans.get_trans_id())
 	|| this->is_stable_written());
-      return c.cache.is_viewable_extent_stable(c.trans, child);
+      if (data_only) {
+	return c.cache.is_viewable_extent_data_stable(c.trans, child);
+      } else {
+	return c.cache.is_viewable_extent_stable(c.trans, child);
+      }
     } else if (this->is_pending()) {
       auto key = this->iter_idx(pos).get_key();
       auto &sparent = this->get_stable_for_key(key);
@@ -1002,7 +1018,11 @@ struct FixedKVLeafNode
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
 	ceph_assert(child->is_logical());
-	return c.cache.is_viewable_extent_stable(c.trans, child);
+	if (data_only) {
+	  return c.cache.is_viewable_extent_data_stable(c.trans, child);
+	} else {
+	  return c.cache.is_viewable_extent_stable(c.trans, child);
+	}
       } else {
 	return true;
       }

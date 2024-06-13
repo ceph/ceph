@@ -297,14 +297,13 @@ overwrite_ops_t prepare_ops_list(
   interval_set<uint64_t> pre_alloc_addr_removed, pre_alloc_addr_remapped;
   if (delta_based_overwrite_max_extent_size) {
     for (auto &r : ops.to_remove) {
-      // TODO: Introduce LBAMapping::is_data_stable() to include EXIST_CLEAN extents
-      if (r->is_stable() && !r->is_zero_reserved()) {
+      if (r->is_data_stable() && !r->is_zero_reserved()) {
 	pre_alloc_addr_removed.insert(r->get_key(), r->get_length());
 
       }
     }
     for (auto &r : ops.to_remap) {
-      if (r.pin && r.pin->is_stable() && !r.pin->is_zero_reserved()) {
+      if (r.pin && r.pin->is_data_stable() && !r.pin->is_zero_reserved()) {
 	pre_alloc_addr_remapped.insert(r.pin->get_key(), r.pin->get_length());
       }
     }
@@ -641,8 +640,8 @@ struct overwrite_plan_t {
 
   // helper member
   extent_len_t block_size;
-  bool is_left_stable;
-  bool is_right_stable;
+  bool is_left_fresh;
+  bool is_right_fresh;
 
 public:
   extent_len_t get_left_size() const {
@@ -692,8 +691,8 @@ public:
 	       << ", left_operation=" << overwrite_plan.left_operation
 	       << ", right_operation=" << overwrite_plan.right_operation
 	       << ", block_size=" << overwrite_plan.block_size
-	       << ", is_left_stable=" << overwrite_plan.is_left_stable
-	       << ", is_right_stable=" << overwrite_plan.is_right_stable
+	       << ", is_left_fresh=" << overwrite_plan.is_left_fresh
+	       << ", is_right_fresh=" << overwrite_plan.is_right_fresh
 	       << ")";
   }
 
@@ -712,8 +711,10 @@ public:
       left_operation(overwrite_operation_t::UNKNOWN),
       right_operation(overwrite_operation_t::UNKNOWN),
       block_size(block_size),
-      is_left_stable(pins.front()->is_stable()),
-      is_right_stable(pins.back()->is_stable()) {
+      // TODO: introduce PhysicalNodeMapping::is_fresh()
+      // Note: fresh write can be merged with overwrite if they overlap.
+      is_left_fresh(!pins.front()->is_stable()),
+      is_right_fresh(!pins.back()->is_stable()) {
     validate();
     evaluate_operations();
     assert(left_operation != overwrite_operation_t::UNKNOWN);
@@ -742,6 +743,9 @@ private:
    * seastore_obj_data_write_amplification; otherwise, split the
    * original extent into at most three parts: origin-left, part-to-be-modified
    * and origin-right.
+   *
+   * TODO: seastore_obj_data_write_amplification needs to be reconsidered because
+   * delta-based overwrite is introduced
    */
   void evaluate_operations() {
     auto actual_write_size = get_pins_size();
@@ -753,7 +757,7 @@ private:
       actual_write_size -= left_ext_size;
       left_ext_size = 0;
       left_operation = overwrite_operation_t::OVERWRITE_ZERO;
-    } else if (!is_left_stable) {
+    } else if (is_left_fresh) {
       aligned_data_size += left_ext_size;
       left_ext_size = 0;
       left_operation = overwrite_operation_t::MERGE_EXISTING;
@@ -763,7 +767,7 @@ private:
       actual_write_size -= right_ext_size;
       right_ext_size = 0;
       right_operation = overwrite_operation_t::OVERWRITE_ZERO;
-    } else if (!is_right_stable) {
+    } else if (is_right_fresh) {
       aligned_data_size += right_ext_size;
       right_ext_size = 0;
       right_operation = overwrite_operation_t::MERGE_EXISTING;

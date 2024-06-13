@@ -800,22 +800,9 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
       auto pin1 = remap_pin(*t, std::move(pins.front()), 4096, 8192);
       auto ext = get_extent(*t, base + 4096, 4096 * 2);
       ASSERT_TRUE(ext->is_exist_clean());
-      ext = tm->get_mutable_extent(*t, ext)->cast<ObjectDataBlock>();
-
-      auto l = 4096;
-      memset(
-	known_contents.c_str() + base + 4096,
-	'z',
-	l);
-      bufferlist bl;
-      bl.append(
-	bufferptr(
-	  known_contents,
-	  base + 4096,
-	  l));
-
-      ext->overwrite(0, bl);
+      write(*t, base + 4096, 4096, 'y');
       ASSERT_TRUE(ext->is_exist_mutation_pending());
+      write(*t, base + 8092, 4096, 'z');
     }
     submit_transaction(std::move(t));
     read(base + 4096, 4096);
