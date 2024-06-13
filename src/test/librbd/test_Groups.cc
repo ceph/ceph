@@ -309,10 +309,12 @@ TEST_F(TestGroup, add_snapshot)
 
   ASSERT_STREQ(snap_name, snaps[0].name);
 
-  ASSERT_EQ(10, rbd_write(image, 11, 10, test_data));
-  ASSERT_EQ(10, rbd_read(image, 11, 10, read_data));
+  ASSERT_EQ(10, rbd_write(image, 9, 10, test_data));
+  ASSERT_EQ(10, rbd_read(image, 9, 10, read_data));
   ASSERT_EQ(0, memcmp(test_data, read_data, 10));
 
+  ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
+  ASSERT_NE(0, memcmp(orig_data, read_data, 10));
   ASSERT_EQ(0, rbd_group_snap_rollback(ioctx, group_name, snap_name));
   ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
   ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
@@ -399,14 +401,13 @@ TEST_F(TestGroup, add_snapshotPP)
 
   bufferlist write_bl;
   write_bl.append(std::string(1024, '2'));
-  ASSERT_EQ(1024, image.write(513, write_bl.length(), write_bl));
-
-  read_bl.clear();
-  ASSERT_EQ(1024, image.read(513, 1024, read_bl));
+  ASSERT_EQ(1024, image.write(256, write_bl.length(), write_bl));
+  ASSERT_EQ(1024, image.read(256, 1024, read_bl));
   ASSERT_TRUE(write_bl.contents_equal(read_bl));
 
+  ASSERT_EQ(512, image.read(0, 512, read_bl));
+  ASSERT_FALSE(expect_bl.contents_equal(read_bl));
   ASSERT_EQ(0, rbd.group_snap_rollback(ioctx, group_name, snap_name));
-
   ASSERT_EQ(512, image.read(0, 512, read_bl));
   ASSERT_TRUE(expect_bl.contents_equal(read_bl));
 
