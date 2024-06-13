@@ -143,9 +143,6 @@ const vector<uint64_t> bdev_label_positions = {
   100*_1G,
   1000*_1G};
 
-#define OBJECT_MAX_SIZE 0xffffffff // 32 bits
-
-
 /*
  * extent map blob encoding
  *
