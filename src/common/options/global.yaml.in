@@ -2568,7 +2568,7 @@ options:
   type: str
   level: advanced
   desc: default erasure code profile for new erasure-coded pools
-  default: plugin=jerasure technique=reed_sol_van k=2 m=2
+  default: plugin=isa technique=reed_sol_van k=2 m=2
   services:
   - mon
   flags:
