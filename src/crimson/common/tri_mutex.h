@@ -3,27 +3,25 @@
 
 #pragma once
 
-#include <optional>
-
 #include <seastar/core/future.hh>
 #include <seastar/core/circular_buffer.hh>
 #include "crimson/common/log.h"
 
 class read_lock {
 public:
-  std::optional<seastar::future<>> lock();
+  seastar::future<> lock();
   void unlock();
 };
 
 class write_lock {
 public:
-  std::optional<seastar::future<>> lock();
+  seastar::future<> lock();
   void unlock();
 };
 
 class excl_lock {
 public:
-  std::optional<seastar::future<>> lock();
+  seastar::future<> lock();
   void unlock();
 };
 
@@ -64,7 +62,7 @@ public:
   }
 
   // for shared readers
-  std::optional<seastar::future<>> lock_for_read();
+  seastar::future<> lock_for_read();
   bool try_lock_for_read() noexcept;
   void unlock_for_read();
   void demote_to_read();
@@ -73,7 +71,7 @@ public:
   }
 
   // for shared writers
-  std::optional<seastar::future<>> lock_for_write();
+  seastar::future<> lock_for_write();
   bool try_lock_for_write() noexcept;
   void unlock_for_write();
   void demote_to_write();
@@ -82,7 +80,7 @@ public:
   }
 
   // for exclusive users
-  std::optional<seastar::future<>> lock_for_excl();
+  seastar::future<> lock_for_excl();
   bool try_lock_for_excl() noexcept;
   void unlock_for_excl();
   bool is_excl_acquired() const {
