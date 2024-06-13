@@ -276,7 +276,7 @@ private:
   int try_lock_directory(const std::string &dir_root, SnapshotReplayerThread *replayer,
                          DirRegistry *registry);
   void unlock_directory(const std::string &dir_root, const DirRegistry &registry);
-  void sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
+  int sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
 
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,
