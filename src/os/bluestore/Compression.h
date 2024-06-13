@@ -53,7 +53,7 @@ public:
     Writer::blob_vec& bd);
 
   void finish();
-
+  void dump(Formatter *f) const;
 private:
   BlueStore* bluestore;
   double expected_compression_factor = 0.5;
