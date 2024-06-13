@@ -103,6 +103,8 @@ struct Owner : public ElectionOwner, RankProvider {
   bool timer_election; // the timeout is for normal election, or victory
   bool rank_deleted = false;
   string prefix_str;
+  set<int> stretch_marked_down_mons;
+  int tiebreaker_mon_rank;
  Owner(int r, ElectionLogic::election_strategy es, double tracker_halflife,
        Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
@@ -186,6 +188,18 @@ struct Owner : public ElectionOwner, RankProvider {
     start_victory_timer();
     quorum = members;
     victory_accepters = 1;
+  }
+  bool is_stretch_marked_down_mons(int rank) const {
+    for (auto& i : stretch_marked_down_mons) {
+      if (i == rank) {
+        return true;
+      }
+    }
+    return false;
+  }
+  bool is_tiebreaker(int rank) const
+  {
+    return tiebreaker_mon_rank == rank;
   }
   bool is_current_member(int r) const { return quorum.count(r) != 0; }
   void receive_propose(int from, epoch_t e, ConnectionTracker *oct) {
