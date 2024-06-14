@@ -609,7 +609,6 @@ bs::error_code logback_generations::remove_empty(const DoutPrefixProvider *dpp, 
     if (ec) return ec;
     auto tries = 0;
     entries_t new_entries;
-    std::unique_lock l(m);
     ceph_assert(!entries_.empty());
     {
       auto i = lowest_nomempty(entries_);
@@ -619,8 +618,8 @@ bs::error_code logback_generations::remove_empty(const DoutPrefixProvider *dpp, 
     }
     entries_t es;
     auto now = ceph::real_clock::now();
-    l.unlock();
     do {
+      std::unique_lock l(m);
       std::copy_if(entries_.cbegin(), entries_.cend(),
 		   std::inserter(es, es.end()),
 		   [now](const auto& e) {
@@ -646,7 +645,6 @@ bs::error_code logback_generations::remove_empty(const DoutPrefixProvider *dpp, 
 	  es2.erase(i);
 	}
       }
-      l.lock();
       es.clear();
       ec = write(dpp, std::move(es2), std::move(l), y);
       ++tries;
