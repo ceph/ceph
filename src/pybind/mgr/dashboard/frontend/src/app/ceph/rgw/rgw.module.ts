@@ -45,6 +45,7 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
+import { RgwMultisiteWizardComponent } from './rgw-multisite-wizard/rgw-multisite-wizard.component';
 
 @NgModule({
   imports: [
@@ -102,7 +103,8 @@ import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.com
     RgwSyncPrimaryZoneComponent,
     RgwSyncMetadataInfoComponent,
     RgwSyncDataInfoComponent,
-    BucketTagModalComponent
+    BucketTagModalComponent,
+    RgwMultisiteWizardComponent
   ]
 })
 export class RgwModule {}

@@ -19,11 +19,20 @@
            routerLink="/services">
            Cluster->Services</a>
       </cd-alert-panel>
-      <cd-table-actions class="btn-group mb-4 me-2"
-                        [permission]="permission"
-                        [selection]="selection"
-                        [tableActions]="createTableActions">
-      </cd-table-actions>
+      <span *ngIf="!showMultisiteReplicationAction">
+        <cd-table-actions class="btn-group mb-4 me-2"
+                          [permission]="permission"
+                          [selection]="selection"
+                          [tableActions]="createTableActions">
+        </cd-table-actions>
+      </span>
+      <span *ngIf="showMultisiteReplicationAction">
+        <cd-table-actions class="btn-group mb-4 me-2"
+                          [permission]="permission"
+                          [selection]="selection"
+                          [tableActions]="setupMultisiteReplication">
+        </cd-table-actions>
+      </span>
       <span *ngIf="showMigrateAction">
         <cd-table-actions class="btn-group mb-4 me-2 secondary"
                           [permission]="permission"
@@ -48,7 +57,6 @@
     <div class="card">
       <div class="card-header"
            i18n>Topology Viewer</div>
-      <div class="card-body">
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
             <i *ngIf="loadingIndicator"
@@ -120,4 +128,3 @@
       </div>
     </div>
   </div>
-</div>
