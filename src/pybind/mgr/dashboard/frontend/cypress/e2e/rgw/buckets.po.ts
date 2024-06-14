@@ -1,5 +1,6 @@
 import { PageHelper } from '../page-helper.po';
 
+const WAIT_TIMER = 500;
 const pages = {
   index: { url: '#/rgw/bucket', id: 'cd-rgw-bucket-list' },
   create: { url: '#/rgw/bucket/create', id: 'cd-rgw-bucket-form' }
@@ -44,7 +45,7 @@ export class BucketsPageHelper extends PageHelper {
     }
 
     // Click the create button and wait for bucket to be made
-    cy.contains('button', 'Create Bucket').click();
+    cy.contains('button', 'Create Bucket').wait(WAIT_TIMER).click();
 
     this.getFirstTableCell(name).should('exist');
   }
@@ -119,7 +120,7 @@ export class BucketsPageHelper extends PageHelper {
 
     cy.get('label[for=versioning]').click();
     cy.get('input[id=versioning]').should('not.be.checked');
-    cy.contains('button', 'Edit Bucket').click();
+    cy.contains('button', 'Edit Bucket').wait(WAIT_TIMER).click();
 
     // Check versioning suspended:
     this.getExpandCollapseElement(name).click();
@@ -134,7 +135,7 @@ export class BucketsPageHelper extends PageHelper {
     // Gives an invalid name (too short), then waits for dashboard to determine validity
     cy.get('@nameInputField').type('rq');
 
-    cy.contains('button', 'Create Bucket').click(); // To trigger a validation
+    cy.contains('button', 'Create Bucket').wait(WAIT_TIMER).click(); // To trigger a validation
 
     // Waiting for website to decide if name is valid or not
     // Check that name input field was marked invalid in the css
@@ -166,7 +167,7 @@ export class BucketsPageHelper extends PageHelper {
 
     // Clicks the Create Bucket button but the page doesn't move.
     // Done by testing for the breadcrumb
-    cy.contains('button', 'Create Bucket').click(); // Clicks Create Bucket button
+    cy.contains('button', 'Create Bucket').wait(WAIT_TIMER).click(); // Clicks Create Bucket button
     this.expectBreadcrumbText('Create');
     // content in fields seems to subsist through tests if not cleared, so it is cleared
     cy.get('@nameInputField').clear();
