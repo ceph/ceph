@@ -1,4 +1,5 @@
 #include "curl/client.h"
+#include "curl/async_perform.h"
 #include <gtest/gtest.h>
 #include <chrono>
 #include <exception>
@@ -58,6 +59,43 @@ auto perform(Client& client, const char* url)
   co_await client.async_perform(easy.get(), asio::use_awaitable);
 }
 
+auto perform(const char* url)
+    -> asio::awaitable<void>
+{
+  auto easy = easy_init();
+  ::curl_easy_setopt(easy.get(), CURLOPT_URL, url);
+
+  co_await async_perform(co_await asio::this_coro::executor,
+                         easy.get(), asio::use_awaitable);
+}
+
+TEST(Client, no_server)
+{
+  asio::io_context cctx;
+  auto client = Client{cctx.get_executor()};
+
+  std::optional<std::exception_ptr> ceptr;
+  asio::co_spawn(cctx, perform(client, "http://127.0.0.1:1234"), capture(ceptr));
+
+  cctx.poll();
+  EXPECT_TRUE(cctx.stopped());
+  ASSERT_TRUE(ceptr);
+  EXPECT_TRUE(*ceptr);
+}
+
+TEST(SharedClient, no_server)
+{
+  asio::io_context cctx;
+
+  std::optional<std::exception_ptr> ceptr;
+  asio::co_spawn(cctx, perform("http://127.0.0.1:1234"), capture(ceptr));
+
+  cctx.poll();
+  EXPECT_TRUE(cctx.stopped());
+  ASSERT_TRUE(ceptr);
+  EXPECT_TRUE(*ceptr);
+}
+
 TEST(Client, one)
 {
   asio::io_context sctx;
@@ -93,6 +131,44 @@ TEST(Client, one)
 
   cctx.poll(); // client wait_read completes, timer is canceled
   ASSERT_TRUE(cctx.stopped());
+  ASSERT_TRUE(ceptr);
+  EXPECT_FALSE(*ceptr);
+}
+
+TEST(SharedClient, one)
+{
+  asio::io_context sctx;
+  const auto localhost = ip::make_address("127.0.0.1");
+  auto acceptor = ip::tcp::acceptor{sctx, ip::tcp::endpoint{localhost, 0}};
+  acceptor.listen(1);
+
+  std::optional<std::exception_ptr> septr;
+  asio::co_spawn(sctx, accept_connection(acceptor, 1), capture(septr));
+
+  sctx.poll(); // server spawn, block on accept
+  ASSERT_FALSE(sctx.stopped());
+  EXPECT_FALSE(septr);
+
+  const std::string url = fmt::format("http://127.0.0.1:{}",
+                                      acceptor.local_endpoint().port());
+
+  // step through the client on a separate io_context
+  asio::io_context cctx;
+
+  std::optional<std::exception_ptr> ceptr;
+  asio::co_spawn(cctx, perform(url.c_str()), capture(ceptr));
+
+  cctx.poll(); // client spawn + write, block on wait_read
+  ASSERT_FALSE(cctx.stopped());
+  EXPECT_FALSE(ceptr);
+
+  sctx.poll(); // server accept + read + write
+  ASSERT_TRUE(sctx.stopped());
+  ASSERT_TRUE(septr);
+  EXPECT_FALSE(*septr);
+
+  cctx.poll(); // client wait_read completes, timer is canceled
+  EXPECT_TRUE(cctx.stopped());
   ASSERT_TRUE(ceptr);
   EXPECT_FALSE(*ceptr);
 }
@@ -249,6 +325,62 @@ TEST(Client, two_keepalive)
 
   std::optional<std::exception_ptr> ceptr2;
   asio::co_spawn(cctx, perform(client, url.c_str()), capture(ceptr2));
+
+  cctx.restart();
+  cctx.poll();
+  ASSERT_FALSE(cctx.stopped());
+  EXPECT_FALSE(ceptr2);
+
+  sctx.poll();
+  ASSERT_TRUE(sctx.stopped());
+  ASSERT_TRUE(septr);
+  EXPECT_FALSE(*septr);
+
+  cctx.run_for(10ms);
+  ASSERT_TRUE(cctx.stopped());
+  ASSERT_TRUE(ceptr2);
+  EXPECT_FALSE(*ceptr2);
+}
+
+TEST(SharedClient, two_keepalive)
+{
+  asio::io_context sctx;
+  const auto localhost = ip::make_address("127.0.0.1");
+  auto acceptor = ip::tcp::acceptor{sctx, ip::tcp::endpoint{localhost, 0}};
+  acceptor.listen(1);
+
+  // accept two requests on the same connection
+  std::optional<std::exception_ptr> septr;
+  asio::co_spawn(sctx, accept_connection(acceptor, 2), capture(septr));
+
+  EXPECT_EQ(1, sctx.poll()); // server spawn, block on accept
+  ASSERT_FALSE(sctx.stopped());
+  EXPECT_FALSE(septr);
+
+  const std::string url = fmt::format("http://127.0.0.1:{}",
+                                      acceptor.local_endpoint().port());
+
+  // step through the client on a separate io_context
+  asio::io_context cctx;
+
+  std::optional<std::exception_ptr> ceptr1;
+  asio::co_spawn(cctx, perform(url.c_str()), capture(ceptr1));
+
+  cctx.poll();
+  ASSERT_FALSE(cctx.stopped());
+  EXPECT_FALSE(ceptr1);
+
+  sctx.poll();
+  ASSERT_FALSE(sctx.stopped());
+  ASSERT_FALSE(septr);
+
+  cctx.poll();
+  ASSERT_TRUE(cctx.stopped());
+  ASSERT_TRUE(ceptr1);
+  EXPECT_FALSE(*ceptr1);
+
+  std::optional<std::exception_ptr> ceptr2;
+  asio::co_spawn(cctx, perform(url.c_str()), capture(ceptr2));
 
   cctx.restart();
   cctx.poll();
@@ -449,6 +581,41 @@ TEST(ClientLoad, multi_thread)
   auto client = Client{ex};
   for (size_t i = 0; i < max_connections; i++) {
     asio::co_spawn(ex, client_load(client, url.c_str(),
+        requests_per_connection), rethrow);
+  }
+
+  ctx.join();
+}
+
+auto client_load(const char* url, size_t count)
+    -> asio::awaitable<void>
+{
+  for (size_t i = 0; i < count; i++) {
+    co_await perform(url);
+  }
+}
+
+TEST(SharedClientLoad, multi_thread)
+{
+  constexpr size_t num_threads = 8;
+  constexpr size_t max_connections = 8;
+  constexpr size_t requests_per_connection = 256;
+
+  auto ctx = asio::static_thread_pool{num_threads};
+  const auto localhost = ip::make_address("127.0.0.1");
+  auto acceptor = ip::tcp::acceptor{ctx, ip::tcp::endpoint{localhost, 0}};
+  acceptor.listen(max_connections);
+
+  for (size_t i = 0; i < max_connections; i++) {
+    asio::co_spawn(ctx, accept_connection(acceptor,
+        requests_per_connection), rethrow);
+  }
+
+  const std::string url = fmt::format("http://127.0.0.1:{}",
+                                      acceptor.local_endpoint().port());
+
+  for (size_t i = 0; i < max_connections; i++) {
+    asio::co_spawn(ctx, client_load(url.c_str(),
         requests_per_connection), rethrow);
   }
 
