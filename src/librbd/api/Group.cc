@@ -1263,6 +1263,35 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
     return -ENOENT;
   }
 
+  if (group_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+    lderr(cct) << "group snapshot is not complete" << dendl;
+    return -EINVAL;
+  }
+
+  std::vector<cls::rbd::GroupImageSpec> rollback_images;
+  for (const auto& snap : group_snap->snaps) {
+    rollback_images.emplace_back(snap.image_id, snap.pool);
+  }
+
+  std::vector<cls::rbd::GroupImageStatus> images;
+  r = group_image_list(group_ioctx, group_name, &images);
+  if (r < 0) {
+    return r;
+  }
+
+  std::vector<cls::rbd::GroupImageSpec> current_images;
+  for (const auto& image : images) {
+    if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED) {
+      current_images.push_back(image.spec);
+    }
+  }
+
+  if (rollback_images != current_images) {
+    lderr(cct) << "group snapshot membership does not match group membership"
+               << dendl;
+    return -EINVAL;
+  }
+
   string group_header_oid = util::group_header_name(group_id);
   r = group_snap_rollback_by_record(group_ioctx, *group_snap, group_id,
                                     group_header_oid, pctx);
