@@ -47,7 +47,7 @@ void JournalTool::usage()
     << "      inspect\n"
     << "      import <path> [--force]\n"
     << "      export <path>\n"
-    << "      reset [--force]\n"
+    << "      reset [--force] <--yes-i-really-really-mean-it>\n"
     << "  cephfs-journal-tool [options] header <get|set> <field> <value>\n"
     << "    <field>: [trimmed_pos|expire_pos|write_pos|pool_id]\n"
     << "  cephfs-journal-tool [options] event <effect> <selector> <output> [special options]\n"
@@ -139,6 +139,12 @@ int JournalTool::main(std::vector<const char*> &argv)
   }
  
   auto& fs = fsmap->get_filesystem(role_selector.get_ns());
+  stringstream (rank_str.substr(rank_str.find(':') + 1)) >> rank;
+  if (fs.get_mds_map().is_active(rank)) {
+    derr << "Cannot run cephfs-journal-tool on an active file system!" << dendl;
+    return -CEPHFS_EPERM;
+  }
+
   int64_t const pool_id = fs.get_mds_map().get_metadata_pool();
   dout(4) << "JournalTool: resolving pool " << pool_id << dendl;
   std::string pool_name;
@@ -196,7 +202,7 @@ int JournalTool::validate_type(const std::string &type)
   if (type == "mdlog" || type == "purge_queue") {
     return 0;
   }
-  return -1;
+  return -CEPHFS_EPERM;
 }
 
 std::string JournalTool::gen_dump_file_path(const std::string &prefix) {
@@ -250,14 +256,36 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
     }
   } else if (command == "reset") {
     bool force = false;
-    if (argv.size() == 2) {
+    if (argv.size() == 1) {
+        std::cerr << "warning: this operation resets the journal!!!\n"
+                  << "Do not run this operation if you do not understand CephFS' internal storage mechanisms or have received specific instructions from those who do.\n"
+                  << "If you want to continue, please add --yes-i-really-really-mean-it!!!"
+                  << std::endl;
+        return -EINVAL;
+    } else if (argv.size() == 2) {
+      if (std::string(argv[1]) == "--force") {
+        std::cerr << "warning: this operation resets the journal!!!\n"
+                  << "Do not run this operation if you do not understand CephFS' internal storage mechanisms or have received specific instructions from those who do.\n"
+                  << "If you want to continue, please add --yes-i-really-really-mean-it!!!"
+                  << std::endl;
+        return -EINVAL;
+      } else if (std::string(argv[1]) != "--yes-i-really-really-mean-it") {
+        std::cerr << "Unknown argument " << argv[1] << std::endl;
+        return -EINVAL;
+      }
+    } else if (argv.size() == 3) {
       if (std::string(argv[1]) == "--force") {
         force = true;
       } else {
         std::cerr << "Unknown argument " << argv[1] << std::endl;
         return -EINVAL;
       }
-    } else if (argv.size() > 2) {
+
+      if (std::string(argv[2]) != "--yes-i-really-really-mean-it") {
+	std::cerr << "Unknown argument " << argv[2] << std::endl;
+        return -EINVAL;
+      }
+    } else if (argv.size() > 3) {
       std::cerr << "Too many arguments!" << std::endl;
       return -EINVAL;
     }
