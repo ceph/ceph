@@ -309,7 +309,6 @@ finish:
 int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
                                   const cls::rbd::GroupSnapshot& group_snap,
                                   const std::string& group_id,
-                                  const std::string& group_header_oid,
                                   ProgressContext& pctx) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   std::vector<C_SaferCond*> on_finishes;
@@ -1292,9 +1291,7 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
     return -EINVAL;
   }
 
-  string group_header_oid = util::group_header_name(group_id);
-  r = group_snap_rollback_by_record(group_ioctx, *group_snap, group_id,
-                                    group_header_oid, pctx);
+  r = group_snap_rollback_by_record(group_ioctx, *group_snap, group_id, pctx);
   return r;
 }
 
