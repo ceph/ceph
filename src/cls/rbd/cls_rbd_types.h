@@ -374,6 +374,7 @@ struct GroupImageSpec {
 
   std::string image_key();
 
+  bool operator==(const GroupImageSpec&) const = default;
 };
 WRITE_CLASS_ENCODER(GroupImageSpec);
 
