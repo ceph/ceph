@@ -248,14 +248,16 @@ Estimator* BlueStore::create_estimator()
 class BlueStore::Scanner::Scan {
 public:
   BlueStore* bluestore;
+  BlueStore::Onode* onode;
   ExtentMap* extent_map;
   Estimator* estimator;
   Scan(
     BlueStore* bluestore,
-    ExtentMap* extent_map,
+    BlueStore::Onode* onode,
     Estimator* estimator)
   : bluestore(bluestore)
-  , extent_map(extent_map)
+  , onode(onode)
+  , extent_map(&onode->extent_map)
   , estimator(estimator) {}
   object_scan_info_t scanned_blobs;
   void on_write_start(
@@ -306,12 +308,12 @@ private:
 };
 
 void Scanner::write_lookaround(
-  BlueStore::ExtentMap* extent_map,
+  BlueStore::Onode* onode,
   uint32_t offset, uint32_t length,
   uint32_t left_limit, uint32_t right_limit,
   Estimator* estimator)
 {
-  Scan on_write(bluestore, extent_map, estimator);
+  Scan on_write(bluestore, onode, estimator);
   on_write.on_write_start(offset, length, left_limit, right_limit);
 }
 
