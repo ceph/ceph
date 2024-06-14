@@ -44,10 +44,6 @@ cherrypy.log.access_log.propagate = False
 
 class AgentEndpoint:
 
-    # TODO: move these constants to migrations
-    KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
-    KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
-
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.ssl_certs = SSLCerts()
