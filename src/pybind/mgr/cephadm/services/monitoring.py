@@ -121,9 +121,6 @@ class GrafanaService(CephadmService):
         return config_file, sorted(deps)
 
     def prepare_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        # TODO: move these variables to migrations
-        # cert_path = f'{daemon_spec.host}/grafana_crt'
-        # key_path = f'{daemon_spec.host}/grafana_key'
         cert = self.mgr.cert_key_store.get_cert('grafana_cert', host=daemon_spec.host)
         pkey = self.mgr.cert_key_store.get_key('grafana_key', host=daemon_spec.host)
         certs_present = (cert and pkey)

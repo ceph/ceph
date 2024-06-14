@@ -45,11 +45,6 @@ class Route(NamedTuple):
 
 class ServiceDiscovery:
 
-    # TODO: these constants should only be needed for migration purposes
-    # after completion of the cert store. Make sure to move them.
-    KV_STORE_SD_ROOT_CERT = 'service_discovery/root/cert'
-    KV_STORE_SD_ROOT_KEY = 'service_discovery/root/key'
-
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.ssl_certs = SSLCerts()
