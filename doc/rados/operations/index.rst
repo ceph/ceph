@@ -40,6 +40,8 @@ CRUSH algorithm.
 	cache-tiering
 	placement-groups
 	balancer
+        pg-states
+        pg-concepts
 	upmap
 	crush-map
 	crush-map-edits
