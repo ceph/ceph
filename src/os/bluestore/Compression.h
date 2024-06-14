@@ -79,7 +79,7 @@ public:
   :bluestore(bluestore) {}
 
   void write_lookaround(
-    BlueStore::ExtentMap* extent_map,
+    BlueStore::Onode* onode,
     uint32_t offset, uint32_t length,
     uint32_t left_limit, uint32_t right_limit,
     Estimator* estimator);

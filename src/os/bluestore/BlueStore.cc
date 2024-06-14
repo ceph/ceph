@@ -17091,7 +17091,7 @@ int BlueStore::_do_write_v2_compressed(
   }
   Estimator* estimator = c->estimator.get();
   estimator->reset();
-  scanner.write_lookaround(&o->extent_map, offset, length, scan_left,
+  scanner.write_lookaround(o.get(), offset, length, scan_left,
                            scan_right, estimator);
   std::vector<Estimator::region_t> regions;
   estimator->get_regions(regions);
