@@ -1476,12 +1476,19 @@ public:
   struct printer : public BlueStore::printer {
     const Onode& onode;
     uint16_t mode;
+    uint32_t from = 0;
+    uint32_t end = OBJECT_MAX_SIZE;
     printer(const Onode& onode, uint16_t mode)
     :onode(onode), mode(mode) {}
+    printer(const Onode& onode, uint16_t mode, uint32_t from, uint32_t end)
+    :onode(onode), mode(mode), from(from), end(end) {}
   };
   friend std::ostream& operator<<(std::ostream& out, const printer &p);
   printer print(uint16_t mode) const {
     return printer(*this, mode);
+  }
+  printer print(uint16_t mode, uint32_t from, uint32_t end) const {
+    return printer(*this, mode, from, end);
   }
 private:
     void _decode(const ceph::buffer::list& v);
