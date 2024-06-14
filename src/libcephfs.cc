@@ -2019,31 +2019,145 @@ extern "C" int64_t ceph_ll_writev(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
 }
 
+struct ceph_ll_readv_writev_buffer {
+  ceph_ll_readv_writev_buffer() : iov() {};
+  ~ceph_ll_readv_writev_buffer() {
+    delete iov;
+  }
+  int prepare_iovs(int iovmax) {
+    iovcnt = bl.get_num_buffers();
+    if (iovmax != 0 && iovcnt > iovmax) {
+      // TODO: refine the interface to accomodate for the buffer count exceeding
+      //       the desired maximum iovec length.
+      return -CEPHFS_EINVAL;
+    }
+    iov = new struct iovec [iovcnt];
+    auto pb = std::cbegin(bl.buffers());
+    for (auto n = 0; n < iovcnt; n++) {
+      iov[n].iov_base = (void*)(pb->c_str());
+      iov[n].iov_len = pb->length();
+      ++pb;
+    }
+    return 0;
+  }
+  bool bigbuffer;
+  bufferlist bl;
+  int iovcnt;
+  struct iovec *iov;
+};
+
+extern "C"  void LL_onfinish_release(void *);
+
 class LL_Onfinish : public Context {
 public:
   LL_Onfinish(struct ceph_ll_io_info *io_info)
-    : io_info(io_info) {}
-  bufferlist bl;
+    : buf(), io_info(io_info) {}
+  struct ceph_ll_readv_writev_buffer buf;
 private:
   struct ceph_ll_io_info *io_info;
+  void complete(int r) override {
+    finish(r); // fills in io_info->result which may be different than r
+    if (io_info->result < 0 || io_info->write || !io_info->zerocopy) {
+      // this is an error, write, or a non-zerocopy read, delete...
+      // for a succesful zero-copy read, we need to keep this object until the
+      // caller is done with the buffers so it can use this as a hook to release
+      // them.
+      delete this;
+    }
+  }
   void finish(int r) override {
     if (!io_info->write && r > 0) {
-      copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &bl, r);
+      if (io_info->zerocopy) {
+        int r2 = buf.prepare_iovs(io_info->iovmax);
+
+        if (r2 < 0) {
+          io_info->result = r;
+          io_info->callback(io_info);
+          return;
+        }
+        
+        io_info->iovcnt = buf.iovcnt;
+        io_info->iov = buf.iov;
+        // This is a zero-copy read, set up for returning zero copy buffer
+        io_info->release = LL_onfinish_release;
+        io_info->release_data = this;
+      } else {
+        copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &buf.bl, r);
+      }
     }
     io_info->result = r;
     io_info->callback(io_info);
   }
 };
 
+extern "C" void LL_onfinish_release(void *release_data)
+{
+  Context *onfinish = (Context *) release_data;
+
+  // Cleanup this object (and the included ceph_ll_readv_writev_buffer) when
+  // the calller is done. This is only called for a zero-copy read.
+  delete onfinish;
+}
+
 extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
 						    struct ceph_ll_io_info *io_info)
 {
   LL_Onfinish *onfinish = new LL_Onfinish(io_info);
 
+  // Note the above instantiates a ceph_ll_readv_writev_buffer which will be
+  // used by a sucessful zero-copy read. The caller will then call
+  // LL_onfinish_release when done with the read buffers.
+
   return (cmount->get_client()->ll_preadv_pwritev(
 			io_info->fh, io_info->iov, io_info->iovcnt,
-			io_info->off, io_info->write, onfinish, &onfinish->bl,
-			io_info->fsync, io_info->syncdataonly));
+			io_info->off, io_info->write, onfinish, &onfinish->buf.bl,
+			io_info->fsync, io_info->syncdataonly, io_info->zerocopy));
+}
+
+extern "C" void ceph_ll_readv_writev_release(void *release_data)
+{
+  ceph_ll_readv_writev_buffer *buf = (ceph_ll_readv_writev_buffer *) release_data;
+
+  // Cleanup the buffer when the caller is done. This is only called for a
+  // zero-copy read.
+  delete buf;
+}
+
+extern "C" void ceph_ll_readv_writev(class ceph_mount_info *cmount,
+				     struct ceph_ll_io_info *io_info)
+{
+  ceph_ll_readv_writev_buffer *buf = new ceph_ll_readv_writev_buffer;
+
+  if (!io_info->write && io_info->zerocopy) {
+    ceph_assert(io_info->iovcnt == 1);
+  }
+
+  io_info->result = (cmount->get_client()->ll_preadv_pwritev(
+			io_info->fh, io_info->iov, io_info->iovcnt,
+			io_info->off, io_info->write, nullptr, &buf->bl,
+			io_info->fsync, io_info->syncdataonly, io_info->zerocopy));
+
+  if (!io_info->write && io_info->result > 0) {
+    if (io_info->zerocopy) {
+      buf->prepare_iovs(io_info->iovmax);
+      io_info->iovcnt = buf->iovcnt;
+      io_info->iov = buf->iov;
+      // This is a zero-copy read, set up for returning zero copy buffer
+      io_info->release = ceph_ll_readv_writev_release;
+      io_info->release_data = buf;
+    } else {
+      copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &buf->bl,
+                               io_info->result);
+    }
+  }
+
+  // Note caller of a successful zero-copy read will end up calling
+  // ceph_ll_readv_writev_release to release the buffers, otherwise clean it
+  // up now since it is no longer needed.
+  if (io_info->write || io_info->result <= 0 || !io_info->zerocopy)
+    delete buf;
+
+  io_info->callback(io_info);
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

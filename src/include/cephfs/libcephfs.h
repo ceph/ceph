@@ -120,15 +120,19 @@ struct ceph_snapdiff_entry_t {
 
 struct ceph_ll_io_info {
   void (*callback) (struct ceph_ll_io_info *cb_info);
+  void (*release) (void *);
+  void *release_data;
   void *priv; // private for caller
   struct Fh *fh;
-  const struct iovec *iov;
+  struct iovec *iov;
   int iovcnt;
+  int iovmax; // maximum iovcnt is allowed, 0 for no limit
   int64_t off;
   int64_t result;
   bool write;
   bool fsync;
   bool syncdataonly;
+  bool zerocopy;
 };
 
 /* setattr mask bits (up to an int in size) */
@@ -1947,6 +1951,8 @@ int64_t ceph_ll_readv(struct ceph_mount_info *cmount, struct Fh *fh,
 		      const struct iovec *iov, int iovcnt, int64_t off);
 int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
 		       const struct iovec *iov, int iovcnt, int64_t off);
+void ceph_ll_readv_writev(struct ceph_mount_info *cmount,
+			  struct ceph_ll_io_info *io_info);
 int64_t ceph_ll_nonblocking_readv_writev(struct ceph_mount_info *cmount,
 					 struct ceph_ll_io_info *io_info);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
