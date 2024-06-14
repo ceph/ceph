@@ -17022,7 +17022,7 @@ int BlueStore::_do_write_v2(
   }
   WriteContext wctx;
   _choose_write_options(c, o, fadvise_flags, &wctx);
-  if (wctx.compress) {
+  if (wctx.compressor) {
     uint32_t end = offset + length;
     uint32_t segment_size = c->segment_size;
     if (segment_size) {
@@ -17094,24 +17094,6 @@ int BlueStore::_do_write_v2_compressed(
   }
   *_dout << std::dec << dendl;
   int r = 0;
-  CompressorRef compr;
-  compr = select_option("compression_algorithm", compressor, [&]() {
-    string val;
-    if (c->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
-      CompressorRef cp = compressor;
-      if (!cp || cp->get_type_name() != val) {
-        cp = Compressor::create(cct, val);
-        if (!cp) {
-          if (_set_compression_alert(false, val.c_str())) {
-            derr << __func__ << " unable to initialize " << val.c_str()
-                 << " compressor" << dendl;
-          }
-        }
-      }
-      return std::optional<CompressorRef>(cp);
-    }
-    return std::optional<CompressorRef>();
-  });
   for (auto i : regions) {
     ceph::buffer::list data_bl;
     if (i.offset <= offset && offset < i.offset + i.length) {
@@ -17137,7 +17119,7 @@ int BlueStore::_do_write_v2_compressed(
     int32_t disk_for_compressed;
     int32_t disk_for_raw;
     uint32_t au_size = min_alloc_size;
-    disk_for_compressed = estimator->split_and_compress(compr, max_blob_size, data_bl, bd);
+    disk_for_compressed = estimator->split_and_compress(wctx.compressor, max_blob_size, data_bl, bd);
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
     BlueStore::Writer wr(this, txc, &wctx, o);
     if (disk_for_compressed < disk_for_raw) {
