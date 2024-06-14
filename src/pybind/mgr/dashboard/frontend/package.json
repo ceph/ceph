@@ -99,7 +99,7 @@
     "@angular/compiler-cli": "15.2.9",
     "@angular/language-service": "15.2.9",
     "@applitools/eyes-cypress": "3.22.5",
-    "@compodoc/compodoc": "1.1.18",
+    "@compodoc/compodoc": "1.1.25",
     "@cypress/browserify-preprocessor": "3.0.2",
     "@types/brace-expansion": "1.1.0",
     "@types/cypress-cucumber-preprocessor": "4.0.1",
