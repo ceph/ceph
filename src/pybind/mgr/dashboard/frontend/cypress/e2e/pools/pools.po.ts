@@ -31,7 +31,7 @@ export class PoolPageHelper extends PageHelper {
     cy.get('cd-submit-button').click();
   }
 
-  edit_pool_pg(name: string, new_pg: number, wait = true, mirroring=false) {
+  edit_pool_pg(name: string, new_pg: number, wait = true, mirroring = false) {
     this.isPowerOf2(new_pg);
     this.navigateEdit(name);
 

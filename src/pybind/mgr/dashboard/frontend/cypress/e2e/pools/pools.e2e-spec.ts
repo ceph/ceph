@@ -67,5 +67,5 @@ describe('Pools page', () => {
     it('should delete the pool', () => {
       pools.delete(poolName);
     });
-  })
+  });
 });
