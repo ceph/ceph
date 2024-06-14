@@ -417,5 +417,4 @@ class PodmanEngine(ContainerEngine):
 def get_container_engine() -> ContainerEngine:
     if engine() == 'docker':
         return DockerEngine()
-    else:
-        return PodmanEngine()
+    return PodmanEngine()
