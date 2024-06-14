@@ -20,7 +20,8 @@ const jestConfig = {
   globalSetup: 'jest-preset-angular/global-setup',
   moduleNameMapper: {
     '\\.scss$': 'identity-obj-proxy',
-    '~/(.*)$': '<rootDir>/src/$1'
+    '~/(.*)$': '<rootDir>/src/$1',
+    '^@carbon/icons/es/(.*)$': '@carbon/icons/lib/$1.js',
   },
   moduleFileExtensions: ['ts', 'html', 'js', 'json', 'mjs', 'cjs'],
   preset: 'jest-preset-angular',

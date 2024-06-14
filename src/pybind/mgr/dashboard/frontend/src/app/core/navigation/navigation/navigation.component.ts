@@ -6,7 +6,6 @@ import { Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { SettingsService } from '~/app/shared/api/settings.service';
 
-import { Icons } from '~/app/shared/enum/icons.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -36,7 +35,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
   enabledFeature$: FeatureTogglesMap$;
   clusterTokenStatus: object = {};
   summaryData: any;
-  icons = Icons;
 
   rightSidebarOpen = false; // rightSidebar only opens when width is less than 768px
   showMenuSidebar = true;
