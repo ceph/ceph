@@ -258,25 +258,26 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
       << " expected_write_size " << o.onode.expected_write_size
       << " in " << o.onode.extent_map_shards.size() << " shards"
       << ", " << o.extent_map.spanning_blob_map.size()
-      << " spanning blobs" << std::endl;
+      << " spanning blobs";
   const BlueStore::ExtentMap& map = o.extent_map;
   std::set<BlueStore::Blob*> visited;
-  for (const auto& e : map.extent_map) {
-    BlueStore::Blob* b = e.blob.get();
-    if (!visited.contains(b)) {
-      out << b->print(mode) << std::endl;
-      visited.insert(b);
-    }
-  }
   // to make printing extents in-sync with blobs
   uint16_t mode_extent = (mode & (P::PTR | P::NICK)) | P::JUSTID;
-  for (const auto& e : map.extent_map) {
-    out << e.print(mode_extent) << std::endl;
+  auto i = map.seek_lextent(p.from);
+  while (i != map.extent_map.end() && i->logical_offset < p.end) {
+    BlueStore::Blob* b = i->blob.get();
+    out << std::endl << i->print(mode_extent);
+    if (!visited.contains(b)) {
+      visited.insert(b);
+    }
+    ++i;
+  }
+  for (const auto& i : visited) {
+    out << std::endl << i->print(mode);
   }
   if (mode & P::ATTRS) {
     for (const auto& p : o.onode.attrs) {
-      out << "  attr " << p.first
-        << " len " << p.second.length() << std::endl;
+      out << std::endl << "attr " << p.first << " len " << p.second.length();
     }
   }
   return out;
