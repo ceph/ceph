@@ -178,12 +178,6 @@ class ScrubQueue {
    */
   void enqueue_target(const Scrub::ScrubJob& sjob);
 
-  void delay_on_failure(
-      Scrub::ScrubJob& sjob,
-      std::chrono::seconds delay,
-      Scrub::delay_cause_t delay_cause,
-      utime_t now_is);
-
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
  public:

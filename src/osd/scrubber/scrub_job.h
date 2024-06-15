@@ -46,8 +46,6 @@ struct scrub_schedule_t {
 
 struct sched_params_t {
   utime_t proposed_time{};
-  double min_interval{0.0};
-  double max_interval{0.0};
   must_scrub_t is_must{must_scrub_t::not_mandatory};
 };
 
@@ -171,9 +169,13 @@ class ScrubJob {
    * random length of time.
    * And if delaying the scrub - we calculate, based on pool parameters, a
    * deadline we should scrub before.
+   *
+   * @return updated (i.e. - possibly delayed) scrub schedule (schedule,
+   * deadline, not_before)
    */
   Scrub::scrub_schedule_t adjust_target_time(
-    const Scrub::sched_params_t& recomputed_params) const;
+    const Scrub::sched_conf_t& app_conf,
+    const Scrub::sched_params_t& proposed_schedule) const;
 
   /**
    * push the 'not_before' time out by 'delay' seconds, so that this scrub target
@@ -253,12 +255,11 @@ template <>
 struct formatter<Scrub::sched_params_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const Scrub::sched_params_t& pm, FormatContext& ctx)
+  auto format(const Scrub::sched_params_t& pm, FormatContext& ctx) const
   {
     return fmt::format_to(
-	ctx.out(), "(proposed:{:s} min/max:{:.3f}/{:.3f} must:{:2s})",
-        utime_t{pm.proposed_time}, pm.min_interval, pm.max_interval,
-        pm.is_must == Scrub::must_scrub_t::mandatory ? "true" : "false");
+	ctx.out(), "proposed:{:s},must:{:c}", pm.proposed_time,
+	pm.is_must == Scrub::must_scrub_t::mandatory ? 'y' : 'n');
   }
 };
 
@@ -268,7 +269,7 @@ struct formatter<Scrub::ScrubJob> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const Scrub::ScrubJob& sjob, FormatContext& ctx)
+  auto format(const Scrub::ScrubJob& sjob, FormatContext& ctx) const
   {
     return fmt::format_to(
 	ctx.out(), "pg[{}] @ nb:{:s} ({:s}) (dl:{:s}) - <{}>",
@@ -281,7 +282,7 @@ template <>
 struct formatter<Scrub::sched_conf_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const Scrub::sched_conf_t& cf, FormatContext& ctx)
+  auto format(const Scrub::sched_conf_t& cf, FormatContext& ctx) const
   {
     return fmt::format_to(
 	ctx.out(),
@@ -289,6 +290,18 @@ struct formatter<Scrub::sched_conf_t> {
 	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
 	cf.max_deep, cf.interval_randomize_ratio, cf.deep_randomize_ratio,
 	cf.mandatory_on_invalid);
+  }
+};
+
+template <>
+struct formatter<Scrub::scrub_schedule_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const Scrub::scrub_schedule_t& sc, FormatContext& ctx) const
+  {
+    return fmt::format_to(
+	ctx.out(), "nb:{:s}(at:{:s},dl:{:s})", sc.not_before,
+        sc.scheduled_at, sc.deadline);
   }
 };
 }  // namespace fmt

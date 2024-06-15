@@ -453,9 +453,6 @@ struct ScrubPgIF {
 
   virtual pg_scrubbing_status_t get_schedule() const = 0;
 
-  /// notify the scrubber about a scrub failure
-  virtual void penalize_next_scrub(Scrub::delay_cause_t cause) = 0;
-
   // // perform 'scrub'/'deep_scrub' asok commands
 
   /// ... by faking the "last scrub" stamps

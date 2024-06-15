@@ -1351,7 +1351,6 @@ Scrub::schedule_result_t PG::start_scrubbing(
       osd_restrictions, pg_cond, m_planned_scrub);
 }
 
-
 double PG::next_deepscrub_interval() const
 {
   double deep_scrub_interval =
@@ -1360,6 +1359,7 @@ double PG::next_deepscrub_interval() const
     deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
   return info.history.last_deep_scrub_stamp + deep_scrub_interval;
 }
+
 void PG::on_scrub_schedule_input_change()
 {
   if (is_active() && is_primary()) {

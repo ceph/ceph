@@ -45,56 +45,46 @@ ostream& operator<<(ostream& out, const ScrubJob& sjob)
 
 
 Scrub::scrub_schedule_t ScrubJob::adjust_target_time(
-  const sched_params_t& times) const
+    const sched_conf_t& app_conf,
+    const sched_params_t& suggested) const
 {
-  Scrub::scrub_schedule_t sched_n_dead{
-    times.proposed_time, times.proposed_time, times.proposed_time};
+  Scrub::scrub_schedule_t adjusted{
+      suggested.proposed_time, suggested.proposed_time, suggested.proposed_time};
 
-  const auto& conf = cct->_conf;
-
-  if (times.is_must == Scrub::must_scrub_t::not_mandatory) {
+  if (suggested.is_must == Scrub::must_scrub_t::not_mandatory) {
     // unless explicitly requested, postpone the scrub with a random delay
-    double scrub_min_interval = times.min_interval > 0
-				  ? times.min_interval
-				  : conf->osd_scrub_min_interval;
-    double scrub_max_interval = times.max_interval > 0
-				  ? times.max_interval
-				  : conf->osd_scrub_max_interval;
-
-    sched_n_dead.scheduled_at += scrub_min_interval;
+    adjusted.scheduled_at += app_conf.shallow_interval;
     double r = rand() / (double)RAND_MAX;
-    sched_n_dead.scheduled_at +=
-      scrub_min_interval * conf->osd_scrub_interval_randomize_ratio * r;
+    adjusted.scheduled_at +=
+	app_conf.shallow_interval * app_conf.interval_randomize_ratio * r;
 
-    if (scrub_max_interval <= 0) {
-      sched_n_dead.deadline = utime_t{};
+    if (app_conf.max_shallow) {
+      adjusted.deadline += *app_conf.max_shallow;
     } else {
-      sched_n_dead.deadline += scrub_max_interval;
+      adjusted.deadline = utime_t{};
     }
+
+    if (adjusted.not_before < adjusted.scheduled_at) {
+      adjusted.not_before = adjusted.scheduled_at;
+    }
+
     dout(20) << fmt::format(
-		  "not-must. Was:{:s} {{min:{}/{} max:{}/{} ratio:{}}} "
-		  "Adjusted:{:s} ({:s})",
-		  times.proposed_time, fmt::group_digits(times.min_interval),
-		  fmt::group_digits(conf->osd_scrub_min_interval),
-		  fmt::group_digits(times.max_interval),
-		  fmt::group_digits(conf->osd_scrub_max_interval),
-		  conf->osd_scrub_interval_randomize_ratio,
-		  sched_n_dead.scheduled_at, sched_n_dead.deadline)
-	     << dendl;
+		    "not-must. Was:{:s} config:{} adjusted:{}",
+		    suggested.proposed_time, app_conf, adjusted) << dendl;
   }
-  // else - no log needed. All relevant data will be logged by the caller
-  return sched_n_dead;
+  // else - no log is needed. All relevant data will be logged by the caller
+
+  return adjusted;
 }
 
 
-// note: some parameters are unused in this commit.
 void ScrubJob::init_targets(
     const sched_params_t& suggested,
     const pg_info_t& info,
     const Scrub::sched_conf_t& aconf,
     utime_t scrub_clock_now)
 {
-  auto adjusted = adjust_target_time(suggested);
+  auto adjusted = adjust_target_time(aconf, suggested);
   high_priority = suggested.is_must == must_scrub_t::mandatory;
   update_schedule(adjusted, true);
 }

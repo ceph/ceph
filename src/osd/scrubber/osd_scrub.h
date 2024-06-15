@@ -101,16 +101,6 @@ class OsdScrub {
       utime_t t,
       bool high_priority_scrub) const;
 
-  /**
-   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
-   * would not be retried before 'delay' seconds have passed.
-   */
-  void delay_on_failure(
-      Scrub::ScrubJob& sjob,
-      std::chrono::seconds delay,
-      Scrub::delay_cause_t delay_cause,
-      utime_t now_is);
-
 
   /**
    * \returns true if the current time is within the scrub time window

@@ -420,15 +420,6 @@ PerfCounters* OsdScrub::get_perf_counters(int pool_type, scrub_level_t level)
 // forwarders to the queue
 
 
-void OsdScrub::delay_on_failure(
-      Scrub::ScrubJob& sjob,
-      std::chrono::seconds delay,
-      Scrub::delay_cause_t delay_cause,
-      utime_t now_is)
-{
-  m_queue.delay_on_failure(sjob, delay, delay_cause, now_is);
-}
-
 void OsdScrub::enqueue_target(const Scrub::ScrubJob& sjob)
 {
   m_queue.enqueue_target(sjob);

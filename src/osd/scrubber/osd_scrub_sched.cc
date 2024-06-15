@@ -71,20 +71,6 @@ void ScrubQueue::enqueue_target(const Scrub::ScrubJob& sjob)
 }
 
 
-void ScrubQueue::delay_on_failure(
-    Scrub::ScrubJob& sjob,
-    std::chrono::seconds delay,
-    Scrub::delay_cause_t delay_cause,
-    utime_t now_is)
-{
-  dout(10) << fmt::format(
-		  "pg[{}] delay_on_failure: delay:{} now:{:s}",
-		  sjob.pgid, delay, now_is)
-	   << dendl;
-  sjob.delay_on_failure(delay, delay_cause, now_is);
-}
-
-
 std::unique_ptr<ScrubJob> ScrubQueue::pop_ready_pg(
     OSDRestrictions restrictions,  // note: 4B in size! (thus - copy)
     utime_t time_now)

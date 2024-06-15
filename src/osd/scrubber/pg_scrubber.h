@@ -566,9 +566,11 @@ class PgScrubber : public ScrubPgIF,
   // 'query' command data for an active scrub
   void dump_active_scrubber(ceph::Formatter* f, bool is_deep) const;
 
-  /// calls penalize_next_scrub() to push the 'not before' to a later time
-  /// (for now. The fuller implementation will also push the scrub job back
-  /// into the queue).
+  /**
+   * move the 'not before' to a later time (with a delay amount that is
+   * based on the delay cause). Also saves the cause.
+   * Pushes the updated scrub-job into the OSD's queue.
+   */
   void requeue_penalized(Scrub::delay_cause_t cause);
 
   // -----     methods used to verify the relevance of incoming events:
@@ -800,10 +802,12 @@ class PgScrubber : public ScrubPgIF,
    * determine the time when the next scrub should be scheduled
    *
    * based on the planned scrub's flags, time of last scrub, and
-   * the pool's scrub configuration.
+   * the pool's scrub configuration. This is only an initial "proposal",
+   * and will be further adjusted based on the scheduling parameters.
    */
-  Scrub::sched_params_t determine_scrub_time(
-      const pool_opts_t& pool_conf) const;
+  Scrub::sched_params_t determine_initial_schedule(
+      const Scrub::sched_conf_t& app_conf,
+      utime_t scrub_clock_now) const;
 
   /// should we perform deep scrub?
   bool is_time_for_deep(

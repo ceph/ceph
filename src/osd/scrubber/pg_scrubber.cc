@@ -502,8 +502,9 @@ void PgScrubber::rm_from_osd_scrubbing()
   }
 }
 
-sched_params_t PgScrubber::determine_scrub_time(
-    const pool_opts_t& pool_conf) const
+sched_params_t PgScrubber::determine_initial_schedule(
+    const Scrub::sched_conf_t& app_conf,
+    utime_t scrub_clock_now) const
 {
   sched_params_t res;
 
@@ -512,29 +513,23 @@ sched_params_t PgScrubber::determine_scrub_time(
     // Set the smallest time that isn't utime_t()
     res.proposed_time = PgScrubber::scrub_must_stamp();
     res.is_must = Scrub::must_scrub_t::mandatory;
-    // we do not need the interval data in this case
 
-  } else if (
-      m_pg->info.stats.stats_invalid &&
-      get_pg_cct()->_conf->osd_scrub_invalid_stats) {
-    res.proposed_time = ceph_clock_now();
+  } else if (m_pg->info.stats.stats_invalid && app_conf.mandatory_on_invalid) {
+    res.proposed_time = scrub_clock_now;
     res.is_must = Scrub::must_scrub_t::mandatory;
 
   } else {
     res.proposed_time = m_pg->info.history.last_scrub_stamp;
-    res.min_interval = pool_conf.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
-    res.max_interval = pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
   }
 
-  dout(15)
-      << fmt::format(
-	     "{}: suggested: {:s} hist: {:s} v:{}/{} must:{} pool-min:{} {}",
-	     __func__, res.proposed_time, m_pg->info.history.last_scrub_stamp,
-	     (bool)m_pg->info.stats.stats_invalid,
-	     get_pg_cct()->_conf->osd_scrub_invalid_stats,
-	     (res.is_must == must_scrub_t::mandatory ? "y" : "n"),
-	     res.min_interval, m_planned_scrub)
-      << dendl;
+  dout(15) << fmt::format(
+		  "{}: suggested:{:s}(must:{:c}) hist:{:s} valid:{}/{} flags:{}",
+		  __func__, res.proposed_time,
+		  (res.is_must == must_scrub_t::mandatory ? 'y' : 'n'),
+		  m_pg->info.history.last_scrub_stamp,
+		  !(bool)m_pg->info.stats.stats_invalid,
+		  app_conf.mandatory_on_invalid, m_planned_scrub)
+	   << dendl;
   return res;
 }
 
@@ -551,10 +546,11 @@ void PgScrubber::schedule_scrub_with_osd()
   auto pre_reg = registration_state();
   m_scrub_job->registered = true;
 
-  auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
-  auto applicable_conf = populate_config_params();
+  const auto applicable_conf = populate_config_params();
+  const auto scrub_clock_now = ceph_clock_now();
+  auto suggested = determine_initial_schedule(applicable_conf, scrub_clock_now);
   m_scrub_job->init_targets(
-      suggested, m_pg->info, applicable_conf, ceph_clock_now());
+      suggested, m_pg->info, applicable_conf, scrub_clock_now);
 
   m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
 
@@ -615,14 +611,18 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 
 
   ceph_assert(m_pg->is_locked());
-  const auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
   const auto applicable_conf = populate_config_params();
-  m_scrub_job->on_periods_change(suggested, applicable_conf, ceph_clock_now());
+  const auto scrub_clock_now = ceph_clock_now();
+  const auto suggested = determine_initial_schedule(applicable_conf, scrub_clock_now);
+  m_scrub_job->on_periods_change(suggested, applicable_conf, scrub_clock_now);
   m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
   m_scrub_job->target_queued = true;
   m_pg->publish_stats_to_osd();
 
-  dout(15) << __func__ << ": done " << registration_state() << dendl;
+  dout(15) << fmt::format(
+                  "{}: flags:<{}> job on exit:{}", __func__, request_flags,
+                  *m_scrub_job)
+           << dendl;
 }
 
 scrub_level_t PgScrubber::scrub_requested(
@@ -1845,7 +1845,7 @@ void PgScrubber::flag_reservations_failure()
 {
   dout(10) << __func__ << dendl;
   // delay the next invocation of the scrubber on this target
-  penalize_next_scrub(Scrub::delay_cause_t::replicas);
+  requeue_penalized(Scrub::delay_cause_t::replicas);
 }
 
 /*
@@ -2057,15 +2057,6 @@ void PgScrubber::scrub_finish()
   }
 }
 
-/*
- * note: arbitrary delay used in this early version of the
- * scheduler refactoring.
- */
-void PgScrubber::penalize_next_scrub(Scrub::delay_cause_t cause)
-{
-  m_osds->get_scrub_services().delay_on_failure(
-      *m_scrub_job, 5s, cause, ceph_clock_now());
-}
 
 void PgScrubber::on_digest_updates()
 {
@@ -2090,11 +2081,14 @@ void PgScrubber::on_digest_updates()
 }
 
 
-// a placeholder. requeue_penalized() is fully implemented in the
-// following commits of this PR
 void PgScrubber::requeue_penalized(Scrub::delay_cause_t cause)
 {
-  penalize_next_scrub(cause);
+  /// \todo fix the 5s' to use a cause-specific delay parameter
+  m_scrub_job->delay_on_failure(5s, cause, ceph_clock_now());
+  ceph_assert(m_scrub_job->is_registered());
+  ceph_assert(!m_scrub_job->target_queued);
+  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
+  m_scrub_job->target_queued = true;
 }
 
 
