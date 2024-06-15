@@ -167,6 +167,15 @@ class ScrubJob {
       bool reset_failure_penalty);
 
   /**
+   * If the scrub job was not explicitly requested, we postpone it by some
+   * random length of time.
+   * And if delaying the scrub - we calculate, based on pool parameters, a
+   * deadline we should scrub before.
+   */
+  Scrub::scrub_schedule_t adjust_target_time(
+    const Scrub::sched_params_t& recomputed_params) const;
+
+  /**
    * push the 'not_before' time out by 'delay' seconds, so that this scrub target
    * would not be retried before 'delay' seconds have passed.
    */
@@ -174,6 +183,31 @@ class ScrubJob {
       std::chrono::seconds delay,
       delay_cause_t delay_cause,
       utime_t scrub_clock_now);
+
+  /**
+   * initial setting of the scheduling parameters of a newly registered
+   * PG. The scrub targets (in this stage of the refactoring - the whole
+   * scrub job) is initialized as for a regular periodic scrub.
+   */
+  void init_targets(
+      const sched_params_t& suggested,
+      const pg_info_t& info,
+      const Scrub::sched_conf_t& aconf,
+      utime_t scrub_clock_now);
+
+ /**
+   * recalculate the scheduling parameters for the periodic scrub targets.
+   * Used whenever the "external state" of the PG changes, e.g. when made
+   * primary - or indeed when the configuration changes.
+   *
+   * Does not modify ripe targets.
+   * (why? for example, a 'scrub pg' command following a 'deepscrub pg'
+   * would otherwise push the deep scrub to the future).
+   */
+  void on_periods_change(
+      const sched_params_t& suggested,
+      const Scrub::sched_conf_t& aconf,
+      utime_t scrub_clock_now) {}
 
   void dump(ceph::Formatter* f) const;
 

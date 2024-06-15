@@ -43,6 +43,63 @@ ostream& operator<<(ostream& out, const ScrubJob& sjob)
 }
 }  // namespace std
 
+
+Scrub::scrub_schedule_t ScrubJob::adjust_target_time(
+  const sched_params_t& times) const
+{
+  Scrub::scrub_schedule_t sched_n_dead{
+    times.proposed_time, times.proposed_time, times.proposed_time};
+
+  const auto& conf = cct->_conf;
+
+  if (times.is_must == Scrub::must_scrub_t::not_mandatory) {
+    // unless explicitly requested, postpone the scrub with a random delay
+    double scrub_min_interval = times.min_interval > 0
+				  ? times.min_interval
+				  : conf->osd_scrub_min_interval;
+    double scrub_max_interval = times.max_interval > 0
+				  ? times.max_interval
+				  : conf->osd_scrub_max_interval;
+
+    sched_n_dead.scheduled_at += scrub_min_interval;
+    double r = rand() / (double)RAND_MAX;
+    sched_n_dead.scheduled_at +=
+      scrub_min_interval * conf->osd_scrub_interval_randomize_ratio * r;
+
+    if (scrub_max_interval <= 0) {
+      sched_n_dead.deadline = utime_t{};
+    } else {
+      sched_n_dead.deadline += scrub_max_interval;
+    }
+    dout(20) << fmt::format(
+		  "not-must. Was:{:s} {{min:{}/{} max:{}/{} ratio:{}}} "
+		  "Adjusted:{:s} ({:s})",
+		  times.proposed_time, fmt::group_digits(times.min_interval),
+		  fmt::group_digits(conf->osd_scrub_min_interval),
+		  fmt::group_digits(times.max_interval),
+		  fmt::group_digits(conf->osd_scrub_max_interval),
+		  conf->osd_scrub_interval_randomize_ratio,
+		  sched_n_dead.scheduled_at, sched_n_dead.deadline)
+	     << dendl;
+  }
+  // else - no log needed. All relevant data will be logged by the caller
+  return sched_n_dead;
+}
+
+
+// note: some parameters are unused in this commit.
+void ScrubJob::init_targets(
+    const sched_params_t& suggested,
+    const pg_info_t& info,
+    const Scrub::sched_conf_t& aconf,
+    utime_t scrub_clock_now)
+{
+  auto adjusted = adjust_target_time(suggested);
+  high_priority = suggested.is_must == must_scrub_t::mandatory;
+  update_schedule(adjusted, true);
+}
+
+
 void ScrubJob::update_schedule(
     const Scrub::scrub_schedule_t& adjusted,
     bool reset_failure_penalty)
@@ -78,9 +135,13 @@ void ScrubJob::delay_on_failure(
 std::string ScrubJob::scheduling_state(utime_t now_is, bool is_deep_expected)
     const
 {
-  // if not in the OSD scheduling queues, not a candidate for scrubbing
+  // if not registered, not a candidate for scrubbing on this OSD (or at all)
   if (!registered) {
-    return "no scrub is scheduled";
+    return "not registered for scrubbing";
+  }
+  if (!target_queued) {
+    // if not currently queued - we are being scrubbed
+    return "scrubbing";
   }
 
   // if the time has passed, we are surely in the queue

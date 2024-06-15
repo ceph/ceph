@@ -100,7 +100,6 @@ ScrubQueue interfaces (main functions):
 
 <4> - manipulating a job's state:
 
-  - register_with_osd()
   - remove_from_osd_queue()
   - update_job()
 
@@ -176,44 +175,8 @@ class ScrubQueue {
   /**
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
    * scrubbed by the OSD.
-   * The registration is active as long as the PG exists and the OSD is its
-   * primary.
-   *
-   * See update_job() for the handling of the 'suggested' parameter.
-   *
-   * locking: might lock jobs_lock
-   */
-  void register_with_osd(Scrub::ScrubJob& sjob, const sched_params_t& suggested);
-
-  /**
-   * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
-   * scrubbed by the OSD.
    */
   void enqueue_target(const Scrub::ScrubJob& sjob);
-
-  /**
-   * modify a scrub-job's scheduled time and deadline
-   *
-   * There are 3 argument combinations to consider:
-   * - 'must' is asserted, and the suggested time is 'scrub_must_stamp':
-   *   the registration will be with "beginning of time" target, making the
-   *   scrub-job eligible to immediate scrub (given that external conditions
-   *   do not prevent scrubbing)
-   * - 'must' is asserted, and the suggested time is 'now':
-   *   This happens if our stats are unknown. The results are similar to the
-   *   previous scenario.
-   * - not a 'must': we take the suggested time as a basis, and add to it some
-   *   configuration / random delays.
-   *  ('must' is sched_params_t.is_must)
-   *
-   *  'reset_notbefore' is used to reset the 'not_before' time to the updated
-   *  'scheduled_at' time. This is used whenever the scrub-job schedule is
-   *  updated not as a result of a scrub attempt failure.
-   */
-  void update_job(
-      Scrub::ScrubJob& sjob,
-      const sched_params_t& suggested,
-      bool reset_notbefore);
 
   void delay_on_failure(
       Scrub::ScrubJob& sjob,
@@ -256,7 +219,7 @@ class ScrubQueue {
 #endif
 
   /**
-   *  jobs_lock protects the job containers.
+   *  jobs_lock protects the job container.
    *
    *  Note that PG locks should not be acquired while holding jobs_lock.
    */
@@ -275,17 +238,6 @@ class ScrubQueue {
    * existence of such a situation in the scrub-queue log messages.
    */
   std::atomic_int_fast16_t blocked_scrubs_cnt{0};
-
-  /**
-   * If the scrub job was not explicitly requested, we postpone it by some
-   * random length of time.
-   * And if delaying the scrub - we calculate, based on pool parameters, a
-   * deadline we should scrub before.
-   *
-   * @return a pair of values: the determined scrub time, and the deadline
-   */
-  Scrub::scrub_schedule_t adjust_target_time(
-    const Scrub::sched_params_t& recomputed_params) const;
 
 protected: // used by the unit-tests
   /**

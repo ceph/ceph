@@ -70,33 +70,6 @@ void ScrubQueue::enqueue_target(const Scrub::ScrubJob& sjob)
   to_scrub.push_back(std::make_unique<ScrubJob>(sjob));
 }
 
-// (only for this commit)
-void ScrubQueue::register_with_osd(
-    Scrub::ScrubJob& scrub_job,
-    const sched_params_t& suggested)
-{
-  update_job(scrub_job, suggested, true /* resets not_before */);
-  enqueue_target(scrub_job);
-  scrub_job.target_queued = true;
-
-  dout(10)
-      << fmt::format(
-	     "pg[{}] sched-state: {} (@{:s})",
-	     scrub_job.pgid, scrub_job.state_desc(), scrub_job.get_sched_time())
-      << dendl;
-}
-
-
-void ScrubQueue::update_job(Scrub::ScrubJob& scrub_job,
-			    const sched_params_t& suggested,
-                            bool reset_nb)
-{
-  // adjust the suggested scrub time according to OSD-wide status
-  auto adjusted = adjust_target_time(suggested);
-  scrub_job.high_priority = suggested.is_must == must_scrub_t::mandatory;
-  scrub_job.update_schedule(adjusted, reset_nb);
-}
-
 
 void ScrubQueue::delay_on_failure(
     Scrub::ScrubJob& sjob,
@@ -186,48 +159,6 @@ void ScrubQueue::for_each_job(
   std::ranges::for_each(
       to_scrub | std::views::take(max_jobs),
       [fn](const auto& job) { fn(*job); });
-}
-
-
-Scrub::scrub_schedule_t ScrubQueue::adjust_target_time(
-  const sched_params_t& times) const
-{
-  Scrub::scrub_schedule_t sched_n_dead{
-    times.proposed_time, times.proposed_time, times.proposed_time};
-
-  if (times.is_must == Scrub::must_scrub_t::not_mandatory) {
-    // unless explicitly requested, postpone the scrub with a random delay
-    double scrub_min_interval = times.min_interval > 0
-				  ? times.min_interval
-				  : conf()->osd_scrub_min_interval;
-    double scrub_max_interval = times.max_interval > 0
-				  ? times.max_interval
-				  : conf()->osd_scrub_max_interval;
-
-    sched_n_dead.scheduled_at += scrub_min_interval;
-    double r = rand() / (double)RAND_MAX;
-    sched_n_dead.scheduled_at +=
-      scrub_min_interval * conf()->osd_scrub_interval_randomize_ratio * r;
-
-    if (scrub_max_interval <= 0) {
-      sched_n_dead.deadline = utime_t{};
-    } else {
-      sched_n_dead.deadline += scrub_max_interval;
-    }
-    // note: no specific job can be named in the log message
-    dout(20) << fmt::format(
-		  "not-must. Was:{:s} {{min:{}/{} max:{}/{} ratio:{}}} "
-		  "Adjusted:{:s} ({:s})",
-		  times.proposed_time, fmt::group_digits(times.min_interval),
-		  fmt::group_digits(conf()->osd_scrub_min_interval),
-		  fmt::group_digits(times.max_interval),
-		  fmt::group_digits(conf()->osd_scrub_max_interval),
-		  conf()->osd_scrub_interval_randomize_ratio,
-		  sched_n_dead.scheduled_at, sched_n_dead.deadline)
-	     << dendl;
-  }
-  // else - no log needed. All relevant data will be logged by the caller
-  return sched_n_dead;
 }
 
 

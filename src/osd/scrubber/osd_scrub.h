@@ -77,44 +77,11 @@ class OsdScrub {
   void clear_pg_scrub_blocked(spg_t blocked_pg);
 
   /**
-   * modify a scrub-job's scheduled time and deadline
-   *
-   * There are 3 argument combinations to consider:
-   * - 'must' is asserted, and the suggested time is 'scrub_must_stamp':
-   *   the registration will be with "beginning of time" target, making the
-   *   scrub-job eligible to immediate scrub (given that external conditions
-   *   do not prevent scrubbing)
-   * - 'must' is asserted, and the suggested time is 'now':
-   *   This happens if our stats are unknown. The results are similar to the
-   *   previous scenario.
-   * - not a 'must': we take the suggested time as a basis, and add to it some
-   *   configuration / random delays.
-   *  ('must' is Scrub::sched_params_t.is_must)
-   *
-   *  'reset_notbefore' is used to reset the 'not_before' time to the updated
-   *  'scheduled_at' time. This is used whenever the scrub-job schedule is
-   *  updated not as a result of a scrub attempt failure.
-   *
-   *  locking: not using the jobs_lock
-   */
-  void update_job(
-      Scrub::ScrubJob& sjob,
-      const Scrub::sched_params_t& suggested,
-      bool reset_notbefore);
-
-  /**
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
    * scrubbed by the OSD.
-   * The registration is active as long as the PG exists and the OSD is its
-   * primary.
-   *
-   * See update_job() for the handling of the 'suggested' parameter.
-   *
-   * locking: might lock jobs_lock
    */
-  void register_with_osd(
-      Scrub::ScrubJob& sjob,
-      const Scrub::sched_params_t& suggested);
+  void enqueue_target(const Scrub::ScrubJob& sjob);
+
 
   /**
    * remove the pg from set of PGs to be scanned for scrubbing.

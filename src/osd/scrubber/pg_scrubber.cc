@@ -552,13 +552,15 @@ void PgScrubber::schedule_scrub_with_osd()
   m_scrub_job->registered = true;
 
   auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
-  m_osds->get_scrub_services().register_with_osd(*m_scrub_job, suggested);
+  auto applicable_conf = populate_config_params();
+  m_scrub_job->init_targets(
+      suggested, m_pg->info, applicable_conf, ceph_clock_now());
+
+  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
 
   dout(10) << fmt::format(
-		  "{}: <flags:{}> {} <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
-		  __func__, m_planned_scrub,
-		  (is_primary() ? "Primary" : "Replica/other"), pre_reg,
-		  pre_reg, registration_state(), m_scrub_job->state_desc())
+		  "{}: <flags:{}> <{:.5}> --> <{:.5}>", __func__,
+		  m_planned_scrub, pre_reg, registration_state())
 	   << dendl;
 }
 
@@ -604,7 +606,8 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 		  *m_scrub_job)
 	   << dendl;
   if (m_scrub_job->target_queued) {
-    m_osds->get_scrub_services().remove_from_osd_queue(*m_scrub_job);
+    m_osds->get_scrub_services().remove_from_osd_queue(m_pg_id);
+    m_scrub_job->target_queued = false;
     dout(20) << fmt::format(
 		    "{}: PG[{}] dequeuing for an update", __func__, m_pg_id)
 	     << dendl;
@@ -612,8 +615,11 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 
 
   ceph_assert(m_pg->is_locked());
-  auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
-  m_osds->get_scrub_services().update_job(*m_scrub_job, suggested, true);
+  const auto suggested = determine_scrub_time(m_pg->get_pgpool().info.opts);
+  const auto applicable_conf = populate_config_params();
+  m_scrub_job->on_periods_change(suggested, applicable_conf, ceph_clock_now());
+  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
+  m_scrub_job->target_queued = true;
   m_pg->publish_stats_to_osd();
 
   dout(15) << __func__ << ": done " << registration_state() << dendl;
