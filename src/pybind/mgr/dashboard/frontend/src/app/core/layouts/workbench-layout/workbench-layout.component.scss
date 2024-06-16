@@ -1,0 +1,18 @@
+@use './src/styles/vendor/variables' as vv;
+
+.dashboard {
+  background-color: vv.$body-bg-alt;
+  margin: 0;
+  padding: 0;
+}
+
+.container-fluid {
+  overflow: auto;
+  padding-bottom: 48px;
+  position: absolute;
+  top: 48px;
+}
+
+.rgw-dashboard {
+  background-color: vv.$body-bg-alt;
+}

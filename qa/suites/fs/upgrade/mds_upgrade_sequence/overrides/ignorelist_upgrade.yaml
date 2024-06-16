@@ -1,0 +1,4 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - OSD_DOWN

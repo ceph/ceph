@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        fuse default permissions: false
