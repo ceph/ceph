@@ -436,18 +436,6 @@ TransactionManager::do_submit_transaction(
           tref,
           submit_result.record_block_base,
           start_seq);
-
-      std::vector<CachedExtentRef> lba_to_clear;
-      std::vector<CachedExtentRef> backref_to_clear;
-      lba_to_clear.reserve(tref.get_retired_set().size());
-      backref_to_clear.reserve(tref.get_retired_set().size());
-      for (auto &e: tref.get_retired_set()) {
-	if (e->is_logical() || is_lba_node(e->get_type()))
-	  lba_to_clear.push_back(e);
-	else if (is_backref_node(e->get_type()))
-	  backref_to_clear.push_back(e);
-      }
-
       journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
