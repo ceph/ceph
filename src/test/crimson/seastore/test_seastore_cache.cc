@@ -81,9 +81,7 @@ struct cache_test_t : public seastar_test_suite_t {
 	cache->complete_commit(*t, prev, seq /* TODO */);
         return prev;
       },
-      crimson::ct_error::all_same_way([](auto e) {
-	ASSERT_FALSE("failed to submit");
-      })
+      crimson::ct_error::assert_all{"failed to submit"}
      );
   }
 
@@ -125,9 +123,7 @@ struct cache_test_t : public seastar_test_suite_t {
         });
       });
     }).handle_error(
-      crimson::ct_error::all_same_way([](auto e) {
-        ASSERT_FALSE("failed to submit");
-      })
+      crimson::ct_error::assert_all{"failed to submit"}
     );
   }
 
