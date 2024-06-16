@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(osdc_osd_srcs
   ${CMAKE_SOURCE_DIR}/src/osdc/Objecter.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Striper.cc)

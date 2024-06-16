@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # unittest_crush_wrapper
 add_executable(unittest_crush_wrapper
   CrushWrapper.cc)

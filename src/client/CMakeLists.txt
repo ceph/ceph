@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(libclient_srcs
   Client.cc
   Dentry.cc

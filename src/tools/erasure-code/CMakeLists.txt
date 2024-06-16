@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(ceph-erasure-code-tool
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
   ceph-erasure-code-tool.cc)

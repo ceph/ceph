@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # radostest
 add_library(radostest_shared OBJECT test_shared.cc)
 target_include_directories(radostest_shared PRIVATE

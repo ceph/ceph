@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(ceph_test_cls_hello
   test_cls_hello.cc
   )

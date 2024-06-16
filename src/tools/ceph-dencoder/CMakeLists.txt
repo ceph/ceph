@@ -1,3 +1,4 @@
+add_ceph_options()
 ## dencoder
 set_source_files_properties(
   ceph_dencoder.cc

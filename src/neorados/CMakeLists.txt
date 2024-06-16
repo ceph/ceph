@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_library(neorados_objs OBJECT
   RADOSImpl.cc)
 target_compile_definitions(neorados_objs PRIVATE

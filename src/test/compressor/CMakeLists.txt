@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_library(ceph_example SHARED compressor_plugin_example.cc)
 target_link_libraries(ceph_example ceph-common)
 

@@ -82,6 +82,7 @@ if(WITH_MGR)
   endif()
 endif()
 
+# NOTE: please update cmake/modules/AddCephOptions.cmake accordingly
 add_options(global)
 add_options(cephfs-mirror)
 add_options(crimson)
@@ -105,9 +106,15 @@ add_options(rgw)
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
 add_library(legacy-option-headers INTERFACE)
-target_sources(legacy-option-headers
-  PRIVATE
-    ${legacy_options_headers})
+if(CMAKE_VERSION VERSION_LESS "3.20")
+  target_sources(legacy-option-headers
+    INTERFACE
+      ${legacy_options_headers})
+else()
+  target_sources(legacy-option-headers
+    PRIVATE
+      ${legacy_options_headers})
+endif()
 
 include(AddCephTest)
 add_ceph_test(validate-options

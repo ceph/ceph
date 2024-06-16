@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(libradosstriper_srcs
   libradosstriper.cc
   RadosStriperImpl.cc

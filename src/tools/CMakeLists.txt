@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(rados_srcs
   rados/rados.cc
   RadosDump.cc

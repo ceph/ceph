@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # ceph_test_cls_refcount
 add_executable(ceph_test_cls_refcount
   test_cls_refcount.cc

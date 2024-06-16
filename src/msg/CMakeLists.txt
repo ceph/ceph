@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(msg_srcs
   DispatchQueue.cc
   Message.cc

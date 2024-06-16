@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(libos_srcs
   ObjectStore.cc
   Transaction.cc

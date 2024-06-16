@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # unittest_mgr_mgrcap
 add_executable(unittest_mgr_mgrcap
   test_mgrcap.cc

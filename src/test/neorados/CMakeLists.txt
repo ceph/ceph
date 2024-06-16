@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(ceph_test_neorados test_neorados.cc)
 target_link_libraries(ceph_test_neorados global libneorados
   ${unittest_libs}

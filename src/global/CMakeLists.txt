@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(libglobal_srcs
   global_init.cc
   pidfile.cc)

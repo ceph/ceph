@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(ceph_test_cls_cas
   test_cls_cas.cc)
 target_link_libraries(ceph_test_cls_cas

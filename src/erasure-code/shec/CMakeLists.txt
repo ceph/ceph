@@ -1,5 +1,7 @@
 #shec plugin
 
+add_ceph_options()
+
 include_directories(.)
 
 set(shec_utils_srcs

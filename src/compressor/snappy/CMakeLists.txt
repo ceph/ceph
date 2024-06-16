@@ -1,5 +1,7 @@
 # snappy
 
+add_ceph_options()
+
 set(snappy_sources
   CompressionPluginSnappy.cc
 )

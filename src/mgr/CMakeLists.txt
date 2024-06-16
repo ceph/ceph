@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_library(mgr_cap_obj OBJECT
   MgrCap.cc)
 

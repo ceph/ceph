@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(ceph_test_cls_sdk
   test_cls_sdk.cc
   )

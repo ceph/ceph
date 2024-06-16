@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # test_rados
 add_executable(ceph_test_rados 
   TestRados.cc

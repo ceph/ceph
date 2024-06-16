@@ -1,4 +1,5 @@
 # lz4
+add_ceph_options()
 
 set(lz4_sources
   CompressionPluginLZ4.cc
