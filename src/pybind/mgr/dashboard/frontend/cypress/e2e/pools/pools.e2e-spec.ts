@@ -28,14 +28,14 @@ describe('Pools page', () => {
   });
 
   describe('Create, update and destroy', () => {
-    it('should create a pool with mirroring enabled', () => {
+    it('should create a pool', () => {
       pools.existTableCell(poolName, false);
       pools.navigateTo('create');
-      pools.create(poolName, 8, 'rbd');
+      pools.create(poolName, 8, ['rbd']);
       pools.existTableCell(poolName);
     });
 
-    it('should edit a pools placement group and check if mirroring is enabled', () => {
+    it('should edit a pools placement group', () => {
       pools.existTableCell(poolName);
       pools.edit_pool_pg(poolName, 32);
     });
@@ -50,4 +50,22 @@ describe('Pools page', () => {
       pools.delete(poolName);
     });
   });
+
+  describe('Pool with mirroring', () => {
+    it('should create a pool with mirroring enabled', () => {
+      pools.existTableCell(poolName, false);
+      pools.navigateTo('create');
+      pools.create(poolName, 8, ['rbd'], true);
+      pools.existTableCell(poolName);
+    });
+
+    it('should edit a pools placement group with mirroring enabled', () => {
+      pools.existTableCell(poolName);
+      pools.edit_pool_pg(poolName, 32, true, true);
+    });
+
+    it('should delete the pool', () => {
+      pools.delete(poolName);
+    });
+  })
 });
