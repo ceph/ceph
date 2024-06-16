@@ -1325,6 +1325,7 @@ unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsig
 
 
 Scrub::schedule_result_t PG::start_scrubbing(
+    std::unique_ptr<Scrub::ScrubJob> candidate,
     Scrub::OSDRestrictions osd_restrictions)
 {
   dout(10) << fmt::format(
@@ -1348,7 +1349,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
        get_pgbackend()->auto_repair_supported());
 
   return m_scrubber->start_scrub_session(
-      osd_restrictions, pg_cond, m_planned_scrub);
+      std::move(candidate), osd_restrictions, pg_cond, m_planned_scrub);
 }
 
 double PG::next_deepscrub_interval() const

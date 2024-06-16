@@ -569,6 +569,7 @@ void PgScrubber::on_primary_active_clean()
   m_fsm->process_event(PrimaryActivate{});
 }
 
+
 /*
  * A note re the call to publish_stats_to_osd() below:
  * - we are called from either request_rescrubbing() or scrub_requested().
@@ -2093,16 +2094,21 @@ void PgScrubber::requeue_penalized(Scrub::delay_cause_t cause)
 
 
 Scrub::schedule_result_t PgScrubber::start_scrub_session(
+    std::unique_ptr<Scrub::ScrubJob> candidate,
     Scrub::OSDRestrictions osd_restrictions,
     Scrub::ScrubPGPreconds pg_cond,
     const requested_scrub_t& requested_flags)
 {
+  m_scrub_job->target_queued = false;
+
   if (is_queued_or_active()) {
     // not a real option when the queue entry is the whole ScrubJob, but
     // will be possible when using level-specific targets
     dout(10) << __func__ << ": scrub already in progress" << dendl;
     return schedule_result_t::target_specific_failure;
   }
+
+  m_active_target = std::move(candidate);
 
   // for all other failures - we must reinstate our entry in the Scrub Queue
   if (!is_primary() || !m_pg->is_active() || !m_pg->is_clean()) {

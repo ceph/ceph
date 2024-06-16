@@ -97,12 +97,6 @@ void OsdScrub::debug_log_all_jobs() const
 
 void OsdScrub::initiate_scrub(bool is_recovery_active)
 {
-  const utime_t scrub_time = ceph_clock_now();
-  dout(10) << fmt::format(
-		  "time now:{:s}, recovery is active?:{}", scrub_time,
-		  is_recovery_active)
-	   << dendl;
-
   if (auto blocked_pgs = get_blocked_pgs_count(); blocked_pgs > 0) {
     // some PGs managed by this OSD were blocked by a locked object during
     // scrub. This means we might not have the resources needed to scrub now.
@@ -113,11 +107,18 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 	<< dendl;
   }
 
+  const utime_t scrub_time = ceph_clock_now();
+
   // check the OSD-wide environment conditions (scrub resources, time, etc.).
   // These may restrict the type of scrubs we are allowed to start, or just
   // prevent us from starting any non-operator-initiated scrub at all.
-  auto env_restrictions =
+  const auto env_restrictions =
       restrictions_on_scrubbing(is_recovery_active, scrub_time);
+
+  dout(10) << fmt::format("scrub scheduling (@tick) starts. "
+                          "time now:{:s}, recovery is active?:{} restrictions:{}",
+                          scrub_time, is_recovery_active, env_restrictions)
+	   << dendl;
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>() &&
       !env_restrictions.high_priority_only) {
@@ -130,7 +131,8 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
     return;
   }
 
-  auto res = initiate_a_scrub(candidate->pgid, env_restrictions);
+  auto candidate_pg = candidate->pgid;
+  auto res = initiate_a_scrub(std::move(candidate), env_restrictions);
 
   switch (res) {
     case schedule_result_t::target_specific_failure:
@@ -140,8 +142,8 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
       break;
 
     case schedule_result_t::scrub_initiated:
-      dout(20) << fmt::format("scrub initiated for pg[{}]", candidate->pgid)
-               << dendl;
+      dout(20) << fmt::format("scrub initiated for pg[{}]", candidate_pg)
+	       << dendl;
       break;
   }
 }
@@ -193,24 +195,27 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 
 
 Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
-    spg_t pgid,
+    std::unique_ptr<Scrub::ScrubJob> candidate,
     Scrub::OSDRestrictions restrictions)
 {
-  dout(20) << fmt::format("trying pg[{}]", pgid) << dendl;
+  dout(20) << fmt::format("trying pg[{}]", candidate->pgid) << dendl;
 
   // we have a candidate to scrub. We need some PG information to
   // know if scrubbing is allowed
 
-  auto locked_pg = m_osd_svc.get_locked_pg(pgid);
+  auto locked_pg = m_osd_svc.get_locked_pg(candidate->pgid);
   if (!locked_pg) {
-    // the PG was dequeued in the short timespan between creating the
-    // candidates list (ready_to_scrub()) and here
-    dout(5) << fmt::format("pg[{}] not found", pgid) << dendl;
+    // the PG was dequeued in the short timespan between querying the
+    // scrub queue - and now.
+    dout(5) << fmt::format("pg[{}] not found", candidate->pgid) << dendl;
     return Scrub::schedule_result_t::target_specific_failure;
   }
 
-  // later on, here is where the scrub target would be dequeued
-  return locked_pg->pg()->start_scrubbing(restrictions);
+  // note: the 'candidate', which in this step is a copy of the scrub job,
+  // was already dequeued. The "original" scrub job cannot be accessed from
+  // here directly. Thus - we leave it to start_scrubbing() (via a call
+  // to PgScrubber::start_scrub_session() to mark it as dequeued.
+  return locked_pg->pg()->start_scrubbing(std::move(candidate), restrictions);
 }
 
 

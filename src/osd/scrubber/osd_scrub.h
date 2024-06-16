@@ -153,7 +153,7 @@ class OsdScrub {
    *          initiated, and if not - why.
    */
   Scrub::schedule_result_t initiate_a_scrub(
-      spg_t pgid,
+      std::unique_ptr<Scrub::ScrubJob> candidate,
       Scrub::OSDRestrictions restrictions);
 
   /// resource reservation management
