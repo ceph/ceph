@@ -466,9 +466,8 @@ auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   if (!osd_op_params) {
     osd_op_params.emplace();
-    fill_op_params_bump_pg_version();
+    fill_op_params_bump_pg_version(m);
   }
-  user_modify = (m == modified_by::user);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
@@ -802,7 +801,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   }
 }
 
-void OpsExecuter::fill_op_params_bump_pg_version()
+void OpsExecuter::fill_op_params_bump_pg_version(OpsExecuter::modified_by m)
 {
   osd_op_params->req_id = msg->get_reqid();
   osd_op_params->mtime = msg->get_mtime();
@@ -810,6 +809,7 @@ void OpsExecuter::fill_op_params_bump_pg_version()
   osd_op_params->pg_trim_to = pg->get_pg_trim_to();
   osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
   osd_op_params->last_complete = pg->get_info().last_complete;
+  osd_op_params->user_modify = (m == modified_by::user);
 }
 
 std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
