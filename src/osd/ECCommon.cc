@@ -63,6 +63,7 @@ static ostream& _prefix(std::ostream *_dout,
   // TODO: backref to ECListener?
   return *_dout;
 }
+static ostream& _prefix(std::ostream *_dout, struct ClientReadCompleter *read_completer);
 
 ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::pipeline_state_t &rhs) {
   switch (rhs.pipeline_state) {
@@ -123,6 +124,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
 	     << ", priority=" << rhs.priority
 	     << ", obj_to_source=" << rhs.obj_to_source
 	     << ", source_to_obj=" << rhs.source_to_obj
+	     << ", want_to_read" << rhs.want_to_read
 	     << ", in_progress=" << rhs.in_progress << ")";
 }
 
@@ -139,6 +141,7 @@ void ECCommon::ReadOp::dump(Formatter *f) const
   f->dump_int("priority", priority);
   f->dump_stream("obj_to_source") << obj_to_source;
   f->dump_stream("source_to_obj") << source_to_obj;
+  f->dump_stream("want_to_read") << want_to_read;
   f->dump_stream("in_progress") << in_progress;
 }
 
@@ -171,6 +174,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
 
 void ECCommon::ReadPipeline::complete_read_op(ReadOp &rop)
 {
+  dout(20) << __func__ << " completing " << rop << dendl;
   map<hobject_t, read_request_t>::iterator req_iter =
     rop.to_read.begin();
   map<hobject_t, read_result_t>::iterator resiter =
@@ -342,7 +346,7 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
 {
   get_min_want_to_read_shards(
     offset, length, sinfo, ec_impl->get_chunk_mapping(), want_to_read);
-  dout(30) << __func__ << ": offset " << offset << " length " << length
+  dout(20) << __func__ << ": offset " << offset << " length " << length
 	   << " want_to_read " << *want_to_read << dendl;
 }
 
@@ -518,6 +522,9 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     list<ECCommon::ec_align_t> to_read,
     set<int> wanted_to_read) override
   {
+    auto* cct = read_pipeline.cct;
+    dout(20) << __func__ << " completing hoid=" << hoid
+             << " res=" << res << " to_read="  << to_read << dendl;
     extent_map result;
     if (res.r != 0)
       goto out;
@@ -541,6 +548,10 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 	   ++j) {
 	to_decode[j->first.shard] = std::move(j->second);
       }
+      dout(20) << __func__ << " going to decode: "
+               << " wanted_to_read=" << wanted_to_read
+               << " to_decode=" << to_decode
+               << dendl;
       int r = ECUtil::decode(
 	read_pipeline.sinfo,
 	read_pipeline.ec_impl,
@@ -548,19 +559,25 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
 	to_decode,
 	&bl);
       if (r < 0) {
+        dout(10) << __func__ << " error on ECUtil::decode r=" << r << dendl;
         res.r = r;
         goto out;
       }
       bufferlist trimmed;
-      ceph_assert(aligned.first <= read.offset);
       auto off = read.offset - aligned.first;
       auto len = std::min(read.size, bl.length() - off);
+      dout(20) << __func__ << " bl.length()=" << bl.length()
+	       << " len=" << len << " read.size=" << read.size
+	       << " off=" << off << " read.offset=" << read.offset
+	       << dendl;
       trimmed.substr_of(bl, off, len);
       result.insert(
 	read.offset, trimmed.length(), std::move(trimmed));
       res.returned.pop_front();
     }
 out:
+    dout(20) << __func__ << " calling complete_object with result="
+             << result << dendl;
     status->complete_object(hoid, res.r, std::move(result));
     read_pipeline.kick_reads();
   }
@@ -573,6 +590,9 @@ out:
   ECCommon::ReadPipeline &read_pipeline;
   ECCommon::ClientAsyncReadStatus *status;
 };
+static ostream& _prefix(std::ostream *_dout, ClientReadCompleter *read_completer) {
+  return _prefix(_dout, &read_completer->read_pipeline);
+}
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
@@ -608,6 +628,12 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       fast_read,
       &shards);
     ceph_assert(r == 0);
+
+    int subchunk_size =
+      sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+    dout(20) << __func__
+             << " subchunk_size=" << subchunk_size
+             << " chunk_size=" << sinfo.get_chunk_size() << dendl;
 
     for_read_op.insert(
       make_pair(

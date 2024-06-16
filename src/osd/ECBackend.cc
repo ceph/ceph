@@ -1029,7 +1029,7 @@ void ECBackend::handle_sub_read(
       if ((op.subchunks.find(i->first)->second.size() == 1) && 
           (op.subchunks.find(i->first)->second.front().second == 
                                             ec_impl->get_sub_chunk_count())) {
-        dout(25) << __func__ << " case1: reading the complete chunk/shard." << dendl;
+        dout(20) << __func__ << " case1: reading the complete chunk/shard." << dendl;
         r = store->read(
 	  ch,
 	  ghobject_t(i->first, ghobject_t::NO_GEN, shard),
@@ -1037,9 +1037,11 @@ void ECBackend::handle_sub_read(
 	  j->get<1>(),
 	  bl, j->get<2>()); // Allow EIO return
       } else {
-        dout(25) << __func__ << " case2: going to do fragmented read." << dendl;
         int subchunk_size =
           sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+        dout(20) << __func__ << " case2: going to do fragmented read;"
+		 << " subchunk_size=" << subchunk_size
+		 << " chunk_size=" << sinfo.get_chunk_size() << dendl;
         bool error = false;
         for (int m = 0; m < (int)j->get<1>() && !error;
              m += sinfo.get_chunk_size()) {
@@ -1618,10 +1620,10 @@ void ECBackend::objects_read_async(
 	  auto range = got.emap.get_containing_range(offset, length);
 	  ceph_assert(range.first != range.second);
 	  ceph_assert(range.first.get_off() <= offset);
-          ldpp_dout(dpp, 30) << "offset: " << offset << dendl;
-          ldpp_dout(dpp, 30) << "range offset: " << range.first.get_off() << dendl;
-          ldpp_dout(dpp, 30) << "length: " << length << dendl;
-          ldpp_dout(dpp, 30) << "range length: " << range.first.get_len()  << dendl;
+          ldpp_dout(dpp, 20) << "offset: " << offset << dendl;
+          ldpp_dout(dpp, 20) << "range offset: " << range.first.get_off() << dendl;
+          ldpp_dout(dpp, 20) << "length: " << length << dendl;
+          ldpp_dout(dpp, 20) << "range length: " << range.first.get_len()  << dendl;
 	  ceph_assert(
 	    (offset + length) <=
 	    (range.first.get_off() + range.first.get_len()));
