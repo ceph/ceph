@@ -979,7 +979,7 @@ class TestCephadm(object):
         assert osd_claims.filtered_by_host('host1') == ['0']
         assert osd_claims.filtered_by_host('host1.domain.com') == ['0']
 
-    @ pytest.mark.parametrize(
+    @pytest.mark.parametrize(
         "ceph_services, cephadm_daemons, strays_expected, metadata",
         # [ ([(daemon_type, daemon_id), ... ], [...], [...]), ... ]
         [
