@@ -284,6 +284,7 @@ protected:
     auto sec_devices = devices->get_secondary_devices();
     auto p_dev = devices->get_primary_device();
     auto fut = seastar::now();
+#ifdef UNIT_TESTS_BUILT
     if (std::get<1>(GetParam()) == integrity_check_t::FULL_CHECK) {
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "true");
@@ -291,6 +292,7 @@ protected:
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "false");
     }
+#endif
     tm = make_transaction_manager(p_dev, sec_devices, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
@@ -436,6 +438,7 @@ protected:
 
   virtual seastar::future<> _init() final {
     auto fut = seastar::now();
+#ifdef UNIT_TESTS_BUILT
     if (std::get<1>(GetParam()) == integrity_check_t::FULL_CHECK) {
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "true");
@@ -443,6 +446,7 @@ protected:
       fut = crimson::common::local_conf().set_val(
 	"seastore_full_integrity_check", "false");
     }
+#endif
     seastore = make_test_seastore(
       std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()));
     return fut.then([this] {
