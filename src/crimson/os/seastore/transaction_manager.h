@@ -413,6 +413,7 @@ public:
     Transaction &t,
     LBAMappingRef &&pin,
     std::array<remap_entry, N> remaps) {
+    static_assert(std::is_base_of_v<LogicalCachedExtent, T>);
 
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
@@ -496,13 +497,14 @@ public:
 	    SUBDEBUGT(seastore_tm,
 	      "remap laddr: {}, remap paddr: {}, remap length: {}", t,
 	      remap_laddr, remap_paddr, remap_len);
-	    extents.emplace_back(cache->alloc_remapped_extent<T>(
+	    auto extent = cache->alloc_remapped_extent<T>(
 	      t,
 	      remap_laddr,
 	      remap_paddr,
 	      remap_len,
 	      original_laddr,
-	      original_bptr));
+	      original_bptr);
+	    extents.emplace_back(std::move(extent));
 	  }
 	});
       }
