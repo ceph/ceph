@@ -1,5 +1,5 @@
 import pytest
-from mock.mock import patch
+from mock.mock import patch, Mock
 from ceph_volume import process
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import migrate
@@ -540,6 +540,7 @@ class TestNew(object):
         expected = 'This command needs to be executed with sudo or as root'
         assert expected in str(error.value)
 
+    @patch('ceph_volume.api.lvm.get_lv_by_fullname', Mock(return_value=None))
     def test_newdb_not_target_lvm(self, is_root, capsys):
         with pytest.raises(SystemExit) as error:
             migrate.NewDB(argv=[
