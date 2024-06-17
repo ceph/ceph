@@ -1040,6 +1040,7 @@ public:
         n_fixed_kv_extent->get_bptr().c_str());
       n_fixed_kv_extent->set_modify_time(fixed_kv_extent.get_modify_time());
       n_fixed_kv_extent->range = n_fixed_kv_extent->get_node_meta();
+      n_fixed_kv_extent->set_last_committed_crc(fixed_kv_extent.get_last_committed_crc());
 
       if (fixed_kv_extent.get_type() == internal_node_t::TYPE ||
           leaf_node_t::do_has_children) {
