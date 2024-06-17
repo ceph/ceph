@@ -91,7 +91,7 @@ class SubnetLookup:
             speed: [hostname]
         }
 
-    @ property
+    @property
     def host_list(self) -> List[str]:
         hosts = []
         for mtu in self.mtu_map:
