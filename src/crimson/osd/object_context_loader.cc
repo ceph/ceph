@@ -14,7 +14,8 @@ using crimson::common::local_conf;
   {
     LOG_PREFIX(ObjectContextLoader::with_head_obc);
     auto [obc, existed] = obc_registry.get_cached_obc(oid);
-    DEBUGDPP("object {}", dpp, obc->get_oid());
+    DEBUGDPP("object {} existed {}",
+             dpp, obc->get_oid(), existed);
     assert(obc->is_head());
     obc->append_to(obc_set_accessing);
     return obc->with_lock<State, IOInterruptCondition>(
@@ -88,8 +89,8 @@ using crimson::common::local_conf;
       [existed=existed, clone=std::move(clone),
        func=std::move(func), head=std::move(head), this]() mutable
       -> load_obc_iertr::future<> {
-      auto loaded = get_or_load_obc<State>(clone, existed);
-      return loaded.safe_then_interruptible(
+      return get_or_load_obc<State>(clone, existed
+      ).safe_then_interruptible(
         [func = std::move(func), head=std::move(head)](auto clone) mutable {
         clone->set_clone_ssc(head->ssc);
         return std::move(func)(std::move(head), std::move(clone));
@@ -144,28 +145,51 @@ using crimson::common::local_conf;
                                        bool existed)
   {
     LOG_PREFIX(ObjectContextLoader::get_or_load_obc);
-    auto loaded =
-      load_obc_iertr::make_ready_future<ObjectContextRef>(obc);
+    DEBUGDPP("{} -- fully_loaded={}, "
+             "invalidated_by_interval_change={}",
+             dpp, obc->get_oid(),
+             obc->fully_loaded,
+             obc->invalidated_by_interval_change);
     if (existed) {
-      if (!obc->is_loaded_and_valid()) {
-	ERRORDPP(
-	  "obc for {} invalid -- fully_loaded={}, "
-	  "invalidated_by_interval_change={}",
-	  dpp, obc->get_oid(),
-	  obc->fully_loaded, obc->invalidated_by_interval_change
-	);
-      }
-      ceph_assert(obc->is_loaded_and_valid());
+      // obc is already loaded - avoid loading_mutex usage
       DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
+      return get_obc(obc, existed);
+    }
+    // See ObjectContext::_with_lock(),
+    // this function must be able to support atomicity before
+    // acquiring the lock
+    if (obc->loading_mutex.try_lock()) {
+      return _get_or_load_obc<State>(obc, existed
+      ).finally([obc]{
+        obc->loading_mutex.unlock();
+      });
+    } else {
+      return interruptor::with_lock(obc->loading_mutex,
+      [this, obc, existed, FNAME] {
+        // Previous user already loaded the obc
+        DEBUGDPP("{} finished waiting for loader, cache hit on {}",
+                 dpp, FNAME, obc->get_oid());
+        return get_obc(obc, existed);
+      });
+    }
+  }
+
+  template<RWState::State State>
+  ObjectContextLoader::load_obc_iertr::future<ObjectContextRef>
+  ObjectContextLoader::_get_or_load_obc(ObjectContextRef obc,
+                                        bool existed)
+  {
+    LOG_PREFIX(ObjectContextLoader::_get_or_load_obc);
+    if (existed) {
+      DEBUGDPP("cache hit on {}", dpp, obc->get_oid());
+      return get_obc(obc, existed);
     } else {
       DEBUGDPP("cache miss on {}", dpp, obc->get_oid());
-      loaded =
-        obc->template with_promoted_lock<State, IOInterruptCondition>(
+      return obc->template with_promoted_lock<State, IOInterruptCondition>(
         [obc, this] {
         return load_obc(obc);
       });
     }
-    return loaded;
   }
 
   ObjectContextLoader::load_obc_iertr::future<>
