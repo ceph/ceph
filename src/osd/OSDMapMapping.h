@@ -144,6 +144,7 @@ protected:
     }
 
     void _process(Item *i, ThreadPool::TPHandle &h) override;
+    void _process_finish(Item *i) override { delete i;}
 
     void _clear() override {
       ceph_assert(_empty());
