@@ -17,6 +17,7 @@
 
 #include <fstream>
 #include <optional>
+#include <string_view>
 #include "include/common_fwd.h"
 #include "include/compat.h"
 
@@ -50,16 +51,20 @@ private:
   std::ifstream proc_maps{proc_maps_fn};
 
   CephContext *cct;
-  void _sample(mem_snap_t *p);
   std::optional<int64_t> get_mapped_heap();
+
+  /**
+   * @brief Compare a line against an expected data label
+   *
+   * If the line starts with the expected label, extract the value and store it in v.
+   * \retval true if the line starts with the expected label
+   */
+  bool cmp_against(const std::string& ln, std::string_view param, long& v) const;
 
 public:
   explicit MemoryModel(CephContext *cct);
-  void sample(mem_snap_t *p = 0) {
-    _sample(&last);
-    if (p)
-      *p = last;
-  }
+  std::optional<mem_snap_t> full_sample();
+  void sample(mem_snap_t *p = nullptr);
 };
 
 #endif
