@@ -1112,7 +1112,8 @@ class Object {
     /** Shortcut synchronous delete call for common deletes */
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y,
-			      uint32_t flags) = 0;
+			      uint32_t flags,
+			      RGWObjVersionTracker* objv) = 0;
     /** Copy an this object to another object. */
     virtual int copy_object(const ACLOwner& owner, const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
@@ -1271,6 +1272,9 @@ class Object {
     /// Return stored torrent info or -ENOENT if there isn't any.
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                  optional_yield y, bufferlist& bl) = 0;
+
+    /** Get the version tracker for this object */
+    virtual RGWObjVersionTracker& get_version_tracker() = 0;
 
     /** Get the OMAP values matching the given set of keys */
     virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,

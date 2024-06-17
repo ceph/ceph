@@ -4366,6 +4366,14 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
 static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
+
+  std::uint64_t size;
+  int ret = cls_cxx_stat2(hctx, &size, nullptr);
+  if (ret < 0) {
+    CLS_LOG(5, "ERROR: %s: cls_cxx_stat2() on obj returned %d", __func__, ret);
+    return ret;
+  }
+
   cls_rgw_mp_upload_part_info_update_op op;
   auto in_iter = in->cbegin();
   try {
@@ -4377,7 +4385,7 @@ static int rgw_mp_upload_part_info_update(cls_method_context_t hctx, bufferlist 
 
   RGWUploadPartInfo stored_info;
 
-  int ret = read_omap_entry(hctx, op.part_key, &stored_info);
+  ret = read_omap_entry(hctx, op.part_key, &stored_info);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }

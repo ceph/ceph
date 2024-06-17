@@ -1365,7 +1365,7 @@ int POSIXBucket::copy(const DoutPrefixProvider *dpp, optional_yield y,
   std::unique_ptr<POSIXBucket> dsb;
 
   // Delete the target, in case it's not a multipart
-  int ret = dest->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
+  int ret = dest->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << dest->get_name() << dendl;
@@ -1417,7 +1417,8 @@ int POSIXBucket::copy(const DoutPrefixProvider *dpp, optional_yield y,
 
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				uint32_t flags)
+				uint32_t flags,
+				RGWObjVersionTracker* objv)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
@@ -1910,7 +1911,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   // Delete the target, in case it's a multipart
-  ret = delete_object(dpp, y, flags);
+  ret = delete_object(dpp, y, flags, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << get_name() << dendl;
@@ -2363,7 +2364,7 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  return source->delete_object(dpp, y, flags);
+  return source->delete_object(dpp, y, flags, nullptr);
 }
 
 int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -2379,7 +2380,7 @@ int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   // Delete the target, in case it's a multipart
-  ret = dobj->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
+  ret = dobj->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << dobj->get_name() << dendl;

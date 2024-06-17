@@ -727,7 +727,8 @@ public:
 
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
-			    uint32_t flags) override;
+			    uint32_t flags,
+			    RGWObjVersionTracker* objv) override;
   virtual int copy_object(const ACLOwner& owner,
                const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
@@ -840,6 +841,8 @@ public:
 
   virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                optional_yield y, bufferlist& bl) override;
+
+  virtual RGWObjVersionTracker& get_version_tracker() override { return next->get_version_tracker(); }
 
   virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
 				    const std::string& oid,

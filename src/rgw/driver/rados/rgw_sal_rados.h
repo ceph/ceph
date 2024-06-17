@@ -559,7 +559,8 @@ class RadosObject : public StoreObject {
       rados_ctx->invalidate(get_obj());
     }
     virtual int delete_object(const DoutPrefixProvider* dpp,
-			      optional_yield y, uint32_t flags) override;
+			      optional_yield y, uint32_t flags,
+			      RGWObjVersionTracker* objv) override;
     virtual int copy_object(const ACLOwner& owner,
                const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,

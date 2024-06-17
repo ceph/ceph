@@ -994,9 +994,10 @@ int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* c
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				uint32_t flags)
+				uint32_t flags,
+				RGWObjVersionTracker* objv)
 {
-  return next->delete_object(dpp, y, flags);
+  return next->delete_object(dpp, y, flags, objv);
 }
 
 int FilterObject::copy_object(const ACLOwner& owner,
