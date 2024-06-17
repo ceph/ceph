@@ -1,15 +1,9 @@
-teuthology:
-  premerge: |
-            local branch = yaml.teuthology.branch
-            yaml_fragment['tasks'][0]['install']['branch'] = tostring(branch)
-            print_branch = "**** done installing "..tostring(branch)
-            yaml_fragment['tasks'][1]['print'] = print_branch
-            local exec = yaml_fragment['tasks'][3]['exec']['osd.0']
-            local set_compat = "ceph osd set-require-min-compat-client "..tostring(branch)
-            py_attrgetter(exec).append(set_compat)
+meta:
+- desc: |
+   install ceph/reef latest
 tasks:
 - install:
-    branch: []
+    branch: reef
     exclude_packages:
       - cephadm
       - ceph-mgr-cephadm
@@ -33,7 +27,7 @@ tasks:
       - NetworkManager
       - iproute
       - util-linux
-- print: []
+- print: "**** done installing reef"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -54,5 +48,6 @@ tasks:
         mon warn on pool no app: false
         ms bind msgr2: false
 - exec:
-    osd.0: []
+    osd.0:
+      - ceph osd set-require-min-compat-client reef
 - print: "**** done ceph"

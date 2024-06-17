@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/pacific latest
+   install ceph/reef latest
 tasks:
 - install:
-    branch: pacific
+    branch: reef
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -13,7 +13,7 @@ tasks:
       - cephadm
       - ceph-volume
     extra_packages: ['librados2']
-- print: "**** done installing pacific"
+- print: "**** done installing reef"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -35,5 +35,5 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client pacific
+      - ceph osd set-require-min-compat-client reef
 - print: "**** done ceph"
