@@ -162,18 +162,17 @@ class JoinAuthValues(_RBase):
 class JoinSource(_RBase):
     """Represents data that can be used to join a system to Active Directory."""
 
-    source_type: JoinSourceType
-    auth: Optional[JoinAuthValues] = None
-    uri: str = ''
+    source_type: JoinSourceType = JoinSourceType.RESOURCE
     ref: str = ''
 
     def validate(self) -> None:
-        if self.ref:
+        if not self.ref:
+            raise ValueError('reference value must be specified')
+        else:
             validation.check_id(self.ref)
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
-        rc.uri.quiet = True
         rc.ref.quiet = True
         return rc
 
@@ -190,40 +189,21 @@ class UserGroupSettings(_RBase):
 class UserGroupSource(_RBase):
     """Represents data used to set up user/group settings for an instance."""
 
-    source_type: UserGroupSourceType
-    values: Optional[UserGroupSettings] = None
-    uri: str = ''
+    source_type: UserGroupSourceType = UserGroupSourceType.RESOURCE
     ref: str = ''
 
     def validate(self) -> None:
-        if self.source_type == UserGroupSourceType.INLINE:
-            pfx = 'inline User/Group configuration'
-            if self.values is None:
-                raise ValueError(pfx + ' requires values')
-            if self.uri:
-                raise ValueError(pfx + ' does not take a uri')
-            if self.ref:
-                raise ValueError(pfx + ' does not take a ref value')
-        if self.source_type == UserGroupSourceType.HTTP_URI:
-            pfx = 'http User/Group configuration'
-            if not self.uri:
-                raise ValueError(pfx + ' requires a uri')
-            if self.values:
-                raise ValueError(pfx + ' does not take inline values')
-            if self.ref:
-                raise ValueError(pfx + ' does not take a ref value')
         if self.source_type == UserGroupSourceType.RESOURCE:
-            pfx = 'resource reference User/Group configuration'
             if not self.ref:
-                raise ValueError(pfx + ' requires a ref value')
-            if self.uri:
-                raise ValueError(pfx + ' does not take a uri')
-            if self.values:
-                raise ValueError(pfx + ' does not take inline values')
+                raise ValueError('reference value must be specified')
+            else:
+                validation.check_id(self.ref)
+        else:
+            if self.ref:
+                raise ValueError('ref may not be specified')
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
-        rc.uri.quiet = True
         rc.ref.quiet = True
         return rc
 
@@ -338,11 +318,21 @@ class JoinAuth(_RBase):
     auth_id: str
     intent: Intent = Intent.PRESENT
     auth: Optional[JoinAuthValues] = None
+    # linked resources can only be used by the resource they are linked to
+    # and are automatically removed when the "parent" resource is removed
+    linked_to_cluster: Optional[str] = None
 
     def validate(self) -> None:
         if not self.auth_id:
             raise ValueError('auth_id requires a value')
         validation.check_id(self.auth_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.linked_to_cluster.quiet = True
+        return rc
 
 
 @resourcelib.resource('ceph.smb.usersgroups')
@@ -352,11 +342,21 @@ class UsersAndGroups(_RBase):
     users_groups_id: str
     intent: Intent = Intent.PRESENT
     values: Optional[UserGroupSettings] = None
+    # linked resources can only be used by the resource they are linked to
+    # and are automatically removed when the "parent" resource is removed
+    linked_to_cluster: Optional[str] = None
 
     def validate(self) -> None:
         if not self.users_groups_id:
             raise ValueError('users_groups_id requires a value')
         validation.check_id(self.users_groups_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.linked_to_cluster.quiet = True
+        return rc
 
 
 # SMBResource is a union of all valid top-level smb resource types.

@@ -160,9 +160,6 @@ VALUE_EVENT(ReserverGranted, AsyncScrubResData);
 /// all replicas have granted our reserve request
 MEV(RemotesReserved)
 
-/// reservations have timed out
-MEV(ReservationTimeout)
-
 /// initiate a new scrubbing session (relevant if we are a Primary)
 MEV(StartScrub)
 
@@ -565,25 +562,21 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
   ScrubTimePoint m_session_started_at{ScrubClock::now()};
 };
 
-struct ReservingReplicas : sc::state<ReservingReplicas, Session>,
-			   NamedSimply {
+struct ReservingReplicas : sc::state<ReservingReplicas, Session>, NamedSimply {
   explicit ReservingReplicas(my_context ctx);
-  ~ReservingReplicas();
-  using reactions = mpl::list<sc::custom_reaction<ReplicaGrant>,
-			      sc::custom_reaction<ReplicaReject>,
-			      sc::transition<RemotesReserved, ActiveScrubbing>,
-			      sc::custom_reaction<ReservationTimeout>>;
+  ~ReservingReplicas() = default;
+  using reactions = mpl::list<
+      sc::custom_reaction<ReplicaGrant>,
+      sc::custom_reaction<ReplicaReject>,
+      sc::transition<RemotesReserved, ActiveScrubbing>>;
 
   ScrubTimePoint entered_at = ScrubClock::now();
-  ScrubMachine::timer_event_token_t m_timeout_token;
 
   /// a "raw" event carrying a peer's grant response
   sc::result react(const ReplicaGrant&);
 
   /// a "raw" event carrying a peer's denial response
   sc::result react(const ReplicaReject&);
-
-  sc::result react(const ReservationTimeout&);
 };
 
 

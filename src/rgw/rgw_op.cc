@@ -12,10 +12,12 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <fmt/format.h>
 
 #include "include/scope_guard.h"
 #include "common/Clock.h"
 #include "common/armor.h"
+#include "common/async/spawn_throttle.h"
 #include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -6671,26 +6673,22 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::wait_flush(optional_yield y,
-                                   boost::asio::deadline_timer *formatter_flush_cond,
-		                   std::function<bool()> predicate)
+void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y)
 {
-  if (y && formatter_flush_cond) {
-    auto yc = y.get_yield_context();
-    while (!predicate()) {
-      boost::system::error_code error;
-      formatter_flush_cond->async_wait(yc[error]);
-      rgw_flush_formatter(s, s->formatter);
+  // add the object key to the dout prefix so we can trace concurrent calls
+  struct ObjectPrefix : public DoutPrefixPipe {
+    const rgw_obj_key& o;
+    ObjectPrefix(const DoutPrefixProvider& dpp, const rgw_obj_key& o)
+        : DoutPrefixPipe(dpp), o(o) {}
+    void add_prefix(std::ostream& out) const override {
+      out << o << ' ';
     }
-  }
-}
+  } prefix{*this, o};
+  const DoutPrefixProvider* dpp = &prefix;
 
-void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y,
-                                                 boost::asio::deadline_timer *formatter_flush_cond)
-{
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
-    send_partial_response(o, false, "", -EINVAL, formatter_flush_cond);
+    send_partial_response(o, false, "", -EINVAL);
     return;
   }
 
@@ -6698,11 +6696,11 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   const auto action = o.instance.empty() ?
       rgw::IAM::s3DeleteObject :
       rgw::IAM::s3DeleteObjectVersion;
-  if (!verify_bucket_permission(this, s, ARN(obj->get_obj()), s->user_acl,
+  if (!verify_bucket_permission(dpp, s, ARN(obj->get_obj()), s->user_acl,
                                 s->bucket_acl, s->iam_policy,
                                 s->iam_identity_policies,
                                 s->session_policies, action)) {
-    send_partial_response(o, false, "", -EACCES, formatter_flush_cond);
+    send_partial_response(o, false, "", -EACCES);
     return;
   }
 
@@ -6712,7 +6710,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   if (!rgw::sal::Object::empty(obj.get())) {
     int state_loaded = -1;
     bool check_obj_lock = obj->have_instance() && bucket->get_info().obj_lock_enabled();
-    const auto ret = state_loaded = obj->load_obj_state(this, y, true);
+    const auto ret = state_loaded = obj->load_obj_state(dpp, y, true);
 
     if (ret < 0) {
       if (ret == -ENOENT) {
@@ -6720,7 +6718,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
         check_obj_lock = false;
       } else {
         // Something went wrong.
-        send_partial_response(o, false, "", ret, formatter_flush_cond);
+        send_partial_response(o, false, "", ret);
         return;
       }
     } else {
@@ -6730,9 +6728,9 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
 
     if (check_obj_lock) {
       ceph_assert(state_loaded == 0);
-      int object_lock_response = verify_object_lock(this, obj->get_attrs(), bypass_perm, bypass_governance_mode);
+      int object_lock_response = verify_object_lock(dpp, obj->get_attrs(), bypass_perm, bypass_governance_mode);
       if (object_lock_response != 0) {
-        send_partial_response(o, false, "", object_lock_response, formatter_flush_cond);
+        send_partial_response(o, false, "", object_lock_response);
         return;
       }
     }
@@ -6745,9 +6743,9 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
                           rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
           = driver->get_notification(obj.get(), s->src_object.get(), s, event_type, y);
-  op_ret = res->publish_reserve(this);
+  op_ret = res->publish_reserve(dpp);
   if (op_ret < 0) {
-    send_partial_response(o, false, "", op_ret, formatter_flush_cond);
+    send_partial_response(o, false, "", op_ret);
     return;
   }
 
@@ -6760,67 +6758,59 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
 
-  op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
   if (op_ret == 0) {
     // send request to notification manager
-    int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
+    int ret = res->publish_commit(dpp, obj_size, ceph::real_clock::now(), etag, version_id);
     if (ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
     }
   }
   
-  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret, formatter_flush_cond);
+  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
 {
-  RGWMultiDelDelete *multi_delete;
-  vector<rgw_obj_key>::iterator iter;
-  RGWMultiDelXMLParser parser;
-  uint32_t aio_count = 0;
-  const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
-  char* buf;
-  std::optional<boost::asio::deadline_timer> formatter_flush_cond;
-  if (y) {
-    auto ex = y.get_yield_context().get_executor();
-    formatter_flush_cond = std::make_optional<boost::asio::deadline_timer>(ex);
-  }
-
-  buf = data.c_str();
+  const char* buf = data.c_str();
   if (!buf) {
     op_ret = -EINVAL;
-    goto error;
+    return;
   }
 
+  RGWMultiDelXMLParser parser;
   if (!parser.init()) {
     op_ret = -EINVAL;
-    goto error;
+    return;
   }
 
   if (!parser.parse(buf, data.length(), 1)) {
-    op_ret = -EINVAL;
-    goto error;
+    s->err.message = "Failed to parse xml input";
+    op_ret = -ERR_MALFORMED_XML;
+    return;
   }
 
-  multi_delete = static_cast<RGWMultiDelDelete *>(parser.find_first("Delete"));
+  auto multi_delete = static_cast<RGWMultiDelDelete *>(parser.find_first("Delete"));
   if (!multi_delete) {
-    op_ret = -EINVAL;
-    goto error;
-  } else {
-#define DELETE_MULTI_OBJ_MAX_NUM      1000
-    int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
-    if (max_num < 0) {
-      max_num = DELETE_MULTI_OBJ_MAX_NUM;
-    }
-    int multi_delete_object_num = multi_delete->objects.size();
-    if (multi_delete_object_num > max_num) {
-      op_ret = -ERR_MALFORMED_XML;
-      goto error;
-    }
+    s->err.message = "Missing require element Delete";
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  constexpr int DEFAULT_MAX_NUM = 1000;
+  int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
+  if (max_num < 0) {
+    max_num = DEFAULT_MAX_NUM;
+  }
+  const int multi_delete_object_num = multi_delete->objects.size();
+  if (multi_delete_object_num > max_num) {
+    s->err.message = fmt::format("Object count limit {} exceeded", max_num);
+    op_ret = -ERR_MALFORMED_XML;
+    return;
   }
 
   if (multi_delete->is_quiet())
@@ -6837,53 +6827,38 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     if (has_versioned && !s->mfa_verified) {
       ldpp_dout(this, 5) << "NOTICE: multi-object delete request with a versioned object, mfa auth not provided" << dendl;
       op_ret = -ERR_MFA_REQUIRED;
-      goto error;
+      return;
     }
   }
 
   begin_response();
-  if (multi_delete->objects.empty()) {
-    goto done;
-  }
 
-  for (iter = multi_delete->objects.begin();
-        iter != multi_delete->objects.end();
-        ++iter) {
-    rgw_obj_key obj_key = *iter;
-    if (y) {
-      wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
-        return aio_count < max_aio;
-      });
-      aio_count++;
-      boost::asio::spawn(y.get_yield_context(), [this, &aio_count, obj_key, &formatter_flush_cond] (boost::asio::yield_context yield) {
-        handle_individual_object(obj_key, yield, &*formatter_flush_cond);
-        aio_count--;
-      }, [] (std::exception_ptr eptr) {
-        if (eptr) std::rethrow_exception(eptr);
-      }); 
-    } else {
-      handle_individual_object(obj_key, y, nullptr);
-    }
+  // process up to max_aio object deletes in parallel
+  const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
+  auto group = ceph::async::spawn_throttle{y, max_aio};
+
+  for (const auto& key : multi_delete->objects) {
+    boost::asio::spawn(group.get_executor(),
+                       [this, &key] (boost::asio::yield_context yield) {
+                         handle_individual_object(key, yield);
+                       }, group);
+
+    rgw_flush_formatter(s, s->formatter);
   }
-  if (formatter_flush_cond) {
-    wait_flush(y, &*formatter_flush_cond, [this, n=multi_delete->objects.size()] {
-      return n == ops_log_entries.size();
-    });
-  }
+  group.wait();
 
   /*  set the return code to zero, errors at this point will be
   dumped to the response */
   op_ret = 0;
 
-done:
   // will likely segfault if begin_response() has not been called
   end_response();
-  return;
+}
 
-error:
+void RGWDeleteMultiObj::send_response()
+{
+  // if we haven't already written a response, send the error response
   send_status();
-  return;
-
 }
 
 bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,

@@ -34,6 +34,10 @@ public:
     return trimmer;
   }
 
+  writer_stats_t get_writer_stats() const final {
+    return record_submitter.get_stats();
+  }
+
   open_for_mkfs_ret open_for_mkfs() final;
 
   open_for_mount_ret open_for_mount() final;
@@ -52,8 +56,8 @@ public:
     write_pipeline = _write_pipeline;
   }
 
-  journal_type_t get_type() final {
-    return journal_type_t::SEGMENTED;
+  backend_type_t get_type() final {
+    return backend_type_t::SEGMENTED;
   }
   seastar::future<> finish_commit(transaction_type_t type) {
     return seastar::now();

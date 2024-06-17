@@ -79,6 +79,11 @@ public:
   using close_ertr = base_ertr;
   close_ertr::future<> close();
 
+  device_stats_t get_device_stats(bool report_detail) const {
+    writer_stats_t journal_stats = journal->get_writer_stats();
+    return epm->get_device_stats(journal_stats, report_detail);
+  }
+
   /// Resets transaction
   void reset_transaction_preserve_handle(Transaction &t) {
     return cache->reset_transaction_preserve_handle(t);
@@ -408,6 +413,7 @@ public:
     Transaction &t,
     LBAMappingRef &&pin,
     std::array<remap_entry, N> remaps) {
+    static_assert(std::is_base_of_v<LogicalCachedExtent, T>);
 
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
@@ -491,13 +497,14 @@ public:
 	    SUBDEBUGT(seastore_tm,
 	      "remap laddr: {}, remap paddr: {}, remap length: {}", t,
 	      remap_laddr, remap_paddr, remap_len);
-	    extents.emplace_back(cache->alloc_remapped_extent<T>(
+	    auto extent = cache->alloc_remapped_extent<T>(
 	      t,
 	      remap_laddr,
 	      remap_paddr,
 	      remap_len,
 	      original_laddr,
-	      original_bptr));
+	      original_bptr);
+	    extents.emplace_back(std::move(extent));
 	  }
 	});
       }

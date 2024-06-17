@@ -323,7 +323,9 @@ public:
   }
   Context *on_clean() final;
   void on_activate_committed() final {
-    // Not needed yet (will be needed for IO unblocking)
+    if (!is_primary()) {
+      wait_for_active_blocker.unblock();
+    }
   }
   void on_active_exit() final {
     // Not needed yet
@@ -831,12 +833,17 @@ struct PG::do_osd_ops_params_t {
     return orig_source_inst.name;
   }
 
+  snapid_t get_snapid() const {
+    return snapid;
+  }
+
   crimson::net::ConnectionXcoreRef &conn;
   osd_reqid_t reqid;
   utime_t mtime;
   epoch_t map_epoch;
   entity_inst_t orig_source_inst;
   uint64_t features;
+  snapid_t snapid;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);

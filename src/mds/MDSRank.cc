@@ -673,9 +673,9 @@ void MDSRank::update_targets()
 
 void MDSRank::hit_export_target(mds_rank_t rank, double amount)
 {
-  double rate = g_conf()->mds_bal_target_decay;
+  double rate = g_conf().get_val<double>("mds_bal_target_decay");
   if (amount < 0.0) {
-    amount = 100.0/g_conf()->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
+    amount = 100.0/rate; /* a good default for "i am trying to keep this export_target active" */
   }
   auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(DecayRate(rate)));
   auto &counter = em.first->second;
@@ -2651,7 +2651,7 @@ void MDSRankDispatcher::handle_asok_command(
   const cmdmap_t& cmdmap,
   Formatter *f,
   const bufferlist &inbl,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   int r = 0;
   CachedStackStringStream css;
@@ -2661,21 +2661,20 @@ void MDSRankDispatcher::handle_asok_command(
   struct AsyncResponse : Context {
     Formatter* f;
     decltype(on_finish) do_respond;
-    std::basic_ostringstream<char> css;
+    std::basic_ostringstream<char> ss;
 
     AsyncResponse(Formatter* f, decltype(on_finish)&& respond_action)
       : f(f), do_respond(std::forward<decltype(on_finish)>(respond_action)) {}
 
     void finish(int rc) override {
       f->open_object_section("result");
-      if (!css.view().empty()) {
-        f->dump_string("message", css.view());
-      }
+      f->dump_string("message", ss.view());
       f->dump_int("return_code", rc);
       f->close_section();
 
       bufferlist outbl;
-      do_respond(rc, {}, outbl);
+      f->flush(outbl); /* even for errors, dump f */
+      do_respond(rc, ss.view(), outbl);
     }
   };
 
@@ -2963,7 +2962,7 @@ void MDSRankDispatcher::handle_asok_command(
     return;
   } else if (command == "flush journal") {
     auto respond = new AsyncResponse(f, std::move(on_finish));
-    C_Flush_Journal* flush_journal = new C_Flush_Journal(mdcache, mdlog, this, &respond->css, respond);
+    C_Flush_Journal* flush_journal = new C_Flush_Journal(mdcache, mdlog, this, &respond->ss, respond);
 
     std::lock_guard locker(mds_lock);
     flush_journal->send();
@@ -3090,7 +3089,7 @@ out:
  */
 void MDSRankDispatcher::evict_clients(
   const SessionFilter &filter,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   bufferlist outbl;
   if (is_any_replay()) {
@@ -3473,7 +3472,7 @@ public:
   std::function<void(int, C_MDS_QuiescePathCommand const&)> finish_once;
 };
 
-void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   std::string path;
   if (!cmd_getval(cmdmap, "path", path)) {
@@ -3515,7 +3514,7 @@ void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::fu
   }
 }
 
-void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   std::string path;
 
@@ -4043,9 +4042,23 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "fsid",
     "host",
     "mds_alternate_name_max",
+    "mds_bal_export_pin",
     "mds_bal_fragment_dirs",
+    "mds_bal_fragment_fast_factor",
     "mds_bal_fragment_interval",
     "mds_bal_fragment_size_max",
+    "mds_bal_interval",
+    "mds_bal_max",
+    "mds_bal_max_until",
+    "mds_bal_merge_size",
+    "mds_bal_mode",
+    "mds_bal_replicate_threshold",
+    "mds_bal_sample_interval",
+    "mds_bal_split_bits",
+    "mds_bal_split_rd",
+    "mds_bal_split_size",
+    "mds_bal_split_wr",
+    "mds_bal_unreplicate_threshold",
     "mds_cache_memory_limit",
     "mds_cache_mid",
     "mds_cache_reservation",
@@ -4073,6 +4086,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_inject_journal_corrupt_dentry_first",
     "mds_inject_migrator_session_race",
     "mds_inject_rename_corrupt_dentry_first",
+    "mds_kill_dirfrag_at",
     "mds_kill_shutdown_at",
     "mds_log_event_large_threshold",
     "mds_log_events_per_segment",
@@ -4111,6 +4125,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
 void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed)
 {
   // XXX with or without mds_lock!
+  dout(2) << __func__ << ": " << changed << dendl;
 
   if (changed.count("mds_heartbeat_reset_grace")) {
     _heartbeat_reset_grace = conf.get_val<uint64_t>("mds_heartbeat_reset_grace");

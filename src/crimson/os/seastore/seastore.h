@@ -3,14 +3,15 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
 #include <map>
+#include <optional>
+#include <string>
 #include <typeinfo>
+#include <unordered_map>
 #include <vector>
 
-#include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics_types.hh>
 
 #include "include/uuid.h"
@@ -202,6 +203,8 @@ public:
     seastar::future<> mkfs_managers();
 
     void init_managers();
+
+    device_stats_t get_device_stats(bool report_detail) const;
 
   private:
     struct internal_context_t {
@@ -495,6 +498,8 @@ public:
   seastar::future<store_statfs_t> stat() const final;
   seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
 
+  seastar::future<> report_stats() final;
+
   uuid_d get_fsid() const final {
     ceph_assert(seastar::this_shard_id() == primary_core);
     return shard_stores.local().get_fsid();
@@ -547,6 +552,10 @@ private:
   DeviceRef device;
   std::vector<DeviceRef> secondaries;
   seastar::sharded<SeaStore::Shard> shard_stores;
+
+  mutable seastar::lowres_clock::time_point last_tp =
+    seastar::lowres_clock::time_point::min();
+  mutable std::vector<device_stats_t> shard_device_stats;
 };
 
 std::unique_ptr<SeaStore> make_seastore(

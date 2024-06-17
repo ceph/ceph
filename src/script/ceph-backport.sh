@@ -1570,6 +1570,7 @@ redmine_url="$(number_to_url "redmine" "${issue}")"
 debug "Considering Redmine issue: $redmine_url - is it in the Backport tracker?"
 
 remote_api_output="$(curl --silent "${redmine_url}.json")"
+debug $remote_api_output
 tracker="$(echo "$remote_api_output" | jq -r '.issue.tracker.name')"
 if [ "$tracker" = "Backport" ]; then
     debug "Yes, $redmine_url is a Backport issue"
@@ -1580,7 +1581,7 @@ else
 fi
 
 debug "Looking up release/milestone of $redmine_url"
-milestone="$(echo "$remote_api_output" | jq -r '.issue.custom_fields[0].value')"
+milestone="$(echo "$remote_api_output" | jq -r '.issue.custom_fields[] | select(.id == 16) | .value')"
 if [ "$milestone" ] ; then
     debug "Release/milestone: $milestone"
 else

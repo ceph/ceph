@@ -26,50 +26,6 @@
 
 namespace rgw::notify {
 
-struct event_entry_t {
-  rgw_pubsub_s3_event event;
-  std::string push_endpoint;
-  std::string push_endpoint_args;
-  std::string arn_topic;
-  ceph::coarse_real_time creation_time;
-  uint32_t time_to_live = DEFAULT_GLOBAL_VALUE;
-  uint32_t max_retries = DEFAULT_GLOBAL_VALUE;
-  uint32_t retry_sleep_duration = DEFAULT_GLOBAL_VALUE;
-  
-  void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
-    encode(event, bl);
-    encode(push_endpoint, bl);
-    encode(push_endpoint_args, bl);
-    encode(arn_topic, bl);
-    encode(creation_time, bl);
-    encode(time_to_live, bl);
-    encode(max_retries, bl);
-    encode(retry_sleep_duration, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
-    decode(event, bl);
-    decode(push_endpoint, bl);
-    decode(push_endpoint_args, bl);
-    decode(arn_topic, bl);
-    if (struct_v > 1) {
-      decode(creation_time, bl);
-    } else {
-      creation_time = ceph::coarse_real_clock::zero();
-    }
-    if (struct_v > 2) {
-      decode(time_to_live, bl);
-      decode(max_retries, bl);
-      decode(retry_sleep_duration, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(event_entry_t)
-
 static inline std::ostream& operator<<(std::ostream& out,
                                        const event_entry_t& e) {
   std::string host;
@@ -767,9 +723,11 @@ public:
           throw err;
         }
       });
-      const auto rc = ceph_pthread_setname(workers.back().native_handle(), 
-        (WORKER_THREAD_NAME+std::to_string(worker_id)).c_str());
-      ceph_assert(rc == 0);
+      const auto thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
+      if (const auto rc = ceph_pthread_setname(workers.back().native_handle(), thread_name.c_str()); rc != 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to set notification manager thread name to: " << thread_name
+          << ". error: " << rc << dendl;
+      }
     }
     ldpp_dout(this, 10) << "INfO: started notification manager with: " << worker_count << " workers" << dendl;
   }
@@ -1111,7 +1069,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           // either the topic is deleted but the corresponding notification
           // still exist or in v2 mode the notification could have synced first
           // but topic is not synced yet.
-          return 0;
+          continue;
         }
         ldpp_dout(res.dpp, 1)
             << "WARN: Using the stored topic from bucket notification struct."

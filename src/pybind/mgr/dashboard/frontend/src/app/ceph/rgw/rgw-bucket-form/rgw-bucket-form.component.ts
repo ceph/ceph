@@ -10,7 +10,7 @@ import { AbstractControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
-import { forkJoin } from 'rxjs';
+import { Observable, forkJoin } from 'rxjs';
 import * as xml2js from 'xml2js';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -36,6 +36,9 @@ import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.component';
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
+import { map, switchMap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -72,6 +75,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   ];
   grantees: string[] = [Grantee.Owner, Grantee.Everyone, Grantee.AuthenticatedUsers];
   aclPermissions: AclPermissionsType[] = [aclPermission.FullControl];
+  multisiteStatus$: Observable<any>;
+  isDefaultZoneGroup$: Observable<boolean>;
 
   get isVersioningEnabled(): boolean {
     return this.bucketForm.getValue('versioning');
@@ -92,7 +97,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     private rgwEncryptionModal: RgwBucketEncryptionModel,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
     public actionLabels: ActionLabelsI18n,
-    private readonly changeDetectorRef: ChangeDetectorRef
+    private readonly changeDetectorRef: ChangeDetectorRef,
+    private rgwMultisiteService: RgwMultisiteService,
+    private rgwDaemonService: RgwDaemonService
   ) {
     super();
     this.editing = this.router.url.startsWith(`/rgw/bucket/${URLVerbs.EDIT}`);
@@ -154,7 +161,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lock_retention_period_days: [10, [CdValidators.number(false), lockDaysValidator]],
       bucket_policy: ['{}', CdValidators.json()],
       grantee: [Grantee.Owner, [Validators.required]],
-      aclPermission: [[aclPermission.FullControl], [Validators.required]]
+      aclPermission: [[aclPermission.FullControl], [Validators.required]],
+      replication: [false]
     });
   }
 
@@ -162,6 +170,16 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     const promises = {
       owners: this.rgwUserService.enumerate()
     };
+    this.multisiteStatus$ = this.rgwMultisiteService.status();
+    this.isDefaultZoneGroup$ = this.rgwDaemonService.selectedDaemon$.pipe(
+      switchMap((daemon) =>
+        this.rgwSiteService.get('default-zonegroup').pipe(
+          map((defaultZoneGroup) => {
+            return daemon.zonegroup_id === defaultZoneGroup;
+          })
+        )
+      )
+    );
 
     this.kmsProviders = this.rgwEncryptionModal.kmsProviders;
     this.rgwBucketService.getEncryptionConfig().subscribe((data) => {
@@ -267,14 +285,22 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   submit() {
     // Exit immediately if the form isn't dirty.
-    if (this.bucketForm.getValue('encryption_enabled') == null) {
-      this.bucketForm.get('encryption_enabled').setValue(false);
-      this.bucketForm.get('encryption_type').setValue(null);
-    }
     if (this.bucketForm.pristine) {
       this.goToListView();
       return;
     }
+
+    // Ensure that no validation is pending
+    if (this.bucketForm.pending) {
+      this.bucketForm.setErrors({ cdSubmitButton: true });
+      return;
+    }
+
+    if (this.bucketForm.getValue('encryption_enabled') == null) {
+      this.bucketForm.get('encryption_enabled').setValue(false);
+      this.bucketForm.get('encryption_type').setValue(null);
+    }
+
     const values = this.bucketForm.value;
     const xmlStrTags = this.tagsToXML(this.tags);
     const bucketPolicy = this.getBucketPolicy();
@@ -331,7 +357,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['keyId'],
           xmlStrTags,
           bucketPolicy,
-          cannedAcl
+          cannedAcl,
+          values['replication']
         )
         .subscribe(
           () => {

@@ -1,0 +1,20 @@
+@use './src/styles/vendor/variables' as vv;
+
+$theme: (
+  text-disabled: vv.$gray-500,
+  text-error: vv.$danger,
+  text-helper: vv.$body-color,
+  text-inverse: vv.$black,
+  text-on-color: vv.$white,
+  text-on-color-disabled: vv.$gray-700,
+  text-placeholder: vv.$gray-700,
+  text-primary: vv.$body-bg-alt,
+  text-secondary: vv.$body-bg-alt,
+  btn-primary: vv.$primary,
+  border-interactive: vv.$primary,
+  background: vv.$secondary,
+  layer-01: vv.$secondary,
+  icon-primary: vv.$gray-100,
+  icon-secondary: vv.$gray-300,
+  link-primary: vv.$primary
+);

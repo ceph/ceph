@@ -1,5 +1,5 @@
 overrides:
   ceph:
-    conf:
+    cluster-conf:
       mds:
         mds_dir_prefetch: true

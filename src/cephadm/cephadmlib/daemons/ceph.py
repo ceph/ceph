@@ -292,8 +292,8 @@ class CephExporter(ContainerDaemonForm):
         self.image = image
 
         self.sock_dir = config_json.get('sock-dir', '/var/run/ceph/')
-        ipv4_addrs, _ = get_ip_addresses(get_hostname())
-        addrs = '0.0.0.0' if ipv4_addrs else '::'
+        _, ipv6_addrs = get_ip_addresses(get_hostname())
+        addrs = '::' if ipv6_addrs else '0.0.0.0'
         self.addrs = config_json.get('addrs', addrs)
         self.port = config_json.get('port', self.DEFAULT_PORT)
         self.prio_limit = config_json.get('prio-limit', 5)

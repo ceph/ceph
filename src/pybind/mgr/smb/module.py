@@ -86,6 +86,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Create an smb cluster"""
         domain_settings = None
         user_group_settings = None
+        to_apply: List[resources.SMBResource] = []
 
         if domain_realm or domain_join_ref or domain_join_user_pass:
             join_sources: List[resources.JoinSource] = []
@@ -108,13 +109,21 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         'a domain join username & password value'
                         ' must contain a "%" separator'
                     )
+                rname = handler.rand_name(cluster_id)
                 join_sources.append(
                     resources.JoinSource(
-                        source_type=JoinSourceType.PASSWORD,
+                        source_type=JoinSourceType.RESOURCE,
+                        ref=rname,
+                    )
+                )
+                to_apply.append(
+                    resources.JoinAuth(
+                        auth_id=rname,
                         auth=resources.JoinAuthValues(
                             username=username,
                             password=password,
                         ),
+                        linked_to_cluster=cluster_id,
                     )
                 )
             domain_settings = resources.DomainSettings(
@@ -140,15 +149,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             for unpw in define_user_pass or []:
                 username, password = unpw.split('%', 1)
                 users.append({'name': username, 'password': password})
-            user_group_settings += [
+            rname = handler.rand_name(cluster_id)
+            user_group_settings.append(
                 resources.UserGroupSource(
-                    source_type=UserGroupSourceType.INLINE,
+                    source_type=UserGroupSourceType.RESOURCE, ref=rname
+                )
+            )
+            to_apply.append(
+                resources.UsersAndGroups(
+                    users_groups_id=rname,
                     values=resources.UserGroupSettings(
                         users=users,
                         groups=[],
                     ),
+                    linked_to_cluster=cluster_id,
                 )
-            ]
+            )
 
         pspec = resources.WrappedPlacementSpec.wrap(
             PlacementSpec.from_string(placement)
@@ -161,7 +177,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             custom_dns=custom_dns,
             placement=pspec,
         )
-        return self._handler.apply([cluster]).one()
+        to_apply.append(cluster)
+        return self._handler.apply(to_apply).squash(cluster)
 
     @cli.SMBCommand('cluster rm', perm='rw')
     def cluster_rm(self, cluster_id: str) -> handler.Result:

@@ -45,7 +45,7 @@
   }           \
   while (0)
 
-void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, asok_finisher on_finish)
 {
   // validate the command:
   using ceph::common::cmd_getval;
@@ -111,7 +111,7 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
   }
 
   struct Ctx : public QuiesceDbManager::RequestContext {
-    std::function<void(int, const std::string&, bufferlist&)> on_finish;
+    asok_finisher on_finish;
     bool all = false;
     mds_gid_t me;
 
@@ -197,9 +197,9 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
     } else if (op_reset) {
       r.reset_roots(roots);
     } else if (op_release) {
-      r.release_roots();
+      r.release();
     } else if (op_cancel) {
-      r.cancel_roots();
+      r.cancel();
     }
 
     double timeout;
@@ -319,7 +319,7 @@ void MDSRank::quiesce_cluster_update() {
     struct CancelAll: public QuiesceDbManager::RequestContext {
       mds_rank_t whoami;
       CancelAll(mds_rank_t whoami) : whoami(whoami) {
-        request.cancel_roots();
+        request.cancel();
       }
       void finish(int rc) override {
         dout(rc == 0 ? 15 : 3) << "injected cancel all completed with rc: " << rc << dendl;

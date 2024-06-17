@@ -18,7 +18,7 @@ from ceph.deployment.service_spec import SMBSpec
 
 # this uses a version check as opposed to a try/except because this
 # form makes mypy happy and try/except doesn't.
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 8):  # pragma: no cover
     from typing import Protocol
 elif TYPE_CHECKING:  # pragma: no cover
     # typing_extensions will not be available for the real mgr server
@@ -29,7 +29,7 @@ else:  # pragma: no cover
         pass
 
 
-if sys.version_info >= (3, 11):
+if sys.version_info >= (3, 11):  # pragma: no cover
     from typing import Self
 elif TYPE_CHECKING:  # pragma: no cover
     # typing_extensions will not be available for the real mgr server
@@ -78,13 +78,8 @@ class ConfigEntry(Protocol):
         ...  # pragma: no cover
 
 
-class ConfigStore(Protocol):
-    """A protocol for describing a configuration data store capable of
-    retaining and tracking configuration entry objects.
-    """
-
-    def __getitem__(self, key: EntryKey) -> ConfigEntry:
-        ...  # pragma: no cover
+class ConfigStoreListing(Protocol):
+    """A protocol for describing the content-listing methods of a config store."""
 
     def namespaces(self) -> Collection[str]:
         ...  # pragma: no cover
@@ -93,6 +88,15 @@ class ConfigStore(Protocol):
         ...  # pragma: no cover
 
     def __iter__(self) -> Iterator[EntryKey]:
+        ...  # pragma: no cover
+
+
+class ConfigStore(ConfigStoreListing, Protocol):
+    """A protocol for describing a configuration data store capable of
+    retaining and tracking configuration entry objects.
+    """
+
+    def __getitem__(self, key: EntryKey) -> ConfigEntry:
         ...  # pragma: no cover
 
     def remove(self, ns: EntryKey) -> bool:

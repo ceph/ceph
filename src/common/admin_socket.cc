@@ -425,7 +425,7 @@ void AdminSocket::do_tell_queue()
     execute_command(
       m->cmd,
       m->get_data(),
-      [m](int r, const std::string& err, bufferlist& outbl) {
+      [m](int r, std::string_view err, bufferlist& outbl) {
 	auto reply = new MCommandReply(r, err);
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
@@ -441,7 +441,7 @@ void AdminSocket::do_tell_queue()
     execute_command(
       m->cmd,
       m->get_data(),
-      [m](int r, const std::string& err, bufferlist& outbl) {
+      [m](int r, std::string_view err, bufferlist& outbl) {
 	auto reply = new MMonCommandAck(m->cmd, r, err, 0);
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
@@ -472,7 +472,7 @@ int AdminSocket::execute_command(
   execute_command(
     cmd,
     inbl,
-    [&errss, outbl, &fin](int r, const std::string& err, bufferlist& out) {
+    [&errss, outbl, &fin](int r, std::string_view err, bufferlist& out) {
       errss << err;
       *outbl = std::move(out);
       fin.finish(r);
@@ -488,7 +488,7 @@ int AdminSocket::execute_command(
 void AdminSocket::execute_command(
   const std::vector<std::string>& cmdvec,
   const bufferlist& inbl,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   cmdmap_t cmdmap;
   string format;
@@ -565,7 +565,7 @@ void AdminSocket::execute_command(
 
   hook->call_async(
     prefix, cmdmap, f, inbl,
-    [f, output, on_finish, m_cct=m_cct](int r, const std::string& err, bufferlist& out) {
+    [f, output, on_finish, m_cct=m_cct](int r, std::string_view err, bufferlist& out) {
       // handle either existing output in bufferlist *or* via formatter
       ldout(m_cct, 10) << __func__ << ": command completed with result " << r << dendl;
       if (auto* jff = dynamic_cast<JSONFormatterFile*>(f); jff != nullptr) {

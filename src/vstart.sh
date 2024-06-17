@@ -273,6 +273,8 @@ options:
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
+	--crimson-alien-num-threads: number of alien-tp threads
+	--crimson-alien-num-cores: number of cores to use for alien-tp
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
 	--use-crush-tunables: if supplied, set tunables to specified value
@@ -344,7 +346,11 @@ parse_secondary_devs() {
     done
 }
 
+# Default values for the crimson options
 crimson_smp=1
+crimson_alien_num_threads=0
+crimson_alien_num_cores=0
+
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug)
@@ -573,6 +579,14 @@ case $1 in
         ;;
     --crimson-smp)
         crimson_smp=$2
+        shift
+        ;;
+    --crimson-alien-num-threads)
+        crimson_alien_num_threads=$2
+        shift
+        ;;
+    --crimson-alien-num-cores)
+        crimson_alien_num_cores=$2
         shift
         ;;
     --bluestore-spdk)
@@ -1698,8 +1712,25 @@ if [ "$ceph_osd" == "crimson-osd" ]; then
         extra_seastar_args=" --trace"
     fi
     if [ "$(expr $(nproc) - 1)" -gt "$(($CEPH_NUM_OSD * crimson_smp))" ]; then
-      echo "crimson_alien_thread_cpu_cores:" $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
-      $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+        if [ $crimson_alien_num_cores -gt 0 ]; then
+            alien_bottom_cpu=$(($CEPH_NUM_OSD * crimson_smp))
+            alien_top_cpu=$(( alien_bottom_cpu + crimson_alien_num_cores - 1 ))
+            # Ensure top value within range:
+            if [ "$(($alien_top_cpu))" -gt "$(expr $(nproc) - 1)" ]; then
+                alien_top_cpu=$(expr $(nproc) - 1)
+            fi
+            echo "crimson_alien_thread_cpu_cores: $alien_bottom_cpu-$alien_top_cpu"
+            # This is a (logical) processor id range, it could be refined to encompass only physical processor ids
+            # (equivalently, ignore hyperthreading sibling processor ids)
+            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores "$alien_bottom_cpu-$alien_top_cpu"
+        else
+            echo "crimson_alien_thread_cpu_cores:" $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+        fi
+        if [ $crimson_alien_num_threads -gt 0 ]; then
+            echo "$CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads $crimson_alien_num_threads"
+            $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_op_num_threads "$crimson_alien_num_threads"
+        fi
     else
       echo "No alien thread cpu core isolation"
     fi

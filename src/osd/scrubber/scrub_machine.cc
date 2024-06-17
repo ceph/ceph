@@ -183,15 +183,6 @@ Session::Session(my_context ctx)
   dout(10) << "-- state -->> PrimaryActive/Session" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
-  // while we've checked the 'someone is reserving' flag before queueing
-  // the start-scrub event, it's possible that the flag was set in the meantime.
-  // Handling this case here requires adding a new sub-state, and the
-  // complication of reporting a failure to the caller in a new failure
-  // path. On the other hand - ignoring an ongoing reservation on rare
-  // occasions will cause no harm.
-  // We choose ignorance.
-  std::ignore = scrbr->set_reserving_now();
-
   m_perf_set = &scrbr->get_counters_set();
   m_perf_set->inc(scrbcnt_started);
 }
@@ -235,31 +226,12 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
       *scrbr, context<PrimaryActive>().last_request_sent_nonce,
       *session.m_perf_set);
 
-  if (session.m_reservations->get_last_sent()) {
-    // the 1'st reservation request was sent
-
-    auto timeout = scrbr->get_pg_cct()->_conf.get_val<milliseconds>(
-	"osd_scrub_reservation_timeout");
-    if (timeout.count() > 0) {
-      // Start a timer to handle case where the replicas take a long time to
-      // ack the reservation.  See ReservationTimeout handler below.
-      m_timeout_token =
-	  machine.schedule_timer_event_after<ReservationTimeout>(timeout);
-    }
-  } else {
+  if (!session.m_reservations->get_last_sent()) {
     // no replicas to reserve
     dout(10) << "no replicas to reserve" << dendl;
     // can't transit directly from here
     post_event(RemotesReserved{});
   }
-}
-
-ReservingReplicas::~ReservingReplicas()
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  // it's OK to try and clear the flag even if we don't hold it
-  // (the flag remembers the actual holder)
-  scrbr->clear_reserving_now();
 }
 
 sc::result ReservingReplicas::react(const ReplicaGrant& ev)
@@ -305,26 +277,6 @@ sc::result ReservingReplicas::react(const ReplicaReject& ev)
   return transit<PrimaryIdle>();
 }
 
-sc::result ReservingReplicas::react(const ReservationTimeout&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  auto& session = context<Session>();
-  dout(10) << "ReservingReplicas::react(const ReservationTimeout&)" << dendl;
-  ceph_assert(session.m_reservations);
-
-  session.m_reservations->log_failure_and_duration(scrbcnt_resrv_timed_out);
-
-  const auto msg = fmt::format(
-      "osd.{} PgScrubber: {} timeout on reserving replicas (since {})",
-      scrbr->get_whoami(), scrbr->get_spgid(), entered_at);
-  dout(1) << msg << dendl;
-  scrbr->get_clog()->warn() << msg;
-
-  // cause the scrubber to stop the scrub session, marking 'reservation
-  // failure' as the cause (affecting future scheduling)
-  scrbr->flag_reservations_failure();
-  return transit<PrimaryIdle>();
-}
 
 // ----------------------- ActiveScrubbing -----------------------------------
 

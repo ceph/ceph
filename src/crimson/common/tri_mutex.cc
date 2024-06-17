@@ -5,7 +5,11 @@
 
 #include <seastar/util/later.hh>
 
-seastar::future<> read_lock::lock()
+SET_SUBSYS(osd);
+//TODO: SET_SUBSYS(crimson_tri_mutex);
+
+std::optional<seastar::future<>>
+read_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_read();
 }
@@ -15,7 +19,8 @@ void read_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_read();
 }
 
-seastar::future<> write_lock::lock()
+std::optional<seastar::future<>>
+write_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_write();
 }
@@ -25,7 +30,8 @@ void write_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_write();
 }
 
-seastar::future<> excl_lock::lock()
+std::optional<seastar::future<>>
+excl_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_excl();
 }
@@ -57,30 +63,40 @@ void excl_lock_from_write::unlock()
 
 tri_mutex::~tri_mutex()
 {
+  LOG_PREFIX(tri_mutex::~tri_mutex());
+  DEBUGDPP("", *this);
   assert(!is_acquired());
 }
 
-seastar::future<> tri_mutex::lock_for_read()
+std::optional<seastar::future<>>
+tri_mutex::lock_for_read()
 {
+  LOG_PREFIX(tri_mutex::lock_for_read());
+  DEBUGDPP("", *this);
   if (try_lock_for_read()) {
-    return seastar::now();
+    DEBUGDPP("lock_for_read successfully", *this);
+    return std::nullopt;
   }
-  waiters.emplace_back(seastar::promise<>(), type_t::read);
+  DEBUGDPP("can't lock_for_read, adding to waiters", *this);
+  waiters.emplace_back(seastar::promise<>(), type_t::read, name);
   return waiters.back().pr.get_future();
 }
 
 bool tri_mutex::try_lock_for_read() noexcept
 {
+  LOG_PREFIX(tri_mutex::try_lock_for_read());
+  DEBUGDPP("", *this);
   if (!writers && !exclusively_used && waiters.empty()) {
     ++readers;
     return true;
-  } else {
-    return false;
   }
+  return false;
 }
 
 void tri_mutex::unlock_for_read()
 {
+  LOG_PREFIX(tri_mutex::unlock_for_read());
+  DEBUGDPP("", *this);
   assert(readers > 0);
   if (--readers == 0) {
     wake();
@@ -89,6 +105,8 @@ void tri_mutex::unlock_for_read()
 
 void tri_mutex::promote_from_read()
 {
+  LOG_PREFIX(tri_mutex::promote_from_read());
+  DEBUGDPP("", *this);
   assert(readers == 1);
   --readers;
   exclusively_used = true;
@@ -96,33 +114,42 @@ void tri_mutex::promote_from_read()
 
 void tri_mutex::demote_to_read()
 {
+  LOG_PREFIX(tri_mutex::demote_to_read());
+  DEBUGDPP("", *this);
   assert(exclusively_used);
   exclusively_used = false;
   ++readers;
 }
 
-seastar::future<> tri_mutex::lock_for_write()
+std::optional<seastar::future<>>
+tri_mutex::lock_for_write()
 {
+  LOG_PREFIX(tri_mutex::lock_for_write());
+  DEBUGDPP("", *this);
   if (try_lock_for_write()) {
-    return seastar::now();
+    DEBUGDPP("lock_for_write successfully", *this);
+    return std::nullopt;
   }
-  waiters.emplace_back(seastar::promise<>(), type_t::write);
+  DEBUGDPP("can't lock_for_write, adding to waiters", *this);
+  waiters.emplace_back(seastar::promise<>(), type_t::write, name);
   return waiters.back().pr.get_future();
 }
 
 bool tri_mutex::try_lock_for_write() noexcept
 {
-  if (!readers && !exclusively_used) {
-    if (waiters.empty()) {
-      ++writers;
-      return true;
-    }
+  LOG_PREFIX(tri_mutex::try_lock_for_write());
+  DEBUGDPP("", *this);
+  if (!readers && !exclusively_used && waiters.empty()) {
+    ++writers;
+    return true;
   }
   return false;
 }
 
 void tri_mutex::unlock_for_write()
 {
+  LOG_PREFIX(tri_mutex::unlock_for_write());
+  DEBUGDPP("", *this);
   assert(writers > 0);
   if (--writers == 0) {
     wake();
@@ -131,6 +158,8 @@ void tri_mutex::unlock_for_write()
 
 void tri_mutex::promote_from_write()
 {
+  LOG_PREFIX(tri_mutex::promote_from_write());
+  DEBUGDPP("", *this);
   assert(writers == 1);
   --writers;
   exclusively_used = true;
@@ -138,23 +167,32 @@ void tri_mutex::promote_from_write()
 
 void tri_mutex::demote_to_write()
 {
+  LOG_PREFIX(tri_mutex::demote_to_write());
+  DEBUGDPP("", *this);
   assert(exclusively_used);
   exclusively_used = false;
   ++writers;
 }
 
 // for exclusive users
-seastar::future<> tri_mutex::lock_for_excl()
+std::optional<seastar::future<>>
+tri_mutex::lock_for_excl()
 {
+  LOG_PREFIX(tri_mutex::lock_for_excl());
+  DEBUGDPP("", *this);
   if (try_lock_for_excl()) {
-    return seastar::now();
+    DEBUGDPP("lock_for_excl, successfully", *this);
+    return std::nullopt;
   }
-  waiters.emplace_back(seastar::promise<>(), type_t::exclusive);
+  DEBUGDPP("can't lock_for_excl, adding to waiters", *this);
+  waiters.emplace_back(seastar::promise<>(), type_t::exclusive, name);
   return waiters.back().pr.get_future();
 }
 
 bool tri_mutex::try_lock_for_excl() noexcept
 {
+  LOG_PREFIX(tri_mutex::try_lock_for_excl());
+  DEBUGDPP("", *this);
   if (readers == 0u && writers == 0u && !exclusively_used) {
     exclusively_used = true;
     return true;
@@ -165,6 +203,8 @@ bool tri_mutex::try_lock_for_excl() noexcept
 
 void tri_mutex::unlock_for_excl()
 {
+  LOG_PREFIX(tri_mutex::unlock_for_excl());
+  DEBUGDPP("", *this);
   assert(exclusively_used);
   exclusively_used = false;
   wake();
@@ -172,6 +212,8 @@ void tri_mutex::unlock_for_excl()
 
 bool tri_mutex::is_acquired() const
 {
+  LOG_PREFIX(tri_mutex::is_acquired());
+  DEBUGDPP("", *this);
   if (readers != 0u) {
     return true;
   } else if (writers != 0u) {
@@ -185,6 +227,8 @@ bool tri_mutex::is_acquired() const
 
 void tri_mutex::wake()
 {
+  LOG_PREFIX(tri_mutex::wake());
+  DEBUGDPP("", *this);
   assert(!readers && !writers && !exclusively_used);
   type_t type = type_t::none;
   while (!waiters.empty()) {
@@ -210,7 +254,9 @@ void tri_mutex::wake()
     default:
       assert(0);
     }
+    DEBUGDPP("waking up {}", *this, waiter.waiter_name);
     waiter.pr.set_value();
     waiters.pop_front();
   }
+  DEBUGDPP("no waiters", *this);
 }
