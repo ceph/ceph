@@ -1136,6 +1136,7 @@ class Object {
         rgw_zone_set* zones_trace{nullptr};
 	bool abortmp{false};
 	uint64_t parts_accounted_size{0};
+        RGWObjVersionTracker* objv_tracker = nullptr;
       } params;
 
       struct Result {
@@ -1155,7 +1156,9 @@ class Object {
     /** Shortcut synchronous delete call for common deletes */
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y,
-			      uint32_t flags) = 0;
+			      uint32_t flags,
+			      std::list<rgw_obj_index_key>* remove_objs,
+			      RGWObjVersionTracker* objv) = 0;
     /** Copy an this object to another object. */
     virtual int copy_object(const ACLOwner& owner, const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
@@ -1299,6 +1302,9 @@ class Object {
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                  optional_yield y, bufferlist& bl) = 0;
 
+    /** Get the version tracker for this object */
+    virtual RGWObjVersionTracker& get_version_tracker() = 0;
+
     /** Get the OMAP values matching the given set of keys */
     virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 			      const std::set<std::string>& keys,
@@ -1380,6 +1386,8 @@ public:
  */
 class MultipartUpload {
 public:
+  using prefix_map_t = boost::container::flat_map<uint32_t, boost::container::flat_set<std::string>>;
+
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
@@ -1425,7 +1433,14 @@ public:
 		       RGWCompressionInfo& cs_info, off_t& ofs,
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
-		       rgw::sal::Object* target_obj) = 0;
+		       rgw::sal::Object* target_obj,
+                       prefix_map_t& processed_prefixes) = 0;
+  /** Cleanup orphaned parts caused by racing condition involving part upload retry */
+  virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+                                     CephContext *cct, optional_yield y,
+                                     const rgw_obj& obj,
+                                     std::list<rgw_obj_index_key>& remove_objs,
+                                     prefix_map_t& processed_prefixes) = 0;
 
   /** Get placement and/or attribute info for this upload */
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) = 0;

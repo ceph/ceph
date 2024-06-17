@@ -994,9 +994,11 @@ int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* c
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				uint32_t flags)
+				uint32_t flags,
+				std::list<rgw_obj_index_key>* remove_objs,
+				RGWObjVersionTracker* objv)
 {
-  return next->delete_object(dpp, y, flags);
+  return next->delete_object(dpp, y, flags, remove_objs, objv);
 }
 
 int FilterObject::copy_object(const ACLOwner& owner,
@@ -1283,11 +1285,21 @@ int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    RGWCompressionInfo& cs_info, off_t& ofs,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
-				    rgw::sal::Object* target_obj)
+				    rgw::sal::Object* target_obj,
+				    prefix_map_t& processed_prefixes)
 {
   return next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
 			compressed, cs_info, ofs, tag, owner, olh_epoch,
-			nextObject(target_obj));
+			nextObject(target_obj), processed_prefixes);
+}
+
+int FilterMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+                                                  CephContext *cct, optional_yield y,
+                                                  const rgw_obj& obj,
+                                                  std::list<rgw_obj_index_key>& remove_objs,
+                                                  prefix_map_t& processed_prefixes)
+{
+  return next->cleanup_orphaned_parts(dpp, cct, y, obj, remove_objs, processed_prefixes);
 }
 
 int FilterMultipartUpload::get_info(const DoutPrefixProvider *dpp,

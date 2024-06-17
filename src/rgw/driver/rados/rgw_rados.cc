@@ -5842,6 +5842,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
 
   store->remove_rgw_head_obj(op);
 
+  if (params.check_objv != nullptr) {
+    cls_version_check(op, *params.check_objv, VER_COND_EQ);
+  }
+
   auto& ioctx = ref.ioctx;
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y);
 
@@ -6034,7 +6038,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   int r = -ENOENT;
 
   if (!assume_noent) {
-    r = RGWRados::raw_obj_stat(dpp, raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), NULL, y);
+    r = RGWRados::raw_obj_stat(dpp, raw_obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), &s->objv_tracker, y);
   }
 
   if (r == -ENOENT) {
@@ -6755,6 +6759,10 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
 
   if (!astate->exists) {
     return -ENOENT;
+  }
+
+  if (params.objv_tracker) {
+    *params.objv_tracker = astate->objv_tracker;
   }
 
   RGWBucketInfo& bucket_info = source->get_bucket_info();
@@ -8674,6 +8682,7 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
   if (first_chunk) {
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
+
   bufferlist outbl;
   r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, &outbl, y);
 

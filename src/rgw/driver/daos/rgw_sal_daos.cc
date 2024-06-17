@@ -1198,7 +1198,8 @@ int DaosObject::DaosDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 }
 
 int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                              uint32_t flags) {
+                              uint32_t flags, std::list<rgw_obj_index_key>* remove_objs,
+                              RGWObjVersionTracker* objv) {
   ldpp_dout(dpp, 20) << "DEBUG: delete_object" << dendl;
   DaosObject::DaosDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;
@@ -1678,7 +1679,8 @@ int DaosMultipartUpload::complete(
     map<int, string>& part_etags, list<rgw_obj_index_key>& remove_objs,
     uint64_t& accounted_size, bool& compressed, RGWCompressionInfo& cs_info,
     off_t& off, std::string& tag, ACLOwner& owner, uint64_t olh_epoch,
-    rgw::sal::Object* target_obj) {
+    rgw::sal::Object* target_obj,
+    prefix_map_t& processed_prefixes) {
   ldpp_dout(dpp, 20) << "DEBUG: complete" << dendl;
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -1921,6 +1923,15 @@ int DaosMultipartUpload::complete(
   ret = ds3_upload_remove(get_bucket_name().c_str(), get_upload_id().c_str(),
                           store->ds3);
   return ret;
+}
+
+int DaosMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+    CephContext *cct, optional_yield y,
+    const rgw_obj& obj,
+    std::list<rgw_obj_index_key>& remove_objs,
+    prefix_map_t& processed_prefixes)
+{
+  return -ENOTSUP;
 }
 
 int DaosMultipartUpload::get_info(const DoutPrefixProvider* dpp,
