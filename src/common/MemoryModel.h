@@ -19,17 +19,17 @@
 
 class MemoryModel {
 public:
-  struct snap {
+  struct mem_snap_t {
     long peak;
     long size;
     long hwm;
     long rss;
     long data;
     long lib;
-    
+
     long heap;
 
-    snap() : peak(0), size(0), hwm(0), rss(0), data(0), lib(0),
+    mem_snap_t() : peak(0), size(0), hwm(0), rss(0), data(0), lib(0),
 	     heap(0)
     {}
 
@@ -40,11 +40,11 @@ public:
 
 private:
   CephContext *cct;
-  void _sample(snap *p);
+  void _sample(mem_snap_t *p);
 
 public:
   explicit MemoryModel(CephContext *cct);
-  void sample(snap *p = 0) {
+  void sample(mem_snap_t *p = 0) {
     _sample(&last);
     if (p)
       *p = last;

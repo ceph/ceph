@@ -7816,9 +7816,9 @@ void MDCache::trim_client_leases()
 void MDCache::check_memory_usage()
 {
   static MemoryModel mm(g_ceph_context);
-  static MemoryModel::snap last;
+  static MemoryModel::mem_snap_t last;
   mm.sample(&last);
-  static MemoryModel::snap baseline = last;
+  static MemoryModel::mem_snap_t baseline = last;
 
   // check client caps
   ceph_assert(CInode::count() == inode_map.size() + snap_inode_map.size() + num_shadow_inodes);
