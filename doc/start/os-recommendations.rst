@@ -49,9 +49,9 @@ non-Linux systems but these are not supported by the core Ceph effort.
 +===============+===============+=================+==================+==================+
 | Centos 7      |               |                 |         A        |      B           |
 +---------------+---------------+-----------------+------------------+------------------+
-| Centos 8      |    A          |     A           |         A        |      A           |
+| Centos 8      |               |                 |                  |                  |
 +---------------+---------------+-----------------+------------------+------------------+
-| Centos 9      |    A          |                 |                  |                  |
+| Centos 9      |    A          |     A :sup:`1`  |                  |                  |
 +---------------+---------------+-----------------+------------------+------------------+
 | Debian 10     |    C          |                 |         C        |      C           |
 +---------------+---------------+-----------------+------------------+------------------+
@@ -71,6 +71,7 @@ non-Linux systems but these are not supported by the core Ceph effort.
 - **A**: Ceph provides packages and has done comprehensive tests on the software in them.
 - **B**: Ceph provides packages and has done basic tests on the software in them.
 - **C**: Ceph provides packages only. No tests have been done on these releases.
+- **1**: Testing has been done on Centos 9 starting on version 17.2.8 for Quincy.
 
 .. note::
    **For Centos 7 Users** 
