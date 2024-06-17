@@ -1098,21 +1098,23 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
                        << dendl;
     return 0;
   }
-  ret = driver->remove_topic_v2(name, tenant, objv_tracker, y, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to remove topic info: ret=" << ret
-                      << dendl;
-    return ret;
-  }
 
   const rgw_pubsub_dest& dest = topic.dest;
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
     ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
     if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
+      ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for "
           "persistent topic: " << cpp_strerror(ret) << dendl;
-    } // not fatal
+      return ret;
+    }
+  }
+
+  ret = driver->remove_topic_v2(name, tenant, objv_tracker, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove topic info: ret=" << ret
+                      << dendl;
+    return ret;
   }
   return 0;
 }
@@ -1144,22 +1146,21 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
   if (t == topics.topics.end()) {
     return -ENOENT;
   }
-  const rgw_pubsub_dest dest = std::move(t->second.dest);
+  if (!t->second.dest.push_endpoint.empty() && t->second.dest.persistent &&
+      !t->second.dest.persistent_queue.empty()) {
+    ret = driver->remove_persistent_topic(dpp, y, t->second.dest.persistent_queue);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for "
+          "persistent topic: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  }
   topics.topics.erase(t);
 
   ret = write_topics_v1(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to remove topics info: ret=" << ret << dendl;
     return ret;
-  }
-
-  if (!dest.push_endpoint.empty() && dest.persistent &&
-      !dest.persistent_queue.empty()) {
-    ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
-          "persistent topic: " << cpp_strerror(ret) << dendl;
-    } // not fatal
   }
   return 0;
 }
