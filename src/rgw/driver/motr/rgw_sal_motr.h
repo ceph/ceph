@@ -657,7 +657,9 @@ class MotrObject : public StoreObject {
 
     virtual int delete_object(const DoutPrefixProvider* dpp,
         optional_yield y,
-        uint32_t flags) override;
+        uint32_t flags,
+        td::list<rgw_obj_index_key>* remove_objs,
+        GWObjVersionTracker* objv) override;
     virtual int copy_object(const ACLOwner& owner,
         const rgw_user& remote_user,
         req_info* info, const rgw_zone_id& source_zone,
@@ -933,7 +935,12 @@ public:
 		       RGWCompressionInfo& cs_info, off_t& off,
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
-		       rgw::sal::Object* target_obj) override;
+		       rgw::sal::Object* target_obj,
+		       boost::container::flat_map<uint32_t, boost::container::flat_set<std::string>>& processed_prefixes) override;
+  virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+           CephContext *cct, optional_yield y,
+           std::list<rgw_obj_index_key>& remove_objs,
+           boost::container::flat_map<uint32_t, boost::container::flat_set<std::string>>& processed_prefixes) override;
   virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,

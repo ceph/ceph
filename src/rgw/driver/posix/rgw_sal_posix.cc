@@ -1365,7 +1365,7 @@ int POSIXBucket::copy(const DoutPrefixProvider *dpp, optional_yield y,
   std::unique_ptr<POSIXBucket> dsb;
 
   // Delete the target, in case it's not a multipart
-  int ret = dest->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
+  int ret = dest->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << dest->get_name() << dendl;
@@ -1417,7 +1417,9 @@ int POSIXBucket::copy(const DoutPrefixProvider *dpp, optional_yield y,
 
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				uint32_t flags)
+				uint32_t flags,
+                                std::list<rgw_obj_index_key>* remove_objs,
+				RGWObjVersionTracker* objv)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
@@ -1910,7 +1912,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   // Delete the target, in case it's a multipart
-  ret = delete_object(dpp, y, flags);
+  ret = delete_object(dpp, y, flags, nullptr, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << get_name() << dendl;
@@ -2363,7 +2365,7 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  return source->delete_object(dpp, y, flags);
+  return source->delete_object(dpp, y, flags, nullptr, nullptr);
 }
 
 int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -2379,7 +2381,7 @@ int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   // Delete the target, in case it's a multipart
-  ret = dobj->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
+  ret = dobj->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << dobj->get_name() << dendl;
@@ -2589,7 +2591,8 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    RGWCompressionInfo& cs_info, off_t& ofs,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
-				    rgw::sal::Object* target_obj)
+				    rgw::sal::Object* target_obj,
+				    boost::container::flat_map<uint32_t, boost::container::flat_set<std::string>>& processed_prefixes)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -2720,6 +2723,14 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   // Rename to target_obj
   return shadow->rename(dpp, y, target_obj);
+}
+
+int POSIXMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+    CephContext *cct, optional_yield y,
+    std::list<rgw_obj_index_key>& remove_objs,
+    boost::container::flat_map<uint32_t, boost::container::flat_set<std::string>>& processed_prefixes)
+{
+  return -ENOTSUP;
 }
 
 int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y,
