@@ -90,6 +90,43 @@ class TestFSCryptRecovery(FSCryptTestCase):
 
         self.mount_a.run_shell_payload(f"cd {self.path} && stat {file}")
 
+class TestFSCryptRMW(FSCryptTestCase):
+    def test_fscrypt_overwrite_block_boundary():
+        """Test writing data with small, half write on previous block and trailing on new block"""
+
+        file = 'file.log'
+
+        size = 5529
+        offset = 3379
+        contents = 's' * size
+        self.mount_a.write_file(file, contents, offset)
+
+        #s = write_fill(fd, 's', 5529, 6144)
+        sleep(10)
+
+        size = 4033
+        offset = 4127
+        contents = 't' * size
+        self.mount_a.write_file(file, contents, offset)
+        #s = write_fill(fd, 't', 4033, 6144)
+
+    def test_fscrypt_huge_hole(self):
+        """Test writing data with huge hole, half write on previous block and trailing on new block"""
+
+        file = 'file.log'
+
+        size = 4096
+        offset = 2147477504
+        contents = 's' * size
+        self.mount_a.write_file(file, contents, offset)
+        #s = write_fill(fd, 's', 4096, 107374182400)
+        sleep(10)
+
+        size = 8
+        offset = 12
+        contents = 't' * size
+        self.mount_a.write_file(file, contents, offset)
+        #s = write_fill(fd, 't', 8, 16)
 
 class TestFSCryptXFS(XFSTestsDev):
 
