@@ -92,7 +92,7 @@ public:
 	*out = CachedExtentRef(&*iter);
       SUBTRACET(seastore_cache, "{} is present in write_set -- {}",
                 *this, addr, *iter);
-      assert((*out)->is_valid());
+      assert(!out || (*out)->is_valid());
       return get_extent_ret::PRESENT;
     } else if (retired_set.count(addr)) {
       return get_extent_ret::RETIRED;
