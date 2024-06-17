@@ -18722,7 +18722,7 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
        << ", l_multi=" << byte_u_t(level_multiplier)
        << std::endl;
   constexpr std::array<const char*, 8> names{ {
-    "DEV/LEV",
+    "LEV/DEV",
     "WAL",
     "DB",
     "SLOW",
