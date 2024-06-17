@@ -12,7 +12,6 @@ from util import (
     run_dc_shell_command,
     run_shell_command,
     engine,
-    BoxType
 )
 
 
