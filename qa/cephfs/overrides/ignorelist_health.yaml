@@ -14,3 +14,4 @@ overrides:
       - do not have an application enabled
       - overall HEALTH_
       - Replacing daemon
+      - deprecated feature inline_data

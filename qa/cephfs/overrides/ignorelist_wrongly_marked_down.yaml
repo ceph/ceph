@@ -7,3 +7,4 @@ overrides:
       - but it is still running
 # MDS daemon 'b' is not responding, replacing it as rank 0 with standby 'a'
       - is not responding
+      - MON_DOWN
