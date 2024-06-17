@@ -5,6 +5,8 @@ teuthology:
               yaml_fragment['tasks'][2]['install.upgrade']['client.0']['branch'] = "pacific"
             elseif tostring(branch) == "pacific" then
               yaml_fragment['tasks'][2]['install.upgrade']['client.0']['branch'] = "reef"
+            elseif tostring(branch) ~= nil and tostring(branch) ~= "pacific" or "reef" then
+              yaml_fragment['tasks'][2]['install.upgrade']['client.0']['branch'] = "main"
             else
               error("invalid source branch")
             end
