@@ -2730,7 +2730,9 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
 
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				uint32_t flags)
+				uint32_t flags,
+                                std::list<rgw_obj_index_key>* remove_objs,
+				RGWObjVersionTracker* objv)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
@@ -3505,7 +3507,7 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y, uint32_t flags)
 {
-  return source->delete_object(dpp, y, flags);
+  return source->delete_object(dpp, y, flags, nullptr, nullptr);
 }
 
 int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -3703,7 +3705,8 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    RGWCompressionInfo& cs_info, off_t& ofs,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
-				    rgw::sal::Object* target_obj)
+				    rgw::sal::Object* target_obj,
+				    prefix_map_t& processed_prefixes)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -3850,6 +3853,15 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
   return 0;
+}
+
+int POSIXMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+    CephContext *cct, optional_yield y,
+    const rgw_obj& obj,
+    std::list<rgw_obj_index_key>& remove_objs,
+    prefix_map_t& processed_prefixes)
+{
+  return -ENOTSUP;
 }
 
 int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y,
