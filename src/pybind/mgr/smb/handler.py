@@ -190,10 +190,11 @@ class _Staging:
         self.destination_store = store
         self.incoming: Dict[EntryKey, SMBResource] = {}
         self.deleted: Dict[EntryKey, SMBResource] = {}
-        self._keycache: Set[EntryKey] = set()
+        self._store_keycache: Set[EntryKey] = set()
+        self._virt_keycache: Set[EntryKey] = set()
 
     def stage(self, resource: SMBResource) -> None:
-        self._keycache = set()
+        self._virt_keycache = set()
         ekey = resource_key(resource)
         if resource.intent == Intent.REMOVED:
             self.deleted[ekey] = resource
@@ -201,25 +202,31 @@ class _Staging:
             self.deleted.pop(ekey, None)
             self.incoming[ekey] = resource
 
-    def _virtual_keys(self) -> Iterator[EntryKey]:
-        new = set(self.incoming.keys())
-        for ekey in self.destination_store:
-            if ekey in self.deleted:
-                continue
-            yield ekey
-            new.discard(ekey)
-        for ekey in new:
-            yield ekey
+    def _virtual_keys(self) -> Collection[EntryKey]:
+        if self._virt_keycache:
+            return self._virt_keycache
+        self._virt_keycache = set(self._store_keys()) - set(
+            self.deleted
+        ) | set(self.incoming)
+        return self._virt_keycache
+
+    def _store_keys(self) -> Collection[EntryKey]:
+        if not self._store_keycache:
+            self._store_keycache = set(self.destination_store)
+        return self._store_keycache
 
     def __iter__(self) -> Iterator[EntryKey]:
-        self._keycache = set(self._virtual_keys())
-        return iter(self._keycache)
+        return iter(self._virtual_keys())
 
     def namespaces(self) -> Collection[str]:
         return {k[0] for k in self}
 
     def contents(self, ns: str) -> Collection[str]:
         return {kname for kns, kname in self if kns == ns}
+
+    def is_new(self, resource: SMBResource) -> bool:
+        ekey = resource_key(resource)
+        return ekey not in self._store_keys()
 
     def get_cluster(self, cluster_id: str) -> resources.Cluster:
         ekey = (str(ClusterEntry.namespace), cluster_id)
@@ -335,7 +342,12 @@ class ClusterConfigHandler:
             f' orch {self._orch!r}'
         )
 
-    def apply(self, inputs: Iterable[SMBResource]) -> ResultGroup:
+    def apply(
+        self, inputs: Iterable[SMBResource], *, create_only: bool = False
+    ) -> ResultGroup:
+        """Apply resource configuration changes.
+        Set `create_only` to disable changing existing resource values.
+        """
         log.debug('applying changes to internal data store')
         results = ResultGroup()
         staging = _Staging(self.internal_store)
@@ -344,7 +356,9 @@ class ClusterConfigHandler:
             for resource in incoming:
                 staging.stage(resource)
             for resource in incoming:
-                results.append(self._check(resource, staging))
+                results.append(
+                    self._check(resource, staging, create_only=create_only)
+                )
         except ErrorResult as err:
             results.append(err)
         except Exception as err:
@@ -421,9 +435,22 @@ class ClusterConfigHandler:
         log.debug("search found %d resources", len(out))
         return out
 
-    def _check(self, resource: SMBResource, staging: _Staging) -> Result:
+    def _check(
+        self,
+        resource: SMBResource,
+        staging: _Staging,
+        *,
+        create_only: bool = False,
+    ) -> Result:
         """Check/validate a staged resource."""
         log.debug('staging resource: %r', resource)
+        if create_only:
+            if not staging.is_new(resource):
+                return Result(
+                    resource,
+                    success=False,
+                    msg='a resource with the same ID already exists',
+                )
         try:
             if isinstance(
                 resource, (resources.Cluster, resources.RemovedCluster)
