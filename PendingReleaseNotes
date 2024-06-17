@@ -224,6 +224,14 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * Monitoring: RGW S3 Analytics: A new Grafana dashboard is now available, enabling you to
   visualize per bucket and user analytics data, including total GETs, PUTs, Deletes,
   Copies, and list metrics.
+* RBD: `Image::access_timestamp` and `Image::modify_timestamp` Python APIs now
+  return timestamps in UTC.
+* RBD: Support for cloning from non-user type snapshots is added.  This is
+  intended primarily as a building block for cloning new groups from group
+  snapshots created with `rbd group snap create` command, but has also been
+  exposed via the new `--snap-id` option for `rbd clone` command.
+* RBD: The output of `rbd snap ls --all` command now includes the original
+  type for trashed snapshots.
 
 >=18.0.0
 

@@ -14,7 +14,7 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
-from ..services.rgw_client import NoRgwDaemonsException, RgwClient, RgwMultisite
+from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, RgwClient, RgwMultisite
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     CRUDCollectionMethod, CRUDEndpoint, DeletePermission, Endpoint, \
@@ -242,6 +242,7 @@ class RgwDaemon(RESTController):
                     'server_hostname': hostname,
                     'realm_name': metadata['realm_name'],
                     'zonegroup_name': metadata['zonegroup_name'],
+                    'zonegroup_id': metadata['zonegroup_id'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id'],
                     'port': int(port) if port else None
@@ -307,6 +308,8 @@ class RgwSite(RgwRESTController):
             return RgwClient.admin_instance(daemon_name=daemon_name).get_realms()
         if query == 'default-realm':
             return RgwClient.admin_instance(daemon_name=daemon_name).get_default_realm()
+        if query == 'default-zonegroup':
+            return RgwMultisite().get_all_zonegroups_info()['default_zonegroup']
 
         # @TODO: for multisite: by default, retrieve cluster topology/map.
         raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
@@ -376,8 +379,8 @@ class RgwBucket(RgwRESTController):
                                              retention_period_days,
                                              retention_period_years)
 
-    def _get_policy(self, bucket: str):
-        rgw_client = RgwClient.admin_instance()
+    def _get_policy(self, bucket: str, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_bucket_policy(bucket)
 
     def _set_policy(self, bucket_name: str, policy: str, daemon_name, owner):
@@ -395,6 +398,16 @@ class RgwBucket(RgwRESTController):
     def _set_acl(self, bucket_name: str, acl: str, owner, daemon_name):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_acl(bucket_name, acl)
+
+    def _set_replication(self, bucket_name: str, replication: bool, owner, daemon_name):
+        multisite = RgwMultisite()
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        zonegroup_name = RgwClient.admin_instance(daemon_name=daemon_name).get_default_zonegroup()
+
+        policy_exists = multisite.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name)
+        if replication and not policy_exists:
+            multisite.create_dashboard_admin_sync_group(zonegroup_name=zonegroup_name)
+        return rgw_client.set_bucket_replication(bucket_name, replication)
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
@@ -448,7 +461,7 @@ class RgwBucket(RgwRESTController):
         result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
-        result['bucket_policy'] = self._get_policy(bucket_name)
+        result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, result['owner'])
         result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
 
         # Append the locking configuration.
@@ -463,9 +476,11 @@ class RgwBucket(RgwRESTController):
                lock_retention_period_days=None,
                lock_retention_period_years=None, encryption_state='false',
                encryption_type=None, key_id=None, tags=None,
-               bucket_policy=None, canned_acl=None, daemon_name=None):
+               bucket_policy=None, canned_acl=None, replication='false',
+               daemon_name=None):
         lock_enabled = str_to_bool(lock_enabled)
         encryption_state = str_to_bool(encryption_state)
+        replication = str_to_bool(replication)
         try:
             rgw_client = RgwClient.instance(uid, daemon_name)
             result = rgw_client.create_bucket(bucket, zonegroup,
@@ -488,6 +503,8 @@ class RgwBucket(RgwRESTController):
             if canned_acl:
                 self._set_acl(bucket, canned_acl, uid, daemon_name)
 
+            if replication:
+                self._set_replication(bucket, replication, uid, daemon_name)
             return result
         except RequestException as e:  # pragma: no cover - handling is too obvious
             raise DashboardException(e, http_status_code=500, component='rgw')

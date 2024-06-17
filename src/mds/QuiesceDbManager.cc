@@ -447,7 +447,7 @@ void QuiesceDbManager::complete_requests() {
     }
 
     // non-zero result codes are all errors
-    dout(10) << "completing request '" << req->request << " with rc: " << -res << dendl;
+    dout(10) << "completing " << req->request << " with rc: " << -res << dendl;
     req->complete(-res);
   }
   done_requests.clear();
@@ -588,6 +588,8 @@ int QuiesceDbManager::leader_process_request(RequestContext* req_ctx)
     dout(2) << "failed to sanitize roots for a request" << dendl;
     return EINVAL;
   }
+
+  dout(20) << request << dendl;
 
   const auto db_age = db.get_age();
 

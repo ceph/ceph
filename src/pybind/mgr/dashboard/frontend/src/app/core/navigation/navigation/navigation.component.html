@@ -1,427 +1,310 @@
 <div class="cd-navbar-main">
-  <cd-pwd-expiration-notification></cd-pwd-expiration-notification>
-  <cd-telemetry-notification></cd-telemetry-notification>
-  <cd-motd></cd-motd>
-  <cd-notifications-sidebar></cd-notifications-sidebar>
-  <div class="cd-navbar-top">
-    <nav class="navbar navbar-expand-md navbar-dark cd-navbar-brand">
-      <button class="btn btn-link py-0"
-              (click)="showMenuSidebar = !showMenuSidebar"
-              aria-label="toggle sidebar visibility">
-        <i [ngClass]="[icons.bars, icons.large2x]"
-           aria-hidden="true"></i>
-      </button>
-
-      <a class="navbar-brand ms-2"
-         routerLink="/dashboard">
-        <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
-             alt="Ceph" />
-      </a>
-
-      <button type="button"
-              class="navbar-toggler"
-              (click)="toggleRightSidebar()">
-        <span i18n
-              class="sr-only">Toggle navigation</span>
-        <span>
-          <i [ngClass]="[icons.navicon, icons.large]"></i>
-        </span>
-      </button>
-
-      <div class="collapse navbar-collapse"
-           [ngClass]="{'show': rightSidebarOpen}">
-        <ng-container *ngIf="clustersMap?.size > 1">
-          <div ngbDropdown
-               placement="bottom-left"
-               class="d-inline-block ms-5">
-            <button ngbDropdownToggle
-                    class="btn btn-outline-light cd-context-bar"
-                    i18n-title
-                    title="Selected Cluster:">
-              <span class="dropdown-text"> {{ selectedCluster?.name }} </span>
-              <span>- {{ selectedCluster?.cluster_alias }} - {{ selectedCluster?.user }}</span>
-            </button>
-            <div ngbDropdownMenu>
-              <ng-container *ngFor="let cluster of clustersMap | keyvalue">
-                <button ngbDropdownItem
-                        (click)="onClusterSelection(cluster.value)"
-                        [disabled]="cluster.value.cluster_connection_status === 1">
-                  <div class="dropdown-text">{{ cluster.value.name }}</div>
-                  <div *ngIf="cluster.value.cluster_alias"
-                       class="text-secondary">{{ cluster.value.cluster_alias }} - {{ cluster.value.user }}</div>
-                </button>
-              </ng-container>
-            </div>
-          </div>
-        </ng-container>
-        <ul class="nav navbar-nav cd-navbar-utility my-2 my-md-0">
-          <ng-container *ngTemplateOutlet="cd_utilities"> </ng-container>
-        </ul>
-      </div>
-    </nav>
-  </div>
-
-  <div class="wrapper">
-    <!-- Content -->
-    <nav id="sidebar"
-         [ngClass]="{'active': !showMenuSidebar}">
-      <ngx-simplebar [options]="simplebar">
-        <ul class="list-unstyled components cd-navbar-primary">
-          <ng-container *ngTemplateOutlet="cd_menu"> </ng-container>
-        </ul>
-      </ngx-simplebar>
-    </nav>
-
-    <!-- Page Content -->
-    <div id="content"
-         [ngClass]="{'active': !showMenuSidebar}">
-      <ng-content></ng-content>
+<!-- ************************ -->
+<!-- NOTIFICATIONS/ALERTS     -->
+<!-- ************************ -->
+<cd-pwd-expiration-notification></cd-pwd-expiration-notification>
+<cd-telemetry-notification></cd-telemetry-notification>
+<cd-motd></cd-motd>
+<cd-notifications-sidebar></cd-notifications-sidebar>
+<!-- ************************ -->
+<!-- HEADER                   -->
+<!-- ************************ -->
+<cds-header name="Ceph Dashboard"
+            class="cd-navbar-top"
+            [brand]="brandTemplate">
+  <cds-hamburger [active]="showMenuSidebar"
+                 data-testid="main-menu-toggler"
+                 (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
+  <cds-header-global>
+    <cds-header-navigation>
+      <cd-language-selector class="d-flex"></cd-language-selector>
+    </cds-header-navigation>
+    <div class="cds--btn cds--btn--icon-only cds--header__action">
+      <cd-notifications (click)="toggleRightSidebar()"></cd-notifications>
     </div>
+    <div class="cds--btn cds--btn--icon-only cds--header__action">
+      <cd-dashboard-help></cd-dashboard-help>
+    </div>
+    <div class="cds--btn cds--btn--icon-only cds--header__action">
+      <cd-administration></cd-administration>
+    </div>
+    <div class="cds--btn cds--btn--icon-only cds--header__action">
+      <cd-identity></cd-identity>
+    </div>
+  </cds-header-global>
+</cds-header>
+<!-- ***************************** -->
+<!-- LOGO BRAND TEMPLATE  -->
+<!-- ***************************** -->
+<ng-template #brandTemplate>
+  <a class="cds--header__name navbar-brand ms-3"
+     routerLink="/dashboard">
+    <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
+         alt="Ceph" />
+  </a>
+</ng-template>
+<!-- **************************************** -->
+<!-- WRAPPER AROUND SIDENAV AND MAIN CONTAINT -->
+<!-- **************************************** -->
+<div class="wrapper">
+  <!-- Content -->
+  <nav id="sidebar"
+       [ngClass]="{'active': !showMenuSidebar}">
+    <ng-container *ngTemplateOutlet="cd_menu"></ng-container>
+  </nav>
+  <!-- Page Content -->
+  <div id="content"
+       [ngClass]="{'active': !showMenuSidebar}">
+    <ng-content></ng-content>
   </div>
-
-  <ng-template #cd_utilities>
-    <li class="nav-item">
-      <cd-language-selector class="cd-navbar"></cd-language-selector>
-    </li>
-    <li class="nav-item">
-      <cd-notifications class="cd-navbar"
-                        (click)="toggleRightSidebar()"></cd-notifications>
-    </li>
-    <li class="nav-item">
-      <cd-dashboard-help class="cd-navbar"></cd-dashboard-help>
-    </li>
-    <li class="nav-item">
-      <cd-administration class="cd-navbar"></cd-administration>
-    </li>
-    <li class="nav-item">
-      <cd-identity class="cd-navbar"></cd-identity>
-    </li>
-  </ng-template>
-
-  <ng-template #cd_menu>
-    <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
+</div>
+<!-- ************************ -->
+<!-- SIDENAV                  -->
+<!-- ************************ -->
+<ng-template #cd_menu>
+  <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
+  <div cdsTheme="theme">
+    <cds-sidenav [expanded]="showMenuSidebar"
+                 class="mt-5">
       <!-- Dashboard -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_dashboard">
-        <a routerLink="/dashboard"
-           class="nav-link">
-          <span i18n>
-            <i [ngClass]="[icons.areaChart]"></i>
-            Dashboard</span>
-          <i
-            *ngIf="summaryData?.health_status !== 'HEALTH_OK'"
-            [ngClass]="[icons.circle]"
-            [ngStyle]="summaryData?.health_status | healthColor">
-          </i>
-        </a>
-      </li>
+      <cds-sidenav-item route="/dashboard"
+                        [useRouter]="true"
+                        title="Dashboard"
+                        i18n-title
+                        class="nav-item tc_menuitem_dashboard">
+        <svg cdsIcon="template"
+             icon
+             size="20"></svg>
+        <span i18n>
+          Dashboard</span>
+      </cds-sidenav-item>
       <!-- Multi-cluster Dashboard -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_multi_cluster">
-        <a (click)="toggleSubMenu('multiCluster')"
-           class="nav-link dropdown-toggle"
-           [attr.aria-expanded]="displayedSubMenu.multiCluster"
-           aria-controls="multi-cluster-nav"
-           role="button">
-          <ng-container i18n>
-            <i [ngClass]="[icons.sitemap]"></i>
-              Multi-Cluster
-          </ng-container>
-        </a>
-        <ul class="list-unstyled"
-            id="multi-cluster-nav"
-            [ngbCollapse]="!displayedSubMenu.multiCluster">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_multiCluster_overview">
-            <a i18n
-               routerLink="/multi-cluster/overview">Overview</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters">
-            <a i18n
-               routerLink="/multi-cluster/manage-clusters">Manage Clusters</a>
-          </li>
-        </ul>
-      </li>
+      <cds-sidenav-menu title="Multi-Cluster"
+                        i18n-title>
+        <svg cdsIcon="edge-cluster"
+             icon
+             size="20"></svg>
+        <cds-sidenav-item route="/multi-cluster/overview"
+                          title="Overview"
+                          i18n-title
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_multiCluster_overview"><span i18n>Overview</span></cds-sidenav-item>
+        <cds-sidenav-item route="/multi-cluster/manage-clusters"
+                          title="Manager Cluster"
+                          i18n-title
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manager Cluster</span></cds-sidenav-item>
+      </cds-sidenav-menu>
       <!-- Cluster -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_cluster"
-          *ngIf="permissions.hosts.read || permissions.monitor.read ||
-          permissions.osd.read || permissions.pool.read">
-        <a (click)="toggleSubMenu('cluster')"
-           class="nav-link dropdown-toggle"
-           [attr.aria-expanded]="displayedSubMenu.cluster"
-           aria-controls="cluster-nav"
-           role="button">
-          <ng-container i18n>
-            <i [ngClass]="[icons.sitemap]"></i>
-            Cluster
-          </ng-container>
-        </a>
-        <ul class="list-unstyled"
-            id="cluster-nav"
-            [ngbCollapse]="!displayedSubMenu.cluster">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_pool"
-              *ngIf="permissions.pool.read">
-            <a i18n
-               routerLink="/pool">Pools</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_hosts"
-              *ngIf="permissions.hosts.read">
-            <a i18n
-               routerLink="/hosts">Hosts</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_osds"
-              *ngIf="permissions.osd.read">
-            <a i18n
-               routerLink="/osd">OSDs</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_inventory"
-              *ngIf="permissions.hosts.read">
-            <a i18n
-               routerLink="/inventory">Physical Disks</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_crush"
-              *ngIf="permissions.osd.read">
-            <a i18n
-               routerLink="/crush-map">CRUSH map</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_monitor"
-              *ngIf="permissions.monitor.read">
-            <a i18n
-               routerLink="/monitor/">Monitors</a>
-          </li>
-        </ul>
-      </li>
-
+      <cds-sidenav-menu title="Cluster"
+                        i18n-title
+                        *ngIf="permissions.hosts.read || permissions.monitor.read || permissions.osd.read || permissions.pool.read"
+                        class="tc_menuitem_cluster">
+        <svg cdsIcon="web-services--cluster"
+             icon
+             size="20"></svg>
+        <cds-sidenav-item route="/pool"
+                          [useRouter]="true"
+                          title="Pools"
+                          i18n-title
+                          *ngIf="permissions.pool.read"
+                          class="tc_submenuitem tc_submenuitem_cluster_pool"><span i18n>Pools</span></cds-sidenav-item>
+        <cds-sidenav-item route="/hosts"
+                          [useRouter]="true"
+                          title="Hosts"
+                          i18n-title
+                          *ngIf="permissions.hosts.read"
+                          class="tc_submenuitem tc_submenuitem_cluster_hosts"><span i18n>Hosts</span></cds-sidenav-item>
+        <cds-sidenav-item route="/osd"
+                          [useRouter]="true"
+                          title="OSDs"
+                          i18n-title
+                          *ngIf="permissions.osd.read"
+                          class="tc_submenuitem tc_submenuitem_cluster_osds"><span i18n>OSDs</span></cds-sidenav-item>
+        <cds-sidenav-item route="/inventory"
+                          [useRouter]="true"
+                          title="Physical Disks"
+                          i18n-title
+                          *ngIf="permissions.hosts.read"
+                          class="tc_submenuitem tc_submenuitem_cluster_inventory"><span i18n>Physical Disks</span></cds-sidenav-item>
+        <cds-sidenav-item route="/crush-map"
+                          [useRouter]="true"
+                          title="CRUSH Map"
+                          i18n-title
+                          *ngIf="permissions.osd.read"
+                          class="tc_submenuitem tc_submenuitem_cluster_crush"><span i18n>CRUSH Map</span></cds-sidenav-item>
+        <cds-sidenav-item route="/monitor"
+                          [useRouter]="true"
+                          title="Monitors"
+                          i18n-title
+                          *ngIf="permissions.monitor.read"
+                          class="tc_submenuitem tc_submenuitem_cluster_monitor"><span i18n>Monitors</span></cds-sidenav-item>
+      </cds-sidenav-menu>
       <!-- Block Storage -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_block"
-          *ngIf="(permissions.rbdImage.read || permissions.rbdMirroring.read || permissions.iscsi.read) &&
-          (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)">
-        <a class="nav-link dropdown-toggle"
-           (click)="toggleSubMenu('block')"
-           [attr.aria-expanded]="displayedSubMenu.block"
-           aria-controls="block-nav"
-           role="button"
-           [ngStyle]="blockHealthColor()">
-          <ng-container i18n>
-            <i [ngClass]="[icons.database]"></i>
-            Block
-          </ng-container>
-        </a>
-
-        <ul class="list-unstyled"
-            id="block-nav"
-            [ngbCollapse]="!displayedSubMenu.block">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_block_images"
-              *ngIf="permissions.rbdImage.read && enabledFeature.rbd">
-            <a i18n
-               routerLink="/block/rbd">Images</a>
-          </li>
-
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_block_mirroring"
-              *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring">
-            <a routerLink="/block/mirroring">
-              <ng-container i18n>Mirroring</ng-container>
-              <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
-                     class="badge badge-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
-              <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
-                     class="badge badge-danger">{{ summaryData?.rbd_mirroring?.errors }}</small>
-            </a>
-          </li>
-
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_block_iscsi"
-              *ngIf="permissions.iscsi.read && enabledFeature.iscsi">
-            <a i18n
-               routerLink="/block/iscsi">iSCSI</a>
-          </li>
-        </ul>
-      </li>
-
+      <cds-sidenav-menu title="Block"
+                        i18n-title
+                        *ngIf="(permissions.rbdImage.read || permissions.rbdMirroring.read|| permissions.iscsi.read) && (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)"
+                        class="tc_menuitem_block">
+        <svg cdsIcon="datastore"
+             icon
+             size="20"></svg>
+        <cds-sidenav-item route="/block/rbd"
+                          [useRouter]="true"
+                          title="Images"
+                          i18n-title
+                          *ngIf="permissions.rbdImage.read && enabledFeature.rbd"
+                          class="tc_submenuitem tc_submenuitem_block_images"><span i18n>Images</span></cds-sidenav-item>
+        <cds-sidenav-item route="/block/mirroring"
+                          [useRouter]="true"
+                          title="Mirroring"
+                          i18n-title
+                          *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring"
+                          class="tc_submenuitem tc_submenuitem_block_mirroring">
+          <span i18n>Mirroring
+            <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
+                   class="badge badge-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
+            <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
+                   class="badge badge-danger">{{ summaryData?.rbd_mirroring?.errors }}</small>
+          </span>
+        </cds-sidenav-item>
+        <cds-sidenav-item route="/block/iscsi"
+                          [useRouter]="true"
+                          title="iSCSI"
+                          i18n-title
+                          *ngIf="permissions.iscsi.read && enabledFeature.iscsi"
+                          class="tc_submenuitem tc_submenuitem_block_iscsi"><span i18n>iSCSI</span></cds-sidenav-item>
+      </cds-sidenav-menu>
       <!-- Object Storage -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_rgw"
-          *ngIf="permissions.rgw.read && enabledFeature.rgw">
-        <a class="nav-link dropdown-toggle"
-           (click)="toggleSubMenu('object')"
-           [attr.aria-expanded]="displayedSubMenu.object"
-           aria-controls="gateway-nav"
-           role="button">
-          <ng-container i18n>
-            <i [ngClass]="[icons.cubes]"></i>
-            Object
-          </ng-container>
-        </a>
-        <ul class="list-unstyled"
-            id="gateway-nav"
-            [ngbCollapse]="!displayedSubMenu.object">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_rgw_overview">
-            <a i18n
-               routerLink="/rgw/overview">Overview</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_rgw_buckets">
-            <a i18n
-               routerLink="/rgw/bucket">Buckets</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_rgw_users">
-            <a i18n
-               routerLink="/rgw/user">Users</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_rgw_buckets">
-            <a i18n
-               routerLink="/rgw/multisite">Multi-site</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_rgw_daemons">
-            <a i18n
-               routerLink="/rgw/daemon">Gateways</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_rgw_nfs"
-              *ngIf="permissions.nfs.read && enabledFeature.nfs">
-            <a i18n
-               class="nav-link"
-               routerLink="/nfs">NFS</a>
-          </li>
-        </ul>
-      </li>
-
+      <cds-sidenav-menu title="Object"
+                        i18n-title
+                        *ngIf="permissions.rgw.read && enabledFeature.rgw"
+                        class="nav-item tc_menuitem_rgw">
+        <svg cdsIcon="object-storage"
+             icon
+             size="20"></svg>
+        <cds-sidenav-item route="/rgw/overview"
+                          title="Overview"
+                          i18n-title
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_rgw_overview"><span i18n>Overview</span></cds-sidenav-item>
+        <cds-sidenav-item route="/rgw/bucket"
+                          title="Buckets"
+                          i18n-title
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Buckets</span></cds-sidenav-item>
+        <cds-sidenav-item route="/rgw/user"
+                          title="Users"
+                          i18n-title
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_rgw_users"><span i18n>Users</span></cds-sidenav-item>
+        <cds-sidenav-item route="/rgw/multisite"
+                          title="Multi-site"
+                          i18n-title
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Multi-site</span></cds-sidenav-item>
+        <cds-sidenav-item route="/rgw/daemon"
+                          title="Gateways"
+                          i18n-title
+                          [useRouter]="true"
+                          class="tc_submenuitem tc_submenuitem_rgw_daemons"><span i18n>Gateways</span></cds-sidenav-item>
+        <cds-sidenav-item route="/nfs"
+                          [useRouter]="true"
+                          title="NFS"
+                          i18n-title
+                          *ngIf="permissions.nfs.read && enabledFeature.nfs"
+                          class="tc_submenuitem tc_submenuitem_rgw_nfs"><span i18n>NFS</span></cds-sidenav-item>
+      </cds-sidenav-menu>
       <!-- Filesystem -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_file"
-          *ngIf="permissions.nfs.read && enabledFeature.nfs
-          || permissions.cephfs.read && enabledFeature.cephfs">
-        <a class="nav-link dropdown-toggle"
-           (click)="toggleSubMenu('file')"
-           [attr.aria-expanded]="displayedSubMenu.file"
-           aria-controls="filesystem-nav"
-           role="button">
-          <ng-container i18n>
-            <i [ngClass]="[icons.text]"></i>
-            File
-          </ng-container>
-        </a>
-        <ul class="list-unstyled"
-            id="filesystem-nav"
-            [ngbCollapse]="!displayedSubMenu.file">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_file_cephfs"
-              *ngIf="permissions.cephfs.read && enabledFeature.cephfs">
-            <a i18n
-               class="nav-link"
-               routerLink="/cephfs">File Systems</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_file_nfs"
-              *ngIf="permissions.nfs.read && enabledFeature.nfs">
-            <a i18n
-               class="nav-link"
-               routerLink="/nfs">NFS</a>
-          </li>
-        </ul>
-      </li>
-
-
+      <cds-sidenav-menu title="File"
+                        i18n-title
+                        *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs"
+                        class="tc_menuitem_file">
+        <svg cdsIcon="file-storage"
+             icon
+             size="20"></svg>
+        <cds-sidenav-item route="/cephfs"
+                          [useRouter]="true"
+                          title="File Systems"
+                          i18n-title
+                          *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
+                          class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File Systems</span></cds-sidenav-item>
+        <cds-sidenav-item route="/nfs"
+                          [useRouter]="true"
+                          title="NFS"
+                          i18n-title
+                          *ngIf="permissions.nfs.read && enabledFeature.nfs"
+                          class="tc_submenuitem tc_submenuitem_file_nfs"><span i18n>NFS</span></cds-sidenav-item>
+      </cds-sidenav-menu>
       <!-- Observability -->
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_observe"
-          *ngIf="permissions.log.read || permissions.prometheus.read">
-        <a class="nav-link dropdown-toggle"
-           (click)="toggleSubMenu('observe')"
-           [attr.aria-expanded]="displayedSubMenu.observe"
-           aria-controls="observe-nav"
-           role="button">
-          <ng-container i18n>
-            <i [ngClass]="[icons.eye]"></i>
-            Observability
-          </ng-container>
-        </a>
-        <ul class="list-unstyled"
-            id="observe-nav"
-            [ngbCollapse]="!displayedSubMenu.observe">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_observe_log"
-              *ngIf="permissions.log.read">
-            <a i18n
-               routerLink="/logs">Logs</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_observe_monitoring"
-              *ngIf="permissions.prometheus.read">
-            <a routerLink="/monitoring">
-              <ng-container i18n>Alerts</ng-container>
-              <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
-                     class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
-              <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
-                     class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
-            </a>
-          </li>
-        </ul>
-      </li>
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_admin"
-          *ngIf="permissions.configOpt.read ||
-          permissions.hosts.read">
-        <a class="nav-link dropdown-toggle"
-           (click)="toggleSubMenu('admin')"
-           [attr.aria-expanded]="displayedSubMenu.admin"
-           aria-controls="admin-nav"
-           role="button">
-          <ng-container i18n>
-            <i [ngClass]="[icons.cogs]"></i>
-            Administration
-          </ng-container>
-        </a>
-        <ul class="list-unstyled"
-            id="admin-nav"
-            [ngbCollapse]="!displayedSubMenu.admin">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_admin_services"
-              *ngIf="permissions.hosts.read">
-            <a i18n
-               routerLink="/services/">Services</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_admin_upgrade"
-              *ngIf="permissions.configOpt.read">
-            <a i18n
-               routerLink="/upgrade">Upgrade</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_admin_users"
-              *ngIf="permissions.configOpt.read">
-            <a i18n
-               routerLink="/ceph-users">Ceph Users</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_admin_modules"
-              *ngIf="permissions.configOpt.read">
-            <a i18n
-               routerLink="/mgr-modules">Manager Modules</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_admin_configuration"
-              *ngIf="permissions.configOpt.read">
-            <a i18n
-               routerLink="/configuration">Configuration</a>
-          </li>
-        </ul>
-      </li>
-    </ng-container>
-  </ng-template>
-
+      <cds-sidenav-menu title="Observability"
+                        i18n-title
+                        *ngIf="permissions.log.read || permissions.prometheus.read"
+                        class="tc_menuitem_observe">
+        <svg cdsIcon="observed--hail"
+             icon
+             size="20"></svg>
+        <cds-sidenav-item route="/logs"
+                          [useRouter]="true"
+                          title="Logs"
+                          i18n-title
+                          *ngIf="permissions.log.read"
+                          class="tc_submenuitem tc_submenuitem_observe_log"><span i18n>Logs</span></cds-sidenav-item>
+        <cds-sidenav-item route="/monitoring"
+                          [useRouter]="true"
+                          title="Alerts"
+                          i18n-title
+                          *ngIf="permissions.prometheus.read"
+                          class="tc_submenuitem tc_submenuitem_observe_monitoring">
+          <span i18n>
+            <ng-container>Alerts</ng-container>
+            <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
+                   class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
+            <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
+                   class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
+          </span>
+        </cds-sidenav-item>
+      </cds-sidenav-menu>
+      <!-- Administration -->
+      <cds-sidenav-menu title="Administration"
+                        i18n-title
+                        *ngIf="permissions.configOpt.read || permissions.hosts.read"
+                        class="tc_menuitem_admin">
+        <svg cdsIcon="network--admin-control"
+             icon
+             size="20"></svg>
+        <cds-sidenav-item route="/services/"
+                          [useRouter]="true"
+                          title="Services"
+                          i18n-title
+                          *ngIf="permissions.hosts.read"
+                          class="tc_submenuitem tc_submenuitem_admin_services"><span i18n>Services</span></cds-sidenav-item>
+        <cds-sidenav-item route="/upgrade"
+                          [useRouter]="true"
+                          title="Upgrade"
+                          i18n-title
+                          *ngIf="permissions.configOpt.read"
+                          class="tc_submenuitem tc_submenuitem_admin_upgrade"><span i18n>Upgrade</span></cds-sidenav-item>
+        <cds-sidenav-item route="/ceph-users"
+                          [useRouter]="true"
+                          title="Ceph Users"
+                          i18n-title
+                          *ngIf="permissions.configOpt.read"
+                          class="tc_submenuitem tc_submenuitem_admin_users"><span i18n>Ceph Users</span></cds-sidenav-item>
+        <cds-sidenav-item route="/mgr-modules"
+                          [useRouter]="true"
+                          title="Manager Modules"
+                          i18n-title
+                          *ngIf="permissions.configOpt.read"
+                          class="tc_submenuitem tc_submenuitem_admin_modules"><span i18n>Manager Modules</span></cds-sidenav-item>
+        <cds-sidenav-item route="/configuration"
+                          [useRouter]="true"
+                          title="Configuration"
+                          i18n-title
+                          *ngIf="permissions.configOpt.read"
+                          class="tc_submenuitem tc_submenuitem_admin_configuration"><span i18n>Configuration</span></cds-sidenav-item>
+      </cds-sidenav-menu>
+    </cds-sidenav>
+  </div>
+  </ng-container>
+</ng-template>
 </div>

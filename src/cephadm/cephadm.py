@@ -18,7 +18,7 @@ import tempfile
 import time
 import errno
 import ssl
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast, Iterable
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast
 
 import re
 import uuid
@@ -96,6 +96,7 @@ from cephadmlib.data_utils import (
     try_convert_datetime,
     read_config,
     with_units_to_int,
+    _extract_host_info_from_applied_spec,
 )
 from cephadmlib.file_utils import (
     get_file_timestamp,
@@ -2465,6 +2466,14 @@ def prepare_bootstrap_config(
     ):
         cp.set('mon', 'auth_allow_insecure_global_id_reclaim', 'false')
 
+    if not cp.has_section('osd'):
+        cp.add_section('osd')
+    if (
+            not cp.has_option('osd', 'osd_memory_target_autotune')
+            and not cp.has_option('osd', 'osd memory target autotune')
+    ):
+        cp.set('osd', 'osd_memory_target_autotune', 'true')
+
     if ctx.single_host_defaults:
         logger.info('Adjusting default settings to suit single-host cluster...')
         # replicate across osds, not hosts
@@ -2561,88 +2570,6 @@ def finish_bootstrap_config(
         f.write(config)
     logger.info('Wrote config to %s' % ctx.output_config)
     pass
-
-
-def _extract_host_info_from_applied_spec(f: Iterable[str]) -> List[Dict[str, str]]:
-    # overall goal of this function is to go through an applied spec and find
-    # the hostname (and addr is provided) for each host spec in the applied spec.
-    # Generally, we should be able to just pass the spec to the mgr module where
-    # proper yaml parsing can happen, but for host specs in particular we want to
-    # be able to distribute ssh keys, which requires finding the hostname (and addr
-    # if possible) for each potential host spec in the applied spec.
-
-    specs: List[List[str]] = []
-    current_spec: List[str] = []
-    for line in f:
-        if re.search(r'^---\s+', line):
-            if current_spec:
-                specs.append(current_spec)
-            current_spec = []
-        else:
-            line = line.strip()
-            if line:
-                current_spec.append(line)
-    if current_spec:
-        specs.append(current_spec)
-
-    host_specs: List[List[str]] = []
-    for spec in specs:
-        for line in spec:
-            if 'service_type' in line:
-                try:
-                    _, type = line.split(':')
-                    type = type.strip()
-                    if type == 'host':
-                        host_specs.append(spec)
-                except ValueError as e:
-                    spec_str = '\n'.join(spec)
-                    logger.error(f'Failed to pull service_type from spec:\n{spec_str}. Got error: {e}')
-                break
-            spec_str = '\n'.join(spec)
-            logger.error(f'Failed to find service_type within spec:\n{spec_str}')
-
-    host_dicts = []
-    for s in host_specs:
-        host_dict = _extract_host_info_from_spec(s)
-        # if host_dict is empty here, we failed to pull the hostname
-        # for the host from the spec. This should have already been logged
-        # so at this point we just don't want to include it in our output
-        if host_dict:
-            host_dicts.append(host_dict)
-
-    return host_dicts
-
-
-def _extract_host_info_from_spec(host_spec: List[str]) -> Dict[str, str]:
-    # note:for our purposes here, we only really want the hostname
-    # and address of the host from each of these specs in order to
-    # be able to distribute ssh keys. We will later apply the spec
-    # through the mgr module where proper yaml parsing can be done
-    # The returned dicts from this function should only contain
-    # one or two entries, one (required) for hostname, one (optional) for addr
-    # {
-    #   hostname: <hostname>
-    #   addr: <ip-addr>
-    # }
-    # if we fail to find the hostname, an empty dict is returned
-
-    host_dict = {}  # type: Dict[str, str]
-    for line in host_spec:
-        for field in ['hostname', 'addr']:
-            if field in line:
-                try:
-                    _, field_value = line.split(':')
-                    field_value = field_value.strip()
-                    host_dict[field] = field_value
-                except ValueError as e:
-                    spec_str = '\n'.join(host_spec)
-                    logger.error(f'Error trying to pull {field} from host spec:\n{spec_str}. Got error: {e}')
-
-    if 'hostname' not in host_dict:
-        spec_str = '\n'.join(host_spec)
-        logger.error(f'Could not find hostname in host spec:\n{spec_str}')
-        return {}
-    return host_dict
 
 
 def _distribute_ssh_keys(ctx: CephadmContext, host_info: Dict[str, str], bootstrap_hostname: str) -> int:
@@ -2792,7 +2719,7 @@ def command_bootstrap(ctx):
         if not os.path.isfile(ctx.custom_prometheus_alerts):
             raise Error(f'No custom prometheus alerts file found at {ctx.custom_prometheus_alerts}')
 
-    (user_conf, _) = get_config_and_keyring(ctx)
+    _, _ = get_config_and_keyring(ctx)
 
     if ctx.ssh_user != 'root':
         check_ssh_connectivity(ctx)
@@ -2892,18 +2819,17 @@ def command_bootstrap(ctx):
     # create mgr
     create_mgr(ctx, uid, gid, fsid, mgr_id, mgr_key, config, cli)
 
-    if user_conf:
-        # user given config settings were already assimilated earlier
-        # but if the given settings contained any attributes in
-        # the mgr (e.g. mgr/cephadm/container_image_prometheus)
-        # they don't seem to be stored if there isn't a mgr yet.
-        # Since re-assimilating the same conf settings should be
-        # idempotent we can just do it again here.
-        with tempfile.NamedTemporaryFile(buffering=0) as tmp:
-            tmp.write(user_conf.encode('utf-8'))
-            cli(['config', 'assimilate-conf',
-                 '-i', '/var/lib/ceph/user.conf'],
-                {tmp.name: '/var/lib/ceph/user.conf:z'})
+    # user given config settings were already assimilated earlier
+    # but if the given settings contained any attributes in
+    # the mgr (e.g. mgr/cephadm/container_image_prometheus)
+    # they don't seem to be stored if there isn't a mgr yet.
+    # Since re-assimilating the same conf settings should be
+    # idempotent we can just do it again here.
+    with tempfile.NamedTemporaryFile(buffering=0) as tmp:
+        tmp.write(config.encode('utf-8'))
+        cli(['config', 'assimilate-conf',
+             '-i', '/var/lib/ceph/user.conf'],
+            {tmp.name: '/var/lib/ceph/user.conf:z'})
 
     if getattr(ctx, 'log_dest', None):
         ldkey = 'mgr/cephadm/cephadm_log_destination'
@@ -2984,10 +2910,6 @@ def command_bootstrap(ctx):
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
     save_cluster_config(ctx, uid, gid, fsid)
-
-    # enable autotune for osd_memory_target
-    logger.info('Enabling autotune for osd_memory_target')
-    cli(['config', 'set', 'osd', 'osd_memory_target_autotune', 'true'])
 
     # Notify the Dashboard to show the 'Expand cluster' page on first log in.
     cli(['config-key', 'set', 'mgr/dashboard/cluster/status', 'INSTALLED'])

@@ -218,8 +218,6 @@ enum {
   scrbcnt_resrv_successful_elapsed,
   /// # failed attempt to reserve replicas due to an abort
   scrbcnt_resrv_aborted,
-  /// # reservation process timed out
-  scrbcnt_resrv_timed_out,
   /// # reservation failed due to a 'rejected' response
   scrbcnt_resrv_rejected,
   /// # reservation skipped for high-priority scrubs

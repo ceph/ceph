@@ -70,6 +70,23 @@ class ResultGroup:
     def one(self) -> Result:
         return one(self._contents)
 
+    def squash(self, target: SMBResource) -> Result:
+        match: Optional[Result] = None
+        others: List[Result] = []
+        for result in self._contents:
+            if result.src == target:
+                match = result
+            else:
+                others.append(result)
+        if match:
+            match.success = self.success
+            match.status = {} if match.status is None else match.status
+            match.status['additional_results'] = [
+                r.to_simplified() for r in others
+            ]
+            return match
+        raise ValueError('no matching result for resource found')
+
     def __iter__(self) -> Iterator[Result]:
         return iter(self._contents)
 

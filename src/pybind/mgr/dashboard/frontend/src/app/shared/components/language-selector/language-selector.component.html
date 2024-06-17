@@ -1,22 +1,6 @@
-<div ngbDropdown
-     display="dynamic"
-     placement="bottom-right">
-  <a ngbDropdownToggle
-     i18n-title
-     id="toggle-language-button"
-     title="Select a Language"
-     role="button">
-    {{ allLanguages[selectedLanguage] }}
-  </a>
-  <div ngbDropdownMenu
-       role="listbox"
-       aria-labelledby="toggle-language-button">
-    <ng-container *ngFor="let lang of supportedLanguages | keyvalue">
-      <button ngbDropdownItem
-              role="option"
-              (click)="changeLanguage(lang.key)">
-        {{ lang.value }}
-      </button>
-    </ng-container>
-  </div>
-</div>
+<cds-header-menu [title]="allLanguages[selectedLanguage]">
+  <ng-container *ngFor="let lang of supportedLanguages | keyvalue">
+    <cds-header-item (click)="changeLanguage(lang.key)">{{ lang.value }}</cds-header-item>
+  </ng-container>
+</cds-header-menu>
+

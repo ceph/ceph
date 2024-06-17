@@ -49,7 +49,7 @@ void LogMissingRequest::dump_detail(Formatter *f) const
 ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
 {
   return get_osd_priv(&get_local_connection()
-         ).client_request_conn_pipeline;
+         ).replicated_request_conn_pipeline;
 }
 
 PerShardPipeline &LogMissingRequest::get_pershard_pipeline(

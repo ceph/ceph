@@ -273,6 +273,7 @@ and subnets for the public network. You may specifically assign static IP
 addresses or override ``public_network`` settings using the ``public_addr``
 setting for a specific daemon.
 
+.. confval:: public_network_interface
 .. confval:: public_network
 .. confval:: public_addr
 
@@ -285,6 +286,7 @@ specifically assign static IP  addresses or override ``cluster_network``
 settings using the ``cluster_addr`` setting for specific OSD daemons.
 
 
+.. confval:: cluster_network_interface 
 .. confval:: cluster_network
 .. confval:: cluster_addr
 

@@ -61,6 +61,10 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
   ceph::common::intrusive_lru_config<
     hobject_t, ObjectContext, obc_to_hoid<ObjectContext>>>
 {
+private:
+  tri_mutex lock;
+  bool recovery_read_marker = false;
+
 public:
   ObjectState obs;
   SnapSetContextRef ssc;
@@ -70,7 +74,12 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
-  ObjectContext(hobject_t hoid) : obs(std::move(hoid)) {}
+  // obc loading is a concurrent phase. In case this obc is being loaded,
+  // make other users of this obc to await for the loading to complete.
+  seastar::shared_mutex loading_mutex;
+
+  ObjectContext(hobject_t hoid) : lock(hoid.oid.name),
+                                  obs(std::move(hoid)) {}
 
   const hobject_t &get_oid() const {
     return obs.oi.soid;
@@ -117,21 +126,33 @@ public:
     }
   }
 
-  bool is_loaded_and_valid() const {
-    return fully_loaded && !invalidated_by_interval_change;
+  bool is_loaded() const {
+    return fully_loaded;
+  }
+
+  bool is_valid() const {
+    return !invalidated_by_interval_change;
   }
 
 private:
-  tri_mutex lock;
-  bool recovery_read_marker = false;
-
   template <typename Lock, typename Func>
   auto _with_lock(Lock& lock, Func&& func) {
     Ref obc = this;
-    return lock.lock().then([&lock, func = std::forward<Func>(func), obc]() mutable {
-      return seastar::futurize_invoke(func).finally([&lock, obc] {
-	lock.unlock();
-      });
+    auto maybe_fut = lock.lock();
+    return seastar::futurize_invoke([
+        maybe_fut=std::move(maybe_fut),
+        func=std::forward<Func>(func)]() mutable {
+      if (maybe_fut) {
+        return std::move(*maybe_fut
+        ).then([func=std::forward<Func>(func)]() mutable {
+          return seastar::futurize_invoke(func);
+        });
+      } else {
+        // atomically calling func upon locking
+        return seastar::futurize_invoke(func);
+      }
+    }).finally([&lock, obc] {
+      lock.unlock();
     });
   }
 

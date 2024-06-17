@@ -51,7 +51,7 @@ import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.com
     CommonModule,
     SharedModule,
     FormsModule,
-    ReactiveFormsModule,
+    ReactiveFormsModule.withConfig({ callSetDisabledState: 'whenDisabledForLegacyCode' }),
     PerformanceCounterModule,
     NgbNavModule,
     RouterModule,

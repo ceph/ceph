@@ -387,6 +387,54 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
       });
     });
 
+    describe('should test service nvmeof', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'nvmeof');
+        formHelper.setValue('service_id', 'svc');
+        formHelper.setValue('pool', 'xyz');
+      });
+
+      it('should submit nvmeof', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'nvmeof',
+          service_id: 'svc',
+          placement: {},
+          unmanaged: false,
+          pool: 'xyz'
+        });
+      });
+
+      it('should throw error when there is no service id', () => {
+        formHelper.expectErrorChange('service_id', '', 'required');
+      });
+
+      it('should throw error when there is no pool', () => {
+        formHelper.expectErrorChange('pool', '', 'required');
+      });
+    });
+
+    describe('should test service smb', () => {
+      beforeEach(() => {
+        formHelper.setValue('service_type', 'smb');
+        formHelper.setValue('service_id', 'foo');
+        formHelper.setValue('cluster_id', 'cluster_foo');
+        formHelper.setValue('config_uri', 'rados://.smb/foo/scc.toml');
+      });
+
+      it('should submit smb', () => {
+        component.onSubmit();
+        expect(cephServiceService.create).toHaveBeenCalledWith({
+          service_type: 'smb',
+          placement: {},
+          unmanaged: false,
+          service_id: 'foo',
+          cluster_id: 'cluster_foo',
+          config_uri: 'rados://.smb/foo/scc.toml'
+        });
+      });
+    });
+
     describe('should test service ingress', () => {
       beforeEach(() => {
         formHelper.setValue('service_type', 'ingress');
@@ -586,6 +634,15 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         const serviceId = fixture.debugElement.query(By.css('#service_id')).nativeElement;
         expect(serviceType.disabled).toBeTruthy();
         expect(serviceId.disabled).toBeTruthy();
+      });
+
+      it('should not edit pools for nvmeof service', () => {
+        component.serviceType = 'nvmeof';
+        formHelper.setValue('service_type', 'nvmeof');
+        component.ngOnInit();
+        fixture.detectChanges();
+        const poolId = fixture.debugElement.query(By.css('#pool')).nativeElement;
+        expect(poolId.disabled).toBeTruthy();
       });
     });
   });
