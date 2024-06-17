@@ -15,7 +15,11 @@
 #ifndef CEPH_MEMORYMODEL_H
 #define CEPH_MEMORYMODEL_H
 
+#include <fstream>
+#include <optional>
 #include "include/common_fwd.h"
+#include "include/compat.h"
+
 
 class MemoryModel {
 public:
@@ -39,8 +43,15 @@ public:
   } last;
 
 private:
+  static inline constexpr const char* proc_stat_fn = PROCPREFIX "/proc/self/status";
+  static inline constexpr const char* proc_maps_fn = PROCPREFIX "/proc/self/maps";
+
+  std::ifstream proc_status{proc_stat_fn};
+  std::ifstream proc_maps{proc_maps_fn};
+
   CephContext *cct;
   void _sample(mem_snap_t *p);
+  std::optional<int64_t> get_mapped_heap();
 
 public:
   explicit MemoryModel(CephContext *cct);
