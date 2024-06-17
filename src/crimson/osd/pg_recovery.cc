@@ -146,10 +146,22 @@ size_t PGRecovery::start_primary_recovery_ops(
     } else {
       soid = p->second;
     }
-    const pg_missing_item& item = missing.get_items().find(p->second)->second;
-    ++p;
 
     hobject_t head = soid.get_head();
+
+    if (pg->get_peering_state().get_missing_loc().is_unfound(soid)) {
+      logger().debug("{}: object {} unfound", __func__, soid);
+      ++skipped;
+      continue;
+    }
+    if (pg->get_peering_state().get_missing_loc().is_unfound(head)) {
+      logger().debug("{}: head object {} unfound", __func__, soid);
+      ++skipped;
+      continue;
+    }
+
+    const pg_missing_item& item = missing.get_items().find(p->second)->second;
+    ++p;
 
     bool head_missing = missing.is_missing(head);
     logger().info(

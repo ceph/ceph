@@ -244,6 +244,40 @@ void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
     std::chrono::duration_cast<seastar::lowres_clock::duration>(delay));
 }
 
+PG::interruptible_future<> PG::find_unfound(epoch_t epoch_started)
+{
+  if (!have_unfound()) {
+    return interruptor::now();
+  }
+  PeeringCtx rctx;
+  if (!peering_state.discover_all_missing(rctx)) {
+    if (peering_state.state_test(PG_STATE_BACKFILLING)) {
+      logger().debug(
+        "{} {} no luck, giving up on this pg for now (in backfill)",
+        *this, __func__);
+      std::ignore = get_shard_services().start_operation<LocalPeeringEvent>(
+        this,
+        get_pg_whoami(),
+        get_pgid(),
+        epoch_started,
+        epoch_started,
+        PeeringState::UnfoundBackfill());
+    } else if (peering_state.state_test(PG_STATE_RECOVERING)) {
+      logger().debug(
+        "{} {} no luck, giving up on this pg for now (in recovery)",
+        *this, __func__);
+      std::ignore = get_shard_services().start_operation<LocalPeeringEvent>(
+        this,
+        get_pg_whoami(),
+        get_pgid(),
+        epoch_started,
+        epoch_started,
+        PeeringState::UnfoundRecovery());
+    }
+  }
+  return get_shard_services().dispatch_context(get_collection_ref(), std::move(rctx));
+}
+
 void PG::recheck_readable()
 {
   bool changed = false;
