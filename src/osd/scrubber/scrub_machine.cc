@@ -183,15 +183,6 @@ Session::Session(my_context ctx)
   dout(10) << "-- state -->> PrimaryActive/Session" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
-  // while we've checked the 'someone is reserving' flag before queueing
-  // the start-scrub event, it's possible that the flag was set in the meantime.
-  // Handling this case here requires adding a new sub-state, and the
-  // complication of reporting a failure to the caller in a new failure
-  // path. On the other hand - ignoring an ongoing reservation on rare
-  // occasions will cause no harm.
-  // We choose ignorance.
-  std::ignore = scrbr->set_reserving_now();
-
   m_perf_set = &scrbr->get_counters_set();
   m_perf_set->inc(scrbcnt_started);
 }
@@ -241,14 +232,6 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
     // can't transit directly from here
     post_event(RemotesReserved{});
   }
-}
-
-ReservingReplicas::~ReservingReplicas()
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  // it's OK to try and clear the flag even if we don't hold it
-  // (the flag remembers the actual holder)
-  scrbr->clear_reserving_now();
 }
 
 sc::result ReservingReplicas::react(const ReplicaGrant& ev)
