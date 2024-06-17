@@ -4,6 +4,7 @@ Ceph FUSE client task
 
 import contextlib
 import logging
+import re
 
 from teuthology import misc
 from tasks.cephfs.fuse_mount import FuseMount
@@ -86,6 +87,32 @@ def task(ctx, config):
             client.1:
               mount_subvol_num: 1
 
+    Example for client mount with custom client feature set
+
+        tasks:
+        - ceph:
+        - ceph-fuse:
+            client.0:
+              client_feature_range: 21 # everything including CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
+
+        OR
+
+        tasks:
+        - ceph:
+        - ceph-fuse:
+            client.0:
+              client_feature_range: "[0-13],[15-21]" # all features except metric_collect (bit 14)
+
+        OR
+
+        tasks:
+        - ceph:
+        - ceph-fuse:
+            client.0:
+              client_feature_range: "[0-13],16,19,[20-21]" # all features except metric_collect,alternate_name, op_getvxattr, 32bit_retry_fwd
+
+        client_feature_range can have repetitive and overlapping ranges/values - the parsed feature bits would not have duplicates and is sorted. Decreasing ranges are silently ignored.
+
     :param ctx: Context
     :param config: Configuration
     """
@@ -161,12 +188,50 @@ def task(ctx, config):
     for remote in remotes:
         FuseMount.cleanup_stale_netnses_and_bridge(remote)
 
+    def parse_client_feature_range(client_feature_range):
+        def intify(val):
+            try:
+                return int(val)
+            except ValueError:
+                log.warn(f'failed to decode feature bit {val}')
+                raise
+        feature_bits = []
+        pvalue = re.compile(r'(\d+)')
+        prange = re.compile(r'\[(\d+)\-(\d+)\]')
+        if (isinstance(client_feature_range, int)):
+            # everything upto (and including) this feature bit
+            feature_bits.extend(range(0, client_feature_range+1))
+        elif isinstance(client_feature_range, str):
+            for feat in client_feature_range.split(','):
+                m = pvalue.match(feat)
+                if m:
+                    feature_bits.append(intify(m.group(1)))
+                    continue
+                m = prange.match(feat)
+                if m:
+                    feature_bits.extend(range(intify(m.group(1)), intify(m.group(2))+1))
+                    continue
+                raise ValueError(f'Invalid feature range or value "{feat}"')
+        else:
+            raise TypeError("client_feature_range must be of type int or str")
+        return sorted(set(feature_bits))
+
     # Mount any clients we have been asked to (default to mount all)
     log.info('Mounting ceph-fuse clients...')
     for info in mounted_by_me.values():
         config = info["config"]
         mount_x = info['mount']
-        mount_x.mount(mntopts=config.get('mntopts', []), mntargs=config.get('mntargs', []))
+
+        # apply custom client feature set
+        client_features = []
+        client_feature_range = config.get("client_feature_range", None)
+        if client_feature_range is not None:
+            client_features = ",".join(str(i) for i in parse_client_feature_range(client_feature_range))
+        mntargs = config.get('mntargs', [])
+        if client_features:
+            mntargs.append(f"--client_debug_inject_features={client_features}")
+        log.debug(f"passing mntargs={mntargs}")
+        mount_x.mount(mntopts=config.get('mntopts', []), mntargs=mntargs)
 
     for info in mounted_by_me.values():
         info["mount"].wait_until_mounted()
