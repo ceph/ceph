@@ -296,12 +296,11 @@
                      name="encryption_enabled"
                      formControlName="encryption_enabled"
                      type="checkbox"
-                     [attr.disabled]="!kmsVaultConfig && !s3VaultConfig ? true : null"/>
+                     [attr.disabled]="!kmsConfigured && !s3Configured ? true : null"/>
               <cd-help-text aria-label="encryption helper">
                 <span i18n>Enables encryption for the objects in the bucket.
                     To enable encryption on a bucket you need to set the configuration values for SSE-S3 or SSE-KMS.
-                    To set the configuration values <a href="#/rgw/bucket/create"
-                                                       (click)="openConfigModal()"
+                    To set the configuration values <a href="#/rgw/configuration"
                                                        aria-label="click here">Click here</a></span>
               </cd-help-text>
             </div>
@@ -317,10 +316,11 @@
                          type="radio"
                          name="encryption_type"
                          value="AES256"
-                         [attr.disabled]="!s3VaultConfig ? true : null">
+                         [attr.disabled]="!s3Configured ? true : null">
                   <label class="form-control-label"
+                         [ngClass]="{'text-muted': !s3Configured}"
                          for="sse_S3_enabled"
-                         i18n>SSE-S3 Encryption</label>
+                         i18n>SSE-S3</label>
                 </div>
               </div>
             </div>
@@ -333,9 +333,10 @@
                          id="kms_enabled"
                          name="encryption_type"
                          value="aws:kms"
-                         [attr.disabled]="!kmsVaultConfig ? true : null"
+                         [attr.disabled]="!kmsConfigured ? true : null"
                          type="radio">
                   <label class="form-control-label"
+                         [ngClass]="{'text-muted': !kmsConfigured}"
                          for="kms_enabled"
                          i18n>Connect to an external key management service</label>
                 </div>

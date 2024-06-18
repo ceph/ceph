@@ -50,14 +50,6 @@ export class BucketsPageHelper extends PageHelper {
     this.getFirstTableCell(name).should('exist');
   }
 
-  @PageHelper.restrictTo(pages.create.url)
-  checkForDefaultEncryption() {
-    cy.get("a[aria-label='click here']").click();
-    cy.get('cd-modal').within(() => {
-      cy.get('input[id=s3Enabled]').should('be.checked');
-    });
-  }
-
   @PageHelper.restrictTo(pages.index.url)
   edit(name: string, new_owner: string, isLocking = false) {
     this.navigateEdit(name);

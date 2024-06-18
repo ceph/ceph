@@ -56,6 +56,8 @@ import { NfsListComponent } from '../nfs/nfs-list/nfs-list.component';
 import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
+import { RgwConfigurationPageComponent } from './rgw-configuration-page/rgw-configuration-page.component';
+import { RgwConfigDetailsComponent } from './rgw-config-details/rgw-config-details.component';
 
 @NgModule({
   imports: [
@@ -116,7 +118,9 @@ import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy
     RgwSyncDataInfoComponent,
     BucketTagModalComponent,
     RgwMultisiteSyncPolicyComponent,
-    RgwMultisiteSyncPolicyFormComponent
+    RgwMultisiteSyncPolicyFormComponent,
+    RgwConfigDetailsComponent,
+    RgwConfigurationPageComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -253,6 +257,11 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
+  },
+  {
+    path: 'configuration',
+    data: { breadcrumbs: 'Configuration' },
+    children: [{ path: '', component: RgwConfigurationPageComponent }]
   }
 ];
 
