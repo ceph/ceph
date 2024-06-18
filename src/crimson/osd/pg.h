@@ -439,6 +439,9 @@ public:
 
 
   // Utility
+  bool is_active_clean() const {
+    return peering_state.is_active() && peering_state.is_clean();
+  }
   bool is_primary() const final {
     return peering_state.is_primary();
   }
