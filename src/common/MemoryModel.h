@@ -16,10 +16,11 @@
 #define CEPH_MEMORYMODEL_H
 
 #include <fstream>
-#include <optional>
+#include <string>
 #include <string_view>
 #include "include/common_fwd.h"
 #include "include/compat.h"
+#include "include/expected.hpp"
 
 
 class MemoryModel {
@@ -50,8 +51,14 @@ private:
   std::ifstream proc_status{proc_stat_fn};
   std::ifstream proc_maps{proc_maps_fn};
 
-  CephContext *cct;
-  std::optional<int64_t> get_mapped_heap();
+  /**
+   * @brief Get the mapped heap size
+   *
+   * Read /proc/self/maps to get the heap size.
+   * \retval the mapped heap size, or an error message if the file had not been opened
+   *    when the object was constructed.
+   */
+  tl::expected<int64_t, std::string> get_mapped_heap();
 
   /**
    * @brief Compare a line against an expected data label
@@ -62,8 +69,19 @@ private:
   bool cmp_against(const std::string& ln, std::string_view param, long& v) const;
 
 public:
-  explicit MemoryModel(CephContext *cct);
-  std::optional<mem_snap_t> full_sample();
+  /**
+   * @brief extract memory usage information from /proc/self/status &
+   *        /proc/self/maps
+   *
+   * Read /proc/self/status and /proc/self/maps to get memory usage information.
+   * \retval a structure containing the memory usage information, or an error
+   *    message if /proc/status had not been opened when the object was
+   *    constructed.
+   *    Note that no error is returned if only /proc/maps is not open (the heap
+   *    size will be reported as 0).
+   */
+  tl::expected<mem_snap_t, std::string> full_sample();
+
   void sample(mem_snap_t *p = nullptr);
 };
 

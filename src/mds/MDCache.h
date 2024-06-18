@@ -776,7 +776,7 @@ private:
   bool expire_recursive(CInode *in, expiremap& expiremap);
 
   void trim_client_leases();
-  void check_memory_usage(const MemoryModel::mem_snap_t &baseline);
+  void check_memory_usage();
 
   void shutdown_start();
   void shutdown_check();
@@ -1540,6 +1540,8 @@ private:
   time upkeep_last_trim = clock::zero();
   time upkeep_last_release = clock::zero();
   std::atomic<bool> upkeep_trim_shutdown{false};
+  std::optional<MemoryModel> upkeep_memory_stats;
+  MemoryModel::mem_snap_t upkeep_mem_baseline;
 
   uint64_t kill_shutdown_at = 0;
 

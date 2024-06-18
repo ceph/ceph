@@ -7812,10 +7812,17 @@ void MDCache::trim_client_leases()
   }
 }
 
-void MDCache::check_memory_usage(const MemoryModel::mem_snap_t &baseline)
+void MDCache::check_memory_usage()
 {
-  MemoryModel mm(g_ceph_context);
-  mm.sample();
+  MemoryModel::mem_snap_t memory_snap;
+
+  if (upkeep_memory_stats) {
+    auto maybe_memory_snap = upkeep_memory_stats->full_sample();
+    if (maybe_memory_snap) {
+      memory_snap = *maybe_memory_snap;
+    }
+  }
+  // else - no access to memory stats. The problem was already reported at thread's init.
 
   // check client caps
   ceph_assert(CInode::count() == inode_map.size() + snap_inode_map.size() + num_shadow_inodes);
@@ -7824,17 +7831,17 @@ void MDCache::check_memory_usage(const MemoryModel::mem_snap_t &baseline)
     caps_per_inode = (double)Capability::count() / (double)CInode::count();
 
   dout(2) << "Memory usage: "
-	   << " total " << mm.last.get_total()
-	   << ", rss " << mm.last.get_rss()
-	   << ", heap " << mm.last.get_heap()
-	   << ", baseline " << baseline.get_heap()
+	   << " total " << memory_snap.get_total()
+	   << ", rss " << memory_snap.get_rss()
+	   << ", heap " << memory_snap.get_heap()
+	   << ", baseline " << upkeep_mem_baseline.get_heap()
 	   << ", " << num_inodes_with_caps << " / " << CInode::count() << " inodes have caps"
 	   << ", " << Capability::count() << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
 
   mds->update_mlogger();
-  mds->mlogger->set(l_mdm_rss, mm.last.get_rss());
-  mds->mlogger->set(l_mdm_heap, mm.last.get_heap());
+  mds->mlogger->set(l_mdm_rss, memory_snap.get_rss());
+  mds->mlogger->set(l_mdm_heap, memory_snap.get_heap());
 }
 
 
@@ -14171,11 +14178,24 @@ void MDCache::upkeep_main(void)
 {
   std::unique_lock lock(upkeep_mutex);
 
+  // create a "memory model" for the upkeep thread. The object maintains
+  // the relevant '/proc' files open. We only check for a failure to open
+  // the files once, and then we'll just keep the object around.
+  upkeep_memory_stats = MemoryModel{};
+
   // get initial sample upon thread creation
-  MemoryModel::mem_snap_t baseline;
   {
-    MemoryModel mm(g_ceph_context);
-    mm.sample(&baseline);
+    auto maybe_base = upkeep_memory_stats->full_sample();
+    if (!maybe_base) {
+      dout(1) << fmt::format(
+		     "{}: Failed to get initial memory sample ({}). No more "
+		     "sampling will be attempted",
+		     __func__, maybe_base.error())
+	      << dendl;
+      upkeep_memory_stats = std::nullopt;
+    } else {
+      upkeep_mem_baseline = *maybe_base;
+    }
   }
 
   while (!upkeep_trim_shutdown.load()) {
@@ -14188,7 +14208,7 @@ void MDCache::upkeep_main(void)
       lock.lock();
       if (upkeep_trim_shutdown.load())
         return;
-      check_memory_usage(baseline);
+      check_memory_usage();
       if (mds->is_cache_trimmable()) {
         dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;
         bool active_with_clients = mds->is_active() || mds->is_clientreplay() || mds->is_stopping();

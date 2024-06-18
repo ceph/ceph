@@ -17,8 +17,6 @@
 using namespace std;
 using mem_snap_t = MemoryModel::mem_snap_t;
 
-MemoryModel::MemoryModel(CephContext *cct_) : cct(cct_) {}
-
 inline bool MemoryModel::cmp_against(
     const std::string &ln,
     std::string_view param,
@@ -41,14 +39,10 @@ inline bool MemoryModel::cmp_against(
 }
 
 
-std::optional<int64_t> MemoryModel::get_mapped_heap()
+tl::expected<int64_t, std::string> MemoryModel::get_mapped_heap()
 {
   if (!proc_maps.is_open()) {
-    ldout(cct, 0) << fmt::format(
-			 "MemoryModel::get_mapped_heap() unable to open {}",
-			 proc_maps_fn)
-		  << dendl;
-    return std::nullopt;
+    return tl::unexpected("unable to open proc/maps");
   }
   // always rewind before reading
   proc_maps.clear();
@@ -99,14 +93,10 @@ std::optional<int64_t> MemoryModel::get_mapped_heap()
 }
 
 
-std::optional<mem_snap_t> MemoryModel::full_sample()
+tl::expected<mem_snap_t, std::string> MemoryModel::full_sample()
 {
   if (!proc_status.is_open()) {
-    ldout(cct, 0) << fmt::format(
-			 "MemoryModel::sample() unable to open {}",
-			 proc_stat_fn)
-		  << dendl;
-    return std::nullopt;
+    return tl::unexpected("unable to open proc/status");
   }
   // always rewind before reading
   proc_status.clear();
