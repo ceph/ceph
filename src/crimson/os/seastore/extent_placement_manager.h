@@ -414,7 +414,10 @@ public:
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
-          auto len = std::min(max_data_allocation_size, left);
+          auto len = left;
+          if (max_data_allocation_size) {
+            len = std::min(max_data_allocation_size, len);
+          }
           auto bp = create_extent_ptr_zero(len);
           auto start = ext.start.is_delayed()
                         ? ext.start
