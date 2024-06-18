@@ -90,19 +90,49 @@ struct OSDRestrictions {
 };
 static_assert(sizeof(Scrub::OSDRestrictions) <= sizeof(uint32_t));
 
+/// concise passing of PG state affecting scrub to the
+/// scrubber at the initiation of a scrub
+struct ScrubPGPreconds {
+  bool allow_shallow{true};
+  bool allow_deep{true};
+  bool has_deep_errors{false};
+  bool can_autorepair{false};
+};
+static_assert(sizeof(Scrub::ScrubPGPreconds) <= sizeof(uint32_t));
+
+/// possible outcome when trying to select a PG and scrub it
+enum class schedule_result_t {
+  scrub_initiated,	    // successfully started a scrub
+  target_specific_failure,  // failed to scrub this specific target
+  osd_wide_failure	    // failed to scrub any target
+};
 }  // namespace Scrub
 
 namespace fmt {
+template <>
+struct formatter<Scrub::ScrubPGPreconds> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const Scrub::ScrubPGPreconds& conds, FormatContext& ctx) const
+  {
+    return fmt::format_to(
+	ctx.out(), "allowed(shallow/deep):{:1}/{:1},deep-err:{:1},can-autorepair:{:1}",
+	conds.allow_shallow, conds.allow_deep, conds.has_deep_errors,
+	conds.can_autorepair);
+  }
+};
+
 template <>
 struct formatter<Scrub::OSDRestrictions> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx)
+  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const
   {
     return fmt::format_to(
       ctx.out(),
-      "priority-only:{} overdue-only:{} load:{} time:{} repair-only:{}",
+      "priority-only:{},overdue-only:{},load:{},time:{},repair-only:{}",
         conds.high_priority_only,
         conds.only_deadlined,
         conds.load_is_low ? "ok" : "high",
@@ -388,6 +418,23 @@ struct ScrubPgIF {
   virtual void map_from_replica(OpRequestRef op) = 0;
 
   virtual void replica_scrub_op(OpRequestRef op) = 0;
+
+  /**
+   * attempt to initiate a scrub session.
+   * @param osd_restrictions limitations on the types of scrubs that can
+   *   be initiated on this OSD at this time.
+   * @param preconds the PG state re scrubbing at the time of the request,
+   *   affecting scrub parameters.
+   * @param requested_flags the set of flags that determine the scrub type
+   *   and attributes (to be removed in the next iteration).
+   * @return the result of the scrub initiation attempt. A success,
+   *   or either a failure due to the specific PG, or a failure due to
+   *   external reasons.
+   */
+  virtual Scrub::schedule_result_t start_scrub_session(
+      Scrub::OSDRestrictions osd_restrictions,
+      Scrub::ScrubPGPreconds,
+      const requested_scrub_t& requested_flags) = 0;
 
   virtual void set_op_parameters(const requested_scrub_t&) = 0;
 
