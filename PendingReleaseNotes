@@ -1,5 +1,7 @@
 >=19.0.0
 
+* cephx: key rotation is now possible using `ceph auth rotate`. Previously,
+  this was only possible by deleting and then recreating the key.
 * ceph: a new --daemon-output-file switch is available for `ceph tell` commands
   to dump output to a file local to the daemon. For commands which produce
   large amounts of output, this avoids a potential spike in memory usage on the
