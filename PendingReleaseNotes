@@ -62,6 +62,8 @@
   Last-Modified header to determine how long the object took to replicate.
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
   python dependencies are now available in EPEL9.
+* cephx: key rotation is now possible using `ceph auth rotate`. Previously,
+  this was only possible by deleting and then recreating the key.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
   multi-site. Previously, the replicas of such objects were corrupted on decryption.
   A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
