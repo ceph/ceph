@@ -502,7 +502,9 @@ class Builder:
         if self._ctx.strip_binaries:
             log.debug("copy and strip: %s", dst_path)
             shutil.copy2(src_path, dst_path)
-            _run(["strip", str(dst_path)]).check_returncode()
+            output = _run(["file", str(dst_path)], capture_output=True, text=True)
+            if "ELF" in output.stdout:
+                _run(["strip", str(dst_path)]).check_returncode()
             return
         log.debug("hard linking: %s", dst_path)
         try:
@@ -583,7 +585,7 @@ class Builder:
             exclude_dirs = ("tests",)
         else:
             log.debug("Excluding dashboard from mgr")
-            exclude_dirs = ("tests", "node_modules")
+            exclude_dirs = ("tests", "node_modules", ".tox", ".angular" )
         exclude_file_suffixes = (".pyc", ".pyo", ".tmp", "~")
         with tarfile.open(self._workdir / name, mode="w") as tar:
             with ChangeDir(self._ctx.source_dir / "src/pybind/mgr"):
@@ -596,7 +598,7 @@ class Builder:
 
     def _py_common_job(self, component):
         name = "python_common.tar"
-        exclude_dirs = ("tests", "node_modules")
+        exclude_dirs = ("tests", "node_modules", ".tox" )
         exclude_file_suffixes = (".pyc", ".pyo", ".tmp", "~")
         with tarfile.open(self._workdir / name, mode="w") as tar:
             with ChangeDir(self._ctx.source_dir / "src/python-common"):
@@ -676,7 +678,7 @@ class Builder:
         return self._bins_and_libs(
             prefix="rgw",
             bin_patterns=["radosgw", "radosgw-admin"],
-            lib_patterns=["libradosgw.so*"],
+            lib_patterns=["librados.so*", "libceph-common.so*"],
         )
         return out
 
