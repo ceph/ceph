@@ -739,7 +739,8 @@ of ``K+M`` so that each chunk is stored in an OSD in the acting set. The rank of
 the chunk is stored as an attribute of the object.
 
 For instance an erasure coded pool can be created to use five OSDs (``K+M = 5``) and
-sustain the loss of two of them (``M = 2``).
+sustain the loss of two of them (``M = 2``). Data may be unavailable until (``K+1``)
+shards are restored.
 
 Reading and Writing Encoded Chunks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
