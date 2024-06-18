@@ -466,7 +466,7 @@ auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   if (!osd_op_params) {
     osd_op_params.emplace();
-    fill_op_params_bump_pg_version(m);
+    fill_op_params(m);
   }
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
 }
@@ -801,7 +801,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   }
 }
 
-void OpsExecuter::fill_op_params_bump_pg_version(OpsExecuter::modified_by m)
+void OpsExecuter::fill_op_params(OpsExecuter::modified_by m)
 {
   osd_op_params->req_id = msg->get_reqid();
   osd_op_params->mtime = msg->get_mtime();
@@ -819,6 +819,7 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   // entry.
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
   std::vector<pg_log_entry_t> log_entries;
+  osd_op_params->at_version.version++;
   log_entries.emplace_back(
     obc->obs.exists ?
       pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
@@ -829,7 +830,6 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
     osd_op_params->req_id,
     osd_op_params->mtime,
     op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
-  osd_op_params->at_version.version++;
   if (op_info.allows_returnvec()) {
     // also the per-op values are recorded in the pg log
     log_entries.back().set_op_returns(ops);
@@ -967,7 +967,6 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     initial_obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
-  osd_op_params->at_version.version++;
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
 
   return cloning_ctx;
@@ -1042,6 +1041,7 @@ ObjectContextRef OpsExecuter::prepare_clone(
   const hobject_t& coid)
 {
   ceph_assert(pg->is_primary());
+  osd_op_params->at_version.version++;
   ObjectState clone_obs{coid};
   clone_obs.exists = true;
   clone_obs.oi.version = osd_op_params->at_version;
