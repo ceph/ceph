@@ -24,6 +24,7 @@ import { AdministrationComponent } from '../administration/administration.compon
 import { IdentityComponent } from '../identity/identity.component';
 import { NgbModule } from '@ng-bootstrap/ng-bootstrap';
 import { DashboardHelpComponent } from '../dashboard-help/dashboard-help.component';
+import { DialogModule, GridModule, ThemeModule, UIShellModule } from 'carbon-components-angular';
 
 function everythingPermittedExcept(disabledPermissions: string[] = []): any {
   const permissions: Permissions = new Permissions({});
@@ -71,7 +72,11 @@ describe('NavigationComponent', () => {
       ToastrModule.forRoot(),
       RouterTestingModule,
       SimplebarAngularModule,
-      NgbModule
+      NgbModule,
+      UIShellModule,
+      ThemeModule,
+      DialogModule,
+      GridModule
     ],
     providers: [AuthStorageService, SummaryService, FeatureTogglesService, PrometheusAlertService]
   });
