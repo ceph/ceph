@@ -824,7 +824,6 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   // entry.
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
   std::vector<pg_log_entry_t> log_entries;
-  osd_op_params->at_version.version++;
   log_entries.emplace_back(
     obc->obs.exists ?
       pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
@@ -936,7 +935,9 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     return std::vector<snapid_t>{std::begin(snapc.snaps), last};
   }();
 
-  auto clone_obc = prepare_clone(coid);
+  auto clone_obc = prepare_clone(coid, osd_op_params->at_version);
+  osd_op_params->at_version.version++;
+
   // make clone
   backend.clone(clone_obc->obs.oi, initial_obs, clone_obc->obs, txn);
 
@@ -966,10 +967,10 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     pg_log_entry_t::CLONE,
     coid,
     clone_obc->obs.oi.version,
-    initial_obs.oi.version,
-    initial_obs.oi.user_version,
+    clone_obc->obs.oi.prior_version,
+    clone_obc->obs.oi.user_version,
     osd_reqid_t(),
-    initial_obs.oi.mtime, // will be replaced in `apply_to()`
+    clone_obc->obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
@@ -1043,13 +1044,13 @@ OpsExecuter::flush_clone_metadata(
 }
 
 ObjectContextRef OpsExecuter::prepare_clone(
-  const hobject_t& coid)
+  const hobject_t& coid,
+  eversion_t version)
 {
   ceph_assert(pg->is_primary());
-  osd_op_params->at_version.version++;
   ObjectState clone_obs{coid};
   clone_obs.exists = true;
-  clone_obs.oi.version = osd_op_params->at_version;
+  clone_obs.oi.version = version;
   clone_obs.oi.prior_version = obc->obs.oi.version;
   clone_obs.oi.copy_user_bits(obc->obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
