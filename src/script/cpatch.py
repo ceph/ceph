@@ -421,7 +421,6 @@ class Builder:
         self._ctx = cli_ctx
         self._jobs = []
         self._include_dashboard = False
-        self._cached_py_site_packages = None
         self._workdir = pathlib.Path(
             tempfile.mkdtemp(suffix=".cpatch", dir=self._ctx.build_dir)
         )
@@ -552,38 +551,6 @@ class Builder:
 
         return out
 
-    def _py_site_packages(self):
-        """Return the correct python site packages dir for the image."""
-        if self._cached_py_site_packages is not None:
-            return self._cached_py_site_packages
-        # use the container image to probe for the correct python site-packages dir
-        py_vers = ['3.12', '3.11', '3.10', '3.9', '3.8', '3.6']
-        valid_site_packages = [
-            f'/usr/lib/python{v}/site-packages' for v in py_vers
-        ]
-        cmd = [
-            self._ctx.engine,
-            "run",
-            "--rm",
-            self._ctx.base_image,
-            "ls",
-            "-d",
-        ]
-        cmd += valid_site_packages
-        if self._ctx.root_build:
-            cmd.insert(0, "sudo")
-        result = _run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        log.debug(f"container output: {result.stdout!r}")
-        for line in result.stdout.decode("utf8").splitlines():
-            pdir = line.strip()
-            if line.strip() in valid_site_packages:
-                log.debug(f"found site packages dir: {pdir}")
-                self._cached_py_site_packages = pdir
-                return self._cached_py_site_packages
-        raise ValueError(
-            "no valid python site-packages dir found in container"
-        )
-
     def _py_mgr_job(self, component):
         name = "mgr_plugins.tar"
         if self._include_dashboard:
@@ -613,7 +580,9 @@ class Builder:
                     exclude_dirs=exclude_dirs,
                     exclude_file_suffixes=exclude_file_suffixes,
                 )
-        return [f"ADD {name} {self._py_site_packages()}"]
+        dlines=[f"ADD {name} tmp_python_common"]
+        dlines.append ("RUN for i in tmp_python_common/*; do find /usr/lib/python*/site-packages -type d -name $(basename $i) -exec cp -frpv $i/* '{}' \;; done && rm -rf tmp_python_common")
+        return dlines
 
     def _cephadm_job(self, component):
         src_path = self._ctx.source_dir / "src/cephadm/cephadm"
@@ -639,7 +608,9 @@ class Builder:
         for pth in sodir.iterdir():
             if pth.match("*.cpython-3*.so"):
                 self._copy_binary(pth, dst / pth.name)
-        return [f"ADD cythonlib {self._py_site_packages()}"]
+        dlines=["ADD cythonlib tmp_cythonlib"]
+        dlines.append ("RUN for i in tmp_cythonlib/*; do find /usr/lib64/python*/site-packages -name $(basename $i) -exec mv -f $i '{}' \;; echo $(basename $i); done && rm -rf tmp_cythonlib")
+        return dlines
 
     def _core_job(self, component):
         # [Quoth the original script]:
