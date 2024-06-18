@@ -2330,7 +2330,7 @@ struct writer_stats_t {
   grouped_io_stats io_depth_stats;
   uint64_t record_group_padding_bytes = 0;
   uint64_t record_group_metadata_bytes = 0;
-  uint64_t record_group_data_bytes = 0;
+  uint64_t data_bytes = 0;
   counter_by_src_t<trans_writer_stats_t> stats_by_src;
 
   bool is_empty() const {
@@ -2340,7 +2340,7 @@ struct writer_stats_t {
   uint64_t get_total_bytes() const {
     return record_group_padding_bytes +
            record_group_metadata_bytes +
-           record_group_data_bytes;
+           data_bytes;
   }
 
   void add(const writer_stats_t &o) {
@@ -2348,7 +2348,7 @@ struct writer_stats_t {
     io_depth_stats.add(o.io_depth_stats);
     record_group_padding_bytes += o.record_group_padding_bytes;
     record_group_metadata_bytes += o.record_group_metadata_bytes;
-    record_group_data_bytes += o.record_group_data_bytes;
+    data_bytes += o.data_bytes;
     add_srcs(stats_by_src, o.stats_by_src);
   }
 
@@ -2357,7 +2357,7 @@ struct writer_stats_t {
     io_depth_stats.minus(o.io_depth_stats);
     record_group_padding_bytes -= o.record_group_padding_bytes;
     record_group_metadata_bytes -= o.record_group_metadata_bytes;
-    record_group_data_bytes -= o.record_group_data_bytes;
+    data_bytes -= o.data_bytes;
     minus_srcs(stats_by_src, o.stats_by_src);
   }
 };
