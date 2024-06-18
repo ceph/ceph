@@ -831,12 +831,17 @@ struct PG::do_osd_ops_params_t {
     return orig_source_inst.name;
   }
 
+  snapid_t get_snapid() const {
+    return snapid;
+  }
+
   crimson::net::ConnectionXcoreRef &conn;
   osd_reqid_t reqid;
   utime_t mtime;
   epoch_t map_epoch;
   entity_inst_t orig_source_inst;
   uint64_t features;
+  snapid_t snapid;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
