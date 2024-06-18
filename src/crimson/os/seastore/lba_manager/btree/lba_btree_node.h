@@ -171,6 +171,8 @@ struct LBALeafNode
 
     for (auto i : *this) {
       auto child = (LogicalCachedExtent*)this->children[i.get_offset()];
+      // Children may not be marked as stable yet,
+      // the specific order is undefined in the transaction prepare record phase.
       if (is_valid_child_ptr(child) && child->get_laddr() != i.get_key()) {
 	SUBERROR(seastore_fixedkv_tree,
 	  "stable child not valid: child {}, key {}",
@@ -194,7 +196,11 @@ struct LBALeafNode
 	iter.get_offset(),
 	*nextent);
       // child-ptr may already be correct, see LBAManager::update_mappings()
-      this->update_child_ptr(iter, nextent);
+      if (!nextent->has_parent_tracker()) {
+	this->update_child_ptr(iter, nextent);
+      }
+      assert(nextent->has_parent_tracker()
+	&& nextent->get_parent_node<LBALeafNode>().get() == this);
     }
     if (val.pladdr.is_paddr()) {
       val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());

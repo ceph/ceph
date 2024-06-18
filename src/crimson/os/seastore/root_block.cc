@@ -7,7 +7,7 @@
 
 namespace crimson::os::seastore {
 
-void RootBlock::on_replace_prior(Transaction &t) {
+void RootBlock::on_replace_prior() {
   if (!lba_root_node) {
     auto &prior = static_cast<RootBlock&>(*get_prior_instance());
     if (prior.lba_root_node) {
