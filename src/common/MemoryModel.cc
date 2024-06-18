@@ -54,39 +54,59 @@ tl::expected<int64_t, std::string> MemoryModel::get_mapped_heap()
     string line;
     getline(proc_maps, line);
 
-    const char *start = line.c_str();
-    const char *dash = start;
+    if (line.length() < 48) {
+      // a malformed line. We expect at least
+      // '560c03f8d000-560c03fae000 rw-p 00000000 00:00 0'
+      continue;
+    }
+
+    const char* start = line.c_str();
+    const char* dash = start;
     while (*dash && *dash != '-')
       dash++;
     if (!*dash)
       continue;
-    const char *end = dash + 1;
+    const char* end = dash + 1;
     while (*end && *end != ' ')
       end++;
     if (!*end)
       continue;
-    unsigned long long as = strtoll(start, 0, 16);
-    unsigned long long ae = strtoll(dash + 1, 0, 16);
 
+    auto addr_end = end;
     end++;
-    const char *mode = end;
-
-    int skip = 4;
-    while (skip--) {
-      end++;
-      while (*end && *end != ' ')
-	end++;
-    }
-    if (*end)
-      end++;
-
-    long size = ae - as;
+    const char* mode = end;
 
     /*
      * anything 'rw' and anon is assumed to be heap.
+     * But we should count lines with inode '0' and '[heap]' as well
      */
-    if (mode[0] == 'r' && mode[1] == 'w' && !*end)
+    if (mode[0] != 'r' || mode[1] != 'w') {
+      continue;
+    }
+
+    auto the_rest = line.substr(5 + end - start);
+    if (!the_rest.starts_with("00000000 00:00 0")) {
+      continue;
+    }
+
+    if (the_rest.ends_with("[stack]")) {
+      // should we really exclude the stack?
+      continue;
+    }
+
+    std::string_view final_token{the_rest.begin() + sizeof("00000000 00:00 0") - 1,
+                                 the_rest.end()};
+    if (final_token.size() < 3 ||
+        final_token.ends_with("[heap]") || final_token.ends_with("[stack]")) {
+      // calculate and sum the size of the heap segment
+      uint64_t as{0ull};
+      from_chars(start, dash, as, 16);
+      uint64_t ae{0ull};
+      from_chars(dash + 1, addr_end, ae, 16);
+      //     fmt::print("\t\tas:{:x} ae:{:x} -> {}\n", as, ae, ((ae - as) >> 10));
+      long size = ae - as;
       heap += size;
+    }
   }
 
   return heap;
