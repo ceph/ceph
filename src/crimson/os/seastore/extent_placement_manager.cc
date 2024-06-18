@@ -1027,7 +1027,7 @@ RandomBlockOolWriter::do_write(
       auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
       ++(trans_stats.num_records);
       trans_stats.data_bytes += ex->get_length();
-      w_stats.record_group_data_bytes += ex->get_length();
+      w_stats.data_bytes += ex->get_length();
     }
     return trans_intr::make_interruptible(
       rbm->write(paddr + offset,
