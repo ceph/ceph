@@ -1,2 +1,6 @@
 os_type: centos
 os_version: "9.stream"
+overrides:
+  selinux:
+    allowlist:
+      - scontext=system_u:system_r:getty_t:s0
