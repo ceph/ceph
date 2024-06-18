@@ -26,23 +26,18 @@
 class MemoryModel {
 public:
   struct mem_snap_t {
-    long peak;
-    long size;
-    long hwm;
-    long rss;
-    long data;
-    long lib;
-
-    long heap;
-
-    mem_snap_t() : peak(0), size(0), hwm(0), rss(0), data(0), lib(0),
-	     heap(0)
-    {}
+    long peak{0};
+    long size{0};
+    long hwm{0};
+    long rss{0};
+    long data{0};
+    long lib{0};
+    long heap{0};
 
     long get_total() const { return size; }
     long get_rss() const { return rss; }
     long get_heap() const { return heap; }
-  } last;
+  };
 
 private:
   static inline constexpr const char* proc_stat_fn = PROCPREFIX "/proc/self/status";
@@ -81,8 +76,6 @@ public:
    *    size will be reported as 0).
    */
   tl::expected<mem_snap_t, std::string> full_sample();
-
-  void sample(mem_snap_t *p = nullptr);
 };
 
 #endif

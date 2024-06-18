@@ -143,13 +143,3 @@ tl::expected<mem_snap_t, std::string> MemoryModel::full_sample()
   s.heap = static_cast<long>(get_mapped_heap().value_or(0));
   return s;
 }
-
-void MemoryModel::sample(mem_snap_t *p)
-{
-  auto s = full_sample();
-  if (s) {
-    last = *s;
-    if (p)
-      *p = last;
-  }
-}
