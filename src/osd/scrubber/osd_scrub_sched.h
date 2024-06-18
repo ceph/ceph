@@ -116,13 +116,6 @@ namespace Scrub {
 
 using namespace ::std::literals;
 
-/// possible outcome when trying to select a PG and scrub it
-enum class schedule_result_t {
-  scrub_initiated,	    // successfully started a scrub
-  target_specific_failure,  // failed to scrub this specific target
-  osd_wide_failure	    // failed to scrub any target
-};
-
 // the OSD services provided to the scrub scheduler
 class ScrubSchedListener {
  public:
