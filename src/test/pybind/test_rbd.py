@@ -20,7 +20,7 @@ from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
 from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
-                 ImageBusy, ImageHasSnapshots, ReadOnlyImage,
+                 ImageBusy, ImageHasSnapshots, ReadOnlyImage, ObjectNotFound,
                  FunctionNotSupported, ArgumentOutOfRange,
                  ECANCELED, OperationCanceled,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
@@ -49,7 +49,7 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_SNAP_CREATE_IGNORE_QUIESCE_ERROR,
                  RBD_WRITE_ZEROES_FLAG_THICK_PROVISION,
                  RBD_ENCRYPTION_FORMAT_LUKS1, RBD_ENCRYPTION_FORMAT_LUKS2,
-                 RBD_ENCRYPTION_FORMAT_LUKS)
+                 RBD_ENCRYPTION_FORMAT_LUKS, RBD_GROUP_SNAP_STATE_COMPLETE)
 
 rados = None
 ioctx = None
@@ -2809,6 +2809,8 @@ def test_list_groups_after_removed():
     eq([], RBD().group_list(ioctx))
 
 class TestGroups(object):
+    img_snap_keys = ['image_name', 'pool_id', 'snap_id']
+    gp_snap_keys = ['id', 'image_snap_name', 'image_snaps', 'name', 'state']
 
     def setup_method(self, method):
         global snap_name
@@ -2882,6 +2884,35 @@ class TestGroups(object):
         with Image(ioctx, image_name) as image:
             eq(0, image.op_features() & RBD_OPERATION_FEATURE_GROUP)
 
+    def test_group_snap_get_info(self):
+        self.image_names.append(create_image())
+        self.image_names.sort()
+        self.group.add_image(ioctx, self.image_names[0])
+        self.group.add_image(ioctx, self.image_names[1])
+        pool_id = ioctx.get_pool_id()
+
+        assert_raises(ObjectNotFound, self.group.get_snap_info, "")
+
+        self.group.create_snap(snap_name)
+        snap_info_dict = self.group.get_snap_info(snap_name)
+        image_names = []
+        assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
+        assert snap_info_dict['name'] == snap_name
+        assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_COMPLETE
+        for image_snap in snap_info_dict['image_snaps']:
+            assert sorted(image_snap.keys()) == self.img_snap_keys
+            assert image_snap['pool_id'] == pool_id
+            image_names.append(image_snap['image_name'])
+            with Image(ioctx, image_snap['image_name']) as member_image:
+                snaps = [snap for snap in member_image.list_snaps()]
+            assert len(snaps) == 1
+            assert snaps[0]['name'] == snap_info_dict['image_snap_name']
+            assert snaps[0]['id'] == image_snap['snap_id']
+        assert sorted(image_names) == self.image_names
+
+        self.group.remove_snap(snap_name)
+        assert_raises(ObjectNotFound, self.group.get_snap_info, snap_name)
+
     def test_group_snap(self):
         global snap_name
         eq([], list(self.group.list_snaps()))
@@ -2919,18 +2950,30 @@ class TestGroups(object):
         eq([], list(self.group.list_snaps()))
 
     def test_group_snap_list_many(self):
+        self.image_names.append(create_image())
+        self.image_names.sort()
+        self.group.add_image(ioctx, self.image_names[0])
+        self.group.add_image(ioctx, self.image_names[1])
+
         global snap_name
-        eq([], list(self.group.list_snaps()))
+        assert list(self.group.list_snaps()) == []
         snap_names = []
         for x in range(0, 20):
             snap_names.append(snap_name)
             self.group.create_snap(snap_name)
             snap_name = get_temp_snap_name()
 
-        snap_names.sort()
-        answer = [snap['name'] for snap in self.group.list_snaps()]
-        answer.sort()
-        eq(snap_names, answer)
+        gp_snaps_list = self.group.list_snaps()
+        gp_snap_names = []
+        for gp_snap in gp_snaps_list:
+            assert sorted(gp_snap.keys()) == self.gp_snap_keys
+            gp_snap_names.append(gp_snap['name'])
+            image_names = []
+            for img_snap in gp_snap['image_snaps']:
+                assert sorted(img_snap.keys()) == self.img_snap_keys
+                image_names.append(img_snap['image_name'])
+            assert sorted(image_names) == self.image_names
+        assert sorted(gp_snap_names) == sorted(snap_names)
 
     def test_group_snap_namespace(self):
         global snap_name
