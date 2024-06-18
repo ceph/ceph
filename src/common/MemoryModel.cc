@@ -89,11 +89,6 @@ tl::expected<int64_t, std::string> MemoryModel::get_mapped_heap()
       continue;
     }
 
-    if (the_rest.ends_with("[stack]")) {
-      // should we really exclude the stack?
-      continue;
-    }
-
     std::string_view final_token{the_rest.begin() + sizeof("00000000 00:00 0") - 1,
                                  the_rest.end()};
     if (final_token.size() < 3 ||
