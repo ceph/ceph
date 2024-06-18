@@ -1041,6 +1041,13 @@ class TestMonitoring:
                       schema: v11
                       index:
                         prefix: index_
+                        period: 24h
+                    - from: 2024-05-03
+                      store: tsdb
+                      object_store: filesystem
+                      schema: v13
+                      index:
+                        prefix: index_
                         period: 24h""").lstrip()
 
                 _run_cephadm.assert_called_with(
