@@ -3391,6 +3391,168 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   return res;
 }
 
+struct S3Location {
+  std::string bucket_name;
+  std::string prefix;
+  std::optional<std::string> storage_class;
+
+
+  void decode_xml(XMLObj *obj) {
+    RGWXMLDecoder::decode_xml("BucketName", bucket_name, obj);
+    RGWXMLDecoder::decode_xml("Prefix", prefix, obj);
+    RGWXMLDecoder::decode_xml("StorageClass", storage_class, obj);
+  }
+
+  void dump_xml(Formatter *f) const {
+    encode_xml("BucketName", bucket_name, f);
+    encode_xml("Prefix", prefix, f);
+    encode_xml("StorageClass", storage_class, f);
+  }
+};
+
+struct OutputLocation {
+  S3Location s3;
+
+  bool is_empty() const {
+    return s3.bucket_name.empty();
+  }
+
+  void decode_xml(XMLObj *obj) {
+    RGWXMLDecoder::decode_xml("S3", s3, obj);
+  }
+
+  void dump_xml(Formatter *f) const {
+    encode_xml("S3", s3, f);
+  }
+};
+
+struct RestoreObjectRequest {
+  std::optional<int> days;
+  std::optional<std::string> type;
+  std::string tier;
+  std::optional<std::string> description;
+  std::optional<OutputLocation> output_location;
+
+  void decode_xml(XMLObj *obj) {
+    RGWXMLDecoder::decode_xml("Days", days, obj);
+    RGWXMLDecoder::decode_xml("Type", type, obj);
+    RGWXMLDecoder::decode_xml("Tier", tier, obj);
+    RGWXMLDecoder::decode_xml("Description", description, obj);
+    RGWXMLDecoder::decode_xml("OutputLocation", output_location, obj);
+  }
+
+  void dump_xml(Formatter *f) const {
+    encode_xml("Days", days, f);
+    encode_xml("Type", type, f);
+    encode_xml("Tier", tier, f);
+    encode_xml("Description", description, f);
+    encode_xml("OutputLocation", output_location, f);
+  }
+};
+
+int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
+{
+
+  op_ret = RGWRestoreObj_ObjStore::get_params(y);
+  if (op_ret < 0)
+  {
+    return op_ret;
+  }
+
+  std::string bucket_name;
+  std::string storage_class;
+  std::string prefix;
+  std::string expected_bucket_owner;
+
+  if (s->info.env->get("x-amz-expected-bucket-owner") != nullptr)
+  {
+    expected_bucket_owner = s->info.env->get("x-amz-expected-bucket-owner");
+  }
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+
+  RGWXMLDecoder::XMLParser parser;
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = read_all_input(s, max_size, false);
+
+  if (r < 0)
+  {
+    return r;
+  }
+
+  if(!parser.init())
+  {
+    return -EINVAL;
+  }
+
+   if (!parser.parse(data.c_str(), data.length(), 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RestoreObjectRequest request;
+
+  try
+  {
+    RGWXMLDecoder::decode_xml("RestoreRequest", request, &parser);
+  }
+  catch (RGWXMLDecoder::err &err)
+  {
+    ldpp_dout(this, 5) << "Malformed restore request: " << err << dendl;
+    return -EINVAL;
+  }
+  
+  if (request.days)
+  {
+    int expiry_days = request.days.value();
+    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
+
+    if (request.output_location)
+    {
+      if (!request.output_location->s3.bucket_name.empty())
+      {
+        output_location = request.output_location->s3.bucket_name;
+        ldpp_dout(this, 10) << "Bucket Name: " << bucket_name << dendl;
+      }
+      if (!request.output_location->s3.prefix.empty())
+      {
+        prefix = request.output_location->s3.prefix;
+        ldpp_dout(this, 10) << "prefix=" << prefix << dendl;
+      }
+      if (request.output_location->s3.storage_class)
+      {
+        storage_class = request.output_location->s3.storage_class.value();
+        ldpp_dout(this, 10) << "storage_class=" << storage_class << dendl;
+      }
+    }
+  } else {
+    ldpp_dout(this, 10) << "No output location found" << dendl;
+  }
+
+  return 0;
+}
+
+
+void RGWRestoreObj_ObjStore_S3::send_response()
+{
+  if (op_ret < 0)
+  {
+    set_req_state_err(s, op_ret);
+    dump_errno(s);
+    end_header(s, this);
+    return;
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  
+  if (output_location.empty()) {
+    dump_header(s, "x-amz-restore-output-path", "NONE");
+  }
+  
+  dump_header_if_nonempty(s, "x-amz-restore-output-path", output_location);
+  end_header(s, this);
+}
 int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
 {
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
@@ -4826,6 +4988,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
   if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
   
+  if (s->info.args.exists("restore"))
+    return new RGWRestoreObj_ObjStore_S3;
+  
   if (is_select_op())
     return rgw::s3select::create_s3select_op();
 
@@ -5877,6 +6042,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 	case RGW_OP_PUT_BUCKET_TAGGING:
 	case RGW_OP_PUT_BUCKET_REPLICATION:
         case RGW_OP_PUT_LC:
+        case RGW_OP_RESTORE_OBJ:
         case RGW_OP_SET_REQUEST_PAYMENT:
         case RGW_OP_PUBSUB_NOTIF_CREATE:
         case RGW_OP_PUBSUB_NOTIF_DELETE:

@@ -5011,6 +5011,47 @@ void RGWPutMetadataObject::execute(optional_yield y)
   op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield);
 }
 
+int RGWRestoreObj::init_processing(optional_yield y)
+{
+  /* Read in the data from the POST form. */
+  int ret = get_params(y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = verify_params();
+  if (ret < 0) {
+    return ret;
+  }
+
+  return RGWOp::init_processing(y);
+}
+
+int RGWRestoreObj::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, ARN(s->object->get_obj()),
+                                rgw::IAM::s3RestoreObject)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWRestoreObj::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWRestoreObj::execute(optional_yield y)
+{
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+  
+  return;
+}
+
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 {
   RGWSLOInfo slo_info;
