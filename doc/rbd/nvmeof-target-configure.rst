@@ -25,10 +25,10 @@ Explanation
 The Ceph NVMe-oF gateway is both an NVMe-oF target and a Ceph client. Think of
 it as a "translator" between Ceph's RBD interface and the NVME-oF protocol. The
 Ceph NVMe-oF gateway can run on a standalone node or be colocated with other
-daemons, for example on a Ceph Object Store Disk (OSD) node. When colocating
-the Ceph NVMe-oF gateway with other daemons, ensure that sufficient CPU and
-memory are available. The steps below explain how to install and configure the
-Ceph NVMe/TCP gateway for basic operation.
+daemons, for example on an OSD node. When colocating the Ceph NVMe-oF gateway
+with other daemons, ensure that sufficient CPU and memory are available.
+The steps below explain how to install and configure the Ceph NVMe/TCP gateway
+for basic operation.
 
 
 Installation
@@ -52,7 +52,7 @@ Complete the following steps to install the Ceph NVME-oF gateway:
 
    .. prompt:: bash #
    
-      ceph orch apply nvmeof NVME-OF_POOL_NAME --placment="host01, host02"
+      ceph orch apply nvmeof NVME-OF_POOL_NAME --placement="host01, host02"
 
 Configuration
 =============
