@@ -45,6 +45,8 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
+import { RgwConfigDetailsComponent } from './rgw-config-details/rgw-config-details.component';
+import { RgwConfigurationPageComponent } from './rgw-configuration-page/rgw-configuration-page.component';
 
 @NgModule({
   imports: [
@@ -102,7 +104,9 @@ import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.com
     RgwSyncPrimaryZoneComponent,
     RgwSyncMetadataInfoComponent,
     RgwSyncDataInfoComponent,
-    BucketTagModalComponent
+    BucketTagModalComponent,
+    RgwConfigDetailsComponent,
+    RgwConfigurationPageComponent
   ]
 })
 export class RgwModule {}
@@ -194,6 +198,11 @@ const routes: Routes = [
     path: 'multisite',
     data: { breadcrumbs: 'Multi-site' },
     children: [{ path: '', component: RgwMultisiteDetailsComponent }]
+  },
+  {
+    path: 'configuration',
+    data: { breadcrumbs: 'Configuration' },
+    children: [{ path: '', component: RgwConfigurationPageComponent }]
   }
 ];
 

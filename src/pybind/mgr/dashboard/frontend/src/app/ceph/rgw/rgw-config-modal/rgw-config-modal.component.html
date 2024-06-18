@@ -17,8 +17,10 @@
                  id="s3Enabled"
                  type="radio"
                  name="encryptionType"
+                 [attr.disabled]="editing && configForm.getValue('encryptionType') !== 'AES256' ? true : null"
                  value="AES256">
           <label class="custom-check-label"
+                 [ngClass]="{'text-muted': editing && configForm.getValue('encryptionType') !== 'AES256'}"
                  for="s3Enabled"
                  i18n>SSE-S3 Encryption</label>
         </div>
@@ -29,8 +31,10 @@
                  id="kmsEnabled"
                  name="encryptionType"
                  value="aws:kms"
+                 [attr.disabled]="editing && configForm.getValue('encryptionType') !== 'aws:kms' ? true : null"
                  type="radio">
           <label class="custom-check-label"
+                 [ngClass]="{'text-muted': editing && configForm.getValue('encryptionType') !== 'aws:kms'}"
                  for="kmsEnabled"
                  i18n>SSE-KMS Encryption</label>
         </div>

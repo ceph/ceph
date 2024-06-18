@@ -32,6 +32,9 @@ export class RgwConfigModalComponent implements OnInit {
   authMethods: string[];
   secretEngines: string[];
 
+  encryptionConfigValues: any = {};
+  editing = false;
+
   constructor(
     private formBuilder: CdFormBuilder,
     public activeModal: NgbActiveModal,
@@ -47,6 +50,19 @@ export class RgwConfigModalComponent implements OnInit {
     this.kmsProviders = this.rgwEncryptionModal.kmsProviders;
     this.authMethods = this.rgwEncryptionModal.authMethods;
     this.secretEngines = this.rgwEncryptionModal.secretEngines;
+    if (this.editing && this.encryptionConfigValues) {
+      this.configForm.get('address').setValue(this.encryptionConfigValues['addr']);
+      if (this.encryptionConfigValues['encryption_type'] === 'SSE-KMS Encryption') {
+        this.configForm.get('encryptionType').setValue('aws:kms');
+      } else if (this.encryptionConfigValues['encryption_type'] === 'SSE-S3 Encryption') {
+        this.configForm.get('encryptionType').setValue('AES256');
+      }
+      this.configForm.get('kms_provider').setValue(this.encryptionConfigValues['backend']);
+      this.configForm.get('auth_method').setValue(this.encryptionConfigValues['auth']);
+      this.configForm.get('secret_engine').setValue(this.encryptionConfigValues['secret_engine']);
+      this.configForm.get('secret_path').setValue(this.encryptionConfigValues['prefix']);
+      this.configForm.get('namespace').setValue(this.encryptionConfigValues['namespace']);
+    }
   }
 
   createForm() {

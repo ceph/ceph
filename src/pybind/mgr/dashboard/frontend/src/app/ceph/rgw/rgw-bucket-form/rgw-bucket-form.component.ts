@@ -33,12 +33,12 @@ import {
   RgwBucketAclGrantee as Grantee
 } from './rgw-bucket-acl-permissions.enum';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
-import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.component';
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
+import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
