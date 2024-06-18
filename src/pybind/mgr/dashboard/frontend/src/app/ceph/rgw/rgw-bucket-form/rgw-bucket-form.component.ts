@@ -33,7 +33,6 @@ import {
   RgwBucketAclGrantee as Grantee
 } from './rgw-bucket-acl-permissions.enum';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
-import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.component';
 import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
@@ -438,13 +437,6 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     this.bucketForm.get('bucket_policy').setValue('{}');
     this.bucketForm.markAsDirty();
     this.bucketForm.updateValueAndValidity();
-  }
-
-  openConfigModal() {
-    const modalRef = this.modalService.show(RgwConfigModalComponent, null, { size: 'lg' });
-    modalRef.componentInstance.configForm
-      .get('encryptionType')
-      .setValue(this.bucketForm.getValue('encryption_type') || 'AES256');
   }
 
   showTagModal(index?: number) {
