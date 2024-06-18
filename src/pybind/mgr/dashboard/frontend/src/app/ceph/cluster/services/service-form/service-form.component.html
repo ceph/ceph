@@ -74,7 +74,7 @@
         <div class="form-group row"
              *ngIf="serviceForm.controls.service_type.value !== 'snmp-gateway'">
           <label class="cd-col-form-label"
-                 [ngClass]="{'required': ['mds', 'rgw', 'nfs', 'iscsi', 'ingress'].includes(serviceForm.controls.service_type.value)}"
+                 [ngClass]="{'required': ['mds', 'rgw', 'nfs', 'iscsi', 'smb', 'ingress'].includes(serviceForm.controls.service_type.value)}"
                  for="service_id">
             <span i18n>Id</span>
             <cd-helper i18n>Used in the service name which is &lt;service_type.service_id&gt;</cd-helper>
@@ -393,6 +393,164 @@
               </div>
             </div>
           </div>
+        </ng-container>
+
+        <!-- smb -->
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'smb'">
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="cluster_id"
+                   i18n>
+              Cluster id
+              <cd-helper>
+                <span>A short name identifying the SMB “cluster”. In this case a cluster is simply a management unit of one or more Samba services sharing a common configuration,
+                   and may not provide actual clustering or availability mechanisms.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="cluster_id"
+                     class="form-control"
+                     type="text"
+                     formControlName="cluster_id"
+                     placeholder="foo"
+                     i18n-placeholder>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('cluster_id', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="config_uri">
+              <span i18n>Config URI</span>
+              <cd-helper i18n>
+                Configuration source that should be loaded by the samba-container as the primary configuration file.
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="config_uri"
+                     class="form-control"
+                     type="text"
+                     formControlName="config_uri"
+                     placeholder="rados://.smb/foo/scc.toml"
+                     i18n-placeholder>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('config_uri', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('config_uri', frm, 'configUriPattern')"
+                    i18n>The value must start with either 'http:', 'https:', 'rados:' or 'rados:mon-config-key:'</span>
+            </div>
+          </div>
+
+          <div class="form-group row"
+               formGroupName="features">
+            <label class="cd-col-form-label"
+                   for="features"
+                   i18n>Features
+              <cd-helper>
+                <span>Pre-defined terms enabling specific deployment characteristics.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <div class="custom-control custom-checkbox"
+                   *ngFor="let feature of smbFeaturesList">
+                <input class="custom-control-input"
+                       type="checkbox"
+                       name="{{feature}}"
+                       id="{{feature}}"
+                       formControlName="{{feature}}">
+                <label class="custom-control-label"
+                       for="{{feature}}"
+                       i18n>{{feature}}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="custom_dns">
+              <span i18n>Custom DNS</span>
+              <cd-helper i18n>
+                <span>Comma separated list of DNSs.</span>
+                <br>
+                <span>A list of IP addresses that will be used as the DNS servers for a Samba container.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="custom_dns"
+                     class="form-control"
+                     type="text"
+                     formControlName="custom_dns"
+                     placeholder="192.168.76.204"
+                     i18n-placeholder>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="join_sources">
+              <span i18n>Join sources</span>
+              <cd-helper i18n>
+                <span>Comma separated list of URIs.</span>
+                <br>
+                <span>A list of values that will be used to identify where authentication data that will be used to perform domain joins are located.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="join_sources"
+                     class="form-control"
+                     type="text"
+                     formControlName="join_sources"
+                     placeholder="rados:mon-config-key:smb/config/foo/join1.json"
+                     i18n-placeholder>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="user_sources">
+              <span i18n>User sources</span>
+              <cd-helper i18n>
+                <span>Comma separated list of URIs.</span>
+                <br>
+                <span>A list of pseudo-uris containing data the samba-container can use to create users (and/or
+                  groups). A ceph based samba container may typically use a rados uri
+                  or a mon config-key store uri </span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="user_sources"
+                     class="form-control"
+                     type="text"
+                     formControlName="user_sources"
+                     placeholder="rados:mon-config-key:smb/config/foo/join2.json"
+                     i18n-placeholder>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="include_ceph_users">
+              <span i18n>Ceph users</span>
+              <cd-helper i18n>
+                <span>Comma separated list of Ceph users.</span>
+                <br>
+                <span>A list of cephx user names that the Samba Containers may use.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="include_ceph_users"
+                     class="form-control"
+                     type="text"
+                     formControlName="include_ceph_users"
+                     placeholder="client.smb.fs.cluster.foo"
+                     i18n-placeholder>
+            </div>
+          </div>
+
         </ng-container>
 
         <!-- Ingress -->
