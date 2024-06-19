@@ -13,6 +13,7 @@
 
 #include <list>
 #include <string>
+#include <cstring>
 
 namespace ceph {
 
@@ -53,8 +54,21 @@ struct ClibBackTrace : public BackTrace {
     free(strings);
   }
 
-  ClibBackTrace(const ClibBackTrace& other);
-  const ClibBackTrace& operator=(const ClibBackTrace& other);
+  ClibBackTrace(const ClibBackTrace& other) = delete;
+  ClibBackTrace(ClibBackTrace&& other) {
+    *this = std::move(other);
+  };
+  ClibBackTrace& operator=(ClibBackTrace&& other) {
+    free(strings);
+    skip = other.skip;
+    strings = other.strings;
+    size = other.size;
+    std::memcpy(array, other.array, sizeof(array));
+    other.skip = 0;
+    other.size = 0;
+    other.strings = nullptr;
+    return *this;
+  };
 
   void print(std::ostream& out) const override;
   void dump(Formatter *f) const override;
