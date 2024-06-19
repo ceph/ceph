@@ -829,6 +829,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
     read(base, 4096 * 3);
     restart();
     epm->check_usage();
+    read(base, 4096);
     read(base, 4096 * 3);
 
     auto t1 = create_mutate_transaction();
