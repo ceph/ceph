@@ -977,7 +977,8 @@ def _generate_share(
         # smb.conf options
         'options': {
             'path': path,
-            "vfs objects": "ceph",
+            "vfs objects": "acl_xattr ceph",
+            'acl_xattr:security_acl_name': 'user.NTACL',
             'ceph:config_file': '/etc/ceph/ceph.conf',
             'ceph:filesystem': share.cephfs.volume,
             'ceph:user_id': cephx_entity,
