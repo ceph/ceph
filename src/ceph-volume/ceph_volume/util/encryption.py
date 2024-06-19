@@ -41,13 +41,13 @@ def set_dmcrypt_no_workqueue(target_version: str = '2.3.4') -> None:
 
     # This regex extracts the version number from
     # the `cryptsetup --version` output
-    pattern: str = r'\b\d+(\.\d+)*\b'
+    pattern: str = r'(\d+\.?)+'
 
     if rc:
         raise RuntimeError(f"Can't retrieve cryptsetup version: {err}")
 
     try:
-        cryptsetup_version = re.match(pattern, out[0])
+        cryptsetup_version = re.search(pattern, out[0])
 
         if cryptsetup_version is None:
             _output: str = "\n".join(out)
