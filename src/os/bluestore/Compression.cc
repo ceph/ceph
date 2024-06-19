@@ -63,7 +63,7 @@ struct scan_blob_element_t {
 };
 using object_scan_info_t = std::map<const Blob*, scan_blob_element_t>;
 
-void Estimator::reset()
+void Estimator::cleanup()
 {
   new_size = 0;
   uncompressed_size = 0;
@@ -232,6 +232,7 @@ void Estimator::finish()
   dout(25) << "exp_comp_factor=" << expected_compression_factor
            << " exp_recomp_err=" << expected_recompression_error
            << " exp_pad_exp=" << expected_pad_expansion << dendl;
+  cleanup();
 }
 
 void Estimator::dump(Formatter *f) const {
