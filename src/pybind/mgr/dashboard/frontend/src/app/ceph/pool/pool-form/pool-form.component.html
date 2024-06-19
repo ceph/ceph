@@ -207,7 +207,8 @@
                 <select class="form-select"
                         id="erasureProfile"
                         name="erasureProfile"
-                        formControlName="erasureProfile">
+                        formControlName="erasureProfile"
+                        (change)="erasureProfileChange()">
                   <option *ngIf="!ecProfiles"
                           ngValue=""
                           i18n>Loading...</option>
@@ -294,8 +295,14 @@
                    for="crushRule"
                    i18n>Crush ruleset</label>
             <div class="cd-col-form-input">
-              <span class="form-text text-muted"
+              <span *ngIf="!msrCrush; else msrCrushText"
+                    class="form-text text-muted"
                     i18n>A new crush ruleset will be implicitly created.</span>
+              <ng-template #msrCrushText>
+                <span class="form-text text-muted"
+                      i18n>A new crush MSR ruleset will be implicitly created.
+                      When crush-osds-per-failure-domain or crush-num-failure-domains is specified</span>
+              </ng-template>
             </div>
           </div>
           <div class="form-group row"
