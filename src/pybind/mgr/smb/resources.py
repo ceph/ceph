@@ -32,6 +32,20 @@ def _present(data: Simplified) -> bool:
     return _get_intent(data) == Intent.PRESENT
 
 
+class InvalidResourceError(ValueError):
+    def __init__(self, msg: str, data: Simplified) -> None:
+        super().__init__(msg)
+        self.resource_data = data
+
+    @classmethod
+    def wrap(cls, err: Exception, data: Simplified) -> Exception:
+        if isinstance(err, ValueError) and not isinstance(
+            err, resourcelib.ResourceTypeError
+        ):
+            return cls(str(err), data)
+        return err
+
+
 class _RBase:
     # mypy doesn't currently (well?) support class decorators adding methods
     # so we use a base class to add this method to all our resource classes.
@@ -104,6 +118,7 @@ class RemovedShare(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_removed)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 
@@ -119,6 +134,7 @@ class Share(_RBase):
     readonly: bool = False
     browseable: bool = True
     cephfs: Optional[CephFSStorage] = None
+    custom_smb_share_options: Optional[Dict[str, str]] = None
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id
@@ -138,6 +154,7 @@ class Share(_RBase):
         # currently only cephfs is supported
         if self.cephfs is None:
             raise ValueError('a cephfs configuration is required')
+        validation.check_custom_options(self.custom_smb_share_options)
 
     @property
     def checked_cephfs(self) -> CephFSStorage:
@@ -147,7 +164,12 @@ class Share(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
+
+    @property
+    def cleaned_custom_smb_share_options(self) -> Optional[Dict[str, str]]:
+        return validation.clean_custom_options(self.custom_smb_share_options)
 
 
 @resourcelib.component()
@@ -226,6 +248,7 @@ class RemovedCluster(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_removed)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
     def validate(self) -> None:
@@ -277,6 +300,7 @@ class Cluster(_RBase):
     domain_settings: Optional[DomainSettings] = None
     user_group_settings: Optional[List[UserGroupSource]] = None
     custom_dns: Optional[List[str]] = None
+    custom_smb_global_options: Optional[Dict[str, str]] = None
     # embedded orchestration placement spec
     placement: Optional[WrappedPlacementSpec] = None
 
@@ -304,11 +328,17 @@ class Cluster(_RBase):
                 raise ValueError(
                     'domain settings not supported for user auth mode'
                 )
+        validation.check_custom_options(self.custom_smb_global_options)
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
+
+    @property
+    def cleaned_custom_smb_global_options(self) -> Optional[Dict[str, str]]:
+        return validation.clean_custom_options(self.custom_smb_global_options)
 
 
 @resourcelib.resource('ceph.smb.join.auth')
@@ -332,6 +362,7 @@ class JoinAuth(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.linked_to_cluster.quiet = True
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 
@@ -356,6 +387,7 @@ class UsersAndGroups(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.linked_to_cluster.quiet = True
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 

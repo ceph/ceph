@@ -6,7 +6,7 @@ import orchestrator
 from ceph.deployment.service_spec import PlacementSpec, SMBSpec
 from mgr_module import MgrModule, Option
 
-from . import cli, fs, handler, mon_store, rados_store, resources
+from . import cli, fs, handler, mon_store, rados_store, resources, results
 from .enums import AuthMode, JoinSourceType, UserGroupSourceType
 from .proto import AccessAuthorizer, Simplified
 
@@ -59,11 +59,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
 
     @cli.SMBCommand('apply', perm='rw')
-    def apply_resources(self, inbuf: str) -> handler.ResultGroup:
+    def apply_resources(self, inbuf: str) -> results.ResultGroup:
         """Create, update, or remove smb configuration resources based on YAML
         or JSON specs
         """
-        return self._handler.apply(resources.load_text(inbuf))
+        try:
+            return self._handler.apply(resources.load_text(inbuf))
+        except resources.InvalidResourceError as err:
+            # convert the exception into a result and return it as the only
+            # item in the result group
+            return results.ResultGroup(
+                [results.InvalidResourceResult(err.resource_data, str(err))]
+            )
 
     @cli.SMBCommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
@@ -82,7 +89,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         define_user_pass: Optional[List[str]] = None,
         custom_dns: Optional[List[str]] = None,
         placement: Optional[str] = None,
-    ) -> handler.Result:
+    ) -> results.Result:
         """Create an smb cluster"""
         domain_settings = None
         user_group_settings = None
@@ -181,7 +188,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self._handler.apply(to_apply, create_only=True).squash(cluster)
 
     @cli.SMBCommand('cluster rm', perm='rw')
-    def cluster_rm(self, cluster_id: str) -> handler.Result:
+    def cluster_rm(self, cluster_id: str) -> results.Result:
         """Remove an smb cluster"""
         cluster = resources.RemovedCluster(cluster_id=cluster_id)
         return self._handler.apply([cluster]).one()
@@ -207,7 +214,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share_name: str = '',
         subvolume: str = '',
         readonly: bool = False,
-    ) -> handler.Result:
+    ) -> results.Result:
         """Create an smb share"""
         share = resources.Share(
             cluster_id=cluster_id,
@@ -223,7 +230,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self._handler.apply([share], create_only=True).one()
 
     @cli.SMBCommand('share rm', perm='rw')
-    def share_rm(self, cluster_id: str, share_id: str) -> handler.Result:
+    def share_rm(self, cluster_id: str, share_id: str) -> results.Result:
         """Remove an smb share"""
         share = resources.RemovedShare(
             cluster_id=cluster_id, share_id=share_id
