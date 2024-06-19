@@ -22,8 +22,6 @@ public:
   Estimator(BlueStore* bluestore)
   :bluestore(bluestore) {}
 
-  // Prepare for new write
-  void reset();
   // Inform estimator that an extent is a candidate for recompression.
   // Estimator has to calculate (guess) the cost (size) of the referenced data.
   // 'gain' is the size that will be released should extent be recompressed.
@@ -70,6 +68,8 @@ private:
   uint32_t actual_compressed = 0;
   uint32_t actual_compressed_plus_pad = 0;
   std::map<uint32_t, uint32_t> extra_recompress;
+  // Prepare for new write
+  void cleanup();
 };
 
 class BlueStore::Scanner {
