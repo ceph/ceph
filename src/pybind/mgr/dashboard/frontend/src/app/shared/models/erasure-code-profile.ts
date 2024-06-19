@@ -12,6 +12,8 @@ export class ErasureCodeProfile {
   'crush-root'?: string;
   'crush-locality'?: string;
   'crush-failure-domain'?: string;
+  'crush-num-failure-domains'?: number;
+  'crush-osds-per-failure-domain'?: number;
   'crush-device-class'?: string;
   'directory'?: string;
 }
