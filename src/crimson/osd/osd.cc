@@ -390,26 +390,6 @@ seastar::future<> OSD::start()
         std::ref(osd_states));
     });
   }).then([this, FNAME] {
-    auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
-    if (stats_seconds > 0) {
-      shard_stats.resize(seastar::smp::count);
-      stats_timer.set_callback([this, FNAME] {
-        std::ignore = shard_services.invoke_on_all(
-          [this](auto &local_service) {
-          auto stats = local_service.report_stats();
-          shard_stats[seastar::this_shard_id()] = stats;
-        }).then([this, FNAME] {
-          std::ostringstream oss;
-          for (const auto &stats : shard_stats) {
-            oss << int(stats.reactor_utilization);
-            oss << ",";
-          }
-          INFO("reactor_utilizations: {}", oss.str());
-        });
-      });
-      stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
-    }
-
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
@@ -419,7 +399,32 @@ seastar::future<> OSD::start()
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
       }));
-  }).then([this] {
+  }).then([this, FNAME] {
+    auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
+    if (stats_seconds > 0) {
+      shard_stats.resize(seastar::smp::count);
+      stats_timer.set_callback([this, FNAME] {
+        gate.dispatch_in_background("stats_osd", *this, [this, FNAME] {
+          return shard_services.invoke_on_all(
+            [this](auto &local_service) {
+            auto stats = local_service.report_stats();
+            shard_stats[seastar::this_shard_id()] = stats;
+          }).then([this, FNAME] {
+            std::ostringstream oss;
+            for (const auto &stats : shard_stats) {
+              oss << int(stats.reactor_utilization);
+              oss << ",";
+            }
+            INFO("reactor_utilizations: {}", oss.str());
+          });
+        });
+        gate.dispatch_in_background("stats_store", *this, [this] {
+          return store.report_stats();
+        });
+      });
+      stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
+    }
+
     return open_meta_coll();
   }).then([this] {
     return pg_shard_manager.get_meta_coll().load_superblock(

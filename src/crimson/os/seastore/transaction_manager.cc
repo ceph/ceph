@@ -775,10 +775,10 @@ TransactionManagerRef make_transaction_manager(
     }
   }
 
-  auto journal_type = p_backend_type;
+  auto backend_type = p_backend_type;
   device_off_t roll_size;
   device_off_t roll_start;
-  if (journal_type == journal_type_t::SEGMENTED) {
+  if (backend_type == backend_type_t::SEGMENTED) {
     roll_size = static_cast<SegmentManager*>(primary_device)->get_segment_size();
     roll_start = 0;
   } else {
@@ -801,17 +801,17 @@ TransactionManagerRef make_transaction_manager(
     cleaner_is_detailed = true;
     cleaner_config = SegmentCleaner::config_t::get_test();
     trimmer_config = JournalTrimmerImpl::config_t::get_test(
-        roll_size, journal_type);
+        roll_size, backend_type);
   } else {
     cleaner_is_detailed = false;
     cleaner_config = SegmentCleaner::config_t::get_default();
     trimmer_config = JournalTrimmerImpl::config_t::get_default(
-        roll_size, journal_type);
+        roll_size, backend_type);
   }
 
   auto journal_trimmer = JournalTrimmerImpl::create(
       *backref_manager, trimmer_config,
-      journal_type, roll_start, roll_size);
+      backend_type, roll_start, roll_size);
 
   AsyncCleanerRef cleaner;
   JournalRef journal;
@@ -826,7 +826,7 @@ TransactionManagerRef make_transaction_manager(
       epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed,
       /* is_cold = */ true);
-    if (journal_type == journal_type_t::SEGMENTED) {
+    if (backend_type == backend_type_t::SEGMENTED) {
       for (auto id : cold_segment_cleaner->get_device_ids()) {
         segment_providers_by_id[id] =
           static_cast<SegmentProvider*>(cold_segment_cleaner.get());
@@ -834,7 +834,7 @@ TransactionManagerRef make_transaction_manager(
     }
   }
 
-  if (journal_type == journal_type_t::SEGMENTED) {
+  if (backend_type == backend_type_t::SEGMENTED) {
     cleaner = SegmentCleaner::create(
       cleaner_config,
       std::move(sms),

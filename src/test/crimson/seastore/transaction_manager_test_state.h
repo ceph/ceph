@@ -183,7 +183,6 @@ class EphemeralTestState
   {
 #endif
 protected:
-  journal_type_t journal_type;
   size_t num_main_device_managers = 0;
   size_t num_cold_device_managers = 0;
   EphemeralDevicesRef devices;

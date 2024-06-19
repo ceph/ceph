@@ -79,6 +79,11 @@ public:
   using close_ertr = base_ertr;
   close_ertr::future<> close();
 
+  device_stats_t get_device_stats(bool report_detail) const {
+    writer_stats_t journal_stats = journal->get_writer_stats();
+    return epm->get_device_stats(journal_stats, report_detail);
+  }
+
   /// Resets transaction
   void reset_transaction_preserve_handle(Transaction &t) {
     return cache->reset_transaction_preserve_handle(t);

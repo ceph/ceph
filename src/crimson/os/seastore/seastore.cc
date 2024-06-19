@@ -572,6 +572,69 @@ seastar::future<store_statfs_t> SeaStore::pool_statfs(int64_t pool_id) const
    return SeaStore::stat();
 }
 
+seastar::future<> SeaStore::report_stats()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  shard_device_stats.resize(seastar::smp::count);
+  return shard_stores.invoke_on_all([this](const Shard &local_store) {
+    bool report_detail = false;
+    if (seastar::this_shard_id() == 0) {
+      // avoid too verbose logs, only report detail in a particular shard
+      report_detail = true;
+    }
+    shard_device_stats[seastar::this_shard_id()] =
+      local_store.get_device_stats(report_detail);
+  }).then([this] {
+    LOG_PREFIX(SeaStore);
+    auto now = seastar::lowres_clock::now();
+    if (last_tp == seastar::lowres_clock::time_point::min()) {
+      last_tp = now;
+      return seastar::now();
+    }
+    std::chrono::duration<double> duration_d = now - last_tp;
+    double seconds = duration_d.count();
+    last_tp = now;
+    device_stats_t ts = {};
+    for (const auto &s : shard_device_stats) {
+      ts.add(s);
+    }
+    constexpr const char* dfmt = "{:.2f}";
+    auto d_ts_num_io = static_cast<double>(ts.num_io);
+    std::ostringstream oss_iops;
+    oss_iops << "device IOPS:"
+             << fmt::format(dfmt, ts.num_io/seconds)
+             << "(";
+    std::ostringstream oss_depth;
+    oss_depth << "device per-writer depth:"
+              << fmt::format(dfmt, ts.total_depth/d_ts_num_io)
+              << "(";
+    std::ostringstream oss_bd;
+    oss_bd << "device bandwidth(MiB):"
+           << fmt::format(dfmt, ts.total_bytes/seconds/(1<<20))
+           << "(";
+    std::ostringstream oss_iosz;
+    oss_iosz << "device IO size(B):"
+             << fmt::format(dfmt, ts.total_bytes/d_ts_num_io)
+             << "(";
+    for (const auto &s : shard_device_stats) {
+      auto d_s_num_io = static_cast<double>(s.num_io);
+      oss_iops << fmt::format(dfmt, s.num_io/seconds) << ",";
+      oss_depth << fmt::format(dfmt, s.total_depth/d_s_num_io) << ",";
+      oss_bd << fmt::format(dfmt, s.total_bytes/seconds/(1<<20)) << ",";
+      oss_iosz << fmt::format(dfmt, s.total_bytes/d_s_num_io) << ",";
+    }
+    oss_iops << ")";
+    oss_depth << ")";
+    oss_bd << ")";
+    oss_iosz << ")";
+    INFO("{}", oss_iops.str());
+    INFO("{}", oss_depth.str());
+    INFO("{}", oss_bd.str());
+    INFO("{}", oss_iosz.str());
+    return seastar::now();
+  });
+}
+
 TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
 SeaStore::Shard::get_coll_bits(CollectionRef ch, Transaction &t) const
 {
@@ -2293,6 +2356,11 @@ void SeaStore::Shard::init_managers()
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
       *transaction_manager);
+}
+
+device_stats_t SeaStore::Shard::get_device_stats(bool report_detail) const
+{
+  return transaction_manager->get_device_stats(report_detail);
 }
 
 std::unique_ptr<SeaStore> make_seastore(
