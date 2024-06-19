@@ -17080,28 +17080,19 @@ int BlueStore::_do_write_v2_compressed(
   ceph::buffer::list& input_bl,
   uint32_t scan_left, uint32_t scan_right)
 {
-  using P = BlueStore::printer;
   o->extent_map.fault_range(db, scan_left, scan_right - scan_left);
-  Scanner scanner(this);
-  dout(20) << __func__ << " on: " << o->print(P::NICK + P::SDISK + P::SUSE) << dendl;
-  uint32_t max_blob_size = c->pool_opts.value_or(
-    pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, (int64_t)comp_max_blob_size.load());
-  if (!c->estimator) {
-    c->estimator.reset(create_estimator());
-  }
+  if (!c->estimator) c->estimator.reset(create_estimator());
   Estimator* estimator = c->estimator.get();
-  estimator->reset();
-  scanner.write_lookaround(o.get(), offset, length, scan_left,
-                           scan_right, estimator);
+  Scanner scanner(this);
+  scanner.write_lookaround(o.get(), offset, length, scan_left, scan_right, estimator);
   std::vector<Estimator::region_t> regions;
   estimator->get_regions(regions);
   dout(15) << __func__ << " " << std::hex << offset << "~" << length << " -> ";
-  for (auto i : regions) {
+  for (const auto& i : regions) {
     *_dout << i.offset << "~" << i.length << " ";
   }
   *_dout << std::dec << dendl;
-  int r = 0;
-  for (auto i : regions) {
+  for (const auto& i : regions) {
     ceph::buffer::list data_bl;
     if (i.offset <= offset && offset < i.offset + i.length) {
       // the starting point is withing the region, so the end must too
@@ -17126,6 +17117,8 @@ int BlueStore::_do_write_v2_compressed(
     int32_t disk_for_compressed;
     int32_t disk_for_raw;
     uint32_t au_size = min_alloc_size;
+    uint32_t max_blob_size = c->pool_opts.value_or(
+      pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, (int64_t)comp_max_blob_size.load());
     disk_for_compressed = estimator->split_and_compress(wctx.compressor, max_blob_size, data_bl, bd);
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
     BlueStore::Writer wr(this, txc, &wctx, o);
@@ -17136,7 +17129,7 @@ int BlueStore::_do_write_v2_compressed(
     }
     txc->statfs_delta += wr.statfs_delta;
     // update shared blobs
-    for (auto b: wr.shared_changed) {
+    for (const auto& b: wr.shared_changed) {
       txc->write_shared_blob(b);
     }
   }
@@ -17146,7 +17139,7 @@ int BlueStore::_do_write_v2_compressed(
   o->extent_map.compress_extent_map(changes_start, changes_end - changes_start);
   o->extent_map.dirty_range(changes_start, changes_end - changes_start);
   o->extent_map.maybe_reshard(changes_start, changes_end);
-  return r;
+  return 0;
 }
 
 int BlueStore::_write(TransContext *txc,
