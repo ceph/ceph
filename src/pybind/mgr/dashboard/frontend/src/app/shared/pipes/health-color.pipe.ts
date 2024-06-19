@@ -11,7 +11,9 @@ export class HealthColorPipe implements PipeTransform {
 
   transform(value: any): any {
     return Object.keys(HealthColor).includes(value as HealthColor)
-      ? { color: this.cssHelper.propertyValue(HealthColor[value]) }
+      ? { color: this.cssHelper.propertyValue(HealthColor[value]),
+          fill: this.cssHelper.propertyValue(HealthColor[value])
+       }
       : null;
   }
 }

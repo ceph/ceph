@@ -74,7 +74,8 @@
                         class="nav-item tc_menuitem_dashboard">
         <svg cdsIcon="template"
              icon
-             size="20"></svg>
+             size="20"
+             [ngStyle]="summaryData?.health_status | healthColor"></svg>
         <span i18n>
           Dashboard</span>
       </cds-sidenav-item>
