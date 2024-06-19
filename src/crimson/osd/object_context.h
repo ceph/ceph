@@ -310,9 +310,6 @@ public:
     assert(recovery_read_marker);
     recovery_read_marker = false;
   }
-  bool maybe_get_excl() {
-    return lock.try_lock_for_excl();
-  }
 };
 using ObjectContextRef = ObjectContext::Ref;
 
