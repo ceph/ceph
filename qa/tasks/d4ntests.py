@@ -24,9 +24,8 @@ class D4NTests(Task):
         for client in clients:
             if client in self.config:
                 self.all_clients.extend([client])
-        if self.all_clients is None:
-            self.all_clients = 'client.0'
-        
+                log.debug('D4N Tests: Client is {cli}'.format(cli=client))
+
         self.user = {'s3main': 'tester'}
 
     def setup(self):
@@ -40,6 +39,15 @@ class D4NTests(Task):
         for (host, roles) in self.ctx.cluster.remotes.items():
             log.debug('D4N Tests: Cluster config is: {cfg}'.format(cfg=roles))
             log.debug('D4N Tests: Host is: {host}'.format(host=host))
+
+            for role in roles:
+                if 'client' in role:
+                    self.all_clients.extend([role])
+        if self.all_clients is None:
+            self.all_clients = 'client.0'
+
+        log.debug('D4N Tests: Client list:')
+        log.debug(self.all_clients)
 
         self.create_user()
 
