@@ -1,0 +1,28 @@
+<ng-container *ngTemplateOutlet="logsLink"></ng-container>
+<ul>
+  <li *ngFor="let check of healthData">
+    <span [ngStyle]="check.severity | healthColor"
+          [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
+    {{ check.type }}</span>: {{ check.summary.message }} <br>
+    <div *ngIf="check.type === 'CEPHADM_FAILED_DAEMON'"
+         class="failed-daemons">
+      <cd-help-text>
+        <b>Failed Daemons:</b>
+        <div *ngFor="let failedDaemons of getFailedDaemons(check.detail); let last = last">
+          {{ failedDaemons }}
+          {{ !last ? ', ' : '' }}
+        </div>
+      </cd-help-text>
+    </div>
+    <div *ngFor="let details of check?.detail">
+      <cd-help-text>{{ details?.message }}</cd-help-text>
+    </div>
+  </li>
+</ul>
+
+<ng-template #logsLink>
+  <ng-container *ngIf="permissions.log.read">
+    <p class="logs-link"
+        i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
+  </ng-container>
+</ng-template>
