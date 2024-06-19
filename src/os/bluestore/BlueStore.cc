@@ -11825,7 +11825,14 @@ int BlueStore::read(
   }
   span_stat_t span_stat;
   {
-    std::shared_lock l(c->lock);
+    std::shared_lock slock(c->lock, std::defer_lock);
+    std::unique_lock ulock(c->lock, std::defer_lock);
+    if (might_need_reformatting) {
+      ulock.lock();
+    } else {
+      slock.lock();
+    }
+
     auto start1 = mono_clock::now();
     o = c->get_onode(oid, false);
     log_latency("get_onode@read",
@@ -11846,9 +11853,9 @@ int BlueStore::read(
     if (r == -EIO) {
       logger->inc(l_bluestore_read_eio);
     }
-  }
-  if (might_need_reformatting) {
-    _maybe_reformat_object(c, o, offset, length, bl, op_flags, span_stat);
+    if (might_need_reformatting) {
+      _maybe_reformat_object(c, o, offset, length, bl, op_flags, span_stat);
+    }
   }
 
  out:
@@ -15465,7 +15472,6 @@ void BlueStore::_txc_exec_reformat_write(TransContext* txc,
     txc->osd_pool_id = pgid.pool();
   }
   // object operations
-  std::unique_lock l(c->lock);
   ceph_assert(o->exists);
   int r = _do_write(txc, txc->ch, o, offset, length, bl, wctx);
 
