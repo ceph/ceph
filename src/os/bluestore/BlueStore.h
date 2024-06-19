@@ -234,6 +234,7 @@ enum {
 
   // reformatting counters
   //****************************************
+  l_bluestore_reformat_lat,
   l_bluestore_reformat_compress_attempted,
   l_bluestore_reformat_compress_omitted,
   l_bluestore_reformat_defragment_attempted,
