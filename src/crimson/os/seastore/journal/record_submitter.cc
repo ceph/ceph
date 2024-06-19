@@ -411,7 +411,7 @@ RecordSubmitter::open(bool is_mkfs)
         ),
         sm::make_counter(
           "record_group_data_bytes",
-          stats.record_group_data_bytes,
+          stats.data_bytes,
           sm::description("bytes of data when write record groups"),
           label_instances
         ),
@@ -489,7 +489,7 @@ void RecordSubmitter::account_submission(
   stats.record_group_padding_bytes +=
     (rg.size.get_mdlength() - rg.size.get_raw_mdlength());
   stats.record_group_metadata_bytes += rg.size.get_raw_mdlength();
-  stats.record_group_data_bytes += rg.size.dlength;
+  stats.data_bytes += rg.size.dlength;
   stats.record_batch_stats.increment(rg.get_size());
 
   for (const record_t& r : rg.records) {

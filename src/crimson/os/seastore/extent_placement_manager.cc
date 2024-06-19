@@ -311,7 +311,12 @@ ExtentPlacementManager::get_device_stats(
     }
     main_stats.add(main_writer_stats.back());
   } else { // RBM
-    // TODO stats from RandomBlockOolWriter
+    ceph_assert(get_main_backend_type() == backend_type_t::RANDOM_BLOCK);
+    // In RBM, md_writer and data_wrtier share a single writer, so we only register
+    // md_writer's writer here.
+    main_writer_stats.emplace_back(
+        get_writer(METADATA, OOL_GENERATION)->get_stats());
+    main_stats.add(main_writer_stats.back());
   }
 
   writer_stats_t cold_stats = {};
@@ -360,7 +365,7 @@ ExtentPlacementManager::get_device_stats(
       report_writer_stats("  mainmdat", main_writer_stats[2]);
       report_writer_stats("  maindata", main_writer_stats[3]);
     } else { // RBM
-      // TODO stats from RandomBlockOolWriter
+      report_writer_stats("  ool", main_writer_stats[0]);
     }
     if (has_cold_tier) {
       report_writer_stats("tier-cold", cold_stats);
@@ -1019,6 +1024,10 @@ RandomBlockOolWriter::do_write(
       bp = ceph::bufferptr(ex->get_bptr(), offset, len);
     } else {
       bp = ex->get_bptr();
+      auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
+      ++(trans_stats.num_records);
+      trans_stats.data_bytes += ex->get_length();
+      w_stats.data_bytes += ex->get_length();
     }
     return trans_intr::make_interruptible(
       rbm->write(paddr + offset,
