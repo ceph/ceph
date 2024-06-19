@@ -6433,6 +6433,9 @@ void BlueStore::_init_logger()
 
   // reformatting counters
   //****************************************
+  b.add_time_avg(l_bluestore_reformat_lat, "reformat_lat",
+    "Average reformatting latency",
+    "rf_l", PerfCountersBuilder::PRIO_CRITICAL);
   b.add_u64_counter(l_bluestore_reformat_compress_attempted,
     "reformat_compress_attempted",
     "Recompression attempts done",
@@ -11852,9 +11855,18 @@ int BlueStore::read(
           might_need_reformatting ? &span_stat : nullptr);
     if (r == -EIO) {
       logger->inc(l_bluestore_read_eio);
+    log_latency(__func__,
+      l_bluestore_read_lat,
+      mono_clock::now() - start,
+      cct->_conf->bluestore_log_op_age);
     }
     if (might_need_reformatting) {
+      auto start2 = mono_clock::now();
       _maybe_reformat_object(c, o, offset, length, bl, op_flags, span_stat);
+      log_latency(__func__,
+        l_bluestore_reformat_lat,
+        mono_clock::now() - start2,
+        cct->_conf->bluestore_log_op_age);
     }
   }
 
@@ -11872,10 +11884,6 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  log_latency(__func__,
-    l_bluestore_read_lat,
-    mono_clock::now() - start,
-    cct->_conf->bluestore_log_op_age);
   return r;
 }
 
