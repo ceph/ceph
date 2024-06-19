@@ -152,6 +152,12 @@ public:
   Interceptor *interceptor = nullptr;
 #endif
 
+  void mark_down(const entity_addr_t& a) final {
+    auto conn = lookup_conn(a);
+    if (conn) {
+      conn->mark_down();
+    }
+  }
 private:
   seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
 
