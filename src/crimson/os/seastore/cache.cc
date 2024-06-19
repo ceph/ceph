@@ -108,8 +108,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
 void Cache::retire_absent_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
-#ifndef NDEBUG
   CachedExtentRef ext;
+#ifndef NDEBUG
   auto result = t.get_extent(addr, &ext);
   assert(result != Transaction::get_extent_ret::PRESENT
     && result != Transaction::get_extent_ret::RETIRED);
