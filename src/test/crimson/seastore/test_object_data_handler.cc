@@ -871,6 +871,31 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
   });
 }
 
+TEST_P(object_data_handler_test_t, parallel_partial_read) {
+  run_async([this] {
+    disable_max_extent_size();
+    enable_delta_based_overwrite();
+    auto t = create_mutate_transaction();
+    auto base = 0;
+    auto len = 4096 * 10;
+    write(*t, base, len, 'a');
+    submit_transaction(std::move(t));
+
+    restart();
+    epm->check_usage();
+    seastar::parallel_for_each(
+      boost::make_counting_iterator(0lu),
+      boost::make_counting_iterator(8lu),
+      [&](auto i) {
+        return seastar::async([&] {
+          read(i * 4096, 8192);
+        });
+      }).get();
+    disable_delta_based_overwrite();
+    enable_max_extent_size();
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   object_data_handler_test,
   object_data_handler_test_t,
