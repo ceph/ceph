@@ -16,6 +16,23 @@
 #include "include/intarith.h"
 #include <limits>
 
+template <typename Char>
+struct basic_ostream_formatter : fmt::formatter<std::basic_string_view<Char>, Char> {
+  template <typename T, typename OutputIt>
+  auto format(const T& value, fmt::basic_format_context<OutputIt, Char>& ctx) const
+      -> OutputIt {
+    std::basic_stringstream<Char> ss;
+    ss << value;
+    return fmt::formatter<std::basic_string_view<Char>, Char>::format(
+        ss.view(), ctx);
+  }
+};
+using ostream_formatter = basic_ostream_formatter<char>;
+
+template <> struct fmt::formatter<BlueStore::Blob::printer>
+  : ostream_formatter {};
+template <> struct fmt::formatter<BlueStore::Extent::printer>
+  : ostream_formatter {};
 
 #define dout_context bluestore->cct
 #define dout_subsys ceph_subsys_bluestore_compression
@@ -30,6 +47,7 @@ using exmp_it = BlueStore::extent_map_t::iterator;
 using Estimator = BlueStore::Estimator;
 using Scanner = BlueStore::Scanner;
 using Scan = BlueStore::Scanner::Scan;
+using P = BlueStore::printer;
 
 struct scan_blob_element_t {
   uint32_t blob_use_size = 0;    // how many bytes in object logical mapping are covered by this blob
@@ -78,7 +96,6 @@ void Estimator::cleanup()
 }
 inline void Estimator::batch(const BlueStore::Extent* e, uint32_t gain)
 {
-  using P = BlueStore::printer;
   const Blob *h_Blob = &(*e->blob);
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
   if (h_bblob.is_compressed()) {
@@ -87,7 +104,9 @@ inline void Estimator::batch(const BlueStore::Extent* e, uint32_t gain)
   } else {
     uncompressed_size += e->length;
   }
-  dout(25) << __func__ << " extent=" << e->print(P::NICK) << " gain=" << gain << dendl;
+  dout(20) << fmt::format("Estimator::batch {} gain {:#x}", e->print(P::NICK), gain) << dendl;
+  dout(20) << fmt::format("Estimator::batch non-compr={:#x} compr-occup={:#x} compr-size?={:#x}",
+    uncompressed_size, compressed_occupied, compressed_size) << dendl;
 }
 
 inline bool Estimator::is_worth()
@@ -122,7 +141,7 @@ inline bool Estimator::is_worth(const BlueStore::Extent* e)
 inline void Estimator::mark_recompress(const BlueStore::Extent* e)
 {
   ceph_assert(!extra_recompress.contains(e->logical_offset));
-  dout(25) << "recompress: " << e->print(0) << dendl;
+  dout(25) << "recompress: " << e->print(P::NICK + P::JUSTID) << dendl;
   extra_recompress.emplace(e->logical_offset, e->length);
 }
 
@@ -296,17 +315,19 @@ private:
   void save_consumed();
   void restore_consumed();
   object_scan_info_t::iterator find_least_expanding();
-  void if_recompressed_extent(const Extent *e);
+  void candidate(const Extent *e);
   void estimate_gain_left(exmp_cit left, uint32_t right);
   void estimate_gain_right(uint32_t left, exmp_cit right);
   void add_compress_left(exmp_cit left, uint32_t right);
   void add_compress_right(uint32_t left, exmp_cit right);
-  void walk_left(exmp_cit &it);
-  void walk_right(exmp_cit &it);
+  void expand_left(exmp_cit &it);
+  void expand_right(exmp_cit &it);
   exmp_logical_offset lo(const exmp_cit &it) {
     return exmp_logical_offset(*this, it);
   }
 };
+template <> struct fmt::formatter<BlueStore::Scanner::Scan::exmp_logical_offset>
+  : ostream_formatter {};
 
 void Scanner::write_lookaround(
   BlueStore::Onode* onode,
@@ -319,31 +340,23 @@ void Scanner::write_lookaround(
 }
 
 std::ostream& operator<<(
-  std::ostream& out, const scan_blob_element_t& bscan)
+  std::ostream& out, const scan_blob_element_t& b)
 {
-  out << "use=" << bscan.blob_use_size
-      << " vis=" << bscan.visited_size
-      << " cons=" << bscan.consumed_size
-      << " cons.save=" << bscan.consumed_saved_size
-      << std::hex 
-      << " blob.l=x" << bscan.blob_left
-      << " blob.r=x" << bscan.blob_right
-      << " extent.l=x" << bscan.leftmost_extent->logical_offset
-      << " extent.r=x" << bscan.rightmost_extent->logical_offset
-      << std::dec
-      << " reje=" << bscan.rejected;
+  out << fmt::format("blob=[{:#x}-{:x}] extent=[{:#x}-{:x}] {:#x}/{:x}/{:x}({:x}){}",
+    b.blob_left, b.blob_right,
+    b.leftmost_extent->logical_offset, b.rightmost_extent->logical_offset,
+    b.blob_use_size, b.visited_size, b.consumed_size, b.consumed_saved_size,
+    b.rejected?" rejected":"");
   return out;
 }
 
 std::ostream& operator<<(
   std::ostream& out, const object_scan_info_t& scanned_blobs)
 {
-  using P = BlueStore::printer;
   out << "[";
-  for (auto it = scanned_blobs.begin(); it != scanned_blobs.end(); ++it) {
+  for (const auto& it : scanned_blobs) {
     out << std::endl;
-    out << it->first->print(P::NICK + P::SDISK + P::SUSE)
-        << " ==> " << it->second;
+    out << it.first->print(P::NICK + P::JUSTID) << " ==> " << it.second;
   }
   out << "]";
   return out;
@@ -378,17 +391,17 @@ void Scan::remove_consumed_blobs()
   }
 }
 
-void Scan::save_consumed()
+inline void Scan::save_consumed()
 {
-  for (auto i = scanned_blobs.begin(); i != scanned_blobs.end(); ++i) {
-    i->second.consumed_saved_size = i->second.consumed_size;
+  for (auto& i : scanned_blobs) {
+    i.second.consumed_saved_size = i.second.consumed_size;
   }
 };
 
-void Scan::restore_consumed()
+inline void Scan::restore_consumed()
 {
-  for (auto i = scanned_blobs.begin(); i != scanned_blobs.end(); ++i) {
-    i->second.consumed_size = i->second.consumed_saved_size;
+  for (auto& i : scanned_blobs) {
+    i.second.consumed_size = i.second.consumed_saved_size;
   }
 };
 
@@ -401,28 +414,25 @@ void Scan::restore_consumed()
 void Scan::scan_for_compressed_blobs(
   exmp_cit start, exmp_cit finish)
 {
-  using P = BlueStore::printer;
-  dout(25) << "sfcb from=" << lo(start) << " upto=" << lo(finish) << dendl;
+  dout(20) << "scan.compr range " << lo(start) << "-" << lo(finish) << dendl;
   for (auto it = start; it != finish; ++it) {
     const Blob* h_Blob = &(*it->blob);
     const bluestore_blob_t& h_bblob = h_Blob->get_blob();
     if (h_bblob.is_shared()) {
       // Do not analyze shared blobs, even compressed ones.
       // It seems improbable that recompressing it would yield benefits.
-      dout(29) << "sfcb " << h_Blob->print(P::NICK) << " shared, rejected" << dendl;
+      dout(20) << "scan.compr " << h_Blob->print(P::NICK | P::JUSTID) << " shared, rejected" << dendl;
       continue;
     }
     if (!h_bblob.is_compressed()) {
-      dout(29) << "sfcb " << h_Blob->print(P::NICK)
-               << " non-compressed, rejected" << dendl;
+      dout(20) << "scan.compr " << h_Blob->print(P::NICK | P::JUSTID) << " non-compressed, rejected" << dendl;
       continue;
     }
     auto bit = scanned_blobs.find(h_Blob);
     if (bit == scanned_blobs.end()) {
       // first time we see this blob
-      dout(29) << "sfcb " << h_Blob->print(P::NICK + P::SDISK + P::SUSE + P::SCHK)
-               << " seen first time, blob_left=x" << std::hex << it->blob_start()
-               << " blob_right=x" << it->blob_end() << std::dec << dendl;
+      dout(20) << fmt::format("scan.compr {} new, range [{:#x}-{:x}]",
+        h_Blob->print(P::NICK | P::JUSTID), it->logical_offset, it->logical_end()) << dendl;
       scanned_blobs.emplace(
           h_Blob,
           scan_blob_element_t(
@@ -441,14 +451,14 @@ void Scan::scan_for_compressed_blobs(
       if (it->logical_offset < info.leftmost_extent->logical_offset) {
         info.leftmost_extent = it;
       }
-      dout(29) << "sfcb " << h_Blob->print(P::NICK + P::SDISK + P::SUSE + P::SCHK)
-               << " updated, blob_left=" << info.blob_left
-               << " blob_right=" << info.blob_right << dendl;
+      dout(20) << fmt::format("scan.compr {} updated range [{:#x}-{:x}]", 
+        h_Blob->print(P::NICK | P::JUSTID), 
+        info.leftmost_extent->logical_offset, info.rightmost_extent->logical_end()) << dendl;
       ceph_assert(info.blob_left == it->blob_start());
       ceph_assert(info.blob_right == it->blob_end());
     }
   }
-  dout(25) << "sfcb done" << dendl;
+  dout(30) << "scan.compr done" << dendl;
 }
 
 // Takes a compressed extent `it` and expands scan range
@@ -456,14 +466,13 @@ void Scan::scan_for_compressed_blobs(
 bool Scan::maybe_expand_scan_range(
   const exmp_cit& it, uint32_t& left, uint32_t& right)
 {
-  using P = BlueStore::printer;
+  // = BlueStore::printer;
   bool expanded = false;
   const Blob *h_Blob = &(*it->blob);
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
   // we made left_walk up to here, it must be compressed blob
-  dout(29) << "mesr " << h_Blob->print(P::NICK + P::SDISK + P::SUSE + P::SCHK) << dendl;
   if (h_bblob.is_shared()) {
-    dout(29) << "rejecting shared blob" << dendl;
+    dout(30) << "maybe_expand rejecting shared " << h_Blob->print(P::NICK + P::JUSTID) << dendl;
   } else {
     ceph_assert(h_bblob.is_compressed());
     auto i = scanned_blobs.find(h_Blob);
@@ -474,27 +483,25 @@ bool Scan::maybe_expand_scan_range(
       left = std::max(limit_left, left);
       right = std::max(right, it->blob_end());
       right = std::min(limit_right, right);
-      dout(19) << "mesr cblob scan range now [0x" << std::hex 
-        << left << "-" << right << ")" << dendl;
+      dout(20) << fmt::format("maybe_expand take {} range=[{:#x}-{:x}]",
+        h_Blob->print(P::NICK + P::SDISK + P::SUSE + P::SCHK), left, right) << dendl;
       expanded = true;
     } else {
-      dout(29) << "mesr blob aready scanned and rejected" << dendl;
+      dout(30) << "maybe_expand blob aready scanned and rejected" << dendl;
     }
   }
   return expanded;
 }
 
 // Calculate gain and cost of recompressing an extent
-void Scan::if_recompressed_extent(
-  const Extent* e)
+void Scan::candidate(const Extent* e)
 {
-  using P = BlueStore::printer;
   const Blob *h_Blob = &(*e->blob);
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
   uint32_t gain = 0;
-  dout(29) << "ire " << e->print(P::NICK + P::SUSE) << dendl;
+  dout(30) << "candidate " << e->print(P::NICK + P::JUSTID) << dendl;
   if (h_bblob.is_shared()) {
-    dout(29) << "ire ignoring shared " << h_Blob->print(P::NICK) << dendl;
+    dout(30) << "candidate ignoring shared " << h_Blob->print(P::NICK + P::JUSTID) << dendl;
   } else if (h_bblob.is_compressed()) {
     auto bit = scanned_blobs.find(h_Blob);
     if (bit != scanned_blobs.end()) {
@@ -505,7 +512,7 @@ void Scan::if_recompressed_extent(
       }
       estimator->batch(e, gain);
     } else {
-      dout(10) << "ire blob not scanned before! " << h_Blob->print(P::NICK + P::SUSE) << dendl;
+      derr << "candidate blob not scanned before! " << h_Blob->print(P::NICK + P::SUSE) << dendl;
       // This blob was seen, but removed as completely consumed?
       // Is it even possible?
       ceph_assert(false);
@@ -532,7 +539,7 @@ void Scan::estimate_gain_left(
       // TODO something has to be done with it....
       // Does it influence compression gain/cost?
     }
-    if_recompressed_extent(&(*i));
+    candidate(&(*i));
     last_offset = i->logical_end();
   }
   if (last_offset < right) {
@@ -554,7 +561,7 @@ void Scan::estimate_gain_right(
       // here we have hole
       // TODO something has to be done with it....
     }
-    if_recompressed_extent(&(*i));
+    candidate(&(*i));
     last_offset = i->logical_end();
     if (i == right)
       break; // stop once right is processed
@@ -569,8 +576,8 @@ void Scan::add_compress_left(
   exmp_cit left, uint32_t right)
 {
   ceph_assert(left != extent_map->extent_map.end());
-  dout(29) << "add_compress_left extents x" << std::hex << left->logical_offset
-           << "(include) .. x" << right << std::dec << dendl;
+  dout(30) << fmt::format("add_compress_left extents {:#x}(include) .. {:#x}",
+    left->logical_offset, right) << dendl;
   ceph_assert(!left->blob->get_blob().is_shared());
   for (auto i = left; i != extent_map->extent_map.end() && i->logical_offset < right; ++i) {
     if (!i->blob->get_blob().is_shared()) {
@@ -587,8 +594,8 @@ void Scan::add_compress_left(
 void Scan::add_compress_right(
   uint32_t left, exmp_cit right) {
   ceph_assert(right != extent_map->extent_map.end());
-  dout(29) << "add_compress_right x" << std::hex << left
-           << " .. x(include)" << right->logical_offset << std::dec << dendl;
+  dout(30) << fmt::format("add_compress_right {:#x} .. {:#x}(include)",
+    left, right->logical_offset) << dendl;
   ceph_assert(!right->blob->get_blob().is_shared());
   for (auto i = extent_map->seek_lextent(left);;) {
     ceph_assert(i != extent_map->extent_map.end());
@@ -604,73 +611,58 @@ void Scan::add_compress_right(
 
 // Argument `it` points to extent that has already been processed
 // Returned `it` points to extent that has been processed
-void Scan::walk_left(exmp_cit& it)
+void Scan::expand_left(exmp_cit& it)
 {
-  using P = BlueStore::printer;
-  dout(29) << "wl start it=" << lo(it) << dendl;
-  //ceph_assert(it != extent_map->extent_map.end());
+  dout(30) << "expand_left start it=" << lo(it) << dendl;
+  uint16_t mode = P::NICK + P::SDISK + P::SUSE;
   for (; it != extent_map->extent_map.begin();) {
     --it;
-    dout(19) << "wl processing it=" << it->print(P::NICK + P::SDISK + P::SUSE) << dendl;
-    if (it->logical_offset < limit_left) {
-      dout(29) << "wl reached limit, stop" << dendl;
-      ++it; //back out
-      break;
-    }
     const Blob *h_Blob = &(*it->blob);
     const bluestore_blob_t &h_bblob = h_Blob->get_blob();
-    if (h_bblob.is_shared()) {
-      // never recompress shared
-      dout(29) << "wl skipping shared" << dendl;
-      ++it; //back out
-      break;
-    }
-    if (h_bblob.is_compressed()) {
-      dout(29) << "wl compressed, stop" << dendl;
+    if (it->logical_offset < limit_left || h_bblob.is_shared() || h_bblob.is_compressed()) {
+      dout(30) << "expand_left stops at " << it->print(mode) << dendl;
       ++it; //back out
       break;
     }
     if (estimator->is_worth(&(*it))) {
+      dout(20) << "expand_left take " << it->print(mode) << dendl;
       estimator->mark_recompress(&(*it));
       done_left = it->logical_offset;
+    } else {
+      dout(20) << "expand_left rejected " << it->print(mode) << dendl;
+      break;
     }
   }
   scanned_left_it = it;
   scanned_left = it->logical_offset;
-  dout(29) << "wl done it=" << lo(it) << dendl;
+  dout(30) << "expand_left done it=" << lo(it) << dendl;
 }
 
 // Argument `it` points to extent that is a candidate
 // Returned `it` points to extent that has been rejected
-void Scan::walk_right(exmp_cit& it)
+void Scan::expand_right(exmp_cit& it)
 {
-  using P = BlueStore::printer;
-  dout(29) << "wr start it=" << lo(it) << dendl;
-  for (; it != extent_map->extent_map.end() && it->logical_end() <= limit_right; ++it) {
-    dout(19) << "wr processing it=" << it->print(P::NICK + P::SDISK + P::SUSE) << dendl;
-    if (it->logical_end() > limit_right) {
-      dout(29) << "wr reached limit, stop" << dendl;
-      break;
-    }
+  uint16_t mode = P::NICK + P::SDISK + P::SUSE;
+  dout(30) << "expand_right start it=" << lo(it) << dendl;
+  for (; !is_end(it); ++it) {
     const Blob *h_Blob = &(*it->blob);
     const bluestore_blob_t &h_bblob = h_Blob->get_blob();
-    if (h_bblob.is_shared()) {
-      // never recompress shared
-      dout(29) << "wr skipping shared" << dendl;
-      break;
-    }
-    if (h_bblob.is_compressed()) {
-      dout(29) << "wr compressed, stop" << dendl;
+    if (it->logical_end() > limit_right || h_bblob.is_shared() || h_bblob.is_compressed()) {
+      dout(30) << "expand_right stops at " << it->print(mode) << dendl;
       break;
     }
     if (estimator->is_worth(&(*it))) {
+      dout(20) << "expand_right take " << it->print(mode) << dendl;
       estimator->mark_recompress(&(*it));
       done_right = it->logical_end();
+    } else {
+      dout(20) << "expand_right rejected " << it->print(mode) << dendl;
+      break;
     }
   }
   scanned_right_it = it;
   scanned_right = is_end(it) ? limit_right : it->logical_offset;
-  dout(29) << "wr done it=" << lo(it) << dendl;
+  dout(30) << "expand_right done it=" << lo(it) << dendl;
 }
 
 // Searches in `scanned_blobs` for a blob that causes least expansion of recompress range.
@@ -747,8 +739,11 @@ void Scan::on_write_start(
   done_right = offset + length;
   limit_left = _limit_left;
   limit_right = _limit_right;
-  dout(10) << "on_write #1 [0x" << std::hex << done_left << "-" << done_right << "] "
-    "limit_left=0x" << limit_left << " limit_right=0x" << limit_right << dendl;
+  dout(10) << fmt::format("on_write #1 [{:#x}-{:x}] limit=({:#x}-{:x})",
+    done_left, done_right, limit_left, limit_right) << dendl;
+  dout(20) << "on_write #1 on: "
+    << onode->print(P::NICK + P::SDISK + P::SUSE, limit_left, limit_right) << dendl;
+
   ceph_assert(limit_left <= done_left && done_right <= limit_right);
 
   exmp_cit start = extent_map->maybe_split_at(done_left);
@@ -769,9 +764,9 @@ void Scan::on_write_start(
   // scanned_left_it->logical_offset != scanned_left
   // scanned_right_it->logical_offset != scanned_right
   // STEP 2.
-  dout(15) << "on_write #2 initial scan [0x" 
-    << std::hex << scanned_left << "-" << scanned_right << std::dec
-    << "] (" << lo(scanned_left_it) << "-" << lo(scanned_right_it) << ")"  << dendl;
+  dout(15) << fmt::format("on_write #2 scan=[{:#x}-{:x}] it={}-{}",
+    scanned_left, scanned_right, lo(scanned_left_it), lo(scanned_right_it)) << dendl;
+
   uint32_t left = std::numeric_limits<uint32_t>::max();
   uint32_t right = std::numeric_limits<uint32_t>::min();
   // Find maximum reach of blobs we scanned.
@@ -788,9 +783,8 @@ void Scan::on_write_start(
   // could be overwritten, so there would be no extent that left_it->logical_offset == left.
   step3:
   if (left < scanned_left || scanned_right < right) {
-    dout(15) << "on_write #3 expand scanned from [0x" 
-      << std::hex << scanned_left << "-" << scanned_right
-      << "] to [0x" << left << "-" << right << "]" << std::dec << dendl;
+    dout(15) << fmt::format("on_write #3 expand [{:#x}-{:x}] to [{:#x}-{:x}]",
+      scanned_left, scanned_right, left, right) << dendl;
     if (left < scanned_left) {
       exmp_cit s = extent_map->seek_nextent(left); //get precisely or next
       scan_for_compressed_blobs(s, scanned_left_it);
@@ -800,7 +794,7 @@ void Scan::on_write_start(
     // scan right side
     if (scanned_right < right) {
       //exmp_cit s = extent_map->seek_lextent(done_right);
-      exmp_cit f = extent_map->seek_nextent(right); 
+      exmp_cit f = extent_map->seek_nextent(right);
       scan_for_compressed_blobs(scanned_right_it, f);
       scanned_right = right;
       scanned_right_it = f;
@@ -820,7 +814,8 @@ void Scan::on_write_start(
       if (b_it == scanned_blobs.end()) {
         break;
       }
-      dout(25) << "on_write #4 expand candidate=" << b_it->first << ", " << b_it->second << dendl;
+      dout(25) << "on_write #4 test expand " << b_it->first->print(P::NICK | P::JUSTID)
+        << ", " << b_it->second << dendl;
       save_consumed();
       // now check if we want to merge this blob that requires least expanding
       if (b_it->second.leftmost_extent->logical_offset < done_left) {
@@ -849,28 +844,25 @@ void Scan::on_write_start(
       }
     }
   } else {
-    dout(15) << "on_write #3 scanned=[0x"
-      << std::hex << scanned_left << "-" << scanned_right << "]" << std::dec << dendl;
+    dout(15) << fmt::format("on_write #3 scanned=[{:#x}-{:x}]", scanned_left, scanned_right) << dendl;
   }
   // STEP 5.
   // All compressed blobs are within the range we already scanned.
   // We are free to expand onto uncompressed blobs.
   exmp_cit right_it = extent_map->seek_nextent(done_right);
   exmp_cit left_it = extent_map->seek_nextent(done_left);
-  dout(15) << "on_write #5 left=" << lo(left_it)
-    << " right=" << lo(right_it) << dendl;
+  dout(15) << "on_write #5 left=" << lo(left_it) << " right=" << lo(right_it) << dendl;
   if (!is_end(right_it)) {
-    walk_right(right_it);
+    expand_right(right_it);
   }
   if (left_it != extent_map->extent_map.begin()) {
-    walk_left(left_it);
+    expand_left(left_it);
   }
   
   // STEP 6.
-  // now left_it & right_it are either compressed or out of allowed range
+  // now left_it & right_it are either compressed or at allowed limit
   // attempt to expand scan range
-  dout(15) << "on_write #6 left=" << lo(left_it)
-    << " right=" << lo(right_it) << dendl;
+  dout(15) << "on_write #6 left=" << lo(left_it) << " right=" << lo(right_it) << dendl;
   bool has_expanded = false;
   if (right_it != extent_map->extent_map.end()) {
     if (right_it->logical_end() < limit_right) {
