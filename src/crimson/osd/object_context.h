@@ -63,7 +63,6 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
 {
 private:
   tri_mutex lock;
-  bool recovery_read_marker = false;
 
 public:
   ObjectState obs;
@@ -117,9 +116,6 @@ public:
   template<typename Exception>
   void interrupt(Exception ex) {
     lock.abort(std::move(ex));
-    if (recovery_read_marker) {
-      drop_recovery_read();
-    }
   }
 
   bool is_loaded() const {
@@ -292,23 +288,6 @@ public:
   }
   bool is_request_pending() const {
     return lock.is_acquired();
-  }
-
-  bool get_recovery_read() {
-    if (lock.try_lock_for_read()) {
-      recovery_read_marker = true;
-      return true;
-    } else {
-      return false;
-    }
-  }
-  void wait_recovery_read() {
-    assert(lock.get_readers() > 0);
-    recovery_read_marker = true;
-  }
-  void drop_recovery_read() {
-    assert(recovery_read_marker);
-    recovery_read_marker = false;
   }
 };
 using ObjectContextRef = ObjectContext::Ref;
