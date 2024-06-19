@@ -2717,15 +2717,6 @@ std::optional<requested_scrub_t> PgScrubber::validate_periodic_mode(
 
 {
   ceph_assert(!planned.must_deep_scrub && !planned.must_repair);
-
-  if (!pg_cond.allow_deep && pg_cond.has_deep_errors) {
-    get_clog()->error() << fmt::format(
-	"osd.{} pg {} Regular scrub skipped due to deep-scrub errors and "
-	"nodeep-scrub set",
-	get_whoami(), m_pg_id);
-    return std::nullopt;  // no scrubbing
-  }
-
   requested_scrub_t upd_flags{planned};
 
   upd_flags.time_for_deep = time_for_deep;
