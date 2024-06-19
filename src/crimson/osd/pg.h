@@ -323,7 +323,9 @@ public:
   }
   Context *on_clean() final;
   void on_activate_committed() final {
-    // Not needed yet (will be needed for IO unblocking)
+    if (!is_primary()) {
+      wait_for_active_blocker.unblock();
+    }
   }
   void on_active_exit() final {
     // Not needed yet
