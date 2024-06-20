@@ -441,7 +441,7 @@ std::ostream &operator<<(std::ostream& out, const record_size_t& rsize)
 std::ostream &operator<<(std::ostream& out, const record_t& r)
 {
   return out << "record_t("
-             << "type=" << r.type
+             << "trans_type=" << r.trans_type
              << ", num_extents=" << r.extents.size()
              << ", num_deltas=" << r.deltas.size()
              << ", modify_time=" << sea_time_point_printer_t{r.modify_time}
@@ -552,7 +552,7 @@ ceph::bufferlist encode_records(
 
   for (auto& r: record_group.records) {
     record_header_t rheader{
-      r.type,
+      r.trans_type,
       (extent_len_t)r.deltas.size(),
       (extent_len_t)r.extents.size(),
       timepoint_to_mod(r.modify_time)
