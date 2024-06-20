@@ -4,6 +4,7 @@
 #include "include/Context.h"
 #include "common/ceph_json.h"
 #include "rgw_coroutine.h"
+#include "rgw_asio_thread.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -615,6 +616,8 @@ void RGWCoroutinesManager::io_complete(RGWCoroutine *cr, const rgw_io_id& io_id)
 
 int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesStack *>& stacks)
 {
+  maybe_warn_about_blocking(dpp);
+
   int ret = 0;
   int blocked_count = 0;
   int interval_wait_count = 0;
