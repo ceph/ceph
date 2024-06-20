@@ -26,6 +26,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "rgw_main.h"
+#include "rgw_asio_thread.h"
 #include "rgw_common.h"
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"

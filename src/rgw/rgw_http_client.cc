@@ -9,6 +9,7 @@
 #include <curl/easy.h>
 #include <curl/multi.h>
 
+#include "rgw_asio_thread.h"
 #include "rgw_common.h"
 #include "rgw_http_client.h"
 #include "rgw_http_errors.h"
@@ -82,10 +83,8 @@ struct rgw_http_req_data : public RefCountedObject {
       async_wait(yield.get_executor(), l, yield[ec]);
       return -ec.value();
     }
-    // work on asio threads should be asynchronous, so warn when they block
-    if (is_asio_thread) {
-      dout(20) << "WARNING: blocking http request" << dendl;
-    }
+    maybe_warn_about_blocking(dpp);
+
     cond.wait(l, [this]{return done==true;});
     return ret;
   }
