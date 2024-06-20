@@ -1215,7 +1215,7 @@ test_snap_moved_to_trash()
     local snap_name=$4
 
     rbd --cluster ${cluster} snap ls ${pool}/${image} --all |
-        grep -F " trash (${snap_name})"
+        grep -F " trash (user ${snap_name})"
 }
 
 wait_for_snap_moved_to_trash()

@@ -15,6 +15,7 @@ from assertions import (assert_equal as eq, assert_raises, assert_not_equal,
                         assert_greater_equal)
 from datetime import datetime, timedelta
 from rados import (Rados,
+                   LIBRADOS_SNAP_HEAD,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
@@ -33,6 +34,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_IMAGE_MODE_JOURNAL, RBD_MIRROR_IMAGE_MODE_SNAPSHOT,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_OPERATION_FEATURE_CLONE_CHILD,
+                 RBD_SNAP_NAMESPACE_TYPE_USER,
+                 RBD_SNAP_NAMESPACE_TYPE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
                  RBD_SNAP_NAMESPACE_TYPE_MIRROR,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
@@ -1790,6 +1793,68 @@ class TestClone(object):
 
         # unprotect, remove parent snap happen in cleanup, and should succeed
 
+    def test_clone_by_snap_id(self):
+        clone_name2 = get_temp_image_name()
+        assert_raises(TypeError, self.rbd.clone, ioctx, image_name,
+                      None, ioctx, clone_name2, features)
+        assert_raises(TypeError, self.rbd.clone, ioctx, image_name,
+                      1.0, ioctx, clone_name2, features)
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, image_name,
+                      LIBRADOS_SNAP_HEAD, ioctx, clone_name2, features)
+
+        self.image.create_snap('snap2')
+        snap_id = self.image.snap_get_id('snap2')
+        self.image.remove_snap('snap2')
+        assert_raises(ImageNotFound, self.image.snap_get_trash_namespace,
+                      snap_id)
+        assert_raises(ImageNotFound, self.rbd.clone, ioctx, image_name,
+                      snap_id, ioctx, clone_name2, features, clone_format=1)
+        assert_raises(ImageNotFound, self.rbd.clone, ioctx, image_name,
+                      snap_id, ioctx, clone_name2, features, clone_format=2)
+
+        snap_id = self.image.snap_get_id('snap1')
+        self.rbd.clone(ioctx, image_name, snap_id, ioctx, clone_name2,
+                       features, clone_format=1)
+        with Image(ioctx, clone_name2) as clone2:
+            assert clone2.parent_info() == self.clone.parent_info()
+            assert clone2.op_features() == 0
+        self.rbd.remove(ioctx, clone_name2)
+        self.rbd.clone(ioctx, image_name, snap_id, ioctx, clone_name2,
+                       features, clone_format=2)
+        with Image(ioctx, clone_name2) as clone2:
+            assert clone2.parent_info() == self.clone.parent_info()
+            assert clone2.op_features() == RBD_OPERATION_FEATURE_CLONE_CHILD
+        self.rbd.remove(ioctx, clone_name2)
+
+        self.image.create_snap('snap2')
+        snap_id = self.image.snap_get_id('snap2')
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, image_name,
+                      snap_id, ioctx, clone_name2, features, clone_format=1)
+        self.rbd.clone(ioctx, image_name, snap_id, ioctx, clone_name2,
+                       features, clone_format=2)
+        with Image(ioctx, clone_name2) as clone2:
+            clone2_parent_info = clone2.parent_info()
+            clone_parent_info = self.clone.parent_info()
+            assert clone2_parent_info[0] == clone_parent_info[0]
+            assert clone2_parent_info[1] == clone_parent_info[1]
+            assert clone2_parent_info[2] == 'snap2'
+            assert clone_parent_info[2] == 'snap1'
+
+        self.image.remove_snap('snap2')
+        trash_snap = self.image.snap_get_trash_namespace(snap_id)
+        assert trash_snap == {
+            'original_namespace_type' : RBD_SNAP_NAMESPACE_TYPE_USER,
+            'original_name' : 'snap2'
+            }
+        clone_name3 = get_temp_image_name()
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, image_name,
+                      snap_id, ioctx, clone_name3, features, clone_format=1)
+        assert_raises(ImageNotFound, self.rbd.clone, ioctx, image_name,
+                      snap_id, ioctx, clone_name3, features, clone_format=2)
+        self.rbd.remove(ioctx, clone_name2)
+        assert_raises(ImageNotFound, self.image.snap_get_trash_namespace,
+                      snap_id)
+
     def test_stat(self):
         image_info = self.image.stat()
         clone_info = self.clone.stat()
@@ -2075,7 +2140,11 @@ class TestClone(object):
 
         snaps = [s for s in self.image.list_snaps() if s['name'] != 'snap1']
         eq([RBD_SNAP_NAMESPACE_TYPE_TRASH], [s['namespace'] for s in snaps])
-        eq([{'original_name' : 'snap2'}], [s['trash'] for s in snaps])
+        trash_snap = {
+            'original_namespace_type' : RBD_SNAP_NAMESPACE_TYPE_USER,
+            'original_name' : 'snap2'
+            }
+        eq([trash_snap], [s['trash'] for s in snaps])
 
         self.rbd.remove(ioctx, clone_name)
         eq([], [s for s in self.image.list_snaps() if s['name'] != 'snap1'])
@@ -2805,7 +2874,7 @@ class TestGroups(object):
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
 
         for snap in self.image.list_snaps():
-            eq(rbd.RBD_SNAP_NAMESPACE_TYPE_GROUP, snap['namespace'])
+            eq(RBD_SNAP_NAMESPACE_TYPE_GROUP, snap['namespace'])
             info = snap['group']
             eq(group_name, info['group_name'])
             eq(snap_name, info['group_snap_name'])
@@ -2869,6 +2938,108 @@ class TestGroups(object):
         eq([new_snap_name], [snap['name'] for snap in self.group.list_snaps()])
         self.group.remove_snap(new_snap_name)
         eq([], list(self.group.list_snaps()))
+
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_group_snap_clone(self):
+        data = rand_data(256)
+        with Image(ioctx, image_name) as image:
+            image.write(data, 0)
+
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap(snap_name)
+        assert [s['name'] for s in self.group.list_snaps()] == [snap_name]
+        image_snaps = list(self.image.list_snaps())
+        assert [s['namespace'] for s in image_snaps] == [RBD_SNAP_NAMESPACE_TYPE_GROUP]
+        image_snap_name = image_snaps[0]['name']
+        image_snap_id = image_snaps[0]['id']
+        assert image_snaps[0]['group'] == {
+            'pool' : ioctx.get_pool_id(),
+            'name' : group_name,
+            'snap_name' : snap_name,
+            }
+
+        clone_name = get_temp_image_name()
+        assert_raises(ImageNotFound, self.rbd.clone, ioctx, image_name,
+                      image_snap_name, ioctx, clone_name, features, clone_format=1)
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, image_name,
+                      image_snap_id, ioctx, clone_name, features, clone_format=1)
+        assert_raises(ImageNotFound, self.rbd.clone, ioctx, image_name,
+                      image_snap_name, ioctx, clone_name, features, clone_format=2)
+        self.rbd.clone(ioctx, image_name, image_snap_id, ioctx, clone_name,
+                       features, clone_format=2)
+        with Image(ioctx, clone_name) as clone:
+            parent_spec = clone.get_parent_image_spec()
+            assert parent_spec['pool_name'] == pool_name
+            assert parent_spec['image_name'] == image_name
+            assert parent_spec['snap_namespace_type'] == RBD_SNAP_NAMESPACE_TYPE_GROUP
+            assert parent_spec['snap_name'] == image_snap_name
+            assert parent_spec['snap_id'] == image_snap_id
+            read = clone.read(0, 256)
+            assert read == data
+
+        self.group.remove_snap(snap_name)
+        assert list(self.group.list_snaps()) == []
+        image_snaps = list(self.image.list_snaps())
+        assert [s['namespace'] for s in image_snaps] == [RBD_SNAP_NAMESPACE_TYPE_TRASH]
+        trash_image_snap_name = image_snaps[0]['name']
+        assert image_snaps[0]['id'] == image_snap_id
+        assert image_snaps[0]['trash'] == {
+            'original_namespace_type' : RBD_SNAP_NAMESPACE_TYPE_GROUP,
+            'original_name' : image_snap_name
+            }
+        assert trash_image_snap_name != image_snap_name
+
+        with Image(ioctx, clone_name) as clone:
+            parent_spec = clone.get_parent_image_spec()
+            assert parent_spec['pool_name'] == pool_name
+            assert parent_spec['image_name'] == image_name
+            assert parent_spec['snap_namespace_type'] == RBD_SNAP_NAMESPACE_TYPE_TRASH
+            assert parent_spec['snap_name'] == trash_image_snap_name
+            assert parent_spec['snap_id'] == image_snap_id
+            read = clone.read(0, 256)
+            assert read == data
+
+        self.rbd.remove(ioctx, clone_name)
+        assert list(self.image.list_snaps()) == []
+
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_group_snap_clone_flatten(self):
+        data = rand_data(256)
+        with Image(ioctx, image_name) as image:
+            image.write(data, 0)
+
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap(snap_name)
+        assert [s['name'] for s in self.group.list_snaps()] == [snap_name]
+        image_snaps = list(self.image.list_snaps())
+        assert [s['namespace'] for s in image_snaps] == [RBD_SNAP_NAMESPACE_TYPE_GROUP]
+        image_snap_id = image_snaps[0]['id']
+
+        clone_name = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, image_snap_id, ioctx, clone_name,
+                       features, clone_format=2)
+        self.group.remove_snap(snap_name)
+        assert list(self.group.list_snaps()) == []
+        image_snaps = list(self.image.list_snaps())
+        assert [s['namespace'] for s in image_snaps] == [RBD_SNAP_NAMESPACE_TYPE_TRASH]
+        assert image_snaps[0]['id'] == image_snap_id
+
+        with Image(ioctx, clone_name) as clone:
+            parent_spec = clone.get_parent_image_spec()
+            assert parent_spec['pool_id'] == ioctx.get_pool_id()
+            assert parent_spec['image_id'] == self.image.id()
+            assert parent_spec['snap_id'] == image_snap_id
+            read = clone.read(0, 256)
+            assert read == data
+            clone.flatten()
+
+        assert list(self.image.list_snaps()) == []
+        with Image(ioctx, clone_name) as clone:
+            assert_raises(ImageNotFound, clone.get_parent_image_spec)
+            read = clone.read(0, 256)
+            assert read == data
+
+        self.rbd.remove(ioctx, clone_name)
 
     def test_group_snap_rollback(self):
         eq([], list(self.group.list_images()))

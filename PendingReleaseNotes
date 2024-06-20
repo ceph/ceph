@@ -209,6 +209,12 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * Monitoring: RGW S3 Analytics: A new Grafana dashboard is now available, enabling you to
   visualize per bucket and user analytics data, including total GETs, PUTs, Deletes,
   Copies, and list metrics.
+* RBD: Support for cloning from non-user type snapshots is added.  This is
+  intended primarily as a building block for cloning new groups from group
+  snapshots created with `rbd group snap create` command, but has also been
+  exposed via the new `--snap-id` option for `rbd clone` command.
+* RBD: The output of `rbd snap ls --all` command now includes the original
+  type for trashed snapshots.
 
 * CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
   confirmation flag when some MDSs exhibit health warning MDS_TRIM or
