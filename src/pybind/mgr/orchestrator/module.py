@@ -1227,11 +1227,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         """
 
         if inbuf and all_available_devices:
-            return HandleCommandResult(-errno.EINVAL, '-i infile and --all-available-devices are mutually exclusive')
+            return HandleCommandResult(-errno.EINVAL, stderr='-i infile and --all-available-devices are mutually exclusive')
 
         if not inbuf and not all_available_devices:
             # one parameter must be present
-            return HandleCommandResult(-errno.EINVAL, '--all-available-devices is required')
+            return HandleCommandResult(-errno.EINVAL, stderr='--all-available-devices is required')
 
         if inbuf:
             if unmanaged is not None:
