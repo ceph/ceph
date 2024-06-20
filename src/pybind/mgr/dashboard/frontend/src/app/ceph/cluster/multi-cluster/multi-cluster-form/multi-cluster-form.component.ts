@@ -52,7 +52,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     if (this.action === 'edit') {
       this.remoteClusterForm.get('remoteClusterUrl').setValue(this.cluster.url);
-      this.remoteClusterForm.get('remoteClusterUrl').disable();
       this.remoteClusterForm.get('clusterAlias').setValue(this.cluster.cluster_alias);
       this.remoteClusterForm.get('ssl').setValue(this.cluster.ssl_verify);
       this.remoteClusterForm.get('ssl_cert').setValue(this.cluster.ssl_certificate);
@@ -76,7 +75,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
 
   createForm() {
     this.remoteClusterForm = new CdFormGroup({
-      // showToken: new FormControl(false),
       username: new FormControl('', [
         CdValidators.custom('uniqueUrlandUser', (username: string) => {
           let remoteClusterUrl = '';
@@ -96,7 +94,12 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           );
         })
       ]),
-      password: new FormControl('', []),
+      password: new FormControl(
+        null,
+        CdValidators.custom('requiredNotEdit', (value: string) => {
+          return this.action !== 'edit' && !value;
+        })
+      ),
       remoteClusterUrl: new FormControl(null, {
         validators: [
           CdValidators.custom('endpoint', (value: string) => {
@@ -116,11 +119,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           Validators.required
         ]
       }),
-      // apiToken: new FormControl('', [
-      //   CdValidators.requiredIf({
-      //     showToken: true
-      //   })
-      // ]),
       clusterAlias: new FormControl(null, {
         validators: [
           Validators.required,
@@ -128,7 +126,9 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
             return (
               (this.action === 'connect' || this.action === 'edit') &&
               this.clusterAliasNames &&
-              this.clusterAliasNames.indexOf(clusterAlias) !== -1
+              this.clusterAliasNames.indexOf(clusterAlias) !== -1 &&
+              this.cluster?.cluster_alias &&
+              this.cluster.cluster_alias !== clusterAlias
             );
           })
         ]
@@ -197,7 +197,14 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       case 'edit':
         this.subs.add(
           this.multiClusterService
-            .editCluster(this.cluster.url, clusterAlias, this.cluster.user, ssl, ssl_certificate)
+            .editCluster(
+              this.cluster.name,
+              url,
+              clusterAlias,
+              this.cluster.user,
+              ssl,
+              ssl_certificate
+            )
             .subscribe({
               ...commonSubscribtion,
               complete: () => this.handleSuccess($localize`Cluster updated successfully`)
