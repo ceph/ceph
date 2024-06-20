@@ -2,7 +2,16 @@
   <cd-navigation>
     <div class="container-fluid h-100"
          [ngClass]="{'dashboard': (router.url == '/dashboard' || router.url == '/dashboard_3' || router.url == '/multi-cluster/overview'), 'rgw-dashboard': (router.url == '/rgw/overview')}">
-    <cd-context></cd-context>
+      <!-- ************************ -->
+      <!-- ALERTS BANNER     -->
+      <!-- ************************ -->
+      <div class="cd-alert-container"
+           [ngClass]="{'ms-4 me-4': (router.url == '/dashboard' || router.url == '/dashboard_3' || router.url == '/multi-cluster/overview'), 'm-3': (router.url == '/rgw/overview')}">
+        <cd-pwd-expiration-notification></cd-pwd-expiration-notification>
+        <cd-telemetry-notification></cd-telemetry-notification>
+        <cd-motd></cd-motd>
+      </div>
+      <cd-context></cd-context>
       <cd-breadcrumbs></cd-breadcrumbs>
       <router-outlet></router-outlet>
     </div>

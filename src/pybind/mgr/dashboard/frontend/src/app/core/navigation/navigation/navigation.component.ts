@@ -1,4 +1,4 @@
-import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 
 import * as _ from 'lodash';
@@ -14,10 +14,8 @@ import {
   FeatureTogglesMap$,
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
-import { MotdNotificationService } from '~/app/shared/services/motd-notification.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
-import { TelemetryNotificationService } from '~/app/shared/services/telemetry-notification.service';
 
 @Component({
   selector: 'cd-navigation',
@@ -25,11 +23,7 @@ import { TelemetryNotificationService } from '~/app/shared/services/telemetry-no
   styleUrls: ['./navigation.component.scss']
 })
 export class NavigationComponent implements OnInit, OnDestroy {
-  notifications: string[] = [];
   clusterDetails: any[] = [];
-  @HostBinding('class') get class(): string {
-    return 'top-notification-' + this.notifications.length;
-  }
 
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
@@ -54,9 +48,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private router: Router,
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService,
-    private telemetryNotificationService: TelemetryNotificationService,
     public prometheusAlertService: PrometheusAlertService,
-    private motdNotificationService: MotdNotificationService,
     private cookieService: CookiesService,
     private settingsService: SettingsService
   ) {
@@ -89,26 +81,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.summaryService.subscribe((summary) => {
         this.summaryData = summary;
-      })
-    );
-    /*
-     Note: If you're going to add more top notifications please do not forget to increase
-     the number of generated css-classes in section topNotification settings in the scss
-     file.
-     */
-    this.subs.add(
-      this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
-        this.showTopNotification('isPwdDisplayed', isDisplayed);
-      })
-    );
-    this.subs.add(
-      this.telemetryNotificationService.update.subscribe((visible: boolean) => {
-        this.showTopNotification('telemetryNotificationEnabled', visible);
-      })
-    );
-    this.subs.add(
-      this.motdNotificationService.motd$.subscribe((motd: any) => {
-        this.showTopNotification('motdNotificationEnabled', _.isPlainObject(motd));
       })
     );
     this.subs.add(
@@ -163,19 +135,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
   toggleRightSidebar() {
     this.rightSidebarOpen = !this.rightSidebarOpen;
-  }
-
-  showTopNotification(name: string, isDisplayed: boolean) {
-    if (isDisplayed) {
-      if (!this.notifications.includes(name)) {
-        this.notifications.push(name);
-      }
-    } else {
-      const index = this.notifications.indexOf(name);
-      if (index >= 0) {
-        this.notifications.splice(index, 1);
-      }
-    }
   }
 
   onClusterSelection(value: object) {
