@@ -13,7 +13,7 @@ namespace {
 
 namespace crimson::osd {
 
-typename InterruptibleOperation::template interruptible_future<>
+typename InterruptibleOperation::template interruptible_future<bool>
 CommonClientRequest::do_recover_missing(
   Ref<PG> pg,
   const hobject_t& soid,
@@ -45,22 +45,29 @@ CommonClientRequest::do_recover_missing(
   if (!needs_recovery_or_backfill) {
     logger().debug("{} reqid {} nothing to recover {}",
                    __func__, reqid, soid);
-    return seastar::now();
+    return seastar::make_ready_future<bool>(false);
   }
 
+  if (pg->get_peering_state().get_missing_loc().is_unfound(soid)) {
+    return seastar::make_ready_future<bool>(true);
+  }
   logger().debug("{} reqid {} need to wait for recovery, {} version {}",
                  __func__, reqid, soid, ver);
   if (pg->get_recovery_backend()->is_recovering(soid)) {
     logger().debug("{} reqid {} object {} version {}, already recovering",
                    __func__, reqid, soid, ver);
-    return pg->get_recovery_backend()->get_recovering(soid).wait_for_recovered();
+    return pg->get_recovery_backend()->get_recovering(
+      soid).wait_for_recovered(
+    ).then([] {
+      return seastar::make_ready_future<bool>(false);
+    });
   } else {
     logger().debug("{} reqid {} object {} version {}, starting recovery",
                    __func__, reqid, soid, ver);
     auto [op, fut] =
       pg->get_shard_services().start_operation<UrgentRecovery>(
         soid, ver, pg, pg->get_shard_services(), pg->get_osdmap_epoch());
-    return std::move(fut);
+    return fut.then([] { return seastar::make_ready_future<bool>(false); });
   }
 }
 
