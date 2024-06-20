@@ -1917,17 +1917,17 @@ struct record_size_t {
 std::ostream &operator<<(std::ostream&, const record_size_t&);
 
 struct record_t {
-  transaction_type_t type = TRANSACTION_TYPE_NULL;
+  transaction_type_t trans_type = TRANSACTION_TYPE_NULL;
   std::vector<extent_t> extents;
   std::vector<delta_info_t> deltas;
   record_size_t size;
   sea_time_point modify_time = NULL_TIME;
 
-  record_t(transaction_type_t type) : type{type} { }
+  record_t(transaction_type_t t_type) : trans_type{t_type} { }
 
   // unit test only
   record_t() {
-    type = transaction_type_t::MUTATE;
+    trans_type = transaction_type_t::MUTATE;
   }
 
   // unit test only
@@ -1940,7 +1940,7 @@ struct record_t {
     for (auto& d: _deltas) {
       push_back(std::move(d));
     }
-    type = transaction_type_t::MUTATE;
+    trans_type = transaction_type_t::MUTATE;
   }
 
   bool is_empty() const {
