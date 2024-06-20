@@ -7,33 +7,33 @@ events {
 }
 
 http {
-{% if dashboard_eps %}
+{% if dashboard_endpoints %}
     upstream dashboard_servers {
-     {% for ep in dashboard_eps %}
+     {% for ep in dashboard_endpoints %}
      server {{ ep }};
      {% endfor %}
     }
 {% endif %}
 
-{% if grafana_eps %}
+{% if grafana_endpoints %}
     upstream grafana_servers {
-     {% for ep in grafana_eps %}
+     {% for ep in grafana_endpoints %}
      server {{ ep }};
      {% endfor %}
     }
 {% endif %}
 
-{% if prometheus_eps %}
+{% if prometheus_endpoints %}
     upstream prometheus_servers {
-     {% for ep in prometheus_eps %}
+     {% for ep in prometheus_endpoints %}
      server {{ ep }};
      {% endfor %}
     }
 {% endif %}
 
-{% if alertmanager_eps %}
+{% if alertmanager_endpoints %}
     upstream alertmanager_servers {
-     {% for ep in alertmanager_eps %}
+     {% for ep in alertmanager_endpoints %}
      server {{ ep }};
      {% endfor %}
     }

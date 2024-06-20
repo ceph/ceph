@@ -75,8 +75,8 @@ def simplified_keyring(entity: str, contents: str) -> str:
     return keyring
 
 
-def get_dashboard_eps(svc: 'CephadmService') -> Tuple[List[str], Optional[str]]:
-    dashboard_eps: List[str] = []
+def get_dashboard_endpoints(svc: 'CephadmService') -> Tuple[List[str], Optional[str]]:
+    dashboard_endpoints: List[str] = []
     port = None
     protocol = None
     mgr_map = svc.mgr.get('mgr_map')
@@ -91,9 +91,9 @@ def get_dashboard_eps(svc: 'CephadmService') -> Tuple[List[str], Optional[str]]:
                 continue
             assert dd.hostname is not None
             addr = svc._inventory_get_fqdn(dd.hostname)
-            dashboard_eps.append(f'{addr}:{port}')
+            dashboard_endpoints.append(f'{addr}:{port}')
 
-    return dashboard_eps, protocol
+    return dashboard_endpoints, protocol
 
 
 def get_dashboard_urls(svc: 'CephadmService') -> List[str]:

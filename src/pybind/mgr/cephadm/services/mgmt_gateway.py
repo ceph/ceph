@@ -4,7 +4,7 @@ from typing import List, Any, Tuple, Dict, Optional, cast
 from mgr_util import build_url
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
-from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_eps
+from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
 from cephadm.ssl_cert_utils import SSLCerts
 
 logger = logging.getLogger(__name__)
@@ -38,74 +38,11 @@ class MgmtGatewayService(CephadmService):
         return DaemonDescription()
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
-        dd = self.get_active_daemon(daemon_descrs)
-        assert dd.hostname is not None
-        addr = self._inventory_get_fqdn(dd.hostname)
-        spec = cast(MgmtGatewaySpec, self.mgr.spec_store[dd.service_name()].spec)
-
-        # Grafana has to be configured by using the 'external' URL
-        protocol = 'http' if spec.disable_https else 'https'
-        port = dd.ports[0] if dd.ports else None
-        mgmt_gw_external_ep = build_url(scheme=protocol, host=addr, port=port)
-        self._set_value_on_dashboard(
-            'Grafana',
-            'dashboard get-grafana-api-url',
-            'dashboard set-grafana-api-url',
-            f'{mgmt_gw_external_ep}/grafana'
-        )
-
-        # configure prometheus
-        mgmt_gw_internal_ep = build_url(scheme='https', host=addr, port=self.INTERNAL_SERVICE_PORT)
-        self._set_value_on_dashboard(
-            'Prometheus',
-            'dashboard get-prometheus-api-host',
-            'dashboard set-prometheus-api-host',
-            f'{mgmt_gw_internal_ep}/internal/prometheus'
-        )
-
-        # configure alertmanager
-        self._set_value_on_dashboard(
-            'AlertManager',
-            'dashboard get-alertmanager-api-host',
-            'dashboard set-alertmanager-api-host',
-            f'{mgmt_gw_internal_ep}/internal/alertmanager'
-        )
-
-        # Disable SSL verification on all the monitoring services
-        # sicne we are using our own self-signed certificates
-        self._set_value_on_dashboard(
-            'Alertmanager',
-            'dashboard get-alertmanager-api-ssl-verify',
-            'dashboard set-alertmanager-api-ssl-verify',
-            'false'
-        )
-        self._set_value_on_dashboard(
-            'Prometheus',
-            'dashboard get-prometheus-api-ssl-verify',
-            'dashboard set-prometheus-api-ssl-verify',
-            'false'
-        )
-        self._set_value_on_dashboard(
-            'Grafana',
-            'dashboard get-grafana-api-ssl-verify',
-            'dashboard set-grafana-api-ssl-verify',
-            'false'
-        )
-
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
     def get_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str]:
-
-        def read_certificate(spec_field: Optional[List[str]]) -> str:
-            cert = ''
-            if isinstance(spec_field, list):
-                cert = '\n'.join(spec_field)
-            elif isinstance(spec_field, str):
-                cert = spec_field
-            return cert
-
         # TODO(redo): store/load these certificates by using the new support and check the posibility
         # to have a "centrilized" certificate mangaer for all cephadm components so we use the same
         # root CA fo sign all of them
@@ -116,8 +53,8 @@ class MgmtGatewayService(CephadmService):
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
         internal_cert, internal_pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
-        cert = read_certificate(svc_spec.ssl_certificate)
-        pkey = read_certificate(svc_spec.ssl_certificate_key)
+        cert = svc_spec.ssl_certificate
+        pkey = svc_spec.ssl_certificate_key
         if not (cert and pkey):
             # In case the user has not provided certificates then we generate self-signed ones
             cert, pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
@@ -142,22 +79,22 @@ class MgmtGatewayService(CephadmService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         svc_spec = cast(MgmtGatewaySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        dashboard_eps, dashboard_scheme = get_dashboard_eps(self)
+        dashboard_endpoints, dashboard_scheme = get_dashboard_endpoints(self)
         scheme = 'https' if self.mgr.secure_monitoring_stack else 'http'
 
-        prometheus_eps = self.get_service_endpoints('prometheus')
-        alertmanager_eps = self.get_service_endpoints('alertmanager')
-        grafana_eps = self.get_service_endpoints('grafana')
+        prometheus_endpoints = self.get_service_endpoints('prometheus')
+        alertmanager_endpoints = self.get_service_endpoints('alertmanager')
+        grafana_endpoints = self.get_service_endpoints('grafana')
         grafana_protocol = None
-        if grafana_eps:
+        if grafana_endpoints:
             grafana_spec = cast(GrafanaSpec, self.mgr.spec_store['grafana'].spec)
             grafana_protocol = grafana_spec.protocol
 
         main_context = {
-            'dashboard_eps': dashboard_eps,
-            'prometheus_eps': prometheus_eps,
-            'alertmanager_eps': alertmanager_eps,
-            'grafana_eps': grafana_eps
+            'dashboard_endpoints': dashboard_endpoints,
+            'prometheus_endpoints': prometheus_endpoints,
+            'alertmanager_endpoints': alertmanager_endpoints,
+            'grafana_endpoints': grafana_endpoints
         }
         external_server_context = {
             'spec': svc_spec,
@@ -165,10 +102,10 @@ class MgmtGatewayService(CephadmService):
             'grafana_scheme': grafana_protocol,
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
-            'dashboard_eps': dashboard_eps,
-            'prometheus_eps': prometheus_eps,
-            'alertmanager_eps': alertmanager_eps,
-            'grafana_eps': grafana_eps
+            'dashboard_endpoints': dashboard_endpoints,
+            'prometheus_endpoints': prometheus_endpoints,
+            'alertmanager_endpoints': alertmanager_endpoints,
+            'grafana_endpoints': grafana_endpoints
         }
         internal_server_context = {
             'spec': svc_spec,
@@ -176,9 +113,9 @@ class MgmtGatewayService(CephadmService):
             'grafana_scheme': grafana_protocol,
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
-            'prometheus_eps': prometheus_eps,
-            'alertmanager_eps': alertmanager_eps,
-            'grafana_eps': grafana_eps
+            'prometheus_endpoints': prometheus_endpoints,
+            'alertmanager_endpoints': alertmanager_endpoints,
+            'grafana_endpoints': grafana_endpoints
         }
 
         internal_cert, internal_pkey, cert, pkey = self.get_certificates(svc_spec, daemon_spec)

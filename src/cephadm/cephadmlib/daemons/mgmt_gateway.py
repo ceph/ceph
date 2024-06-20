@@ -10,19 +10,24 @@ from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
 from ..constants import DEFAULT_NGINX_IMAGE
-from ..data_utils import dict_get
+from ..data_utils import dict_get, is_fsid
 from ..file_utils import populate_files, makedirs, recursive_chown
-
+from ..exceptions import Error
 
 logger = logging.getLogger()
 
 
 @register_daemon_form
 class MgmtGateway(ContainerDaemonForm):
-    """Define the configs for the jaeger tracing containers"""
+    """Defines an MgmtGateway container"""
 
     daemon_type = 'mgmt-gateway'
-    required_files = ['nginx.conf']
+    required_files = ['nginx.conf',
+                      'nginx_external_server.conf',
+                      'nginx_internal_server.conf',
+                      'nginx_internal.crt',
+                      'nginx_internal.key']
+
     default_image = DEFAULT_NGINX_IMAGE
 
     @classmethod
@@ -41,6 +46,7 @@ class MgmtGateway(ContainerDaemonForm):
         self.daemon_id = daemon_id
         self.image = image
         self.files = dict_get(config_json, 'files', {})
+        self.validate()
 
     @classmethod
     def init(
@@ -58,15 +64,29 @@ class MgmtGateway(ContainerDaemonForm):
     def identity(self) -> DaemonIdentity:
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
+    def validate(self) -> None:
+
+        if not is_fsid(self.fsid):
+            raise Error(f'not an fsid: {self.fsid}')
+        if not self.daemon_id:
+            raise Error(f'invalid daemon_id: {self.daemon_id}')
+        if not self.image:
+            raise Error(f'invalid image: {self.image}')
+
+        # check for the required files
+        missing_files = set(self.required_files) - self.files.keys()
+        if missing_files:
+            raise Error('required file(s) missing from config-json: %s' % ', '.join(missing_files))
+
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
-        return 65534, 65534
+        return 65534, 65534 # nobody, nobody
 
     def get_daemon_args(self) -> List[str]:
-        return ['']
+        return []
 
     def default_entrypoint(self) -> str:
         return ''

@@ -1758,12 +1758,15 @@ Usage:
                              no_overwrite: bool = False,
                              inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add a cluster gateway service (cephadm only)"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
 
         spec = MgmtGatewaySpec(
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             port=port,
-            disable_https=disable_https
+            disable_https=disable_https,
+            preview_only=dry_run
         )
 
         spec.validate()  # force any validation exceptions to be caught correctly

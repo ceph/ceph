@@ -1766,8 +1766,8 @@ class MgmtGatewaySpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  disable_https: Optional[bool] = False,
                  port: Optional[int] = None,
-                 ssl_certificate: Optional[List[str]] = None,
-                 ssl_certificate_key: Optional[List[str]] = None,
+                 ssl_certificate: Optional[str] = None,
+                 ssl_certificate_key: Optional[str] = None,
                  ssl_prefer_server_ciphers: Optional[str] = None,
                  ssl_session_tickets: Optional[str] = None,
                  ssl_session_timeout: Optional[str] = None,
@@ -1775,8 +1775,9 @@ class MgmtGatewaySpec(ServiceSpec):
                  server_tokens: Optional[str] = None,
                  ssl_stapling: Optional[str] = None,
                  ssl_stapling_verify: Optional[str] = None,
-                 ssl_protocols: List[Optional[str]] = None,
+                 ssl_protocols: Optional[List[str]] = None,
                  ssl_ciphers: Optional[List[str]] = None,
+                 preview_only: bool = False,
                  unmanaged: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -1788,6 +1789,7 @@ class MgmtGatewaySpec(ServiceSpec):
             'mgmt-gateway', service_id=service_id,
             placement=placement, config=config,
             networks=networks,
+            preview_only=preview_only,
             extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
@@ -1815,8 +1817,54 @@ class MgmtGatewaySpec(ServiceSpec):
 
     def validate(self) -> None:
         super(MgmtGatewaySpec, self).validate()
-        # TODO(redo)
+        self._validate_port(self.port)
+        self._validate_certificate(self.ssl_certificate, "ssl_certificate")
+        self._validate_private_key(self.ssl_certificate_key, "ssl_certificate_key")
+        self._validate_boolean_switch(self.ssl_prefer_server_ciphers, "ssl_prefer_server_ciphers")
+        self._validate_boolean_switch(self.ssl_session_tickets, "ssl_session_tickets")
+        self._validate_session_timeout(self.ssl_session_timeout)
+        self._validate_session_cache(self.ssl_session_cache)
+        self._validate_server_tokens(self.server_tokens)
+        self._validate_boolean_switch(self.ssl_stapling, "ssl_stapling")
+        self._validate_boolean_switch(self.ssl_stapling_verify, "ssl_stapling_verify")
+        self._validate_ssl_protocols(self.ssl_protocols)
 
+    def _validate_port(self, port: Optional[int]) -> None:
+        if port is not None and not (1 <= port <= 65535):
+            raise SpecValidationError(f"Invalid port: {port}. Must be between 1 and 65535.")
+
+    def _validate_certificate(self, cert: Optional[str], name: str) -> None:
+        if cert is not None and not isinstance(cert, str):
+            raise SpecValidationError(f"Invalid {name}. Must be a string.")
+
+    def _validate_private_key(self, key: Optional[str] , name: str) -> None:
+        if key is not None and not isinstance(key, str):
+            raise SpecValidationError(f"Invalid {name}. Must be a string.")
+
+    def _validate_boolean_switch(self, value: Optional[str], name: str) -> None:
+        if value is not None and value not in ['on', 'off']:
+            raise SpecValidationError(f"Invalid {name}: {value}. Supported values: on | off.")
+
+    def _validate_session_timeout(self, timeout: Optional[str]) -> None:
+        if timeout is not None and not re.match(r'^\d+[smhd]$', timeout):
+            raise SpecValidationError(f"Invalid SSL Session Timeout: {timeout}. Value must be a number followed by 's', 'm', 'h', or 'd'.")
+
+    def _validate_session_cache(self, cache: Optional[str]) -> None:
+        valid_caches = ['none', 'off', 'builtin', 'shared']
+        if cache is not None and not any(cache.startswith(vc) for vc in valid_caches):
+            raise SpecValidationError(f"Invalid SSL Session Cache: {cache}. Supported values are: off | none | [builtin[:size]] [shared:name:size]")
+
+    def _validate_server_tokens(self, tokens: Optional[str]) -> None:
+        if tokens is not None and tokens not in ['on', 'off', 'build', 'string']:
+            raise SpecValidationError(f"Invalid Server Tokens: {tokens}. Must be one of ['on', 'off', 'build', 'version'].")
+
+    def _validate_ssl_protocols(self, protocols: Optional[List[str]]) -> None:
+        if protocols is None:
+            return
+        valid_protocols = ['SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3']
+        for protocol in protocols:
+            if protocol not in valid_protocols:
+                raise SpecValidationError(f"Invalid SSL Protocol: {protocol}. Must be one of {valid_protocols}.")
 
 yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
 

@@ -1095,7 +1095,8 @@ class CephadmServe:
                 # TODO(redo): check if we should just go always with redeploy (it's fast enough)
                 if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager']:
                     diff = list(set(last_deps).symmetric_difference(set(deps)))
-                    if any(('secure_monitoring_stack' in e) or ('mgmt-gateway' in e) for e in diff):
+                    REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
+                    if any(svc in e for e in diff for svc in REDEPLOY_TRIGGERS):
                         action = 'redeploy'
                 elif dd.daemon_type == 'jaeger-agent':
                     # changes to jaeger-agent deps affect the way the unit.run for

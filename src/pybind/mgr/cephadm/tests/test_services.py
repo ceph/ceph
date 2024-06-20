@@ -3176,10 +3176,10 @@ class TestMgmtGateway:
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     @patch('cephadm.ssl_cert_utils.SSLCerts.generate_cert', lambda instance, fqdn, ip: (ceph_generated_cert, ceph_generated_key))
-    @patch("cephadm.services.mgmt_gateway.get_dashboard_eps", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
-    def test_mgmt_gateway_config(self, get_service_eps_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
+    @patch("cephadm.services.mgmt_gateway.get_dashboard_endpoints", lambda _: (["ceph-node-2:8443", "ceph-node-2:8443"], "https"))
+    def test_mgmt_gateway_config(self, get_service_endpoints_mock: List[str], _run_cephadm, cephadm_module: CephadmOrchestrator):
 
-        def get_services_eps(name):
+        def get_services_endpoints(name):
             if name == 'prometheus':
                 return ["192.168.100.100:9095", "192.168.100.101:9095"]
             elif name == 'grafana':
@@ -3189,7 +3189,7 @@ class TestMgmtGateway:
             return []
 
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
-        get_service_eps_mock.side_effect = get_services_eps
+        get_service_endpoints_mock.side_effect = get_services_endpoints
 
         server_port = 5555
         spec = MgmtGatewaySpec(port=server_port,

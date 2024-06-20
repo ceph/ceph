@@ -10,7 +10,7 @@ server {
     {% if spec.ssl_protocols %}
     ssl_protocols            {{ spec.ssl_protocols | join(' ') }};
     {% else %}
-    ssl_protocols            TLSv1.2 TLSv1.3;
+    ssl_protocols            TLSv1.3;
     {% endif %}
     {% if spec.ssl_ciphers %}
     ssl_ciphers            {{ spec.ssl_ciphers | join(':') }};
@@ -48,27 +48,27 @@ server {
 
 {% endif %}
 
-{% if dashboard_eps %}
+{% if dashboard_endpoints %}
     location / {
         proxy_pass {{ dashboard_scheme }}://dashboard_servers;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
     }
 {% endif %}
 
-{% if grafana_eps %}
+{% if grafana_endpoints %}
     location /grafana {
         rewrite ^/grafana/(.*) /$1 break;
         proxy_pass {{ grafana_scheme }}://grafana_servers;
     }
 {% endif %}
 
-{% if prometheus_eps %}
+{% if prometheus_endpoints %}
     location /prometheus {
         proxy_pass {{ prometheus_scheme }}://prometheus_servers;
     }
 {% endif %}
 
-{% if alertmanager_eps %}
+{% if alertmanager_endpoints %}
     location /alertmanager {
         proxy_pass {{ alertmanager_scheme }}://alertmanager_servers;
     }
