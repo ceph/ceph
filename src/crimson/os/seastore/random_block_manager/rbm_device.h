@@ -83,7 +83,7 @@ public:
     return read(rbm_addr, out);
   }
 protected:
-  rbm_metadata_header_t super;
+  rbm_superblock_t super;
   rbm_shard_info_t shard_info;
 public:
   RBMDevice() {}
@@ -160,9 +160,9 @@ public:
 
   mount_ret do_shard_mount();
 
-  write_ertr::future<> write_rbm_header();
+  write_ertr::future<> write_rbm_superblock();
 
-  read_ertr::future<rbm_metadata_header_t> read_rbm_header(rbm_abs_addr addr);
+  read_ertr::future<rbm_superblock_t> read_rbm_superblock(rbm_abs_addr addr);
 
   using stat_device_ret =
     read_ertr::future<seastar::stat_data>;
