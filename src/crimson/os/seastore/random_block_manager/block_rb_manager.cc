@@ -201,9 +201,9 @@ void BlockRBManager::prefill_fragmented_device()
 }
 #endif
 
-std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
+std::ostream &operator<<(std::ostream &out, const rbm_superblock_t &header)
 {
-  out << " rbm_metadata_header_t(size=" << header.size
+  out << " rbm_superblock_t(size=" << header.size
        << ", block_size=" << header.block_size
        << ", feature=" << header.feature
        << ", journal_size=" << header.journal_size
