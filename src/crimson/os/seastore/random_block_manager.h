@@ -39,7 +39,7 @@ struct rbm_shard_info_t {
   }
 };
 
-struct rbm_metadata_header_t {
+struct rbm_superblock_t {
   size_t size = 0;
   size_t block_size = 0;
   uint64_t feature = 0;
@@ -49,7 +49,7 @@ struct rbm_metadata_header_t {
   unsigned int shard_num = 0;
   std::vector<rbm_shard_info_t> shard_infos;
 
-  DENC(rbm_metadata_header_t, v, p) {
+  DENC(rbm_superblock_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.size, p);
     denc(v.block_size, p);
@@ -171,7 +171,7 @@ namespace random_block_device {
 seastar::future<std::unique_ptr<random_block_device::RBMDevice>> 
   get_rb_device(const std::string &device);
 
-std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header);
+std::ostream &operator<<(std::ostream &out, const rbm_superblock_t &header);
 std::ostream &operator<<(std::ostream &out, const rbm_shard_info_t &shard);
 }
 
@@ -179,10 +179,10 @@ WRITE_CLASS_DENC_BOUNDED(
   crimson::os::seastore::rbm_shard_info_t
 )
 WRITE_CLASS_DENC_BOUNDED(
-  crimson::os::seastore::rbm_metadata_header_t
+  crimson::os::seastore::rbm_superblock_t
 )
 
 #if FMT_VERSION >= 90000
-template<> struct fmt::formatter<crimson::os::seastore::rbm_metadata_header_t> : fmt::ostream_formatter {};
+template<> struct fmt::formatter<crimson::os::seastore::rbm_superblock_t> : fmt::ostream_formatter {};
 template<> struct fmt::formatter<crimson::os::seastore::rbm_shard_info_t> : fmt::ostream_formatter {};
 #endif
