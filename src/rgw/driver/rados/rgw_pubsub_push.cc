@@ -9,6 +9,7 @@
 #include "common/Formatter.h"
 #include "common/iso_8601.h"
 #include "common/async/completion.h"
+#include "rgw_asio_thread.h"
 #include "rgw_common.h"
 #include "rgw_data_sync.h"
 #include "rgw_pubsub.h"
@@ -161,6 +162,8 @@ public:
           }, token, yield.get_executor());
       return -ec.value();
     }
+    maybe_warn_about_blocking(dpp);
+
     cond.wait(l, [this]{return (done==true);});
     return ret;
   }
