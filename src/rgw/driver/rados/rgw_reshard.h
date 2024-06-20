@@ -266,7 +266,7 @@ public:
   ~RGWReshardWait() {
     ceph_assert(going_down);
   }
-  int wait(optional_yield y);
+  int wait(const DoutPrefixProvider* dpp, optional_yield y);
   // unblock any threads waiting on reshard
   void stop();
 };

@@ -7,6 +7,7 @@
 
 #include "rgw_zone.h"
 #include "driver/rados/rgw_bucket.h"
+#include "rgw_asio_thread.h"
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -1261,7 +1262,7 @@ int RGWReshard::clear_bucket_resharding(const DoutPrefixProvider *dpp, const str
   return 0;
 }
 
-int RGWReshardWait::wait(optional_yield y)
+int RGWReshardWait::wait(const DoutPrefixProvider* dpp, optional_yield y)
 {
   std::unique_lock lock(mutex);
 
@@ -1285,6 +1286,7 @@ int RGWReshardWait::wait(optional_yield y)
     waiters.erase(waiters.iterator_to(waiter));
     return -ec.value();
   }
+  maybe_warn_about_blocking(dpp);
 
   cond.wait_for(lock, duration);
 
