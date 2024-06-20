@@ -1749,14 +1749,14 @@ Usage:
 
     @_cli_write_command('orch apply mgmt-gateway')
     def _apply_mgmt_gateway(self,
-                             port: Optional[int] = None,
-                             disable_https: Optional[bool] = False,
-                             placement: Optional[str] = None,
-                             unmanaged: bool = False,
-                             dry_run: bool = False,
-                             format: Format = Format.plain,
-                             no_overwrite: bool = False,
-                             inbuf: Optional[str] = None) -> HandleCommandResult:
+                            port: Optional[int] = None,
+                            disable_https: Optional[bool] = False,
+                            placement: Optional[str] = None,
+                            unmanaged: bool = False,
+                            dry_run: bool = False,
+                            format: Format = Format.plain,
+                            no_overwrite: bool = False,
+                            inbuf: Optional[str] = None) -> HandleCommandResult:
         """Add a cluster gateway service (cephadm only)"""
         if inbuf:
             raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')

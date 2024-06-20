@@ -1794,19 +1794,33 @@ class MgmtGatewaySpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
         )
+        #: ``disable_https`` is a flag to disable HTTPS. If True, the server will use unsecure HTTP.
         self.disable_https = disable_https
+        #: The ``port`` number on which the server will listen.
         self.port = port
+        #: ``ssl_certificate`` a multi-line string that contains the SSL certificate.
         self.ssl_certificate = ssl_certificate
+        #: ``ssl_certificate_key`` a multi-line string that contains the SSL key.
         self.ssl_certificate_key = ssl_certificate_key
+        #: ``ssl_prefer_server_ciphers`` when True server ciphers are preferred over client ciphers.
         self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
+        #: ``ssl_session_tickets`` a multioption flag to control session tickets: on | off.
         self.ssl_session_tickets = ssl_session_tickets
+        #: ``ssl_session_timeout`` the duration for SSL session timeout. Syntax: time, i.e: 5m
         self.ssl_session_timeout = ssl_session_timeout
+        #: ``ssl_session_cache`` Syntax: off | none | [builtin[:size]] [shared:name:size]
         self.ssl_session_cache = ssl_session_cache
+        #: ``server_tokens`` flag control server tokens in responses:  on | off | build | string
         self.server_tokens = server_tokens
+        #: ``ssl_stapling``a flag to enable or disable SSL stapling: on | off
         self.ssl_stapling = ssl_stapling
+        #: ``ssl_stapling_verify`` a flag to control verification of SSL stapling: on | off
         self.ssl_stapling_verify = ssl_stapling_verify
+        #: ``ssl_protocols`` a list of supported SSL protocols (as supported by nginx)
         self.ssl_protocols = ssl_protocols
+        #: ``ssl_ciphers`` a list of supported SSL ciphers (as supported by nginx)
         self.ssl_ciphers = ssl_ciphers
+        #: A flag to indicate if the server is unmanaged.
         self.unmanaged = unmanaged
 
     def get_port_start(self) -> List[int]:
@@ -1837,7 +1851,7 @@ class MgmtGatewaySpec(ServiceSpec):
         if cert is not None and not isinstance(cert, str):
             raise SpecValidationError(f"Invalid {name}. Must be a string.")
 
-    def _validate_private_key(self, key: Optional[str] , name: str) -> None:
+    def _validate_private_key(self, key: Optional[str], name: str) -> None:
         if key is not None and not isinstance(key, str):
             raise SpecValidationError(f"Invalid {name}. Must be a string.")
 
@@ -1847,16 +1861,19 @@ class MgmtGatewaySpec(ServiceSpec):
 
     def _validate_session_timeout(self, timeout: Optional[str]) -> None:
         if timeout is not None and not re.match(r'^\d+[smhd]$', timeout):
-            raise SpecValidationError(f"Invalid SSL Session Timeout: {timeout}. Value must be a number followed by 's', 'm', 'h', or 'd'.")
+            raise SpecValidationError(f"Invalid SSL Session Timeout: {timeout}. \
+            Value must be a number followed by 's', 'm', 'h', or 'd'.")
 
     def _validate_session_cache(self, cache: Optional[str]) -> None:
         valid_caches = ['none', 'off', 'builtin', 'shared']
         if cache is not None and not any(cache.startswith(vc) for vc in valid_caches):
-            raise SpecValidationError(f"Invalid SSL Session Cache: {cache}. Supported values are: off | none | [builtin[:size]] [shared:name:size]")
+            raise SpecValidationError(f"Invalid SSL Session Cache: {cache}. Supported values are: \
+            off | none | [builtin[:size]] [shared:name:size]")
 
     def _validate_server_tokens(self, tokens: Optional[str]) -> None:
         if tokens is not None and tokens not in ['on', 'off', 'build', 'string']:
-            raise SpecValidationError(f"Invalid Server Tokens: {tokens}. Must be one of ['on', 'off', 'build', 'version'].")
+            raise SpecValidationError(f"Invalid Server Tokens: {tokens}. Must be one of \
+            ['on', 'off', 'build', 'version'].")
 
     def _validate_ssl_protocols(self, protocols: Optional[List[str]]) -> None:
         if protocols is None:
@@ -1864,7 +1881,9 @@ class MgmtGatewaySpec(ServiceSpec):
         valid_protocols = ['SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3']
         for protocol in protocols:
             if protocol not in valid_protocols:
-                raise SpecValidationError(f"Invalid SSL Protocol: {protocol}. Must be one of {valid_protocols}.")
+                raise SpecValidationError(f"Invalid SSL Protocol: {protocol}. \
+                Must be one of {valid_protocols}.")
+
 
 yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
 

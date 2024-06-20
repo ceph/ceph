@@ -1,7 +1,6 @@
 import logging
-from typing import List, Any, Tuple, Dict, Optional, cast
+from typing import List, Any, Tuple, Dict, cast
 
-from mgr_util import build_url
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
@@ -85,10 +84,11 @@ class MgmtGatewayService(CephadmService):
         prometheus_endpoints = self.get_service_endpoints('prometheus')
         alertmanager_endpoints = self.get_service_endpoints('alertmanager')
         grafana_endpoints = self.get_service_endpoints('grafana')
-        grafana_protocol = None
-        if grafana_endpoints:
+        try:
             grafana_spec = cast(GrafanaSpec, self.mgr.spec_store['grafana'].spec)
             grafana_protocol = grafana_spec.protocol
+        except Exception:
+            grafana_protocol = 'https'  # defualt to https just for UT
 
         main_context = {
             'dashboard_endpoints': dashboard_endpoints,

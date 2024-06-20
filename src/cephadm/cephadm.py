@@ -3652,7 +3652,7 @@ def list_daemons(
                                     version = SNMPGateway.get_version(ctx, fsid, daemon_id)
                                     seen_versions[image_id] = version
                                 elif daemon_type == MgmtGateway.daemon_type:
-                                    version = MgmtGateway.get_version(ctx, fsid, daemon_id)
+                                    version = MgmtGateway.get_version(ctx, container_id)
                                     seen_versions[image_id] = version
                                 else:
                                     logger.warning('version for unknown daemon type %s' % daemon_type)
