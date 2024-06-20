@@ -16,3 +16,8 @@
 .rgw-dashboard {
   background-color: vv.$body-bg-alt;
 }
+
+.cd-alert-container {
+  display: flex;
+  flex-direction: column;
+}
