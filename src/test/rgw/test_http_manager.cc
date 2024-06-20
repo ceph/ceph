@@ -76,7 +76,8 @@ TEST(HTTPManager, ReadTruncated)
   const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
 
   RGWHTTPClient client{g_ceph_context, "GET", url};
-  EXPECT_EQ(-EAGAIN, RGWHTTP::process(&client, null_yield));
+  const auto dpp = NoDoutPrefix{g_ceph_context, ceph_subsys_rgw};
+  EXPECT_EQ(-EAGAIN, RGWHTTP::process(&dpp, &client, null_yield));
 
   server.join();
 }
@@ -100,7 +101,8 @@ TEST(HTTPManager, Head)
   const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
 
   RGWHTTPClient client{g_ceph_context, "HEAD", url};
-  EXPECT_EQ(0, RGWHTTP::process(&client, null_yield));
+  const auto dpp = NoDoutPrefix{g_ceph_context, ceph_subsys_rgw};
+  EXPECT_EQ(0, RGWHTTP::process(&dpp, &client, null_yield));
 
   server.join();
 }

@@ -88,7 +88,8 @@ public:
     }
   }
 
-  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const DoutPrefixProvider* dpp, const rgw_pubsub_s3_event& event,
+           optional_yield y) override {
     std::shared_lock lock(s_http_manager_mutex);
     if (!s_http_manager) {
       ldout(cct, 1) << "ERROR: send failed. http endpoint manager not running" << dendl;
@@ -114,7 +115,7 @@ public:
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
     auto rc = s_http_manager->add_request(&request);
     if (rc == 0) {
-      rc = request.wait(y);
+      rc = request.wait(dpp, y);
     }
     if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
     // TODO: use read_bl to process return code and handle according to ack level
@@ -144,7 +145,7 @@ class Waiter {
   mutable std::condition_variable cond;
 
 public:
-  int wait(optional_yield y) {
+  int wait(const DoutPrefixProvider* dpp, optional_yield y) {
     std::unique_lock l{lock};
     if (done) {
       return ret;
@@ -247,7 +248,7 @@ public:
     }
   }
 
-  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const DoutPrefixProvider* dpp, const rgw_pubsub_s3_event& event, optional_yield y) override {
     if (ack_level == ack_level_t::None) {
       return amqp::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
@@ -262,7 +263,7 @@ public:
         // failed to publish, does not wait for reply
         return rc;
       }
-      return w->wait(y);
+      return w->wait(dpp, y);
     }
   }
 
@@ -320,7 +321,8 @@ public:
    }
  }
 
-  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const DoutPrefixProvider* dpp, const rgw_pubsub_s3_event& event,
+           optional_yield y) override {
     if (ack_level == ack_level_t::None) {
       return kafka::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
@@ -332,7 +334,7 @@ public:
         // failed to publish, does not wait for reply
         return rc;
       }
-      return w->wait(y);
+      return w->wait(dpp, y);
     }
   }
 

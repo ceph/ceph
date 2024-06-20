@@ -315,7 +315,7 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
   //Headers
   openidc_req.append_header("Content-Type", "application/x-www-form-urlencoded");
 
-  int res = openidc_req.process(y);
+  int res = openidc_req.process(dpp, y);
   if (res < 0) {
     ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
     throw -EINVAL;
@@ -353,7 +353,7 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
     //Headers
     cert_req.append_header("Content-Type", "application/x-www-form-urlencoded");
 
-    int res = cert_req.process(y);
+    int res = cert_req.process(dpp, y);
     if (res < 0) {
       ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
       throw -EINVAL;

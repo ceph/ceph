@@ -71,7 +71,7 @@ struct rgw_http_req_data : public RefCountedObject {
         }, token, ex);
   }
 
-  int wait(optional_yield y) {
+  int wait(const DoutPrefixProvider* dpp, optional_yield y) {
     std::unique_lock l{lock};
     if (done) {
       return ret;
@@ -534,9 +534,9 @@ static bool is_upload_request(const string& method)
 /*
  * process a single simple one off request
  */
-int RGWHTTPClient::process(optional_yield y)
+int RGWHTTPClient::process(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return RGWHTTP::process(this, y);
+  return RGWHTTP::process(dpp, this, y);
 }
 
 string RGWHTTPClient::to_str()
@@ -648,9 +648,9 @@ bool RGWHTTPClient::is_done()
 /*
  * wait for async request to complete
  */
-int RGWHTTPClient::wait(optional_yield y)
+int RGWHTTPClient::wait(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return req_data->wait(y);
+  return req_data->wait(dpp, y);
 }
 
 void RGWHTTPClient::cancel()
@@ -1214,7 +1214,7 @@ int RGWHTTP::send(RGWHTTPClient *req) {
   return 0;
 }
 
-int RGWHTTP::process(RGWHTTPClient *req, optional_yield y) {
+int RGWHTTP::process(const DoutPrefixProvider* dpp, RGWHTTPClient *req, optional_yield y) {
   if (!req) {
     return 0;
   }
@@ -1223,6 +1223,6 @@ int RGWHTTP::process(RGWHTTPClient *req, optional_yield y) {
     return r;
   }
 
-  return req->wait(y);
+  return req->wait(dpp, y);
 }
 
