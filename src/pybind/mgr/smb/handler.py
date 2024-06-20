@@ -1036,7 +1036,6 @@ def _generate_config(
         'globals': {
             'default': {
                 'options': {
-                    'server min protocol': 'SMB2',
                     'load printers': 'No',
                     'printing': 'bsd',
                     'printcap name': '/dev/null',

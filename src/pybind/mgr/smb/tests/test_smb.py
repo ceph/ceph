@@ -446,7 +446,6 @@ def test_share_dump_config(tmodule):
         'globals': {
             'default': {
                 'options': {
-                    'server min protocol': 'SMB2',
                     'load printers': 'No',
                     'printing': 'bsd',
                     'printcap name': '/dev/null',

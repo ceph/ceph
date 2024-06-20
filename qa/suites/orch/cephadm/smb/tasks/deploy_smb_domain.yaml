@@ -51,7 +51,6 @@ tasks:
           "read only" = "no"
           "browseable" = "yes"
           [globals.default.options]
-          "server min protocol" = "SMB2"
           "load printers" = "no"
           "printing" = "bsd"
           "printcap name" = "/dev/null"
