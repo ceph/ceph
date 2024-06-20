@@ -17,6 +17,7 @@
 
 #include "common/BackTrace.h"
 #include "common/dout.h"
+#include "include/ceph_assert.h"
 
 thread_local bool is_asio_thread = false;
 
@@ -27,6 +28,11 @@ void maybe_warn_about_blocking(const DoutPrefixProvider* dpp)
     return;
   }
 
+  // for validation, tests can assert that no requests block
+  const auto& conf = dpp->get_cct()->_conf;
+  ceph_assert_always(!conf->rgw_asio_assert_yielding);
+
+  // otherwise just log the warning and optional backtrace
   ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
 #ifdef _BACKTRACE_LOGGING
   ldpp_dout(dpp, 20) << "BACKTRACE: " << ClibBackTrace(0) << dendl;
