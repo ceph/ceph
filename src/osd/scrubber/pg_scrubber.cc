@@ -534,30 +534,16 @@ sched_params_t PgScrubber::determine_initial_schedule(
 }
 
 
-/*
- * Note: referring to m_planned_scrub here is temporary, as this set of
- * scheduling flags will be removed in a followup PR.
- */
 void PgScrubber::schedule_scrub_with_osd()
 {
   ceph_assert(is_primary());
   ceph_assert(m_scrub_job);
 
-  auto pre_reg = registration_state();
-  m_scrub_job->registered = true;
-
-  const auto applicable_conf = populate_config_params();
-  const auto scrub_clock_now = ceph_clock_now();
-  auto suggested = determine_initial_schedule(applicable_conf, scrub_clock_now);
-  m_scrub_job->init_targets(
-      suggested, m_pg->info, applicable_conf, scrub_clock_now);
-
-  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
-
-  dout(10) << fmt::format(
-		  "{}: <flags:{}> <{:.5}> --> <{:.5}>", __func__,
-		  m_planned_scrub, pre_reg, registration_state())
+  dout(20) << fmt::format(
+		  "{}: state at entry: {}", __func__, m_scrub_job->state_desc())
 	   << dendl;
+  m_scrub_job->registered = true;
+  update_scrub_job(delay_ready_t::delay_ready);
 }
 
 
@@ -613,8 +599,12 @@ void PgScrubber::update_scrub_job(Scrub::delay_ready_t delay_ready)
   ceph_assert(m_pg->is_locked());
   const auto applicable_conf = populate_config_params();
   const auto scrub_clock_now = ceph_clock_now();
-  const auto suggested = determine_initial_schedule(applicable_conf, scrub_clock_now);
-  m_scrub_job->on_periods_change(suggested, applicable_conf, scrub_clock_now);
+  const auto suggested =
+      determine_initial_schedule(applicable_conf, scrub_clock_now);
+
+  ceph_assert(m_scrub_job->is_registered());
+  m_scrub_job->adjust_schedule(
+      suggested, applicable_conf, scrub_clock_now, delay_ready);
   m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
   m_scrub_job->target_queued = true;
   m_pg->publish_stats_to_osd();
@@ -761,10 +751,7 @@ void PgScrubber::on_operator_periodic_cmd(
 	   << dendl;
 
   // move the relevant time-stamp backwards - enough to trigger a scrub
-
-  utime_t now_is = ceph_clock_now();
-  utime_t stamp = now_is;
-
+  utime_t stamp = ceph_clock_now();
   if (offset > 0) {
     stamp -= offset;
   } else {
@@ -2080,6 +2067,56 @@ void PgScrubber::on_digest_updates()
     preemption_data.reset();
     m_osds->queue_scrub_next_chunk(m_pg, m_pg->is_scrub_blocking_ops());
   }
+}
+
+
+/**
+ * The scrub session was aborted. We are left with two sets of parameters
+ * as to when the next scrub of this PG should take place, and what should
+ * it be like. One set of parameters is the one that was used to start the
+ * scrub, and that was 'frozen' by set_op_parameters(). It has its own
+ * scheduling target, priority, not-before, etc'.
+ * The other set is the updated state of the current scrub-job. It may
+ * have had its priority, flags, or schedule modified in the meantime.
+ * And - it does not (at least initially, i.e. immediately after
+ * set_op_parameters()), have high priority.
+ *
+ * Alas, the scrub session that was initiated was aborted. We must now
+ * merge the two sets of parameters, using the highest priority and the
+ * nearest target time for the next scrub.
+ *
+ * Note: only half-functioning in this commit. As the scrub-job copy
+ * (the one that was in the scheduling queue, and was passed to the scrubber)
+ * does not have the 'urgency' parameter, we are missing some information
+ * that is still encoded in the 'planned scrub' flags. This will be fixed in
+ * the next step.
+ */
+void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
+{
+  // assuming we can still depend on the 'scrubbing' flag being set;
+  // Also on Queued&Active.
+
+  // note again: this is not how merging should work in the final version:
+  // e.g. - the 'aborted_schedule' data should be passed thru the scrubber.
+  // In this current patchworik, for example, we are only guessing at
+  // the original value of 'must_deep_scrub'.
+  m_planned_scrub.must_deep_scrub =
+      m_planned_scrub.must_deep_scrub || (m_flags.required && m_is_deep);
+  m_planned_scrub.must_scrub = m_planned_scrub.must_deep_scrub ||
+			       m_planned_scrub.must_scrub || m_flags.required;
+  m_planned_scrub.must_repair = m_planned_scrub.must_repair || m_is_repair;
+  m_planned_scrub.need_auto = m_planned_scrub.need_auto || m_flags.auto_repair;
+  m_planned_scrub.deep_scrub_on_error =
+      m_planned_scrub.deep_scrub_on_error || m_flags.deep_scrub_on_error;
+  m_planned_scrub.check_repair =
+      m_planned_scrub.check_repair || m_flags.check_repair;
+
+  m_scrub_job->merge_and_delay(
+      m_active_target->schedule, issue, m_planned_scrub, ceph_clock_now());
+  ceph_assert(m_scrub_job->is_registered());
+  ceph_assert(!m_scrub_job->target_queued);
+  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
+  m_scrub_job->target_queued = true;
 }
 
 

@@ -437,7 +437,7 @@ class PgScrubber : public ScrubPgIF,
 
   void scrub_finish() final;
 
-  void penalize_next_scrub(Scrub::delay_cause_t cause) final;
+  void on_mid_scrub_abort(Scrub::delay_cause_t issue) final;
 
   ScrubMachineListener::MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) final;
