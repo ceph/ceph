@@ -194,6 +194,10 @@ export class CdValidators {
                   result = value.length >= prerequisite['arg1'];
                 }
                 break;
+              case 'minValue':
+                if (_.isNumber(value)) {
+                  result = value >= prerequisite['arg1'];
+                }
             }
             return result;
           }

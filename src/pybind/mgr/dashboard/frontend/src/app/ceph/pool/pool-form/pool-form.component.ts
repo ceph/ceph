@@ -86,6 +86,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   crushRuleMaxSize = 10;
   DEFAULT_RATIO = 0.875;
+  msrCrush: boolean = false;
 
   private modalSubscription: Subscription;
 
@@ -199,6 +200,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.listenToChanges();
       this.setComplexValidators();
     });
+    this.erasureProfileChange();
   }
 
   private initInfo(info: PoolFormInfo) {
@@ -933,5 +935,12 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   appSelection() {
     this.form.get('name').updateValueAndValidity({ emitEvent: false, onlySelf: true });
+  }
+
+  erasureProfileChange() {
+    const profile = this.form.get('erasureProfile').value;
+    if (profile) {
+      this.msrCrush = profile['crush-num-failure-domains'] > 0 || profile['crush-osds-per-failure-domain'] > 0;
+    }
   }
 }
