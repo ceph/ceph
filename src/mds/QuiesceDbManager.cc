@@ -87,11 +87,9 @@ void* QuiesceDbManager::quiesce_db_thread_main()
       if (next_event_at_age <= db_age) {
         break;
       }
+      dout(20) << "db idle, age: " << db_age << " next_event_at_age: " << next_event_at_age << dendl;
       auto timeout = std::min(max_wait, next_event_at_age - db_age);
-      auto wait_result = submit_condition.wait_for(ls, timeout);
-      if (std::cv_status::timeout == wait_result) {
-        dout(20) << "db idle, age: " << db_age << dendl;
-      }
+      submit_condition.wait_for(ls, timeout);
     }
 
     auto [is_member, should_exit] = membership_upkeep();
@@ -111,6 +109,8 @@ void* QuiesceDbManager::quiesce_db_thread_main()
           next_event_at_age = leader_upkeep(std::move(acks), std::move(requests));
         } else {
           // not yet there. Put the acks and requests back onto the queue and wait for updates
+          // We should mark the next event age in case we get caught up in the sleep above
+          next_event_at_age = db.get_age() + bootstrap_delay;
           ls.lock();
           while (!requests.empty()) {
             pending_requests.emplace_front(std::move(requests.back()));
@@ -121,6 +121,12 @@ void* QuiesceDbManager::quiesce_db_thread_main()
             acks.pop_back();
           }
           if (pending_db_updates.empty()) {
+            // we are waiting here because if requests/acks aren't empty
+            // the code above will skip the sleep due to the `db_thread_has_work`
+            // returning true, causing a busy-loop of the quiesce manager thread.
+            // This sleep may be interrupted by the submit_condition, in which case
+            // we will re-consider everything and may end up here again, but with a shorter
+            // bootstrap_delay.
             dout(5) << "bootstrap: waiting for new peers with pending acks: " << pending_acks.size()
               << " requests: " << pending_requests.size()
               << ". Wait timeout: " << bootstrap_delay << dendl;
