@@ -814,7 +814,7 @@ KmipGetTheKey::get_uniqueid_for_keyname(const DoutPrefixProvider* dpp,
 	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::LOCATE);
 
 	secret_req.name = work.data();
-	ret = secret_req.process(y);
+	ret = secret_req.process(dpp, y);
 	if (ret < 0) {
 		failed = true;
 	} else if (!secret_req.outlist->string_count) {
@@ -841,7 +841,7 @@ KmipGetTheKey::get_key_for_uniqueid(const DoutPrefixProvider* dpp,
 	if (failed) return ret;
 	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::GET);
 	secret_req.unique_id = work.data();
-	ret = secret_req.process(y);
+	ret = secret_req.process(dpp, y);
 	if (ret < 0) {
 		failed = true;
 	} else {
