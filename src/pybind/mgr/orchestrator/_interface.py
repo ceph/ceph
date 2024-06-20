@@ -785,6 +785,10 @@ class Orchestrator(object):
         """remove prometheus target for multi-cluster"""
         raise NotImplementedError()
 
+    def set_custom_prometheus_alerts(self, alerts_file: str) -> OrchResult[str]:
+        """set prometheus custom alerts files and schedule reconfig of prometheus"""
+        raise NotImplementedError()
+
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
         """get alertmanager access information"""
         raise NotImplementedError()
