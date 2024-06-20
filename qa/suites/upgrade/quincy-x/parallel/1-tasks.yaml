@@ -1,3 +1,21 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - mons down
+      - mon down
+      - MON_DOWN
+      - out of quorum
+      - PG_
+      - OSD_DOWN
+      - POOL_APP_NOT_ENABLED
+      - pgs degraded
+      - pg degraded
+      - object degraded
+      - objects degraded
+      - FS_DEGRADED
+      - MDS_ALL_DOWN
+      - OSD_UPGRADE_FINISHED
+      - do not have an application enabled
 tasks:
 - install:
     branch: quincy
@@ -34,6 +52,12 @@ tasks:
     - workload
     - upgrade-sequence
 - print: "**** done end parallel"
+
+- print: "**** done set require-osd-release ..."
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+        - ceph osd require-osd-release squid
 
 - print: "**** done start telemetry x..."
 - workunit:
