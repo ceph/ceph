@@ -119,6 +119,7 @@ class MDSCacheObject {
   void state_set(unsigned mask) { state |= mask; }
   void state_reset(unsigned s) { state = s; }
 
+  virtual bool is_dir() const { return false; }
   bool is_auth() const { return state_test(STATE_AUTH); }
   bool is_dirty() const { return state_test(STATE_DIRTY); }
   bool is_clean() const { return !is_dirty(); }
