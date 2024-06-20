@@ -39,9 +39,9 @@ from redminelib.exceptions import ResourceAttrError
 redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
-custom_field_tag = 'cf_3'
-tag_separator = ' '
-tag_backport_processed = 'backport_processed'
+CF_TAGS = 31 # Tags custom field: https://tracker.ceph.com/custom_fields/31/edit
+TAG_SEPARATOR = ' '
+TAG_BACKPORT_PROCESSED = 'backport_processed'
 delay_seconds = 5
 redmine_key_file="~/.redmine_key"
 redmine_key_env="REDMINE_API_KEY"
@@ -87,7 +87,7 @@ def parse_arguments():
                         "them even if not in 'Pending Backport' status. "
                         "Otherwise, process all issues in 'Pending Backport' "
                         "status even if already processed "
-                        f"(tag '{tag_backport_processed}' added)",
+                        f"(tag '{TAG_BACKPORT_PROCESSED}' added)",
                         action="store_true")
     return parser.parse_args()
 
@@ -305,20 +305,34 @@ def mark_as_processed(r, issue):
     This script will add a custom Tag to indicate whether the tracker was
     already processed for backport tracker creation.
     """
-    custom_fields = list(issue['custom_fields'].values())
-    for i, field in enumerate(custom_fields):
-        if field['name'] == 'Tags':
-            if tag_backport_processed not in field['value']:
-                if field['value']:
-                    custom_fields[i]['value'] += (tag_separator +
-                                                  tag_backport_processed)
-                else:
-                    custom_fields[i]['value'] = tag_backport_processed
-                logging.info("%s adding tag '%s'", url(issue),
-                             tag_backport_processed)
-                r.issue.update(issue.id, custom_fields=custom_fields)
-                return
 
+    logging.debug("custom_fields: %s", list(issue['custom_fields']))
+
+    tags_cf = next(filter(lambda x: x['id'] == CF_TAGS, issue['custom_fields']), None)
+
+    if tags_cf is None:
+        tags = ''
+    else:
+        tags = tags_cf.value
+        if tags is None:
+            tags = ''
+        else:
+            tags.strip()
+
+    if TAG_BACKPORT_PROCESSED not in tags:
+        if tags:
+            tags += f"{TAG_SEPARATOR}{TAG_BACKPORT_PROCESSED}"
+        else:
+            tags = TAG_BACKPORT_PROCESSED
+
+        logging.info("%s adding tag '%s', now '%s'", url(issue), TAG_BACKPORT_PROCESSED, tags)
+        tags_cf = {
+          'id': CF_TAGS,
+          'value': tags,
+        }
+        r.issue.update(issue.id, custom_fields=[tags_cf])
+    else:
+        logging.debug("%s already has tag '%s'", url(issue), TAG_BACKPORT_PROCESSED)
 
 def iterate_over_backports(r, issues, dry_run=False):
     counter = 0
@@ -377,7 +391,7 @@ if __name__ == '__main__':
         if args.force or args.resolve_parent:
             if args.force:
                 logging.warn("--force option was given: ignoring '%s' tag!",
-                             tag_backport_processed)
+                             TAG_BACKPORT_PROCESSED)
             issues = redmine.issue.filter(project_id=ceph_project_id,
                                           status_id=pending_backport_status_id)
         else:
@@ -385,9 +399,9 @@ if __name__ == '__main__':
             issues = redmine.issue.filter(project_id=ceph_project_id,
                                           status_id=pending_backport_status_id,
                                           **{
-                                              custom_field_tag:
+                                              f"cf_{CF_TAGS}":
                                               '!~' +
-                                              tag_backport_processed})
+                                              TAG_BACKPORT_PROCESSED})
     if force_create:
         logging.info("Processing {} issues regardless of status"
                      .format(len(issues)))
