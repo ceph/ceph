@@ -3795,7 +3795,7 @@ TYPED_TEST(EncryptedFlattenTest, ZeroOverlap)
   }
 }
 
-#endif
+#endif // HAVE_LIBCRYPTSETUP
 
 TEST_F(TestLibRBD, TestIOWithIOHint)
 {
@@ -7487,6 +7487,82 @@ public:
     test_deterministic_pp(image, object_off, len, 1);
   }
 
+#ifdef HAVE_LIBCRYPTSETUP
+
+  void test_deterministic_luks1(uint64_t object_off, uint64_t len) {
+    rados_ioctx_t ioctx;
+    ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+    rbd_image_t image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ASSERT_EQ(0, create_image(ioctx, name.c_str(), 24 << 20, &order));
+    ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+    rbd_encryption_luks1_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, "some passphrase", 15};
+    ASSERT_EQ(0, rbd_encryption_format(image, RBD_ENCRYPTION_FORMAT_LUKS1,
+                                       &fopts, sizeof(fopts)));
+    test_deterministic(image, object_off, len, 512);
+
+    ASSERT_EQ(0, rbd_close(image));
+    rados_ioctx_destroy(ioctx);
+  }
+
+  void test_deterministic_luks1_pp(uint64_t object_off, uint64_t len) {
+    librados::IoCtx ioctx;
+    ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 24 << 20, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+    librbd::encryption_luks1_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, "some passphrase"};
+    ASSERT_EQ(0, image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS1, &fopts,
+                                         sizeof(fopts)));
+    test_deterministic_pp(image, object_off, len, 512);
+  }
+
+  void test_deterministic_luks2(uint64_t object_off, uint64_t len) {
+    rados_ioctx_t ioctx;
+    ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+
+    rbd_image_t image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ASSERT_EQ(0, create_image(ioctx, name.c_str(), 36 << 20, &order));
+    ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+    rbd_encryption_luks2_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, "some passphrase", 15};
+    ASSERT_EQ(0, rbd_encryption_format(image, RBD_ENCRYPTION_FORMAT_LUKS2,
+                                       &fopts, sizeof(fopts)));
+    test_deterministic(image, object_off, len, 4096);
+
+    ASSERT_EQ(0, rbd_close(image));
+    rados_ioctx_destroy(ioctx);
+  }
+
+  void test_deterministic_luks2_pp(uint64_t object_off, uint64_t len) {
+    librados::IoCtx ioctx;
+    ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 22;
+    std::string name = this->get_temp_image_name();
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), 36 << 20, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+    librbd::encryption_luks2_format_options_t fopts = {
+        RBD_ENCRYPTION_ALGORITHM_AES256, "some passphrase"};
+    ASSERT_EQ(0, image.encryption_format(RBD_ENCRYPTION_FORMAT_LUKS2, &fopts,
+                                         sizeof(fopts)));
+    test_deterministic_pp(image, object_off, len, 4096);
+  }
+
+#endif // HAVE_LIBCRYPTSETUP
+
 private:
   void test_deterministic(rbd_image_t image, uint64_t object_off,
                           uint64_t len, uint64_t block_size) {
@@ -7893,6 +7969,58 @@ TYPED_TEST(DiffIterateTest, DiffIterateDeterministicPP)
   EXPECT_NO_FATAL_FAILURE(this->test_deterministic_pp(3 << 20, 2));
   EXPECT_NO_FATAL_FAILURE(this->test_deterministic_pp((4 << 20) - 2, 2));
 }
+
+#ifdef HAVE_LIBCRYPTSETUP
+
+TYPED_TEST(DiffIterateTest, DiffIterateDeterministicLUKS1)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1(0, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1((1 << 20) - 256, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1((1 << 20) - 128, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1(1 << 20, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1((4 << 20) - 256, 256));
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateDeterministicLUKS1PP)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1_pp(0, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1_pp((3 << 20) - 2, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1_pp((3 << 20) - 1, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1_pp(3 << 20, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks1_pp((4 << 20) - 2, 2));
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateDeterministicLUKS2)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2(0, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2((1 << 20) - 256, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2((1 << 20) - 128, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2(1 << 20, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2((4 << 20) - 256, 256));
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateDeterministicLUKS2PP)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2_pp(0, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2_pp((3 << 20) - 2, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2_pp((3 << 20) - 1, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2_pp(3 << 20, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_luks2_pp((4 << 20) - 2, 2));
+}
+
+#endif // HAVE_LIBCRYPTSETUP
 
 TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
 {
