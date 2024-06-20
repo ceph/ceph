@@ -32,7 +32,7 @@ describe('Mirroring page', () => {
       cy.ceph2Login();
       cy.login();
       pools.navigateTo('create');
-      pools.create(poolName, 8, 'rbd');
+      pools.create(poolName, 8, ['rbd']);
       pools.navigateTo();
       pools.existTableCell(poolName, true);
       mirroring.navigateTo();
@@ -49,16 +49,17 @@ describe('Mirroring page', () => {
         // so writing the code to copy the token inside the origin manually
         // rather than using a function call
         // @ts-ignore
+        cy.ceph2Login();
         cy.origin(url, { args }, ({ name, bootstrapToken }) => {
           // Create an rbd pool in the second cluster
+          cy.visit('#/pool/create').wait(100);
 
           // Login to the second cluster
           // Somehow its not working with the cypress login function
-          cy.visit('#/pool/create').wait(100);
-
           cy.get('[name=username]').type('admin');
           cy.get('#password').type('admin');
           cy.get('[type=submit]').click();
+
           cy.get('input[name=name]').clear().type(name);
           cy.get(`select[name=poolType]`).select('replicated');
           cy.get(`select[name=poolType] option:checked`).contains('replicated');
@@ -93,7 +94,7 @@ describe('Mirroring page', () => {
 
     beforeEach(() => {
       pools.navigateTo('create'); // Need pool for mirroring testing
-      pools.create(poolName, 8, 'rbd');
+      pools.create(poolName, 8, ['rbd']);
       pools.navigateTo();
       pools.existTableCell(poolName, true);
     });
