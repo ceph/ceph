@@ -50,6 +50,18 @@ public:
     assert(it->second);
     return {*(it->second), added};
   }
+  seastar::future<> add_unfound(const hobject_t &soid) {
+    auto [it, added] = unfound.emplace(soid, seastar::shared_promise());
+    return it->second.get_shared_future();
+  }
+  void found_and_remove(const hobject_t &soid) {
+    auto it = unfound.find(soid);
+    if (it != unfound.end()) {
+      auto &found_promise = it->second;
+      found_promise.set_value();
+      unfound.erase(it);
+    }
+  }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
     assert(is_recovering(soid));
     return *(recovering.at(soid));
@@ -90,6 +102,10 @@ public:
   seastar::future<> stop() {
     for (auto& [soid, recovery_waiter] : recovering) {
       recovery_waiter->stop();
+    }
+    for (auto& [soid, promise] : unfound) {
+      promise.set_exception(
+	crimson::common::system_shutdown_exception());
     }
     return on_stop();
   }
@@ -236,6 +252,7 @@ public:
   using WaitForObjectRecoveryRef = boost::intrusive_ptr<WaitForObjectRecovery>;
 protected:
   std::map<hobject_t, WaitForObjectRecoveryRef> recovering;
+  std::map<hobject_t, seastar::shared_promise<>> unfound;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
     eversion_t version) const;

@@ -431,6 +431,7 @@ void PGRecovery::on_global_recover (
   auto& recovery_waiter = pg->get_recovery_backend()->get_recovering(soid);
   recovery_waiter.set_recovered();
   pg->get_recovery_backend()->remove_recovering(soid);
+  pg->get_recovery_backend()->found_and_remove(soid);
 }
 
 void PGRecovery::on_failed_recover(
