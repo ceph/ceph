@@ -4126,7 +4126,7 @@ written." % (self.name, ret, length))
             ret = rbd_get_access_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting access timestamp for image: %s' % (self.name))
-        return datetime.fromtimestamp(timestamp.tv_sec)
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
 
     @requires_not_closed
     def modify_timestamp(self):
@@ -4139,7 +4139,7 @@ written." % (self.name, ret, length))
             ret = rbd_get_modify_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting modify timestamp for image: %s' % (self.name))
-        return datetime.fromtimestamp(timestamp.tv_sec)
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
 
     @requires_not_closed
     def flatten(self, on_progress=None):
