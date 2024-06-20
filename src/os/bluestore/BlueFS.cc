@@ -2469,6 +2469,7 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
   // 5. update our log fnode
   // discard first old_log_jump_to extents
 
+  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
   dout(10) << __func__ << " remove 0x" << std::hex << old_log_jump_to << std::dec
 	   << " of " << log_file->fnode.extents << dendl;
   uint64_t discarded = 0;
@@ -2499,7 +2500,6 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
     ++from;
   }
 
-  vselector->sub_usage(log_file->vselector_hint, log_file->fnode);
 
   // clear the extents from old log file, they are added to new log
   log_file->fnode.clear_extents();
