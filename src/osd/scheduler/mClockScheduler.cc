@@ -553,7 +553,8 @@ void mClockScheduler::handle_conf_change(
 
   if (auto key = get_changed_key(); key.has_value()) {
     auto mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
-    if (mclock_profile == "custom") {
+    auto override_settings = cct->_conf.get_val<bool>("osd_mclock_override_recovery_settings");
+    if (override_settings || mclock_profile == "custom") {
       client_registry.update_from_config(
         conf, osd_bandwidth_capacity_per_shard);
     } else {
@@ -584,7 +585,7 @@ void mClockScheduler::handle_conf_change(
     }
     // Alternatively, the QoS parameter, if set ephemerally for this OSD via
     // the 'daemon' or 'tell' interfaces must be removed.
-    if (!cct->_conf.rm_val(*key)) {
+    if (override_settings || !cct->_conf.rm_val(*key)) {
       dout(10) << __func__ << " Restored " << *key << " to default" << dendl;
       cct->_conf.apply_changes(nullptr);
     }
