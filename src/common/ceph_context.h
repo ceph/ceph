@@ -282,11 +282,10 @@ public:
   void set_mon_addrs(const MonMap& mm);
   void set_mon_addrs(const std::vector<entity_addrvec_t>& in) {
     auto ptr = std::make_shared<std::vector<entity_addrvec_t>>(in);
-    atomic_store_explicit(&_mon_addrs, std::move(ptr), std::memory_order_relaxed);
+    _mon_addrs.store(std::move(ptr), std::memory_order_relaxed);
   }
   std::shared_ptr<std::vector<entity_addrvec_t>> get_mon_addrs() const {
-    auto ptr = atomic_load_explicit(&_mon_addrs, std::memory_order_relaxed);
-    return ptr;
+    return _mon_addrs.load(std::memory_order_relaxed);
   }
 
 private:
@@ -306,7 +305,7 @@ private:
 
   int _crypto_inited;
 
-  std::shared_ptr<std::vector<entity_addrvec_t>> _mon_addrs;
+  std::atomic<std::shared_ptr<std::vector<entity_addrvec_t>>> _mon_addrs;
 
   /* libcommon service thread.
    * SIGHUP wakes this thread, which then reopens logfiles */
