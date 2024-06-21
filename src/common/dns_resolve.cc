@@ -22,6 +22,8 @@
 
 using std::map;
 using std::string;
+using std::tolower;
+using std::transform;
 
 namespace ceph {
 
@@ -312,7 +314,6 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     ldout(cct, 20) << "No hosts found for service " << query_str << dendl;
     return 0;
   }
-
   ns_msg handle;
 
   ns_initparse(nsbuf, len, &handle);
@@ -322,7 +323,6 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     ldout(cct, 20) << "No hosts found for service " << query_str << dendl;
     return 0;
   }
-
   ns_rr rr;
   char full_target[NS_MAXDNAME];
 
@@ -357,6 +357,8 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     if (r == 0) {
       addr.set_port(port);
       string target = full_target;
+      transform(srv_domain.begin(), srv_domain.end(), srv_domain.begin(),
+          [](unsigned char c) { return std::tolower(c); });
       auto end = target.find(srv_domain);
       if (end == target.npos) {
 	lderr(cct) << "resolved target not in search domain: "
