@@ -1,0 +1,136 @@
+.. _deploy-cephadm-mgmt-gateway:
+
+==================
+Management Gateway
+==================
+
+Deploying mgmt-gateway
+======================
+
+In Ceph releases beginning with Squid, the `mgmt-gateway` service introduces a new design for Ceph applications
+based on a modular, service-based architecture. This service, managed by cephadm and built on top of nginx
+(an open-source, high-performance web server), acts as the new front-end and single entry point to the
+Ceph cluster. The `mgmt-gateway` provides unified access to all Ceph applications, including the ceph dashboard
+and monitoring stack. Employing nginx enhances security and simplifies access management due to its robust
+community support and high-security standards. The `mgmt-gateway` service acts as a reverse-proxy that routes
+requests to the appropriate Ceph application instances.
+
+In order to deploy the mgmt-gateway service, use the following command:
+
+.. prompt:: bash #
+
+    ceph orch apply mgmt-gateway [--placement ...] ...
+
+Once applied cephadm will automatically reconfigure several running daemons (including monitoring)
+to run automatically behind the new created service. External access to those services will not be possible
+anymore. All the access will be centralized through the new created service endpoint: `https://<node-ip>:<port>`.
+
+
+Benefits of the mgmt-gateway service
+====================================
+* ``Unified Access``: Centralizing access through nginx improves security and provide a single entry to the cluster.
+* ``Improved user experience``: User shouldn't care anymore about where each application is running (ip/host).
+* ``High Availability for dashboard``: nginx HA mechanisms are used to provide high availability for ceph dashboard.
+* ``High Availability for monitoring``: nginx HA mechanisms are used to provide high availability for monitoring.
+
+Security enhancements
+=====================
+
+Once the `mgmt-gateway` service is deployed user cannot access monitoring services without authentication through the
+dashboard.
+
+
+High availability enhancements
+==============================
+nginx HA mechanisms are used to provide high availability for all the Ceph management applications including Dashboard
+and monitoring stack. In case of the Dashboard user shouldn't care anymore where the active manager is running.
+`mgmt-gateway` handles manager failover transparently and redirects the user to the active manager. In case of the
+monitoring `mgmt-gateway` takes care of handling the high availability in case several instances of Prometheus, Alertmanager
+or Grafana are available. The reverse-proxy will automatically detect healthy instances and use them to process user requests.
+
+
+Accessing services with mgmt-gateway
+====================================
+
+Once the `mgmt-gateway` service is deployed direct access to the monitoring services will not be allowed anymore.
+Applications such as: Prometheus, Grafana and Alertmanager are now accessible through dedicated links
+from `Administration > Services`.
+
+
+Service Specification
+=====================
+
+A mgmt-gateway service can be applied using a specification. An example in YAML follows:
+
+.. code-block:: yaml
+
+    service_type: mgmt-gateway
+    service_id: gateway
+    placement:
+      hosts:
+        - ceph0
+    spec:
+     port: 5000
+     ssl_protocols:
+       - TLSv1.2
+       - TLSv1.3
+       - ...
+     ssl_ciphers:
+       - AES128-SHA
+       - AES256-SHA
+       - ...
+     ssl_certificate: |
+       -----BEGIN CERTIFICATE-----
+       MIIDtTCCAp2gAwIBAgIYMC4xNzc1NDQxNjEzMzc2MjMyXzxvQ7EcMA0GCSqGSIb3
+       DQEBCwUAMG0xCzAJBgNVBAYTAlVTMQ0wCwYDVQQIDARVdGFoMRcwFQYDVQQHDA5T
+       [...]
+       -----END CERTIFICATE-----
+    ssl_certificate_key: |
+       -----BEGIN PRIVATE KEY-----
+       MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC5jdYbjtNTAKW4
+       /CwQr/7wOiLGzVxChn3mmCIF3DwbL/qvTFTX2d8bDf6LjGwLYloXHscRfxszX/4h
+       [...]
+       -----END PRIVATE KEY-----
+
+Fields specific to the ``spec`` section of the mgmt-gateway service are described below.
+
+.. py:currentmodule:: ceph.deployment.service_spec
+
+.. autoclass:: MgmtGatewaySpec
+   :members:
+
+The specification can then be applied by running the following command:
+
+.. prompt:: bash #
+
+   ceph orch apply -i mgmt-gateway.yaml
+
+
+Limitations
+===========
+
+A non-exhaustive list of important limitations for the mgmt-gateway service follows:
+
+* High-availability configurations and clustering for the mgmt-gateway service itself are currently not supported.
+* Services must bind to the appropriate ports based on the applications being proxied. Ensure that there
+  are no port conflicts that might disrupt service availability.
+
+
+Default images
+~~~~~~~~~~~~~~
+
+The `mgmt-gateway` service internally makes use of nginx reverse proxy. The following container image is used by default:
+
+::
+
+    DEFAULT_NGINX_IMAGE = 'docker.io/nginx:1.26.0'
+
+Admins can specify the image to be used by changing the `container_image_nginx` cephadm module option. If there were already
+running daemon(s) you must redeploy the daemon(s) in order to have them actually use the new image.
+
+For example:
+
+.. code-block:: bash
+
+     ceph config set mgr mgr/cephadm/container_image_nginx <new-nginx-image>
+     ceph orch redeploy mgmt-gateway
