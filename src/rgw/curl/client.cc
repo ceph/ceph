@@ -28,6 +28,7 @@ namespace rgw::curl {
 boost::system::error_category& easy_category()
 {
   static struct category : boost::system::error_category {
+    virtual ~category() {}
     const char* name() const noexcept override { return "curl easy"; }
     std::string message(int code) const override {
       return ::curl_easy_strerror(static_cast<CURLcode>(code));
@@ -39,6 +40,7 @@ boost::system::error_category& easy_category()
 boost::system::error_category& multi_category()
 {
   static struct category : boost::system::error_category {
+    virtual ~category() {}
     const char* name() const noexcept override { return "curl multi"; }
     std::string message(int code) const override {
       return ::curl_multi_strerror(static_cast<CURLMcode>(code));
