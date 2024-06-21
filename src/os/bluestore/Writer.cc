@@ -20,7 +20,7 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_p
 {
   out << std::hex;
   uint32_t lof = printer.base_position;
-  for (auto q: printer.blobs) {
+  for (const auto& q: printer.blobs) {
     out << " " << lof << "~" << q.real_length;
     if (q.is_compressed()) {
       out << "(" << q.compressed_length << ")";
@@ -38,6 +38,7 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_p
 /// shared_changed - set of shared blobs that are modified,
 ///                  including the case of shared blob being empty
 /// statfs_delta - delta of stats
+/// returns: iterator to ExtentMap following last element removed
 BlueStore::extent_map_t::iterator BlueStore::_punch_hole_2(
   Collection* c,
   OnodeRef& o,
@@ -74,10 +75,10 @@ BlueStore::extent_map_t::iterator BlueStore::_punch_hole_2(
       // through SharedBlob's multi-ref ref_map disk regions
       bool unshare = false; //is there a chance that shared blob can be unshared?
       // TODO - make put_ref return released_size directly
-      for (auto de: local_released) {
+      for (const auto& de: local_released) {
         p->blob->get_shared_blob()->put_ref(de.offset, de.length, &shared_released, &unshare);
       }
-      for (auto& de : shared_released) {
+      for (const auto& de : shared_released) {
         released_size += de.length;
       }
       released.insert(released.end(), shared_released.begin(), shared_released.end());
@@ -651,7 +652,7 @@ inline void BlueStore::Writer::_schedule_io(
       bstore->logger->inc(l_bluestore_issued_deferred_writes);
       bstore->logger->inc(l_bluestore_issued_deferred_write_bytes, data.length());
     } else {
-      for (auto loc : disk_allocs) {
+      for (const auto& loc : disk_allocs) {
         ceph_assert(initial_offset <= loc.length);
         bufferlist data_chunk;
         uint32_t data_to_write = std::min(data.length(), loc.length - initial_offset);
@@ -662,7 +663,7 @@ inline void BlueStore::Writer::_schedule_io(
       ceph_assert(data.length() == 0);
     }
   } else {
-    for (auto loc: disk_allocs) {
+    for (const auto& loc: disk_allocs) {
       ceph_assert(initial_offset <= loc.length);
       bufferlist data_chunk;
       uint32_t data_to_write = std::min(data.length(), loc.length - initial_offset);
@@ -799,7 +800,7 @@ void BlueStore::Writer::_try_reuse_allocated_r(
   ceph_assert(!bd.is_compressed());
   ceph_assert(p2phase<uint32_t>(end_offset, au_size) != 0);
   BlueStore::ExtentMap& emap = onode->extent_map;
-  for (auto it = after_punch_it; it != emap.extent_map.end(); ++it) {
+  for (auto& it = after_punch_it; it != emap.extent_map.end(); ++it) {
     // first of all, check it we can even use the blob here
     if (it->logical_offset >= search_end) break;
     Blob* b = it->blob.get();
@@ -884,7 +885,7 @@ void BlueStore::Writer::_try_put_data_on_allocated(
     dout(25) << func_name << caption << std::hex << logical_offset << ".."
       << end_offset << " ref_end=" << ref_end_offset << " bd=";
     uint32_t lof = logical_offset;
-    for (auto q: bd) {
+    for (const auto& q: bd) {
       *_dout << " " << lof << "~" << q.disk_data.length();
       lof += q.disk_data.length();
     }
@@ -1207,7 +1208,7 @@ void BlueStore::Writer::_defer_or_allocate(uint32_t need_size)
 {
   // make a deferred decision
   uint32_t released_size = 0;
-  for (auto& r : released) {
+  for (const auto& r : released) {
     released_size += r.length;
   }
   uint32_t au_size = bstore->min_alloc_size;
@@ -1355,7 +1356,7 @@ void BlueStore::Writer::_collect_released_allocated()
 {
   if (!do_deferred) {
     // When we do direct all released is really released.
-    for (auto e : released) {
+    for (const auto& e : released) {
       txc->released.insert(e.offset, e.length);
     }
     // We do not accept allocating more than really using later.
