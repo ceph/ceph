@@ -1893,7 +1893,20 @@ constexpr bool is_modify_transaction(transaction_type_t type) {
       is_background_transaction(type));
 }
 
+// Note: It is possible to statically introduce structs for OOL, which must be
+// more efficient, but that requires to specialize the RecordSubmitter as well.
+// Let's delay this optimization until necessary.
+enum class record_type_t {
+  JOURNAL = 0,
+  OOL, // no header, no metadata, so no padding
+  MAX
+};
+std::ostream &operator<<(std::ostream&, const record_type_t&);
+
+static constexpr auto RECORD_TYPE_NULL = record_type_t::MAX;
+
 struct record_size_t {
+  record_type_t record_type = RECORD_TYPE_NULL; // must not be NULL in use
   extent_len_t plain_mdlength = 0; // mdlength without the record header
   extent_len_t dlength = 0;
 
@@ -1923,16 +1936,24 @@ struct record_t {
   record_size_t size;
   sea_time_point modify_time = NULL_TIME;
 
-  record_t(transaction_type_t t_type) : trans_type{t_type} { }
+  record_t(record_type_t r_type,
+           transaction_type_t t_type)
+  : trans_type{t_type} {
+    assert(r_type != RECORD_TYPE_NULL);
+    size.record_type = r_type;
+  }
 
   // unit test only
   record_t() {
     trans_type = transaction_type_t::MUTATE;
+    size.record_type = record_type_t::JOURNAL;
   }
 
   // unit test only
   record_t(std::vector<extent_t>&& _extents,
            std::vector<delta_info_t>&& _deltas) {
+    trans_type = transaction_type_t::MUTATE;
+    size.record_type = record_type_t::JOURNAL;
     auto modify_time = seastar::lowres_system_clock::now();
     for (auto& e: _extents) {
       push_back(std::move(e), modify_time);
@@ -1940,7 +1961,6 @@ struct record_t {
     for (auto& d: _deltas) {
       push_back(std::move(d));
     }
-    trans_type = transaction_type_t::MUTATE;
   }
 
   bool is_empty() const {
@@ -1949,6 +1969,13 @@ struct record_t {
   }
 
   std::size_t get_delta_size() const {
+    assert(size.record_type < record_type_t::MAX);
+    if (size.record_type == record_type_t::OOL) {
+      // OOL won't contain metadata
+      assert(deltas.size() == 0);
+      return 0;
+    }
+    // JOURNAL
     auto delta_size = std::accumulate(
         deltas.begin(), deltas.end(), 0,
         [](uint64_t sum, auto& delta) {
@@ -2018,6 +2045,7 @@ struct record_group_header_t {
 std::ostream& operator<<(std::ostream&, const record_group_header_t&);
 
 struct record_group_size_t {
+  record_type_t record_type = RECORD_TYPE_NULL; // must not be NULL in use
   extent_len_t plain_mdlength = 0; // mdlength without the group header
   extent_len_t dlength = 0;
   extent_len_t block_size = 0;
@@ -2033,7 +2061,14 @@ struct record_group_size_t {
 
   extent_len_t get_mdlength() const {
     assert(block_size > 0);
-    return p2roundup(get_raw_mdlength(), block_size);
+    assert(record_type < record_type_t::MAX);
+    if (record_type == record_type_t::JOURNAL) {
+      return p2roundup(get_raw_mdlength(), block_size);
+    } else {
+      // OOL won't contain metadata
+      assert(get_raw_mdlength() == 0);
+      return 0;
+    }
   }
 
   extent_len_t get_encoded_length() const {
@@ -2401,6 +2436,7 @@ template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> 
 template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_locator_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::rewrite_gen_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::scan_valid_records_cursor> : fmt::ostream_formatter {};
