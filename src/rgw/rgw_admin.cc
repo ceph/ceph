@@ -340,6 +340,8 @@ void usage()
   cout << "  notification list                list bucket notifications configuration\n";
   cout << "  notification get                 get a bucket notifications configuration\n";
   cout << "  notification rm                  remove a bucket notifications configuration\n";
+  cout << "  topic migrate                    migrate topic and notifications "
+          "for give rgw_user to account-id\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>                 tenant name\n";
   cout << "   --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -884,6 +886,7 @@ enum class OPT {
   ACCOUNT_STATS,
   ACCOUNT_RM,
   ACCOUNT_LIST,
+  PUBSUB_TOPIC_MIGRATE,
 };
 
 }
@@ -1115,6 +1118,7 @@ static SimpleCmd::Commands all_cmds = {
   { "topic list", OPT::PUBSUB_TOPIC_LIST },
   { "topic get", OPT::PUBSUB_TOPIC_GET },
   { "topic rm", OPT::PUBSUB_TOPIC_RM },
+  { "topic migrate", OPT::PUBSUB_TOPIC_MIGRATE },
   { "notification list", OPT::PUBSUB_NOTIFICATION_LIST },
   { "notification get", OPT::PUBSUB_NOTIFICATION_GET },
   { "notification rm", OPT::PUBSUB_NOTIFICATION_RM },
@@ -4332,7 +4336,8 @@ int main(int argc, const char **argv)
        OPT::PUBSUB_NOTIFICATION_GET,
        OPT::PUBSUB_TOPIC_STATS  ,
        OPT::PUBSUB_TOPIC_DUMP  ,
-			 OPT::SCRIPT_GET,
+       OPT::PUBSUB_TOPIC_MIGRATE,
+       OPT::SCRIPT_GET,
     };
 
     std::set<OPT> gc_ops_list = {
@@ -4433,6 +4438,7 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
                           && opt_cmd != OPT::PUBSUB_TOPIC_DUMP
+                          && opt_cmd != OPT::PUBSUB_TOPIC_MIGRATE
 			  && opt_cmd != OPT::SCRIPT_PUT
 			  && opt_cmd != OPT::SCRIPT_GET
 			  && opt_cmd != OPT::SCRIPT_RM
@@ -11349,6 +11355,129 @@ next:
     }
     formatter->close_section();
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::PUBSUB_TOPIC_MIGRATE) {
+    if (rgw::sal::User::empty(user) && account_id.empty()) {
+      cerr << "ERROR: --uid and --account-id required" << std::endl;
+      return EINVAL;
+    }
+    if (!driver->is_meta_master()) {
+      cerr << "ERROR: Run 'topic migrate' from master zone " << std::endl;
+      return -EINVAL;
+    }
+    if (!rgw::all_zonegroups_support(*site,
+                                     rgw::zone_features::notification_v2)) {
+      cerr << "ERROR: topic migration supported only for notification_v2"
+           << std::endl;
+      return EINVAL;
+    }
+    const RGWPubSub old_ps(driver, tenant, *site);
+    const RGWPubSub migrated_ps(driver, account_id, *site);
+    std::string next_token = marker;
+    std::optional<rgw_owner> userid = user->get_id();
+    do {
+      rgw_pubsub_topics result;
+      int ret = old_ps.get_topics(dpp(), next_token, max_entries, result,
+                                  next_token, null_yield);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret)
+             << std::endl;
+        return -ret;
+      }
+      for (const auto& [_, old_topic] : result.topics) {
+        if (userid != old_topic.owner) {
+          continue;
+        }
+        std::set<std::string> subscribed_buckets;
+        ret = driver->get_bucket_topic_mapping(old_topic, subscribed_buckets,
+                                               null_yield, dpp());
+        if (ret < 0) {
+          cerr << "failed to fetch bucket topic mapping info for topic: "
+               << old_topic.name << ", ret=" << ret << "not migrating the topic"
+               << std::endl;
+          continue;
+        }
+        rgw_pubsub_topic migrated_topic = old_topic;
+        migrated_topic.owner = account_id;
+        migrated_topic.arn =
+            rgw::ARN{rgw::Partition::aws, rgw::Service::sns,
+                     driver->get_zone()->get_zonegroup().get_name(), account_id,
+                     topic_name}
+                .to_string();
+        if (old_topic.dest.persistent) {
+          migrated_topic.dest.persistent_queue =
+              string_cat_reserve(account_id, ":", old_topic.name);
+          ret = driver->add_persistent_topic(
+              dpp(), null_yield, migrated_topic.dest.persistent_queue);
+          if (ret < 0) {
+            cerr << "CreateTopic Action failed to create queue for "
+                    "topic: "
+                 << old_topic.name << ". error:" << ret << std::endl;
+            continue;
+          }
+        }
+        ret = migrated_ps.create_topic(dpp(), migrated_topic.name,
+                                       migrated_topic.dest, migrated_topic.arn,
+                                       migrated_topic.opaque_data, account_id,
+                                       migrated_topic.policy_text, null_yield);
+        if (ret < 0) {
+          cerr << "CreateTopic failed for topic: " << old_topic.name
+               << ". error:" << ret << std::endl;
+          if (old_topic.dest.persistent) {
+            driver->remove_persistent_topic(
+                dpp(), null_yield, migrated_topic.dest.persistent_queue);
+          }
+          continue;
+        }
+        for (const auto& bucket_key : subscribed_buckets) {
+          ret = driver->update_bucket_topic_mapping(migrated_topic, bucket_key,
+                                                    /*add_mapping=*/true,
+                                                    null_yield, dpp());
+          if (ret < 0) {
+            cerr << "Failed to add topic mapping on bucket=" << bucket_key
+                 << " ret= " << ret << std::endl;
+            // error should be reported ?? or continue
+          }
+          std::unique_ptr<rgw::sal::Bucket> bucket;
+          std::string tenant_name;
+          std::string bucket_name;
+          rgw_parse_url_bucket(bucket_key, tenant, bucket_name, tenant_name);
+          ret = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
+                                    &bucket, null_yield);
+          if (ret < 0) {
+            cerr << "could not get bucket info for bucket=" << bucket_name
+                 << ": " << cpp_strerror(-ret) << std::endl;
+            // new topic should be deleted ? since the bucket attr is not
+            // modified
+          }
+          rgw_pubsub_bucket_topics bucket_topics;
+          ret = get_bucket_notifications(dpp(), bucket.get(), bucket_topics);
+          if (ret < 0) {
+            cerr << "could not get bucket notifications bucket=" << bucket_name
+                 << ": " << cpp_strerror(-ret) << std::endl;
+            // new topic should be deleted ? since the bucket attr is not
+            // modified
+          }
+          for (auto& bucket_topic : bucket_topics.topics) {
+            if (bucket_topic.second.topic.name == migrated_topic.name) {
+              bucket_topic.second.topic = migrated_topic;
+            }
+          }
+          // finally store all the bucket notifications as attr.
+          bufferlist bl;
+          bucket_topics.encode(bl);
+          rgw::sal::Attrs& attrs = bucket->get_attrs();
+          attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
+          ret = bucket->merge_and_store_attrs(dpp(), attrs, null_yield);
+          if (ret < 0) {
+            cerr << "ERROR: failed writing bucket instance info for bucket: "
+                 << bucket_name << " with error: " << cpp_strerror(-ret)
+                 << std::endl;
+          }
+        }
+      }
+    } while (!next_token.empty());
   }
 
   if (opt_cmd == OPT::SCRIPT_PUT) {
