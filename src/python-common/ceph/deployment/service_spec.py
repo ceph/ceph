@@ -1794,34 +1794,32 @@ class MgmtGatewaySpec(ServiceSpec):
             extra_entrypoint_args=extra_entrypoint_args,
             custom_configs=custom_configs
         )
-        #: ``disable_https`` is a flag to disable HTTPS. If True, the server will use unsecure HTTP.
+        #: Is a flag to disable HTTPS. If True, the server will use unsecure HTTP
         self.disable_https = disable_https
-        #: The ``port`` number on which the server will listen.
+        #: The port number on which the server will listen
         self.port = port
-        #: ``ssl_certificate`` a multi-line string that contains the SSL certificate.
+        #: A multi-line string that contains the SSL certificate
         self.ssl_certificate = ssl_certificate
-        #: ``ssl_certificate_key`` a multi-line string that contains the SSL key.
+        #: A multi-line string that contains the SSL key
         self.ssl_certificate_key = ssl_certificate_key
-        #: ``ssl_prefer_server_ciphers`` when True server ciphers are preferred over client ciphers.
+        #: Prefer server ciphers over client ciphers: on | off
         self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
-        #: ``ssl_session_tickets`` a multioption flag to control session tickets: on | off.
+        #: A multioption flag to control session tickets: on | off
         self.ssl_session_tickets = ssl_session_tickets
-        #: ``ssl_session_timeout`` the duration for SSL session timeout. Syntax: time, i.e: 5m
+        #: The duration for SSL session timeout. Syntax: time (i.e: 5m)
         self.ssl_session_timeout = ssl_session_timeout
-        #: ``ssl_session_cache`` Syntax: off | none | [builtin[:size]] [shared:name:size]
+        #: Duration an SSL/TLS session is cached: off | none | [builtin[:size]] [shared:name:size]
         self.ssl_session_cache = ssl_session_cache
-        #: ``server_tokens`` flag control server tokens in responses:  on | off | build | string
+        #: Flag control server tokens in responses:  on | off | build | string
         self.server_tokens = server_tokens
-        #: ``ssl_stapling``a flag to enable or disable SSL stapling: on | off
+        #: Flag to enable or disable SSL stapling: on | off
         self.ssl_stapling = ssl_stapling
-        #: ``ssl_stapling_verify`` a flag to control verification of SSL stapling: on | off
+        #: Flag to control verification of SSL stapling: on | off
         self.ssl_stapling_verify = ssl_stapling_verify
-        #: ``ssl_protocols`` a list of supported SSL protocols (as supported by nginx)
+        #: A list of supported SSL protocols (as supported by nginx)
         self.ssl_protocols = ssl_protocols
-        #: ``ssl_ciphers`` a list of supported SSL ciphers (as supported by nginx)
+        #: A list of supported SSL ciphers (as supported by nginx)
         self.ssl_ciphers = ssl_ciphers
-        #: A flag to indicate if the server is unmanaged.
-        self.unmanaged = unmanaged
 
     def get_port_start(self) -> List[int]:
         ports = []
