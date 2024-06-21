@@ -1,20 +1,38 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - mons down
+      - mon down
+      - MON_DOWN
+      - out of quorum
+      - PG_
+      - OSD_DOWN
+      - POOL_APP_NOT_ENABLED
+      - pgs degraded
+      - pg degraded
+      - object degraded
+      - objects degraded
+      - FS_DEGRADED
+      - MDS_ALL_DOWN
+      - OSD_UPGRADE_FINISHED
+      - do not have an application enabled
+      - is down
 tasks:
 - install:
-    branch: pacific
+    branch: reef
     exclude_packages:
       - ceph-volume
 - print: "**** done install task..."
-- print: "**** done start installing pacific cephadm ..."
+- print: "**** done start installing reef cephadm ..."
 - cephadm:
-    image: quay.io/ceph/daemon-base:latest-pacific
-    cephadm_branch: pacific
-    cephadm_git_url: https://github.com/ceph/ceph
+    image: quay.ceph.io/ceph-ci/ceph:reef
+    compiled_cephadm_branch: reef
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
         osd_class_load_list: "*"
         osd_class_default_list: "*"
-- print: "**** done end installing pacific cephadm ..."
+- print: "**** done end installing reef cephadm ..."
 
 - print: "**** done start cephadm.shell ceph config set mgr..."
 - cephadm.shell:
@@ -22,13 +40,12 @@ tasks:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 
-
-- print: "**** done start telemetry pacific..."
+- print: "**** done start telemetry reef..."
 - workunit:
     clients:
       client.0:
-        - test_telemetry_pacific.sh
-- print: "**** done end telemetry pacific..."
+        - test_telemetry_reef.sh
+- print: "**** done end telemetry reef..."
 
 - print: "**** done start upgrade sequence..."
 - sequential:
@@ -45,10 +62,16 @@ tasks:
             - ceph versions | jq -e '.overall | keys' | grep $sha1
     - print: "**** done end upgrade..."
 
+    - print: "**** done set require-osd-release ..."
+    - cephadm.shell:
+        env: [sha1]
+        mon.a:
+            - ceph osd require-osd-release squid
+
     - print: "**** done start telemetry x..."
     - workunit:
         clients:
           client.0:
-            - test_telemetry_pacific_x.sh
+            - test_telemetry_reef_x.sh
     - print: "**** done end telemetry x..."
 - print: "**** done end upgrade sequence..."

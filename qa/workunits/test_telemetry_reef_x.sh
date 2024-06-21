@@ -1,5 +1,9 @@
 #!/bin/bash -ex
 
+# Opt in to new collections right away to avoid "TELEMETRY_CHANGED"
+# warning (see https://tracker.ceph.com/issues/64458)
+ceph telemetry on --license sharing-1-0
+
 # For quincy, the last_opt_revision remains at 1 since last_opt_revision
 # was phased out for fresh installs of quincy.
 LAST_OPT_REVISION=$(ceph config get mgr mgr/telemetry/last_opt_revision)
@@ -25,9 +29,6 @@ done
 ceph telemetry preview
 ceph telemetry preview-device
 ceph telemetry preview-all
-
-# Opt in to new collections (basic_pool_flags)
-ceph telemetry on --license sharing-1-0
 
 # Run show commands
 ceph telemetry show
