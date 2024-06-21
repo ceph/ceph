@@ -56,7 +56,7 @@ using crimson::common::local_conf;
                                            bool resolve_clone)
   {
     LOG_PREFIX(ObjectContextLoader::with_clone_obc_only);
-    DEBUGDPP("{}", clone_oid);
+    DEBUGDPP("{}", dpp, clone_oid);
     assert(!clone_oid.is_head());
     if (resolve_clone) {
       auto resolved_oid = resolve_oid(head->get_head_ss(), clone_oid);
