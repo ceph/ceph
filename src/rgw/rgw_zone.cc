@@ -860,6 +860,8 @@ void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tier_type", tier_type, obj);
   JSONDecoder::decode_json("storage_class", storage_class, obj);
   JSONDecoder::decode_json("retain_head_object", retain_head_object, obj);
+  JSONDecoder::decode_json("allow_read_through", allow_read_through, obj);
+  JSONDecoder::decode_json("read_through_restore_days", read_through_restore_days, obj);
 
   if (tier_type == "cloud-s3") {
     JSONDecoder::decode_json("s3", t.s3, obj);
@@ -897,6 +899,8 @@ void RGWZoneGroupPlacementTier::dump(Formatter *f) const
   encode_json("tier_type", tier_type, f);
   encode_json("storage_class", storage_class, f);
   encode_json("retain_head_object", retain_head_object, f);
+  encode_json("allow_read_through", allow_read_through, f);
+  encode_json("read_through_restore_days", read_through_restore_days, f);
 
   if (tier_type == "cloud-s3") {
     encode_json("s3", t.s3, f);

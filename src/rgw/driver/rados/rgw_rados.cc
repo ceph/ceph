@@ -5313,9 +5313,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   ret = processor.complete(accounted_size, etag, &mtime, set_mtime,
                            attrs, rgw::cksum::no_cksum, delete_at , nullptr, nullptr, nullptr,
                            (rgw_zone_set *)&zone_set, &canceled, rctx, log_op ? rgw::sal::FLAG_LOG_OP : 0);
-    if (ret < 0) {
-      return ret;
-    }
+  if (ret < 0) {
+    return ret;
+  }
 
   // XXX: handle olh_epoch for versioned objects like in fetch_remote_obj
   return ret; 
