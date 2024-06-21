@@ -1,7 +1,9 @@
 import logging
 import os
 from typing import Dict, List, Tuple, Optional
+import re
 
+from ..call_wrappers import call, CallVerbosity
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer
 from ..context import CephadmContext
@@ -109,12 +111,26 @@ class MgmtGateway(ContainerDaemonForm):
         return mounts
 
     @staticmethod
-    def get_version(
-        ctx: CephadmContext, fsid: str, daemon_id: str
-    ) -> Optional[str]:
-        """Return the version of the notifier from it's http endpoint"""
-        # Redo(TODO): fix version
-        return 'TODO'
+    def get_version(ctx: CephadmContext, container_id: str) -> Optional[str]:
+        """Return the version of the Nginx container"""
+        version = None
+        out, err, code = call(
+            ctx,
+            [
+                ctx.container_engine.path,
+                'exec',
+                container_id,
+                'nginx',
+                '-v',
+            ],
+            verbosity=CallVerbosity.QUIET,
+        )
+        if code == 0:
+            # nginx is using stderr to print the version!!
+            match = re.search(r'nginx version:\s*nginx\/(.+)', err)
+            if match:
+                version = match.group(1)
+        return version
 
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
