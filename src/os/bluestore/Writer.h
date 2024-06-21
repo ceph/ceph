@@ -30,7 +30,7 @@ public:
     bufferlist disk_data;       // Bitstream to got o disk. Its either same as object_data,
                                 // or contains compressed data. Block aligned.
     bufferlist object_data;     // Object data. Needed to put into caches.
-    bool is_compressed() {return compressed_length != 0;}
+    bool is_compressed() const {return compressed_length != 0;}
   };
   using blob_vec = std::vector<blob_data_t>;
   struct blob_data_printer {
