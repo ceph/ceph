@@ -3561,7 +3561,7 @@ void BlueStore::ExtentMap::reshard(
   auto cct = onode->c->store->cct; // used by dout
 
   dout(10) << __func__ << " 0x[" << std::hex << needs_reshard_begin << ","
-	   << needs_reshard_end << ")" << std::dec
+	   << needs_reshard_end << ") segment 0x" << segment_size << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
   for (auto& p : spanning_blob_map) {
@@ -3599,7 +3599,7 @@ void BlueStore::ExtentMap::reshard(
 
   fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
   if (needs_reshard_end == OBJECT_MAX_SIZE) {
-    data_reshard_end = extent_map.empty() ? needs_reshard_end : extent_map.rbegin()->blob_end();
+    data_reshard_end = (extent_map.empty() ? needs_reshard_end : extent_map.rbegin()->blob_end());
   } else {
     data_reshard_end = needs_reshard_end;
   }
@@ -3640,8 +3640,7 @@ void BlueStore::ExtentMap::reshard(
 	   << ", slop " << slop << dendl;
 
   uint32_t next_boundary = segment_size;
-  uint32_t encoded_segment_estimate = /* bytes * (segment_size / (needs_reshard_end - needs_reshard_begin)) */
-    bytes * segment_size / (data_reshard_end - needs_reshard_begin);
+  uint32_t encoded_segment_estimate = bytes * segment_size / (data_reshard_end - needs_reshard_begin);
 
   bool onode_data_has_boundaries = (segment_size != 0);
   // reshard
