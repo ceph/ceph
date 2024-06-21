@@ -7652,8 +7652,8 @@ private:
 
   void test_deterministic_pp(librbd::Image& image, uint64_t object_off,
                              uint64_t len, uint64_t block_size) {
-    uint64_t off1 = 0 << 20;
-    uint64_t off2 = 4 << 20;
+    uint64_t off1 = 8 << 20;
+    uint64_t off2 = 16 << 20;
     uint64_t size = 20 << 20;
     uint64_t extent_len = round_up_to(object_off + len, block_size);
 
@@ -7876,14 +7876,22 @@ TYPED_TEST(DiffIterateTest, DiffIterateDeterministic)
 {
   REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
 
-  this->test_deterministic(0, 256);
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic(0, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic((1 << 20) - 256, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic((1 << 20) - 128, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic(1 << 20, 256));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic((4 << 20) - 256, 256));
 }
 
 TYPED_TEST(DiffIterateTest, DiffIterateDeterministicPP)
 {
   REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
 
-  this->test_deterministic_pp(0, 256);
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_pp(0, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_pp((3 << 20) - 2, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_pp((3 << 20) - 1, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_pp(3 << 20, 2));
+  EXPECT_NO_FATAL_FAILURE(this->test_deterministic_pp((4 << 20) - 2, 2));
 }
 
 TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
