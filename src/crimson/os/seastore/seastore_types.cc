@@ -571,6 +571,7 @@ ceph::bufferlist encode_records(
   const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce)
 {
+  assert(record_group.size.record_type < record_type_t::MAX);
   assert(record_group.size.block_size > 0);
   assert(record_group.records.size() > 0);
 
@@ -582,6 +583,15 @@ ceph::bufferlist encode_records(
     }
   }
 
+  if (record_group.size.record_type == record_type_t::OOL) {
+    // OOL won't contain metadata
+    assert(record_group.size.get_mdlength() == 0);
+    ceph_assert(data_bl.length() ==
+                record_group.size.get_encoded_length());
+    record_group.clear();
+    return data_bl;
+  }
+  // JOURNAL
   bufferlist bl;
   record_group_header_t header{
     static_cast<extent_len_t>(record_group.records.size()),
