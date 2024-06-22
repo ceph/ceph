@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <boost/algorithm/string/case_conv.hpp>
 #include <cstdint>
 #include <errno.h>
 #include <array>
@@ -481,7 +482,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     } catch (const buffer::error&) {}
   }
 
-  if (multipart_parts_count && multipart_parts_count > 0) {
+  if (multipart_parts_count && *multipart_parts_count > 0) {
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
 
@@ -513,7 +514,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	}  catch (buffer::error& err) {
 	  ldpp_dout(this, 0) << "ERROR: failed to decode rgw::cksum::Cksum"
 			     << dendl;
-	  /* XXX return error here?  the user might prefer data we have */
+	  /* XXX agreed to handle this case as if there is no checksum
+	   * to avoid data unavailable */
 	}
       }
     } /* checksum_mode */
@@ -2974,7 +2976,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     auto cksum_type =  rgw::cksum::parse_cksum_type_hdr(k);
     if (cksum_type != rgw::cksum::Type::none) {
       put_prop("HTTP_X_AMZ_CHECKSUM_ALGORITHM",
-	       safe_upcase_str(to_string(cksum_type)));
+	       boost::to_upper_copy(to_string(cksum_type)));
       bufferlist& d = p.second.data;
       std::string v {
 	rgw_trim_whitespace(std::string_view(d.c_str(), d.length()))};
@@ -4045,7 +4047,8 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     dump_header_if_nonempty(s, "x-amz-abort-rule-id", rule_id);
   }
   if (cksum_algo != rgw::cksum::Type::none) {
-    dump_header(s, "x-amz-checksum-algorithm", safe_upcase_str(to_string(cksum_algo)));
+    dump_header(s, "x-amz-checksum-algorithm",
+		boost::to_upper_copy(to_string(cksum_algo)));
   }
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
@@ -4167,7 +4170,8 @@ void RGWListMultipart_ObjStore_S3::send_response()
        Container element that identifies who initiated the multipart upload. If the initiator is an AWS account, this element provides the same information as the Owner element. If the initiator is an IAM User, this element provides the user ARN and display name, see https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html */
 
     if (cksum && cksum->aws()) {
-      s->formatter->dump_string("ChecksumAlgorithm", safe_upcase_str(cksum->type_string()));
+      s->formatter->dump_string("ChecksumAlgorithm",
+				boost::to_upper_copy(std::string(cksum->type_string())));
     }
 
     for (; iter != upload->get_parts().end(); ++iter) {
@@ -4182,7 +4186,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
       auto& part_cksum = part->get_cksum();
       if (part_cksum && part_cksum->aws()) {
 	s->formatter->dump_string(part_cksum->element_name(),
-				  fmt::format("{}", part_cksum->to_armor()));
+				  part_cksum->to_armor());
       }
       s->formatter->close_section();
     }

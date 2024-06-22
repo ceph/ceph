@@ -23,7 +23,7 @@
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
 #include "common/perf_counters_key.h"
-#include "rgw_cksum.h"
+#include "rgw_cksum_digest.h"
 #include "rgw_common.h"
 #include "rgw_tracer.h"
 
@@ -4393,7 +4393,7 @@ void RGWPutObj::execute(optional_yield y)
       cksum_filter =
 	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env);
     } catch (const rgw::io::Exception& e) {
-      op_ret = e.code().value();
+      op_ret = -e.code().value();
       return;
     }
     if (cksum_filter) {
@@ -4755,7 +4755,7 @@ void RGWPostObj::execute(optional_yield y)
       cksum_filter =
 	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env);
     } catch (const rgw::io::Exception& e) {
-      op_ret = e.code().value();
+      op_ret = -e.code().value();
       return;
     }
     if (cksum_filter) {
@@ -6680,7 +6680,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     }
   }
 
-  auto target_attrs = meta_obj->get_attrs();
+  auto& target_attrs = meta_obj->get_attrs();
 
   if (cksum) {
     armored_cksum =
