@@ -4547,12 +4547,14 @@ void RGWPutObj::execute(optional_yield y)
     cksum = get<1>(cksum_verify);
     if (std::get<0>(cksum_verify)) {
       buffer::list cksum_bl;
-      ldpp_dout(this, 16)
-	<< fmt::format("{} checksum verified ", hdr.second)
-	<< fmt::format("\n\tcomputed={} == \n\texpected=  {}",
-		       cksum->to_armor(),
-		       cksum_filter->expected(*s->info.env))
-	<< dendl;
+
+      ldpp_dout_fmt(this, 16,
+		    "{} checksum verified "
+		    "\n\tcomputed={} == \n\texpected={}",
+		    hdr.second,
+		    cksum->to_armor(),
+		    cksum_filter->expected(*s->info.env));
+
       cksum->encode(cksum_bl);
       emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
     } else {
@@ -4560,12 +4562,13 @@ void RGWPutObj::execute(optional_yield y)
       auto computed_ck = cksum->to_armor();
       auto expected_ck = cksum_filter->expected(*s->info.env);
 
-      ldpp_dout(this, 4)
-	<< fmt::format("{} content checksum mismatch", hdr.second)
-	<< fmt::format("\n\tcalculated={} != \n\texpected={}",
-		       computed_ck,
-		       (!!expected_ck) ? expected_ck : "(checksum unavailable)")
-	<< dendl;
+      ldpp_dout_fmt(this, 4,
+		    "{} content checksum mismatch"
+		    "\n\tcalculated={} != \n\texpected={}",
+		    hdr.second,
+		    computed_ck,
+		    (!!expected_ck) ? expected_ck : "(checksum unavailable)");
+
       op_ret = -ERR_INVALID_REQUEST;
       return;
     }
@@ -4859,13 +4862,14 @@ void RGWPostObj::execute(optional_yield y)
       } else {
         /* content checksum mismatch */
         const auto &hdr = cksum_filter->header();
-        ldpp_dout(this, 4) << fmt::format("{} content checksum mismatch",
-                                          hdr.second)
-                           << fmt::format(
-                                  "\n\tcalculated={} != \n\texpected={}",
-                                  cksum->to_armor(),
-                                  cksum_filter->expected(*s->info.env))
-                           << dendl;
+
+        ldpp_dout_fmt(this, 4,
+		      "{} content checksum mismatch"
+		      "\n\tcalculated={} != \n\texpected={}",
+		      hdr.second,
+		      cksum->to_armor(),
+		      cksum_filter->expected(*s->info.env));
+
         op_ret = -ERR_INVALID_REQUEST;
         return;
       }
@@ -6490,11 +6494,12 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
   }
 
   if (truncated) {
-    ldpp_dout(dpp, 20)
-      << fmt::format(
-	 "WARNING: {} upload->list_parts {} {} truncated, again_count={}!",
-	     __func__, num_parts, marker, again_count)
-      << dendl;
+
+    ldpp_dout_fmt(dpp, 20,
+		  "WARNING: {} upload->list_parts {} {} truncated, "
+		  "again_count={}!",
+		  __func__, num_parts, marker, again_count);
+
     truncated = false;
     ++again_count;
     goto again;
@@ -6514,20 +6519,21 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
   for (auto& part : parts_map) {
     ++parts_ix;
     auto& part_cksum = part.second->get_cksum();
-    ldpp_dout(dpp, 16)
-      << fmt::format("INFO: {} iterate part: {} {} {}",
-		     __func__, parts_ix, part_cksum->type_string(),
-		     part_cksum->to_armor())
-      << dendl;
+
+    ldpp_dout_fmt(dpp, 16,
+		  "INFO: {} iterate part: {} {} {}",
+		  __func__, parts_ix, part_cksum->type_string(),
+		  part_cksum->to_armor());
+
     if ((part_cksum->type != cksum_type)) {
       /* if parts have inconsistent checksum, fail now */
-      ldpp_dout(dpp, 4)
-	<< fmt::format(
-	       "ERROR: multipart part checksum type mismatch\n\tcomplete "
-	       "multipart header={} part={}",
-	       to_string(part_cksum->type), to_string(cksum_type))
-	<< dendl;
-      op_ret = -ERR_INVALID_REQUEST;
+
+    ldpp_dout_fmt(dpp, 14,
+		  "ERROR: multipart part checksum type mismatch\n\tcomplete "
+		  "multipart header={} part={}",
+		  to_string(part_cksum->type), to_string(cksum_type));
+
+    op_ret = -ERR_INVALID_REQUEST;
       return op_ret;
     }
 
@@ -6543,12 +6549,11 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
   /* we cannot verify this checksum, only compute it */
   out_cksum = rgw::cksum::finalize_digest(digest, cksum_type);
 
-  ldpp_dout(dpp, 16)
-    << fmt::format("INFO: {} combined checksum {} {}-{}",
-		   __func__,
-		   out_cksum->type_string(),
-		   out_cksum->to_armor(), num_parts)
-    << dendl;
+  ldpp_dout_fmt(dpp, 16,
+		"INFO: {} combined checksum {} {}-{}",
+		__func__,
+		out_cksum->type_string(),
+		out_cksum->to_armor(), num_parts);
 
   return op_ret;
 } /* try_sum_part_chksums */
@@ -6689,9 +6694,10 @@ void RGWCompleteMultipart::execute(optional_yield y)
     /* validate computed checksum against supplied checksum, if present */
     auto [hdr_cksum, supplied_cksum] =
       rgw::putobj::find_hdr_cksum(*(s->info.env));
-    ldpp_dout(this, 10) << fmt::format("INFO: client supplied checksum {}: {}",
-				       hdr_cksum.header_name(), supplied_cksum)
-			<< dendl;
+
+      ldpp_dout_fmt(this, 10,
+		    "INFO: client supplied checksum {}: {}",
+		    hdr_cksum.header_name(), supplied_cksum);
 
     if (! (supplied_cksum.empty()) &&
 	(supplied_cksum != armored_cksum)) {
