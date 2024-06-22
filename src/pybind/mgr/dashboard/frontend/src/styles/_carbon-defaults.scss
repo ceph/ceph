@@ -8,10 +8,11 @@
 @use '@carbon/styles/scss/themes';
 @use '@carbon/styles/scss/theme' with (
   $theme: default.$theme,
-  $fallback: compat.$g90,
+  $fallback: compat.$white,
 );
 @use '@carbon/styles';
 @use '@carbon/type';
+@use './src/styles/vendor/variables' as vv;
 
 /**********************************************************************************
 These are meant to be temporary style overrides.
@@ -40,8 +41,39 @@ a.cds--side-nav__link {
 }
 
 .cds--side-nav__submenu-title,
-a.cds--side-nav__link > .cds--side-nav__link-text {
+a.cds--side-nav__link > .cds--side-nav__link-text,
+a.cds--side-nav__link--active > .cds--side-nav__link-text,
+.cds--side-nav__item--active .cds--side-nav__icon > svg {
+  color: vv.$body-bg-alt;
+  fill: vv.$body-bg-alt;
   font-size: calc(type.type-scale(4) + 0.5px);
+}
+
+a.cds--header__menu-item,
+.cds--overflow-menu-options__btn,
+.cds--side-nav__menu
+  a.cds--side-nav__link:not(.cds--side-nav__link--current):not([aria-current='page']):hover
+  > span,
+.cds--side-nav__item:not(.cds--side-nav__item--active) > .cds--side-nav__link:hover > span,
+a.cds--header__menu-item:hover > svg {
+  color: vv.$body-bg-alt;
+  fill: vv.$body-bg-alt;
+
+  &:hover,
+  &:focus {
+    color: vv.$body-bg-alt;
+    fill: vv.$body-bg-alt;
+  }
+}
+
+.cds--overflow-menu-options__option:hover,
+.cds--overflow-menu:hover,
+.cds--header__menu-title[aria-expanded='true'] + .cds--header__menu .cds--header__menu-item:hover {
+  background-color: vv.$gray-600;
+}
+
+a.cds--side-nav__link[aria-current='page'] .cds--side-nav__link-text > span {
+  color: vv.$body-bg-alt;
 }
 
 .cds--side-nav__icon > svg {
@@ -75,7 +107,16 @@ a.cds--header__menu-item,
 .cds--header__action,
 .cds--header {
   block-size: $header-block-size;
+  border: 0;
   font-size: calc(type.type-scale(4) + 0.5px);
+
+  .cds--header__menu-trigger {
+    border: 1px solid vv.$body-bg-alt;
+  }
+
+  .cds--header__menu-trigger > svg {
+    fill: vv.$body-bg-alt;
+  }
 }
 
 button.cds--header__menu-trigger.cds--header__action.cds--header__menu-toggle {
@@ -100,4 +141,35 @@ Overflow menu
 ******************************************/
 .cds--overflow-menu.cds--overflow-menu--open {
   box-shadow: none;
+}
+
+/******************************************
+Forms
+******************************************/
+.form-header {
+  @include type.type-style('heading-04');
+  margin-bottom: 40px;
+}
+
+.cd-header {
+  @extend .pb-1;
+  @extend .mt-4;
+  @extend .mb-4;
+  @include type.type-style('heading-03');
+}
+
+.spacing-03 {
+  margin: 0.5rem;
+}
+
+.cds--col {
+  padding-inline: 0;
+}
+
+/******************************************
+Breadcrumbs
+******************************************/
+.cds--breadcrumb {
+  margin-top: 8px;
+  padding: 8px 0;
 }

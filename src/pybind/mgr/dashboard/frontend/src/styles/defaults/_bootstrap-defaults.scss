@@ -67,6 +67,10 @@ $theme-colors: (
   'dark': $dark
 ) !default;
 
+// Button colors
+$btn-primary-hover: #1f6f79 !default;
+$btn-primary-active: #1e6872 !default;
+
 // Body
 $body-color-bright: $light !default;
 $body-bg: $white !default;

@@ -1,22 +1,14 @@
 <fieldset>
-  <legend class="cd-header">
-    <div class="accordion accordion-flush">
-      <button class="accordion-button cd-form-advanced-fieldset-buttton p-0"
-              type="button"
-              id="advanced-fieldset"
-              aria-label="toggle advanced mode"
-              [ngClass]="{collapsed: !showAdvanced}"
-              (click)="showAdvanced = !showAdvanced"
-              i18n>Advanced
-      </button>
-    </div>
-  </legend>
-  <div class="accordion-collapse collapse"
-       [ngClass]="{show: showAdvanced}">
-    <div class="accordion-body">
-      <div class="card-body">
-        <ng-content></ng-content>
-      </div>
-    </div>
-  </div>
+  <cds-accordion size="lg"
+                 class="form-item">
+    <cds-accordion-item [title]="title"
+                        i18n
+                        (selected)="showAdvanced = !showAdvanced">
+      <ng-content></ng-content>
+    </cds-accordion-item>
+  </cds-accordion>
+
+  <ng-template #title>
+    <h5 class="cds--accordion__title cd-header">Advanced</h5>
+  </ng-template>
 </fieldset>
