@@ -85,7 +85,6 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_CKSUM    	RGW_ATTR_PREFIX "cksum"
-#define RGW_ATTR_CKSUM_ALGORITHM     RGW_ATTR_PREFIX "x-amz-checksum-algorithm"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
@@ -1991,16 +1990,6 @@ static inline std::string ys_header_mangle(std::string_view name)
 		 });
   return out;
 } /* ys_header_mangle */
-
-static inline std::string& upcase_str(std::string& s) {
-  std::transform(s.begin(), s.end(), s.begin(), ::toupper);
-  return s;
-}
-
-static inline std::string safe_upcase_str(std::string s) {
-  std::transform(s.begin(), s.end(), s.begin(), ::toupper);
-  return s;
-}
 
 extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
 
