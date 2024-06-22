@@ -130,6 +130,57 @@ your CRUSH map. This procedure shows how to do this.
              step emit
      }
 
+   .. warning:: If a CRUSH rule is defined for a stretch mode cluster and the
+      rule has multiple "takes" in it, then ``MAX AVAIL`` for the pools
+      associated with the CRUSH rule will report that the available size is all
+      of the available space from the datacenter, not the available space for
+      the pools associated with the CRUSH rule.
+   
+      For example, consider a cluster with two CRUSH rules, ``stretch_rule`` and
+      ``stretch_replicated_rule``::
+
+         rule stretch_rule {
+              id 1
+              type replicated
+              step take DC1
+              step chooseleaf firstn 2 type host
+              step emit
+              step take DC2
+              step chooseleaf firstn 2 type host
+              step emit
+         }
+         
+         rule stretch_replicated_rule {
+                 id 2
+                 type replicated
+                 step take default
+                 step choose firstn 0 type datacenter
+                 step chooseleaf firstn 2 type host
+                 step emit
+         }
+
+      In the above example, ``stretch_rule`` will report an incorrect value for
+      ``MAX AVAIL``. ``stretch_replicated_rule`` will report the correct value.
+      This is because ``stretch_rule`` is defined in such a way that
+      ``PGMap::get_rule_avail`` considers only the available size of a single
+      data center, and not (as would be correct) the total available size from
+      both datacenters.
+      
+      Here is a workaround. Instead of defining the stretch rule as defined in
+      the ``stretch_rule`` function above, define it as follows::
+
+         rule stretch_rule {
+           id 2
+           type replicated
+           step take default
+           step choose firstn 0 type datacenter
+           step chooseleaf firstn 2 type host
+           step emit
+         }
+
+      See https://tracker.ceph.com/issues/56650 for more detail on this workaround.
+
+
 #. Inject the CRUSH map to make the rule available to the cluster:
 
    .. prompt:: bash $
