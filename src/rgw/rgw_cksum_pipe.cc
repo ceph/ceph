@@ -30,8 +30,7 @@ namespace rgw::putobj {
     : Pipe(next),
       _type(_typ),
       dv(rgw::cksum::digest_factory(_type)),
-      _digest(cksum::get_digest(dv)), cksum_hdr(_hdr),
-      _state(State::DIGEST)
+      _digest(cksum::get_digest(dv)), cksum_hdr(_hdr)
   {}
 
   std::unique_ptr<RGWPutObj_Cksum> RGWPutObj_Cksum::Factory(

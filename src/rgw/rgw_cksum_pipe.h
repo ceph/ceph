@@ -19,7 +19,8 @@
 #include <utility>
 #include <tuple>
 #include <cstring>
-#include "rgw_cksum.h"
+#include <boost/algorithm/string/case_conv.hpp>
+#include "rgw_cksum_digest.h"
 #include "rgw_common.h"
 #include "rgw_putobj.h"
 
@@ -76,7 +77,7 @@ namespace rgw::putobj {
 	 ix <= uint16_t(cksum::Type::blake3); ++ix) {
       cksum_type = cksum::Type(ix);
       auto hk = fmt::format("HTTP_X_AMZ_CHECKSUM_{}",
-			    safe_upcase_str(to_string(cksum_type)));
+			    boost::to_upper_copy(to_string(cksum_type)));
       auto hv = env.get(hk.c_str());
       if (hv) {
 	return
@@ -90,18 +91,11 @@ namespace rgw::putobj {
   // PutObj filter for streaming checksums
   class RGWPutObj_Cksum : public rgw::putobj::Pipe {
 
-    enum class State : uint16_t {
-      START,
-      DIGEST,
-      FINAL
-    };
-    
     cksum::Type _type;
     cksum::DigestVariant dv;
     cksum::Digest* _digest;
     cksum::Cksum _cksum;
     cksum_hdr_t cksum_hdr;
-    State _state;
 
   public:
 
@@ -118,7 +112,6 @@ namespace rgw::putobj {
     cksum::Type type() { return _type; }
     cksum::Digest* digest() const { return _digest; }
     const cksum::Cksum& cksum() { return _cksum; };
-    State state() const { return _state; }
 
     const cksum_hdr_t& header() const {
       return cksum_hdr;
@@ -126,7 +119,6 @@ namespace rgw::putobj {
 
     const cksum::Cksum& finalize() {
       _cksum = finalize_digest(_digest, _type);
-      _state = State::FINAL;
       return _cksum;
     }
 
@@ -137,7 +129,7 @@ namespace rgw::putobj {
     }
 
     VerifyResult verify(const RGWEnv& env) {
-      if (_state == State::DIGEST) [[likely]] {
+      if (_cksum.type == cksum::Type::none) [[likely]] {
 	(void) finalize();
       }
       auto hv = expected(env);

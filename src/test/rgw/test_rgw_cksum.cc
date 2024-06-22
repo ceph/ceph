@@ -62,19 +62,6 @@ TEST(RGWCksum, Ctor)
   ASSERT_EQ(ck2.to_armor(), ck3.first.to_armor());
 }
 
-TEST(RGWCksum, Output)
-{
-  auto o_mode = std::ios::out|std::ios::trunc;
-  std::ofstream of;
-  of.open("/tmp/lorem", o_mode);
-  of << lorem;
-  of.close();
-
-  of.open("/tmp/dolor", o_mode);
-  of << dolor;
-  of.close();
-}
-
 TEST(RGWCksum, DigestCRC32)
 {
   auto t = cksum::Type::crc32;

@@ -19,9 +19,6 @@
 #include <stdio.h>
 #include "BLAKE3/c/blake3.h"
 
-#define XXH_INLINE_ALL 1 /* required for streaming variants */
-#include "xxhash.h"
-
 namespace rgw { namespace digest {
 
 class Blake3 {
