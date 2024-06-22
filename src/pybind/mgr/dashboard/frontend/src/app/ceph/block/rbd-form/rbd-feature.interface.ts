@@ -7,4 +7,5 @@ export interface RbdImageFeature {
   key?: string;
   initDisabled?: boolean;
   helperHtml?: string;
+  helperText?: string;
 }
