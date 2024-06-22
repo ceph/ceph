@@ -1,10 +1,7 @@
-import { Component, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { Component } from '@angular/core';
 
 import { Permission } from '~/app/shared/models/permissions';
-import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
-import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { NvmeofGateway } from '~/app/shared/models/nvmeof';
 
@@ -15,21 +12,13 @@ import { NvmeofService } from '../nvmeof.service';
   templateUrl: './nvmeof-gateway.component.html',
   styleUrls: ['./nvmeof-gateway.component.scss']
 })
-export class NvmeofGatewayComponent extends ListWithDetails implements OnInit {
+export class NvmeofGatewayComponent {
   gateways: NvmeofGateway[] = [];
   gatewayColumns: any;
   permission: Permission;
   selection = new CdTableSelection();
 
-  constructor(
-    private nvmeofService: NvmeofService,
-    private authStorageService: AuthStorageService,
-    public actionLabels: ActionLabelsI18n,
-    private router: Router
-  ) {
-    super();
-    this.permission = this.authStorageService.getPermissions().nvmeof;
-  }
+  constructor(private nvmeofService: NvmeofService, public actionLabels: ActionLabelsI18n) {}
 
   ngOnInit() {
     this.gatewayColumns = [
@@ -46,38 +35,6 @@ export class NvmeofGatewayComponent extends ListWithDetails implements OnInit {
         prop: 'port'
       }
     ];
-  }
-
-  updateSelection(selection: CdTableSelection) {
-    this.selection = selection;
-  }
-
-  getServiceName() {
-    const service_id = this.selection.first().name.split('.')[2];
-    return `nvmeof.${service_id}`;
-  }
-
-  openModal(hasCreate: boolean) {
-    const BASE_URL = 'services';
-    if (hasCreate) {
-      this.router.navigate([
-        BASE_URL,
-        {
-          outlets: {
-            modal: [URLVerbs.CREATE, 'nvmeof']
-          }
-        }
-      ]);
-    } else {
-      this.router.navigate([
-        BASE_URL,
-        {
-          outlets: {
-            modal: [URLVerbs.EDIT, 'nvmeof', this.getServiceName()]
-          }
-        }
-      ]);
-    }
   }
 
   getGateways() {
