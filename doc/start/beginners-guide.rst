@@ -96,6 +96,7 @@ See :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
 
 LINKS
 -----
-`Ceph Wiki (requires Ceph Redmine Tracker account) <https://tracker.ceph.com/projects/ceph/wiki>`_
 
-
+#. `Ceph Wiki (requires Ceph Redmine Tracker account) <https://tracker.ceph.com/projects/ceph/wiki>`_
+#. `Sage Weil's 27 June 2019 "Intro To Ceph" tech talk (1h27m) <https://www.youtube.com/watch?v=PmLPbrf-x9g>`_
+#. `Sage Weil's 2018 talk "Ceph, the Future of Storage" (27m) <https://www.youtube.com/watch?v=szE4Hg1eXoA>`_
