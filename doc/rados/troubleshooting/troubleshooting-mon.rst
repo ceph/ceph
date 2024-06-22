@@ -139,7 +139,7 @@ command).
 
 .. note:: The command ``ceph tell mon.X mon_status`` is not meant to be input
    literally. The ``X`` portion of ``mon.X`` is meant to be replaced with a
-   value specific to your own Ceph cluster when you run the command.
+   value specific to your Ceph cluster when you run the command.
 
 To understand this command's output, let us consider the following example, in
 which we see the output of ``ceph tell mon.c mon_status``::
@@ -170,8 +170,8 @@ which we see the output of ``ceph tell mon.c mon_status``::
                 "addr": "127.0.0.1:6795\/0"}]}}
 
 This output reports that there are three monitors in the monmap (``a``, ``b``,
-and ``c``), that quorum is formed by only two monitors, and that ``c`` is in
-quorum as a ``peon``.
+and ``c``), that quorum is formed by only two monitors, and that ``c`` is a
+``peon``.
 
 **Which monitor is out of quorum?**
 
