@@ -3,7 +3,7 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
@@ -19,7 +19,6 @@ import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { Permissions } from '~/app/shared/models/permissions';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
@@ -29,11 +28,14 @@ import { RbdTabsComponent } from '../rbd-tabs/rbd-tabs.component';
 import { RbdSnapshotActionsModel } from './rbd-snapshot-actions.model';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { BaseModalService, ModalModule, ModalService, PlaceholderModule } from 'carbon-components-angular';
 
 describe('RbdSnapshotListComponent', () => {
   let component: RbdSnapshotListComponent;
   let fixture: ComponentFixture<RbdSnapshotListComponent>;
   let summaryService: SummaryService;
+  let modalService: ModalCdsService;
 
   const fakeAuthStorageService = {
     isLoggedIn: () => {
@@ -60,11 +62,14 @@ describe('RbdSnapshotListComponent', () => {
         RouterTestingModule,
         NgbNavModule,
         ToastrModule.forRoot(),
-        NgbModalModule
+        ModalModule,
+        PlaceholderModule
       ],
       providers: [
         { provide: AuthStorageService, useValue: fakeAuthStorageService },
-        TaskListService
+        TaskListService,
+        ModalService,
+        BaseModalService
       ]
     },
     [CriticalConfirmationModalComponent]
@@ -90,7 +95,7 @@ describe('RbdSnapshotListComponent', () => {
 
     beforeEach(() => {
       fixture.detectChanges();
-      const modalService = TestBed.inject(ModalService);
+      const modalService = TestBed.inject(ModalCdsService);
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
       called = false;
       rbdService = new RbdService(null, null);
@@ -99,7 +104,6 @@ describe('RbdSnapshotListComponent', () => {
       authStorageService.set('user', { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(
         authStorageService,
-        modalService,
         null,
         null,
         rbdService,
@@ -108,21 +112,24 @@ describe('RbdSnapshotListComponent', () => {
         null,
         null,
         actionLabelsI18n,
-        null
+        null,
+        modalService
       );
       spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();
+      spyOn(modalService, 'stopLoadingSpinner').and.stub();
     });
 
     it('should call stopLoadingSpinner if the request fails', fakeAsync(() => {
       component.updateSelection(new CdTableSelection([{ name: 'someName' }]));
       expect(called).toBe(false);
       component.deleteSnapshotModal();
-      spyOn(component.modalRef.componentInstance, 'stopLoadingSpinner').and.callFake(() => {
+      component.modalRef.snapshotForm = { value: { snapName: 'someName' } };
+      component.modalRef.submitAction();
+      tick(500);
+      spyOn(modalService, 'stopLoadingSpinner').and.callFake(() => {
         called = true;
       });
-      component.modalRef.componentInstance.submitAction();
-      tick(500);
       expect(called).toBe(true);
     }));
   });
@@ -202,7 +209,8 @@ describe('RbdSnapshotListComponent', () => {
           null,
           null,
           TestBed.inject(ActionLabelsI18n),
-          null
+          null,
+          component.poolName
         );
         ref.componentInstance.onSubmit = new Subject();
         return ref;

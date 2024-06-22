@@ -1,6 +1,6 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit } from '@angular/core';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import moment from 'moment';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
@@ -18,27 +18,26 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   templateUrl: './rbd-trash-move-modal.component.html',
   styleUrls: ['./rbd-trash-move-modal.component.scss']
 })
-export class RbdTrashMoveModalComponent implements OnInit {
-  // initial state
-  poolName: string;
-  namespace: string;
-  imageName: string;
-  hasSnapshots: boolean;
-
+export class RbdTrashMoveModalComponent extends BaseModal implements OnInit {
   imageSpec: ImageSpec;
   imageSpecStr: string;
   executingTasks: ExecutingTask[];
 
   moveForm: CdFormGroup;
   pattern: string;
+  setExpirationDate = false;
 
   constructor(
     private rbdService: RbdService,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private fb: CdFormBuilder,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    @Inject('poolName') public poolName: string,
+    @Inject('namespace') public namespace: string,
+    @Inject('imageName') public imageName: string,
+    @Inject('hasSnapshots') public hasSnapshots: boolean
   ) {
+    super();
     this.createForm();
   }
 
@@ -56,7 +55,8 @@ export class RbdTrashMoveModalComponent implements OnInit {
             return result;
           })
         ]
-      ]
+      ],
+      setExpiry: [false]
     });
   }
 
@@ -87,8 +87,17 @@ export class RbdTrashMoveModalComponent implements OnInit {
       })
       .subscribe({
         complete: () => {
-          this.activeModal.close();
+          this.closeModal();
         }
       });
+  }
+
+  toggleExpiration() {
+    this.setExpirationDate = !this.setExpirationDate;
+    if (!this.setExpirationDate) {
+      this.moveForm.get('expiresAt').setValue('');
+      this.moveForm.get('expiresAt').markAsPristine();
+      this.moveForm.get('expiresAt').updateValueAndValidity();
+    }
   }
 }

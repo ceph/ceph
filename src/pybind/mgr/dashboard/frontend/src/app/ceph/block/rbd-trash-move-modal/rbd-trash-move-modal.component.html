@@ -1,57 +1,49 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n
-                class="modal-title">Move an image to trash</ng-container>
+<cds-modal size="sm"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Move an image to trash</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <section cdsModalContent>
     <form name="moveForm"
           class="form"
           #formDir="ngForm"
           [formGroup]="moveForm"
           novalidate>
-      <div class="modal-body">
-        <div class="alert alert-warning"
-             *ngIf="hasSnapshots"
-             role="alert">
-          <span i18n>This image contains snapshot(s), which will prevent it
-            from being removed after moved to trash.</span>
-        </div>
+      <cd-alert-panel type="warning"
+                      *ngIf="hasSnapshots"
+                      spacingClass="mb-2">
+        <span i18n>This image contains snapshot(s), which will prevent it
+          from being removed after moved to trash.</span>
+      </cd-alert-panel>
 
-        <p i18n>To move <kbd>{{ imageSpecStr }}</kbd> to trash,
-          click <kbd>Move</kbd>. Optionally, you can pick an expiration date.</p>
-
-        <div class="form-group">
-          <label class="col-form-label"
-                 for="expiresAt"
-                 i18n>Protection expires at</label>
-          <input type="text"
-                 placeholder="NOT PROTECTED"
-                 i18n-placeholder
-                 class="form-control"
-                 formControlName="expiresAt"
-                 [ngbPopover]="popContent"
-                 triggers="manual"
-                 #p="ngbPopover"
-                 (click)="p.open()"
-                 (keypress)="p.close()">
-
-          <span class="invalid-feedback"
-                *ngIf="moveForm.showError('expiresAt', formDir, 'format')"
-                i18n>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span>
-          <span class="invalid-feedback"
-                *ngIf="moveForm.showError('expiresAt', formDir, 'expired')"
-                i18n>Protection has already expired. Please pick a future date or leave it empty.</span>
-        </div>
+      <p i18n>To move <kbd>{{ imageSpecStr }}</kbd> to trash,
+        click <kbd>Move</kbd>. Optionally, you can pick an expiration date.</p>
+      <div class="form-item">
+        <cds-checkbox formControlName="setExpiry"
+                      id="setExpiry"
+                      name="setExpiry"
+                      (checkedChange)="toggleExpiration()"
+                      i18n>Set expiration date</cds-checkbox>
       </div>
+      <div class="form-item"
+           *ngIf="setExpirationDate">
+        <cd-date-time-picker [control]="moveForm.get('expiresAt')"></cd-date-time-picker>
 
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="moveImage()"
-                              [form]="moveForm"
-                              [submitText]="actionLabels.MOVE"></cd-form-button-panel>
+        <span class="invalid-feedback"
+              *ngIf="moveForm.showError('expiresAt', formDir, 'format')"
+              i18n>Wrong date format. Please use "YYYY-MM-DD HH:mm:ss".</span>
+        <span class="invalid-feedback"
+              *ngIf="moveForm.showError('expiresAt', formDir, 'expired')"
+              i18n>Protection has already expired. Please pick a future date or leave it empty.</span>
       </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
 
-<ng-template #popContent>
-  <cd-date-time-picker [control]="moveForm.get('expiresAt')"></cd-date-time-picker>
-</ng-template>
+  <cd-form-button-panel (submitActionEvent)="moveImage()"
+                        [form]="moveForm"
+                        [submitText]="actionLabels.MOVE"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>

@@ -1,28 +1,27 @@
-<cd-modal (hide)="cancel()">
-  <ng-container class="modal-title">
-    <span class="text-warning"
-          *ngIf="warning">
-      <i class="fa fa-exclamation-triangle fa-1x"></i>
-    </span>{{ titleText }}</ng-container>
-  <ng-container class="modal-content">
+<cds-modal size="sm"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ titleText }}</h3>
+  </cds-modal-header>
+  <section cdsModalContent>
     <form name="confirmationForm"
           #formDir="ngForm"
           [formGroup]="confirmationForm"
           novalidate>
-      <div class="modal-body">
-        <ng-container *ngTemplateOutlet="bodyTpl; context: bodyContext"></ng-container>
-        <p *ngIf="description">
-          {{description}}
-        </p>
-      </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit(confirmationForm.value)"
-                              (backActionEvent)="boundCancel()"
-                              [form]="confirmationForm"
-                              [submitText]="buttonText"
-                              [showCancel]="showCancel"
-                              [showSubmit]="showSubmit"></cd-form-button-panel>
-      </div>
+      <ng-container *ngTemplateOutlet="bodyTpl; context: bodyContext"></ng-container>
+      <p *ngIf="description">
+        {{description}}
+      </p>
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="onSubmit(confirmationForm.value)"
+                        [form]="confirmationForm"
+                        [submitText]="buttonText"
+                        [showCancel]="showCancel"
+                        [showSubmit]="showSubmit"
+                        [modalForm]="true"></cd-form-button-panel>
+
+</cds-modal>

@@ -108,7 +108,8 @@ Button
   }
 }
 
-.cds--btn--primary {
+.cds--btn--primary,
+.flatpickr-day.selected {
   background-color: vv.$primary;
 
   &:hover {

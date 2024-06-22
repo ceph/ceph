@@ -16,6 +16,7 @@ import { ImageListComponent } from '../image-list/image-list.component';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { PoolListComponent } from '../pool-list/pool-list.component';
 import { OverviewComponent } from './overview.component';
+import { ButtonModule, GridModule, InputModule } from 'carbon-components-angular';
 
 describe('OverviewComponent', () => {
   let component: OverviewComponent;
@@ -38,7 +39,10 @@ describe('OverviewComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot()
+      ToastrModule.forRoot(),
+      ButtonModule,
+      InputModule,
+      GridModule
     ]
   });
 

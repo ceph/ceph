@@ -1,13 +1,24 @@
-<div class="d-flex justify-content-center">
-  <ngb-datepicker #dp
-                  [(ngModel)]="date"
-                  [minDate]="minDate"
-                  (ngModelChange)="onModelChange()"></ngb-datepicker>
-</div>
-
-<div class="d-flex justify-content-center"
-     *ngIf="hasTime">
-  <ngb-timepicker [seconds]="hasSeconds"
-                  [(ngModel)]="time"
-                  (ngModelChange)="onModelChange()"></ngb-timepicker>
+<div cdsCol
+     class="form-item">
+  <div cdsRow>
+<cds-date-picker label="Protection expires at"
+                 i18n-label
+                 placeholder="NOT PROTECTED"
+                 formControlname="expiresAt"
+                 dateFormat="Y/m/d"
+                 [value]="date"
+                 (valueChange)="onModelChange($event)">
+</cds-date-picker>
+<cds-timepicker (valueChange)="onModelChange($event)"
+                [(ngModel)]="time"
+                label="Select a time"
+                pattern="(1[012]|[0-9]):[0-5][0-9]"
+                *ngIf="hasTime">
+  <cds-timepicker-select [(ngModel)]="ampm"
+                         (valueChange)="onModelChange($event)">
+    <option selected
+            value="AM">AM</option>
+    <option value="PM">PM</option>
+  </cds-timepicker-select>
+</cds-timepicker></div>
 </div>
