@@ -17,7 +17,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
@@ -46,7 +46,7 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
     private titleCasePipe: TitleCasePipe,
     private actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
     private router: Router,
     private rgwDaemonService: RgwDaemonService

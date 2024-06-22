@@ -2,32 +2,33 @@
           [formGroup]="form.get('configuration')">
   <legend i18n>RBD Configuration</legend>
 
-  <div *ngFor="let section of rbdConfigurationService.sections"
-       class="col-12">
+  <div *ngFor="let section of rbdConfigurationService.sections">
     <h5 class="cd-header">
-      <span (click)="toggleSectionVisibility(section.class)"
-            class="collapsible">
+      <legend (click)="toggleSectionVisibility(section.class)"
+              class="collapsible">
         {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
                                  aria-hidden="true"></i>
-      </span>
+      </legend>
     </h5>
     <div class="{{ section.class }}"
          [hidden]="!sectionVisibility[section.class]">
-      <div class="form-group row"
+      <div class="form-item"
            *ngFor="let option of section.options">
-        <label class="cd-col-form-label"
-               [for]="option.name">{{ option.displayName }}<cd-helper>{{ option.description }}</cd-helper></label>
+        <cds-text-label [helperText]="option.description"
+                        [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty || form.get('configuration').controls[option.name].touched)"
+                        [invalidText]="formError">
+          {{ option.displayName }}
 
-        <div class="cd-col-form-input {{ section.heading }}">
-          <div class="input-group">
+          <div class="cds-input-group">
             <ng-container [ngSwitch]="option.type">
               <ng-container *ngSwitchCase="configurationType.milliseconds">
                 <input [id]="option.name"
                        [name]="option.name"
                        [formControlName]="option.name"
                        type="text"
-                       class="form-control"
+                       cdsText
                        [ngDataReady]="ngDataReady"
+                       [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty || form.get('configuration').controls[option.name].touched)"
                        cdMilliseconds>
               </ng-container>
               <ng-container *ngSwitchCase="configurationType.bps">
@@ -35,9 +36,10 @@
                        [name]="option.name"
                        [formControlName]="option.name"
                        type="text"
-                       class="form-control"
+                       cdsText
                        defaultUnit="b"
                        [ngDataReady]="ngDataReady"
+                       [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty || form.get('configuration').controls[option.name].touched)"
                        cdDimlessBinaryPerSecond>
               </ng-container>
               <ng-container *ngSwitchCase="configurationType.iops">
@@ -45,28 +47,35 @@
                        [name]="option.name"
                        [formControlName]="option.name"
                        type="text"
-                       class="form-control"
+                       cdsText
                        [ngDataReady]="ngDataReady"
+                       [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty || form.get('configuration').controls[option.name].touched)"
                        cdIops>
               </ng-container>
             </ng-container>
-            <button class="btn btn-light"
-                    type="button"
-                    data-toggle="button"
-                    [ngClass]="{'active': isDisabled(option.name)}"
-                    title="Remove the local configuration value. The parent configuration value will be inherited and used instead."
-                    i18n-title
-                    (click)="reset(option.name)">
-              <i [ngClass]="[icons.erase]"
-                 aria-hidden="true"></i>
-            </button>
+            <cds-icon-button kind="ghost"
+                             size="md"
+                             (click)="reset(option.name)"
+                             data-toggle="button">
+              <svg cdsIcon="close"
+                   size="32"
+                   class="cds--btn__icon"
+                   *ngIf="!form.get('configuration').get(option.name).disabled; else resetIcon"></svg>
+              <ng-template #resetIcon>
+                <svg cdsIcon="reset"
+                     size="32"
+                     class="cds--btn__icon"
+                     *ngIf="form.get('configuration').get(option.name).disabled"></svg>
+              </ng-template>
+            </cds-icon-button>
+            <ng-template #formError>
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('configuration.' + option.name, cfgFormGroup, 'min')"
+                    i18n>The minimum value is 0.</span>
+            </ng-template>
           </div>
-          <span i18n
-                class="invalid-feedback"
-                *ngIf="form.showError('configuration.' + option.name, cfgFormGroup, 'min')">The minimum value is 0</span>
-        </div>
+        </cds-text-label>
       </div>
     </div>
   </div>
-
 </fieldset>

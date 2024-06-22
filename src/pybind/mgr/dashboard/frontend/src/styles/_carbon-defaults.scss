@@ -12,6 +12,7 @@
 );
 @use '@carbon/styles';
 @use '@carbon/type';
+@use '@carbon/colors';
 @use './src/styles/vendor/variables' as vv;
 
 /**********************************************************************************
@@ -111,7 +112,7 @@ a.cds--header__menu-item,
   font-size: calc(type.type-scale(4) + 0.5px);
 
   .cds--header__menu-trigger {
-    border: 1px solid vv.$body-bg-alt;
+    border: 1px solid vv.$gray-700;
   }
 
   .cds--header__menu-trigger > svg {
@@ -162,7 +163,7 @@ Forms
   margin: 0.5rem;
 }
 
-.cds--col {
+.cds--col-md-4 {
   padding-inline: 0;
 }
 
@@ -172,4 +173,31 @@ Breadcrumbs
 .cds--breadcrumb {
   margin-top: 8px;
   padding: 8px 0;
+}
+
+/******************************************
+Modals
+******************************************/
+.cds--modal-container {
+  background-color: colors.$gray-10;
+
+  .cds--modal-close {
+    background-color: transparent;
+
+    &:hover {
+      background-color: colors.$gray-10-hover;
+    }
+
+    &:focus,
+    &:active {
+      background-color: transparent;
+    }
+  }
+}
+
+/******************************************
+Date picker
+******************************************/
+.flatpickr-calendar.open {
+  background-color: colors.$gray-10;
 }

@@ -23,7 +23,7 @@ describe('RGW roles page', () => {
     });
 
     it('should delete rgw role', () => {
-      roles.delete(roleName);
+      roles.delete(roleName, null, null, true);
     });
   });
 });

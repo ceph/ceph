@@ -94,29 +94,3 @@
 .card-footer button.btn:not(:first-child) {
   margin-left: 5px;
 }
-
-/******************************************
-Button
-******************************************/
-.cds--btn {
-  .cds--loading {
-    margin-left: 0.5rem;
-  }
-
-  .cds--loading__stroke {
-    stroke: vv.$white;
-  }
-}
-
-.cds--btn--primary {
-  background-color: vv.$primary;
-
-  &:hover {
-    background-color: vv.$btn-primary-hover;
-  }
-
-  &:focus,
-  &:active {
-    background-color: vv.$btn-primary-active;
-  }
-}

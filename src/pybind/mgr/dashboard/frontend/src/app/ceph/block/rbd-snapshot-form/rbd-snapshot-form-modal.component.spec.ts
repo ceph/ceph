@@ -13,6 +13,7 @@ import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdSnapshotFormModalComponent } from './rbd-snapshot-form-modal.component';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { of } from 'rxjs';
+import { CheckboxModule, InputModule, ModalModule } from 'carbon-components-angular';
 
 describe('RbdSnapshotFormModalComponent', () => {
   let component: RbdSnapshotFormModalComponent;
@@ -26,10 +27,13 @@ describe('RbdSnapshotFormModalComponent', () => {
       PipesModule,
       HttpClientTestingModule,
       ToastrModule.forRoot(),
-      RouterTestingModule
+      RouterTestingModule,
+      ModalModule,
+      InputModule,
+      CheckboxModule
     ],
     declarations: [RbdSnapshotFormModalComponent],
-    providers: [NgbActiveModal, AuthStorageService]
+    providers: [NgbActiveModal, AuthStorageService, { provide: 'poolName', useValue: 'pool' }]
   });
 
   beforeEach(() => {
@@ -45,7 +49,7 @@ describe('RbdSnapshotFormModalComponent', () => {
   it('should show "Create" text', () => {
     fixture.detectChanges();
 
-    const header = fixture.debugElement.nativeElement.querySelector('h4');
+    const header = fixture.debugElement.nativeElement.querySelector('cds-modal-header h3');
     expect(header.textContent).toBe('Create RBD Snapshot');
 
     const button = fixture.debugElement.nativeElement.querySelector('cd-submit-button');
@@ -57,7 +61,7 @@ describe('RbdSnapshotFormModalComponent', () => {
 
     fixture.detectChanges();
 
-    const header = fixture.debugElement.nativeElement.querySelector('h4');
+    const header = fixture.debugElement.nativeElement.querySelector('cds-modal-header h3');
     expect(header.textContent).toBe('Rename RBD Snapshot');
 
     const button = fixture.debugElement.nativeElement.querySelector('cd-submit-button');
@@ -70,7 +74,7 @@ describe('RbdSnapshotFormModalComponent', () => {
     component.ngOnInit();
     fixture.detectChanges();
     const radio = fixture.debugElement.nativeElement.querySelector('#mirrorImageSnapshot');
-    expect(radio.disabled).toBe(false);
+    expect(radio.querySelector('input').disabled).toBe(false);
   });
 
   // TODO: Fix this test. It is failing after updating the jest.

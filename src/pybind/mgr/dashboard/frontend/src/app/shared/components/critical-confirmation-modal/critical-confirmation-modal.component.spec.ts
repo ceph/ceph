@@ -2,15 +2,15 @@ import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { NgForm, ReactiveFormsModule } from '@angular/forms';
 
-import { NgbActiveModal, NgbModalModule, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
 import { DirectivesModule } from '~/app/shared/directives/directives.module';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { configureTestBed, modalServiceShow } from '~/testing/unit-test-helper';
 import { AlertPanelComponent } from '../alert-panel/alert-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
+import { ModalService, PlaceholderService } from 'carbon-components-angular';
+import { ModalCdsService } from '../../services/modal-cds.service';
 
 @NgModule({})
 export class MockModule {}
@@ -40,11 +40,11 @@ class MockComponent {
   modalDescription: TemplateRef<any>;
   someData = [1, 2, 3, 4, 5];
   finished: number[];
-  ctrlRef: NgbModalRef;
-  modalRef: NgbModalRef;
+  ctrlRef: any;
+  modalRef: any;
 
   // Normally private - public was needed for the tests
-  constructor(public modalService: ModalService) {}
+  constructor(public modalService: ModalCdsService) {}
 
   openCtrlDriven() {
     this.ctrlRef = this.modalService.show(CriticalConfirmationModalComponent, {
@@ -97,8 +97,14 @@ describe('CriticalConfirmationModalComponent', () => {
         AlertPanelComponent
       ],
       schemas: [NO_ERRORS_SCHEMA],
-      imports: [ReactiveFormsModule, MockModule, DirectivesModule, NgbModalModule],
-      providers: [NgbActiveModal]
+      imports: [ReactiveFormsModule, MockModule, DirectivesModule],
+      providers: [
+        ModalService,
+        PlaceholderService,
+        { provide: 'itemNames', useValue: [] },
+        { provide: 'itemDescription', useValue: 'entry' },
+        { provide: 'actionDescription', useValue: 'delete' }
+      ]
     },
     [CriticalConfirmationModalComponent]
   );
@@ -146,16 +152,14 @@ describe('CriticalConfirmationModalComponent', () => {
       ctrl.setValue(value);
       ctrl.markAsDirty();
       ctrl.updateValueAndValidity();
-      mockFixture.detectChanges();
     };
 
     it('should test hideModal', () => {
-      expect(component.activeModal).toBeTruthy();
       expect(component.hideModal).toBeTruthy();
-      spyOn(component.activeModal, 'close').and.callThrough();
-      expect(component.activeModal.close).not.toHaveBeenCalled();
+      spyOn(component, 'closeModal').and.callThrough();
+      expect(component.closeModal).not.toHaveBeenCalled();
       component.hideModal();
-      expect(component.activeModal.close).toHaveBeenCalled();
+      expect(component.closeModal).toHaveBeenCalled();
     });
 
     describe('validate confirmation', () => {

@@ -6,7 +6,8 @@
       {{ crumb.text }}
     </cds-breadcrumb-item>
 
-    <cds-breadcrumb-item *ngIf="last || crumb.path === null">
+    <cds-breadcrumb-item *ngIf="last || crumb.path === null"
+                         data-testid="active-breadcrumb-item">
       {{ crumb.text }}
     </cds-breadcrumb-item>
   </ng-container>

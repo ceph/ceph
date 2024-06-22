@@ -11,9 +11,9 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const BASE_URL = 'block/nvmeof/subsystems';
 
@@ -35,7 +35,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
     private router: Router,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService
   ) {
     super();

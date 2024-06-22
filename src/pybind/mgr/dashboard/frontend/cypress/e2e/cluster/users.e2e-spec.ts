@@ -40,7 +40,7 @@ describe('Cluster Ceph Users', () => {
     });
 
     it('should delete a user', () => {
-      users.delete(entityName);
+      users.delete(entityName, null, null, true);
     });
   });
 });

@@ -29,10 +29,10 @@ Feature: Cluster expansion host addition
         And I should see a row with "<hostname>"
         When I select a row "<hostname>"
         And I click on "Remove" button from the table actions
-        Then I should see the modal
-        And I check the tick box in modal
+        Then I should see the carbon modal
+        And I check the tick box in carbon modal
         And I click on "Remove Host" button
-        Then I should not see the modal
+        Then I should not see the carbon modal
         And I should not see a row with "<hostname>"
 
         Examples:

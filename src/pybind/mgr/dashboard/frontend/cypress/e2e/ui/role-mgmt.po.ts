@@ -17,7 +17,7 @@ export class RoleMgmtPageHelper extends PageHelper {
 
     // Click the create button and wait for role to be made
     cy.get('[data-cy=submitBtn]').click();
-    cy.get('.breadcrumb-item.active').should('not.have.text', 'Create');
+    cy.get('[data-testid="active-breadcrumb-item"]').should('not.have.text', 'Create');
 
     this.getFirstTableCell(name).should('exist');
   }
@@ -32,7 +32,7 @@ export class RoleMgmtPageHelper extends PageHelper {
 
     // Click the edit button and check new values are present in table
     cy.get('[data-cy=submitBtn]').click();
-    cy.get('.breadcrumb-item.active').should('not.have.text', 'Edit');
+    cy.get('[data-testid="active-breadcrumb-item"]').should('not.have.text', 'Edit');
 
     this.getFirstTableCell(name).should('exist');
     this.getFirstTableCell(description).should('exist');

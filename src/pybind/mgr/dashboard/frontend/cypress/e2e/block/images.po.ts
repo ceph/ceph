@@ -71,12 +71,12 @@ export class ImagesPageHelper extends PageHelper {
     cy.contains('button', 'Restore').click();
 
     // wait for pop-up to be visible (checks for title of pop-up)
-    cy.get('cd-modal #name').should('be.visible');
+    cy.get('cds-modal #name').should('be.visible');
 
     // If a new name for the image is passed, it changes the name of the image
     if (newName !== undefined) {
       // click name box and send new name
-      cy.get('cd-modal #name').clear().type(newName);
+      cy.get('cds-modal #name').clear().type(newName);
     }
 
     cy.get('[data-cy=submitBtn]').click();
@@ -95,7 +95,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.contains('button', 'Purge Trash').click();
 
     // Check for visibility of modal container
-    cy.get('.modal-header').should('be.visible');
+    cy.get('cds-modal').should('be.visible');
 
     // If purging a specific pool, selects that pool if given
     if (pool !== undefined) {

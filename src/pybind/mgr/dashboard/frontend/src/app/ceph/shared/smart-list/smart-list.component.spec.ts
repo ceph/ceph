@@ -112,7 +112,7 @@ describe('OsdSmartListComponent', () => {
       expect(alertPanel.attributes.title).toBe(panelTitle);
       expect(alertPanel.attributes.size).toBe(panelSize);
     } else {
-      const panelText = alertPanel.query(By.css('.alert-panel-text'));
+      const panelText = alertPanel.query(By.css('.cds--actionable-notification__content'));
       expect(panelText.nativeElement.textContent).toBe(panelTitle);
     }
   };

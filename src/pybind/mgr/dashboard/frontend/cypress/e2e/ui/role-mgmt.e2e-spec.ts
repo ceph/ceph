@@ -30,7 +30,7 @@ describe('Role Management page', () => {
     });
 
     it('should delete a role', () => {
-      roleMgmt.delete(role_name);
+      roleMgmt.delete(role_name, null, null, true);
     });
   });
 });

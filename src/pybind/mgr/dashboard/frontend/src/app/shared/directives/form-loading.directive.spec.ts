@@ -65,7 +65,7 @@ describe('FormLoadingDirective', () => {
     expectShown(0, 1, 0);
 
     const alert = fixture.debugElement.nativeElement.querySelector(
-      'cd-alert-panel .alert-panel-text'
+      'cd-alert-panel .cds--actionable-notification__content'
     );
     expect(alert.textContent).toBe('Form data could not be loaded.');
   });

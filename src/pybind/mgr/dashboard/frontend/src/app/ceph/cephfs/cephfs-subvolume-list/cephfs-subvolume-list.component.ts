@@ -34,6 +34,7 @@ import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group
 import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
 import { HealthService } from '~/app/shared/api/health.service';
 import _ from 'lodash';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
 
@@ -92,7 +93,8 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService,
-    private healthService: HealthService
+    private healthService: HealthService,
+    private cdsModalService: ModalCdsService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -250,7 +252,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     });
     this.errorMessage = '';
     this.selectedName = this.selection.first().name;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
       actionDescription: 'Remove',
       itemNames: [this.selectedName],
       itemDescription: 'Subvolume',
@@ -268,7 +270,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
             )
           })
           .subscribe({
-            complete: () => this.modalRef.close(),
+            complete: () => this.cdsModalService.dismissAll(),
             error: (error) => {
               this.modalRef.componentInstance.stopLoadingSpinner();
               this.errorMessage = error.error.detail;

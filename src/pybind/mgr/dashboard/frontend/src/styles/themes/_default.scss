@@ -21,10 +21,11 @@ $theme: (
   button-primary: vv.$primary,
   button-primary-hover: vv.$primary-500,
   interactive: vv.$primary,
-  support-info: vv.$info,
   support-success: vv.$success,
   support-warning: vv.$warning,
   support-error: vv.$danger,
+  support-info: vv.$info,
+  notification-background-info: vv.$info,
   // Sizes
   heading-03: 1.75rem,
   spacing-03: 0.5rem

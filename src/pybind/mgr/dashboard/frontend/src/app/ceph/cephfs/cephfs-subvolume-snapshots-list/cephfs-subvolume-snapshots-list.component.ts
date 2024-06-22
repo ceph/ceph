@@ -26,6 +26,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import moment from 'moment';
 import { Validators } from '@angular/forms';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
@@ -66,7 +67,8 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     private authStorageService: AuthStorageService,
     private cdDatePipe: CdDatePipe,
     private taskWrapper: TaskWrapperService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private cdsModalService: ModalCdsService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -223,7 +225,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     const subVolumeName = this.activeSubVolumeName;
     const subVolumeGroupName = this.activeGroupName;
     const fsName = this.fsName;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
       actionDescription: this.actionLabels.REMOVE,
       itemNames: [snapshotName],
       itemDescription: 'Snapshot',
@@ -244,7 +246,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
             )
           })
           .subscribe({
-            complete: () => this.modalRef.close(),
+            complete: () => this.cdsModalService.dismissAll(),
             error: () => this.modalRef.componentInstance.stopLoadingSpinner()
           })
     });

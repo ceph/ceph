@@ -20,6 +20,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-cephfs-subvolume-group',
@@ -63,7 +64,8 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private authStorageService: AuthStorageService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private cdsModalService: ModalCdsService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -177,7 +179,7 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
 
   removeSubVolumeModal() {
     const name = this.selection.first().name;
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'subvolume group',
       itemNames: [name],
       actionDescription: 'remove',

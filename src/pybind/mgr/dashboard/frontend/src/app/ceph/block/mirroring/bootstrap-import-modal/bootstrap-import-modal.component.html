@@ -1,96 +1,109 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n
-                class="modal-title">Import Bootstrap Token</ng-container>
+<cds-modal size="md"
+           [open]="open"
+           (overlaySelected)="closeModal()">
 
-  <ng-container class="modal-content">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Import Bootstrap Token</h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
     <form name="importBootstrapForm"
           class="form"
           #formDir="ngForm"
           [formGroup]="importBootstrapForm"
           novalidate>
-      <div class="modal-body">
-        <p>
-          <ng-container i18n>To import a bootstrap token which was created
-          by a peer site cluster, provide the local site's name, select
-          which pools will have mirroring enabled, provide the generated
-          token, and click&nbsp;<kbd>Import</kbd>.</ng-container>
-        </p>
+      <p>
+        <ng-container i18n>To import a bootstrap token which was created
+        by a peer site cluster, provide the local site's name, select
+        which pools will have mirroring enabled, provide the generated
+        token, and click&nbsp;<kbd>Import</kbd>.</ng-container>
+      </p>
 
-        <div class="form-group">
-          <label class="col-form-label required"
-                 for="siteName"
-                 i18n>Site Name</label>
-          <input class="form-control"
-                 type="text"
+      <div class="form-item">
+        <cds-text-label for="siteName"
+                        i18n
+                        cdRequiredField="Site Name"
+                        [invalid]="!importBootstrapForm.controls['siteName'].valid && (importBootstrapForm.controls['siteName'].dirty || importBootstrapForm.controls['siteName'].touched)"
+                        [invalidText]="siteNameError"
+                        i18n-invalidText>Site Name
+          <input cdsText
                  placeholder="Name..."
                  i18n-placeholder
                  id="siteName"
                  name="siteName"
                  formControlName="siteName"
+                 [invalid]="importBootstrapForm.showError('siteName', formDir, 'required')"
                  autofocus>
+        </cds-text-label>
+        <ng-template #siteNameError>
           <span *ngIf="importBootstrapForm.showError('siteName', formDir, 'required')"
                 class="invalid-feedback"
                 i18n>This field is required.</span>
-        </div>
+        </ng-template>
+      </div>
 
-        <div class="form-group">
-          <label class="col-form-label"
-                 for="direction">
-            <span i18n>Direction</span>
-          </label>
-          <select id="direction"
-                  name="direction"
-                  class="form-control"
-                  formControlName="direction">
-            <option *ngFor="let direction of directions"
-                    [value]="direction.key">{{ direction.desc }}</option>
-          </select>
-        </div>
+      <div class="form-item">
+        <cds-select label="Direction"
+                    for="direction"
+                    name="direction"
+                    id="direction"
+                    formControlName="direction">
+          <option *ngFor="let direction of directions"
+                  [value]="direction.key">{{ direction.desc }}</option>
+        </cds-select>
+      </div>
 
-        <div class="form-group"
-             formGroupName="pools">
-          <label class="col-form-label required"
+      <div class="form-item"
+           formGroupName="pools">
+        <fieldset>
+          <label class="cds--label"
                  for="pools"
                  i18n>Pools</label>
-          <div class="custom-control custom-checkbox"
-               *ngFor="let pool of pools">
-            <input type="checkbox"
-                   class="custom-control-input"
-                   id="{{ pool.name }}"
-                   name="{{ pool.name }}"
-                   formControlName="{{ pool.name }}">
-            <label class="custom-control-label"
-                   for="{{ pool.name }}">{{ pool.name }}</label>
-          </div>
-          <span *ngIf="importBootstrapForm.showError('pools', formDir, 'requirePool')"
-                class="invalid-feedback"
-                i18n>At least one pool is required.</span>
-        </div>
+          <ng-container *ngFor="let pool of pools">
+            <cds-checkbox i18n-label
+                          [id]="pool.name"
+                          [name]="pool.name"
+                          [formControlName]="pool.name">
+              {{ pool.name }}
+            </cds-checkbox>
+          </ng-container>
+        </fieldset>
+        <span *ngIf="importBootstrapForm.showError('pools', formDir, 'requirePool')"
+              class="invalid-feedback"
+              i18n>At least one pool is required.</span>
+      </div>
 
-        <div class="form-group">
-          <label class="col-form-label required"
-                 for="token"
-                 i18n>Token</label>
-          <textarea class="form-control resize-vertical"
+      <div class="form-item">
+        <cds-textarea-label for="token"
+                            [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty || importBootstrapForm.controls['token'].touched)"
+                            [invalidText]="tokenError"
+                            cdRequiredField="Token"
+                            i18n>Token
+          <textarea cdsTextArea
                     placeholder="Generated token..."
                     i18n-placeholder
                     id="token"
-                    formControlName="token">
+                    formControlName="token"
+                    cols="200"
+                    rows="5"
+                    [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty || importBootstrapForm.controls['token'].touched)">
           </textarea>
+        </cds-textarea-label>
+        <ng-template #tokenError>
           <span *ngIf="importBootstrapForm.showError('token', formDir, 'required')"
                 class="invalid-feedback"
                 i18n>This field is required.</span>
           <span *ngIf="importBootstrapForm.showError('token', formDir, 'invalidToken')"
                 class="invalid-feedback"
                 i18n>The token is invalid.</span>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="import()"
-                              [form]="importBootstrapForm"
-                              [submitText]="actionLabels.SUBMIT"></cd-form-button-panel>
+        </ng-template>
       </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="import()"
+                        [form]="importBootstrapForm"
+                        [submitText]="actionLabels.SUBMIT"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>

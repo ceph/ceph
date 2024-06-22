@@ -1,46 +1,41 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n
-                class="modal-title">Purge Trash</ng-container>
+<cds-modal size="md"
+           [open]="true"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Purge Trash</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <section cdsModalContent>
     <form name="purgeForm"
           class="form"
           #formDir="ngForm"
           [formGroup]="purgeForm"
           novalidate>
-      <div class="modal-body">
-        <p i18n>To purge, select&nbsp;
-          <kbd>All</kbd>&nbsp;
-          or one pool and click&nbsp;
-          <kbd>Purge</kbd>.&nbsp;</p>
+      <p i18n>To purge, select&nbsp;
+        <kbd>All</kbd>&nbsp;
+        or one pool and click&nbsp;
+        <kbd>Purge</kbd>.&nbsp;</p>
 
-        <div class="form-group">
-          <label class="col-form-label mx-auto"
-                 i18n>Pool:</label>
-          <input class="form-control"
-                 type="text"
-                 placeholder="Pool name..."
-                 i18n-placeholder
-                 formControlName="poolName"
-                 *ngIf="!poolPermission.read">
-          <select id="poolName"
-                  name="poolName"
-                  class="form-control"
-                  formControlName="poolName"
-                  *ngIf="poolPermission.read">
-            <option value=""
-                    i18n>All</option>
-            <option *ngFor="let pool of pools"
-                    [value]="pool">{{ pool }}</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="purge()"
-                              [form]="purgeForm"
-                              [submitText]="actionLabels.PURGE"></cd-form-button-panel>
+      <div class="form-item">
+        <cds-select label="Pool"
+                    for="poolName"
+                    id="poolName"
+                    formControlName="poolName"
+                    *ngIf="poolPermission.read">
+          <option value=""
+                  i18n>All</option>
+          <option *ngFor="let pool of pools"
+                  [value]="pool">{{ pool }}</option>
+        </cds-select>
       </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="purge()"
+                        [form]="purgeForm"
+                        [submitText]="actionLabels.PURGE"
+                        [modalForm]="true"></cd-form-button-panel>
+
+</cds-modal>

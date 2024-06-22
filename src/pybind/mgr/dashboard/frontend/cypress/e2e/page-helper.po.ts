@@ -68,7 +68,12 @@ export abstract class PageHelper {
    * Checks the active breadcrumb value.
    */
   expectBreadcrumbText(text: string) {
-    cy.get('.breadcrumb-item.active').should('have.text', text);
+    cy.get('[data-testid="active-breadcrumb-item"]')
+      .last()
+      .invoke('text')
+      .then((crumb) => {
+        expect(crumb.trim()).to.equal(text);
+      });
   }
 
   getTabs() {
@@ -106,7 +111,7 @@ export abstract class PageHelper {
    * @param option The option text (not value) to be selected.
    */
   selectOption(selectionName: string, option: string) {
-    cy.get(`select[name=${selectionName}]`).select(option);
+    cy.get(`select[id=${selectionName}]`).select(option);
     return this.expectSelectOption(selectionName, option);
   }
 
@@ -116,7 +121,7 @@ export abstract class PageHelper {
    *   be expected.
    */
   expectSelectOption(selectionName: string, option: string) {
-    return cy.get(`select[name=${selectionName}] option:checked`).contains(option);
+    return cy.get(`select[id=${selectionName}] option:checked`).contains(option);
   }
 
   getLegends() {
@@ -283,7 +288,9 @@ export abstract class PageHelper {
    * @param name The string to search in table cells.
    * @param columnIndex If provided, search string in columnIndex column.
    */
-  delete(name: string, columnIndex?: number, section?: string) {
+  // cdsModal is a temporary variable which will be removed once the carbonization
+  // is complete
+  delete(name: string, columnIndex?: number, section?: string, cdsModal = false) {
     // Selects row
     const getRow = columnIndex
       ? this.getTableCell.bind(this, columnIndex, name, true)
@@ -297,12 +304,17 @@ export abstract class PageHelper {
 
     // Convert action to SentenceCase and Confirms deletion
     const actionUpperCase = action.charAt(0).toUpperCase() + action.slice(1);
-    cy.get('cd-modal .custom-control-label').click();
-    cy.contains('cd-modal button', actionUpperCase).click();
+    cy.get('input[name="confirmation"]').click({ force: true });
 
-    // Wait for modal to close
-    cy.get('cd-modal').should('not.exist');
-
+    if (cdsModal) {
+      cy.get('cds-modal button').contains(actionUpperCase).click();
+      // Wait for modal to close
+      cy.get('cds-modal').should('not.exist');
+    } else {
+      cy.contains('cd-modal button', actionUpperCase).click();
+      // Wait for modal to close
+      cy.get('cd-modal').should('not.exist');
+    }
     // Waits for item to be removed from table
     getRow(name).should('not.exist');
   }

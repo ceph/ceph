@@ -50,6 +50,28 @@ import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form/nvmeof-n
 import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list/nvmeof-initiators-list.component';
 import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-initiators-form.component';
 
+import {
+  ButtonModule,
+  CheckboxModule,
+  DatePickerModule,
+  GridModule,
+  IconModule,
+  IconService,
+  InputModule,
+  ModalModule,
+  NumberModule,
+  RadioModule,
+  SelectModule,
+  UIShellModule
+} from 'carbon-components-angular';
+
+// Icons
+import ChevronDown from '@carbon/icons/es/chevron--down/16';
+import Close from '@carbon/icons/es/close/32';
+import AddFilled from '@carbon/icons/es/add--filled/32';
+import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
+import Reset from '@carbon/icons/es/reset/32';
+
 @NgModule({
   imports: [
     CommonModule,
@@ -62,7 +84,18 @@ import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-i
     NgxPipeFunctionModule,
     SharedModule,
     RouterModule,
-    TreeModule
+    TreeModule,
+    UIShellModule,
+    InputModule,
+    GridModule,
+    ButtonModule,
+    IconModule,
+    CheckboxModule,
+    RadioModule,
+    SelectModule,
+    NumberModule,
+    ModalModule,
+    DatePickerModule
   ],
   declarations: [
     RbdListComponent,
@@ -103,7 +136,11 @@ import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-i
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
-export class BlockModule {}
+export class BlockModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset]);
+  }
+}
 
 /* The following breakdown is needed to allow importing block.module without
     the routes (e.g.: this module is imported by pool.module for RBD QoS
