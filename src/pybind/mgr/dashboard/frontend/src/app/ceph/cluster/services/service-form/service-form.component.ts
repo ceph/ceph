@@ -811,6 +811,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
+  onPlacementChange(selected: string) {
+    if (selected === 'label') {
+      this.serviceForm.get('count').setValue(null);
+    }
+  }
+
   onBlockPoolChange() {
     const selectedBlockPool = this.serviceForm.get('pool').value;
     if (selectedBlockPool) {
