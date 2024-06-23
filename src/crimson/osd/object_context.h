@@ -137,22 +137,34 @@ public:
 private:
   template <typename Lock, typename Func>
   auto _with_lock(Lock& lock, Func&& func) {
-    Ref obc = this;
     auto maybe_fut = lock.lock();
     return seastar::futurize_invoke([
         maybe_fut=std::move(maybe_fut),
-        func=std::forward<Func>(func)]() mutable {
+        func=std::forward<Func>(func),
+	obc=Ref(this),
+	&lock]() mutable {
       if (maybe_fut) {
         return std::move(*maybe_fut
-        ).then([func=std::forward<Func>(func)]() mutable {
-          return seastar::futurize_invoke(func);
+        ).then([func=std::forward<Func>(func), obc, &lock]() mutable {
+          return seastar::futurize_invoke(
+	    func
+	  ).finally([&lock, obc] {
+	    /* We chain the finally block here because it's possible for
+	     * *maybe_fut from lock.lock() above to fail due to a call to
+	     * ObjectContext::interrupt, which calls tri_mutex::abort.
+	     * In the event of such an error, the lock isn't actually taken
+	     * and calling unlock() would be incorrect. */
+	    lock.unlock();
+	  });
         });
       } else {
         // atomically calling func upon locking
-        return seastar::futurize_invoke(func);
+        return seastar::futurize_invoke(
+	  func
+	).finally([&lock, obc] {
+	  lock.unlock();
+	});
       }
-    }).finally([&lock, obc] {
-      lock.unlock();
     });
   }
 
