@@ -669,5 +669,9 @@ using sha512_digest_t = sha_digest_t<64>;
 using md5_digest_t = sha_digest_t<16>;
 WRITE_CLASS_ENCODER(md5_digest_t)
 
+using local_clone_id_t = uint32_t;
+using local_clone_id_le_t = ceph_le32;
+constexpr local_clone_id_t LOCAL_CLONE_ID_NULL =
+  std::numeric_limits<local_clone_id_t>::max();
 
 #endif
