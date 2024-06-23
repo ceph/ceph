@@ -2489,6 +2489,31 @@ void Server::trim_completed_request_list(ceph_tid_t tid, Session *session)
   }
 }
 
+void Server::set_reply_extra_bl(const cref_t<MClientRequest> &req, inodeno_t ino, bufferlist& extra_bl)
+{
+  Session *session = mds->get_session(req);
+
+  if (session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
+    openc_response_t ocresp;
+
+    dout(10) << "adding created_ino and delegated_inos" << dendl;
+    ocresp.created_ino = ino;
+
+    if (delegate_inos_pct && !req->is_queued_for_replay()) {
+      // Try to delegate some prealloc_inos to the client, if it's down to half the max
+      unsigned frac = 100 / delegate_inos_pct;
+      if (session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
+	session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
+    }
+
+    encode(ocresp, extra_bl);
+  } else if (req->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+    dout(10) << "adding ino to reply to indicate inode was created" << dendl;
+    // add the file created flag onto the reply if create_flags features is supported
+    encode(ino, extra_bl);
+  }
+}
+
 void Server::handle_client_request(const cref_t<MClientRequest> &req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
@@ -2549,7 +2574,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
         auto reply = make_message<MClientReply>(*req, 0);
 	if (created != inodeno_t()) {
 	  bufferlist extra;
-	  encode(created, extra);
+	  set_reply_extra_bl(req, created, extra);
 	  reply->set_extra_bl(extra);
 	}
         mds->send_message_client(reply, session);
@@ -2765,10 +2790,18 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
 
     // funky.
   case CEPH_MDS_OP_CREATE:
-    if (mdr->has_completed)
+    if (mdr->has_completed) {
+      inodeno_t created;
+
+      ceph_assert(mdr->session);
+      mdr->session->have_completed_request(req->get_reqid().tid, &created);
+      ceph_assert(created != inodeno_t());
+
+      set_reply_extra_bl(req, created, mdr->reply_extra_bl);
       handle_client_open(mdr);  // already created.. just open
-    else
+    } else {
       handle_client_openc(mdr);
+    }
     break;
 
   case CEPH_MDS_OP_OPEN:
@@ -4794,25 +4827,7 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, newi);
 
-  if (mdr->session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
-    openc_response_t	ocresp;
-
-    dout(10) << "adding created_ino and delegated_inos" << dendl;
-    ocresp.created_ino = _inode->ino;
-
-    if (delegate_inos_pct && !req->is_queued_for_replay()) {
-      // Try to delegate some prealloc_inos to the client, if it's down to half the max
-      unsigned frac = 100 / delegate_inos_pct;
-      if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
-	mdr->session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
-    }
-
-    encode(ocresp, mdr->reply_extra_bl);
-  } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
-    dout(10) << "adding ino to reply to indicate inode was created" << dendl;
-    // add the file created flag onto the reply if create_flags features is supported
-    encode(newi->ino(), mdr->reply_extra_bl);
-  }
+  set_reply_extra_bl(req, _inode->ino, mdr->reply_extra_bl);
 
   journal_and_reply(mdr, newi, dn, le, fin);
 
