@@ -13,6 +13,9 @@ roles:
 tasks:
 - install:
 - cephadm:
+- ceph:
+    log-ignorelist:
+      - \(OSD_DOWN\)
 - workunit:
     clients:
       client.1:
