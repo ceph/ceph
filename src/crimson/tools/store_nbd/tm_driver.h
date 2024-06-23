@@ -51,6 +51,6 @@ private:
     >;
   read_extents_ret read_extents(
     crimson::os::seastore::Transaction &t,
-    crimson::os::seastore::laddr_t offset,
+    off_t offset,
     crimson::os::seastore::extent_len_t length);
 };

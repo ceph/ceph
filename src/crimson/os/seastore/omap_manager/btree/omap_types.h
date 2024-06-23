@@ -46,7 +46,7 @@ struct omap_node_meta_le_t {
 struct omap_inner_key_t {
   uint16_t key_off = 0;
   uint16_t key_len = 0;
-  laddr_t laddr = 0;
+  laddr_t laddr = L_ADDR_NULL;
 
   omap_inner_key_t() = default;
   omap_inner_key_t(uint16_t off, uint16_t len, laddr_t addr)
@@ -70,7 +70,7 @@ struct omap_inner_key_t {
 struct omap_inner_key_le_t {
   ceph_le16 key_off{0};
   ceph_le16 key_len{0};
-  laddr_le_t laddr{0};
+  laddr_le_t laddr{L_ADDR_NULL};
 
   omap_inner_key_le_t() = default;
   omap_inner_key_le_t(const omap_inner_key_le_t &) = default;
@@ -91,7 +91,7 @@ struct omap_inner_key_le_t {
   }
 
   inline bool operator==(const omap_inner_key_le_t b) const {
-    return key_off == b.key_off && key_len == b.key_len && laddr == b.laddr;
+    return key_off == b.key_off && key_len == b.key_len && laddr_t(laddr) == laddr_t(b.laddr);
   }
 };
 

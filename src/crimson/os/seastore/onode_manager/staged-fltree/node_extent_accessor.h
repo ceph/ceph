@@ -166,7 +166,7 @@ class DeltaRecorderT final: public DeltaRecorder {
       }
       case node_delta_op_t::UPDATE_CHILD_ADDR: {
         SUBDEBUG(seastore_onode, "decoding UPDATE_CHILD_ADDR ...");
-        laddr_t new_addr;
+        laddr_t new_addr = L_ADDR_NULL;
         ceph::decode(new_addr, delta);
         node_offset_t update_offset;
         ceph::decode(update_offset, delta);
@@ -252,7 +252,7 @@ class DeltaRecorderT final: public DeltaRecorder {
   value_input_t decode_value(ceph::bufferlist::const_iterator& delta) const {
     if constexpr (std::is_same_v<value_input_t, laddr_t>) {
       // NODE_TYPE == node_type_t::INTERNAL
-      laddr_t value;
+      laddr_t value = L_ADDR_NULL;
       ceph::decode(value, delta);
       return value;
     } else if constexpr (std::is_same_v<value_input_t, value_config_t>) {

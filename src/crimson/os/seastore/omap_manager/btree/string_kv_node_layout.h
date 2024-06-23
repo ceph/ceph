@@ -91,7 +91,7 @@ struct delta_inner_t {
     REMOVE,
   } op;
   std::string key;
-  laddr_t addr;
+  laddr_t addr = L_ADDR_NULL;
 
   DENC(delta_inner_t, v, p) {
     DENC_START(1, 1, p);

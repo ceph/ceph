@@ -138,7 +138,7 @@ void validate_tree_config(const tree_conf_t& conf)
 #define _STAGE_T(NodeType) node_to_stage_t<typename NodeType::node_stage_t>
 #define NXT_T(StageType)  staged<typename StageType::next_param_t>
 
-    laddr_t i_value{0};
+    laddr_t i_value{L_ADDR_NULL};
     auto insert_size_2 =
       _STAGE_T(InternalNode0)::insert_size(key, i_value);
     auto insert_size_0 =

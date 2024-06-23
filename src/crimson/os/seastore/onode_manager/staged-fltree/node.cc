@@ -1506,7 +1506,7 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
 
   // proceed to split with insert
   // assume I'm already ref-counted by caller
-  laddr_t left_hint, right_hint;
+  laddr_t left_hint = L_ADDR_NULL, right_hint = L_ADDR_NULL;
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
@@ -2090,7 +2090,7 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   }
   // split and insert
   Ref<Node> this_ref = this;
-  laddr_t left_hint, right_hint;
+  laddr_t left_hint = L_ADDR_NULL, right_hint = L_ADDR_NULL;
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
