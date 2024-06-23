@@ -59,6 +59,8 @@
 #include "RadosImport.h"
 
 #include "osd/ECUtil.h"
+#include "objclass/objclass.h"
+#include "cls/refcount/cls_refcount_ops.h"
 
 using namespace std::chrono_literals;
 using namespace librados;
@@ -2750,8 +2752,30 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     else
       ret = 0;
-    string s(bl.c_str(), bl.length());
-    cout << s;
+
+    if (attr_name == "refcount")  {
+      obj_refcount oref;
+      auto p = bl.cbegin();
+      decode(oref, p);
+      for (auto itr = oref.refs.begin(); itr != oref.refs.end(); itr++) {
+	if (!itr->first.empty()) {
+	  cout << itr->first << "::" << itr->second << std::endl;
+	}
+	else {
+	  cout << "wildcard reference::" << itr->second << std::endl;
+	}
+      }
+      if (!oref.retired_refs.empty()) {
+	cout << "--------------------------------------" << std::endl;
+	for (const auto & ref : oref.retired_refs) {
+	  cout << "retired_refs::" << ref << std::endl;
+	}
+      }
+    }
+    else {
+      string s(bl.c_str(), bl.length());
+      cout << s << std::endl;
+    }
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
     if (!pool_name || nargs.size() < (obj_name ? 2 : 3)) {
       usage(cerr);
