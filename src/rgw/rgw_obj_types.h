@@ -27,7 +27,7 @@
 
 #include "common/dout.h"
 #include "common/Formatter.h"
-
+#include "common/ceph_crypto.h"
 struct rgw_obj_index_key { // cls_rgw_obj_key now aliases this type
   std::string name;
   std::string instance;
@@ -535,6 +535,13 @@ struct rgw_obj {
 
   std::string get_oid() const {
     return key.get_oid();
+  }
+
+  std::string calc_refcount_tag_hash() const {
+    bufferlist bl;
+    bl.append(this->bucket.name);
+    bl.append(this->get_oid());
+    return crypto::digest<crypto::SHA1>(bl).to_str();
   }
 
   const std::string& get_hash_object() const {

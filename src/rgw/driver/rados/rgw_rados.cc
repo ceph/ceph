@@ -4832,15 +4832,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWRados::Object dest_op_target(this, dest_bucket_info, obj_ctx, dest_obj);
   RGWRados::Object::Write write_op(&dest_op_target);
 
-  string tag;
-
-  if (ptag) {
-    tag = *ptag;
-  }
-
-  if (tag.empty()) {
-    append_rand_alpha(cct, tag, tag, 32);
-  }
+  string tag = dest_obj.calc_refcount_tag_hash();
 
   const req_context rctx{dpp, y, nullptr};
   std::unique_ptr<rgw::Aio> aio;
@@ -4856,7 +4848,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     string ref_tag;
     for (; miter != amanifest->obj_end(dpp); ++miter) {
       ObjectWriteOperation op;
-      ref_tag = tag + '\0';
+      ref_tag = tag;
       cls_refcount_get(op, ref_tag, true);
 
       rgw_rados_ref obj;
@@ -4909,7 +4901,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   write_op.meta.data = &first_chunk;
   write_op.meta.manifest = pmanifest;
-  write_op.meta.ptag = &tag;
+  write_op.meta.ptag = 0;
   write_op.meta.owner = owner;
   write_op.meta.bucket_owner = dest_bucket_info.owner;
   write_op.meta.mtime = mtime;
@@ -5318,7 +5310,7 @@ int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp
     return 0;
   }
 
-  string tag = (state->tail_tag.length() > 0 ? state->tail_tag.to_str() : state->obj_tag.to_str());
+  string tag = state->get_obj_refcount_tag();
   if (store->gc == nullptr) {
     ldpp_dout(dpp, 0) << "deleting objects inline since gc isn't initialized" << dendl;
     //Delete objects inline just in case gc hasn't been initialised, prevents crashes
@@ -5626,17 +5618,7 @@ int RGWRados::defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBuc
     ldpp_dout(dpp, 20) << "state for obj=" << obj << " is not atomic, not deferring gc operation" << dendl;
     return -EINVAL;
   }
-
-  string tag;
-
-  if (state->tail_tag.length() > 0) {
-    tag = state->tail_tag.c_str();
-  } else if (state->obj_tag.length() > 0) {
-    tag = state->obj_tag.c_str();
-  } else {
-    ldpp_dout(dpp, 20) << "state->obj_tag is empty, not deferring gc operation" << dendl;
-    return -EINVAL;
-  }
+  string tag = state->get_obj_refcount_tag();
 
   ldpp_dout(dpp, 0) << "defer chain tag=" << tag << dendl;
 

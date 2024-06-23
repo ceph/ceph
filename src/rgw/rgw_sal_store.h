@@ -90,6 +90,15 @@ struct RGWObjState {
     }
     return false;
   }
+
+  std::string get_obj_refcount_tag() const {
+    if (this->tail_tag.length() > 0) {
+      return this->tail_tag.to_str();
+    }
+    else {
+      return (this->obj.calc_refcount_tag_hash());
+    }
+  }
 };
 
 namespace rgw { namespace sal {
