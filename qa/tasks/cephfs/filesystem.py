@@ -242,6 +242,7 @@ class CephClusterBase(RunCephCmd):
             manager = CephManager(self.admin_remote, ctx=ctx,
                                   logger=log.getChild('ceph_manager'))
         self.mon_manager = manager
+        self.mon_manager.init_pools()
 
     def get_config(self, key, service_type=None):
         """

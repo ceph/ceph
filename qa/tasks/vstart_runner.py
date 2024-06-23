@@ -793,7 +793,7 @@ tasks.cephfs.fuse_mount.FuseMount = LocalFuseMount
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
 class LocalCephManager(CephManager):
-    def __init__(self, ctx=None, cluster_name=None):
+    def __init__(self, ctx=None, cluster_name='ceph'):
         self.ctx = ctx
         self.cluster = cluster_name
 
@@ -821,6 +821,9 @@ class LocalCephManager(CephManager):
         self.RADOS_CMD = [RADOS_CMD]
 
         self.save_conf_epoch()
+
+    def init_pools(self):
+        self.wait_for_active()
 
     def get_ceph_cmd(self, **kwargs):
         return [CEPH_CMD]

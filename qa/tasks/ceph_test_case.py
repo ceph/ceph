@@ -148,6 +148,10 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
             from tasks.ceph_manager import CephManager
             self.mon_manager = CephManager(self.ceph_cluster.admin_remote,
                 ctx=self.ctx, logger=log.getChild('ceph_manager'))
+        if not hasattr(self.ctx, 'managers'):
+            self.ctx.managers = {}
+        # set the manager for cluster 'ceph'
+        self.ctx.managers[self.mon_manager.cluster] = self.mon_manager
 
     def setUp(self):
         self._init_mon_manager()

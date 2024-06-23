@@ -1586,6 +1586,10 @@ class CephManager:
                     f'{self.testdir}/archive/coverage']
         self.RADOS_CMD = self.pre + ['rados', '--cluster', self.cluster]
 
+        self.init_pools()
+
+    def init_pools(self):
+        self.wait_for_active()
         pools = self.list_pools()
         self.pools = {}
         for pool in pools:
