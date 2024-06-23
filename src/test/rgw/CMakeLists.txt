@@ -66,6 +66,18 @@ target_link_libraries(ceph_test_rgw_redis_driver PRIVATE
   )
 install(TARGETS ceph_test_rgw_redis_driver DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(ceph_test_rgw_redis_lock test_redis_lock.cc)
+target_include_directories(ceph_test_rgw_redis_lock
+ SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+ target_link_libraries(ceph_test_rgw_redis_lock PRIVATE 
+  rgw_common
+  ceph-common
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+ )
+install(TARGETS ceph_test_rgw_redis_lock DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 add_executable(ceph_test_rgw_ssd_driver
   test_ssd_driver.cc
   )
