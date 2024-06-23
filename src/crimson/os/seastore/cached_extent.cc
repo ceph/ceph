@@ -150,9 +150,22 @@ void LogicalCachedExtent::on_replace_prior() {
 
 parent_tracker_t::~parent_tracker_t() {
   // this is parent's tracker, reset it
-  auto &p = (FixedKVNode<laddr_t>&)*parent;
-  if (p.my_tracker == this) {
-    p.my_tracker = nullptr;
+  // NOTE: the size of laddr_t is 16B, but the size of paddr_t is 8B,
+  // which cause FixedKVNode<laddr_t> and FixedKVNode<paddr_t> have
+  // different layout.
+  extent_types_t type = parent->get_type();
+  if (type == extent_types_t::LADDR_INTERNAL ||
+      type == extent_types_t::LADDR_LEAF) {
+    auto &p = (FixedKVNode<laddr_t>&)*parent;
+    if (p.my_tracker == this) {
+      p.my_tracker = nullptr;
+    }
+  } else if (type == extent_types_t::BACKREF_INTERNAL ||
+	     type == extent_types_t::BACKREF_LEAF) {
+    auto &p = (FixedKVNode<paddr_t>&)*parent;
+    if (p.my_tracker == this) {
+      p.my_tracker = nullptr;
+    }
   }
 }
 
