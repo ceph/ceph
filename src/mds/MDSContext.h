@@ -46,6 +46,7 @@ template<template<typename> class A>
 
   void complete(int r) override;
   virtual MDSRank *get_mds() = 0;
+  virtual bool takes_lock() const { return false; }
 };
 
 /* Children of this could have used multiple inheritance with MDSHolder and
@@ -100,6 +101,7 @@ public:
   virtual ~MDSIOContextBase();
   MDSIOContextBase(const MDSIOContextBase&) = delete;
   MDSIOContextBase& operator=(const MDSIOContextBase&) = delete;
+  bool takes_lock() const override { return true; }
 
   void complete(int r) override;
 
@@ -127,6 +129,7 @@ protected:
 public:
   MDSLogContextBase() = default;
   void complete(int r) final;
+  bool takes_lock() const override { return true; }
   void set_write_pos(uint64_t wp) { write_pos = wp; }
   virtual void pre_finish(int r) {}
   void print(std::ostream& out) const override {
