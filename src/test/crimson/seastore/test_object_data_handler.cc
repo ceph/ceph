@@ -218,14 +218,14 @@ struct object_data_handler_test_t:
     objaddr_t offset,
     extent_len_t length) {
     auto ret = with_trans_intr(t, [&](auto &t) {
-      return tm->get_pins(t, offset, length);
+      return tm->get_pins(t, laddr_t::get_hint_from_offset(offset), length);
     }).unsafe_get0();
     return ret;
   }
   std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
-      return tm->get_pins(t, offset, length);
+      return tm->get_pins(t, laddr_t::get_hint_from_offset(offset), length);
     }).unsafe_get0();
     return ret;
   }
@@ -253,12 +253,12 @@ struct object_data_handler_test_t:
 
   ObjectDataBlockRef get_extent(
     Transaction &t,
-    laddr_t addr,
+    objaddr_t addr,
     extent_len_t len) {
     auto ext = with_trans_intr(t, [&](auto& trans) {
-	return tm->read_extent<ObjectDataBlock>(trans, addr, len);
+	return tm->read_extent<ObjectDataBlock>(trans, laddr_t::get_hint_from_offset(addr), len);
 	}).unsafe_get0();
-    EXPECT_EQ(addr, ext->get_laddr());
+    EXPECT_EQ(addr, ext->get_laddr().get_original_offset());
     return ext;
   }
 
@@ -297,9 +297,8 @@ struct object_data_handler_test_t:
       "seastore_max_data_allocation_size", "8192").get();
   }
 
-  laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
-    return block_size *
-      std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
+  size_t get_random_laddr(size_t block_size, size_t limit) {
+    return block_size * std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
   }
 
   void test_multi_write() {

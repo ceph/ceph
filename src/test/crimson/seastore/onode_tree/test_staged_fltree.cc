@@ -127,7 +127,7 @@ TEST_F(a_basic_test_t, 1_basic_sizes)
   value.payload_size = 8;
 #define _STAGE_T(NodeType) node_to_stage_t<typename NodeType::node_stage_t>
 #define NXT_T(StageType)  staged<typename StageType::next_param_t>
-  laddr_t i_value{0};
+  laddr_t i_value = laddr_t::get_hint_from_offset(0);
   logger().info("\n"
     "Bytes of a key-value insertion (full-string):\n"
     "  s-p-c, 'n'-'o', s-g => value_payload(8): typically internal 43B, leaf 59B\n"
@@ -1047,8 +1047,8 @@ class DummyChildPool {
 
     static Ref<DummyChild> create_new(
         const std::set<ghobject_t>& keys, bool is_level_tail, DummyChildPool& pool) {
-      static laddr_t seed = 0;
-      return create(keys, is_level_tail, seed++, pool);
+      static laddr_t seed = laddr_t::get_hint_from_offset(0);
+      return create(keys, is_level_tail, seed + laddr_t::UNIT_SIZE, pool);
     }
 
     static eagain_ifuture<Ref<DummyChild>> create_initial(
