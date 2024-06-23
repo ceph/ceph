@@ -198,9 +198,10 @@ class DeltaRecorderT final: public DeltaRecorder {
         auto p_header_ = reinterpret_cast<const value_header_t*>(p_header);
         SUBDEBUG(seastore_onode, "update {} at {:#x} ...", *p_header_, value_header_offset);
         auto payload_mut = p_header_->get_payload_mutable(mut);
-        auto value_addr = node.get_laddr() + payload_mut.get_node_offset();
         get_value_replayer(p_header_->magic)->apply_value_delta(
-            delta, payload_mut, value_addr);
+            delta, payload_mut,
+            node.get_laddr(),
+            payload_mut.get_node_offset());
         break;
       }
       default:

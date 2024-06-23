@@ -137,7 +137,8 @@ class TestValue final : public Value {
 
     void apply_value_delta(ceph::bufferlist::const_iterator& delta,
                            NodeExtentMutable& payload_mut,
-                           laddr_t value_addr) override {
+                           laddr_t value_addr,
+                           node_offset_t offset) override {
       delta_op_t op;
       try {
         ceph::decode(op, delta);
