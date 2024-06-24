@@ -525,6 +525,7 @@ public:
 	      ? (ext && ext->is_fully_loaded())
 	      : true);
 	  std::optional<ceph::bufferptr> original_bptr;
+          // TODO: preserve the partially loaded buffer during remapping
 	  if (ext && ext->is_fully_loaded()) {
 	    ceph_assert(!ext->is_mutable());
 	    ceph_assert(ext->get_length() >= original_len);

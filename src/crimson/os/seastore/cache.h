@@ -1700,6 +1700,7 @@ private:
     assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING ||
       extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
       extent->state == CachedExtent::extent_state_t::CLEAN);
+    /// TODO: add fine-grained io check to support concurrent read
     extent->set_io_wait();
     region_list_t regions;
     if (extent->is_fully_loaded()) {
