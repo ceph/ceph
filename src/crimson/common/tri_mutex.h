@@ -3,41 +3,27 @@
 
 #pragma once
 
-#include <optional>
-
 #include <seastar/core/future.hh>
 #include <seastar/core/circular_buffer.hh>
+
+#include "common/hobject.h"
 #include "crimson/common/log.h"
 
 class read_lock {
 public:
-  std::optional<seastar::future<>> lock();
+  seastar::future<> lock();
   void unlock();
 };
 
 class write_lock {
 public:
-  std::optional<seastar::future<>> lock();
+  seastar::future<> lock();
   void unlock();
 };
 
 class excl_lock {
 public:
-  std::optional<seastar::future<>> lock();
-  void unlock();
-};
-
-// promote from read to excl
-class excl_lock_from_read {
-public:
-  void lock();
-  void unlock();
-};
-
-// promote from write to excl
-class excl_lock_from_write {
-public:
-  void lock();
+  seastar::future<> lock();
   void unlock();
 };
 
@@ -54,21 +40,16 @@ public:
 /// - readers
 /// - writers
 /// - exclusive users
-///
-/// For lock promotion, a read or a write lock is only allowed to be promoted
-/// atomically upon the first locking.
 class tri_mutex : private read_lock,
                           write_lock,
-                          excl_lock,
-                          excl_lock_from_read,
-                          excl_lock_from_write
+                          excl_lock
 {
 public:
   tri_mutex() = default;
 #ifdef NDEBUG
-  tri_mutex(const std::string obj_name) : name() {}
+  tri_mutex(const hobject_t &obj_name) : name() {}
 #else
-  tri_mutex(const std::string obj_name) : name(obj_name) {}
+  tri_mutex(const hobject_t &obj_name) : name(obj_name) {}
 #endif
   ~tri_mutex();
 
@@ -81,35 +62,27 @@ public:
   excl_lock& for_excl() {
     return *this;
   }
-  excl_lock_from_read& excl_from_read() {
-    return *this;
-  }
-  excl_lock_from_write& excl_from_write() {
-    return *this;
-  }
 
   // for shared readers
-  std::optional<seastar::future<>> lock_for_read();
+  seastar::future<> lock_for_read();
   bool try_lock_for_read() noexcept;
   void unlock_for_read();
-  void promote_from_read();
   void demote_to_read();
   unsigned get_readers() const {
     return readers;
   }
 
   // for shared writers
-  std::optional<seastar::future<>> lock_for_write();
+  seastar::future<> lock_for_write();
   bool try_lock_for_write() noexcept;
   void unlock_for_write();
-  void promote_from_write();
   void demote_to_write();
   unsigned get_writers() const {
     return writers;
   }
 
   // for exclusive users
-  std::optional<seastar::future<>> lock_for_excl();
+  seastar::future<> lock_for_excl();
   bool try_lock_for_excl() noexcept;
   void unlock_for_excl();
   bool is_excl_acquired() const {
@@ -128,7 +101,7 @@ public:
     }
   }
 
-  std::string_view get_name() const{
+  const hobject_t &get_name() const{
     return name;
   }
 
@@ -144,21 +117,17 @@ private:
     none,
   };
   struct waiter_t {
-    waiter_t(seastar::promise<>&& pr, type_t type, std::string_view waiter_name)
+    waiter_t(seastar::promise<>&& pr, type_t type)
       : pr(std::move(pr)), type(type)
     {}
     seastar::promise<> pr;
     type_t type;
-    std::string_view waiter_name;
   };
   seastar::circular_buffer<waiter_t> waiters;
-  const std::string name;
+  const hobject_t name;
   friend class read_lock;
   friend class write_lock;
   friend class excl_lock;
-  friend class excl_lock_from_read;
-  friend class excl_lock_from_write;
-  friend class excl_lock_from_excl;
   friend std::ostream& operator<<(std::ostream &lhs, const tri_mutex &rhs);
 };
 
