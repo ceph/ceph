@@ -1,3 +1,12 @@
+>=20.0.0
+
+* RBD: All Python APIs that produce timestamps now return "aware" `datetime`
+  objects instead of "naive" ones (i.e. those including time zone information
+  instead of those not including it).  All timestamps remain to be in UTC but
+  including `timezone.utc` makes it explicit and avoids the potential of the
+  returned timestamp getting misinterpreted -- in Python 3, many `datetime`
+  methods treat "naive" `datetime` objects as local times.
+
 >=19.0.0
 
 * cephx: key rotation is now possible using `ceph auth rotate`. Previously,
