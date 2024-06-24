@@ -38,14 +38,24 @@ class CrushRule(RESTController):
                 return r
         raise NotFound('No such crush rule')
 
-    def create(self, name, root, failure_domain, device_class=None):
-        rule = {
-            'name': name,
-            'root': root,
-            'type': failure_domain,
-            'class': device_class
-        }
-        CephService.send_command('mon', 'osd crush rule create-replicated', **rule)
+    def create(self, name, failure_domain, device_class=None, root=None, profile=None,
+               pool_type='replication'):
+        if pool_type == 'erasure':
+            rule = {
+                'name': name,
+                'profile': profile,
+                'type': failure_domain,
+                'class': device_class
+            }
+            CephService.send_command('mon', 'osd crush rule create-erasure', **rule)
+        else:
+            rule = {
+                'name': name,
+                'root': root,
+                'type': failure_domain,
+                'class': device_class
+            }
+            CephService.send_command('mon', 'osd crush rule create-replicated', **rule)
 
     def delete(self, name):
         CephService.send_command('mon', 'osd crush rule rm', name=name)
