@@ -12,6 +12,8 @@ from .enums import (
     CephFSStorageProvider,
     Intent,
     JoinSourceType,
+    LoginAccess,
+    LoginCategory,
     UserGroupSourceType,
 )
 from .proto import Self, Simplified, checked
@@ -99,6 +101,19 @@ class CephFSStorage(_RBase):
         return rc
 
 
+@resourcelib.component()
+class LoginAccessEntry(_RBase):
+    name: str
+    category: LoginCategory = LoginCategory.USER
+    access: LoginAccess = LoginAccess.READ_ONLY
+
+    def __post_init__(self) -> None:
+        self.access = self.access.expand()
+
+    def validate(self) -> None:
+        validation.check_access_name(self.name)
+
+
 @resourcelib.resource('ceph.smb.share')
 class RemovedShare(_RBase):
     """Represents a share that has / will be removed."""
@@ -135,6 +150,8 @@ class Share(_RBase):
     browseable: bool = True
     cephfs: Optional[CephFSStorage] = None
     custom_smb_share_options: Optional[Dict[str, str]] = None
+    login_control: Optional[List[LoginAccessEntry]] = None
+    restrict_access: bool = False
 
     def __post_init__(self) -> None:
         # if name is not given explicitly, take it from the share_id
@@ -155,6 +172,10 @@ class Share(_RBase):
         if self.cephfs is None:
             raise ValueError('a cephfs configuration is required')
         validation.check_custom_options(self.custom_smb_share_options)
+        if self.restrict_access and not self.login_control:
+            raise ValueError(
+                'a share with restricted access must define at least one login_control entry'
+            )
 
     @property
     def checked_cephfs(self) -> CephFSStorage:
@@ -163,6 +184,7 @@ class Share(_RBase):
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.restrict_access.quiet = True
         rc.on_condition(_present)
         rc.on_construction_error(InvalidResourceError.wrap)
         return rc

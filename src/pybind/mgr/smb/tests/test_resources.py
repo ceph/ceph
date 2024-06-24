@@ -447,6 +447,58 @@ user_group_settings:
             "exc_type": ValueError,
             "error": "reference value must be",
         },
+        # missing name field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+login_control:
+  - nmae: frink
+    access: r
+""",
+            "exc_type": ValueError,
+            "error": "field: name",
+        },
+        # bad value in access field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+login_control:
+  - name: frink
+    access: rwx
+""",
+            "exc_type": ValueError,
+            "error": "rwx",
+        },
+        # bad value in category field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+login_control:
+  - category: admins
+    name: frink
+    access: admin
+""",
+            "exc_type": ValueError,
+            "error": "admins",
+        },
     ],
 )
 def test_load_error(params):
@@ -519,3 +571,74 @@ placement:
     assert sd
     assert 'placement' in sd
     assert sd['placement'] == {'count': 3, 'label': 'ilovesmb'}
+
+
+def test_share_with_login_control_1():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: shake
+name: Shake It
+cephfs:
+  volume: abc
+  path: /shake1
+  subvolume: foo
+login_control:
+  - name: bob
+    access: read
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    share = loaded[0]
+    assert share.login_control
+    assert len(share.login_control) == 1
+    assert share.login_control[0].name == 'bob'
+    assert share.login_control[0].category == enums.LoginCategory.USER
+    assert share.login_control[0].access == enums.LoginAccess.READ_ONLY
+
+
+def test_share_with_login_control_2():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: shake
+name: Shake It
+cephfs:
+  volume: abc
+  path: /shake1
+  subvolume: foo
+login_control:
+  - name: alice
+    access: r
+  - name: itstaff
+    category: group
+    access: rw
+  - name: caldor
+    category: user
+    access: admin
+  - name: delbard
+    access: none
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    share = loaded[0]
+    assert share.login_control
+    assert len(share.login_control) == 4
+    assert share.login_control[0].name == 'alice'
+    assert share.login_control[0].category == enums.LoginCategory.USER
+    assert share.login_control[0].access == enums.LoginAccess.READ_ONLY
+    assert share.login_control[1].name == 'itstaff'
+    assert share.login_control[1].category == enums.LoginCategory.GROUP
+    assert share.login_control[1].access == enums.LoginAccess.READ_WRITE
+    assert share.login_control[2].name == 'caldor'
+    assert share.login_control[2].category == enums.LoginCategory.USER
+    assert share.login_control[2].access == enums.LoginAccess.ADMIN
+    assert share.login_control[3].name == 'delbard'
+    assert share.login_control[3].category == enums.LoginCategory.USER
+    assert share.login_control[3].access == enums.LoginAccess.NONE
