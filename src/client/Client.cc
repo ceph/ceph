@@ -9382,6 +9382,12 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     int r = _getattr(dn->inode, mask, dirp->perms);
     if (r < 0)
       return r;
+
+    /* fix https://tracker.ceph.com/issues/56288 */
+    if (dirp->inode->dir == NULL) {
+      ldout(cct, 0) << " dir is closed, so we should return" << dendl;
+      return -CEPHFS_EAGAIN;
+    }
     
     // the content of readdir_cache may change after _getattr(), so pd may be invalid iterator    
     pd = dir->readdir_cache.begin() + idx;
