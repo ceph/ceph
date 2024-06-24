@@ -1423,6 +1423,7 @@ spec:
                             "deploy_arguments": [],
                             "params": {
                                 'tcp_ports': [4200, 9094],
+                                'reconfig': True
                             },
                             "meta": {
                                 'service_name': 'alertmanager',
@@ -1436,7 +1437,7 @@ spec:
                             },
                             "config_blobs": {},
                         }),
-                        use_current_daemon_image=False,
+                        use_current_daemon_image=True,
                     )
 
 
