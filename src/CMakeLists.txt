@@ -70,6 +70,10 @@ configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   @ONLY)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/ceph_release.h.in.cmake
+  ${CMAKE_BINARY_DIR}/src/include/ceph_release.h
+  @ONLY)
 
 add_definitions(
   -DHAVE_CONFIG_H
