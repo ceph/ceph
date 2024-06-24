@@ -11,6 +11,7 @@ import { DeploymentOptions } from '../models/osd-deployment-options';
 import { OsdSettings } from '../models/osd-settings';
 import { SmartDataResponseV1 } from '../models/smart';
 import { DeviceService } from '../services/device.service';
+import { CdFormGroup } from '../forms/cd-form-group';
 
 @Injectable({
   providedIn: 'root'
@@ -20,6 +21,8 @@ export class OsdService {
   private uiPath = 'ui-api/osd';
 
   osdDevices: InventoryDeviceType[] = [];
+  selectedFormValues: CdFormGroup;
+  isDeployementModeSimple: boolean = true;
 
   osdRecvSpeedModalPriorities = {
     KNOWN_PRIORITIES: [
