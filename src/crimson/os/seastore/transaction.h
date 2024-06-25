@@ -317,19 +317,14 @@ public:
   }
 
   bool is_retired(paddr_t paddr, extent_len_t len) {
-    if (retired_set.empty()) {
-      return false;
-    }
     auto iter = retired_set.lower_bound(paddr);
     if (iter == retired_set.end() ||
-	(*iter)->get_paddr() > paddr) {
-      assert(iter != retired_set.begin());
-      --iter;
+	(*iter)->get_paddr() != paddr) {
+      return false;
+    } else {
+      assert(len == (*iter)->get_length());
+      return true;
     }
-    auto retired_paddr = (*iter)->get_paddr();
-    auto retired_length = (*iter)->get_length();
-    return retired_paddr <= paddr &&
-      retired_paddr.add_offset(retired_length) >= paddr.add_offset(len);
   }
 
   template <typename F>
