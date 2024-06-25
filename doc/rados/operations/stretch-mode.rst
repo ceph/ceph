@@ -180,6 +180,7 @@ your CRUSH map. This procedure shows how to do this.
 
       See https://tracker.ceph.com/issues/56650 for more detail on this workaround.
 
+   *The above procedure was developed in May and June of 2024 by Prashant Dhange.*
 
 #. Inject the CRUSH map to make the rule available to the cluster:
 
