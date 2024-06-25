@@ -1178,6 +1178,13 @@ seastar::future<> OSD::committed_osd_maps(
       }
       if (should_restart()) {
         return restart();
+      } else if (!pg_shard_manager.is_stopping()) {
+        /* 
+         * TODO: Missing start_waiting_for_healthy() counterpart.
+         * Only subscribe to the next map until implemented.
+         * See https://tracker.ceph.com/issues/66832 
+        */
+	return get_shard_services().osdmap_subscribe(osdmap->get_epoch() + 1, false);
       } else {
         return seastar::now();
       }
