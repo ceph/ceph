@@ -1,0 +1,12 @@
+# Ignore everything
+*
+
+# Don't ignore files required for docker build
+!run-make-check.sh
+!install-deps.sh
+!do_cmake.sh
+!src/script/buildcontainer-setup.sh
+!src/script/run-make.sh
+!src/script/lib-build.sh
+!ceph.spec.in
+!debian

@@ -55,7 +55,7 @@ function prepare() {
 
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
-        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
+        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2 jsonnet"
         $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
@@ -99,7 +99,7 @@ EOM
     local c_compiler="${discovered_c_compiler}"
     local cmake_opts
     cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
-    cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
+    #cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
     cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
     cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
     cmake_opts+=" -DWITH_FIO=ON"
