@@ -40,7 +40,13 @@ export class NavigationComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   clustersMap: Map<string, any> = new Map<string, any>();
-  selectedCluster: object;
+  selectedCluster: {
+    name: string;
+    cluster_alias: string;
+    user: string;
+    cluster_connection_status?: number;
+  };
+  currentClusterName: string;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -74,6 +80,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
           });
           this.selectedCluster =
             this.clustersMap.get(`${resp['current_url']}-${resp['current_user']}`) || {};
+          this.currentClusterName = `${this.selectedCluster?.name} - ${this.selectedCluster?.cluster_alias} - ${this.selectedCluster?.user}`;
         }
       })
     );
@@ -181,5 +188,9 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.multiClusterService.refreshMultiCluster(currentRoute);
       }
     );
+  }
+
+  trackByFn(item: any) {
+    return item;
   }
 }

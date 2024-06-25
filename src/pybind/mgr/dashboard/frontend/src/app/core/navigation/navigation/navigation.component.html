@@ -12,6 +12,21 @@
     <cds-hamburger [active]="showMenuSidebar"
                    data-testid="main-menu-toggler"
                    (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
+    <!-- ************************* -->
+    <!-- CLUSTER SWITCHER TEMPLATE -->
+    <!-- ************************* -->
+    <cds-header-navigation class="cluster-switcher"
+                           *ngIf="clustersMap?.size > 1">
+      <cds-header-menu [title]="currentClusterName">
+        <ng-container *ngFor="let cluster of clustersMap | keyvalue; trackBy:trackByFn ">
+          <cds-header-item (click)="onClusterSelection(cluster.value)"
+                           [class.disabled]="cluster.value.cluster_connection_status === 1">
+              {{ cluster.value.name }} - {{ cluster.value?.cluster_alias }} - {{ cluster.value?.user }}
+          </cds-header-item>
+        </ng-container>
+      </cds-header-menu>
+    </cds-header-navigation>
+
     <cds-header-global>
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
