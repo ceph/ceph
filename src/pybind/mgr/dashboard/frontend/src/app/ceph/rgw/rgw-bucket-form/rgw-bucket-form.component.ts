@@ -271,6 +271,14 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
                 .get('bucket_policy')
                 .setValue(JSON.stringify(value['bucket_policy'], null, 2));
             }
+            if (value['replication']) {
+              const replicationConfig = value['replication'];
+              if (replicationConfig?.['Rule']?.['Status'] === 'Enabled') {
+                this.bucketForm.get('replication').setValue(true);
+              } else {
+                this.bucketForm.get('replication').setValue(false);
+              }
+            }
             this.filterAclPermissions();
           }
         }
@@ -326,7 +334,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['lock_retention_period_days'],
           xmlStrTags,
           bucketPolicy,
-          cannedAcl
+          cannedAcl,
+          values['replication']
         )
         .subscribe(
           () => {

@@ -108,7 +108,8 @@ export class RgwBucketService extends ApiClient {
     lockRetentionPeriodDays: string,
     tags: string,
     bucketPolicy: string,
-    cannedAcl: string
+    cannedAcl: string,
+    replication: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
@@ -125,7 +126,8 @@ export class RgwBucketService extends ApiClient {
         lock_retention_period_days: lockRetentionPeriodDays,
         tags: tags,
         bucket_policy: bucketPolicy,
-        canned_acl: cannedAcl
+        canned_acl: cannedAcl,
+        replication: replication
       });
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });

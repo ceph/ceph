@@ -408,17 +408,9 @@
               <cd-help-text>
                 <span i18n>Enables replication for the objects in the bucket.</span>
               </cd-help-text>
-              <div class="mt-1">
+              <div class="mt-1"
+                   *ngIf="!editing">
                 <cd-alert-panel type="info"
-                                *ngIf="!multisiteStatus.status.available && !multisiteStatus.isDefaultZg"
-                                class="me-1"
-                                id="multisite-configured-info"
-                                i18n>
-                  Multi-site needs to be configured on the current realm or you need to be on
-                  the default zonegroup to enable replication.
-                </cd-alert-panel>
-                <cd-alert-panel type="info"
-                                *ngIf="bucketForm.getValue('replication')"
                                 class="me-1"
                                 id="replication-info"
                                 i18n>
