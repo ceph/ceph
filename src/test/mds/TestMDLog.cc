@@ -10,6 +10,8 @@
 #include <future>
 #include <memory>
 #include <random>
+#include <ranges>
+#include "stubs/journal.h"
 
 using std::vector;
 using std::unique_ptr;
@@ -96,11 +98,14 @@ protected:
   }
 
   vector<vector<unique_ptr<LogEvent>>>
-  generate_random_segment_events(int min = 5, int max = 50, int major_ratio = 5)
+  generate_random_segments(unsigned min_segments = 0, unsigned min_events = 5, unsigned max_events = 50, unsigned major_ratio = 5)
   {
-    std::uniform_int_distribution<int> d_rnd(min, max);
+    std::uniform_int_distribution<unsigned> d_rnd(min_events, max_events);
 
-    const int segment_count = d_rnd(e_rnd);
+    unsigned segment_count = d_rnd(e_rnd);
+    if (segment_count < min_segments) {
+      segment_count = min_segments;
+    }
     std::normal_distribution<> major_dist_rnd(segment_count / major_ratio);
     vector<vector<unique_ptr<LogEvent>>> segment_events;
 
@@ -109,9 +114,12 @@ protected:
       segment_events.push_back({});
       vector<unique_ptr<LogEvent>>& events = segment_events.at(s);
 
-      events.push_back(make_boundary_event(next_major_in == 0));
-      if (--next_major_in < 0) {
+      bool major = next_major_in == 0;
+      events.push_back(make_boundary_event(major));
+      if (major) {
         next_major_in = major_dist_rnd(e_rnd);
+      } else {
+        --next_major_in;
       }
 
       for (int e = d_rnd(e_rnd); e > 1 /* 1 for the segment boundary */; e--) {
@@ -150,7 +158,7 @@ TEST_F(MDLogTest, InitialConditions)
 
 TEST_F(MDLogTest, FlushAll)
 {
-  auto segment_events = generate_random_segment_events();
+  auto segment_events = generate_random_segments();
   int expected_event_total = 0;
   int expected_segment_total = 0;
 
@@ -173,7 +181,7 @@ TEST_F(MDLogTest, FlushAll)
 TEST_F(MDLogTest, TrimAll)
 {
   int segs_since_last_major = 0;
-  for (auto& events : generate_random_segment_events()) {
+  for (auto& events : generate_random_segments()) {
     std::lock_guard l(rank->get_lock());
 
     segs_since_last_major++;
@@ -199,4 +207,57 @@ TEST_F(MDLogTest, TrimAll)
   // will stay untrimmed, but no less than one last segment
   int expected_seg_count = std::max(1, segs_since_last_major + 1);
   EXPECT_EQ(expected_seg_count, log->get_num_segments());
+}
+
+TEST_F(MDLogTest, TrimTwoSegments)
+{
+  for (auto& events : std::ranges::take_view(generate_random_segments(2), 2)) {
+    std::lock_guard l(rank->get_lock());
+
+    // we want two major segments
+    bool first_event = true;
+    for (auto& event : events) {
+      if (first_event) {
+        first_event = false;
+        log->submit_entry(make_boundary_event(true).release());
+      } else {
+        log->submit_entry(event.release());
+      }
+    }
+  }
+  EXPECT_EQ(2, log->get_num_segments());
+  ASSERT_NO_FATAL_FAILURE(flush_and_wait());
+
+  vector<Context*> expirations;
+  journal_log_segment_expiration_hook = [&](LogSegment&, MDSRankBase*,MDSGatherBuilder& gather,int) {
+    expirations.push_back(gather.new_sub());
+  };
+
+  {
+    std::lock_guard l(rank->get_lock());
+    log->trim_all();
+    // we shouldn't expire the last segment
+    EXPECT_EQ(1, expirations.size());
+    journal_log_segment_expiration_hook = {};
+  }
+
+  C_SaferCond* did_expire = new C_SaferCond();
+
+  {
+    std::lock_guard l(rank->get_lock());
+    // we should be able to await expiration of the first out of the two segments
+    EXPECT_TRUE(log->await_expiring_segments(did_expire));
+    std::ranges::for_each(expirations, [](auto c) { c->complete(0); });
+    log->trim_expired_segments();
+  }
+
+  EXPECT_EQ(0, did_expire->wait_for(std::chrono::seconds(10)));
+
+  EXPECT_EQ(1, log->get_num_segments());
+
+  {
+    std::lock_guard l(rank->get_lock());
+    C_NoopContext noop;
+    ASSERT_FALSE(log->await_expiring_segments(&noop));
+  }
 }

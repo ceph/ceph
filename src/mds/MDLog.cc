@@ -617,13 +617,17 @@ bool MDLog::await_expiring_segments(Context *c)
 
   if (last_expiring_segment_seq.has_value()) {
     // if unexpired_segments contans sequences <= last_expiring
-    // this iterator will be between [begin(), end())
-    auto it = unexpired_segments.lower_bound(last_expiring_segment_seq.value());
+    // this iterator will be in the range (begin(), end())
+    dout(10) << __func__ << ": last_expiring_seq=" << *last_expiring_segment_seq << dendl;
+    auto it = unexpired_segments.upper_bound(*last_expiring_segment_seq);
     if (it != unexpired_segments.end() && it != unexpired_segments.begin()) {
-      expiry_waiters[last_expiring_segment_seq.value()].push_back(c);
+      ceph_assert(unexpired_segments.size() > 1); //we shouldn't ever expire the last segment
+      expiry_waiters[*last_expiring_segment_seq].push_back(c);
       return true;
     }
   }
+  dout(10) << __func__ << ": nothing is expiring currently" << dendl;
+  dout(20) << __func__ << ": unexpired segments: " << unexpired_segments << dendl;
   return false;
 }
 
@@ -816,6 +820,7 @@ void MDLog::_mark_for_expiry(const AutoSharedLogSegment& ls, int op_prio)
 {
   ceph_assert(!last_expiring_segment_seq.has_value() || last_expiring_segment_seq.value() < ls->seq);
 
+  dout(15) << __func__ << " " << *ls << dendl;
   last_expiring_segment_seq = ls->seq;
   num_expiring_events += ls->num_events;
   num_expiring_segments += 1;
@@ -832,15 +837,13 @@ void MDLog::try_expire(const AutoSharedLogSegment& ls, int op_prio)
   ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
 
   MDSGatherBuilder gather_bld(g_ceph_context);
+  dout(5) << __func__ << " " << *ls << dendl;
   ls->try_to_expire(mds, gather_bld, op_prio);
 
   if (gather_bld.has_subs()) {
-    dout(5) << __func__ << " expiring: " << *ls << dendl;
     gather_bld.set_finisher(new C_MaybeExpiredSegment(this, ls, op_prio));
     gather_bld.activate();
   } else {
-    dout(10) << __func__ << " expired: " << *ls << dendl;
-
     ceph_assert(last_expiring_segment_seq >= ls->seq);
     _expired(ls);
   }
@@ -856,7 +859,6 @@ void MDLog::_maybe_expired(const AutoSharedLogSegment& ls, int op_prio)
     return;
   }
 
-  dout(10) << __func__ << *ls << dendl;
   try_expire(ls, op_prio);
 }
 
