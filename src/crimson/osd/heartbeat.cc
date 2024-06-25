@@ -360,7 +360,7 @@ seastar::future<> Heartbeat::handle_reply(crimson::net::ConnectionRef conn,
 
 seastar::future<> Heartbeat::handle_you_died()
 {
-  // TODO: ask for newer osdmap
+  service.osdmap_subscribe(service.get_map()->get_epoch() + 1, false);
   return seastar::now();
 }
 

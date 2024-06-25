@@ -769,9 +769,12 @@ void OSD::print(std::ostream& out) const
 std::optional<seastar::future<>>
 OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 {
+  LOG_PREFIX(OSD::ms_dispatch);
   if (pg_shard_manager.is_stopping()) {
+    DEBUG("osd is stopping, dropping message {}", *m);
     return seastar::now();
   }
+  DEBUG("ms_disp {}", *m);
   auto maybe_ret = do_ms_dispatch(conn, std::move(m));
   if (!maybe_ret.has_value()) {
     return std::nullopt;
@@ -789,11 +792,13 @@ OSD::do_ms_dispatch(
    crimson::net::ConnectionRef conn,
    MessageRef m)
 {
+  LOG_PREFIX(OSD::do_ms_dispatch);
   if (seastar::this_shard_id() != PRIMARY_CORE) {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
     case MSG_COMMAND:
     case MSG_OSD_MARK_ME_DOWN:
+      DEBUG("dispatching {} to primary core", *m);
       // FIXME: order is not guaranteed in this path
       return conn.get_foreign(
       ).then([this, m=std::move(m)](auto f_conn) {
@@ -1178,8 +1183,10 @@ seastar::future<> OSD::committed_osd_maps(
       }
       if (should_restart()) {
         return restart();
+      } else if (!pg_shard_manager.is_stopping()) {
+	return get_shard_services().osdmap_subscribe(osdmap->get_epoch() + 1, false);
       } else {
-        return seastar::now();
+	return seastar::now();
       }
     } else if (pg_shard_manager.is_preboot()) {
       INFO("osd.{}: now preboot", whoami);
