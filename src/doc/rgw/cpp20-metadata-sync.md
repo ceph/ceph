@@ -51,3 +51,38 @@ not all cls clients have been added to `neorados` yet, so `LocalLog` and `LogSta
 `RGWHTTPManager` supports stackful coroutines with `optional_yield` and integrates with the `RGWCoroutine` framework, but does not support c++20 coroutines
 
 i've proposed a new async libcurl client in https://github.com/ceph/ceph/pull/58094 for use here. like `neorados`, it follows asio's async model so supports c++20 coroutines and asio's other completion types. and unlike `RGWHTTPManager`, it doesn't require a separate background thread to poll for libcurl completions. it runs on the same `asio::io_context` that's running the metadata sync coroutines
+
+### error handling
+
+if a coroutine spawned by `asio::co_spawn()` exits with an exception, that exception is captured and passed back to `asio::co_spawn()`'s completion handler. these coroutines may also choose to return errors by using a return type like `asio::awaitable<int>`. on completion, that return value is passed back to the completion handler whose function signature is `(std::exception_ptr eptr, int error)`. coroutines may also choose to return `asio::awaitable<void>`, resulting in a completion signature of `(std::exception_ptr eptr)`
+
+because exceptions must be handled in either case, we've found it simplest to rely exclusively on exceptions for error handling in metadata sync. as a result, care must be taken to write exception-safe code
+
+spawned coroutines also support [Per-Op Cancellation](https://www.boost.org/doc/libs/1_82_0/doc/html/boost_asio/overview/core/cancellation.html), which cause the canceled coroutine to exit with an exception
+
+### concurrency patterns
+
+over time, the `RGWCoroutine` framework developed a small library of concurrency primitives so that a parent coroutine could manage several child coroutines running in parallel. examples include the `RGWShardCollectCR` class and macros like `drain_all()` and `yield_spawn_window()`
+
+we've developed similar primitives for use with c++20 coroutines, with a focus on [structured concurrency](https://en.wikipedia.org/wiki/Structured_concurrency)
+
+#### fork-join
+
+sync often needs to spawn several coroutines and wait for all of them to complete. for example, metadata sync spawns a child coroutine for each shard of the mdlog to be polled/processed in parallel
+
+https://github.com/ceph/ceph/pull/50005 added a `spawn_group` class to wait on a group of child coroutines, along with a `parallel_for_each()` algorithm inspired by seastar's
+
+#### bounded concurrency
+
+similarly, incremental sync processes a long stream of mdlog entries by spawning a child coroutine for each. but here, it's important that we limit how many entries we process at a time to:
+* limit total memory usage,
+* spread load evenly between mdlog shards, and
+* limit the amount of work we'd have to redo in case of errors and retries
+
+https://github.com/ceph/ceph/pull/49720 added a `co_throttle` class for this, which limits the total number of child coroutines by blocking before spawning more
+
+#### cls locks
+
+multisite sync uses cls locks to divide up the work between cooperating rgws. sync must only process a given mdlog shard while it holds an exclusive lock on it
+
+to this end, https://github.com/ceph/ceph/pull/49904 added a `with_lease()` algorithm. this spawns a child coroutine once the lock is acquired, continuously renews the lock while it's running, and releases the lock once the child completes. in the meantime, if the lock expires or its renewal fails, the child coroutine is canceled immediately
