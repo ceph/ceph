@@ -11337,6 +11337,11 @@ paths:
         name: zonegroup_name
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: all_policy
+        schema:
+          type: string
       responses:
         '200':
           content:
