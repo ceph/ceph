@@ -34,4 +34,17 @@ export class RgwMultisiteService {
   status() {
     return this.http.get(`${this.uiUrl}/status`);
   }
+
+  getSyncPolicy(bucketName?: string, zonegroup?: string, fetchAllPolicy = false) {
+    let params = new HttpParams();
+    if (bucketName) {
+      params = params.append('bucket_name', bucketName);
+    }
+    if (zonegroup) {
+      params = params.append('zonegroup_name', zonegroup);
+    }
+    // fetchAllPolicy - if true, will fetch all the policy either linked or not linked with the buckets
+    params = params.append('all_policy', fetchAllPolicy);
+    return this.http.get(`${this.url}/sync-policy`, { params });
+  }
 }
