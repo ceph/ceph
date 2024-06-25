@@ -123,7 +123,7 @@ The `mgmt-gateway` service internally makes use of nginx reverse proxy. The foll
 
 ::
 
-    DEFAULT_NGINX_IMAGE = 'docker.io/nginx:1.26.0'
+    DEFAULT_NGINX_IMAGE = 'quay.io/ceph/nginx:1.26.1'
 
 Admins can specify the image to be used by changing the `container_image_nginx` cephadm module option. If there were already
 running daemon(s) you must redeploy the daemon(s) in order to have them actually use the new image.
