@@ -5,7 +5,6 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 import { ToastrModule } from 'ngx-toastr';
 
@@ -29,7 +28,6 @@ describe('CRUDTableComponent', () => {
       TablePaginationComponent
     ],
     imports: [
-      NgxDatatableModule,
       FormsModule,
       ComponentsModule,
       NgbDropdownModule,

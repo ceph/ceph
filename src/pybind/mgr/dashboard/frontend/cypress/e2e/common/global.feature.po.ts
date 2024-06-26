@@ -22,7 +22,7 @@ And('I should see a button to {string}', (button: string) => {
 });
 
 When('I click on {string} button', (button: string) => {
-  cy.get(`[aria-label="${button}"]`).first().click();
+  cy.get(`[aria-label="${button}"]`).first().click({ force: true });
 });
 
 Then('I should see the modal', () => {

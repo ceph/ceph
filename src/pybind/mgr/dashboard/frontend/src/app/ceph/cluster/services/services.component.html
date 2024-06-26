@@ -18,7 +18,7 @@
                       [selection]="selection"
                       [tableActions]="tableActions">
     </cd-table-actions>
-    <cd-service-details cdTableDetail
+    <cd-service-details *cdTableDetail
                         [permissions]="permissions"
                         [selection]="expandedRow">
     </cd-service-details>
@@ -28,7 +28,7 @@
 
 
 <ng-template #runningTpl
-             let-value="value">
+             let-value="data.value">
   <span ngbTooltip="Service instances running out of the total number of services requested.">
     {{ value.running }} / {{ value.size }}
   </span>
@@ -39,7 +39,7 @@
 </ng-template>
 
 <ng-template #urlTpl
-             let-row="row">
+             let-row="data.row">
   <ng-container *ngIf="serviceUrls[row.service_type] else noUrl">
     <a *ngIf="!isMgmtGateway else mgmtGateway"
        target="_blank"

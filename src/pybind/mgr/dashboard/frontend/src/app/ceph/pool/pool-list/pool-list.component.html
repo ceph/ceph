@@ -22,7 +22,7 @@
                           [selection]="selection"
                           [tableActions]="tableActions">
         </cd-table-actions>
-        <cd-pool-details cdTableDetail
+        <cd-pool-details *cdTableDetail
                          id="pool-list-details"
                          [selection]="expandedRow"
                          [permissions]="permissions"
@@ -51,7 +51,7 @@
 <div [ngbNavOutlet]="nav"></div>
 
 <ng-template #poolUsageTpl
-             let-row="row">
+             let-row="data.row">
   <cd-usage-bar *ngIf="row.stats?.avail_raw?.latest"
                 [total]="row.stats.bytes_used.latest + row.stats.avail_raw.latest"
                 [used]="row.stats.bytes_used.latest"

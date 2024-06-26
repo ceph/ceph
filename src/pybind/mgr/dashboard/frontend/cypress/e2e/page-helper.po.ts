@@ -52,13 +52,22 @@ export abstract class PageHelper {
   /**
    * Navigates to the edit page
    */
-  navigateEdit(name: string, select = true, breadcrumb = true, navigateTo: string = null) {
-    if (select) {
+  navigateEdit(
+    name: string,
+    _select = true,
+    breadcrumb = true,
+    navigateTo: string = null,
+    isMultiselect = false
+  ) {
+    if (navigateTo) {
       this.navigateTo(navigateTo);
-      this.getFirstTableCell(name).click();
+    } else if (isMultiselect) {
+      this.clickActionButtonFromMultiselect(name);
+      cy.contains('Creating...').should('not.exist');
+      cy.contains('button', 'Edit').click();
+    } else {
+      this.clickRowActionButton(name, 'edit');
     }
-    cy.contains('Creating...').should('not.exist');
-    cy.contains('button', 'Edit').click();
     if (breadcrumb) {
       this.expectBreadcrumbText('Edit');
     }
@@ -138,38 +147,36 @@ export abstract class PageHelper {
    */
   private waitDataTableToLoad() {
     cy.get('cd-table').should('exist');
-    cy.get('datatable-scroller, .empty-row');
+    cy.get('cds-table table tbody').should('exist');
+    cy.contains('Loading').should('not.exist');
   }
 
   getDataTables() {
     this.waitDataTableToLoad();
 
-    return cy.get('cd-table .dataTables_wrapper');
+    return cy.get('cd-table cds-table');
   }
 
-  private getTableCountSpan(spanType: 'selected' | 'found' | 'total') {
-    return cy.contains('.datatable-footer-inner .page-count span', spanType);
+  private getTableCountSpan(_spanType: 'selected' | 'found' | 'total' | 'item' | 'items') {
+    return cy.contains('.cds--pagination__text.cds--pagination__items-count', /item|items/gi);
   }
 
   // Get 'selected', 'found', or 'total' row count of a table.
-  getTableCount(spanType: 'selected' | 'found' | 'total') {
+  getTableCount(spanType: 'selected' | 'found' | 'total' | 'item' | 'items') {
     this.waitDataTableToLoad();
+    cy.wait(1 * 1000);
     return this.getTableCountSpan(spanType).then(($elem) => {
-      const text = $elem
-        .filter((_i, e) => e.innerText.includes(spanType))
-        .first()
-        .text();
-
-      return Number(text.match(/(\d+)\s+\w*/)[1]);
+      const text = $elem.first().text();
+      return Number(text.match(/\b\d+(?= item|items\b)/)[0]);
     });
   }
 
   // Wait until selected', 'found', or 'total' row count of a table equal to a number.
-  expectTableCount(spanType: 'selected' | 'found' | 'total', count: number) {
+  expectTableCount(spanType: 'selected' | 'found' | 'total' | 'item' | 'items', count: number) {
     this.waitDataTableToLoad();
     this.getTableCountSpan(spanType).should(($elem) => {
       const text = $elem.first().text();
-      expect(Number(text.match(/(\d+)\s+\w*/)[1])).to.equal(count);
+      expect(Number(text.match(/\b\d+(?= item|items\b)/)[0])).to.equal(count);
     });
   }
 
@@ -177,13 +184,13 @@ export abstract class PageHelper {
     this.waitDataTableToLoad();
 
     this.searchTable(content);
-    return cy.contains('.datatable-body-row', content);
+    return cy.contains('[cdstablerow]', content);
   }
 
   getTableRows() {
     this.waitDataTableToLoad();
 
-    return cy.get('datatable-row-wrapper');
+    return cy.get('[cdstablerow]');
   }
 
   /**
@@ -195,24 +202,22 @@ export abstract class PageHelper {
 
     if (content) {
       this.searchTable(content);
-      return cy.contains('.datatable-body-cell-label', content);
+      return cy.contains('[cdstablerow] [cdstabledata]', content);
     } else {
-      return cy.get('.datatable-body-cell-label').first();
+      return cy.get('[cdstablerow] [cdstabledata]').first();
     }
   }
 
   getTableCell(columnIndex: number, exactContent: string, partialMatch = false) {
     this.waitDataTableToLoad();
     this.clearTableSearchInput();
+    cy.wait(1 * 1000);
     this.searchTable(exactContent);
     if (partialMatch) {
-      return cy.contains(
-        `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
-        exactContent
-      );
+      return cy.contains(`[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`, exactContent);
     }
     return cy.contains(
-      `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
+      `[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`,
       new RegExp(`^${exactContent}$`)
     );
   }
@@ -224,21 +229,22 @@ export abstract class PageHelper {
 
   getExpandCollapseElement(content?: string) {
     this.waitDataTableToLoad();
-
     if (content) {
-      return cy.contains('.datatable-body-row', content).find('.tc_expand-collapse');
-    } else {
-      return cy.get('.tc_expand-collapse').first();
+      return cy
+        .contains('[cdstablerow] [cdstabledata]', content)
+        .parent('[cdstablerow]')
+        .find('[cdstableexpandbutton] .cds--table-expand__button');
     }
+    return cy.get('.cds--table-expand__button').first();
   }
 
   /**
    * Gets column headers of table
    */
-  getDataTableHeaders(index = 0) {
+  getDataTableHeaders() {
     this.waitDataTableToLoad();
 
-    return cy.get('.datatable-header').its(index).find('.datatable-header-cell');
+    return cy.get('[cdstableheadcell]');
   }
 
   /**
@@ -250,35 +256,62 @@ export abstract class PageHelper {
 
   filterTable(name: string, option: string) {
     this.waitDataTableToLoad();
-
-    cy.get('.tc_filter_name > button').click();
-    cy.contains(`.tc_filter_name .dropdown-item`, name).click();
-
-    cy.get('.tc_filter_option > button').click();
-    cy.contains(`.tc_filter_option .dropdown-item`, option).click();
+    cy.get('select#filter_name').select(name);
+    cy.get('select#filter_option').select(option);
   }
 
   setPageSize(size: string) {
-    cy.get('cd-table .dataTables_paginate input').first().clear({ force: true }).type(size);
+    cy.get('.cds--select__item-count .cds--select-input').select(size, { force: true });
   }
 
-  searchTable(text: string) {
+  searchTable(text: string, delay = 35) {
     this.waitDataTableToLoad();
 
-    this.setPageSize('10');
-    cy.get('[aria-label=search]').first().clear({ force: true }).type(text);
+    cy.get('.cds--search-input').first().clear({ force: true }).type(text, { delay });
   }
 
   clearTableSearchInput() {
     this.waitDataTableToLoad();
 
-    return cy.get('cd-table .search button').first().click();
+    return cy.get('.cds--search-close').first().click({ force: true });
   }
 
   // Click the action button
   clickActionButton(action: string) {
-    cy.get('.table-actions button.dropdown-toggle').first().click(); // open submenu
-    cy.get(`button.${action}`).click(); // click on "action" menu item
+    cy.get('[data-testid="table-action-btn"]').first().click({ force: true }); // open submenu
+    cy.get(`button.${action}`).click({ force: true }); // click on "action" menu item
+  }
+
+  clickActionButtonFromMultiselect(content: string, action?: string) {
+    this.searchTable(content);
+    cy.wait(500);
+    cy.contains('[cdstablerow] [cdstabledata]', content)
+      .parent('[cdstablerow]')
+      .find('[cdstablecheckbox] cds-checkbox [type="checkbox"]')
+      .check({ force: true });
+    if (action) {
+      cy.get(`cds-table-toolbar-actions button.${action}`).click();
+    }
+  }
+
+  /**
+   * Clicks on the kebab menu button and performs an action on same row as content provided
+   * @param content content to be found in a table cell
+   * @param action action to be performed
+   * @param waitTime default 1s. wait time between search resumes and start of looking up content
+   * @param searchDelay delay time in ms between key strokes on search bar
+   */
+  clickRowActionButton(content: string, action: string, waitTime = 1 * 1000, searchDelay?: number) {
+    this.waitDataTableToLoad();
+    this.clearTableSearchInput();
+    cy.contains('Creating...').should('not.exist');
+    this.searchTable(content, searchDelay);
+    cy.wait(waitTime);
+    cy.contains('[cdstablerow] [cdstabledata]', content)
+      .parent('[cdstablerow]')
+      .find('[cdstabledata] [data-testid="table-action-btn"]')
+      .click({ force: true });
+    cy.get(`button.${action}`).click({ force: true });
   }
 
   /**
@@ -290,17 +323,22 @@ export abstract class PageHelper {
    */
   // cdsModal is a temporary variable which will be removed once the carbonization
   // is complete
-  delete(name: string, columnIndex?: number, section?: string, cdsModal = false) {
-    // Selects row
-    const getRow = columnIndex
-      ? this.getTableCell.bind(this, columnIndex, name, true)
-      : this.getFirstTableCell.bind(this);
-    getRow(name).click();
-    let action: string;
-    section === 'hosts' ? (action = 'remove') : (action = 'delete');
+  delete(
+    name: string,
+    columnIndex?: number,
+    section?: string,
+    cdsModal = false,
+    isMultiselect = false,
+    shouldReload = false
+  ) {
+    const action: string = section === 'hosts' ? 'remove' : 'delete';
 
     // Clicks on table Delete/Remove button
-    this.clickActionButton(action);
+    if (isMultiselect) {
+      this.clickActionButtonFromMultiselect(name, action);
+    } else {
+      this.clickRowActionButton(name, action);
+    }
 
     // Convert action to SentenceCase and Confirms deletion
     const actionUpperCase = action.charAt(0).toUpperCase() + action.slice(1);
@@ -316,7 +354,13 @@ export abstract class PageHelper {
       cy.get('cd-modal').should('not.exist');
     }
     // Waits for item to be removed from table
-    getRow(name).should('not.exist');
+    if (shouldReload) {
+      cy.reload(true, { log: true, timeout: 5 * 1000 });
+    }
+    (columnIndex
+      ? this.getTableCell(columnIndex, name, true)
+      : this.getFirstTableCell(name)
+    ).should('not.exist');
   }
 
   getNestedTableCell(
@@ -330,13 +374,13 @@ export abstract class PageHelper {
     this.searchNestedTable(selector, exactContent);
     if (partialMatch) {
       return cy
-        .get(`${selector} datatable-body-row datatable-body-cell:nth-child(${columnIndex})`)
+        .get(`${selector} [cdstablerow] [cdstabledata]:nth-child(${columnIndex})`)
         .should('contain', exactContent);
     }
     return cy
       .get(`${selector}`)
       .contains(
-        `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
+        `[cdstablerow] [cdstabledata]:nth-child(${columnIndex})`,
         new RegExp(`^${exactContent}$`)
       );
   }

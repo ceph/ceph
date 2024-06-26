@@ -19,7 +19,7 @@
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
                 [toolHeader]="!hideToolHeader">
-        <div class="table-actions btn-toolbar">
+        <div class="table-actions">
           <cd-table-actions [permission]="permissions.hosts"
                             [selection]="selection"
                             class="btn-group"
@@ -33,7 +33,7 @@
                             [tableActions]="expandClusterActions">
           </cd-table-actions>
         </div>
-        <cd-host-details cdTableDetail
+        <cd-host-details *cdTableDetail
                          [permissions]="permissions"
                          [selection]="expandedRow">
         </cd-host-details>
@@ -62,7 +62,7 @@
 <div [ngbNavOutlet]="nav"></div>
 
 <ng-template #servicesTpl
-             let-services="value">
+             let-services="data.value">
   <span *ngFor="let service of services">
     <cd-label [key]="service['type']"
               [value]="service['count']"
@@ -71,7 +71,7 @@
 </ng-template>
 
 <ng-template #hostNameTpl
-             let-row="row">
+             let-row="data.row">
   <span [ngClass]="row">
     {{ row.hostname }}
   </span><br>
@@ -93,7 +93,7 @@
 
 
 <ng-template #hostMetricTmpl
-             let-value="value">
+             let-value="data.value">
   <div *ngIf="validValue(value)">
     <span>{{ value }}</span>
   </div>
@@ -103,7 +103,7 @@
 </ng-template>
 
 <ng-template #hostDimlessTmpl
-             let-value="value">
+             let-value="data.value">
   <div *ngIf="!validValue(value)">
     <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
   </div>

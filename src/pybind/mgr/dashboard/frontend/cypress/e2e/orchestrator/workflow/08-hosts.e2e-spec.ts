@@ -39,7 +39,7 @@ describe('Host Page', () => {
     hosts.remove(hostnames[3]);
     hosts.navigateTo('add');
     hosts.add(hostnames[3]);
-    hosts.checkExist(hostnames[3], true);
+    hosts.checkExist(hostnames[3], true, true);
   });
 
   it('should show the exact count of daemons', () => {

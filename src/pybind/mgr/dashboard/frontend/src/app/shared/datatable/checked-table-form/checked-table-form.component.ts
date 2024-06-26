@@ -36,6 +36,7 @@ export class CheckedTableFormComponent implements OnInit {
         column.cellTemplate = this.cellPermissionCheckboxTpl;
         column.headerTemplate = this.headerPermissionCheckboxTpl;
       }
+      column.sortable = false;
     });
     this.listenToChanges();
     this.form.get(this.inputField).setValue(this.initialValue);

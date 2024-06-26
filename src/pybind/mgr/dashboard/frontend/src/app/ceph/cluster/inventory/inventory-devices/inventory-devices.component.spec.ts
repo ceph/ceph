@@ -97,17 +97,20 @@ describe('InventoryDevicesComponent', () => {
         [action: string]: { disabled: boolean; disableDesc: string };
       }
     ) => {
-      fixture.detectChanges();
-      await fixture.whenStable();
+      const component = fixture.componentInstance;
+      const selection = component.selection;
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
-      // There is actually only one action for now
+      const tableActionComponent: TableActionsComponent = tableActionElement.componentInstance;
+      tableActionComponent.selection = selection;
+
       const actions = {};
       tableActions.forEach((action) => {
-        const actionElement = tableActionElement.query(By.css('button'));
-        actions[action.name] = {
-          disabled: actionElement.classes.disabled ? true : false,
-          disableDesc: actionElement.properties.title
-        };
+        if (expectResult[action.name]) {
+          actions[action.name] = {
+            disabled: tableActionComponent.disableSelectionAction(action),
+            disableDesc: tableActionComponent.useDisableDesc(action) || ''
+          };
+        }
       });
       expect(actions).toEqual(expectResult);
     };

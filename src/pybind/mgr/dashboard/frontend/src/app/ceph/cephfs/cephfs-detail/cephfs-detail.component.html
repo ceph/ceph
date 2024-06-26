@@ -30,14 +30,14 @@
 
 <!-- templates -->
 <ng-template #poolUsageTpl
-             let-row="row">
+             let-row="data.row">
   <cd-usage-bar [total]="row.size"
                 [used]="row.used"
                 [title]="row.pool_name"></cd-usage-bar>
 </ng-template>
 
 <ng-template #activityTmpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
 </ng-template>

@@ -5,7 +5,7 @@
           [autoSave]="false"
           (fetchData)="getCounters($event)">
   <ng-template #valueTpl
-               let-row="row">
+               let-row="data.row">
     {{ row.value | dimless }} {{ row.unit }}
   </ng-template>
 </cd-table>

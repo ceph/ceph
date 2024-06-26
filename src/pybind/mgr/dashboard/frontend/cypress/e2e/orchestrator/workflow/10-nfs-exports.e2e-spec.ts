@@ -68,17 +68,19 @@ describe('nfsExport page', () => {
     });
 
     it('should edit an export', () => {
-      nfsExport.editExport(rgwPseudo, editPseudo, 'rgw_index');
+      nfsExport.navigateTo('rgw_index');
+
+      nfsExport.editExport(rgwPseudo, editPseudo);
 
       nfsExport.existTableCell(editPseudo);
     });
 
     it('should delete exports and bucket', () => {
       nfsExport.navigateTo('rgw_index');
-      nfsExport.delete(editPseudo, null, null, true);
+      nfsExport.delete(editPseudo, null, null, true, false, true);
 
       buckets.navigateTo();
-      buckets.delete(bucketName, null, null, true);
+      buckets.delete(bucketName, null, null, true, true, true);
     });
   });
 });

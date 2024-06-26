@@ -1,45 +1,50 @@
-<div class="btn-group">
-  <ng-container *ngIf="currentAction">
-    <button type="button"
-            title="{{ useDisableDesc(currentAction) }}"
-            class="btn btn-{{btnColor}}"
-            [ngClass]="{'disabled': disableSelectionAction(currentAction)}"
-            (click)="useClickAction(currentAction)"
-            [disabled]="disableSelectionAction(currentAction)"
-            [routerLink]="useRouterLink(currentAction)"
-            [attr.aria-label]="currentAction.name"
-            [preserveFragment]="currentAction.preserveFragment ? '' : null">
-      <i [ngClass]="[currentAction.icon]"></i>
-      <span class="action-label">{{ currentAction.name }}</span>
-    </button>
-  </ng-container>
-  <div class="btn-group"
-       ngbDropdown
-       role="group"
-       *ngIf="dropDownActions.length > 1"
-       aria-label="Button group with nested dropdown">
-    <button aria-label="dropdown-menu-toggle"
-            class="btn btn-{{btnColor}} dropdown-toggle"
-            ngbDropdownToggle>
-      <ng-container *ngIf="dropDownOnly">{{ dropDownOnly }} </ng-container>
-      <span *ngIf="!dropDownOnly"
-            class="sr-only"></span>
-    </button>
-    <div class="dropdown-menu"
-         ngbDropdownMenu>
-      <ng-container *ngFor="let action of dropDownActions">
-        <button ngbDropdownItem
-                class="{{ toClassName(action) }}"
-                title="{{ useDisableDesc(action) }}"
-                (click)="useClickAction(action)"
-                [routerLink]="useRouterLink(action)"
-                [preserveFragment]="action.preserveFragment ? '' : null"
-                [disabled]="disableSelectionAction(action)"
-                [attr.aria-label]="action.name">
-          <i [ngClass]="[action.icon, 'action-icon']"></i>
-          <span>{{ action.name }}</span>
-        </button>
-      </ng-container>
-    </div>
-  </div>
-</div>
+<ng-container *ngIf="!dropDownOnly; else dropDownOnlyTpl">
+  <button *ngIf="currentAction"
+          type="button"
+          [cdsButton]="currentAction.buttonKind"
+          title="{{ useDisableDesc(currentAction) }}"
+          (click)="useClickAction(currentAction)"
+          [disabled]="disableSelectionAction(currentAction)"
+          [routerLink]="useRouterLink(currentAction)"
+          [attr.aria-label]="currentAction.name"
+          [preserveFragment]="currentAction.preserveFragment ? '' : null"
+          data-testid="primary-action">
+    <span i18n>{{ currentAction.name }}</span>
+    <svg class="cds--btn__icon"
+         cdsIcon="add"
+         size="16"></svg>
+  </button>
+</ng-container>
+
+
+<ng-template #dropDownOnlyTpl>
+  <cds-overflow-menu [customTrigger]="customTrigger"
+                     [flip]="true"
+                     [offset]="{ x: 105, y: 0 }"
+                     data-testid="table-action-btn"
+                     class="d-flex justify-content-end">
+    <ng-container *ngFor="let action of dropDownActions">
+      <cds-overflow-menu-option *ngIf="currentAction !== action"
+                                class="{{ toClassName(action) }}"
+                                title="{{ useDisableDesc(action) }}"
+                                (click)="useClickAction(action)"
+                                [routerLink]="useRouterLink(action)"
+                                [preserveFragment]="action.preserveFragment ? '' : null"
+                                [disabled]="disableSelectionAction(action)"
+                                [attr.aria-label]="action.name"
+                                data-testid="table-action-option-btn"
+                                i18n>
+      {{ action.name }}
+      </cds-overflow-menu-option>
+    </ng-container>
+  </cds-overflow-menu>
+</ng-template>
+
+<ng-template #customTrigger>
+  <button cdsButton="tertiary">
+    <span i18n>{{ dropDownOnly }}</span>
+    <svg class="cds--btn__icon"
+         cdsIcon="caret--down"
+         size="16"></svg>
+  </button>
+</ng-template>

@@ -34,7 +34,7 @@ export class UsersPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(name: string, new_fullname: string, new_email: string, new_maxbuckets: string) {
-    this.navigateEdit(name);
+    this.navigateEdit(name, false, true, null, true);
 
     // Change the full name field
     cy.get('#display_name').click().clear().type(new_fullname);
@@ -50,7 +50,7 @@ export class UsersPageHelper extends PageHelper {
 
     // Click the user and check its details table for updated content
     this.getExpandCollapseElement(name).click();
-    cy.get('.datatable-row-detail')
+    cy.get('[data-testid="datatable-row-detail"]')
       .should('contain.text', new_fullname)
       .and('contain.text', new_email)
       .and('contain.text', new_maxbuckets);
@@ -100,7 +100,7 @@ export class UsersPageHelper extends PageHelper {
     cy.contains('#max_buckets + .invalid-feedback', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(tenant + '$' + uname, null, null, true);
+    this.delete(tenant + '$' + uname, null, null, true, true);
   }
 
   invalidEdit() {
@@ -110,7 +110,7 @@ export class UsersPageHelper extends PageHelper {
     this.navigateTo('create');
     this.create(tenant, uname, 'xxx', 'xxx@xxx', '50');
     const name = tenant + '$' + uname;
-    this.navigateEdit(name);
+    this.navigateEdit(name, false, true, null, true);
 
     // put invalid email to make field invalid
     cy.get('#email')
@@ -134,6 +134,6 @@ export class UsersPageHelper extends PageHelper {
     cy.contains('#max_buckets + .invalid-feedback', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(tenant + '$' + uname, null, null, true);
+    this.delete(tenant + '$' + uname, null, null, true, true);
   }
 }

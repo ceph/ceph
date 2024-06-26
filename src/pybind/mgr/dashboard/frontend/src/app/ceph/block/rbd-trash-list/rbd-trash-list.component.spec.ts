@@ -152,7 +152,7 @@ describe('RbdTrashListComponent', () => {
       };
       fixture.detectChanges();
 
-      const purge = fixture.debugElement.query(By.css('.table-actions button .fa-times'));
+      const purge = fixture.debugElement.query(By.css('.table-actions button'));
       expect(purge).not.toBeNull();
     });
 
@@ -165,7 +165,7 @@ describe('RbdTrashListComponent', () => {
       };
       fixture.detectChanges();
 
-      const purge = fixture.debugElement.query(By.css('.table-actions button .fa-times'));
+      const purge = fixture.debugElement.query(By.css('.table-actions button'));
       expect(purge).toBeNull();
     });
   });
