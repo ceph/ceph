@@ -482,7 +482,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     } catch (const buffer::error&) {}
   }
 
-  if (multipart_parts_count && multipart_parts_count > 0) {
+  if (multipart_parts_count && *multipart_parts_count > 0) {
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
 
