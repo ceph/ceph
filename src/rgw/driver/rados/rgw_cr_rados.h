@@ -16,6 +16,8 @@
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
+#include <string_view>
+using namespace std;
 
 struct rgw_http_param_pair;
 class RGWRESTConn;
@@ -1708,3 +1710,105 @@ public:
   int operate(const DoutPrefixProvider* dpp) override;
 };
 
+struct rgw_bucket_entry_owner {
+  std::string id;
+  std::string display_name;
+
+  rgw_bucket_entry_owner() {}
+  rgw_bucket_entry_owner(const std::string& _id, const std::string& _display_name) : id(_id), display_name(_display_name) {}
+
+  void decode_json(JSONObj *obj);
+};
+
+struct bucket_list_entry {
+  bool delete_marker;
+  rgw_obj_key key;
+  bool is_latest;
+  real_time mtime;
+  string etag;
+  uint64_t size;
+  string storage_class;
+  rgw_bucket_entry_owner owner;
+  uint64_t versioned_epoch;
+  string rgw_tag;
+
+  bucket_list_entry() : delete_marker(false), is_latest(false), size(0), versioned_epoch(0) {}
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("IsDeleteMarker", delete_marker, obj);
+    JSONDecoder::decode_json("Key", key.name, obj);
+    JSONDecoder::decode_json("VersionId", key.instance, obj);
+    JSONDecoder::decode_json("IsLatest", is_latest, obj);
+    string mtime_str;
+    JSONDecoder::decode_json("RgwxMtime", mtime_str, obj);
+
+    struct tm t;
+    uint32_t nsec;
+    if (parse_iso8601(mtime_str.c_str(), &t, &nsec)) {
+      ceph_timespec ts;
+      ts.tv_sec = (uint64_t)internal_timegm(&t);
+      ts.tv_nsec = nsec;
+      mtime = real_clock::from_ceph_timespec(ts);
+    }
+    JSONDecoder::decode_json("ETag", etag, obj);
+    JSONDecoder::decode_json("Size", size, obj);
+    JSONDecoder::decode_json("StorageClass", storage_class, obj);
+    JSONDecoder::decode_json("Owner", owner, obj);
+    JSONDecoder::decode_json("VersionedEpoch", versioned_epoch, obj);
+    JSONDecoder::decode_json("RgwxTag", rgw_tag, obj);
+    if (key.instance == "null" && !versioned_epoch) {
+      key.instance.clear();
+    }
+  }
+
+  RGWModifyOp get_modify_op() const {
+    if (delete_marker) {
+      return CLS_RGW_OP_LINK_OLH_DM;
+    } else if (!key.instance.empty() && key.instance != "null") {
+      return CLS_RGW_OP_LINK_OLH;
+    } else {
+      return CLS_RGW_OP_ADD;
+    }
+  }
+};
+
+struct bucket_unordered_list_result {
+  string name;
+  string prefix;
+  int max_keys;
+  bool is_truncated;
+  bool allow_unordered;
+  list<bucket_list_entry> entries;
+
+  bucket_unordered_list_result() : max_keys(0), is_truncated(false) {}
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("Name", name, obj);
+    JSONDecoder::decode_json("Prefix", prefix, obj);
+    JSONDecoder::decode_json("MaxKeys", max_keys, obj);
+    JSONDecoder::decode_json("IsTruncated", is_truncated, obj);
+    JSONDecoder::decode_json("allow-unordered", allow_unordered, obj);
+    JSONDecoder::decode_json("Entries", entries, obj);
+  }
+};
+
+class RGWStatRemoteBucketCR: public RGWCoroutine {
+  int child_ret = 0;
+  const DoutPrefixProvider *dpp;
+  rgw::sal::RadosStore* const store;
+  const rgw_zone_id source_zone;
+  const rgw_bucket& bucket;
+  RGWHTTPManager* http;
+  std::vector<rgw_zone_id> zids;
+  vector<bucket_unordered_list_result>& peer_result;
+
+public:
+  RGWStatRemoteBucketCR(const DoutPrefixProvider *dpp,
+				    rgw::sal::RadosStore* const store,
+            const rgw_zone_id source_zone,
+            const rgw_bucket& bucket,
+            RGWHTTPManager* http, std::vector<rgw_zone_id> zids,
+            std::vector<bucket_unordered_list_result>& peer_result);
+
+  int operate(const DoutPrefixProvider *dpp) override;
+};

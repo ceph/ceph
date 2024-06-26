@@ -5576,6 +5576,64 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
     }
   }
 
+  // delete_bucket checks for objects in the bucket on other zones,
+  // if there is bucket sync policy configured, by doing unordered
+  // listing with max_key=1. we don't prevent users from
+  // deleting a bucket if there are any errors in this block
+  // except if we found objects in another zone.
+  if (svc.zone->is_syncing_bucket_meta(bucket)) {
+    auto bs_policy = bucket_info.sync_policy;
+    if (bs_policy) {
+      ldpp_dout(dpp, 10) << "bucket policy exists" << dendl;
+      const rgw_zone_id source_zone = svc.zone->get_zone_params().get_id();
+      RGWBucketSyncPolicyHandlerRef source_handler;
+      int ret = driver->get_sync_policy_handler(dpp, source_zone, bucket, &source_handler, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 10) << "could not get bucket sync policy handler (r=" << ret << ")" << dendl;
+      }
+
+      auto all_dests = source_handler->get_all_dests();
+
+      std::vector<rgw_zone_id> zids;
+      rgw_zone_id last_zid;
+      for (auto& diter : all_dests) {
+        const auto& zid = diter.first;
+        if (zid == last_zid) {
+          continue;
+        }
+        last_zid = zid;
+        zids.push_back(zid);
+      }
+
+      std::vector<bucket_unordered_list_result> peer_status;
+      peer_status.resize(zids.size());
+
+      RGWCoroutinesManager crs(driver->ctx(), driver->getRados()->get_cr_registry());
+      RGWHTTPManager http(driver->ctx(), crs.get_completion_mgr());
+      ret = http.start();
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "failed in http_manager.start() ret=" << ret << dendl;
+      }
+      ret = crs.run(dpp, new RGWStatRemoteBucketCR(dpp, driver, source_zone, bucket, &http, zids, peer_status));
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "failed to fetch remote bucket stats " << cpp_strerror(ret) << dendl;
+      }
+
+      for (const auto& list_result: peer_status) {
+        auto entries_iter = list_result.entries.begin();
+        for (; entries_iter != list_result.entries.end(); ++entries_iter) {
+          std::string ns;
+          rgw_obj_key obj;
+
+          if (rgw_obj_key::oid_to_key_in_ns(entries_iter->key.name, &obj, ns)) {
+            ldpp_dout(dpp, 0) << "cannot delete bucket. objects exist in the bucket in another zone " << dendl;
+            return -ENOTEMPTY;
+          }
+        }
+      }
+    }
+  }
+
   bool remove_ep = true;
 
   if (objv_tracker.read_version.empty()) {
