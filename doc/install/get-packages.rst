@@ -84,9 +84,9 @@ major releases (e.g., ``luminous``, ``mimic``, ``nautilus``) and development rel
 APT
 ~~~
 
-To install the ``release.asc`` key, execute the following::
+To install the ``release.gpg`` key, execute the following::
 
-	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
+	wget -q -O /usr/share/keyring/ceph.gpg 'https://download.ceph.com/keys/release.gpg'
 
 
 RPM
@@ -135,7 +135,7 @@ get the short codename, and replace ``{codename}`` in the following command.
 .. prompt:: bash $
    :substitutions:
 
-   sudo apt-add-repository 'deb https://download.ceph.com/debian-|stable-release|/ {codename} main'
+   sudo apt-add-repository 'deb [arch=amd64 signed-by=/usr/share/keyrings/ceph.gpg] https://download.ceph.com/debian-|stable-release|/ {codename} main'
 
 For early Linux distributions, you may execute the following command
 
