@@ -117,9 +117,9 @@ private:
   void set_ctime(const utime_t &t) { ctime = t; }
   void set_atime(const utime_t &t) { atime = t; }
 
-  void set_cap_peer(uint64_t id, ceph_seq_t seq, ceph_seq_t mseq, int mds, int flags) {
+  void set_cap_peer(uint64_t id, ceph_seq_t issue_seq, ceph_seq_t mseq, int mds, int flags) {
     peer.cap_id = id;
-    peer.seq = seq;
+    peer.issue_seq = issue_seq;
     peer.mseq = mseq;
     peer.mds = mds;
     peer.flags = flags;
