@@ -2,6 +2,7 @@ from typing import Optional, TYPE_CHECKING
 import unittest
 import time
 import logging
+import json
 from io import StringIO
 
 from teuthology.exceptions import CommandFailedError
@@ -169,12 +170,39 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
                         "would take too long on full sized OSDs")
 
         self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "dump")
+        self.wait_until_mgr_up()
 
     def tearDown(self):
         self.ceph_cluster.mon_manager.raw_cluster_cmd("config", "reset", str(self.ctx.conf_epoch))
 
+        self.wait_until_mgr_down()
+
         self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
             "Ended test {0}".format(self.id()))
+
+    def wait_until_mgr_down(self):
+        retries = 0
+        while True:
+            out = self.ceph_cluster.mon_manager.raw_cluster_cmd('mgr', 'stat')
+            j = json.loads(out)
+            if j['available'] != 'true':
+                break
+            retries += 1
+            if retries == 30:
+                break
+            time.sleep(5)
+
+    def wait_until_mgr_up(self):
+        retries = 0
+        while True:
+            out = self.ceph_cluster.mon_manager.raw_cluster_cmd('mgr', 'stat')
+            j = json.loads(out)
+            if j['available'] != 'false':
+                break
+            retries += 1
+            if retries == 30:
+                break
+            time.sleep(5)
 
     def _fix_key(self, key):
         return str(key).replace(' ', '_')
