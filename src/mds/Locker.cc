@@ -4222,7 +4222,7 @@ void Locker::handle_client_cap_release(const cref_t<MClientCapRelease> &m)
   Session *session = mds->get_session(m);
 
   for (const auto &cap : m->caps) {
-    _do_cap_release(client, inodeno_t((uint64_t)cap.ino) , cap.cap_id, cap.migrate_seq, cap.seq);
+    _do_cap_release(client, inodeno_t((uint64_t)cap.ino) , cap.cap_id, cap.migrate_seq, cap.issue_seq);
   }
 
   if (session) {
