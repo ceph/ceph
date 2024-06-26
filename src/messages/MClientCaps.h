@@ -181,7 +181,8 @@ public:
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)
 	<< " " << head.cap_id
-	<< " seq " << head.seq;
+	<< " seq " << head.seq
+	<< " issue_seq " << head.issue_seq;
     if (get_tid())
       out << " tid " << get_tid();
     out << " caps=" << ccap_string(head.caps)
