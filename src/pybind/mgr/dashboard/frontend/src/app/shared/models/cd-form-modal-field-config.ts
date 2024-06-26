@@ -13,6 +13,11 @@ export class CdFormModalFieldConfig {
   validators: ValidatorFn[];
   asyncValidators?: AsyncValidatorFn[];
 
+  // Used when you want to dynamically update the
+  // async validators based on the field value
+  valueChangeListener?: boolean;
+  dependsOn?: string;
+
   // --- Specific field properties ---
   typeConfig?: {
     [prop: string]: any;
