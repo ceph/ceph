@@ -1,0 +1,711 @@
+commit a60ac9194718083a4b6a225fc17cad6096c69bd1
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Thu Dec 19 20:53:10 2013 +0000
+
+    v0.67.5
+
+commit 8745ba63533ba77b2ec9d40780cad822a577089c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Dec 18 13:11:01 2013 -0800
+
+    rgw: fix use-after-free when releasing completion handle
+    
+    Backport: emperor, dumpling
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c8890ab2d46fe8e12200a0d2f9eab31c461fb871)
+
+commit 7587ee52161d74a41bf89dc741e8ece9c964fb67
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Dec 18 13:10:21 2013 -0800
+
+    rgw: don't return data within the librados cb
+    
+    Fixes: #7030
+    The callback is running within a single Finisher thread, thus we
+    shouldn't block there. Append read data to a list and flush it within
+    the iterate context.
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit d6a4f6adfaa75c3140d07d6df7be03586cc16183)
+
+commit 9bd1ebe960aae69f6528a33809a58c13481f8df3
+Author: Christophe Courtaut <christophe.courtaut@gmail.com>
+Date:   Mon Jul 22 15:15:38 2013 +0200
+
+    rgw: Allow wildcard in supported keystone roles.
+    
+    http://tracker.ceph.com/issues/4365 fixes #4365
+    
+    Signed-off-by: Christophe Courtaut <christophe.courtaut@gmail.com>
+    (cherry picked from commit 60195581273aee259e8c83d0b471af859d928342)
+
+commit e52b9b76844f935daf2dc060905f869248bba60b
+Author: Roald J. van Loon <roaldvanloon@gmail.com>
+Date:   Fri Aug 9 13:31:10 2013 +0200
+
+    Validate S3 tokens against Keystone
+    
+    - Added config option to allow S3 to use Keystone auth
+    - Implemented JSONDecoder for KeystoneToken
+    - RGW_Auth_S3::authorize now uses rgw_store_user_info on keystone auth
+    - Minor fix in get_canon_resource; dout is now after the assignment
+    
+    Reviewed-by: Yehuda Sadeh<yehuda@inktank.com>
+    Signed-off-by: Roald J. van Loon <roaldvanloon@gmail.com>
+    (cherry picked from commit a200e184b15a03a4ca382e94caf01efb41cb9db7)
+    
+    Conflicts:
+    	src/rgw/rgw_swift.h
+
+commit 5df2f35ee5797ffe85e8398b1ecf75f2eefb5031
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Oct 21 18:02:32 2013 -0700
+
+    rgw: init src_bucket_name, src_object in the S3 handler
+    
+    Be consistent and initialize these fields also in the S3 case.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit ccaab2abf9e49ce3e50c15df793a3a3ca6b29bb8)
+
+commit 0edee8e9c9b140a280dc782b491c330c7f86edfc
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Oct 21 14:45:59 2013 -0700
+
+    rgw: get rid of req_state.bucket_name
+    
+    No need for this field, as we already have req_state.bucket_name_str.
+    This saves us some memory allocation / freeing through every request
+    processing.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit db7eb771226beaa2372ef5860ce742cb3457cd89)
+    
+    Conflicts:
+    	src/rgw/rgw_rest_s3.cc
+
+commit 0eae05f31e4a03e923d51521ecd0078657eda9ba
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Oct 21 14:17:12 2013 -0700
+
+    rgw: turn swift COPY into PUT
+    
+    Fixes: #6606
+    The swift COPY operation is unique in a sense that it's a write
+    operation that has its destination not set by the URI target, but by a
+    different HTTP header. This is problematic as there are some hidden
+    assumptions in the code that the specified bucket/object in the URI is
+    the operation target. E.g., certain initialization functions, quota,
+    etc. Instead of creating a specialized code everywhere for this case
+    just turn it into a regular copy operation, that is, a PUT with
+    a specified copy source.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit cbf8f9a51737e7d89fb0ec0832b50fd47c35b08d)
+
+commit 455f28a78ee22b6a535831ff70a330fa1379567c
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Aug 13 20:32:14 2013 -0700
+
+    OSDMonitor: add 'osd perf' command to dump recent osd perf information
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 94c3f29a32cbf169d896015da6765febd3c724e0)
+
+commit ec086df1beccda6d5a6c12c727c84c2555b0b2cd
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Aug 13 17:36:57 2013 -0700
+
+    ObjectStore: add ObjectStore::get_cur_stats and impl in FileStore
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit ebde89d5602536b4bc651737e4280fdfb6634c32)
+
+commit 5bf7e7be1fa39ec39726635581e98a0e3a1df20f
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Aug 13 17:21:39 2013 -0700
+
+    osd_types: add osd_perf_stat_t type
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 95f3353a6ab3a4dd2bf28eaca7122487942e913e)
+
+commit b37c5d208778ee52292757e96265d59d75f19654
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Dec 3 11:22:56 2013 -0800
+
+    rgw: do not use UNPRIVILEGED_DAEMON option
+    
+    This is sort of a backport for 4f403c26dc0048ad63e20d20369fa86bfb31c50e
+    in that we get the same behavior change, but only for rgw.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit a447fb7d04fbad84f9ecb57726396bb6ca29d8f6
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Dec 3 21:51:26 2013 -0800
+
+    osd/OSDMonitor: accept 'osd pool set ...' value as string
+    
+    Newer monitors take this as a CephString.  Accept that so that if we are
+    mid-upgrade and get a forwarded message using the alternate schema from
+    a future mon we will handle it properly.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 9875c8b1992c59cc0c40901a44573676cdff2669
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Nov 25 13:43:43 2013 -0800
+
+    init, upstart: prevent daemons being started by both
+    
+    There can be only one init system starting a daemon. If there is a
+    host entry in ceph.conf for a daemon, sysvinit would try to start it
+    even if the daemon's directory did not include a sysvinit file. This
+    preserves backwards compatibility with older installs using sysvinit,
+    but if an upstart file is present in the daemon's directory, upstart
+    will try to start them, regardless of host entries in ceph.conf.
+    
+    If there's an upstart file in a daemon's directory and a host entry
+    for that daemon in ceph.conf, both sysvinit and upstart would attempt
+    to manage it.
+    
+    Fix this by only starting daemons if the marker file for the other
+    init system is not present. This maintains backwards compatibility
+    with older installs using neither sysvinit or upstart marker files,
+    and does not break any valid configurations. The only configuration
+    that would break is one with both sysvinit and upstart files present
+    for the same daemon.
+    
+    Backport: emperor, dumpling
+    Reported-by: Tim Spriggs <tims@uahirise.org>
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 5e34beb61b3f5a1ed4afd8ee2fe976de40f95ace)
+
+commit bd08d332f5d23b6097a7e8344a6183896b2303a9
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Sun Nov 3 21:02:36 2013 -0800
+
+    OSD: allow project_pg_history to handle a missing map
+    
+    If we get a peering message for an old map we don't have, we
+    can throwit out: the sending OSD will learn about the newer
+    maps and update itself accordingly, and we don't have the
+    information to know if the message is valid. This situation
+    can only happen if the sender was down for a long enough time
+    to create a map gap and its PGs have not yet advanced from
+    their boot-up maps to the current ones, so we can rely on it
+    
+    Fixes: #6712
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit cd0d612e1abdf5c87082eeeccd4ca09dd14fd737)
+
+commit 8cd33e3a8ebf7c2aa796ec9f92d6b554c39ff705
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Aug 19 16:56:27 2013 -0700
+
+    rgw: bucket meta remove don't overwrite entry point first
+    
+    Fixes: #6056
+    
+    When removing a bucket metadata entry we first unlink the bucket
+    and then we remove the bucket entrypoint object. Originally
+    when unlinking the bucket we first overwrote the bucket entrypoint
+    entry marking it as 'unlinked'. However, this is not really needed
+    as we're just about to remove it. The original version triggered
+    a bug, as we needed to propagate the new header version first (which
+    we didn't do, so the subsequent bucket removal failed).
+    
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 0373d749cea7d9b532069ba8ebca2f005b2c9f59)
+
+commit a24f1326adcdda1d387e0f4e3c18dda5ec4aa055
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Nov 22 07:04:01 2013 -0800
+
+    rgw: lower some debug message
+    
+    Fixes: #6084
+    Backport: dumpling, emperor
+    
+    Reported-by: Ron Allred <rallred@itrefined.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit b35fc1bc2ec8c8376ec173eb1c3e538e02c1694e)
+
+commit 9e2d0d311437c1ffdd43fc8c961c60aacfea339c
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Nov 18 14:39:12 2013 -0800
+
+    osd: fix bench block size
+    
+    The command was declared to take 'size' in dumpling, but was trying to
+    read 'bsize' instead, so it always used the default of 4MiB. Change
+    the bench command to read 'size', so it matches what existing clients
+    are sending.
+    
+    Fixes: #6795
+    Backport: emperor, dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 40a76ef0d09f8ecbea13712410d9d34f25b91935)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+
+commit 35c91cac9a2b414ba3d52ea06cf6f71a0a1d4ba3
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed Sep 25 09:19:16 2013 -0700
+
+    os, osd, tools: Add backportable compatibility checking for sharded objects
+    
+    OSD
+      New CEPH_OSD_FEATURE_INCOMPAT_SHARDS
+    FileStore
+      NEW CEPH_FS_FEATURE_INCOMPAT_SHARDS
+      Add FSSuperblock with feature CompatSet in it
+      Store sharded_objects state using CompatSet
+      Add set_allow_sharded_objects() and get_allow_sharded_objects() to FileStore/ObjectStore
+      Add read_superblock()/write_superblock() internal filestore functions
+    ceph_filestore_dump
+      Add OSDsuperblock to export format
+      Use CompatSet from OSD code itself in filestore-dump tool
+      Always check compatibility of OSD features with on-disk features
+      On import verify compatibility of on-disk features with export data
+      Bump super_ver due to export format change
+    
+    Backport: dumpling, cuttlefish
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit c6b83180f9f769de27ca7890f5f8ec507ee743ca)
+    
+    Conflicts:
+    
+    	src/os/FileStore.cc
+    	src/os/FileStore.h
+    	src/osd/OSD.cc
+    
+    Excluded from cherry-pick:
+      Didn't add set_allow_sharded_objects() and get_allow_sharded_objects() to FileStore/ObjectStore
+      Didn't add code to check for incomplete transition to sharded objects in ceph-filestore-dump
+
+commit 372f62717c56d9ab883ae2942e13d6d8d37c2925
+Author: Ray Lv <xiangyulv@gmail.com>
+Date:   Tue Oct 29 19:34:51 2013 +0800
+
+    rgw: Wrap hex_to_num table into class HexTable
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    Signed-off-by: Ray Lv <xiangyulv@gmail.com>
+    (cherry picked from commit 588ed60a8ec1d8db5e096fd8f7b762f2afcf7dd3)
+
+commit 6917b02530103b8c86ed75592da33144b0dea168
+Merge: 7ef210a f1fa811
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Nov 5 12:27:42 2013 -0800
+
+    Merge pull request #805 from ceph/wip-rgw-replica-log-dumpling
+    
+    backport a bunch of rgw stuff to dumpling
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit f1fa8116d441924d44c99624829f3daa090c821c
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Nov 1 16:12:52 2013 -0700
+
+    rgw: don't turn 404 into 400 for the replicalog api
+    
+    404 is not actually a problem to clients like radosgw-agent, but 400
+    implies something about the request was incorrect.
+    
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 306ec7142d699c26ce874b11dc02ccdb3cf296c7)
+
+commit 739e7861f6d5fde5c4a2b59170377b6147fecfa3
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Sep 3 13:27:21 2013 -0700
+
+    rgw: when failing read from client, return correct error
+    
+    Fixes: #6214
+    When getting a failed read from client when putting an object
+    we returned the wrong value (always 0), which in the chunked-
+    upload case ended up in assuming that the write was done
+    successfully.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0499948aad64c6c66668b43963403fb0cb1a2737)
+
+commit 465087e64ab2bd85d7f5e183565e3619b3aa76fc
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Sep 30 14:15:19 2013 -0700
+
+    rgw: fix leak in RGWMetadataManager::remove()
+    
+    Backport: dumpling
+    Fixes: #6445
+    handler->get() returns a newly allocated obj, need to delete it when
+    done.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 8dd7ea3fadc06b5ebb330af41d686d3da155fb5d)
+
+commit a4dc2694db6a7e45109f111dcdfd077da67b6030
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Aug 26 11:16:08 2013 -0700
+
+    rgw: quiet down warning message
+    
+    Fixes: #6123
+    We don't want to know about failing to read region map info
+    if it's not found, only if failed on some other error. In
+    any case it's just a warning.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 055e31359ac977943f014270cc56a1b7786abee3)
+
+commit 7f57d9dda74a1feb2da85be3c77d61c6f81ec1b2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Sep 13 14:43:54 2013 -0700
+
+    rgw: try to create log pool if doesn't exist
+    
+    When using replica log, if the log pool doesn't exist all operations are
+    going to fail. Try to create it if doesn't exist.
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 4216eac0f59af60f60d4ce909b9ace87a7b64ccc)
+
+commit 4fb233cf702957e782083d760877afa48d4f6965
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Oct 11 16:56:46 2013 -0700
+
+    formatter: dump_bool dumps unquoted strings
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit ad409f8a6d230e9b1199226a333bb54159c2c910)
+
+commit de7ede925acc47a5aee84b9fe82b9cf0368aa1b2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Sep 27 13:15:35 2013 -0700
+
+    Formatter: add dump_bool()
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 28949d5d43beba7cef37cb2f83e3399d978061a6)
+
+commit c5991f26febd86878aeb78baab33c071660fdee6
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 24 08:42:48 2013 -0700
+
+    rgw: escape bucket and object names in StreamReadRequests
+    
+    This fixes copy operations for objects that contain unsafe characters,
+    like a newline, which would return a 403 otherwise, since the GET to
+    the source rgw would be unable to verify the signature on a partially
+    valid bucket name.
+    
+    Fixes: #6604
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit ec45b3b88c485140781b23d2c4f582f2cc26ea43)
+
+commit 672679d26110dd93393bc18a681ae41175e4a299
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 24 08:37:25 2013 -0700
+
+    rgw: move url escaping to a common place
+    
+    This is useful outside of the s3 interface. Rename url_escape()
+    url_encode() for consistency with the exsting common url_decode()
+    function. This is in preparation for the next commit, which needs
+    to escape url-unsafe characters in another place.
+    
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit dd308cd481b368f90a64220847b91fc233d92a59)
+
+commit 91997fca6ec6c06beecd63c3e2ae521319fca7c2
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 24 08:34:24 2013 -0700
+
+    rgw: update metadata log list to match data log list
+    
+    Send the last marker whether the log is truncated in the same format
+    as data log list, so clients don't have more needless complexity
+    handling the difference.  Keep bucket index logs the same, since they
+    contain the marker already, and are not used in exactly the same way
+    metadata and data logs are.
+    
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit e0e8fb1b2b4a308b2a9317e10c6fd53ad48dbfaf)
+
+commit 8916648521e2362a54eed0f5ebe078a269e4d703
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 24 08:26:19 2013 -0700
+
+    rgw: include marker and truncated flag in data log list api
+    
+    Consumers of this api need to know their position in the log. It's
+    readily available when fetching the log, so return it.  Without the
+    marker in this call, a client could not easily or efficiently figure
+    out its position in the log, since it would require getting the global
+    last marker in the log, and then reading all the log entries.
+    
+    This would be slow for large logs, and would be subject to races that
+    would cause potentially very expensive duplicate work.
+    
+    Returning this atomically while fetching the log entries simplifies
+    all of this.
+    
+    Fixes: #6615
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit c275912509255f8bb4c854e181318b45ab0f8564)
+
+commit a49c064b7a1b4083818b6f950d7e0aade71c6afe
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 24 08:18:19 2013 -0700
+
+    cls_log: always return final marker from log_list
+    
+    There's no reason to restrict returning the marker to the case where
+    less than the whole log is returned, since there's already a truncated
+    flag to tell the client what happened.
+    
+    Giving the client the last marker makes it easy to consume when the
+    log entries do not contain their own marker. If the last marker is not
+    returned, the client cannot get the last marker without racing with
+    updates to the log.
+    
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit e74776f4176470122485a79a4c07e9c12c9fc036)
+
+commit 90101aea6818c2f43bf31243d912ec9143f68882
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 10 15:50:39 2013 -0700
+
+    rgw: skip read_policy checks for system_users
+    
+    A system user should still be able to examine suspended buckets, and
+    get -ENOENT instead of -EACCESS for a deleted object.
+    
+    Fixes: #6616
+    Backport: dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit ea816c1c2fd47eab647d6fab96c9ca4bfeecd5bb)
+
+commit 7ef210adbd4645bd45e5387c9b03a122a7ca82df
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Oct 29 08:39:27 2013 -0700
+
+    common/crc32c: fix #ifdef to be x86_64 specific
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 29f4eebf63bcba9ea86b9a2e4d093b782b5fbf1e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Sep 24 08:05:38 2013 +0200
+
+    rgw: fix rgw test to reflect usage change
+    
+    otherwise src/test/cli/radosgw-admin/help.t fails when running make
+    check when run after a configure --with-radosgw
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit e50343e4423e20130035c860ba47a0edea876f7c)
+
+commit 0106569a88a92aa94fbc5efc6a0a142ad0de325d
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Oct 24 17:25:16 2013 -0700
+
+    rbd.py: increase parent name size limit
+    
+    64 characters isn't all that long. 4096 ought to be enough for anyone.
+    
+    Fixes: #6072
+    Backport: dumpling, cuttlefish
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 3c0042cde5a12de0f554a16b227ab437c6254ddd)
+
+commit 352d8c966c323a008362130eb979ae5dfa47494f
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Sep 23 14:10:36 2013 -0700
+
+    common/config: include --cluster in default usage message
+    
+    Clean it up a bit too.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 157754b3a0191c5ff534a84adbeed88025615898)
+
+commit 299ddd31b29e332dc5e76bc4f871e4769698665d
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Thu Oct 10 10:35:48 2013 +0800
+
+    mds: fix infinite loop of MDCache::populate_mydir().
+    
+    make MDCache::populate_mydir() only fetch bare-bone stray dirs.
+    After all stray dirs are populated, call MDCache::scan_stray_dir(),
+    it fetches incomplete stray dirs.
+    
+    Fixes: #4405
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 007f06ec174d4ee5cfb578c8b3f1c96b2bb0c238)
+    
+    Conflicts:
+    
+    	src/mds/MDCache.h
+    
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 7d99940467019bda74da83f3f1ebc2da46bd6967
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Oct 15 10:20:48 2013 -0700
+
+    rgw: fix authenticated users acl group check
+    
+    Fixes: #6553
+    Backport: bobtail, cuttlefish, dumpling
+    Authenticated users group acl bit was not working correctly. Check to
+    test whether user is anonymous was wrong.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit bebbd6cb7b71697b34b8f27652cabdc40c97a33b)
+
+commit e5736de834027a281d29afcf6743347a8db97d26
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Oct 15 10:55:07 2013 -0700
+
+    rgw: change default log level
+    
+    Fixes: #6554
+    Backport: cuttlefish, dumpling
+    Default log level was just too high, bring it down a bit.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8d7dbf85472cfca9268d81ecf057ea078cf345b3)
+
+commit e6e9ee7145bcfc1774af738af607a653fe8dfe46
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Oct 4 13:00:26 2013 -0700
+
+    rgw: swift update obj metadata also add generic attrs
+    
+    Fixes: #6462
+    We were missing the generic attributes when we updated the object
+    metadata (operation that only exists in the swift api).
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit f2645e1c6d7383a0ace3b239f4304e353249c4bb)
+
+commit cd1c3c9e00e90b19e83c1f11a48e516a7de93665
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Wed Oct 2 11:43:12 2013 +0800
+
+    mds: return -EAGAIN if standby replay falls behind
+    
+    standby replay may fall behind and get -ENOENT when reading the
+    journal. return -EAGAIN in this case, it makes the MDS respawn itself.
+    
+    fixes: #5458
+    
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d2cb2bf6bac83ac6db9df6cb876317d30e7493cc)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit bd073eeac28d8cba969e5746c5e6adcb95820fdf
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Thu Sep 12 09:50:51 2013 +0800
+
+    mon/MDSMonitor: don't reset incarnation when creating newfs
+    
+    Fixes: #6279
+    
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    (cherry picked from commit 40613b700b87b495d67793101ae05d6ba58b2a9a)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 3a3724b782c53c92c45624ad02df9f0de77f1545
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Thu Sep 12 10:36:39 2013 +0800
+
+    osdc/ObjectCacher: finish contexts after dropping object reference
+    
+    The context to finish can be class C_Client_PutInode, which may drop
+    inode's last reference. So we should first drop object's reference,
+    then finish contexts.
+    
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    (cherry picked from commit b66ac77fa7aa3ff37804918c4308a348f239af09)
+
+commit 102f63993cacf3b3404256e62a3096c5836f2282
+Author: Sandon Van Ness <sandon@inktank.com>
+Date:   Tue Oct 8 12:08:08 2013 -0700
+
+    Go back to $PWD in fsstress.sh if compiling from source.
+    
+    Although fsstress was being called with a static path the directory
+    it was writing to was in the current directory so doing a cd to the
+    source directory that is made in /tmp and then removing it later
+    caused it to be unable to write the files in a non-existent dir.
+    
+    This change gets the current path first and cd's back into it after
+    it is done compiling fsstress.
+    
+    Issue #6479.
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    Reviewed-by: Alfredo Deza <alfredo.deza@inktank.com>
+
+commit 62db186a19f902b0a23d14034552c83db8de7ece
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Tue Aug 27 09:53:12 2013 -0700
+
+    ceph.spec.in:  radosgw package doesn't require mod_fcgi
+    
+    Fixes #5702
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit 42fc9b49a7bbc242096946b381aafd435ebdd530
+Merge: ad85b8b 67ac3cf
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Fri Oct 4 19:51:32 2013 +0000
+
+    Merge branch 'dumpling' of jenkins:ceph/ceph into dumpling
+
+commit 67ac3cffa1066030ad840937958bd534e8b26272
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Oct 3 21:47:26 2013 -0700
+
+    ceph_test_rados: do not let rollback race with snap delete
+    
+    Note that the OSD behaves in a weird way when you rollback to a non-
+    existent snap, so the test probably isn't the only party at fault here.
+    
+    Fixes (test half of): #6254
+    Backport: dumpling, cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 55d279b98553ba4542219b126fc7159b20b18b1f)
+    
+    Conflicts:
+    
+    	src/test/osd/RadosModel.h
+    	src/test/osd/TestRados.cc

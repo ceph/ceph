@@ -1,0 +1,33 @@
+meta:
+- desc: |
+   Run ceph on one nodes,
+   Use xfs beneath the osds. upgrade to reef
+   should fail to start the osds with filestore
+overrides:
+  ceph:
+    mon_bind_msgr2: false
+    mon_bind_addrvec: false
+    mon-health-to-clog: false
+    wait-for-healthy: false
+    wait-for-osds-up: false
+    wait-for-scrub: false
+    skip_stop_pg_num_changes: true
+    fs: xfs
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
+      - slow request
+      - \(MON_MSGR2_NOT_ENABLED\)
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
+        mon warn on msgr2 not enabled: false
+      mon:
+        mon warn on osd down out interval zero: false
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2

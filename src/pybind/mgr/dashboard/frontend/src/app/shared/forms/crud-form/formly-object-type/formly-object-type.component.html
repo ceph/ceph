@@ -1,0 +1,17 @@
+<div class="mb-3">
+  <legend *ngIf="props.label"
+          class="cd-col-form-label"
+          i18n>{{ props.label }}</legend>
+  <p *ngIf="props.description"
+     i18n>{{ props.description }}</p>
+  <div class="alert alert-danger"
+       role="alert"
+       *ngIf="showError && formControl.errors">
+    <formly-validation-message [field]="field"></formly-validation-message>
+  </div>
+  <div [ngClass]="inputClass">
+    <formly-field *ngFor="let f of field.fieldGroup"
+                  [field]="f"
+                  class="flex-grow-1"></formly-field>
+  </div>
+</div>
