@@ -27,7 +27,6 @@ TEST_F(TestGroup, group_create)
     rados_ioctx_destroy(ioctx);
   } BOOST_SCOPE_EXIT_END;
 
-  librbd::RBD rbd;
   ASSERT_EQ(0, rbd_group_create(ioctx, "mygroup"));
 
   size_t size = 0;
