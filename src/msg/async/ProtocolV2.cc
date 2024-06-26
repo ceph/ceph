@@ -1906,6 +1906,22 @@ CtPtr ProtocolV2::send_client_ident() {
     flags |= CEPH_MSG_CONNECT_LOSSY;
   }
 
+  if (messenger->get_mytype() == CEPH_ENTITY_TYPE_CLIENT &&
+      connection->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    auto client_sub_type = cct->_conf->client_sub_type;
+    if (client_sub_type == "client") {
+      flags |= CEPH_MSG_CONNECT_SUB_TYPE_CLIENT;
+    } else if (client_sub_type == "background_recovery") {
+      flags |= CEPH_MSG_CONNECT_SUB_TYPE_BACKGROUND_RECOVERY;
+    } else if (client_sub_type == "background_best_effort") {
+      flags |= CEPH_MSG_CONNECT_SUB_TYPE_BACKGROUND_BEST_EFFORT;
+    }
+    ldout(cct, 5) << __func__ << " my_identity()=" <<  messenger->get_mytype()
+                  << ", peer_identity=" << connection->get_peer_type()
+                  << ", client_sub_type=" << client_sub_type
+                  << std::hex << ", flags=" << flags << std::dec << dendl;
+  }
+
   auto client_ident = ClientIdentFrame::Encode(
       messenger->get_myaddrs(),
       connection->target_addr,

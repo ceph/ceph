@@ -157,8 +157,15 @@ struct ceph_msg_connect_reply {
 	__u8 flags;
 } __attribute__ ((packed));
 
-#define CEPH_MSG_CONNECT_LOSSY  1  /* messages i send may be safely dropped */
-
+#define CEPH_MSG_CONNECT_LOSSY                            (1ULL) /* messages i send may be safely dropped */
+/*
+ * the parameter ClientIdentFrame.flags is uint64_t.
+ * in order to facilitate backport new features from community in the future.
+ * we used the high 4 bits (57-60)
+ */
+#define CEPH_MSG_CONNECT_SUB_TYPE_CLIENT                  (1ULL << 57) /* mclock client */
+#define CEPH_MSG_CONNECT_SUB_TYPE_BACKGROUND_RECOVERY     (1ULL << 58) /* mclock background recovery */
+#define CEPH_MSG_CONNECT_SUB_TYPE_BACKGROUND_BEST_EFFORT  (1ULL << 59) /* mclock background best effort */
 
 /*
  * message header

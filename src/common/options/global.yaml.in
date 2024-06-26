@@ -5484,6 +5484,16 @@ options:
   level: dev
   desc: Maximum RAM hybrid allocator should use before enabling bitmap supplement
   default: 64_M
+- name: client_sub_type
+  type: str
+  level: dev
+  desc: client sub type for osd mclock
+  default: client
+  enum_values:
+  - client
+  - background_recovery
+  - background_best_effort
+  with_legacy: true
 - name: bluestore_volume_selection_policy
   type: str
   level: dev
