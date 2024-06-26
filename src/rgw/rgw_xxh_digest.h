@@ -17,10 +17,10 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "rgw_crc_digest.h"
 
 #define XXH_INLINE_ALL 1 /* required for streaming variants */
-#include "xxhash.h"
+#include <xxhash.h>
+#include <xxh3.h>
 
 namespace rgw { namespace digest {
 
