@@ -3426,6 +3426,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return 0;
   }
 
+  /* Handle caching */
   if (rule) {
     if (!placement.empty()) {
       *rule = &placement;
@@ -3435,6 +3436,14 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     } else {
       *rule = nullptr;
+    }
+  }
+
+  if (attrs) {
+    if (!cached_attrs.empty()) {
+      *attrs = cached_attrs;
+      if (!rule || *rule != nullptr)
+        return 0;
     }
   }
 
@@ -3458,11 +3467,13 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return ret;
   }
 
+  /* Cache attrs filled in by prepare */
+  cached_attrs = meta_obj->get_attrs();
+
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
 
   if (attrs) {
-    /* Attrs are filled in by prepare */
-    *attrs = meta_obj->get_attrs();
+    *attrs = cached_attrs;
     if (!rule || *rule != nullptr) {
       /* placement was cached; don't actually read */
       return 0;
