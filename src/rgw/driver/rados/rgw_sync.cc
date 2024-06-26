@@ -1481,6 +1481,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   bool done_with_period = false;
 
   int total_entries = 0;
+  string old_mdlog_marker;
 
   RGWSyncTraceNodeRef tn;
 public:
@@ -1832,6 +1833,7 @@ public:
 	if (mdlog_marker <= max_marker || !truncated) {
 	  /* we're at the tip, try to bring more entries */
           ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
+          old_mdlog_marker = mdlog_marker;
           yield call(new RGWCloneMetaLogCoroutine(sync_env, mdlog,
                                                   period, shard_id,
                                                   mdlog_marker, &mdlog_marker));
@@ -1902,7 +1904,8 @@ public:
           tn->log(10, SSTR(*this << ": done with period"));
           break;
         }
-	if (mdlog_marker == max_marker && can_adjust_marker) {
+	if (mdlog_marker == old_mdlog_marker && can_adjust_marker) {
+          tn->log(20, SSTR("mdlog_marker=" << mdlog_marker << " old_mdlog_marker=" << old_mdlog_marker));
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 	  yield wait(utime_t(cct->_conf->rgw_meta_sync_poll_interval, 0));
 	}
