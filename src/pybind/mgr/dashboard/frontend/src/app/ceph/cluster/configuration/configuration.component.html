@@ -11,13 +11,13 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <cd-configuration-details cdTableDetail
+  <cd-configuration-details *cdTableDetail
                             [selection]="expandedRow">
   </cd-configuration-details>
 </cd-table>
 
 <ng-template #confValTpl
-             let-value="value">
+             let-value="data.value">
   <span *ngIf="value">
     <span *ngFor="let conf of value; last as isLast">
       {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br />

@@ -1,306 +1,272 @@
-<div class="dataTables_wrapper">
-
-  <div *ngIf="onlyActionHeader"
-       class="dataTables_header clearfix">
-    <div class="cd-datatable-actions">
-      <ng-content select=".only-table-actions"></ng-content>
-    </div>
-  </div>
-  <div class="dataTables_header clearfix"
-       *ngIf="toolHeader">
-    <!-- actions -->
-    <div class="cd-datatable-actions">
-      <ng-content select=".table-actions"></ng-content>
-    </div>
-    <!-- end actions -->
-
-    <!-- column filters -->
-    <div *ngIf="columnFilters.length !== 0"
-         class="btn-group widget-toolbar">
-      <div ngbDropdown
-           placement="bottom-right"
-           class="tc_filter_name">
-        <button ngbDropdownToggle
-                class="btn btn-light"
-                title="Filter">
-          <i [ngClass]="[icons.large, icons.filter]"></i>
-          {{ selectedFilter.column.name }}
+<cds-table-container [cdsLayer]="layer"
+                     [cdsTheme]="theme">
+  <cds-table-toolbar #toolbar
+                     *ngIf="toolHeader"
+                     (cancel)="onBatchActionsCancel()"
+                     [model]="selectionType === 'multiClick' ? model : []"
+                     [batchText]="{ SINGLE: '1 item selected', MULTIPLE: '{{count}} items selected' }">
+    <!-- batch actions -->
+    <cds-table-toolbar-actions *ngIf="tableActions?.dropDownActions.length > 0">
+      <ng-container *ngFor="let action of tableActions?.dropDownActions">
+        <button *ngIf="tableActions.currentAction !== action"
+                cdsButton="primary"
+                [tabindex]="toolbar.selected ? 0 : -1"
+                class="{{ tableActions.toClassName(action) }}"
+                title="{{ tableActions.useDisableDesc(action) }}"
+                (click)="tableActions.useClickAction(action)"
+                [routerLink]="tableActions.useRouterLink(action)"
+                [preserveFragment]="action.preserveFragment ? '' : null"
+                [disabled]="tableActions.disableSelectionAction(action)"
+                [attr.aria-label]="action.name"
+                i18n>
+          {{ action.name }}
         </button>
-        <div ngbDropdownMenu>
+      </ng-container>
+    </cds-table-toolbar-actions>
+    <!-- end batch actions -->
+    <cds-table-toolbar-content>
+      <!-- search -->
+      <cds-table-toolbar-search *ngIf="searchField"
+                                [expandable]="false"
+                                [(ngModel)]="search"
+                                aria-label="search"
+                                (valueChange)="updateFilter($event)"
+                                (clear)="onClearSearch()">
+      </cds-table-toolbar-search>
+      <!-- end search -->
+      <!-- column filters -->
+      <ng-container *ngIf="columnFilters.length !== 0">
+        <div class="d-inline-flex position-relative">
+          <svg cdsIcon="filter"
+               size="16"
+               class="align-self-center mb-2"></svg>
+        </div>
+        <cds-select (valueChange)="onSelectFilter($event)"
+                    display="inline"
+                    id="filter_name">
           <ng-container *ngFor="let filter of columnFilters">
-            <button ngbDropdownItem
-                    (click)="onSelectFilter(filter); false">{{ filter.column.name }}</button>
+            <option [value]="filter.column.name"
+                    [selected]="filter.column.name === selectedFilter.column.name">{{ filter.column.name }}</option>
           </ng-container>
-        </div>
-      </div>
-
-      <div ngbDropdown
-           placement="bottom-right"
-           class="tc_filter_option">
-        <button ngbDropdownToggle
-                class="btn btn-light"
-                [class.disabled]="selectedFilter.options.length === 0">
-          {{ selectedFilter.value ? selectedFilter.value.formatted: 'Any' }}
-        </button>
-        <div ngbDropdownMenu>
+        </cds-select>
+        <cds-select (valueChange)="onChangeFilter($event)"
+                    display="inline"
+                    id="filter_option">
+          <option *ngIf="!selectedFilter.value"
+                  i18n>Any</option>
           <ng-container *ngFor="let option of selectedFilter.options">
-            <button ngbDropdownItem
-                    (click)="onChangeFilter(selectedFilter, option); false">
-              {{ option.formatted }}
-              <i *ngIf="selectedFilter.value !== undefined && (selectedFilter.value.raw === option.raw)"
-                 [ngClass]="[icons.check]"></i>
-            </button>
+            <option [value]="option.raw"
+                    [selected]="option.raw === selectedFilter?.value?.raw">{{ option.formatted }}</option>
           </ng-container>
-        </div>
-      </div>
-    </div>
-    <!-- end column filters -->
-
-    <!-- search -->
-    <div class="input-group search"
-         *ngIf="searchField">
-      <span class="input-group-text">
-        <i [ngClass]="[icons.search]"></i>
-      </span>
-      <input aria-label="search"
-             class="form-control"
-             type="text"
-             [(ngModel)]="search"
-             (keyup)="updateFilter()">
-      <button type="button"
-              class="btn btn-light"
-              title="Clear"
-              (click)="onClearSearch()">
-        <i class="icon-prepend {{ icons.destroy }}"></i>
-      </button>
-    </div>
-    <!-- end search -->
-
-    <!-- pagination limit -->
-    <div class="input-group dataTables_paginate"
-         *ngIf="limit">
-      <input aria-label="table pagination"
-             class="form-control"
-             type="number"
-             min="1"
-             max="9999"
-             [value]="userConfig.limit"
-             (click)="setLimit($event)"
-             (keyup)="setLimit($event)"
-             (blur)="setLimit($event)">
-    </div>
-    <!-- end pagination limit-->
-
-    <!-- show hide columns -->
-    <div class="widget-toolbar">
-      <div ngbDropdown
-           autoClose="outside"
-           class="tc_menuitem">
-        <button ngbDropdownToggle
-                class="btn btn-light tc_columnBtn"
-                title="toggle columns">
-          <i [ngClass]="[icons.large, icons.table]"></i>
-        </button>
-        <div ngbDropdownMenu>
-          <ng-container *ngFor="let column of columns">
-            <ng-container *ngIf="!column?.isInvisible">
-              <button ngbDropdownItem
-                      *ngIf="column.name !== ''"
-                      (click)="toggleColumn(column); false;">
-              <div class="custom-control custom-checkbox py-0">
-                <input class="custom-control-input"
-                       type="checkbox"
-                       [name]="column.prop"
-                       id="{{ column.prop }}{{ tableName }}"
-                       [checked]="!column.isHidden">
-                <label class="custom-control-label"
-                       for="{{ column.prop }}{{ tableName }}">{{ column.name }}</label>
-              </div>
-            </button>
-            </ng-container>
-          </ng-container>
-        </div>
-      </div>
-    </div>
-    <!-- end show hide columns -->
-
-    <!-- refresh button -->
-    <div class="widget-toolbar tc_refreshBtn"
-         *ngIf="fetchData.observers.length > 0">
-
-      <button type="button"
-              [class]="'btn btn-' + status.type"
-              [ngbTooltip]="status.msg"
+        </cds-select>
+      </ng-container>
+      <!-- end column filters -->
+      <!-- refresh button -->
+      <button cdsButton="ghost"
+              [disabled]="!fetchData?.observers?.length"
               (click)="refreshBtn()"
-              title="Refresh">
-        <i [ngClass]="[icons.large, icons.refresh]"
-           [class.fa-spin]="updating || loadingIndicator"></i>
+              title="Refresh"
+              [description]="status.msg"
+              i18n-title
+              i18n-description
+              class="toolbar-action"
+              placement="bottom">
+        <svg cdsIcon="renew"
+             size="16"
+             [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></svg>
       </button>
-    </div>
-    <!-- end refresh button -->
-  </div>
-  <div class="dataTables_header clearfix"
-       *ngIf="toolHeader && columnFiltered">
-    <!-- filter chips for column filters -->
-    <div class="filter-chips">
-      <span *ngFor="let filter of columnFilters">
-        <span *ngIf="filter.value"
-              class="badge badge-info me-2">
-          <span class="me-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
-          <a class="badge-remove"
-             (click)="onChangeFilter(filter); false">
-            <i [ngClass]="[icons.destroy]"
-               aria-hidden="true"></i>
-          </a>
-        </span>
-      </span>
-      <a class="tc_clearSelections"
-         href=""
-         (click)="onClearFilters(); false">
-        <ng-container i18n>Clear filters</ng-container>
-      </a>
-    </div>
-    <!-- end filter chips for column filters -->
-  </div>
-  <ngx-datatable #table
-                 class="bootstrap cd-datatable"
-                 [cssClasses]="paginationClasses"
-                 [selectionType]="selectionType"
-                 [selected]="selection.selected"
-                 (select)="onSelect($event)"
-                 [sorts]="userConfig.sorts"
-                 (sort)="changeSorting($event)"
-                 [columns]="tableColumns"
-                 [columnMode]="columnMode"
-                 [rows]="rows"
-                 [rowClass]="getRowClass()"
-                 [headerHeight]="header ? 'auto' : 0"
-                 [footerHeight]="footer ? 'auto' : 0"
-                 [count]="count"
-                 [externalPaging]="serverSide"
-                 [externalSorting]="serverSide"
-                 [limit]="userConfig.limit > 0 ? userConfig.limit : undefined"
-                 [offset]="userConfig.offset >= 0 ? userConfig.offset : 0"
-                 (page)="changePage($event)"
-                 [loadingIndicator]="loadingIndicator"
-                 [rowIdentity]="rowIdentity()"
-                 [rowHeight]="'auto'">
-
-    <!-- Row Selection Template-->
-    <ng-template #rowSelectionTpl
-                 let-value="value"
-                 let-isSelected="isSelected"
-                 ngx-datatable-cell-template>
-      <input type="checkbox"
-             [attr.aria-label]="isSelected ? 'selected' : 'select'"
-             [checked]="isSelected"
-             class="cd-datatable-checkbox" />
-    </ng-template>
-
-    <!-- Row Detail Template -->
-    <ngx-datatable-row-detail rowHeight="auto"
-                              #detailRow>
-      <ng-template let-row="row"
-                   let-expanded="expanded"
-                   ngx-datatable-row-detail-template>
-        <!-- Table Details -->
-        <ng-content select="[cdTableDetail]"></ng-content>
-      </ng-template>
-    </ngx-datatable-row-detail>
-
-    <ngx-datatable-footer>
-      <ng-template ngx-datatable-footer-template
-                   let-rowCount="rowCount"
-                   let-pageSize="pageSize"
-                   let-selectedCount="selectedCount"
-                   let-curPage="curPage"
-                   let-offset="offset"
-                   let-isVisible="isVisible">
-        <div class="page-count">
-          <span *ngIf="selectionType">
-            {{ selectedCount }} <ng-container i18n="X selected">selected</ng-container> /
-          </span>
-
-          <!-- rowCount might have different semantics with or without serverSide.
-            We treat serverSide (backend-driven tables) as a specific case.
-          -->
-          <span *ngIf="!serverSide else serverSideTpl">
-            <span *ngIf="rowCount != data?.length">
-              {{ rowCount }} <ng-container i18n="X found">found</ng-container> /
-            </span>
-            {{ data?.length || 0 }} <ng-container i18n="X total">total</ng-container>
-          </span>
-
-          <ng-template #serverSideTpl>
-            <span>
-              {{ data?.length || 0 }} <ng-container i18n="X found">found</ng-container> /
-              {{ rowCount }} <ng-container i18n="X total">total</ng-container>
-            </span>
-          </ng-template>
+      <!-- end refresh button -->
+      <!-- show hide columns -->
+      <button cdsButton="ghost"
+              class="toolbar-action"
+              [cdsOverflowMenu]="showHideColumnsRef"
+              placement="bottom"
+              [flip]="true"
+              [offset]="{ x: 3, y: 0 }">
+        <svg cdsIcon="data-table"
+             size="16"
+             class="cds--toolbar-action__icon"></svg>
+      </button>
+      <ng-template #showHideColumnsRef>
+        <div class="vstack gap-3 p-3"
+             (click)="$event.stopPropagation()"
+             [cdsTheme]="theme">
+          <ng-container *ngFor="let column of columns">
+            <cds-checkbox *ngIf="!column?.isInvisible"
+                          id="{{ column.prop }}{{ tableName }}"
+                          name="{{ column.prop }}{{ tableName }}"
+                          [checked]="!column?.isHidden"
+                          (checkedChange)="toggleColumn(column);">{{ column.name }}
+          </cds-checkbox>
+          </ng-container>
         </div>
-        <cd-table-pagination [page]="curPage"
-                             [size]="pageSize"
-                             [count]="rowCount"
-                             [hidden]="!((rowCount / pageSize) > 1)"
-                             (pageChange)="table.onFooterPage($event)"></cd-table-pagination>
       </ng-template>
-    </ngx-datatable-footer>
-  </ngx-datatable>
-</div>
+      <!-- end show hide columns -->
+      <!-- actions -->
+      <ng-content select=".table-actions"></ng-content>
+      <!-- end actions -->
+    </cds-table-toolbar-content>
+  </cds-table-toolbar>
+  <!-- filter chips for column filters -->
+  <div class="d-flex justify-content-end align-items-center filter-tags"
+       *ngIf="toolHeader && columnFiltered">
+  <div class="d-flex gap-2">
+    <ng-container *ngFor="let filter of columnFilters">
+      <cds-tag *ngIf="filter.value"
+               type="outline"
+               class="align-self-center">
+        <span class="me-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
+        <button class="cds--tag__close-icon"
+                (click)="onChangeFilter(filter)">
+          <svg cdsIcon="close"
+               size="16"></svg>
+        </button>
+      </cds-tag>
+    </ng-container>
+    <button cdsButton="ghost"
+            (click)="onClearFilters($event)">
+      <ng-container i18n>Clear filters</ng-container>
+    </button>
+  </div>
+  </div>
+  <!-- end filter chips for column filters -->
+  <cds-table [model]="model"
+             [sortable]="!!userConfig.sorts"
+             [size]="size"
+             class="overflow-y-hidden"
+             [skeleton]="false"
+             [showSelectionColumn]="selectionType === 'multiClick'"
+             [enableSingleSelect]="selectionType === 'single'"
+             [stickyHeader]="false"
+             [striped]="false"
+             [isDataGrid]="false"
+             (sort)="changeSorting($event)"
+             (selectRow)="onSelect($event)"
+             (selectAll)="onSelectAll($event)"
+             (deselectRow)="onDeselect($event)"
+             (deselectAll)="onDeselectAll($event)">
+    <tbody>
+      <tr cdstablerow>
+        <td *ngIf="!rows?.length && !loadingIndicator"
+            class="no-data"
+            cdstabledata
+            [attr.colspan]="visibleColumns.length + 1">
+          <span class="d-flex justify-content-center align-items-center"
+                i18n>No data to display</span>
+        </td>
+      </tr>
+      <tr cdstablerow>
+        <td *ngIf="loadingIndicator"
+            class="no-data"
+            cdstabledata
+            [attr.colspan]="visibleColumns.length + 1">
+          <span class="d-flex justify-content-center align-items-center"
+                i18n>Loading</span>
+        </td>
+      </tr>
+    </tbody>
+  </cds-table>
+  <cds-pagination [model]="model"
+                  (selectPage)="onPageChange($event)"
+                  [disabled]="limit === 0"
+                  [pageInputDisabled]="limit === 0">
+  </cds-pagination>
+</cds-table-container>
+
+<ng-template #rowDetailTpl
+             let-row="data">
+  <div *ngIf="row[identifier] === expanded?.[identifier]"
+       (mouseenter)="onRowDetailHover($event)"
+       data-testid="datatable-row-detail">
+    <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
+  </div>
+</ng-template>
+
+<ng-template #defaultValueTpl
+             let-value="data.value"
+             let-expanded="expanded"
+             let-column="data.column">
+  <span [ngClass]="column?.cellClass">{{ value }}</span>
+</ng-template>
+
+<ng-template #tableActionTpl>
+  <cds-overflow-menu *ngIf="tableActions?.dropDownActions.length > 1 && selectionType !== 'multiClick'"
+                     [flip]="true"
+                     data-testid="table-action-btn"
+                     class="d-flex justify-content-end">
+    <ng-container *ngFor="let action of tableActions?.dropDownActions">
+      <cds-overflow-menu-option *ngIf="tableActions.currentAction !== action"
+                                class="{{ tableActions.toClassName(action) }}"
+                                title="{{ tableActions.useDisableDesc(action) }}"
+                                (click)="tableActions.useClickAction(action)"
+                                [routerLink]="tableActions.useRouterLink(action)"
+                                [preserveFragment]="action.preserveFragment ? '' : null"
+                                [disabled]="tableActions.disableSelectionAction(action)"
+                                [attr.aria-label]="action.name"
+                                data-testid="table-action-option-btn"
+                                i18n>
+        {{ action.name }}
+      </cds-overflow-menu-option>
+    </ng-container>
+  </cds-overflow-menu>
+</ng-template>
+
 
 <!-- cell templates that can be accessed from outside -->
 <ng-template #tableCellBoldTpl
-             let-value="value">
+             let-value="data.value">
   <strong>{{ value }}</strong>
 </ng-template>
 
 <ng-template #sparklineTpl
-             let-row="row"
-             let-value="value">
-  <cd-sparkline [data]="value"
-                [isBinary]="row.cdIsBinary"></cd-sparkline>
+             let-row="data.row"
+             let-value="data.value">
+  <div class="position-relative">
+    <cd-sparkline [data]="value"
+                  [isBinary]="row.cdIsBinary"></cd-sparkline>
+  </div>
 </ng-template>
 
 <ng-template #routerLinkTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <a [routerLink]="[row.cdLink]"
      [queryParams]="row.cdParams">{{ value }}</a>
 </ng-template>
 
 <ng-template #checkIconTpl
-             let-value="value">
+             let-value="data.value">
   <i [ngClass]="[icons.check]"
      [hidden]="!(value | boolean)"></i>
 </ng-template>
 
 <ng-template #perSecondTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   {{ value | dimless }} /s
 </ng-template>
 
 <ng-template #executingTpl
-             let-column="column"
-             let-row="row"
-             let-value="value">
+             let-column="data.column"
+             let-row="data.row"
+             let-value="data.value">
   <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
   <span [ngClass]="column?.customTemplateConfig?.valueClass">
     {{ value }}
   </span>
   <span *ngIf="row.cdExecuting"
-        [ngClass]="column?.customTemplateConfig?.executingClass ? column.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
+        [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
 </ng-template>
 
 <ng-template #classAddingTpl
-             let-value="value">
+             let-value="data.value">
   <span class="{{ value | pipeFunction:useCustomClass:this }}">{{ value }}</span>
 </ng-template>
 
 <ng-template #badgeTpl
-             let-column="column"
-             let-value="value">
+             let-column="data.column"
+             let-value="data.value">
   <span *ngFor="let item of (value | array); last as last">
     <span class="badge"
           [ngClass]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')"
@@ -312,14 +278,14 @@
 </ng-template>
 
 <ng-template #mapTpl
-             let-column="column"
-             let-value="value">
+             let-column="data.column"
+             let-value="data.value">
   <span>{{ value | map:column?.customTemplateConfig }}</span>
 </ng-template>
 
 <ng-template #tooltipTpl
-             let-column="column"
-             let-value="value">
+             let-column="data.column"
+             let-value="data.value">
   <span *ngFor="let item of (value | array);">
     <span
       i18n
@@ -332,15 +298,15 @@
 </ng-template>
 
 <ng-template #truncateTpl
-             let-column="column"
-             let-value="value">
+             let-column="data.column"
+             let-value="data.value">
   <span data-toggle="tooltip"
         [title]="value">{{ value | truncate:column?.customTemplateConfig?.length:column?.customTemplateConfig?.omission }}</span>
 </ng-template>
 
 <ng-template #rowDetailsTpl
-             let-row="row"
-             let-isExpanded="expanded"
+             let-row="data.row"
+             let-isExpanded="data.expanded"
              ngx-datatable-cell-template>
   <a href="javascript:void(0)"
      [class.expand-collapse-icon-right]="!isExpanded"
@@ -353,13 +319,13 @@
 </ng-template>
 
 <ng-template #timeAgoTpl
-             let-value="value">
+             let-value="data.value">
   <span data-toggle="tooltip"
         [title]="value | cdDate">{{ value | relativeDate }}</span>
 </ng-template>
 
 <ng-template #pathTpl
-             let-value="value">
+             let-value="data.value">
   <span data-toggle="tooltip"
         [title]="value"
         class="font-monospace">{{ value | path }}

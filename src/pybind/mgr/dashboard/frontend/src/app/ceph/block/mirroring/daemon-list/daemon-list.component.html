@@ -7,7 +7,7 @@
 </cd-table>
 
 <ng-template #healthTmpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <span [ngClass]="row.health_color | mirrorHealthColor">{{ value }}</span>
 </ng-template>

@@ -15,16 +15,16 @@
 </cd-table>
 
 <ng-template #userRolesTpl
-             let-value="value">
+             let-value="data.value">
   <span *ngFor="let role of value; last as isLast">
     {{ role }}{{ !isLast ? ", " : "" }}
   </span>
 </ng-template>
 
 <ng-template #warningTpl
-             let-column="column"
-             let-value="value"
-             let-row="row">
+             let-column="data.column"
+             let-value="data.value"
+             let-row="data.row">
   <div [class.border-danger]="row.remainingDays < this.expirationDangerAlert"
        [class.border-warning]="row.remainingDays < this.expirationWarningAlert && row.remainingDays >= this.expirationDangerAlert"
        class="border-margin">
@@ -33,9 +33,9 @@
 </ng-template>
 
 <ng-template #durationTpl
-             let-column="column"
-             let-value="value"
-             let-row="row">
+             let-column="data.column"
+             let-value="data.value"
+             let-row="data.row">
   <i *ngIf="row.remainingDays < this.expirationWarningAlert"
      i18n-title
      title="User's password is about to expire"

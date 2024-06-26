@@ -35,7 +35,7 @@ export class OSDsPageHelper extends PageHelper {
       if (expandCluster) {
         this.getTableCount('total').should('be.gte', 1);
       }
-      cy.get('@addButton').click();
+      cy.get('@addButton').click({ force: true });
     });
 
     if (!expandCluster) {
@@ -51,8 +51,9 @@ export class OSDsPageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.index.url)
   checkStatus(id: number, status: string[]) {
     this.searchTable(`id:${id}`);
+    cy.wait(5 * 1000);
     this.expectTableCount('found', 1);
-    cy.get(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`).should(($ele) => {
+    cy.get(`[cdstabledata]:nth-child(${this.columnIndex.status}) .badge`).should(($ele) => {
       const allStatus = $ele.toArray().map((v) => v.innerText);
       for (const s of status) {
         expect(allStatus).to.include(s);
@@ -71,8 +72,7 @@ export class OSDsPageHelper extends PageHelper {
   deleteByIDs(osdIds: number[], replace?: boolean) {
     this.getTableRows().each(($el) => {
       const rowOSD = Number(
-        $el.find('datatable-body-cell .datatable-body-cell-label').get(this.columnIndex.id - 1)
-          .textContent
+        $el.find('[cdstabledata][cdstablerow]').get(this.columnIndex.id - 1).textContent
       );
       if (osdIds.includes(rowOSD)) {
         cy.wrap($el).click();

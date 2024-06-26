@@ -22,13 +22,14 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <cd-table-key-value cdTableDetail
-                      *ngIf="expandedRow"
-                      [renderObjects]="true"
-                      [hideEmpty]="true"
-                      [appendParentKey]="false"
-                      [data]="expandedRow"
-                      [customCss]="customCss"
-                      [autoReload]="false">
-  </cd-table-key-value>
+  <ng-container *ngIf="expandedRow">
+    <cd-table-key-value *cdTableDetail
+                        [renderObjects]="true"
+                        [hideEmpty]="true"
+                        [appendParentKey]="false"
+                        [data]="expandedRow"
+                        [customCss]="customCss"
+                        [autoReload]="false">
+    </cd-table-key-value>
+  </ng-container>
 </cd-table>

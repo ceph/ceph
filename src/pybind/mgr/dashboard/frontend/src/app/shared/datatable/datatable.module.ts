@@ -3,8 +3,29 @@ import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+
+import {
+  TableModule,
+  ButtonModule,
+  IconModule,
+  IconService,
+  CheckboxModule,
+  PaginationModule,
+  ThemeModule,
+  DialogModule,
+  SelectModule,
+  TagModule,
+  LayerModule
+} from 'carbon-components-angular';
+import AddIcon from '@carbon/icons/es/add/16';
+import FilterIcon from '@carbon/icons/es/filter/16';
+import ReloadIcon from '@carbon/icons/es/renew/16';
+import DataTableIcon from '@carbon/icons/es/data-table/16';
+import CheckIcon from '@carbon/icons/es/checkmark/16';
+import CloseIcon from '@carbon/icons/es/close/16';
+import MaximizeIcon from '@carbon/icons/es/maximize/16';
+import ArrowDown from '@carbon/icons/es/caret--down/16';
 
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
@@ -25,11 +46,11 @@ import { FormlyInputWrapperComponent } from '../forms/crud-form/formly-input-wra
 import { FormlyFileTypeComponent } from '../forms/crud-form/formly-file-type/formly-file-type.component';
 import { FormlyFileValueAccessorDirective } from '../forms/crud-form/formly-file-type/formly-file-type-accessor';
 import { CheckedTableFormComponent } from './checked-table-form/checked-table-form.component';
+import { TableDetailDirective } from './directives/table-detail.directive';
 
 @NgModule({
   imports: [
     CommonModule,
-    NgxDatatableModule,
     NgxPipeFunctionModule,
     FormsModule,
     NgbDropdownModule,
@@ -69,7 +90,17 @@ import { CheckedTableFormComponent } from './checked-table-form/checked-table-fo
       ],
       wrappers: [{ name: 'input-wrapper', component: FormlyInputWrapperComponent }]
     }),
-    FormlyBootstrapModule
+    FormlyBootstrapModule,
+    TableModule,
+    ButtonModule,
+    IconModule,
+    CheckboxModule,
+    PaginationModule,
+    DialogModule,
+    ThemeModule,
+    SelectModule,
+    TagModule,
+    LayerModule
   ],
   declarations: [
     TableComponent,
@@ -84,16 +115,30 @@ import { CheckedTableFormComponent } from './checked-table-form/checked-table-fo
     FormlyInputWrapperComponent,
     FormlyFileTypeComponent,
     FormlyFileValueAccessorDirective,
-    CheckedTableFormComponent
+    CheckedTableFormComponent,
+    TableDetailDirective
   ],
   exports: [
     TableComponent,
-    NgxDatatableModule,
     TableKeyValueComponent,
     TableActionsComponent,
     CRUDTableComponent,
     TablePaginationComponent,
-    CheckedTableFormComponent
+    CheckedTableFormComponent,
+    TableDetailDirective
   ]
 })
-export class DataTableModule {}
+export class DataTableModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([
+      AddIcon,
+      FilterIcon,
+      ReloadIcon,
+      DataTableIcon,
+      CheckIcon,
+      CloseIcon,
+      MaximizeIcon,
+      ArrowDown
+    ]);
+  }
+}

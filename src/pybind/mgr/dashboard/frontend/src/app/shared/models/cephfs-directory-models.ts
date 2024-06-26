@@ -1,5 +1,3 @@
-import { TreeStatus } from '@swimlane/ngx-datatable';
-
 export class CephfsSnapshot {
   name: string;
   path: string;
@@ -17,5 +15,5 @@ export class CephfsDir {
   quotas: CephfsQuotas;
   snapshots: CephfsSnapshot[];
   parent: string;
-  treeStatus?: TreeStatus; // Needed for table tree view
+  treeStatus?: 'collapsed' | 'expanded' | 'loading' | 'disabled'; // Needed for table tree view
 }

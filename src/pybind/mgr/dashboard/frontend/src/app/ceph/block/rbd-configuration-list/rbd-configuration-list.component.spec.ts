@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { NgChartsModule } from 'ng2-charts';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
@@ -23,7 +22,6 @@ describe('RbdConfigurationListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       FormsModule,
-      NgxDatatableModule,
       RouterTestingModule,
       ComponentsModule,
       NgbDropdownModule,

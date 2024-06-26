@@ -1,11 +1,10 @@
-import { SortPropDir } from '@swimlane/ngx-datatable';
-
 import { CdTableColumn } from './cd-table-column';
+import { CdSortPropDir } from './cd-sort-prop-dir';
 
 export interface CdUserConfig {
   limit?: number;
   offset?: number;
   search?: string;
-  sorts?: SortPropDir[];
+  sorts?: CdSortPropDir[];
   columns?: CdTableColumn[];
 }

@@ -28,7 +28,7 @@
           (fetchData)="getTargets()"
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
-  <div class="table-actions btn-toolbar">
+  <div class="table-actions">
     <cd-table-actions class="btn-group"
                       [permission]="permission"
                       [selection]="selection"
@@ -45,9 +45,10 @@
     </button>
   </div>
 
-  <cd-iscsi-target-details cdTableDetail
-                           *ngIf="expandedRow"
-                           [cephIscsiConfigVersion]="cephIscsiConfigVersion"
-                           [selection]="expandedRow"
-                           [settings]="settings"></cd-iscsi-target-details>
+  <ng-container *ngIf="expandedRow">
+    <cd-iscsi-target-details *cdTableDetail
+                             [cephIscsiConfigVersion]="cephIscsiConfigVersion"
+                             [selection]="expandedRow"
+                             [settings]="settings"></cd-iscsi-target-details>
+  </ng-container>
 </cd-table>

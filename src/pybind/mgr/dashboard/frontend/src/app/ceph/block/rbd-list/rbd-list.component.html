@@ -22,21 +22,21 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <cd-rbd-details cdTableDetail
+  <cd-rbd-details *cdTableDetail
                   [selection]="expandedRow">
   </cd-rbd-details>
 </cd-table>
 
 <ng-template #parentTpl
-             let-value="value">
+             let-value="data.value">
   <span *ngIf="value">{{ value.pool_name }}<span
           *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
   <span *ngIf="!value">-</span>
 </ng-template>
 
 <ng-template #mirroringTpl
-             let-value="value"
-             let-row="row">
+             let-value="data.value"
+             let-row="data.row">
   <span *ngIf="value.length === 3; else probb"
         class="badge badge-info">{{ value[0] }}</span>&nbsp;
   <span *ngIf="value.length === 3"
@@ -53,8 +53,8 @@
 </ng-template>
 
 <ng-template #ScheduleTpl
-             let-value="value"
-             let-row="row">
+             let-value="data.value"
+             let-row="data.row">
   <span *ngIf="value.length === 3"
         class="badge badge-info">{{ value[2] | cdDate  }}</span>
 </ng-template>
@@ -87,9 +87,9 @@
 </ng-template>
 
 <ng-template #removingStatTpl
-             let-column="column"
-             let-value="value"
-             let-row="row">
+             let-column="data.column"
+             let-value="data.value"
+             let-row="data.row">
 
   <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
@@ -119,7 +119,7 @@
 </ng-template>
 
 <ng-template #imageUsageTpl
-             let-row="row">
+             let-row="data.row">
   <span *ngIf="row.features_name && (!row.features_name.includes('fast-diff') || row.mirror_mode === 'snapshot') ; else usageBar"
         [ngbTooltip]="usageTooltip">
     <span>-</span>

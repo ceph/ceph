@@ -11,12 +11,12 @@ export class DaemonsPageHelper extends PageHelper {
       .its(1)
       .find('cd-table')
       .should('have.length', 1) // Only 1 table should be renderer
-      .find('datatable-body-cell');
+      .find('[cdstabledata]');
   }
 
   checkTables() {
     // click on a daemon so details table appears
-    cy.get('.datatable-body-cell-label').first().click();
+    this.getExpandCollapseElement().click();
 
     // check details table is visible
     // check at least one field is present

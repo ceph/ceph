@@ -135,6 +135,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: this.actionLabels.EXPAND_CLUSTER,
         permission: 'create',
+        buttonKind: 'secondary',
         icon: Icons.expand,
         routerLink: '/expand-cluster',
         disable: (selection: CdTableSelection) => this.getDisable('add', selection),

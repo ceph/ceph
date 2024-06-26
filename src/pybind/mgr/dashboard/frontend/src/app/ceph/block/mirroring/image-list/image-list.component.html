@@ -46,14 +46,14 @@
 <div [ngbNavOutlet]="nav"></div>
 
 <ng-template #stateTmpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <span [ngClass]="row.state_color | mirrorHealthColor">{{ value }}</span>
 </ng-template>
 
 <ng-template #progressTmpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <div *ngIf="row.state === 'Replaying'">
   </div>
   <div class="w-100 h-100 d-flex justify-content-center align-items-center">
@@ -66,8 +66,8 @@
 </ng-template>
 
 <ng-template #entriesBehindPrimaryTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <span *ngIf="row.mirror_mode === 'journal'">
     {{ value }}
   </span>

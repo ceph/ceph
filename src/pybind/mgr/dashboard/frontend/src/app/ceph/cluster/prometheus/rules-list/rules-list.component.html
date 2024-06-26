@@ -13,10 +13,11 @@
           [hasDetails]="true"
           (setExpandedRow)="setExpandedRow($event)"
           (updateSelection)="updateSelection($event)">
-  <cd-table-key-value cdTableDetail
-                      *ngIf="expandedRow"
-                      [data]="expandedRow"
-                      [renderObjects]="true"
-                      [hideKeys]="hideKeys">
-  </cd-table-key-value>
+  <ng-container *ngIf="expandedRow">
+    <cd-table-key-value *cdTableDetail
+                        [data]="expandedRow"
+                        [renderObjects]="true"
+                        [hideKeys]="hideKeys">
+    </cd-table-key-value>
+  </ng-container>
 </cd-table>

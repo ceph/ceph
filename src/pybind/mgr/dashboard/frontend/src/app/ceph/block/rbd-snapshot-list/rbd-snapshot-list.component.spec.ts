@@ -279,35 +279,75 @@ describe('RbdSnapshotListComponent', () => {
           'Rollback',
           'Delete'
         ],
-        primary: { multiple: 'Create', executing: 'Rename', single: 'Rename', no: 'Create' }
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
       },
       'create,update': {
         actions: ['Create', 'Rename', 'Protect', 'Unprotect', 'Clone', 'Copy', 'Rollback'],
-        primary: { multiple: 'Create', executing: 'Rename', single: 'Rename', no: 'Create' }
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
       },
       'create,delete': {
         actions: ['Create', 'Clone', 'Copy', 'Delete'],
-        primary: { multiple: 'Create', executing: 'Clone', single: 'Clone', no: 'Create' }
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
       },
       create: {
         actions: ['Create', 'Clone', 'Copy'],
-        primary: { multiple: 'Create', executing: 'Clone', single: 'Clone', no: 'Create' }
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
       },
       'update,delete': {
         actions: ['Rename', 'Protect', 'Unprotect', 'Rollback', 'Delete'],
-        primary: { multiple: 'Rename', executing: 'Rename', single: 'Rename', no: 'Rename' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
       update: {
         actions: ['Rename', 'Protect', 'Unprotect', 'Rollback'],
-        primary: { multiple: 'Rename', executing: 'Rename', single: 'Rename', no: 'Rename' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
       delete: {
         actions: ['Delete'],
-        primary: { multiple: 'Delete', executing: 'Delete', single: 'Delete', no: 'Delete' }
+        primary: {
+          multiple: 'Delete',
+          executing: 'Delete',
+          single: 'Delete',
+          no: 'Delete'
+        }
       },
       'no-permissions': {
         actions: [],
-        primary: { multiple: '', executing: '', single: '', no: '' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       }
     });
   });
