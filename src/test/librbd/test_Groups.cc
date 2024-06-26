@@ -275,7 +275,8 @@ TEST_F(TestGroup, add_snapshot)
     EXPECT_EQ(0, rbd_close(image));
   } BOOST_SCOPE_EXIT_END;
 
-  ASSERT_EQ(10, rbd_write(image, 0, 10, orig_data));
+  ASSERT_EQ(10, rbd_write2(image, 0, 10, orig_data,
+                           LIBRADOS_OP_FLAG_FADVISE_FUA));
   ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
   ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
 
@@ -344,13 +345,17 @@ TEST_F(TestGroup, add_snapshot)
 
   ASSERT_STREQ(snap_name, snaps[0].name);
 
-  ASSERT_EQ(10, rbd_write(image, 9, 10, test_data));
+  ASSERT_EQ(10, rbd_write2(image, 9, 10, test_data,
+                           LIBRADOS_OP_FLAG_FADVISE_FUA));
   ASSERT_EQ(10, rbd_read(image, 9, 10, read_data));
   ASSERT_EQ(0, memcmp(test_data, read_data, 10));
 
   ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
   ASSERT_NE(0, memcmp(orig_data, read_data, 10));
   ASSERT_EQ(0, rbd_group_snap_rollback(ioctx, group_name, snap_name));
+  if (!is_feature_enabled(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    ASSERT_EQ(0, rbd_invalidate_cache(image));
+  }
   ASSERT_EQ(10, rbd_read(image, 0, 10, read_data));
   ASSERT_EQ(0, memcmp(orig_data, read_data, 10));
 
@@ -421,7 +426,8 @@ TEST_F(TestGroup, add_snapshotPP)
   bufferlist expect_bl;
   bufferlist read_bl;
   expect_bl.append(std::string(512, '1'));
-  ASSERT_EQ((ssize_t)expect_bl.length(), image.write(0, expect_bl.length(), expect_bl));
+  ASSERT_EQ(512, image.write2(0, expect_bl.length(), expect_bl,
+                              LIBRADOS_OP_FLAG_FADVISE_FUA));
   ASSERT_EQ(512, image.read(0, 512, read_bl));
   ASSERT_TRUE(expect_bl.contents_equal(read_bl));
 
@@ -436,13 +442,17 @@ TEST_F(TestGroup, add_snapshotPP)
 
   bufferlist write_bl;
   write_bl.append(std::string(1024, '2'));
-  ASSERT_EQ(1024, image.write(256, write_bl.length(), write_bl));
+  ASSERT_EQ(1024, image.write2(256, write_bl.length(), write_bl,
+                               LIBRADOS_OP_FLAG_FADVISE_FUA));
   ASSERT_EQ(1024, image.read(256, 1024, read_bl));
   ASSERT_TRUE(write_bl.contents_equal(read_bl));
 
   ASSERT_EQ(512, image.read(0, 512, read_bl));
   ASSERT_FALSE(expect_bl.contents_equal(read_bl));
   ASSERT_EQ(0, rbd.group_snap_rollback(ioctx, group_name, snap_name));
+  if (!is_feature_enabled(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    ASSERT_EQ(0, image.invalidate_cache());
+  }
   ASSERT_EQ(512, image.read(0, 512, read_bl));
   ASSERT_TRUE(expect_bl.contents_equal(read_bl));
 
