@@ -3825,6 +3825,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 				   want,
 				   flush,
 				   cap->mseq,
+                                   cap->issue_seq,
                                    cap_epoch_barrier);
   /*
    * Since the setattr will check the cephx mds auth access before
@@ -3838,7 +3839,6 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->caller_uid = -1;
   m->caller_gid = -1;
 
-  m->head.issue_seq = cap->issue_seq;
   m->set_tid(flush_tid);
 
   m->head.uid = in->uid;
