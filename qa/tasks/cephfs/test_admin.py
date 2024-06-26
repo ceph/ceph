@@ -1565,6 +1565,8 @@ class TestFsAuthorize(CephFSTestCase):
         characters
         """
         self.mount_a.umount_wait(require_clean=True)
+        # let's unmount both client before deleting the FS
+        self.mount_b.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         fs_name = "cephfs-_."
         self.fs = self.mds_cluster.newfs(name=fs_name)
