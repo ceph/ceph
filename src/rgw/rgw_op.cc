@@ -6614,7 +6614,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
     }
   }
 
-  auto target_attrs = meta_obj->get_attrs();
+  auto& target_attrs = meta_obj->get_attrs();
 
   if (cksum) {
     armored_cksum =
