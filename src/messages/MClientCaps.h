@@ -137,11 +137,11 @@ protected:
 	      inodeno_t ino,
 	      inodeno_t realm,
 	      uint64_t id,
-	      long seq,
+	      ceph_seq_t seq,
 	      int caps,
 	      int wanted,
 	      int dirty,
-	      int mseq,
+	      ceph_seq_t mseq,
               epoch_t oeb)
     : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
@@ -159,7 +159,7 @@ protected:
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
-	      uint64_t id, int mseq, epoch_t oeb)
+	      uint64_t id, ceph_seq_t mseq, epoch_t oeb)
     : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
