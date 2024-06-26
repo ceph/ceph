@@ -2401,6 +2401,26 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
     return _fault();
   }
 
+  if (messenger->get_mytype() == CEPH_ENTITY_TYPE_OSD &&
+      connection->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT) {
+    int client_sub_type = CEPH_ENTITY_SUB_TYPE_CLIENT;
+    uint64_t flags = client_ident.flags();
+    if (flags & CEPH_MSG_CONNECT_SUB_TYPE_CLIENT) {
+      client_sub_type = CEPH_ENTITY_SUB_TYPE_CLIENT;
+    } else if (flags & CEPH_MSG_CONNECT_SUB_TYPE_BACKGROUND_RECOVERY) {
+      client_sub_type = CEPH_ENTITY_SUB_TYPE_BACKGROUND_RECOVERY;
+    } else if (flags & CEPH_MSG_CONNECT_SUB_TYPE_BACKGROUND_BEST_EFFORT) {
+      client_sub_type = CEPH_ENTITY_SUB_TYPE_BACKGROUND_BEST_EFFORT;
+    }
+
+    connection->policy = messenger->get_policy(client_sub_type);
+
+    ldout(cct, 5) << __func__ << " my_identity()=" <<  messenger->get_mytype()
+                  << ", peer_identity=" << connection->get_peer_type()
+                  << ", client_sub_type=" << client_sub_type
+                  << std::hex << ", flags=" << flags << std::dec << dendl;
+  }
+
   connection->set_peer_addrs(client_ident.addrs());
   connection->target_addr = connection->_infer_target_addr(client_ident.addrs());
 

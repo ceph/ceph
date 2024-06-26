@@ -95,6 +95,16 @@ struct ceph_entity_name {
 
 #define CEPH_ENTITY_TYPE_ANY    0xFF
 
+/*
+ * TYPE_CLIENT <==> TYPE_SUB_CLIENT
+ * CEPH_ENTITY_TYPE_* is a variable of type __u8, with a maximum of no more than 255 (0xFF),
+ * CEPH_ENTITY_SUB_TYPE_* is a variable of type int, NOT shift bit,
+ * in order not to conflict with CEPH_ENTITY_TYPE_*, CEPH_ENTITY_SUB_TYPE_* starts with 256
+ */
+#define CEPH_ENTITY_SUB_TYPE_CLIENT                    CEPH_ENTITY_TYPE_CLIENT
+#define CEPH_ENTITY_SUB_TYPE_BACKGROUND_RECOVERY       258
+#define CEPH_ENTITY_SUB_TYPE_BACKGROUND_BEST_EFFORT    259
+
 extern const char *ceph_entity_type_name(int type);
 
 /*
