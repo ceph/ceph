@@ -219,7 +219,7 @@
                             i18n-title
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_rgw_daemons"><span i18n>Gateways</span></cds-sidenav-item>
-          <cds-sidenav-item route="/nfs"
+          <cds-sidenav-item route="/rgw/nfs"
                             [useRouter]="true"
                             title="NFS"
                             i18n-title
@@ -234,13 +234,13 @@
           <svg cdsIcon="file-storage"
                icon
                size="20"></svg>
-          <cds-sidenav-item route="/cephfs"
+          <cds-sidenav-item route="/cephfs/fs"
                             [useRouter]="true"
                             title="File Systems"
                             i18n-title
                             *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
                             class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File Systems</span></cds-sidenav-item>
-          <cds-sidenav-item route="/nfs"
+          <cds-sidenav-item route="/cephfs/nfs"
                             [useRouter]="true"
                             title="NFS"
                             i18n-title
