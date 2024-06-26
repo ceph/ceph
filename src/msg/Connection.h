@@ -46,6 +46,7 @@ struct Connection : public RefCountedObjectSafe {
   RefCountedPtr priv;
   int peer_type = -1;
   int64_t peer_id = -1;  // [msgr2 only] the 0 of osd.0, 4567 or client.4567
+  int peer_client_sub_type = -1; // client/background_recovery/best_effort
   safe_item_history<entity_addrvec_t> peer_addrs;
   utime_t last_keepalive, last_keepalive_ack;
   bool anon = false;  ///< anonymous outgoing connection
@@ -180,6 +181,18 @@ public:
   bool peer_is_mds() const { return peer_type == CEPH_ENTITY_TYPE_MDS; }
   bool peer_is_osd() const { return peer_type == CEPH_ENTITY_TYPE_OSD; }
   bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
+
+  int get_peer_client_sub_type() const { return peer_client_sub_type; }
+  void set_peer_client_sub_type(int t) { peer_client_sub_type = t; }
+  bool peer_sub_type_is_client() const {
+    return peer_client_sub_type == CEPH_ENTITY_SUB_TYPE_CLIENT;
+  }
+  bool peer_sub_type_is_background_recovery() const {
+    return peer_client_sub_type == CEPH_ENTITY_SUB_TYPE_BACKGROUND_RECOVERY;
+  }
+  bool peer_sub_type_is_background_best_effort() const {
+    return peer_client_sub_type == CEPH_ENTITY_SUB_TYPE_BACKGROUND_BEST_EFFORT;
+  }
 
   /// which of the peer's addrs is actually in use for this connection
   virtual entity_addr_t get_peer_socket_addr() const = 0;

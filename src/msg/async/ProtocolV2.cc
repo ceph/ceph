@@ -2413,7 +2413,7 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
       client_sub_type = CEPH_ENTITY_SUB_TYPE_BACKGROUND_BEST_EFFORT;
     }
 
-    connection->policy = messenger->get_policy(client_sub_type);
+    connection->set_peer_client_sub_type(client_sub_type);
 
     ldout(cct, 5) << __func__ << " my_identity()=" <<  messenger->get_mytype()
                   << ", peer_identity=" << connection->get_peer_type()
