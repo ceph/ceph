@@ -331,7 +331,9 @@ list(APPEND mds_files
 
 add_subdirectory(json_spirit)
 
-add_subdirectory(xxHash/cmake_unofficial)
+if(NOT WITH_SYSTEM_XXHASH)
+  add_subdirectory(xxHash/cmake_unofficial)
+endif()
 
 # use the rapidjson headers from s3select's submodule
 if(NOT TARGET RapidJSON::RapidJSON)

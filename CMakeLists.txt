@@ -221,6 +221,11 @@ if(WITH_SYSTEM_BLAKE3)
   find_package(blake3 REQUIRED)
 endif()
 
+option(WITH_SYSTEM_XXHASH "Use system packages for xxHash" OFF)
+if(WITH_SYSTEM_XXHASH)
+  find_package(xxHash 0.8.2 REQUIRED)
+endif()
+
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(WITH_OPENLDAP)
   find_package(OpenLDAP REQUIRED)

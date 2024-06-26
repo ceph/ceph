@@ -24,7 +24,7 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
 #include <boost/optional.hpp>
-#include "xxhash.h"
+#include <xxhash.h>
 #include "include/buffer.h"
 #include "common/cohort_lru.h"
 #include "common/ceph_timer.h"
