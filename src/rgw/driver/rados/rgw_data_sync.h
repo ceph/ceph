@@ -285,17 +285,6 @@ struct rgw_datalog_shard_data {
 
 class RGWAsyncRadosProcessor;
 class RGWDataSyncControlCR;
-
-struct rgw_bucket_entry_owner {
-  std::string id;
-  std::string display_name;
-
-  rgw_bucket_entry_owner() {}
-  rgw_bucket_entry_owner(const std::string& _id, const std::string& _display_name) : id(_id), display_name(_display_name) {}
-
-  void decode_json(JSONObj *obj);
-};
-
 class RGWSyncErrorLogger;
 class RGWRESTConn;
 class RGWServices;
