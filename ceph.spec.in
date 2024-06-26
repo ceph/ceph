@@ -122,6 +122,7 @@
 %bcond_with system_qat
 %endif
 %bcond_without system_blake3
+%bcond_without system_xxhash
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -380,6 +381,9 @@ BuildRequires:  qatzip-devel
 %endif
 %if 0%{with system_blake3}
 BuildRequires:  blake3-devel
+%endif
+%if 0%{with system_xxhash}
+BuildRequires:  xxhash-devel >= 0.8.2
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel
@@ -1511,6 +1515,9 @@ cmake .. \
 %endif
 %if 0%{with system_blake3}
     -DWITH_SYSTEM_BLAKER3:BOOL=ON \
+%endif
+%if 0%{with system_xxhash}
+    -DWITH_SYSTEM_XXHASH:BOOL=ON \
 %endif
 %if 0%{with seastar}
     -DWITH_SEASTAR:BOOL=ON \
