@@ -1201,6 +1201,7 @@ void QuiesceDbManager::calculate_quiesce_map(QuiesceMap &map)
 
   for(auto & [set_id, set]: db.sets) {
     if (set.is_active()) {
+      auto requested = set.get_requested_member_state();
       // we only report active sets;
       for(auto & [root, member]: set.members) {
         if (member.excluded) {
@@ -1210,7 +1211,6 @@ void QuiesceDbManager::calculate_quiesce_map(QuiesceMap &map)
         // for a quiesce map, we want to report active roots as either QUIESCING or RELEASING
         // this is to make sure that clients always have a reason to report back and confirm
         // the quiesced state.
-        auto requested = set.get_requested_member_state();
         auto ttl = get_root_ttl(set, member, db_age);
         auto root_it = map.roots.try_emplace(root, QuiesceMap::RootInfo { requested, ttl }).first;
 
