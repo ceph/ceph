@@ -312,6 +312,11 @@ target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
 
+# work around https://github.com/Cyan4973/xxHash/issues/943 for debug builds
+target_compile_definitions(rgw_common PUBLIC
+  $<$<CONFIG:Debug>:XXH_NO_INLINE_HINTS=1>
+  $<$<CONFIG:RelWithDebInfo>:XXH_NO_INLINE_HINTS=1>)
+
 if(WITH_RADOSGW_D4N)
   target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/boost_redis/include")
 endif()
