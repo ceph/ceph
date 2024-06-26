@@ -126,7 +126,7 @@ public:
     }
     return r;
   }
-  void exit(int r) {
+  [[noreturn]] void exit(int r) {
     if (is_child())
         signal_exit(r);
     ::exit(r);
