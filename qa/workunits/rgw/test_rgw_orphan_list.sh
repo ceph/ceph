@@ -350,7 +350,6 @@ for f in $(seq 5 5) ;do
     mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
 done
 
-
 ############################################################
 # copy multipart objects and delete original
 
@@ -374,6 +373,83 @@ for f in $(seq 5 5) ;do
     mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
 done
 
+mys3cmd rb --recursive s3://$o_bkt
+
+############################################################
+# copy multipart objects and delete destination
+
+o_bkt="orig-mp-bkt-5"
+d_bkt="copy-mp-bkt-5"
+
+mys3cmd mb s3://$o_bkt
+
+for f in $(seq 2) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${o_bkt}/$dest_obj
+done
+
+mys3cmd mb s3://$d_bkt
+
+mys3cmd cp s3://${o_bkt}/orig-multipart-obj-1 \
+	s3://${d_bkt}/copied-multipart-obj-1
+
+for f in $(seq 5 5) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
+done
+
+mys3cmd rb --recursive s3://$d_bkt
+
+############################################################
+# copy multipart objects and delete original then destination
+
+o_bkt="orig-mp-bkt-6"
+d_bkt="copy-mp-bkt-6"
+
+mys3cmd mb s3://$o_bkt
+
+for f in $(seq 2) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${o_bkt}/$dest_obj
+done
+
+mys3cmd mb s3://$d_bkt
+
+mys3cmd cp s3://${o_bkt}/orig-multipart-obj-1 \
+	s3://${d_bkt}/copied-multipart-obj-1
+
+for f in $(seq 5 5) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
+done
+
+mys3cmd rb --recursive s3://$o_bkt
+mys3cmd rb --recursive s3://$d_bkt
+
+############################################################
+# copy multipart objects and delete destination then original
+
+o_bkt="orig-mp-bkt-7"
+d_bkt="copy-mp-bkt-7"
+
+mys3cmd mb s3://$o_bkt
+
+for f in $(seq 2) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${o_bkt}/$dest_obj
+done
+
+mys3cmd mb s3://$d_bkt
+
+mys3cmd cp s3://${o_bkt}/orig-multipart-obj-1 \
+	s3://${d_bkt}/copied-multipart-obj-1
+
+for f in $(seq 5 5) ;do
+    dest_obj="orig-multipart-obj-$f"
+    mys3cmd put -q $huge_obj s3://${d_bkt}/$dest_obj
+done
+
+mys3cmd rb --recursive s3://$d_bkt
 mys3cmd rb --recursive s3://$o_bkt
 
 ########################################################################
