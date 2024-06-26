@@ -41,7 +41,8 @@ target_link_libraries(mon
   legacy-option-headers
   kv
   heap_profiler
-  ${FMT_LIB})
+  ${FMT_LIB}
+  xxHash::xxhash)
 if(WITH_JAEGER)
   target_link_libraries(mon jaeger_base)
 endif()

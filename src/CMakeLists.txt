@@ -331,7 +331,7 @@ list(APPEND mds_files
 
 add_subdirectory(json_spirit)
 
-include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
+add_subdirectory(xxHash/cmake_unofficial)
 
 # use the rapidjson headers from s3select's submodule
 if(NOT TARGET RapidJSON::RapidJSON)
@@ -423,7 +423,6 @@ set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
   global/global_context.cc
-  xxHash/xxhash.c
   common/error_code.cc
   common/tracer.cc
   log/Log.cc
@@ -493,6 +492,7 @@ set(ceph_common_deps
   Boost::date_time
   Boost::iostreams
   StdFilesystem::filesystem
+  xxHash::xxhash
   ${FMT_LIB}
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}

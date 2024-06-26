@@ -40,7 +40,8 @@ endif()
 add_library(os STATIC ${libos_srcs})
 target_link_libraries(os
   legacy-option-headers
-  blk)
+  blk
+  xxHash::xxhash)
 
 target_link_libraries(os heap_profiler kv)
 
