@@ -49,20 +49,20 @@ TEST_F(TestGroup, group_createPP)
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   librbd::RBD rbd;
-  ASSERT_EQ(0, rbd.group_create(ioctx, "mygroup"));
+  ASSERT_EQ(0, rbd.group_create(ioctx, "mygroupPP"));
 
   std::vector<std::string> groups;
   ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
   ASSERT_EQ(1U, groups.size());
-  ASSERT_EQ("mygroup", groups[0]);
+  ASSERT_EQ("mygroupPP", groups[0]);
 
   groups.clear();
-  ASSERT_EQ(0, rbd.group_rename(ioctx, "mygroup", "newgroup"));
+  ASSERT_EQ(0, rbd.group_rename(ioctx, "mygroupPP", "newgroupPP"));
   ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
   ASSERT_EQ(1U, groups.size());
-  ASSERT_EQ("newgroup", groups[0]);
+  ASSERT_EQ("newgroupPP", groups[0]);
 
-  ASSERT_EQ(0, rbd.group_remove(ioctx, "newgroup"));
+  ASSERT_EQ(0, rbd.group_remove(ioctx, "newgroupPP"));
 
   groups.clear();
   ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
@@ -158,7 +158,7 @@ TEST_F(TestGroup, add_imagePP)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  const char *group_name = "mycg";
+  const char *group_name = "mycgPP";
   librbd::RBD rbd;
   ASSERT_EQ(0, rbd.group_create(ioctx, group_name));
 
@@ -371,7 +371,7 @@ TEST_F(TestGroup, add_snapshotPP)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  const char *group_name = "snap_group";
+  const char *group_name = "snap_groupPP";
   const char *snap_name = "snap_snapshot";
 
   librbd::RBD rbd;
