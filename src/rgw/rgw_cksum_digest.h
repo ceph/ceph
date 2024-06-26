@@ -15,6 +15,7 @@
 
 #include <boost/variant.hpp>
 #include <boost/blank.hpp>
+#include "common/ceph_crypto.h"
 #include "rgw_blake3_digest.h"
 #include "rgw_crc_digest.h"
 #include "rgw_xxh_digest.h"
