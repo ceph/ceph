@@ -142,6 +142,7 @@ protected:
 	      int wanted,
 	      int dirty,
 	      ceph_seq_t mseq,
+              ceph_seq_t issue_seq,
               epoch_t oeb)
     : SafeMessage{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
@@ -155,6 +156,7 @@ protected:
     head.wanted = wanted;
     head.dirty = dirty;
     head.migrate_seq = mseq;
+    head.issue_seq = issue_seq;
     memset(&peer, 0, sizeof(peer));
   }
   MClientCaps(int op,
