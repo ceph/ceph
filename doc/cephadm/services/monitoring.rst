@@ -451,14 +451,16 @@ Configuring SSL/TLS for Grafana
 
 ``cephadm`` deploys Grafana using the certificate defined in the ceph
 key/value store. If no certificate is specified, ``cephadm`` generates a
-self-signed certificate during the deployment of the Grafana service.
+self-signed certificate during the deployment of the Grafana service. The previous 
+method was to reference the config-key path mgr/cephadm/grafana_<crt|key>, but has
+been replaced with direct key paths for each node that is running the service.
 
 A custom certificate can be configured using the following commands:
 
 .. prompt:: bash #
 
-  ceph config-key set mgr/cephadm/grafana_key -i $PWD/key.pem
-  ceph config-key set mgr/cephadm/grafana_crt -i $PWD/certificate.pem
+  ceph config-key set mgr/cephadm/<hostname>/grafana_key -i $PWD/key.pem
+  ceph config-key set mgr/cephadm/<hostname>/grafana_crt -i $PWD/certificate.pem
 
 If you have already deployed Grafana, run ``reconfig`` on the service to
 update its configuration:
