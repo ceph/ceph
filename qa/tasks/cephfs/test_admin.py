@@ -1798,10 +1798,9 @@ class TestFsAuthorize(CephFSTestCase):
         That fs authorize command works on filesystems with names having [_.-]
         characters
         """
-        self.skipTest('this test is broken ATM, see: '
-                      'https://tracker.ceph.com/issues/66077')
-
         self.mount_a.umount_wait(require_clean=True)
+        # let's unmount both client before deleting the FS
+        self.mount_b.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         fs_name = "cephfs-_."
         self.fs = self.mds_cluster.newfs(name=fs_name)
