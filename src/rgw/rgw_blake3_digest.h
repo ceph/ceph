@@ -17,7 +17,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "BLAKE3/c/blake3.h"
+#include <blake3.h>
 
 namespace rgw { namespace digest {
 

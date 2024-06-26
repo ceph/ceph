@@ -216,6 +216,11 @@ else()
   set(HAVE_BLKID OFF)
 endif(LINUX)
 
+option(WITH_SYSTEM_BLAKE3 "Use system packages for BLAKE3" OFF)
+if(WITH_SYSTEM_BLAKE3)
+  find_package(blake3 REQUIRED)
+endif()
+
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(WITH_OPENLDAP)
   find_package(OpenLDAP REQUIRED)
