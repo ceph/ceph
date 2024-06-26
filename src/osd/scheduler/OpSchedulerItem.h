@@ -244,7 +244,19 @@ public:
     auto type = op->get_req()->get_type();
     if (type == CEPH_MSG_OSD_OP ||
 	type == CEPH_MSG_OSD_BACKOFF) {
-      return op_scheduler_class::client;
+      /*
+       * use connection client_sub_type to distinguish opclass types
+       */
+      switch (op->get_req()->get_connection()->get_peer_client_sub_type()) {
+      case CEPH_ENTITY_SUB_TYPE_CLIENT:
+        return op_scheduler_class::client;
+      case CEPH_ENTITY_SUB_TYPE_BACKGROUND_RECOVERY:
+        return op_scheduler_class::background_recovery;
+      case CEPH_ENTITY_SUB_TYPE_BACKGROUND_BEST_EFFORT:
+        return op_scheduler_class::background_best_effort;
+      default: // other default fast client
+        return op_scheduler_class::client;
+      }
     } else {
       return op_scheduler_class::immediate;
     }
