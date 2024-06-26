@@ -1,0 +1,17 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.0
+  - ceph.nvmeof.nvmeof.a
+- - host.b
+  - mon.b
+  - osd.2
+  - osd.3
+  - osd.4
+  - client.1
+  - ceph.nvmeof.nvmeof.b
+- - client.2
+- - client.3

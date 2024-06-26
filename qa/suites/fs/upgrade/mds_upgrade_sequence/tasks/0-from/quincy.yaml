@@ -1,0 +1,32 @@
+meta:
+- desc: |
+   setup ceph/quincy
+
+tasks:
+- install:
+    branch: quincy
+    exclude_packages:
+      - ceph-volume
+- print: "**** done install task..."
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:quincy
+    roleless: true
+    cephadm_branch: quincy
+    cephadm_git_url: https://github.com/ceph/ceph
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing quincy cephadm ..."
+- cephadm.shell:
+    host.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    host.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
