@@ -196,8 +196,10 @@ if(HAS_GLIBCXX_ASSERTIONS AND CMAKE_BUILD_TYPE STREQUAL Debug)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-D_GLIBCXX_ASSERTIONS>)
 endif()
 
-# add BLAKE3 before we clobber CMAKE_ASM_COMPILER
-add_subdirectory(BLAKE3/c)
+if(NOT WITH_SYSTEM_BLAKE3)
+  # add BLAKE3 before we clobber CMAKE_ASM_COMPILER
+  add_subdirectory(BLAKE3/c)
+endif()
 
 include(SIMDExt)
 if(HAVE_INTEL)
