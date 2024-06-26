@@ -340,7 +340,8 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
       set_group_id = monitor_group_client.set_group_id( new_gw_state.group_id);
       if (!set_group_id) {
 	      dout(10) << "GRPC set_group_id failed" << dendl;
-	      usleep(1000); // TODO: conf options
+	      auto retry_timeout = g_conf().get_val<uint64_t>("mon_nvmeofgw_set_group_id_retry");
+	      usleep(retry_timeout);
       }
     }
   }
