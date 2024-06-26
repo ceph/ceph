@@ -465,6 +465,7 @@ done:
   }
   dout(1) << "====== req done req=" << hex << req << dec
           << " op=" << (op ? op->name() : "unknown")
+          << " bucket=" << s->bucket_name
           << " status=" << op_ret
           << " http_status=" << s->err.http_ret
           << " latency=" << lat
