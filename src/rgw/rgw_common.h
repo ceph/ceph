@@ -26,6 +26,7 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
+#include "common/dout_fmt.h"
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "common/tracer.h"
