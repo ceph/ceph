@@ -2909,6 +2909,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   jspan_context no_trace{false, false};
 
   r = copy_obj(obj_ctx,
+               obj_ctx,  /* src and dest share an obj_ctx */
                owner,
                remote_user,
                NULL, /* req_info *info */
@@ -3008,6 +3009,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
     jspan_context no_trace{false, false};
 
     int ret = copy_obj(obj_ctx,
+                       obj_ctx,  /* src and dest share an obj_ctx */
                        owner,
                        remote_user,
                        nullptr,       /* req_info *info */
@@ -4148,7 +4150,7 @@ int RGWFetchObjFilter_Default::filter(CephContext *cct,
   return 0;
 }
 
-int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
+int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                const rgw_user& user_id,
                req_info *info,
                const rgw_zone_id& source_zone,
@@ -4200,7 +4202,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   jspan_context no_trace{false, false};
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
-                                  owner, obj_ctx, dest_obj, olh_epoch,
+                                  owner, dest_obj_ctx, dest_obj, olh_epoch,
 				  tag, rctx.dpp, rctx.y, no_trace);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
@@ -4284,7 +4286,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_if_newer) {
     /* need to get mtime for destination */
-    ret = get_obj_state(rctx.dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
+    ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
     if (ret < 0)
       goto set_err_state;
 
@@ -4492,8 +4494,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
     if (copy_if_newer && canceled) {
       ldpp_dout(rctx.dpp, 20) << "raced with another write of obj: " << dest_obj << dendl;
-      obj_ctx.invalidate(dest_obj); /* object was overwritten */
-      ret = get_obj_state(rctx.dpp, &obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
+      dest_obj_ctx.invalidate(dest_obj); /* object was overwritten */
+      ret = get_obj_state(rctx.dpp, &dest_obj_ctx, dest_bucket_info, stat_dest_obj, &dest_state, &manifest, stat_follow_olh, rctx.y);
       if (ret < 0) {
         ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
         goto set_err_state;
@@ -4527,7 +4529,7 @@ set_err_state:
     // for OP_LINK_OLH to call set_olh() with a real olh_epoch
     if (olh_epoch && *olh_epoch > 0) {
       constexpr bool log_data_change = true;
-      ret = set_olh(rctx.dpp, obj_ctx, dest_bucket_info, dest_obj, false, nullptr,
+      ret = set_olh(rctx.dpp, dest_obj_ctx, dest_bucket_info, dest_obj, false, nullptr,
                     *olh_epoch, real_time(), false, rctx.y, zones_trace, log_data_change);
     } else {
       // we already have the latest copy
@@ -4602,7 +4604,8 @@ int RGWRados::copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
+int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
+	       RGWObjectCtx& dest_obj_ctx,
                const ACLOwner& owner,
                const rgw_user& remote_user,
                req_info *info,
@@ -4663,7 +4666,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (remote_src || !source_zone.empty()) {
     rgw_zone_set_entry source_trace_entry{source_zone.id, std::nullopt};
     const req_context rctx{dpp, y, nullptr};
-    return fetch_remote_obj(obj_ctx, remote_user, info, source_zone,
+    return fetch_remote_obj(dest_obj_ctx, remote_user, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
@@ -4673,7 +4676,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   map<string, bufferlist> src_attrs;
-  RGWRados::Object src_op_target(this, src_bucket_info, obj_ctx, src_obj);
+  RGWRados::Object src_op_target(this, src_bucket_info, src_obj_ctx, src_obj);
   RGWRados::Object::Read read_op(&src_op_target);
 
   read_op.conds.mod_ptr = mod_ptr;
@@ -4730,7 +4733,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjManifest *amanifest = nullptr;
 
   constexpr bool follow_olh = true;
-  ret = get_obj_state(dpp, &obj_ctx, src_bucket_info, src_obj,
+  ret = get_obj_state(dpp, &src_obj_ctx, src_bucket_info, src_obj,
                       &astate, &amanifest, follow_olh, y);
   if (ret < 0) {
     return ret;
@@ -4807,7 +4810,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
-    return copy_obj_data(obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
+    return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
   }
 
@@ -4824,7 +4827,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjManifest *pmanifest; 
   ldpp_dout(dpp, 20) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
-  RGWRados::Object dest_op_target(this, dest_bucket_info, obj_ctx, dest_obj);
+  RGWRados::Object dest_op_target(this, dest_bucket_info, dest_obj_ctx, dest_obj);
   RGWRados::Object::Write write_op(&dest_op_target);
 
   string tag;

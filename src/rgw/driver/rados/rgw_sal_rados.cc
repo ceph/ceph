@@ -2863,6 +2863,7 @@ int RadosObject::copy_object(const ACLOwner& owner,
 				optional_yield y)
 {
   return store->getRados()->copy_obj(*rados_ctx,
+				     *static_cast<RadosObject*>(dest_object)->rados_ctx,
 				     owner,
 				     remote_user,
 				     info,
