@@ -128,10 +128,10 @@ def test_remote_cache_api(r, client, obj):
 
     # Check contents of both files
     out = subprocess.check_output(['cat', '/tmp/rgw_d4n_datacache/bkt_test.txt_0_11']).decode('latin-1')
-    assert(out == "test")
+    assert(out == "hello world")
 
     out = subprocess.check_output(['cat', '/tmp/rgw_d4n_datacache/RD_bkt_test.txt_0_11']).decode('latin-1')
-    assert(out == "test")
+    assert(out == "hello world")
 
     data = r.hgetall('bkt_test.txt_0_11')
 
