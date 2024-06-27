@@ -28,6 +28,7 @@ from teuthology.config import config as teuth_config
 from teuthology.exceptions import ConfigError, CommandFailedError
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
+from tasks.daemonwatchdog import DaemonWatchdog
 from tasks.util import chacra
 
 # these items we use from ceph.py should probably eventually move elsewhere
@@ -1389,6 +1390,15 @@ def ceph_clients(ctx, config):
             remote.sudo_write_file(client_keyring, keyring, mode='0644')
     yield
 
+@contextlib.contextmanager
+def watchdog_setup(ctx, config):
+    if 'watchdog_setup' in config: 
+        ctx.ceph[config['cluster']].thrashers = []
+        ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config, ctx.ceph[config['cluster']].thrashers)
+        ctx.ceph[config['cluster']].watchdog.start()
+    else:
+        ctx.ceph[config['cluster']].watchdog = None 
+    yield
 
 @contextlib.contextmanager
 def ceph_initial():
@@ -1429,10 +1439,11 @@ def stop(ctx, config):
         cluster, type_, id_ = teuthology.split_role(role)
         ctx.daemons.get_daemon(type_, id_, cluster).stop()
         clusters.add(cluster)
-
-#    for cluster in clusters:
-#        ctx.ceph[cluster].watchdog.stop()
-#        ctx.ceph[cluster].watchdog.join()
+    
+    if ctx.ceph[cluster].watchdog:
+        for cluster in clusters:
+            ctx.ceph[cluster].watchdog.stop()
+            ctx.ceph[cluster].watchdog.join()
 
     yield
 
@@ -2141,6 +2152,7 @@ def task(ctx, config):
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
+    :param watchdog_setup: start DaemonWatchdog to watch daemons for failures
     """
     if config is None:
         config = {}
@@ -2227,6 +2239,8 @@ def task(ctx, config):
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
+            lambda: conf_epoch(ctx=ctx, config=config),
+            lambda: watchdog_setup(ctx=ctx, config=config),
     ):
         try:
             if config.get('wait-for-healthy', True):
