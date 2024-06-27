@@ -1491,6 +1491,9 @@ static void do_init(void *data, fuse_conn_info *conn)
   if(conn->capable & FUSE_CAP_SPLICE_MOVE)
     conn->want |= FUSE_CAP_SPLICE_MOVE;
 
+  if(conn->capable & FUSE_CAP_IOCTL_DIR)
+    conn->want |= FUSE_CAP_IOCTL_DIR;
+
 #if !defined(__APPLE__)
   if (!client->get_fuse_default_permissions() && client->ll_handle_umask()) {
     // apply umask in userspace if posix acl is enabled
