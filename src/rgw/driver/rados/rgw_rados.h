@@ -1359,7 +1359,7 @@ public:
                                    const rgw_obj& obj_instance,
                                    const std::string& op_tag, const std::string& olh_tag,
                                    uint64_t olh_epoch, optional_yield y,
-                                   bool null_verid,
+                                   uint16_t bilog_flags,
                                    rgw_zone_set *zones_trace = nullptr,
                                    bool log_op = true);
   int bucket_index_read_olh_log(const DoutPrefixProvider *dpp,
@@ -1396,7 +1396,7 @@ public:
   int repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, const RGWBucketInfo& bucket_info,
                  const rgw_obj& obj, optional_yield y);
   int unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
-                          uint64_t olh_epoch, optional_yield y, bool null_verid, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+                          uint64_t olh_epoch, optional_yield y, uint16_t bilog_flags, bool null_verid, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
 
   void check_pending_olh_entries(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& pending_entries, std::map<std::string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::map<std::string, bufferlist>& pending_attrs, optional_yield y);
