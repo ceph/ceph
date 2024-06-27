@@ -6919,9 +6919,9 @@ static const string snap_id_from_order_key(const string &key) {
   return key.substr(RBD_GROUP_SNAP_ORDER_KEY_PREFIX.size());
 }
 
-int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
-              uint64_t max_return,
-              std::vector<cls::rbd::GroupSnapshot> *group_snaps)
+int snap_list_sorted(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
+                     uint64_t max_return,
+                     std::vector<cls::rbd::GroupSnapshot> *group_snaps)
 {
   int max_read = RBD_MAX_KEYS_READ;
   std::map<std::string, bufferlist> vals;
@@ -6992,6 +6992,11 @@ int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
     }
   } while (more);
 
+  if (group_snaps->size() != orders.size()) {
+    CLS_ERR("mismatch in snaps and snap order keys");
+    return -ENOTSUP;
+  }
+
   std::sort(group_snaps->begin(), group_snaps->end(),
             [&orders](const cls::rbd::GroupSnapshot &a,
                       const cls::rbd::GroupSnapshot &b) {
@@ -7020,9 +7025,9 @@ int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
   return 0;
 }
 
-int snap_list_unsorted(cls_method_context_t hctx,
-                       cls::rbd::GroupSnapshot start_after, uint64_t max_return,
-                       std::vector<cls::rbd::GroupSnapshot> *group_snaps) {
+int snap_list(cls_method_context_t hctx,
+              cls::rbd::GroupSnapshot start_after, uint64_t max_return,
+              std::vector<cls::rbd::GroupSnapshot> *group_snaps) {
   int max_read = RBD_MAX_KEYS_READ;
   std::map<string, bufferlist> vals;
   string last_read = snap_key(start_after.id);
@@ -7072,7 +7077,7 @@ static int check_duplicate_snap_name(cls_method_context_t hctx,
   std::vector<cls::rbd::GroupSnapshot> page;
 
   for (;;) {
-    int r = snap_list_unsorted(hctx, snap_last, max_read, &page);
+    int r = snap_list(hctx, snap_last, max_read, &page);
     if (r < 0) {
       return r;
     }
@@ -7713,6 +7718,31 @@ int group_snap_list(cls_method_context_t hctx,
   return 0;
 }
 
+int group_snap_list_sorted(cls_method_context_t hctx,
+                           bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "group_snap_list_sorted");
+
+  cls::rbd::GroupSnapshot start_after;
+  uint64_t max_return;
+  try {
+    auto iter = in->cbegin();
+    decode(start_after, iter);
+    decode(max_return, iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+  std::vector<cls::rbd::GroupSnapshot> group_snaps;
+  int r = group::snap_list_sorted(hctx, start_after, max_return, &group_snaps);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(group_snaps, *out);
+
+  return 0;
+}
+
 namespace trash {
 
 static const std::string IMAGE_KEY_PREFIX("id_");
@@ -8339,6 +8369,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_group_snap_remove;
   cls_method_handle_t h_group_snap_get_by_id;
   cls_method_handle_t h_group_snap_list;
+  cls_method_handle_t h_group_snap_list_sorted;
   cls_method_handle_t h_trash_add;
   cls_method_handle_t h_trash_remove;
   cls_method_handle_t h_trash_list;
@@ -8722,6 +8753,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "group_snap_list",
 			  CLS_METHOD_RD,
 			  group_snap_list, &h_group_snap_list);
+  cls_register_cxx_method(h_class, "group_snap_list_sorted",
+			  CLS_METHOD_RD,
+			  group_snap_list_sorted, &h_group_snap_list_sorted);
 
   /* rbd_trash object methods */
   cls_register_cxx_method(h_class, "trash_add",
