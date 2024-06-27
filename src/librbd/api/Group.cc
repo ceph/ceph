@@ -60,6 +60,7 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 
   string group_id;
   vector<string> ind_snap_names;
+  bool sort_support = true;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
@@ -78,8 +79,20 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
   for (;;) {
     vector<cls::rbd::GroupSnapshot> snaps_page;
 
-    r = cls_client::group_snap_list(&group_ioctx, group_header_oid,
+    if (sort_support) {
+      r = cls_client::group_snap_list_sorted(&group_ioctx, group_header_oid,
+				             snap_last, max_read, &snaps_page);
+      if (r == -ENOTSUP) {
+	ldout(cct, 20) << "falling back to unsorted listing" << dendl;
+	sort_support = false;
+	cls_snaps->clear();
+	snap_last = {};
+	continue;
+      }
+    } else {
+      r = cls_client::group_snap_list(&group_ioctx, group_header_oid,
 				    snap_last, max_read, &snaps_page);
+    }
     if (r == -ERESTART && !snap_last.id.empty()) {
       ldout(cct, 20) << "invalid snap_last " << snap_last.id << ", "
                      << "restarting listing" << dendl;
