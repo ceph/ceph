@@ -10,7 +10,6 @@ import json
 import logging
 import socket
 import ssl
-import tempfile
 import threading
 import time
 
@@ -20,11 +19,12 @@ from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.ssl_cert_utils import SSLCerts
 from mgr_util import test_port_allocation, PortAlreadyInUse
+from mgr_util import verify_tls_files
+import tempfile
 
 from urllib.error import HTTPError, URLError
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -44,14 +44,12 @@ cherrypy.log.access_log.propagate = False
 
 class AgentEndpoint:
 
-    KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
-    KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
-
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
-        self.ssl_certs = SSLCerts()
         self.server_port = 7150
         self.server_addr = self.mgr.get_mgr_ip()
+        self.key_file: IO[bytes]
+        self.cert_file: IO[bytes]
 
     def configure_routes(self) -> None:
         conf = {'/': {'tools.trailing_slash.on': False}}
@@ -60,18 +58,21 @@ class AgentEndpoint:
         cherrypy.tree.mount(self.node_proxy_endpoint, '/node-proxy', config=conf)
 
     def configure_tls(self, server: Server) -> None:
-        old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
-        old_key = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_KEY)
-        if old_cert and old_key:
-            self.ssl_certs.load_root_credentials(old_cert, old_key)
-        else:
-            self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
-            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_CERT, self.ssl_certs.get_root_cert())
-            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_KEY, self.ssl_certs.get_root_key())
 
-        host = self.mgr.get_hostname()
         addr = self.mgr.get_mgr_ip()
-        server.ssl_certificate, server.ssl_private_key = self.ssl_certs.generate_cert_files(host, addr)
+        host = self.mgr.get_hostname()
+        cert, key = self.mgr.cert_mgr.generate_cert(host, addr)
+
+        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file.write(cert.encode('utf-8'))
+        self.cert_file.flush()  # cert_tmp must not be gc'ed
+
+        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file.write(key.encode('utf-8'))
+        self.key_file.flush()  # pkey_tmp must not be gc'ed
+
+        verify_tls_files(self.cert_file.name, self.key_file.name)
+        server.ssl_certificate, server.ssl_private_key = self.cert_file.name, self.key_file.name
 
     def find_free_port(self) -> None:
         max_port = self.server_port + 150
@@ -96,7 +97,7 @@ class AgentEndpoint:
 class NodeProxyEndpoint:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
-        self.ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
+        self.ssl_root_crt = self.mgr.cert_mgr.get_root_ca()
         self.ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         self.ssl_ctx.check_hostname = False
         self.ssl_ctx.verify_mode = ssl.CERT_NONE
@@ -303,7 +304,7 @@ class NodeProxyEndpoint:
         endpoint: List[Any] = ['led', led_type]
         device: str = id_drive if id_drive else ''
 
-        ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
+        ssl_root_crt = self.mgr.cert_mgr.get_root_ca()
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = True
         ssl_ctx.verify_mode = ssl.CERT_REQUIRED
@@ -776,14 +777,13 @@ class AgentMessageThread(threading.Thread):
         self.mgr.agent_cache.sending_agent_message[self.host] = True
         try:
             assert self.agent
-            root_cert = self.agent.ssl_certs.get_root_cert()
+            root_cert = self.mgr.cert_mgr.get_root_ca()
             root_cert_tmp = tempfile.NamedTemporaryFile()
             root_cert_tmp.write(root_cert.encode('utf-8'))
             root_cert_tmp.flush()
             root_cert_fname = root_cert_tmp.name
 
-            cert, key = self.agent.ssl_certs.generate_cert(
-                self.mgr.get_hostname(), self.mgr.get_mgr_ip())
+            cert, key = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip())
 
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert.encode('utf-8'))
@@ -952,7 +952,7 @@ class CephadmAgentHelpers:
         down = False
         try:
             assert self.agent
-            assert self.agent.ssl_certs.get_root_cert()
+            assert self.mgr.cert_mgr.get_root_ca()
         except Exception:
             self.mgr.log.debug(
                 f'Delaying checking agent on {host} until cephadm endpoint finished creating root cert')
@@ -976,7 +976,7 @@ class CephadmAgentHelpers:
                 # so it's necessary to check this one specifically
                 root_cert_match = False
                 try:
-                    root_cert = self.agent.ssl_certs.get_root_cert()
+                    root_cert = self.mgr.cert_mgr.get_root_ca()
                     if last_deps and root_cert in last_deps:
                         root_cert_match = True
                 except Exception:
