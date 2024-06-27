@@ -10,6 +10,8 @@ from ..constants import (
     DEFAULT_NODE_EXPORTER_IMAGE,
     DEFAULT_PROMETHEUS_IMAGE,
     DEFAULT_PROMTAIL_IMAGE,
+    UID_NOBODY,
+    GID_NOGROUP,
 )
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer, extract_uid_gid
@@ -170,7 +172,7 @@ class Monitoring(ContainerDaemonForm):
         if daemon_type == 'prometheus':
             uid, gid = extract_uid_gid(ctx, file_path='/etc/prometheus')
         elif daemon_type == 'node-exporter':
-            uid, gid = 65534, 65534
+            uid, gid = UID_NOBODY, GID_NOGROUP
         elif daemon_type == 'grafana':
             uid, gid = extract_uid_gid(ctx, file_path='/var/lib/grafana')
         elif daemon_type == 'loki':
