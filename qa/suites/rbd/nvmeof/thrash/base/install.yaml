@@ -1,6 +1,8 @@
 use_shaman: True
 tasks:
 - install:
+    extra_packages:
+        - nvme-cli
 - cephadm:
 - cephadm.shell:
     host.a:
@@ -10,4 +12,3 @@ tasks:
     - ceph orch host ls
     - ceph orch device ls
     - ceph osd lspools
-
