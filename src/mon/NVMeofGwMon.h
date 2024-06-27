@@ -48,7 +48,7 @@ public:
 
     // config observer
     const char** get_tracked_conf_keys() const override;
-    void handle_conf_change(const ConfigProxy& conf, const std::set<std::string> &changed) override;
+    void handle_conf_change(const ConfigProxy& conf, const std::set<std::string> &changed) override {};
 
     // 3 pure virtual methods of the paxosService
     void create_initial() override {};
