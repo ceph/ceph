@@ -3988,6 +3988,41 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_set_alloc_hint2)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_set_alloc_hint2);
 
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_copy_from)(
+  rados_write_op_t write_op,
+  const char *src,
+  rados_ioctx_t src_io,
+  uint64_t src_version,
+  uint32_t src_fadvise_flags)
+{
+  tracepoint(librados, rados_write_op_copy_from_enter, write_op, src, src_io, src_version, src_fadvise_flags);
+  librados::IoCtxImpl *src_ctx = (librados::IoCtxImpl *)src_io;
+  object_t oid(src);
+  to_object_operation(write_op)->copy_from(oid, src_ctx->snap_seq,
+	       src_ctx->oloc, src_version, 0, src_fadvise_flags);
+  tracepoint(librados, rados_write_op_copy_from_exit);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_copy_from);
+
+extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_copy_from2)(
+  rados_write_op_t write_op,
+  const char *src,
+  rados_ioctx_t src_io,
+  uint64_t src_version,
+  uint32_t truncate_seq,
+  uint64_t truncate_size,
+  uint32_t src_fadvise_flags)
+{
+  tracepoint(librados, rados_write_op_copy_from2_enter, write_op, src, src_io, src_version, truncate_seq, truncate_size, src_fadvise_flags);
+  librados::IoCtxImpl *src_ctx = (librados::IoCtxImpl *)src_io;
+  object_t oid(src);
+  to_object_operation(write_op)->copy_from2(oid, src_ctx->snap_seq,
+	       src_ctx->oloc, src_version, 0,
+	       truncate_seq, truncate_size, src_fadvise_flags);
+  tracepoint(librados, rados_write_op_copy_from2_exit);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_copy_from2);
+
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_write_op_operate)(
   rados_write_op_t write_op,
   rados_ioctx_t io,

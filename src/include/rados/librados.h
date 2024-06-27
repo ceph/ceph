@@ -3183,6 +3183,48 @@ CEPH_RADOS_API void rados_write_op_set_alloc_hint2(rados_write_op_t write_op,
 						   uint32_t flags);
 
 /**
+ * Copy an object
+ *
+ * Copies an object from another location.  The operation is atomic in that
+ * the copy either succeeds in its entirety or fails (e.g., because the
+ * source object was modified while the copy was in progress).
+ *
+ * @param src source object name
+ * @param src_io ioctx for the source object
+ * @param src_version current version of the source object
+ * @param src_fadvise_flags the fadvise flags for source object
+ */
+CEPH_RADOS_API void rados_write_op_copy_from(rados_write_op_t write_op,
+						   const char *src,
+						   rados_ioctx_t src_io,
+						   uint64_t src_version,
+						   uint32_t src_fadvise_flags);
+
+/**
+ * Copy an object
+ *
+ * Copies an object from another location.  The operation is atomic in that
+ * the copy either succeeds in its entirety or fails (e.g., because the
+ * source object was modified while the copy was in progress).  Instead of
+ * copying truncate_seq and truncate_size from the source object it receives
+ * these values as parameters.
+ *
+ * @param src source object name
+ * @param src_io ioctx for the source object
+ * @param src_version current version of the source object
+ * @param truncate_seq truncate sequence for the destination object
+ * @param truncate_size truncate size for the destination object
+ * @param src_fadvise_flags the fadvise flags for source object
+ */
+CEPH_RADOS_API void rados_write_op_copy_from2(rados_write_op_t write_op,
+						   const char *src,
+						   rados_ioctx_t src_io,
+						   uint64_t src_version,
+						   uint32_t truncate_seq,
+						   uint64_t truncate_size,
+						   uint32_t src_fadvise_flags);
+
+/**
  * Perform a write operation synchronously
  * @param write_op operation to perform
  * @param io the ioctx that the object is in
