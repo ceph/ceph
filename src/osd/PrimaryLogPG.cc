@@ -4904,7 +4904,7 @@ int PrimaryLogPG::trim_object(
     encode(snapset, bl);
     attrs[SS_ATTR] = std::move(bl);
 
-    bl.clear();
+    bl.clear(); //NOLINT(bugprone-use-after-move)
     encode(head_obc->obs.oi, bl,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR] = std::move(bl);
