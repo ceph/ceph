@@ -120,7 +120,7 @@ def test_remote_cache_api(r, client, obj):
     assert(data.get('objHosts') == '')
 
     # Allow cleaning cycle to pass
-    time.sleep(6)
+    time.sleep(20)
 
     log.debug(subprocess.check_output(['ls', '/tmp/rgw_d4n_datacache']).decode('latin-1'))
     assert(os.path.exists('/tmp/rgw_d4n_datacache/bkt_test.txt_0_11') == True)
