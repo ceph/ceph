@@ -8,16 +8,16 @@ overrides:
         debug rgw: 20
         rgw filter: d4n
         rgw d4n cache cleaning interval: 5
-        rgw local cache address: "127.0.0.1:8001"
-        rgw remote cache address: "127.0.0.1:8002"
-        rgw d4n backend address: "127.0.0.1:8001"
+        rgw local cache address: "127.0.0.1:8000"
+        rgw remote cache address: "127.0.0.1:8001"
+        rgw d4n backend address: "127.0.0.1:8000"
         d4n writecache enabled: true
       c2.client.0:
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
         rgw filter: d4n
-        rgw local cache address: "127.0.0.1:8002" 
+        rgw local cache address: "127.0.0.1:8001" 
         d4n writecache enabled: true
 tasks:
 - install:
@@ -34,9 +34,9 @@ tasks:
 - tox: [c2.client.0]
 - rgw:
     c1.client.0:
-      port: 8001
+      port: 8000
     c2.client.0:
-      port: 8002
+      port: 8001
 - exec:
     c1.client.0:
       - sudo chmod 0777 /var/lib/ceph

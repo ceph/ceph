@@ -8,25 +8,25 @@ overrides:
         rgw filter: d4n
         d4n writecache enabled: true
         rgw d4n cache cleaning interval: 5
-        rgw local cache address: "127.0.0.1:8001"
-        rgw remote cache address: "127.0.0.1:8002"
-        rgw d4n backend address: "127.0.0.1:8001"
+        rgw local cache address: "127.0.0.1:8000"
+        rgw remote cache address: "127.0.0.1:8001"
+        rgw d4n backend address: "127.0.0.1:8000"
       c1.client.0: 
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
         rgw filter: d4n
         rgw d4n cache cleaning interval: 5
-        rgw local cache address: "127.0.0.1:8001"
-        rgw remote cache address: "127.0.0.1:8002"
-        rgw d4n backend address: "127.0.0.1:8001"
+        rgw local cache address: "127.0.0.1:8000"
+        rgw remote cache address: "127.0.0.1:8001"
+        rgw d4n backend address: "127.0.0.1:8000"
         d4n writecache enabled: true
       c2.client.0:
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
         rgw filter: d4n
-        rgw local cache address: "127.0.0.1:8002" 
+        rgw local cache address: "127.0.0.1:8001" 
         d4n writecache enabled: true
 
   rgw:
