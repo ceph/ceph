@@ -1328,7 +1328,6 @@ public:
     dout(20) << __func__ << " level " << level << " near " << near
              << " on " << *b
              << " which has cache_private " << b->cache_private << dendl;
-    ceph_assert(ceph_mutex_is_locked(cache));  // see _txc_finish_io
     ceph_assert(b->is_clean() || b->is_empty());
     if (near) {
       b->cache_private = near->cache_private;
