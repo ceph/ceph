@@ -129,8 +129,7 @@ function auth_cephx_key() {
     if mon_mkfs --key='corrupted key' ; then
         return 1
     else
-        rm -fr $MON_DIR/store.db
-        rm -fr $MON_DIR/kv_backend
+        rm -fr $MON_DIR
     fi
 
     mon_mkfs --key=$key
