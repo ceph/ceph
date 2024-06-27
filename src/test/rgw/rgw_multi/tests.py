@@ -949,6 +949,8 @@ def test_null_version_id_delete():
 
     bucket.delete_key(obj, version_id='null')
 
+    bucket.delete_key(obj, version_id=key2.version_id)
+
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_concurrent_versioned_object_incremental_sync():

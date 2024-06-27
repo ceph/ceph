@@ -5121,12 +5121,7 @@ void RGWDeleteObj::execute(optional_yield y)
     {
       RGWObjState* astate = nullptr;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
-      op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
-      if (s->object->get_instance() == "null") {
-        null_verid = 1;
-      } else {
-        null_verid = 0;
-      }
+      null_verid = (s->object->get_instance() == "null");
 
       op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
@@ -5227,7 +5222,6 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
 
-      ldpp_dout(this, 1) << "del_op->params.null_verid " << del_op->params.null_verid << dendl;
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
 	delete_marker = del_op->result.delete_marker;
