@@ -1,5 +1,11 @@
 tls_server_config:
   cert_file: prometheus.crt
   key_file: prometheus.key
+{% if enable_mtls %}
+  client_auth_type: RequireAndVerifyClientCert
+  client_ca_file: root_cert.pem
+{% endif %}
+{% if enable_basic_auth %}
 basic_auth_users:
     {{ prometheus_web_user }}: {{ prometheus_web_password }}
+{% endif %}
