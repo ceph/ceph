@@ -3,9 +3,11 @@ overrides:
   nuke-on-error: false
 tasks:
 - ceph-fuse:
-- print: "**** done octopus client"
-#- workunit:
-#    clients:
-#      all:
-#      - suites/fsstress.sh
+    client.1:
+      client_feature_range: "[0-13],[15-21]"
+- print: "**** done client"
+- workunit:
+    clients:
+      all:
+      - suites/fsstress.sh
 - print: "**** done fsstress"
