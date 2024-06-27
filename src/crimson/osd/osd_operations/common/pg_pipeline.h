@@ -17,7 +17,7 @@ protected:
   struct WaitForActive : OrderedExclusivePhaseT<WaitForActive> {
     static constexpr auto type_name = "CommonPGPipeline:::wait_for_active";
   } wait_for_active;
-  struct RecoverMissing : OrderedExclusivePhaseT<RecoverMissing> {
+  struct RecoverMissing : OrderedConcurrentPhaseT<RecoverMissing> {
     static constexpr auto type_name = "CommonPGPipeline::recover_missing";
   } recover_missing;
   struct GetOBC : OrderedExclusivePhaseT<GetOBC> {
