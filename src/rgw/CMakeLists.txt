@@ -70,6 +70,7 @@ set(librgw_common_srcs
   rgw_bucket.cc
   rgw_bucket_layout.cc
   rgw_cache.cc
+  rgw_cksum_pipe.cc
   rgw_common.cc
   rgw_compression.cc
   rgw_cors.cc
@@ -304,7 +305,8 @@ target_link_libraries(rgw_common
     RapidJSON::RapidJSON
     Boost::context
     ${FMT_LIB}
-    OpenSSL::SSL)
+    OpenSSL::SSL
+    BLAKE3::blake3)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
