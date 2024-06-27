@@ -1,7 +1,10 @@
 use_shaman: True
 tasks:
 - install:
+    extra_packages:
+        - nvme-cli
 - cephadm:
+    watchdog_setup:
 - cephadm.shell:
     host.a:
     # get state before nvmeof deployment
@@ -10,4 +13,3 @@ tasks:
     - ceph orch host ls
     - ceph orch device ls
     - ceph osd lspools
-
