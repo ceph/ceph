@@ -115,19 +115,20 @@ class MgmtGatewayService(CephadmService):
             'grafana_endpoints': grafana_endpoints
         }
 
-        internal_cert, internal_pkey, cert, pkey = self.get_certificates(svc_spec, daemon_spec)
+        internal_cert, internal_pkey, cert, key = self.get_certificates(svc_spec, daemon_spec)
         daemon_config = {
             "files": {
                 "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),
                 "nginx_external_server.conf": self.mgr.template.render(self.EXTERNAL_SVC_TEMPLATE_PATH, external_server_context),
                 "nginx_internal_server.conf": self.mgr.template.render(self.INTERNAL_SVC_TEMPLATE_PATH, internal_server_context),
                 "nginx_internal.crt": internal_cert,
-                "nginx_internal.key": internal_pkey
+                "nginx_internal.key": internal_pkey,
+                "ca.crt": self.mgr.cert_mgr.get_root_ca()
             }
         }
         if not svc_spec.disable_https:
             daemon_config["files"]["nginx.crt"] = cert
-            daemon_config["files"]["nginx.key"] = pkey
+            daemon_config["files"]["nginx.key"] = key
 
         return daemon_config, sorted(self.get_mgmt_gateway_deps())
 
