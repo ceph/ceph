@@ -62,29 +62,30 @@ struct rgw_http_req_data : public RefCountedObject {
   }
 
   template <typename Executor, typename CompletionToken>
-  auto async_wait(const Executor& ex, CompletionToken&& token) {
+  auto async_wait(const Executor& ex, std::unique_lock<ceph::mutex>& lock,
+                  CompletionToken&& token) {
     return boost::asio::async_initiate<CompletionToken, Signature>(
-        [this] (auto handler, auto ex) {
-          std::unique_lock l{lock};
+        [this, &lock] (auto handler, auto ex) {
           completion = Completion::create(ex, std::move(handler));
+          lock.unlock(); // unlock before suspend
         }, token, ex);
   }
 
   int wait(optional_yield y) {
+    std::unique_lock l{lock};
     if (done) {
       return ret;
     }
     if (y) {
       auto& yield = y.get_yield_context();
       boost::system::error_code ec;
-      async_wait(yield.get_executor(), yield[ec]);
+      async_wait(yield.get_executor(), l, yield[ec]);
       return -ec.value();
     }
     // work on asio threads should be asynchronous, so warn when they block
     if (is_asio_thread) {
       dout(20) << "WARNING: blocking http request" << dendl;
     }
-    std::unique_lock l{lock};
     cond.wait(l, [this]{return done==true;});
     return ret;
   }
