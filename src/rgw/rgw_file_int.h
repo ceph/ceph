@@ -24,7 +24,7 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
 #include <boost/optional.hpp>
-#include "xxhash.h"
+#include <xxhash.h>
 #include "include/buffer.h"
 #include "common/cohort_lru.h"
 #include "common/ceph_timer.h"
@@ -37,6 +37,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
 #include "rgw_perf_counters.h"
+#include "rgw_cksum.h"
 
 
 /* XXX
