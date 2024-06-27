@@ -31,7 +31,7 @@ by a programmer by implementing the ``encode`` and ``decode`` methods.
 Principles for format change
 ----------------------------
 It is not unusual that the format of serialization changes. This
-process requires careful attention from during both development
+process requires careful attention during both development
 and review.
 
 The general rule is that a decoder must understand what had been
@@ -55,7 +55,7 @@ of interoperability between dencoders:
 
 * ``n-2`` for dencoding between daemons,
 * ``n-3`` hard requirement for client-involved scenarios,
-* ``n-3..``  soft requirements for clinet-involved scenarios. Ideally
+* ``n-3..``  soft requirements for client-involved scenarios. Ideally
   every client should be able to talk any version of daemons.
 
 As the underlying reasons are the same, the rules dencoders
@@ -163,7 +163,7 @@ macro.
 The append-extendability of our dencoders is a result of the forward
 compatibility that the ``ENCODE_START`` and ``DECODE_FINISH`` macros bring.
 
-They are implementing extendibility facilities. An encoder, when filling
+They are implementing extensibility facilities. An encoder, when filling
 the bufferlist, prepends three fields: version of the current format,
 minimal version of a decoder compatible with it and the total size of
 all encoded fields.
