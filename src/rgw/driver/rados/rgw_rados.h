@@ -1125,7 +1125,6 @@ public:
                std::map<std::string, bufferlist> *pattrs,
                std::map<std::string, std::string> *pheaders,
                std::string *version_id,
-               std::string *ptag,
                std::string *petag, optional_yield y);
 
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
@@ -1150,7 +1149,6 @@ public:
                        RGWObjCategory category,
                        std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
-                       std::string *ptag,
                        std::string *petag,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
@@ -1199,7 +1197,6 @@ public:
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                std::string *version_id,
-               std::string *ptag,
                std::string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,

@@ -2937,7 +2937,6 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                0, /* uint64_t olh_epoch */
                real_time(), /* time_t delete_at */
                NULL, /* string *version_id */
-               NULL, /* string *ptag */
                NULL, /* string *petag */
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
@@ -3036,7 +3035,6 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        0,             /* uint64_t olh_epoch */
                        real_time(),   /* time_t delete_at */
                        nullptr,       /* string *version_id */
-                       nullptr,       /* string *ptag */
                        nullptr,       /* string *petag */
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
                        nullptr,       /* void *progress_data */
@@ -4021,7 +4019,6 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
                map<string, bufferlist> *pattrs,
                map<string, string> *pheaders,
                string *version_id,
-               string *ptag,
                string *petag, optional_yield y)
 {
   /* source is in a different zonegroup, copy from there */
@@ -4175,7 +4172,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                RGWObjCategory category,
                std::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
-               string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
@@ -4631,7 +4627,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *version_id,
-               string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
@@ -4673,7 +4668,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, rctx,
+               olh_epoch, delete_at, petag, progress_cb, progress_data, rctx,
                nullptr /* filter */, stat_follow_olh, stat_dest_obj, source_trace_entry);
   }
 

@@ -820,7 +820,6 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        RGWObjCategory::Main,
                        versioned_epoch,
                        real_time(), /* delete_at */
-                       NULL, /* string *ptag, */
                        &etag, /* string *petag, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL, /* void *progress_data*); */
@@ -884,7 +883,6 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        pattrs,
                        pheaders,
                        nullptr,
-                       nullptr, /* string *ptag, */
                        petag, null_yield); /* string *petag, */
 
   if (r < 0) {
