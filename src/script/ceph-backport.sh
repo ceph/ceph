@@ -292,7 +292,7 @@ function cherry_pick_phase {
         git checkout -b "$local_branch" FETCH_HEAD
     fi
 
-    git fetch "$upstream_remote" "pull/$original_pr/head:pr-$original_pr"
+    git fetch "$upstream_remote" "$merge_commit_sha"
 
     set +x
     maybe_restore_set_x
