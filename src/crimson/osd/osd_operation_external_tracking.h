@@ -33,6 +33,8 @@ struct LttngBackend
     PGActivationBlocker::BlockingEvent::Backend,
     scrub::PGScrubber::BlockingEvent::Backend,
     ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::Backend,
+    ClientRequest::PGPipeline::RecoverMissing::
+      BlockingEvent::ExitBarrierEvent::Backend,
     ClientRequest::PGPipeline::RecoverMissingLockOBC::BlockingEvent::Backend,
     ClientRequest::PGPipeline::RecoverMissingLockOBC::
       BlockingEvent::ExitBarrierEvent::Backend,
@@ -107,6 +109,10 @@ struct LttngBackend
   void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent& ev,
               const Operation& op,
               const ClientRequest::PGPipeline::RecoverMissing& blocker) override {
+  }
+
+  void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::ExitBarrierEvent& ev,
+	      const Operation& op) override {
   }
 
   void handle(ClientRequest::PGPipeline::RecoverMissingLockOBC::BlockingEvent& ev,
@@ -175,6 +181,8 @@ struct HistoricBackend
     PGActivationBlocker::BlockingEvent::Backend,
     scrub::PGScrubber::BlockingEvent::Backend,
     ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::Backend,
+    ClientRequest::PGPipeline::RecoverMissing::
+      BlockingEvent::ExitBarrierEvent::Backend,
     ClientRequest::PGPipeline::RecoverMissingLockOBC::BlockingEvent::Backend,
     ClientRequest::PGPipeline::RecoverMissingLockOBC::
       BlockingEvent::ExitBarrierEvent::Backend,
@@ -249,6 +257,10 @@ struct HistoricBackend
   void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent& ev,
               const Operation& op,
               const ClientRequest::PGPipeline::RecoverMissing& blocker) override {
+  }
+
+  void handle(ClientRequest::PGPipeline::RecoverMissing::BlockingEvent::ExitBarrierEvent& ev,
+              const Operation& op) override {
   }
 
   void handle(ClientRequest::PGPipeline::RecoverMissingLockOBC::BlockingEvent& ev,
