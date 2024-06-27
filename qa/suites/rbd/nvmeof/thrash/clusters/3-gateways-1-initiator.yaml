@@ -21,3 +21,10 @@ roles:
   - client.2
   - ceph.nvmeof.nvmeof.c
 - - client.3 # initiator
+
+overrides:
+  ceph:
+    conf:
+      mon:
+        # cephadm can take up to 5 minutes to bring up remaining mons
+        mon down mkfs grace: 300
