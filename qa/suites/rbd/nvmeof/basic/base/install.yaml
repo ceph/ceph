@@ -4,6 +4,7 @@ tasks:
     extra_packages:
         - nvme-cli
 - cephadm: 
+    watchdog_setup:
 - cephadm.shell:
     host.a:
     # get state before nvmeof deployment
