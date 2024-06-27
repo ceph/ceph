@@ -286,8 +286,6 @@ ClientRequest::recover_missing_snaps(
   ObjectContextRef head,
   std::set<snapid_t> &snaps)
 {
-  co_await ihref.enter_stage<interruptor>(
-    client_pp(*pg).recover_missing_snaps, *this);
   for (auto &snap : snaps) {
     auto coid = head->obs.oi.soid;
     coid.snap = snap;
@@ -309,9 +307,7 @@ ClientRequest::process_op(
   instance_handle_t &ihref, Ref<PG> pg, unsigned this_instance_id)
 {
   LOG_PREFIX(ClientRequest::process_op);
-  co_await ihref.enter_stage<interruptor>(
-    client_pp(*pg).recover_missing, *this
-  );
+  ihref.enter_stage_sync(client_pp(*pg).recover_missing, *this);
   if (!pg->is_primary()) {
     DEBUGDPP(
       "Skipping recover_missings on non primary pg for soid {}",
@@ -321,8 +317,6 @@ ClientRequest::process_op(
     std::set<snapid_t> snaps = snaps_need_to_recover();
     if (!snaps.empty()) {
       // call with_obc() in order, but wait concurrently for loading.
-      ihref.enter_stage_sync(
-          client_pp(*pg).recover_missing_lock_obc, *this);
       auto with_obc = pg->obc_loader.with_obc<RWState::RWREAD>(
         m->get_hobj().get_head(),
         [&snaps, &ihref, pg, this](auto head, auto) {
