@@ -99,6 +99,20 @@ Fields specific to the ``spec`` section of the mgmt-gateway service are describe
 .. autoclass:: MgmtGatewaySpec
    :members:
 
+.. warning::
+
+   TLSv1.3 is considered safe at this moment and includes a set of secure ciphers by default.
+   When configuring SSL/TLS ciphers for older versions, especially TLSv1.2, it is crucial to
+   use only a subset of secure ciphers. Using weak or outdated ciphers can significantly
+   compromise the security of your system.
+
+   Any alteration of the cipher list for SSL/TLS configurations is the responsibility of the
+   system administrator. Avoid modifying these lists without a thorough understanding of the
+   implications. Incorrect configurations can lead to vulnerabilities such as weak encryption,
+   lack of forward secrecy, and susceptibility to various attacks. Always refer to up-to-date
+   security guidelines and best practices when configuring SSL/TLS settings.
+
+
 The specification can then be applied by running the following command:
 
 .. prompt:: bash #

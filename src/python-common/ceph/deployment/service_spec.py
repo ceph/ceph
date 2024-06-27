@@ -1818,7 +1818,7 @@ class MgmtGatewaySpec(ServiceSpec):
         self.ssl_stapling_verify = ssl_stapling_verify
         #: A list of supported SSL protocols (as supported by nginx)
         self.ssl_protocols = ssl_protocols
-        #: A list of supported SSL ciphers (as supported by nginx)
+        #: List of supported secure SSL ciphers. Changing this list may reduce system security.
         self.ssl_ciphers = ssl_ciphers
 
     def get_port_start(self) -> List[int]:
@@ -1876,7 +1876,7 @@ class MgmtGatewaySpec(ServiceSpec):
     def _validate_ssl_protocols(self, protocols: Optional[List[str]]) -> None:
         if protocols is None:
             return
-        valid_protocols = ['SSLv2', 'SSLv3', 'TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3']
+        valid_protocols = ['TLSv1.2', 'TLSv1.3']
         for protocol in protocols:
             if protocol not in valid_protocols:
                 raise SpecValidationError(f"Invalid SSL Protocol: {protocol}. \
