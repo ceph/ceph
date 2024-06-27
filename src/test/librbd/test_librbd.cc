@@ -13336,6 +13336,171 @@ TEST_F(TestLibRBD, ConcurrentOperations)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, FormatAndCloneFormatOptions)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::ImageOptions opts_with_0;
+  ASSERT_EQ(0, opts_with_0.set(RBD_IMAGE_OPTION_FORMAT, 0));
+  librbd::ImageOptions opts_with_1;
+  ASSERT_EQ(0, opts_with_1.set(RBD_IMAGE_OPTION_FORMAT, 1));
+  librbd::ImageOptions opts_with_2;
+  ASSERT_EQ(0, opts_with_2.set(RBD_IMAGE_OPTION_FORMAT, 2));
+  librbd::ImageOptions opts_with_3;
+  ASSERT_EQ(0, opts_with_3.set(RBD_IMAGE_OPTION_FORMAT, 3));
+
+  uint64_t features;
+  ASSERT_TRUE(get_features(&features));
+  ASSERT_EQ(0, opts_with_2.set(RBD_IMAGE_OPTION_FEATURES, features));
+
+  // create
+  librbd::RBD rbd;
+  std::string name1 = get_temp_image_name();
+  std::string name2 = get_temp_image_name();
+  auto do_create = [&rbd, &ioctx](const auto& name, const auto& opts) {
+    auto mod_opts = opts;
+    return rbd.create4(ioctx, name.c_str(), 2 << 20, mod_opts);
+  };
+  ASSERT_EQ(-EINVAL, do_create(name1, opts_with_0));
+  ASSERT_EQ(-EINVAL, do_create(name1, opts_with_3));
+  ASSERT_EQ(0, do_create(name1, opts_with_1));
+  auto verify_format_1 = [&rbd, &ioctx](const auto& name) {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+    uint8_t old_format;
+    ASSERT_EQ(0, image.old_format(&old_format));
+    ASSERT_TRUE(old_format);
+  };
+  ASSERT_NO_FATAL_FAILURE(verify_format_1(name1));
+  ASSERT_EQ(0, do_create(name2, opts_with_2));
+  auto verify_format_2 = [&rbd, &ioctx](const auto& name) {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+    uint8_t old_format;
+    ASSERT_EQ(0, image.old_format(&old_format));
+    ASSERT_FALSE(old_format);
+  };
+  ASSERT_NO_FATAL_FAILURE(verify_format_2(name2));
+
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name2.c_str(), NULL));
+    ASSERT_EQ(0, image.snap_create("parent_snap"));
+    ASSERT_EQ(0, image.snap_protect("parent_snap"));
+  }
+
+  // clone
+  std::string clone_name1 = get_temp_image_name();
+  std::string clone_name2 = get_temp_image_name();
+  auto do_clone = [&rbd, &ioctx, &name2](const auto& clone_name,
+                                         const auto& opts) {
+    auto mod_opts = opts;
+    return rbd.clone3(ioctx, name2.c_str(), "parent_snap", ioctx,
+                      clone_name.c_str(), mod_opts);
+  };
+  ASSERT_EQ(-EINVAL, do_clone(clone_name1, opts_with_0));
+  ASSERT_EQ(-EINVAL, do_clone(clone_name1, opts_with_1));
+  ASSERT_EQ(-EINVAL, do_clone(clone_name1, opts_with_3));
+  // if RBD_IMAGE_OPTION_CLONE_FORMAT isn't set, rbd_default_clone_format
+  // config option kicks in -- we aren't interested in its behavior here
+  ASSERT_EQ(0, do_clone(clone_name1, opts_with_2));
+  ASSERT_EQ(0, rbd.remove(ioctx, clone_name1.c_str()));
+
+  auto clone_opts_with_0 = opts_with_2;
+  ASSERT_EQ(0, clone_opts_with_0.set(RBD_IMAGE_OPTION_CLONE_FORMAT, 0));
+  auto clone_opts_with_1 = opts_with_2;
+  ASSERT_EQ(0, clone_opts_with_1.set(RBD_IMAGE_OPTION_CLONE_FORMAT, 1));
+  auto clone_opts_with_2 = opts_with_2;
+  ASSERT_EQ(0, clone_opts_with_2.set(RBD_IMAGE_OPTION_CLONE_FORMAT, 2));
+  auto clone_opts_with_3 = opts_with_2;
+  ASSERT_EQ(0, clone_opts_with_3.set(RBD_IMAGE_OPTION_CLONE_FORMAT, 3));
+
+  ASSERT_EQ(-EINVAL, do_clone(clone_name1, clone_opts_with_0));
+  ASSERT_EQ(-EINVAL, do_clone(clone_name1, clone_opts_with_3));
+  ASSERT_EQ(0, do_clone(clone_name1, clone_opts_with_1));
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, clone_name1.c_str(), NULL));
+    uint64_t op_features;
+    ASSERT_EQ(0, image.get_op_features(&op_features));
+    ASSERT_EQ(op_features, 0);
+  }
+  ASSERT_EQ(0, do_clone(clone_name2, clone_opts_with_2));
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, clone_name2.c_str(), NULL));
+    uint64_t op_features;
+    ASSERT_EQ(0, image.get_op_features(&op_features));
+    ASSERT_EQ(op_features, RBD_OPERATION_FEATURE_CLONE_CHILD);
+  }
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name1.c_str(), NULL));
+
+  // copy
+  std::string copy_name1 = get_temp_image_name();
+  std::string copy_name2 = get_temp_image_name();
+  auto do_copy = [&image, &ioctx](const auto& copy_name, const auto& opts) {
+    auto mod_opts = opts;
+    return image.copy3(ioctx, copy_name.c_str(), mod_opts);
+  };
+  ASSERT_EQ(-EINVAL, do_copy(copy_name1, opts_with_0));
+  ASSERT_EQ(-EINVAL, do_copy(copy_name1, opts_with_3));
+  ASSERT_EQ(0, do_copy(copy_name1, opts_with_1));
+  ASSERT_NO_FATAL_FAILURE(verify_format_1(copy_name1));
+  ASSERT_EQ(0, do_copy(copy_name2, opts_with_2));
+  ASSERT_NO_FATAL_FAILURE(verify_format_2(copy_name2));
+
+  // deep copy
+  std::string deep_copy_name = get_temp_image_name();
+  auto do_deep_copy = [&image, &ioctx, &deep_copy_name](const auto& opts) {
+    auto mod_opts = opts;
+    return image.deep_copy(ioctx, deep_copy_name.c_str(), mod_opts);
+  };
+  ASSERT_EQ(-EINVAL, do_deep_copy(opts_with_0));
+  ASSERT_EQ(-EINVAL, do_deep_copy(opts_with_1));
+  ASSERT_EQ(-EINVAL, do_deep_copy(opts_with_3));
+  ASSERT_EQ(0, do_deep_copy(opts_with_2));
+  ASSERT_NO_FATAL_FAILURE(verify_format_2(deep_copy_name));
+
+  ASSERT_EQ(0, image.close());
+
+  // migration
+  std::string migrate_name = get_temp_image_name();
+  auto do_migrate = [&rbd, &ioctx, &name1, &migrate_name](const auto& opts) {
+    auto mod_opts = opts;
+    return rbd.migration_prepare(ioctx, name1.c_str(), ioctx,
+                                 migrate_name.c_str(), mod_opts);
+  };
+  ASSERT_EQ(-EINVAL, do_migrate(opts_with_0));
+  ASSERT_EQ(-EINVAL, do_migrate(opts_with_1));
+  ASSERT_EQ(-EINVAL, do_migrate(opts_with_3));
+  ASSERT_EQ(0, do_migrate(opts_with_2));
+  ASSERT_NO_FATAL_FAILURE(verify_format_2(migrate_name));
+
+  // import-only migration
+  std::string source_spec = R"({
+    "type": "native",
+    "pool_name": ")" + m_pool_name + R"(",
+    "image_name": ")" + name2 + R"(",
+    "snap_name": "parent_snap"
+})";
+  std::string import_name = get_temp_image_name();
+  auto do_migrate_import = [&rbd, &ioctx, &source_spec, &import_name](
+      const auto& opts) {
+    auto mod_opts = opts;
+    return rbd.migration_prepare_import(source_spec.c_str(), ioctx,
+                                        import_name.c_str(), mod_opts);
+  };
+  ASSERT_EQ(-EINVAL, do_migrate_import(opts_with_0));
+  ASSERT_EQ(-EINVAL, do_migrate_import(opts_with_1));
+  ASSERT_EQ(-EINVAL, do_migrate_import(opts_with_3));
+  ASSERT_EQ(0, do_migrate_import(opts_with_2));
+  ASSERT_NO_FATAL_FAILURE(verify_format_2(import_name));
+}
 
 // poorman's ceph_assert()
 namespace ceph {
