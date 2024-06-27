@@ -3072,6 +3072,12 @@ Then run the following:
         return (user, password)
 
     @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Dict[str, str]:
+        #  TODO: check if the module_name is valid
+        cert, key = self.cert_mgr.generate_cert(module_name, self.get_mgr_ip())
+        return {'cert': cert, 'key': key}
+
+    @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
@@ -3250,13 +3256,6 @@ Then run the following:
         self.tuned_profiles.rm_setting(profile_name, setting)
         self._kick_serve_loop()
         return f'Removed setting {setting} from tuned profile {profile_name}'
-
-    @handle_orch_error
-    def service_discovery_dump_cert(self) -> str:
-        root_cert = self.get_store(ServiceDiscovery.KV_STORE_SD_ROOT_CERT)
-        if not root_cert:
-            raise OrchestratorError('No certificate found for service discovery')
-        return root_cert
 
     def set_health_warning(self, name: str, summary: str, count: int, detail: List[str]) -> None:
         self.health_checks[name] = {
