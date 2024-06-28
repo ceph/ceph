@@ -105,7 +105,6 @@ def test_remote_cache_api(r, client, obj):
     assert(os.path.exists('/tmp/rgw_d4n_datacache/D_bkt_test.txt_0_11') == True)
 
     data = r.hgetall('bkt_test.txt_0_11')
-    log.debug(data)
 
     # directory entry comparisons
     assert(data.get('blockID') == '0')
@@ -133,7 +132,10 @@ def test_remote_cache_api(r, client, obj):
     out = subprocess.check_output(['cat', '/tmp/rgw_d4n_datacache/RD_bkt_test.txt_0_11']).decode('latin-1')
     assert(out == "hello world")
 
+    log.debug("keys:")
+    log.debug(r.keys('*'))
     data = r.hgetall('bkt_test.txt_0_11')
+    log.debug(data)
 
     # directory entry comparisons
     assert(data.get('blockID') == '0')
