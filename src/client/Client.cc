@@ -1702,6 +1702,12 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
     goto out;
   }
 
+  if (unlikely(cct->_conf->client_debug_force_send_request_to_rank0)) {
+    mds = 0;
+    ldout(cct, 10) << __func__ << " force sending requests to mds.0" << dendl;
+    goto out;
+  }
+
   if (cct->_conf->client_use_random_mds)
     goto random_mds;
 
