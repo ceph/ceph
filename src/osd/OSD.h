@@ -1031,9 +1031,7 @@ struct OSDShard {
   epoch_t get_max_waiting_epoch();
 
   /// push osdmap into shard
-  void consume_map(
-    const OSDMapRef& osdmap,
-    unsigned *pushes_to_free);
+  void consume_map(const OSDMapRef& osdmap);
 
   int _wake_pg_slot(spg_t pgid, OSDShardPGSlot *slot);
 
