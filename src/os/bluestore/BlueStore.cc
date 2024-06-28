@@ -18652,17 +18652,17 @@ uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
       // considering statically available db space vs.
       // - observed maximums on DB dev for DB/WAL/UNSORTED data
       // - observed maximum spillovers
-      uint64_t max_db_use = 0; // max db usage we potentially observed
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_LOG - LEVEL_FIRST);
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
+      uint64_t current_db_use = 0; // max db usage we potentially observed
+      current_db_use += per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_LOG - LEVEL_FIRST);
+      current_db_use += per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
+      current_db_use += per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
       // this could go to db hence using it in the estimation
-      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_SLOW, LEVEL_DB - LEVEL_FIRST);
+      current_db_use += per_level_per_dev_usage.at(BlueFS::BDEV_SLOW, LEVEL_DB - LEVEL_FIRST);
 
       auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
       uint64_t avail = min(
         db_avail4slow,
-        max_db_use < db_total ? db_total - max_db_use : 0);
+        current_db_use < db_total ? db_total - current_db_use : 0);
 
       // considering current DB dev usage for SLOW data
       if (avail > per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_SLOW - LEVEL_FIRST)) {
