@@ -10,8 +10,9 @@ from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
 from ..constants import DEFAULT_OAUTH2_PROXY_IMAGE
-from ..data_utils import dict_get
+from ..data_utils import dict_get, is_fsid
 from ..file_utils import populate_files, makedirs, recursive_chown
+from ..exceptions import Error
 
 
 logger = logging.getLogger()
@@ -21,8 +22,14 @@ logger = logging.getLogger()
 class OAuth2Proxy(ContainerDaemonForm):
     """Define the configs for the jaeger tracing containers"""
 
+    default_image = DEFAULT_OAUTH2_PROXY_IMAGE
     daemon_type = 'oauth2-proxy'
-    required_files = ['oauth2-proxy.conf']
+    required_files = [
+        'oauth2-proxy.conf',
+        'oauth2-proxy.crt',
+        'oauth2-proxy.key',
+    ]
+
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -40,6 +47,7 @@ class OAuth2Proxy(ContainerDaemonForm):
         self.daemon_id = daemon_id
         self.image = image
         self.files = dict_get(config_json, 'files', {})
+        self.validate()
 
     @classmethod
     def init(
@@ -65,7 +73,9 @@ class OAuth2Proxy(ContainerDaemonForm):
         return extract_uid_gid(ctx, file_path='/bin/oauth2-proxy')
 
     def get_daemon_args(self) -> List[str]:
-        return ['--config=/etc/oauth2-proxy.conf']
+        return ['--config=/etc/oauth2-proxy.conf',
+                '--tls-cert-file=/etc/oauth2-proxy.crt',
+                '--tls-key-file=/etc/oauth2-proxy.key']
 
     def default_entrypoint(self) -> str:
         return ''
@@ -79,6 +89,22 @@ class OAuth2Proxy(ContainerDaemonForm):
         makedirs(config_dir, uid, gid, 0o755)
         recursive_chown(config_dir, uid, gid)
         populate_files(config_dir, self.files, uid, gid)
+
+    def validate(self) -> None:
+        if not is_fsid(self.fsid):
+            raise Error(f'not an fsid: {self.fsid}')
+        if not self.daemon_id:
+            raise Error(f'invalid daemon_id: {self.daemon_id}')
+        if not self.image:
+            raise Error(f'invalid image: {self.image}')
+
+        # check for the required files
+        if self.required_files:
+            for fname in self.required_files:
+                if fname not in self.files:
+                    raise Error(
+                        'required file missing from config-json: %s' % fname
+                    )
 
     @staticmethod
     def get_version(
@@ -97,6 +123,12 @@ class OAuth2Proxy(ContainerDaemonForm):
                 os.path.join(
                     data_dir, 'etc/oauth2-proxy.conf'
                 ): '/etc/oauth2-proxy.conf:Z',
+                os.path.join(
+                    data_dir, 'etc/oauth2-proxy.crt'
+                ): '/etc/oauth2-proxy.crt:Z',
+                os.path.join(
+                    data_dir, 'etc/oauth2-proxy.key'
+                ): '/etc/oauth2-proxy.key:Z',
             }
         )
 

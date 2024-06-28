@@ -42,47 +42,36 @@ class OAuth2ProxyService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
-    def get_certificates(self, svc_spec: OAuth2ProxySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str]:
-
-        def read_certificate(spec_field: Optional[List[str]]) -> str:
-            cert = ''
-            if isinstance(spec_field, list):
-                cert = '\n'.join(spec_field)
-            elif isinstance(spec_field, str):
-                cert = spec_field
-            return cert
-
+    def get_certificates(self, svc_spec: OAuth2ProxySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
         # TODO(redo): store/load these certificates by using the new support and check the posibility
         # to have a "centrilized" certificate mangaer for all cephadm components so we use the same
         # root CA fo sign all of them
         #
         # PD: a this moment we are generating new certificates each time the service is reconfigured
-        self.ssl_certs = SSLCerts()
-        self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-        internal_cert, internal_pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
-        cert = read_certificate(svc_spec.ssl_certificate)
-        pkey = read_certificate(svc_spec.ssl_certificate_key)
-        if not (cert and pkey):
+        cert = svc_spec.ssl_certificate
+        key = svc_spec.ssl_certificate_key
+        if not (cert and key):
             # In case the user has not provided certificates then we generate self-signed ones
-            cert, pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
+            cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
 
-        return internal_cert, internal_pkey, cert, pkey
+        return cert, key
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
-        # TODO: get_certificates
         svc_spec = cast(OAuth2ProxySpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         context = {
             'spec': svc_spec,
             'redirect_url': self.get_redirect_url(),
         }
 
-        internal_cert, internal_pkey, cert, pkey = self.get_certificates(svc_spec, daemon_spec)
+        cert, key = self.get_certificates(svc_spec, daemon_spec)
         daemon_config = {
             "files": {
                 "oauth2-proxy.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, context),
+                "oauth2-proxy.crt": cert,
+                "oauth2-proxy.key": key,
             }
         }
 

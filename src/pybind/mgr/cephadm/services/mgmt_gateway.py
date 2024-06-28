@@ -38,7 +38,7 @@ class MgmtGatewayService(CephadmService):
     def get_oauth2_service_url(self) -> Optional[str]:
         # TODO(redo): check how can we create several servers for HA
         oauth2_servers = self.get_service_endpoints('oauth2-proxy')
-        return f'http://{oauth2_servers[0]}' if oauth2_servers else None
+        return f'https://{oauth2_servers[0]}' if oauth2_servers else None
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
