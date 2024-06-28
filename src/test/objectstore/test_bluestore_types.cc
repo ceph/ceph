@@ -2055,7 +2055,7 @@ TEST_P(PunchHoleFixture, multipunch)
     BlueStore::volatile_statfs statfs_delta;
 
     for (int j = 0; j < 10; j++) {
-      uint32_t s = rand() % ((hole_end - hole_start) / 5) + 1;
+      uint32_t s = rand() % ((hole_end - hole_start) / 5 + 1);
       uint32_t p = rand() % (hole_end - hole_start - s) + hole_start;
       store->debug_punch_hole_2(
         coll, onode, p, s,
