@@ -1081,6 +1081,7 @@ class Object {
         rgw_owner bucket_owner; //< bucket owner for usage/quota accounting
         ACLOwner obj_owner; //< acl owner for delete marker if necessary
         int versioning_status{0};
+        bool null_verid{false};
         uint64_t olh_epoch{0};
 	std::string marker_version_id;
         uint32_t bilog_flags{0};

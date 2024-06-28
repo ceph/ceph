@@ -2810,6 +2810,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.zones_trace = params.zones_trace;
   parent_op.params.abortmp = params.abortmp;
   parent_op.params.parts_accounted_size = params.parts_accounted_size;
+  parent_op.params.null_verid = params.null_verid;
 
   int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
   if (ret < 0)
