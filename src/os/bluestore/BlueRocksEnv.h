@@ -17,6 +17,14 @@ class BlueFS;
 
 class BlueRocksEnv : public rocksdb::EnvWrapper {
 public:
+  // See FileSystem::RegisterDbPaths.
+  rocksdb::Status RegisterDbPaths(const std::vector<std::string>& paths) override {
+    return rocksdb::Status::OK();
+  }
+  // See FileSystem::UnregisterDbPaths.
+  rocksdb::Status UnregisterDbPaths(const std::vector<std::string>& paths) override {
+    return rocksdb::Status::OK();
+  }
   // Create a brand new sequentially-readable file with the specified name.
   // On success, stores a pointer to the new file in *result and returns OK.
   // On failure, stores nullptr in *result and returns non-OK.  If the file does
@@ -52,12 +60,38 @@ public:
     std::unique_ptr<rocksdb::WritableFile>* result,
     const rocksdb::EnvOptions& options) override;
 
+  // Create an object that writes to a file with the specified name.
+  // `WritableFile::Append()`s will append after any existing content.  If the
+  // file does not already exist, creates it.
+  //
+  // On success, stores a pointer to the file in *result and returns OK.  On
+  // failure stores nullptr in *result and returns non-OK.
+  //
+  // The returned file will only be accessed by one thread at a time.
+  rocksdb::Status ReopenWritableFile(
+    const std::string& fname,
+    std::unique_ptr<rocksdb::WritableFile>* result,
+    const rocksdb::EnvOptions& options) override {
+      return rocksdb::Status::NotSupported("ReopenWritableFile() not supported.");
+    }
+
   // Reuse an existing file by renaming it and opening it as writable.
   rocksdb::Status ReuseWritableFile(
     const std::string& fname,
     const std::string& old_fname,
     std::unique_ptr<rocksdb::WritableFile>* result,
     const rocksdb::EnvOptions& options) override;
+
+  // Open `fname` for random read and write, if file doesn't exist the file
+  // will be created.  On success, stores a pointer to the new file in
+  // *result and returns OK.  On failure returns non-OK.
+  //
+  // The returned file will only be accessed by one thread at a time.
+  rocksdb::Status NewRandomRWFile(const std::string& fname,
+                                 std::unique_ptr<rocksdb::RandomRWFile>* result,
+                                 const rocksdb::EnvOptions& options)override {
+    return rocksdb::Status::NotSupported("RandomRWFile is not implemented in this Env");
+  }
 
   // Create an object that represents a directory. Will fail if directory
   // doesn't exist. If the directory exists, it will open the directory
@@ -85,6 +119,11 @@ public:
 
   // Delete the named file.
   rocksdb::Status DeleteFile(const std::string& fname) override;
+
+  // Truncate the named file to the specified size.
+  rocksdb::Status Truncate(const std::string& fname, size_t size) override {
+    return rocksdb::Status::NotSupported("Truncate is not supported for this Env");
+  }
 
   // Create the specified directory. Returns error if directory exists.
   rocksdb::Status CreateDir(const std::string& dirname) override;
