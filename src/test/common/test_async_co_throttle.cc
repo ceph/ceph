@@ -13,11 +13,13 @@
  */
 
 #include "common/async/co_throttle.h"
+#include <latch>
 #include <optional>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/thread_pool.hpp>
 #include <gtest/gtest.h>
 #include "common/async/co_waiter.h"
 
@@ -27,14 +29,7 @@ namespace asio = boost::asio;
 namespace errc = boost::system::errc;
 using boost::system::error_code;
 
-using executor_type = asio::io_context::executor_type;
-
-template <typename T>
-using awaitable = asio::awaitable<T, executor_type>;
-using use_awaitable_t = asio::use_awaitable_t<executor_type>;
-[[maybe_unused]] static constexpr use_awaitable_t use_awaitable{};
-
-using void_waiter = co_waiter<void, executor_type>;
+using void_waiter = co_waiter<void, asio::any_io_executor>;
 
 auto capture(std::optional<std::exception_ptr>& eptr)
 {
@@ -47,7 +42,7 @@ auto capture(asio::cancellation_signal& signal,
   return asio::bind_cancellation_slot(signal.slot(), capture(eptr));
 }
 
-awaitable<void> wait(void_waiter& waiter, bool& completed)
+asio::awaitable<void> wait(void_waiter& waiter, bool& completed)
 {
   co_await waiter.get();
   completed = true;
@@ -58,7 +53,7 @@ TEST(co_throttle, wait_empty)
   constexpr size_t limit = 1;
   asio::io_context ctx;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.wait();
   };
@@ -82,7 +77,7 @@ TEST(co_throttle, spawn_over_limit)
   bool spawn1_completed = false;
   bool spawn2_completed = false;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(waiter1.get());
     spawn1_completed = true;
@@ -125,7 +120,7 @@ TEST(co_throttle, spawn_over_smaller_limit)
   bool spawn1_completed = false;
   bool spawn2_completed = false;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(waiter1.get());
     spawn1_completed = true;
@@ -166,7 +161,7 @@ TEST(co_throttle, spawn_cancel)
   bool spawn1_completed = false;
   bool spawn2_completed = false;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(waiter1.get());
     spawn1_completed = true;
@@ -208,7 +203,7 @@ TEST(co_throttle, wait_cancel)
   void_waiter waiter;
   bool spawn_completed = false;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(waiter.get());
     spawn_completed = true;
@@ -248,7 +243,7 @@ TEST(co_throttle, spawn_shutdown)
   void_waiter waiter2;
   bool spawn1_completed = false;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(waiter1.get());
     spawn1_completed = true;
@@ -273,7 +268,7 @@ TEST(co_throttle, wait_shutdown)
   void_waiter waiter;
   bool spawn_completed = false;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(waiter.get());
     spawn_completed = true;
@@ -303,7 +298,7 @@ TEST(co_throttle, spawn_error)
   bool cr3_completed = false;
   std::exception_ptr spawn3_eptr;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(wait(waiter1, cr1_completed));
     co_await throttle.spawn(wait(waiter2, cr2_completed));
@@ -355,7 +350,7 @@ TEST(co_throttle, wait_error)
 
   void_waiter waiter;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto throttle = co_throttle{co_await asio::this_coro::executor, limit};
     co_await throttle.spawn(waiter.get());
     co_await throttle.wait();
@@ -392,7 +387,7 @@ TEST(co_throttle, spawn_cancel_on_error_after)
   bool cr4_completed = false;
   std::exception_ptr spawn3_eptr;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto ex = co_await asio::this_coro::executor;
     auto throttle = co_throttle{ex, limit, cancel_on_error::after};
     co_await throttle.spawn(wait(waiter1, cr1_completed));
@@ -454,7 +449,7 @@ TEST(co_throttle, spawn_cancel_on_error_all)
   bool cr4_completed = false;
   std::exception_ptr spawn3_eptr;
 
-  auto cr = [&] () -> awaitable<void> {
+  auto cr = [&] () -> asio::awaitable<void> {
     auto ex = co_await asio::this_coro::executor;
     auto throttle = co_throttle{ex, limit, cancel_on_error::all};
     co_await throttle.spawn(wait(waiter1, cr1_completed));
@@ -492,6 +487,30 @@ TEST(co_throttle, spawn_cancel_on_error_all)
   EXPECT_FALSE(cr2_completed); // exited by exception
   EXPECT_FALSE(cr3_completed); // cr3 canceled
   EXPECT_TRUE(cr4_completed); // cr4 not canceled
+}
+
+TEST(co_throttle, cancel_outside_thread)
+{
+  asio::thread_pool ctx{1};
+  asio::any_io_executor ex = ctx.get_executor();
+  constexpr size_t limit = 2;
+  auto throttle = co_throttle{ex, limit};
+
+  void_waiter waiter;
+  std::latch waiting{1};
+  auto cr = [&] () -> asio::awaitable<void> {
+    co_await throttle.spawn(waiter.get());
+    waiting.count_down();
+    co_await throttle.wait();
+  };
+
+  std::optional<std::exception_ptr> result;
+  asio::co_spawn(ctx, cr, capture(result));
+
+  waiting.wait();
+  throttle.cancel();
+
+  ctx.join();
 }
 
 } // namespace ceph::async
