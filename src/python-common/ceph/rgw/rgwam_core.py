@@ -786,7 +786,7 @@ class RGWAM:
                                 "secret": secret})
         return realms_info
 
-    def zone_create(self, rgw_spec, start_radosgw):
+    def zone_create(self, rgw_spec, start_radosgw, secondary_zone_period_retry_limit=5):
 
         if not rgw_spec.rgw_realm_token:
             raise RGWAMException('missing realm token')
@@ -823,7 +823,25 @@ class RGWAM:
         zone = self.create_zone(realm, zonegroup, rgw_spec.rgw_zone,
                                 False,  # secondary zone
                                 access_key, secret, endpoints=rgw_spec.zone_endpoints)
-        self.update_period(realm, zonegroup, zone)
+
+        # Adding a retry limit for period update in case the default 10s timeout is not sufficient
+        rgw_limit = 0
+
+        while rgw_limit != int(secondary_zone_period_retry_limit):
+            try:
+                self.update_period(realm, zonegroup, zone)
+                break
+            except RGWAMException as e:
+                logging.info(f'Failed to update Period in 10s. Retrying with current limit \
+                             & retry-limit values {rgw_limit} {secondary_zone_period_retry_limit}')
+                rgw_limit += 1
+                if rgw_limit == secondary_zone_period_retry_limit:
+                    raise RGWAMException(f'Period Update failed for zone {zone}. \
+                                          Exception raised while period update {e.message}')
+                continue
+
+        # By default the above operation is expected to be completed in 10s timeout but if we
+        # updating this for secondary site it would take some time because of pool creation
 
         period = RGWPeriod(period_info)
         logging.debug(period.to_json())
