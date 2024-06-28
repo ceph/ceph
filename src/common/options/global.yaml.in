@@ -795,6 +795,19 @@ options:
   level: advanced
   desc: Set QAT busy bolling to reduce latency at the cost of potentially increasing CPU usage
   default: false
+- name: uadk_compressor_enabled
+  type: bool
+  level: advanced
+  desc: Enable UADK acceleration support for compression if available
+  default: false
+  with_legacy: true
+- name: uadk_wd_sync_ctx_num
+  type: int
+  level: advanced
+  desc: Set the number of instances in the queue
+  default: 2
+  min: 2
+  max: 1024
 - name: plugin_crypto_accelerator
   type: str
   level: advanced
