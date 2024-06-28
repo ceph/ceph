@@ -235,10 +235,16 @@ class CephClusterBase(RunCephCmd):
 
     def __init__(self, ctx, cluster_name='ceph') -> None:
         self._ctx = ctx
-        try:
-            manager = ctx.managers[cluster_name]
-        except Exception as e:
-            log.warn(f"Couldn't get a manager for cluster {cluster_name} from the context; exception: {e}")
+        #try:
+        #    manager = LocalCephManager(ctx=self._ctx)
+        #except Exception as e:
+        #    log.warn(f"Couldn't get a manager for cluster {cluster_name} from the context; exception: {e}")
+        #    manager = CephManager(self.admin_remote, ctx=ctx,
+        #                          logger=log.getChild('ceph_manager'))
+        if hasattr(ctx, 'environment') and ctx.environment == 'vstart':
+            from tasks.vstart_runner import LocalCephManager
+            manager = LocalCephManager(ctx=ctx)
+        else:
             manager = CephManager(self.admin_remote, ctx=ctx,
                                   logger=log.getChild('ceph_manager'))
         self.mon_manager = manager
