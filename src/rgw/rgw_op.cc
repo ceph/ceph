@@ -4481,7 +4481,7 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
     return;
   }
-  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags.get())) {
+  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags)) {
     bufferlist repl_bl;
     repl_bl.append("PENDING");
     emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
