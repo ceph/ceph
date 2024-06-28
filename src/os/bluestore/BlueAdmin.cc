@@ -24,7 +24,10 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "bluestore collections",
       this,
       "list all collections");
-    ceph_assert(r == 0);
+    if (r != 0) {
+      dout(1) << __func__ << " cannot register SocketHook" << dendl;
+      return;
+    }
     r = admin_socket->register_command(
       "bluestore list "
       "name=collection,type=CephString,req=true "
