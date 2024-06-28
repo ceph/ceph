@@ -348,18 +348,19 @@ class CapTester(MonCapTester, MdsCapTester):
         possible_errmsgs = ('permission denied', 'operation not permitted')
         cmdargs = ['sudo'] if sudo_write else ['']
         cmdargs += _cmdargs
+        log.info(f'test absence of {_cmdargs[0]} perm: expect failure {self.path}.')
 
-        for mount, path, data in self.test_set:
-            log.info(f'test absence of {_cmdargs[0]} perm: expect failure {path}.')
+        # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
+        # to mount
+        proc = self.mount.open_background(self.path)
 
-            # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
-            # to mount
-            proc = mount.open_background(path)
-            cmdargs.append(path)
-            mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
-            cmdargs.pop(-1)
-            mount._kill_background(proc)
-            log.info(f'absence of {_cmdargs[0]} perm was tested successfully')
+        cmdargs.append(self.path)
+        self.mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+        cmdargs.pop(-1)
+
+        self.mount._kill_background(proc)
+
+        log.info(f'absence of {_cmdargs[0]} perm was tested successfully')
 
     def conduct_neg_test_for_chown_caps(self, sudo_write=True):
         # flip ownership to nobody. assumption: nobody's id is 65534
