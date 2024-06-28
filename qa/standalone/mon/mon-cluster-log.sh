@@ -59,6 +59,7 @@ function TEST_cluster_log_level() {
       ERRORS=$(($ERRORS + 1))
     fi
 
+    ceph config set mon.a mon_cluster_log_level info
     ceph osd down 0
     TIMEOUT=20 wait_for_osd up 0 || return 1
     grep -q "cluster [[]INF[]] osd.0.*boot" $dir/log
@@ -68,7 +69,6 @@ function TEST_cluster_log_level() {
       ERRORS=$(($ERRORS + 1))
     fi
 
-    ceph config set mon.a mon_cluster_log_level info
     ceph pg deep-scrub 1.1
     search_str="cluster [[]DBG[]] 1.1 deep-scrub"
     TIMEOUT=60 wait_for_string $dir/log "$search_str"
