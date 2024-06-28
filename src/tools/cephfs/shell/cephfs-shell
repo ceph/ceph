@@ -1014,9 +1014,9 @@ class CephFSShell(Cmd):
 
     @with_argparser(rmdir_parser)
     def do_rmdir(self, args):
-        self.do_rmdir_helper(args)
+        self._rmdir(args)
 
-    def do_rmdir_helper(self, args):
+    def _rmdir(self, args):
         """
         Remove a specific Directory
         """
@@ -1531,7 +1531,7 @@ class CephFSShell(Cmd):
             try:
                 if is_dir_exists(snap_dir):
                     newargs = argparse.Namespace(paths=[snap_dir], parent=False)
-                    self.do_rmdir_helper(newargs)
+                    self._rmdir(newargs)
                 else:
                     set_exit_code_msg(errno.ENOENT, "'{}': no such snapshot".format(
                         args.name.decode('utf-8')))
