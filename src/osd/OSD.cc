@@ -2089,7 +2089,7 @@ void OSDService::_queue_for_recovery(
 	  p.pg->get_pgid(),
 	  p.epoch_queued,
           reserved_pushes,
-	  p.priority)),
+	  p.priority, this)),
       cost_for_queue,
       cct->_conf->osd_recovery_priority,
       ceph_clock_now(),
@@ -9019,9 +9019,8 @@ void OSD::consume_map()
 
   service.prune_pg_created();
 
-  unsigned pushes_to_free = 0;
   for (auto& shard : shards) {
-    shard->consume_map(osdmap, &pushes_to_free);
+    shard->consume_map(osdmap);
   }
 
   vector<spg_t> pgids;
@@ -9062,8 +9061,6 @@ void OSD::consume_map()
   dispatch_sessions_waiting_on_map();
 
   service.maybe_inject_dispatch_delay();
-
-  service.release_reserved_pushes(pushes_to_free);
 
   // queue null events to push maps down to individual PGs
   for (auto pgid : pgids) {
@@ -9480,6 +9477,9 @@ void OSDService::_maybe_queue_recovery() {
     dout(10) << __func__ << " starting " << to_start
 	     << ", recovery_ops_reserved " << recovery_ops_reserved
 	     << " -> " << (recovery_ops_reserved + to_start) << dendl;
+
+    // During PGRecovery object destruction it call release_reserved_pushes
+    // to release the recovery_ops_reserved resource.
     recovery_ops_reserved += to_start;
   }
 }
@@ -9607,7 +9607,6 @@ void OSD::do_recovery(
 
  out:
   ceph_assert(started <= reserved_pushes);
-  service.release_reserved_pushes(reserved_pushes);
 }
 
 void OSDService::start_recovery_op(PG *pg, const hobject_t& soid)
@@ -9656,6 +9655,8 @@ bool OSDService::is_recovery_active()
   return local_reserver.has_reservation() || remote_reserver.has_reservation();
 }
 
+// Call this function during PGRecovery object destruction to release
+// recovery_ops_reserved resource
 void OSDService::release_reserved_pushes(uint64_t pushes)
 {
   std::lock_guard l(recovery_lock);
@@ -10509,8 +10510,7 @@ epoch_t OSDShard::get_max_waiting_epoch()
 }
 
 void OSDShard::consume_map(
-  const OSDMapRef& new_osdmap,
-  unsigned *pushes_to_free)
+  const OSDMapRef& new_osdmap)
 {
   std::lock_guard l(shard_lock);
   OSDMapRef old_osdmap;
@@ -10572,7 +10572,6 @@ void OSDShard::consume_map(
 		 << (qi.get_map_epoch() < new_osdmap->get_epoch() ? "stale" :
 		     "misdirected")
 		 << ", dropping" << dendl;
-        *pushes_to_free += qi.get_reserved_pushes();
 	slot->waiting.pop_front();
       }
     }
@@ -11157,13 +11156,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	osd->service.maybe_share_map((*_op)->get_req()->get_connection().get(),
 				     sdata->shard_osdmap,
 				     (*_op)->sent_epoch);
-      }
-      unsigned pushes_to_free = qi.get_reserved_pushes();
-      if (pushes_to_free > 0) {
-	sdata->shard_lock.unlock();
-	osd->service.release_reserved_pushes(pushes_to_free);
-	handle_oncommits(oncommits);
-	return;
       }
     }
     sdata->shard_lock.unlock();
