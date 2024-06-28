@@ -68,7 +68,7 @@ class MgmtGatewayService(CephadmService):
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('prometheus')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('grafana')]
-        #deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')] TODO should we have this automated?
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')]
         # secure_monitoring_stack affects the protocol used by monitoring services
         deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):

@@ -2938,6 +2938,7 @@ Then run the following:
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
             deps += [d.name() for d in self.cache.get_daemons_by_service('mgmt-gateway')]
+            deps += [d.name() for d in self.cache.get_daemons_by_service('oauth2-proxy')]
             if self.secure_monitoring_stack:
                 if prometheus_user and prometheus_password:
                     deps.append(f'{hash(prometheus_user + prometheus_password)}')
@@ -2948,7 +2949,7 @@ Then run the following:
             if self.secure_monitoring_stack and prometheus_user and prometheus_password:
                 deps.append(f'{hash(prometheus_user + prometheus_password)}')
         elif daemon_type == 'alertmanager':
-            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'mgmt-gateway'])
+            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
             if self.secure_monitoring_stack and alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
@@ -2962,7 +2963,7 @@ Then run the following:
         elif daemon_type == 'mgmt-gateway':
             # url_prefix for monitoring daemons depends on the presence of mgmt-gateway
             # while dashboard urls depend on the mgr daemons
-            deps += get_daemon_names(['mgr', 'grafana', 'prometheus', 'alertmanager'])
+            deps += get_daemon_names(['mgr', 'grafana', 'prometheus', 'alertmanager', 'oauth2-proxy'])
         else:
             # this daemon type doesn't need deps mgmt
             pass
@@ -3364,6 +3365,11 @@ Then run the following:
 
         if spec.service_type == 'mgmt-gateway':
             self.set_module_option('secure_monitoring_stack', True)
+
+        if spec.service_type == 'oauth2-proxy':
+            mgmt_gw_daemons = self.cache.get_daemons_by_service('mgmt-gateway')
+            if not mgmt_gw_daemons:
+                raise OrchestratorError("The 'oauth2-proxy' service depends on the 'mgmt-gateway' service, but it is not configured.")
 
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:
