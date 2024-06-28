@@ -13,7 +13,7 @@ import sys
 
 from assertions import (assert_equal as eq, assert_raises, assert_not_equal,
                         assert_greater_equal)
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from rados import (Rados,
                    LIBRADOS_SNAP_HEAD,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
@@ -594,9 +594,9 @@ class TestImage(object):
         self.rbd = RBD()
         # {create,access,modify}_timestamp() have second precision,
         # allow for rounding
-        self.time_before_create = datetime.utcnow() - timedelta(seconds=1)
+        self.time_before_create = datetime.now(timezone.utc) - timedelta(seconds=1)
         create_image()
-        self.time_after_create = datetime.utcnow() + timedelta(seconds=1)
+        self.time_after_create = datetime.now(timezone.utc) + timedelta(seconds=1)
         self.image = Image(ioctx, image_name)
 
     def teardown_method(self, method):
@@ -1118,9 +1118,9 @@ class TestImage(object):
 
     def test_snap_timestamp(self):
         # get_snap_timestamp() has second precision, allow for rounding
-        time_before = datetime.utcnow() - timedelta(seconds=1)
+        time_before = datetime.now(timezone.utc) - timedelta(seconds=1)
         self.image.create_snap('snap1')
-        time_after = datetime.utcnow() + timedelta(seconds=1)
+        time_after = datetime.now(timezone.utc) + timedelta(seconds=1)
         eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
         for snap in self.image.list_snaps():
             snap_id = snap["id"]

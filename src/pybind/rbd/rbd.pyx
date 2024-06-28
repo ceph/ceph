@@ -29,7 +29,7 @@ try:
     from collections.abc import Iterable
 except ImportError:
     from collections import Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 import errno
 from itertools import chain
 import time
@@ -935,8 +935,10 @@ class RBD(object):
             'id'          : decode_cstr(c_info.id),
             'name'        : decode_cstr(c_info.name),
             'source'      : __source_string[c_info.source],
-            'deletion_time' : datetime.utcfromtimestamp(c_info.deletion_time),
-            'deferment_end_time' : datetime.utcfromtimestamp(c_info.deferment_end_time)
+            'deletion_time' : datetime.fromtimestamp(c_info.deletion_time,
+                                                     tz=timezone.utc),
+            'deferment_end_time' : datetime.fromtimestamp(c_info.deferment_end_time,
+                                                          tz=timezone.utc)
             }
         rbd_trash_get_cleanup(&c_info)
         return info
@@ -2296,7 +2298,8 @@ cdef class MirrorImageStatusIterator(object):
                     site_status = {
                         'state'       : s_status.state,
                         'description' : decode_cstr(s_status.description),
-                        'last_update' : datetime.utcfromtimestamp(s_status.last_update),
+                        'last_update' : datetime.fromtimestamp(s_status.last_update,
+                                                               tz=timezone.utc),
                         'up'          : s_status.up,
                         }
                     mirror_uuid = decode_cstr(s_status.mirror_uuid)
@@ -3814,7 +3817,7 @@ cdef class Image(object):
             ret = rbd_snap_get_timestamp(self.image, _snap_id, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting snapshot timestamp for image: %s, snap_id: %d' % (self.name, snap_id))
-        return datetime.utcfromtimestamp(timestamp.tv_sec)
+        return datetime.fromtimestamp(timestamp.tv_sec, tz=timezone.utc)
 
     @requires_not_closed
     def remove_snap_limit(self):
@@ -4136,7 +4139,7 @@ written." % (self.name, ret, length))
             ret = rbd_get_create_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting create timestamp for image: %s' % (self.name))
-        return datetime.utcfromtimestamp(timestamp.tv_sec)
+        return datetime.fromtimestamp(timestamp.tv_sec, tz=timezone.utc)
 
     @requires_not_closed
     def access_timestamp(self):
@@ -4149,7 +4152,7 @@ written." % (self.name, ret, length))
             ret = rbd_get_access_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting access timestamp for image: %s' % (self.name))
-        return datetime.utcfromtimestamp(timestamp.tv_sec)
+        return datetime.fromtimestamp(timestamp.tv_sec, tz=timezone.utc)
 
     @requires_not_closed
     def modify_timestamp(self):
@@ -4162,7 +4165,7 @@ written." % (self.name, ret, length))
             ret = rbd_get_modify_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting modify timestamp for image: %s' % (self.name))
-        return datetime.utcfromtimestamp(timestamp.tv_sec)
+        return datetime.fromtimestamp(timestamp.tv_sec, tz=timezone.utc)
 
     @requires_not_closed
     def flatten(self, on_progress=None):
@@ -4733,7 +4736,8 @@ written." % (self.name, ret, length))
                 site_status = {
                     'state'       : s_status.state,
                     'description' : decode_cstr(s_status.description),
-                    'last_update' : datetime.utcfromtimestamp(s_status.last_update),
+                    'last_update' : datetime.fromtimestamp(s_status.last_update,
+                                                           tz=timezone.utc),
                     'up'          : s_status.up,
                     }
                 mirror_uuid = decode_cstr(s_status.mirror_uuid)
@@ -5703,8 +5707,10 @@ cdef class TrashIterator(object):
                 'id'          : decode_cstr(self.entries[i].id),
                 'name'        : decode_cstr(self.entries[i].name),
                 'source'      : TrashIterator.__source_string[self.entries[i].source],
-                'deletion_time' : datetime.utcfromtimestamp(self.entries[i].deletion_time),
-                'deferment_end_time' : datetime.utcfromtimestamp(self.entries[i].deferment_end_time)
+                'deletion_time' : datetime.fromtimestamp(self.entries[i].deletion_time,
+                                                         tz=timezone.utc),
+                'deferment_end_time' : datetime.fromtimestamp(self.entries[i].deferment_end_time,
+                                                              tz=timezone.utc)
                 }
 
     def __dealloc__(self):
