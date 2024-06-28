@@ -1752,6 +1752,7 @@ Usage:
     def _apply_mgmt_gateway(self,
                             port: Optional[int] = None,
                             disable_https: Optional[bool] = False,
+                            enable_auth: Optional[bool] = False,
                             placement: Optional[str] = None,
                             unmanaged: bool = False,
                             dry_run: bool = False,
@@ -1767,6 +1768,7 @@ Usage:
             unmanaged=unmanaged,
             port=port,
             disable_https=disable_https,
+            enable_auth=enable_auth,
             preview_only=dry_run
         )
 

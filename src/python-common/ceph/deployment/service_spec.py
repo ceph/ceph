@@ -1767,6 +1767,7 @@ class MgmtGatewaySpec(ServiceSpec):
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  disable_https: Optional[bool] = False,
+                 enable_auth: Optional[bool] = False,
                  port: Optional[int] = None,
                  ssl_certificate: Optional[str] = None,
                  ssl_certificate_key: Optional[str] = None,
@@ -1798,6 +1799,8 @@ class MgmtGatewaySpec(ServiceSpec):
         )
         #: Is a flag to disable HTTPS. If True, the server will use unsecure HTTP
         self.disable_https = disable_https
+        #: Is a flag to enable SSO auth. Requires oauth2-proxy to be active for SSO authentication.
+        self.enable_auth = enable_auth
         #: The port number on which the server will listen
         self.port = port
         #: A multi-line string that contains the SSL certificate

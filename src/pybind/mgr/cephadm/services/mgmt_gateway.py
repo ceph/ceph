@@ -101,7 +101,7 @@ class MgmtGatewayService(CephadmService):
         }
         external_server_context = {
             'spec': svc_spec,
-            'oauth2_proxy_url': self.get_oauth2_service_url(),
+            'oauth2_proxy_url': self.get_oauth2_service_url() if svc_spec.enable_auth else None,
             'dashboard_scheme': dashboard_scheme,
             'grafana_scheme': grafana_protocol,
             'prometheus_scheme': scheme,
