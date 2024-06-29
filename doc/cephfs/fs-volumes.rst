@@ -676,7 +676,7 @@ Cloning Snapshots
 
 Subvolumes can be created by cloning subvolume snapshots. Cloning is an
 asynchronous operation that copies data from a snapshot to a subvolume. Because
-cloning is an operation that involves bulk copying, it is inefficient for
+cloning is an operation that involves bulk copying, it is slow for
 very large data sets.
 
 .. note:: Removing a snapshot (source subvolume) fails when there are
