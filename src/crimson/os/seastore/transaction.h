@@ -391,6 +391,7 @@ public:
     get_handle().exit();
     on_destruct(*this);
     invalidate_clear_write_set();
+    views.clear();
   }
 
   friend class crimson::os::seastore::SeaStore;
@@ -427,6 +428,7 @@ public:
       has_reset = true;
     }
     get_handle().exit();
+    views.clear();
   }
 
   bool did_reset() const {
@@ -512,6 +514,15 @@ public:
     return trans_id;
   }
 
+  using view_ref = std::unique_ptr<trans_spec_view_t>;
+  template <typename T, typename... Args,
+	   std::enable_if_t<std::is_base_of_v<trans_spec_view_t, T>, int> = 0>
+  T& add_transactional_view(Args&&... args) {
+    auto &view = views.emplace_back(
+      std::make_unique<T>(std::forward<Args>(args)...));
+    return static_cast<T&>(*view);
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -576,6 +587,8 @@ private:
   /// partial blocks of extents on disk, with data and refcounts
   std::list<CachedExtentRef> existing_block_list;
   existing_block_stats_t existing_block_stats;
+
+  std::list<view_ref> views;
 
   /**
    * retire_set
