@@ -1047,7 +1047,7 @@ public:
         fixed_kv_extent.get_user_hint(),
         // get target rewrite generation
         fixed_kv_extent.get_rewrite_generation());
-      n_fixed_kv_extent->rewrite(fixed_kv_extent, 0);
+      n_fixed_kv_extent->rewrite(c.trans, fixed_kv_extent, 0);
       
       SUBTRACET(
         seastore_fixedkv_tree,
