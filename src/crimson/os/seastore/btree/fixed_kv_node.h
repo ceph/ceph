@@ -32,7 +32,7 @@ struct FixedKVNode : ChildableCachedExtent {
   using FixedKVNodeRef = TCachedExtentRef<FixedKVNode>;
   fixed_kv_node_meta_t<node_key_t> range;
 
-  struct copy_source_cmp_t {
+  struct fixedkv_node_cmp_t {
     using is_transparent = node_key_t;
     bool operator()(const FixedKVNodeRef &l, const FixedKVNodeRef &r) const {
       assert(l->range.end <= r->range.begin
@@ -84,10 +84,55 @@ struct FixedKVNode : ChildableCachedExtent {
    * 	cannot be rewritten) because their parents must be mutated upon remapping.
    */
   std::vector<ChildableCachedExtent*> children;
-  std::set<FixedKVNodeRef, copy_source_cmp_t> copy_sources;
+  std::set<FixedKVNodeRef, fixedkv_node_cmp_t> copy_sources;
   uint16_t capacity = 0;
   parent_tracker_t* my_tracker = nullptr;
   RootBlockRef root_block;
+
+  // copy dests points from a stable node back to its pending nodes
+  // having copy sources at the same tree level, it serves as a two-level index:
+  // transaction-id then node-key to the pending node.
+  //
+  // The copy dest pointers must be symmetric to the copy source pointers.
+  //
+  // copy_dests_t will be automatically unregisterred upon transaction destruction,
+  // see Transaction::views
+  struct copy_dests_t : trans_spec_view_t {
+    std::set<FixedKVNodeRef, fixedkv_node_cmp_t> dests_by_key;
+    copy_dests_t(Transaction &t) : trans_spec_view_t{t.get_trans_id()} {}
+    ~copy_dests_t() {
+      LOG_PREFIX(~copy_dests_t);
+      SUBTRACE(seastore_fixedkv_tree, "copy_dests_t destroyed");
+    }
+  };
+
+  trans_view_set_t copy_dests_by_trans;
+
+  void add_copy_dest(Transaction &t, FixedKVNodeRef dest) {
+    ceph_assert(is_stable());
+    ceph_assert(dest->is_pending());
+    auto tid = t.get_trans_id();
+    auto iter = copy_dests_by_trans.lower_bound(
+      tid, trans_spec_view_t::cmp_t());
+    if (iter == copy_dests_by_trans.end() ||
+	iter->pending_for_transaction != tid) {
+      iter = copy_dests_by_trans.insert_before(
+	iter, t.add_transactional_view<copy_dests_t>(t));
+    }
+    auto &copy_dests = static_cast<copy_dests_t&>(*iter);
+    auto [it, inserted] = copy_dests.dests_by_key.insert(dest);
+    assert(inserted || it->get() == dest.get());
+  }
+
+  void del_copy_dest(Transaction &t, FixedKVNodeRef dest) {
+    auto iter = copy_dests_by_trans.find(
+      t.get_trans_id(), trans_spec_view_t::cmp_t());
+    ceph_assert(iter != copy_dests_by_trans.end());
+    auto &copy_dests = static_cast<copy_dests_t&>(*iter);
+    auto it = copy_dests.dests_by_key.find(dest);
+    ceph_assert(it != copy_dests.dests_by_key.end());
+    copy_dests.dests_by_key.erase(dest);
+  }
 
   bool is_linked() {
     assert(!has_parent_tracker() || !(bool)root_block);
@@ -161,7 +206,7 @@ struct FixedKVNode : ChildableCachedExtent {
 
   virtual bool have_children() const = 0;
 
-  void on_rewrite(CachedExtent &extent, extent_len_t off) final {
+  void on_rewrite(Transaction &t, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     assert(off == 0);
     auto &foreign_extent = (FixedKVNode&)extent;
@@ -169,11 +214,14 @@ struct FixedKVNode : ChildableCachedExtent {
 
     if (have_children()) {
       if (!foreign_extent.is_pending()) {
+	foreign_extent.add_copy_dest(t, this);
 	copy_sources.emplace(&foreign_extent);
       } else {
 	ceph_assert(foreign_extent.is_mutation_pending());
-	copy_sources.emplace(
-	  foreign_extent.get_prior_instance()->template cast<FixedKVNode>());
+	auto copy_source = 
+	  foreign_extent.get_prior_instance()->template cast<FixedKVNode>();
+	copy_source->add_copy_dest(t, this);
+	copy_sources.emplace(copy_source);
 	children = std::move(foreign_extent.children);
 	adjust_ptracker_for_children();
       }
@@ -211,17 +259,24 @@ struct FixedKVNode : ChildableCachedExtent {
   }
 
   static void push_copy_sources(
+    Transaction &t,
     FixedKVNode &dest,
     FixedKVNode &src)
   {
     ceph_assert(dest.is_initial_pending());
     if (!src.is_pending()) {
+      src.add_copy_dest(t, &dest);
       dest.copy_sources.emplace(&src);
     } else if (src.is_mutation_pending()) {
-      dest.copy_sources.emplace(
-	src.get_prior_instance()->template cast<FixedKVNode>());
+      auto copy_src =
+	src.get_prior_instance()->template cast<FixedKVNode>();
+      copy_src->add_copy_dest(t, &dest);
+      dest.copy_sources.emplace(copy_src);
     } else {
       ceph_assert(src.is_initial_pending());
+      for (auto &cs : src.copy_sources) {
+	cs->add_copy_dest(t, &dest);
+      }
       dest.copy_sources.insert(
 	src.copy_sources.begin(),
 	src.copy_sources.end());
@@ -306,13 +361,20 @@ struct FixedKVNode : ChildableCachedExtent {
   }
 
   void split_child_ptrs(
+    Transaction &t,
     FixedKVNode &left,
     FixedKVNode &right)
   {
     assert(!left.my_tracker);
     assert(!right.my_tracker);
-    push_copy_sources(left, *this);
-    push_copy_sources(right, *this);
+    if (is_initial_pending()) {
+      for (auto &cs : copy_sources) {
+	cs->del_copy_dest(t, this);
+      }
+    }
+
+    push_copy_sources(t, left, *this);
+    push_copy_sources(t, right, *this);
     if (is_pending()) {
       uint16_t pivot = get_node_split_pivot();
       move_child_ptrs(left, *this, 0, 0, pivot);
@@ -322,12 +384,24 @@ struct FixedKVNode : ChildableCachedExtent {
   }
 
   void merge_child_ptrs(
+    Transaction &t,
     FixedKVNode &left,
     FixedKVNode &right)
   {
     ceph_assert(!my_tracker);
-    push_copy_sources(*this, left);
-    push_copy_sources(*this, right);
+
+    if (left.is_initial_pending()) {
+      for (auto &cs : left.copy_sources) {
+	cs->del_copy_dest(t, &left);
+      }
+    }
+    if (right.is_initial_pending()) {
+      for (auto &cs : right.copy_sources) {
+	cs->del_copy_dest(t, &right);
+      }
+    }
+    push_copy_sources(t, *this, left);
+    push_copy_sources(t, *this, right);
 
     if (left.is_pending()) {
       move_child_ptrs(*this, left, 0, 0, left.get_node_size());
@@ -341,6 +415,7 @@ struct FixedKVNode : ChildableCachedExtent {
   }
 
   static void balance_child_ptrs(
+    Transaction &t,
     FixedKVNode &left,
     FixedKVNode &right,
     bool prefer_left,
@@ -355,12 +430,23 @@ struct FixedKVNode : ChildableCachedExtent {
       pivot_idx++;
     }
 
+    if (left.is_initial_pending()) {
+      for (auto &cs : left.copy_sources) {
+	cs->del_copy_dest(t, &left);
+      }
+    }
+    if (right.is_initial_pending()) {
+      for (auto &cs : right.copy_sources) {
+	cs->del_copy_dest(t, &right);
+      }
+    }
+
     assert(!replacement_left.my_tracker);
     assert(!replacement_right.my_tracker);
     if (pivot_idx < l_size) {
       // deal with left
-      push_copy_sources(replacement_left, left);
-      push_copy_sources(replacement_right, left);
+      push_copy_sources(t, replacement_left, left);
+      push_copy_sources(t, replacement_right, left);
       if (left.is_pending()) {
 	move_child_ptrs(replacement_left, left, 0, 0, pivot_idx);
 	move_child_ptrs(replacement_right, left, 0, pivot_idx, l_size);
@@ -368,22 +454,22 @@ struct FixedKVNode : ChildableCachedExtent {
       }
 
       // deal with right
-      push_copy_sources(replacement_right, right);
+      push_copy_sources(t, replacement_right, right);
       if (right.is_pending()) {
 	move_child_ptrs(replacement_right, right, l_size - pivot_idx, 0, r_size);
 	right.my_tracker= nullptr;
       }
     } else {
       // deal with left
-      push_copy_sources(replacement_left, left);
+      push_copy_sources(t, replacement_left, left);
       if (left.is_pending()) {
 	move_child_ptrs(replacement_left, left, 0, 0, l_size);
 	left.my_tracker = nullptr;
       }
 
       // deal with right
-      push_copy_sources(replacement_left, right);
-      push_copy_sources(replacement_right, right);
+      push_copy_sources(t, replacement_left, right);
+      push_copy_sources(t, replacement_right, right);
       if (right.is_pending()) {
 	move_child_ptrs(replacement_left, right, l_size, 0, pivot_idx - l_size);
 	move_child_ptrs(replacement_right, right, 0, pivot_idx - l_size, r_size);
@@ -821,10 +907,10 @@ struct FixedKVInternalNode
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    this->split_child_ptrs(*left, *right);
     auto pivot = this->split_into(*left, *right);
     left->range = left->get_meta();
     right->range = right->get_meta();
+    this->split_child_ptrs(c.trans, *left, *right);
     return std::make_tuple(
       left,
       right,
@@ -836,9 +922,9 @@ struct FixedKVInternalNode
     Ref &right) {
     auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    replacement->merge_child_ptrs(*this, *right);
     replacement->merge_from(*this, *right->template cast<node_type_t>());
     replacement->range = replacement->get_meta();
+    replacement->merge_child_ptrs(c.trans, *this, *right);
     return replacement;
   }
 
@@ -860,15 +946,15 @@ struct FixedKVInternalNode
       prefer_left,
       *replacement_left,
       *replacement_right);
+    replacement_left->range = replacement_left->get_meta();
+    replacement_right->range = replacement_right->get_meta();
     this->balance_child_ptrs(
+      c.trans,
       *this,
       right,
       prefer_left,
       *replacement_left,
       *replacement_right);
-
-    replacement_left->range = replacement_left->get_meta();
-    replacement_right->range = replacement_right->get_meta();
     return std::make_tuple(
       replacement_left,
       replacement_right,
@@ -1231,12 +1317,12 @@ struct FixedKVLeafNode
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    if constexpr (has_children) {
-      this->split_child_ptrs(*left, *right);
-    }
     auto pivot = this->split_into(*left, *right);
     left->range = left->get_meta();
     right->range = right->get_meta();
+    if constexpr (has_children) {
+      this->split_child_ptrs(c.trans, *left, *right);
+    }
     return std::make_tuple(
       left,
       right,
@@ -1248,11 +1334,11 @@ struct FixedKVLeafNode
     Ref &right) {
     auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    if constexpr (has_children) {
-      replacement->merge_child_ptrs(*this, *right);
-    }
     replacement->merge_from(*this, *right->template cast<node_type_t>());
     replacement->range = replacement->get_meta();
+    if constexpr (has_children) {
+      replacement->merge_child_ptrs(c.trans, *this, *right);
+    }
     return replacement;
   }
 
@@ -1274,17 +1360,17 @@ struct FixedKVLeafNode
       prefer_left,
       *replacement_left,
       *replacement_right);
+    replacement_left->range = replacement_left->get_meta();
+    replacement_right->range = replacement_right->get_meta();
     if constexpr (has_children) {
       this->balance_child_ptrs(
+	c.trans,
 	*this,
 	right,
 	prefer_left,
 	*replacement_left,
 	*replacement_right);
     }
-
-    replacement_left->range = replacement_left->get_meta();
-    replacement_right->range = replacement_right->get_meta();
     return std::make_tuple(
       replacement_left,
       replacement_right,
