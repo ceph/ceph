@@ -1,0 +1,25 @@
+<ng-container *ngIf="selection">
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="subsystem-details">
+    <ng-container ngbNavItem="details">
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <cd-table-key-value [data]="data">
+        </cd-table-key-value>
+      </ng-template>
+    </ng-container>
+    <ng-container ngbNavItem="listeners">
+      <a ngbNavLink
+         i18n>Listeners</a>
+      <ng-template ngbNavContent>
+        <cd-nvmeof-listeners-list [subsystemNQN]="subsystemNQN">
+        </cd-nvmeof-listeners-list>
+      </ng-template>
+    </ng-container>
+  </nav>
+
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>
