@@ -26,10 +26,10 @@ void shutdown();
 // key class for the connection list
 struct connection_id_t {
   std::string host;
-  int port;
+  int port = 0;
   std::string vhost;
   std::string exchange;
-  bool ssl;
+  bool ssl = false;
   connection_id_t() = default;
   connection_id_t(const amqp_connection_info& info, const std::string& _exchange);
 };

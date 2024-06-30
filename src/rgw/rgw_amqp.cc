@@ -513,10 +513,10 @@ bool new_state(connection_t* conn, const connection_id_t& conn_id) {
 
 /// struct used for holding messages in the message queue
 struct message_wrapper_t {
-  connection_id_t conn_id;
-  std::string topic;
-  std::string message;
-  reply_callback_t cb;
+  const connection_id_t conn_id;
+  const std::string topic;
+  const std::string message;
+  const reply_callback_t cb;
 
   message_wrapper_t(const connection_id_t& _conn_id,
       const std::string& _topic,
