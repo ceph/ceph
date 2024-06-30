@@ -59,14 +59,22 @@ struct cls_2pc_urgent_data
   cls_2pc_reservations reservations; // reservation list (keyed by id)
   bool has_xattrs{false};
   uint32_t committed_entries{0}; // how many entries have been committed so far
+  std::string push_endpoint;
+  std::string push_endpoint_args;
+  std::string arn_topic;
+  bool topic_attrs_set{false};
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(reserved_size, bl);
     encode(last_id, bl);
     encode(reservations, bl);
     encode(has_xattrs, bl);
     encode(committed_entries, bl);
+    encode(push_endpoint, bl);
+    encode(push_endpoint_args, bl);
+    encode(arn_topic, bl);
+    encode(topic_attrs_set, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -78,6 +86,12 @@ struct cls_2pc_urgent_data
     decode(has_xattrs, bl);
     if (struct_v >= 2) {
       decode(committed_entries, bl);
+    }
+    if (struct_v >= 3) {
+      decode(push_endpoint, bl);
+      decode(push_endpoint_args, bl);
+      decode(arn_topic, bl);
+      decode(topic_attrs_set, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -94,6 +108,10 @@ struct cls_2pc_urgent_data
     }
     f->close_section();
     f->dump_bool("has_xattrs", has_xattrs);
+    f->dump_string("push_endpoint", push_endpoint);
+    f->dump_string("push_endpoint_args", push_endpoint_args);
+    f->dump_string("arn_topic", arn_topic);
+    f->dump_bool("topic_attrs_set", topic_attrs_set);
   }
 
   static void generate_test_instances(std::list<cls_2pc_urgent_data*>& ls) {

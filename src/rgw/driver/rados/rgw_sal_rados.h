@@ -321,7 +321,10 @@ class RadosStore : public StoreDriver {
                             TopicList& listing) override;
     int add_persistent_topic(const DoutPrefixProvider* dpp,
                              optional_yield y,
-                             const std::string& topic_queue) override;
+                             const rgw_pubsub_dest &dest) override;
+    int update_persistent_topic_attrs(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const rgw_pubsub_dest &dest) override;
     int remove_persistent_topic(const DoutPrefixProvider* dpp,
                                 optional_yield y,
                                 const std::string& topic_queue) override;

@@ -34,7 +34,11 @@ void shutdown();
 
 // create persistent delivery queue for a topic (endpoint)
 // this operation also add a topic queue to the common (to all RGWs) list of all topics
-int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y);
+int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const rgw_pubsub_dest &dest, optional_yield y);
+
+// update persistent delivery queue attrs for a topic (endpoint)
+// this operation also updates a topic queue to the common (to all RGWs) list of all topics
+int update_persistent_topic_attrs(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const rgw_pubsub_dest &dest, optional_yield y);
 
 // remove persistent delivery queue for a topic (endpoint)
 // this operation also remove the topic queue from the common (to all RGWs) list of all topics

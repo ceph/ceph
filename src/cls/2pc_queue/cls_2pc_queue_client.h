@@ -33,6 +33,13 @@ int cls_2pc_queue_list_entries(librados::IoCtx& io_ctx, const std::string& queue
 
 // list all pending reservations in the queue
 int cls_2pc_queue_list_reservations(librados::IoCtx& io_ctx, const std::string& queue_name, cls_2pc_reservations& reservations);
+
+// return push_endpoint, push_endpoint_args and arn_topic
+int cls_2pc_queue_get_topic_attrs(librados::IoCtx &io_ctx, const std::string &queue_name, std::string &push_endpoint,
+                                  std::string &push_endpoint_args, std::string &arn_topic, bool &topic_attrs_set);
+// return push_endpoint, push_endpoint_args and arn_topic
+int cls_2pc_queue_update_attrs(librados::IoCtx& io_ctx, const std::string& queue_name, const std::string& push_endpoint,
+                                   const std::string& push_endpoint_args, const std::string& arn_topic);
 #endif
 
 // optionally async method for getting capacity (bytes) 
@@ -91,4 +98,15 @@ void cls_2pc_queue_expire_reservations(librados::ObjectWriteOperation& op,
 // if there is no guarantee against two clienst deleting entries at the same time, you can leave the entries_to_remove unprovided or input zero entries_to_remove
 // the function will count how many entries it needs to removed
 void cls_2pc_queue_remove_entries(librados::ObjectWriteOperation& op, const std::string& end_marker, uint64_t entries_to_remove=0);
+
+// update the arn_topic, push_endpoint address and its arguments in the header of the queue
+void cls_2pc_queue_update_attrs(librados::ObjectWriteOperation& op, std::string& push_endpoint,
+                                std::string& push_endpoint_args, std::string& arn_topic);
+
+// optionally async method for getting arn_topic, push_endpoint address and its arguments in the header of the queue
+// after answer is received, call cls_2pc_queue_get_topic_attrs_result() to parse the results
+void cls_2pc_queue_get_topic_attrs(librados::ObjectReadOperation& op,  bufferlist* obl, int* prval);
+
+int cls_2pc_queue_get_topic_attrs_result(const bufferlist &bl, std::string &push_endpoint, std::string &push_endpoint_args,
+                                     std::string &arn_topic, bool &topic_attrs_set);
 
