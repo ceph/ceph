@@ -183,7 +183,7 @@ public:
     LBAMappingRef pin)
   {
     auto fut = base_iertr::make_ready_future<LBAMappingRef>();
-    if (!pin->is_parent_valid()) {
+    if (!pin->is_parent_viewable()) {
       fut = get_pin(t, pin->get_key()
       ).handle_error_interruptible(
 	crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
@@ -211,7 +211,7 @@ public:
     Transaction &t,
     LBAMappingRef pin)
   {
-    ceph_assert(pin->is_parent_valid());
+    ceph_assert(pin->is_parent_viewable());
     // checking the lba child must be atomic with creating
     // and linking the absent child
     auto v = pin->get_logical_extent(t);
@@ -475,7 +475,7 @@ public:
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
       if (!pin->is_indirect()) {
-	if (!pin->is_parent_valid()) {
+	if (!pin->is_parent_viewable()) {
 	  fut = get_pin(t, pin->get_key()
 	  ).si_then([&pin](auto npin) {
 	    assert(npin);
