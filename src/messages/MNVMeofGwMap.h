@@ -47,7 +47,8 @@ public:
     auto p = payload.cbegin();
     int version;
     decode(version, p);
-    ceph_assert(version == VERSION);
+    if (version > VERSION)
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, VERSION, version));
     decode(gwmap_epoch, p);
     decode(map, p);
   }
