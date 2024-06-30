@@ -2193,12 +2193,12 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
     {
       auto t = create_transaction();
       auto pin = get_pin(t, (LEAF_NODE_CAPACITY - 1) * 4096);
-      assert(pin->is_parent_valid());
+      assert(pin->is_parent_viewable());
       auto extent = alloc_extent(t, LEAF_NODE_CAPACITY * 4096, 4096, 'a');
-      assert(!pin->is_parent_valid());
+      assert(!pin->is_parent_viewable());
       pin = get_pin(t, LEAF_NODE_CAPACITY * 4096);
       std::ignore = alloc_extent(t, (LEAF_NODE_CAPACITY + 1) * 4096, 4096, 'a');
-      assert(pin->is_parent_valid());
+      assert(pin->is_parent_viewable());
       assert(pin->parent_modified());
       pin->maybe_fix_pos();
       auto v = pin->get_logical_extent(*t.t);

@@ -11,7 +11,7 @@ get_child_ret_t<LogicalCachedExtent>
 BtreeNodeMapping<key_t, val_t>::get_logical_extent(
   Transaction &t)
 {
-  ceph_assert(is_parent_valid());
+  ceph_assert(is_parent_viewable());
   assert(pos != std::numeric_limits<uint16_t>::max());
   ceph_assert(t.get_trans_id() == ctx.trans.get_trans_id());
   auto &p = (FixedKVNode<key_t>&)*parent;

@@ -1154,7 +1154,7 @@ public:
   bool is_zero_reserved() const {
     return !get_val().is_real();
   }
-  virtual bool is_parent_valid() const = 0;
+  virtual bool is_parent_viewable() const = 0;
   virtual bool parent_modified() const {
     ceph_abort("impossible");
     return false;
@@ -1277,7 +1277,7 @@ public:
   void reset_parent_tracker(parent_tracker_t *p = nullptr) {
     parent_tracker.reset(p);
   }
-  bool is_parent_valid() const {
+  bool is_parent_viewable() const {
     return parent_tracker && parent_tracker->is_valid();
   }
   template <typename T = CachedExtent>

@@ -481,7 +481,7 @@ struct FixedKVNode : ChildableCachedExtent {
     }
     ceph_assert(!root_block);
     take_prior_parent_tracker();
-    assert(is_parent_valid());
+    assert(is_parent_viewable());
     auto parent = get_parent_node<FixedKVNode>();
     //TODO: can this search be avoided?
     auto off = parent->lower_bound_offset(get_node_meta().begin);
@@ -616,7 +616,7 @@ struct FixedKVNode : ChildableCachedExtent {
     if (range.is_root()) {
       reset_parent_tracker();
     }
-    assert(has_parent_tracker() ? (is_parent_valid()) : true);
+    assert(has_parent_tracker() ? (is_parent_viewable()) : true);
   }
 
   void set_child_ptracker(ChildableCachedExtent *child) {
@@ -758,7 +758,7 @@ struct FixedKVInternalNode
 	ceph_assert(this->root_block);
 	unlink_phy_tree_root_node<NODE_KEY>(this->root_block);
       } else {
-	ceph_assert(this->is_parent_valid());
+	ceph_assert(this->is_parent_viewable());
 	auto parent = this->template get_parent_node<FixedKVNode<NODE_KEY>>();
 	auto off = parent->lower_bound_offset(this->get_meta().begin);
 	assert(parent->get_key_from_idx(off) == this->get_meta().begin);
@@ -1192,7 +1192,7 @@ struct FixedKVLeafNode
 	ceph_assert(this->root_block);
 	unlink_phy_tree_root_node<NODE_KEY>(this->root_block);
       } else {
-	ceph_assert(this->is_parent_valid());
+	ceph_assert(this->is_parent_viewable());
 	auto parent = this->template get_parent_node<FixedKVNode<NODE_KEY>>();
 	auto off = parent->lower_bound_offset(this->get_meta().begin);
 	assert(parent->get_key_from_idx(off) == this->get_meta().begin);

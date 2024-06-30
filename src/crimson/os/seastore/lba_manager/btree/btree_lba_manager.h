@@ -163,13 +163,13 @@ public:
 
   bool parent_modified() const final {
     ceph_assert(parent);
-    ceph_assert(is_parent_valid());
+    ceph_assert(is_parent_viewable());
     auto &p = static_cast<LBALeafNode&>(*parent);
     return p.modified_since(parent_modifications);
   }
 
   void maybe_fix_pos() final {
-    assert(is_parent_valid());
+    assert(is_parent_viewable());
     if (!parent_modified()) {
       return;
     }
