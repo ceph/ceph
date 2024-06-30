@@ -1154,7 +1154,7 @@ public:
   bool is_zero_reserved() const {
     return !get_val().is_real();
   }
-  virtual bool is_parent_valid() const = 0;
+  virtual bool is_parent_viewable() const = 0;
   virtual bool parent_modified() const {
     ceph_abort("impossible");
     return false;
