@@ -23,7 +23,7 @@ def install_rabbitmq(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
         ctx.cluster.only(client).run(args=[
-             'sudo', 'yum', '-y', 'install', 'epel-release'
+             'sudo', 'dnf', '-y', 'install', 'epel-release'
         ])
 
         link1 = 'https://packagecloud.io/install/repositories/rabbitmq/erlang/script.rpm.sh'
@@ -33,7 +33,7 @@ def install_rabbitmq(ctx, config):
         ])
 
         ctx.cluster.only(client).run(args=[
-             'sudo', 'yum', '-y', 'install', 'erlang'
+             'sudo', 'dnf', '-y', 'install', 'erlang'
         ])
 
         link2 = 'https://packagecloud.io/install/repositories/rabbitmq/rabbitmq-server/script.rpm.sh'
@@ -43,7 +43,7 @@ def install_rabbitmq(ctx, config):
         ])
 
         ctx.cluster.only(client).run(args=[
-             'sudo', 'yum', '-y', 'install', 'rabbitmq-server'
+             'sudo', 'dnf', '-y', 'install', 'rabbitmq-server'
         ])
 
     try:
@@ -53,7 +53,7 @@ def install_rabbitmq(ctx, config):
 
         for (client, _) in config.items():
             ctx.cluster.only(client).run(args=[
-                 'sudo', 'yum', '-y', 'remove', 'rabbitmq-server.noarch'
+                 'sudo', 'dnf', '-y', 'remove', 'rabbitmq-server.noarch'
             ])
 
 
@@ -70,7 +70,7 @@ def run_rabbitmq(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
         ctx.cluster.only(client).run(args=[
-             'sudo', 'chkconfig', 'rabbitmq-server', 'on'
+             'sudo', 'systemctl', 'enable', 'rabbitmq-server.service'
             ],
         )
 

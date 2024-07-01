@@ -1339,8 +1339,7 @@ def test_ps_s3_notification_push_kafka_on_master():
         time.sleep(5)
         receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
     except Exception as e:
-        print(e)
-        assert False
+        assert False, str(e)
     finally:
         # cleanup
         if s3_notification_conf is not None:
