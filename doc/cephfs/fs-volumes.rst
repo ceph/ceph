@@ -663,6 +663,8 @@ Run a command of the following form to initiate a clone operation:
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name>
 
+.. note:: ``subvolume snapshot clone`` command depends upon the above mentioned config option ``snapshot_clone_no_wait``
+
 Run a command of the following form when a snapshot (source subvolume) is a
 part of non-default group. Note that the group name needs to be specified:
 
@@ -685,12 +687,6 @@ the following form to create a cloned subvolume with a specific pool layout:
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
-
-Configure the maximum number of concurrent clones. The default is 4:
-
-.. prompt:: bash #
-
-   ceph config set mgr mgr/volumes/max_concurrent_clones <value>
 
 Run a command of the following form to check the status of a clone operation:
 
@@ -835,6 +831,31 @@ by using the following command:
 
 The current value of ``snapshot_clone_no_wait`` can be fetched by running the
 following command.
+
+.. prompt:: bash #
+    
+   ceph config get mgr mgr/volumes/snapshot_clone_no_wait
+
+Configurables
+~~~~~~~~~~~~~
+
+Configure the maximum number of concurrent clone operations. The default is 4:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/volumes/max_concurrent_clones <value>
+
+Configure the snapshot_clone_no_wait option :
+
+The ``snapshot_clone_no_wait`` config option is used to reject clone creation requests when cloner threads 
+(which can be configured using above option i.e. ``max_concurrent_clones``) are not available.
+It is enabled by default i.e. the value set is True, whereas it can be configured by using below command.
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/volumes/snapshot_clone_no_wait <bool>
+
+The current value of ``snapshot_clone_no_wait`` can be fetched by using below command.
 
 .. prompt:: bash #
     
