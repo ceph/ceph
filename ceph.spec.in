@@ -144,9 +144,7 @@
 %if 0%{with seastar}
 %{!?gts_version: %global gts_version 13}
 %else
-%if 0%{?rhel} == 8
-%{!?gts_version: %global gts_version 11}
-%endif
+%{!?gts_version: %global gts_version 12}
 %endif
 
 # gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
@@ -198,8 +196,8 @@
 %enable_devtoolset13
 %endif
 %else
-%if 0%{?enable_devtoolset11:1}
-%enable_devtoolset11
+%if 0%{?enable_devtoolset12:1}
+%enable_devtoolset12
 %endif
 %endif
 %endif
@@ -251,7 +249,7 @@ BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 BuildRequires:	git
 %if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9 || 0%{?openEuler}
-BuildRequires:	gcc-c++ >= 11
+BuildRequires:	gcc-c++ >= 12
 %endif
 %if 0%{?suse_version} == 1500
 BuildRequires: gcc11-c++
