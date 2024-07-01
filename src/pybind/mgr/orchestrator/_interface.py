@@ -42,6 +42,7 @@ from ceph.deployment.service_spec import (
     RGWSpec,
     SMBSpec,
     SNMPGatewaySpec,
+    MgmtGatewaySpec,
     ServiceSpec,
     TunedProfileSpec,
 )
@@ -526,14 +527,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_discovery_dump_cert(self) -> OrchResult:
-        """
-        Returns service discovery server root certificate
-
-        :return: service discovery root certificate
-        """
-        raise NotImplementedError()
-
     def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None, refresh: bool = False) -> OrchResult[List['ServiceDescription']]:
         """
         Describe a service (of any kind) that is already configured in
@@ -584,6 +577,7 @@ class Orchestrator(object):
             'snmp-gateway': self.apply_snmp_gateway,
             'host': self.add_host,
             'smb': self.apply_smb,
+            'mgmt-gateway': self.apply_mgmt_gateway,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -777,6 +771,10 @@ class Orchestrator(object):
         """set prometheus access information"""
         raise NotImplementedError()
 
+    def generate_certificates(self, module_name: str) -> OrchResult[Dict[str, str]]:
+        """set prometheus access information"""
+        raise NotImplementedError()
+
     def set_custom_prometheus_alerts(self, alerts_file: str) -> OrchResult[str]:
         """set prometheus custom alerts files and schedule reconfig of prometheus"""
         raise NotImplementedError()
@@ -823,6 +821,10 @@ class Orchestrator(object):
 
     def apply_snmp_gateway(self, spec: SNMPGatewaySpec) -> OrchResult[str]:
         """Update an existing snmp gateway service"""
+        raise NotImplementedError()
+
+    def apply_mgmt_gateway(self, spec: MgmtGatewaySpec) -> OrchResult[str]:
+        """Update an existing cluster gateway service"""
         raise NotImplementedError()
 
     def apply_smb(self, spec: SMBSpec) -> OrchResult[str]:
@@ -908,6 +910,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'keepalived': 'ingress',
         'iscsi': 'iscsi',
         'nvmeof': 'nvmeof',
+        'mgmt-gateway': 'mgmt-gateway',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
         'nfs': 'nfs',
@@ -943,6 +946,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'ingress': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
         'nvmeof': ['nvmeof'],
+        'mgmt-gateway': ['mgmt-gateway'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
         'nfs': ['nfs'],
