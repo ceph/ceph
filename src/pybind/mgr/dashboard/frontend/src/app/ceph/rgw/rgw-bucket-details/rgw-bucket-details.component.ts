@@ -13,6 +13,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
   @Input()
   selection: any;
 
+  lifecycleFormat: 'json' | 'xml' = 'json';
   aclPermissions: Record<string, string[]> = {};
   replicationStatus = $localize`Disabled`;
 
@@ -23,6 +24,9 @@ export class RgwBucketDetailsComponent implements OnChanges {
       this.rgwBucketService.get(this.selection.bid).subscribe((bucket: object) => {
         bucket['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bucket);
         this.selection = bucket;
+        if (this.lifecycleFormat === 'json' && !this.selection.lifecycle) {
+          this.selection.lifecycle = {};
+        }
         this.aclPermissions = this.parseXmlAcl(this.selection.acl, this.selection.owner);
         if (this.selection.replication?.['Rule']?.['Status']) {
           this.replicationStatus = this.selection.replication?.['Rule']?.['Status'];

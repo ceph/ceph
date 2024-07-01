@@ -404,6 +404,18 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_tags(bucket_name, tags)
 
+    def _get_lifecycle(self, bucket_name: str, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.get_lifecycle(bucket_name)
+
+    def _set_lifecycle(self, bucket_name: str, lifecycle: str, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.set_lifecycle(bucket_name, lifecycle)
+
+    def _delete_lifecycle(self, bucket_name: str, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.delete_lifecycle(bucket_name)
+
     def _get_acl(self, bucket_name, daemon_name, owner):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return str(rgw_client.get_acl(bucket_name))
@@ -486,6 +498,7 @@ class RgwBucket(RgwRESTController):
         result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, result['owner'])
         result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
         result['replication'] = self._get_replication(bucket_name, result['owner'], daemon_name)
+        result['lifecycle'] = self._get_lifecycle(bucket_name, daemon_name, result['owner'])
 
         # Append the locking configuration.
         locking = self._get_locking(result['owner'], daemon_name, bucket_name)
@@ -538,7 +551,8 @@ class RgwBucket(RgwRESTController):
             mfa_delete=None, mfa_token_serial=None, mfa_token_pin=None,
             lock_mode=None, lock_retention_period_days=None,
             lock_retention_period_years=None, tags=None, bucket_policy=None,
-            canned_acl=None, replication=None, daemon_name=None):
+            canned_acl=None, replication=None, lifecycle=None, daemon_name=None):
+        # pylint: disable=R0912
         encryption_state = str_to_bool(encryption_state)
         if replication is not None:
             replication = str_to_bool(replication)
@@ -586,8 +600,12 @@ class RgwBucket(RgwRESTController):
             self._set_policy(bucket_name, bucket_policy, daemon_name, uid)
         if canned_acl:
             self._set_acl(bucket_name, canned_acl, uid, daemon_name)
-        if replication is not None:
+        if replication:
             self._set_replication(bucket_name, replication, uid, daemon_name)
+        if lifecycle and not lifecycle == '{}':
+            self._set_lifecycle(bucket_name, lifecycle, daemon_name, uid)
+        else:
+            self._delete_lifecycle(bucket_name, daemon_name, uid)
         return self._append_bid(result)
 
     def delete(self, bucket, purge_objects='true', daemon_name=None):

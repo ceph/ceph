@@ -109,7 +109,8 @@ export class RgwBucketService extends ApiClient {
     tags: string,
     bucketPolicy: string,
     cannedAcl: string,
-    replication: string
+    replication: string,
+    lifecycle: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
@@ -127,7 +128,8 @@ export class RgwBucketService extends ApiClient {
         tags: tags,
         bucket_policy: bucketPolicy,
         canned_acl: cannedAcl,
-        replication: replication
+        replication: replication,
+        lifecycle: lifecycle
       });
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });
