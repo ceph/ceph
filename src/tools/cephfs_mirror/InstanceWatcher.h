@@ -10,6 +10,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "Watcher.h"
+#include "Types.h"
 
 class ContextWQ;
 
@@ -49,7 +50,7 @@ public:
     return m_blocklisted;
   }
 
-  utime_t get_blocklisted_ts() {
+  monotime get_blocklisted_ts() {
     std::scoped_lock locker(m_lock);
     return m_blocklisted_ts;
   }
@@ -59,7 +60,7 @@ public:
     return m_failed;
   }
 
-  utime_t get_failed_ts() {
+  monotime get_failed_ts() {
     std::scoped_lock locker(m_lock);
     return m_failed_ts;
   }
@@ -76,8 +77,8 @@ private:
   bool m_blocklisted = false;
   bool m_failed = false;
 
-  utime_t m_blocklisted_ts;
-  utime_t m_failed_ts;
+  monotime m_blocklisted_ts;
+  monotime m_failed_ts;
 
   void create_instance();
   void handle_create_instance(int r);
