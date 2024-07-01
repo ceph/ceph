@@ -52,9 +52,10 @@ inline std::ostream& operator<<(std::ostream& os, const gw_availability_t value)
     return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const SM_STATE value) {
+inline std::ostream& operator<<(std::ostream& os, const SmState value) {
     os << "SM_STATE [ ";
-    for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) os << value[i];
+    for (auto& state_itr: value )
+        os << value.at(state_itr.first);
     os << "]";
     return os;
 }
@@ -124,14 +125,17 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeAnaNonceMap value) {
     return os;
 }
 
-inline std::ostream& print_gw_created_t(std::ostream& os, const NvmeGwMonState value, size_t num_ana_groups, NvmeAnaGrpId *anas) {
+inline std::ostream& print_gw_created_t(std::ostream& os, const NvmeGwMonState value, size_t num_ana_groups) {
     os << "==Internal map ==NvmeGwCreated { ana_group_id " << value.ana_grp_id << " osd_epochs: ";
-    for(size_t i = 0; i < num_ana_groups; i ++){
-        os << " " << anas[i] <<": " << value.blocklist_data[anas[i]].osd_epoch << ":" <<value.blocklist_data[anas[i]].is_failover ;
+    for (auto& blklst_itr: value.blocklist_data)
+    {
+        os << " " << blklst_itr.first <<": " << blklst_itr.second.osd_epoch << ":" <<blklst_itr.second.is_failover ;
     }
     os << "\n" << MODULE_PREFFIX << "nonces: " << value.nonce_map << " }";
-    for (size_t i = 0; i < num_ana_groups; i++) {
-        os << " " << anas[i] <<": " << value.sm_state[anas[i]] << ",";
+
+    for (auto& state_itr: value.sm_state )
+    {
+        os << " " << state_itr.first <<": " << state_itr.second << ",";
     }
 
     os << "]\n"<< MODULE_PREFFIX << "availability " << value.availability << " full-startup " << value.performed_full_startup  << " ]";
@@ -141,13 +145,13 @@ inline std::ostream& print_gw_created_t(std::ostream& os, const NvmeGwMonState v
 
 inline std::ostream& operator<<(std::ostream& os, const NvmeGwMonState value) {
     os << "==Internal map ==G W_CREATED_T { ana_group_id " << value.ana_grp_id << " osd_epochs: ";
-    for(int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i ++){
-        os << " " << value.blocklist_data[i].osd_epoch;
+    for (auto &blklst_itr: value.blocklist_data) {
+        os << " " << blklst_itr.second.osd_epoch;
     }
     os << "\n" << MODULE_PREFFIX << "nonces: " << value.nonce_map << " }";
 
-    for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
-        os << value.sm_state[i] << ",";
+    for (auto& state_itr: value.sm_state ) {
+        os << value.sm_state.at(state_itr.first) << ",";
     }
 
     os <<  "]\n"<< MODULE_PREFFIX << " beacon-subsystems ";
@@ -162,14 +166,10 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeGwMonState value) {
 
 inline std::ostream& operator<<(std::ostream& os, const NvmeGwMonStates value) {
     if(value.size()) os << "\n" << MODULE_PREFFIX;;
-    NvmeAnaGrpId anas[MAX_SUPPORTED_ANA_GROUPS];
-    int i = 0;
-    for(auto &it: value ){
-       anas[i++] = it.second.ana_grp_id; // effective ana groups for these GWs within group_pool
-    }
+
     for (auto &gw_created_map : value) {
         os  <<  "gw_id: " << gw_created_map.first  << " [ " ;//<< gw_created_map.second << "] \n"<< MODULE_PREFFIX;
-        print_gw_created_t(os, gw_created_map.second,  value.size(), anas);
+        print_gw_created_t(os, gw_created_map.second,  value.size());
         os << "] \n"<< MODULE_PREFFIX;
     }
     return os;
@@ -187,7 +187,7 @@ inline std::ostream& operator<<(std::ostream& os, const NVMeofGwMap value) {
 inline void encode(const ana_state_t& st,  ceph::bufferlist &bl) {
     ENCODE_START(1, 1, bl);
     encode((uint32_t)st.size(), bl);
-    for (const auto& gr: st){
+    for (const auto& gr: st) {
         encode((uint32_t)gr.first, bl);
         encode((uint32_t)gr.second, bl);
     }
@@ -212,7 +212,7 @@ inline void decode(ana_state_t& st, ceph::buffer::list::const_iterator &bl) {
 inline void encode(const GwSubsystems& subsystems,  ceph::bufferlist &bl) {
     ENCODE_START(1, 1, bl);
     encode((uint32_t)subsystems.size(), bl);
-    for (const auto& sub: subsystems){
+    for (const auto& sub: subsystems) {
         encode(sub.second.nqn, bl);
         encode(sub.second.ana_state, bl);
     }
@@ -224,7 +224,7 @@ inline  void decode(GwSubsystems& subsystems,  ceph::bufferlist::const_iterator&
   DECODE_START(1, bl);
   decode(num_subsystems, bl);
   subsystems.clear();
-  for (uint32_t i=0; i<num_subsystems; i++){
+  for (uint32_t i=0; i<num_subsystems; i++) {
      std::string  nqn;
      decode(nqn, bl);
      ana_state_t st;
@@ -256,13 +256,14 @@ inline  void decode(NvmeGwClientState& state,  ceph::bufferlist::const_iterator&
 
 inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl) {
     ENCODE_START(1, 1, bl);
-    encode((uint32_t)MAX_SUPPORTED_ANA_GROUPS, bl);
-    for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
-        uint32_t tick = state.data[i].timer_started;
-        uint8_t val = state.data[i].timer_value;
+    encode((uint32_t)state.data.size(), bl);
+    for (auto &tm_itr:state.data) {
+        encode((uint32_t)tm_itr.first, bl);// encode key
+        uint32_t tick = tm_itr.second.timer_started;
+        uint8_t  val  = tm_itr.second.timer_value;
         encode(tick, bl);
         encode(val,  bl);
-        auto endtime = state.data[i].end_time;
+        auto endtime  = tm_itr.second.end_time;
         // Convert the time point to milliseconds since the epoch
         uint64_t  millisecondsSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(endtime.time_since_epoch()).count();
         encode(millisecondsSinceEpoch , bl);
@@ -271,22 +272,24 @@ inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl) {
 }
 
 inline  void decode(NvmeGwTimerState& state,  ceph::bufferlist::const_iterator& bl) {
-    uint32_t s;
-      
+    uint32_t size;
     DECODE_START(1, bl);
-    decode(s, bl);
-    ceph_assert(s == (uint32_t)MAX_SUPPORTED_ANA_GROUPS);
-    for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
+    decode(size, bl);
+    for (uint32_t i = 0; i <size; i ++) {
+        uint32_t tm_key;
         uint32_t tick;
         uint8_t val;
+        decode(tm_key, bl);
         decode(tick, bl);
         decode(val,  bl);
-        state.data[i].timer_started = tick;
-        state.data[i].timer_value = val;
+        Tmdata tm;
+        tm.timer_started = tick;
+        tm.timer_value = val;
         uint64_t milliseconds;
         decode(milliseconds, bl);
         auto duration = std::chrono::milliseconds(milliseconds);
-        state.data[i].end_time = std::chrono::time_point<std::chrono::system_clock>(duration);
+        tm.end_time = std::chrono::time_point<std::chrono::system_clock>(duration);
+        state.data[tm_key] = tm;
     }
     DECODE_FINISH(bl);
 }
@@ -309,10 +312,10 @@ inline void decode(NvmeAnaNonceMap& nonce_map, ceph::buffer::list::const_iterato
     std::string nonce;
     DECODE_START(1, bl);
     decode(map_size, bl);
-    for(uint32_t i = 0; i<map_size; i++){
+    for (uint32_t i = 0; i<map_size; i++) {
         decode(ana_grp_id, bl);
         decode(vector_size,bl);
-        for(uint32_t j = 0; j < vector_size; j++){
+        for (uint32_t j = 0; j < vector_size; j++) {
             decode (nonce, bl);
             nonce_map[ana_grp_id].push_back(nonce);
         }
@@ -323,21 +326,24 @@ inline void decode(NvmeAnaNonceMap& nonce_map, ceph::buffer::list::const_iterato
 inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl) {
     ENCODE_START(1, 1, bl);
     encode ((uint32_t)gws.size(), bl); // number of gws in the group
-    for(auto& gw : gws){
+    for (auto& gw : gws) {
         encode(gw.first, bl);// GW_id
         encode(gw.second.ana_grp_id, bl); // GW owns this group-id
-
-        for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
-            encode((uint32_t)(gw.second.sm_state[i]), bl);
+        encode((uint32_t)gw.second.sm_state.size(), bl);
+        for (auto &state_it:gw.second.sm_state) {
+            encode((uint32_t)state_it.first, bl); //key of map
+            encode((uint32_t)state_it.second, bl);//value of map
         }
         encode((uint32_t)gw.second.availability, bl);
         encode((uint16_t)gw.second.performed_full_startup, bl);
         encode((uint16_t)gw.second.last_gw_map_epoch_valid, bl);
         encode(gw.second.subsystems, bl);
 
-        for(int i=0; i< MAX_SUPPORTED_ANA_GROUPS; i++){
-            encode(gw.second.blocklist_data[i].osd_epoch, bl);
-            encode(gw.second.blocklist_data[i].is_failover, bl);
+        encode((uint32_t)gw.second.blocklist_data.size(), bl);
+        for (auto &blklst_itr: gw.second.blocklist_data) {
+            encode((uint32_t)blklst_itr.first, bl);
+            encode((uint32_t)blklst_itr.second.osd_epoch, bl);
+            encode((uint32_t)blklst_itr.second.is_failover, bl);
         }
         encode(gw.second.nonce_map, bl);
     }
@@ -350,7 +356,7 @@ inline void decode(NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl)
     DECODE_START(1, bl);
     decode(num_created_gws, bl);
 
-    for(uint32_t i = 0; i<num_created_gws; i++){
+    for (uint32_t i = 0; i<num_created_gws; i++) {
         std::string gw_name;
         decode(gw_name, bl);
         NvmeAnaGrpId ana_grp_id;
@@ -358,10 +364,14 @@ inline void decode(NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl)
 
         NvmeGwMonState gw_created(ana_grp_id);
         uint32_t sm_state;
+        uint32_t sm_key;
         NvmeGwId peer_name;
-        for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
+        uint32_t size;
+        decode(size, bl);
+        for (uint32_t i = 0; i <size; i ++) {
+            decode(sm_key, bl);
             decode(sm_state, bl);
-            gw_created.sm_state[i] = (gw_states_per_group_t)  sm_state;
+            gw_created.sm_state[sm_key] = ((gw_states_per_group_t)sm_state);
         }
         uint32_t avail;
         decode(avail, bl);
@@ -375,10 +385,17 @@ inline void decode(NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl)
         BeaconSubsystems   subsystems;
         decode(subsystems, bl);
         gw_created.subsystems = subsystems;
+        decode(size, bl);
+        for (uint32_t i=0; i<size; i++) {
+            uint32_t blklist_key;
+            uint32_t osd_epoch;
+            uint32_t is_failover;
+            decode(blklist_key, bl);
+            decode(osd_epoch,   bl);
+            decode(is_failover, bl);
+            Blocklist_data blst((epoch_t)osd_epoch, (bool)is_failover);
 
-        for(int i=0; i< MAX_SUPPORTED_ANA_GROUPS; i++){
-            decode(gw_created.blocklist_data[i].osd_epoch, bl);
-            decode(gw_created.blocklist_data[i].is_failover, bl);
+            gw_created.blocklist_data[blklist_key] = blst;
         }
         decode(gw_created.nonce_map, bl);
         gws[gw_name] = gw_created;
@@ -405,7 +422,7 @@ inline void decode(std::map<NvmeGroupKey, NvmeGwMonStates>& created_gws, ceph::b
     uint32_t ngroups;
     DECODE_START(1, bl);
     decode(ngroups, bl);
-    for(uint32_t i = 0; i<ngroups; i++){
+    for (uint32_t i = 0; i<ngroups; i++) {
         std::string pool, group;
         decode(pool, bl);
         decode(group, bl);
@@ -460,7 +477,7 @@ inline void decode(std::map<NvmeGroupKey, NvmeGwMonClientStates>& gmap, ceph::bu
     uint32_t ngroups;
     DECODE_START(1, bl);
     decode(ngroups, bl);
-    for(uint32_t i = 0; i<ngroups; i++){
+    for (uint32_t i = 0; i<ngroups; i++) {
         std::string pool, group;
         decode(pool, bl);
         decode(group, bl);
@@ -489,7 +506,7 @@ inline void decode(std::map<NvmeGroupKey, NvmeGwTimers>& gmetadata, ceph::buffer
     uint32_t ngroups;
     DECODE_START(1, bl);
     decode(ngroups, bl);
-    for(uint32_t i = 0; i<ngroups; i++){
+    for (uint32_t i = 0; i<ngroups; i++) {
         std::string pool, group;
         decode(pool, bl);
         decode(group, bl);
