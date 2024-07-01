@@ -11,3 +11,10 @@
 .btn:disabled {
   pointer-events: none;
 }
+
+.container-fluid {
+  align-items: flex-start;
+  display: flex;
+  padding-left: 0;
+  width: 100%;
+}

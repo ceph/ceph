@@ -49,6 +49,7 @@ import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-inf
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
 import { NfsListComponent } from '../nfs/nfs-list/nfs-list.component';
 import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
+import { RgwMultisiteWizardComponent } from './rgw-multisite-wizard/rgw-multisite-wizard.component';
 
 @NgModule({
   imports: [
@@ -106,7 +107,8 @@ import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
     RgwSyncPrimaryZoneComponent,
     RgwSyncMetadataInfoComponent,
     RgwSyncDataInfoComponent,
-    BucketTagModalComponent
+    BucketTagModalComponent,
+    RgwMultisiteWizardComponent
   ]
 })
 export class RgwModule {}
