@@ -692,6 +692,9 @@ class TestMonitoring:
                     use_current_daemon_image=False,
                 )
 
+                assert cephadm_module.cert_key_store.get_cert('alertmanager_cert', host='test') == 'mycert'
+                assert cephadm_module.cert_key_store.get_key('alertmanager_key', host='test') == 'mykey'
+
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     def test_prometheus_config_security_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -1155,8 +1158,8 @@ class TestMonitoring:
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
         with with_host(cephadm_module, "test"):
-            cephadm_module.set_store("test/grafana_crt", grafana_cert)
-            cephadm_module.set_store("test/grafana_key", grafana_key)
+            cephadm_module.cert_key_store.save_cert('grafana_cert', grafana_cert, host='test')
+            cephadm_module.cert_key_store.save_key('grafana_key', grafana_key, host='test')
             with with_service(
                 cephadm_module, PrometheusSpec("prometheus")
             ) as _, with_service(cephadm_module, ServiceSpec("mgr")) as _, with_service(

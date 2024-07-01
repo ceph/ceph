@@ -14,8 +14,6 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
 from threading import Event
 
-from cephadm.service_discovery import ServiceDiscovery
-
 from ceph.deployment.service_spec import PrometheusSpec
 
 import string
@@ -78,8 +76,18 @@ from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCol
 from .services.node_proxy import NodeProxy
 from .services.smb import SMBService
 from .schedule import HostAssignment
-from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
-    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
+from .inventory import (
+    Inventory,
+    SpecStore,
+    HostCache,
+    AgentCache,
+    EventStore,
+    ClientKeyringStore,
+    ClientKeyringSpec,
+    TunedProfileStore,
+    NodeProxyCache,
+    CertKeyStore,
+)
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
@@ -653,6 +661,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.tuned_profiles.load()
 
         self.tuned_profile_utils = TunedProfileUtils(self)
+
+        self.cert_key_store = CertKeyStore(self)
+        self.cert_key_store.load()
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -3121,6 +3132,14 @@ Then run the following:
                 'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
 
     @handle_orch_error
+    def cert_store_cert_ls(self) -> Dict[str, Any]:
+        return self.cert_key_store.cert_ls()
+
+    @handle_orch_error
+    def cert_store_key_ls(self) -> Dict[str, Any]:
+        return self.cert_key_store.key_ls()
+
+    @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
@@ -3236,7 +3255,7 @@ Then run the following:
 
     @handle_orch_error
     def service_discovery_dump_cert(self) -> str:
-        root_cert = self.get_store(ServiceDiscovery.KV_STORE_SD_ROOT_CERT)
+        root_cert = self.cert_key_store.get_cert('service_discovery_root_cert')
         if not root_cert:
             raise OrchestratorError('No certificate found for service discovery')
         return root_cert
