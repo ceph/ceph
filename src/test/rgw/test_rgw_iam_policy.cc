@@ -1250,9 +1250,8 @@ TEST(MatchWildcards, Asterisk)
                               "http://example.com/index.html"));
   EXPECT_TRUE(match_wildcards("http://example.com/*/*.jpg",
                               "http://example.com/fun/smiley.jpg"));
-  // note: parsing of * is not greedy, so * does not match 'bc' here
-  EXPECT_FALSE(match_wildcards("a*c", "abcc"));
-  EXPECT_FALSE(match_wildcards("a*c", "abcc", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a*c", "abcc"));
+  EXPECT_TRUE(match_wildcards("a*c", "abcc", MATCH_CASE_INSENSITIVE));
 }
 
 TEST(MatchPolicy, Action)
