@@ -256,7 +256,7 @@ and Ceph Monitor / Manager purposes, a minimum capacity of 256GB is advised
 and at least 480GB is recommended. A drive model rated at 1+ DWPD (or the
 equivalent in TBW (TeraBytes Written) is suggested.  However, for a given write
 workload, a larger drive than technically required will provide more endurance
-because it effectively has greater overprovsioning. We stress that
+because it effectively has greater overprovisioning. We stress that
 enterprise-class drives are best for production use, as they feature power
 loss protection and increased durability compared to client (desktop) SKUs
 that are intended for much lighter and intermittent duty cycles.
