@@ -46,6 +46,8 @@ from ._interface import (
     RGWSpec,
     SMBSpec,
     SNMPGatewaySpec,
+    MgmtGatewaySpec,
+    OAuth2ProxySpec,
     ServiceDescription,
     TunedProfileSpec,
     _cli_read_command,
@@ -942,15 +944,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
-    @_cli_write_command('orch sd dump cert')
-    def _service_discovery_dump_cert(self) -> HandleCommandResult:
-        """
-        Returns service discovery server root certificate
-        """
-        completion = self.service_discovery_dump_cert()
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
-
     @_cli_read_command('orch ls')
     def _list_services(self,
                        service_type: Optional[str] = None,
@@ -1159,6 +1152,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             raise ArgumentError("Invalid arguments. Please provide arguments <username> <password> or -i <credentials_json_file>")
 
         return _username, _password
+
+    @_cli_write_command('orch certmgr generate-certificates')
+    def _cert_mgr_generate_certificates(self, module_name: str) -> HandleCommandResult:
+        try:
+            completion = self.generate_certificates(module_name)
+            result = raise_if_exception(completion)
+            return HandleCommandResult(stdout=json.dumps(result))
+        except ArgumentError as e:
+            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
 
     @_cli_write_command('orch prometheus set-credentials')
     def _set_prometheus_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
@@ -1745,6 +1747,57 @@ Usage:
         spec.validate()  # force any validation exceptions to be caught correctly
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply mgmt-gateway')
+    def _apply_mgmt_gateway(self,
+                            port: Optional[int] = None,
+                            disable_https: Optional[bool] = False,
+                            enable_auth: Optional[bool] = False,
+                            placement: Optional[str] = None,
+                            unmanaged: bool = False,
+                            dry_run: bool = False,
+                            format: Format = Format.plain,
+                            no_overwrite: bool = False,
+                            inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Add a cluster gateway service (cephadm only)"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = MgmtGatewaySpec(
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            port=port,
+            disable_https=disable_https,
+            enable_auth=enable_auth,
+            preview_only=dry_run
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply oauth2-proxy')
+    def _apply_oauth2_proxy(self,
+                            https_address: Optional[str] = None,
+                            placement: Optional[str] = None,
+                            unmanaged: bool = False,
+                            dry_run: bool = False,
+                            format: Format = Format.plain,
+                            no_overwrite: bool = False,
+                            inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Add a cluster gateway service (cephadm only)"""
+
+        spec = OAuth2ProxySpec(
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            https_address=https_address
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+
 
     @_cli_write_command('orch apply nvmeof')
     def _apply_nvmeof(self,

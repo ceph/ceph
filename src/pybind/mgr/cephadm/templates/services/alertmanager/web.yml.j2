@@ -1,5 +1,11 @@
 tls_server_config:
   cert_file: alertmanager.crt
   key_file: alertmanager.key
+{% if enable_mtls %}
+  client_auth_type: RequireAndVerifyClientCert
+  client_ca_file: root_cert.pem
+{% endif %}
+{% if enable_basic_auth %}
 basic_auth_users:
     {{ alertmanager_web_user }}: {{ alertmanager_web_password }}
+{% endif %}

@@ -1,3 +1,7 @@
 tls_server_config:
   cert_file: node_exporter.crt
   key_file: node_exporter.key
+{% if enable_mtls %}
+  client_auth_type: RequireAndVerifyClientCert
+  client_ca_file: root_cert.pem
+{% endif %}

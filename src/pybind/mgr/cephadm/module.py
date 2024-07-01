@@ -14,9 +14,8 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
 from threading import Event
 
-from cephadm.service_discovery import ServiceDiscovery
-
 from ceph.deployment.service_spec import PrometheusSpec
+from cephadm.cert_mgr import CertMgr
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -70,6 +69,8 @@ from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
 from .services.nvmeof import NvmeofService
+from .services.mgmt_gateway import MgmtGatewayService
+from .services.oauth2_proxy import OAuth2ProxyService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -131,6 +132,8 @@ DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
 DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
+DEFAULT_NGINX_IMAGE = 'quay.io/ceph/nginx:1.26.1'
+DEFAULT_OAUTH2_PROXY = 'quay.io/oauth2-proxy/oauth2-proxy:v7.2.0'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
 # ------------------------------------------------------------------------------
@@ -268,6 +271,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_snmp_gateway',
             default=DEFAULT_SNMP_GATEWAY_IMAGE,
             desc='SNMP Gateway container image',
+        ),
+        Option(
+            'container_image_nginx',
+            default=DEFAULT_NGINX_IMAGE,
+            desc='Nginx container image',
+        ),
+        Option(
+            'container_image_oauth2_proxy',
+            default=DEFAULT_OAUTH2_PROXY,
+            desc='oauth2-proxy container image',
         ),
         Option(
             'container_image_elasticsearch',
@@ -522,11 +535,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         super(CephadmOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid: str = self.get('mon_map')['fsid']
         self.last_monmap: Optional[datetime.datetime] = None
+        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
 
         # for serve()
         self.run = True
         self.event = Event()
-
         self.ssh = ssh.SSHManager(self)
 
         if self.get_store('pause'):
@@ -554,6 +567,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
+            self.container_image_nginx = ''
+            self.container_image_oauth2_proxy = ''
             self.container_image_elasticsearch = ''
             self.container_image_jaeger_agent = ''
             self.container_image_jaeger_collector = ''
@@ -697,6 +712,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             RgwService,
             SMBService,
             SNMPGatewayService,
+            MgmtGatewayService,
+            OAuth2ProxyService,
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -907,7 +924,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
-            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query'
+            'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway', 'oauth2-proxy'
         ]
         if forcename:
             if len([d for d in existing if d.daemon_id == forcename]):
@@ -1639,6 +1656,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'prometheus': self.container_image_prometheus,
                 'promtail': self.container_image_promtail,
                 'snmp-gateway': self.container_image_snmp_gateway,
+                'mgmt-gateway': self.container_image_nginx,
+                'oauth2-proxy': self.container_image_oauth2_proxy,
                 # The image can't be resolved here, the necessary information
                 # is only available when a container is deployed (given
                 # via spec).
@@ -2587,6 +2606,9 @@ Then run the following:
                 raise OrchestratorError(
                     f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
 
+        if service_name == 'mgmt-gateway':
+            self.set_module_option('secure_monitoring_stack', False)
+
         found = self.spec_store.rm(service_name)
         if found and service_name.startswith('osd.'):
             self.spec_store.finally_rm(service_name)
@@ -2877,7 +2899,7 @@ Then run the following:
             server_port = ''
             try:
                 server_port = str(self.http_server.agent.server_port)
-                root_cert = self.http_server.agent.ssl_certs.get_root_cert()
+                root_cert = self.cert_mgr.get_root_ca()
             except Exception:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert,
@@ -2887,7 +2909,7 @@ Then run the following:
             server_port = ''
             try:
                 server_port = str(self.http_server.agent.server_port)
-                root_cert = self.http_server.agent.ssl_certs.get_root_cert()
+                root_cert = self.cert_mgr.get_root_ca()
             except Exception:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert])
@@ -2915,17 +2937,19 @@ Then run the following:
                 deps.append('ingress')
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
+            deps += [d.name() for d in self.cache.get_daemons_by_service('mgmt-gateway')]
+            deps += [d.name() for d in self.cache.get_daemons_by_service('oauth2-proxy')]
             if self.secure_monitoring_stack:
                 if prometheus_user and prometheus_password:
                     deps.append(f'{hash(prometheus_user + prometheus_password)}')
                 if alertmanager_user and alertmanager_password:
                     deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'grafana':
-            deps += get_daemon_names(['prometheus', 'loki'])
+            deps += get_daemon_names(['prometheus', 'loki', 'mgmt-gateway'])
             if self.secure_monitoring_stack and prometheus_user and prometheus_password:
                 deps.append(f'{hash(prometheus_user + prometheus_password)}')
         elif daemon_type == 'alertmanager':
-            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway'])
+            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'mgmt-gateway', 'oauth2-proxy'])
             if self.secure_monitoring_stack and alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
@@ -2936,11 +2960,15 @@ Then run the following:
                 port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
                 deps.append(build_url(host=dd.hostname, port=port).lstrip('/'))
             deps = sorted(deps)
+        elif daemon_type == 'mgmt-gateway':
+            # url_prefix for monitoring daemons depends on the presence of mgmt-gateway
+            # while dashboard urls depend on the mgr daemons
+            deps += get_daemon_names(['mgr', 'grafana', 'prometheus', 'alertmanager', 'oauth2-proxy'])
         else:
-            # TODO(redo): some error message!
+            # this daemon type doesn't need deps mgmt
             pass
 
-        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana']:
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana', 'mgmt-gateway']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
 
         return sorted(deps)
@@ -3055,6 +3083,12 @@ Then run the following:
         return (user, password)
 
     @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Dict[str, str]:
+        #  TODO: check if the module_name is valid
+        cert, key = self.cert_mgr.generate_cert(module_name, self.get_mgr_ip())
+        return {'cert': cert, 'key': key}
+
+    @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
@@ -3111,14 +3145,14 @@ Then run the following:
         user, password = self._get_prometheus_credentials()
         return {'user': user,
                 'password': password,
-                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+                'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:
         user, password = self._get_alertmanager_credentials()
         return {'user': user,
                 'password': password,
-                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+                'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
@@ -3234,13 +3268,6 @@ Then run the following:
         self._kick_serve_loop()
         return f'Removed setting {setting} from tuned profile {profile_name}'
 
-    @handle_orch_error
-    def service_discovery_dump_cert(self) -> str:
-        root_cert = self.get_store(ServiceDiscovery.KV_STORE_SD_ROOT_CERT)
-        if not root_cert:
-            raise OrchestratorError('No certificate found for service discovery')
-        return root_cert
-
     def set_health_warning(self, name: str, summary: str, count: int, detail: List[str]) -> None:
         self.health_checks[name] = {
             'severity': 'warning',
@@ -3318,6 +3345,8 @@ Then run the following:
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
+                'mgmt-gateway': PlacementSpec(count=1),
+                'oauth2-proxy': PlacementSpec(count=1),
                 'elasticsearch': PlacementSpec(count=1),
                 'jaeger-agent': PlacementSpec(host_pattern='*'),
                 'jaeger-collector': PlacementSpec(count=1),
@@ -3333,6 +3362,14 @@ Then run the following:
 
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
+
+        if spec.service_type == 'mgmt-gateway':
+            self.set_module_option('secure_monitoring_stack', True)
+
+        if spec.service_type == 'oauth2-proxy':
+            mgmt_gw_daemons = self.cache.get_daemons_by_service('mgmt-gateway')
+            if not mgmt_gw_daemons:
+                raise OrchestratorError("The 'oauth2-proxy' service depends on the 'mgmt-gateway' service, but it is not configured.")
 
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:
@@ -3454,6 +3491,14 @@ Then run the following:
 
     @handle_orch_error
     def apply_smb(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_mgmt_gateway(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_oauth2_proxy(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

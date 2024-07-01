@@ -176,6 +176,8 @@ from cephadmlib.daemons import (
     NFSGanesha,
     SMB,
     SNMPGateway,
+    MgmtGateway,
+    OAuth2Proxy,
     Tracing,
     NodeProxy,
 )
@@ -227,6 +229,8 @@ def get_supported_daemons():
     supported_daemons.append(Keepalived.daemon_type)
     supported_daemons.append(CephadmAgent.daemon_type)
     supported_daemons.append(SNMPGateway.daemon_type)
+    supported_daemons.append(MgmtGateway.daemon_type)
+    supported_daemons.append(OAuth2Proxy.daemon_type)
     supported_daemons.extend(Tracing.components)
     supported_daemons.append(NodeProxy.daemon_type)
     supported_daemons.append(SMB.daemon_type)
@@ -463,6 +467,10 @@ def update_default_image(ctx: CephadmContext) -> None:
             ctx.image = Keepalived.default_image
         if type_ == SNMPGateway.daemon_type:
             ctx.image = SNMPGateway.default_image
+        if type_ == MgmtGateway.daemon_type:
+            ctx.image = MgmtGateway.default_image
+        if type_ == OAuth2Proxy.daemon_type:
+            ctx.image = OAuth2Proxy.default_image
         if type_ == CephNvmeof.daemon_type:
             ctx.image = CephNvmeof.default_image
         if type_ in Tracing.components:
@@ -854,6 +862,14 @@ def create_daemon_dirs(
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.init(ctx, fsid, ident.daemon_id)
         sg.create_daemon_conf()
+
+    elif daemon_type == MgmtGateway.daemon_type:
+        cg = MgmtGateway.init(ctx, fsid, ident.daemon_id)
+        cg.create_daemon_dirs(data_dir, uid, gid)
+
+    elif daemon_type == OAuth2Proxy.daemon_type:
+        co = OAuth2Proxy.init(ctx, fsid, ident.daemon_id)
+        co.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == NodeProxy.daemon_type:
         node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
@@ -2413,11 +2429,20 @@ def prepare_dashboard(
             pathify(ctx.dashboard_crt.name): '/tmp/dashboard.crt:z',
             pathify(ctx.dashboard_key.name): '/tmp/dashboard.key:z'
         }
-        cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
-        cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
     else:
-        logger.info('Generating a dashboard self-signed certificate...')
-        cli(['dashboard', 'create-self-signed-cert'])
+        logger.info('Using certmgr to generate dashboard self-signed certificate...')
+        cert_key = json_loads_retry(lambda: cli(['orch', 'certmgr', 'generate-certificates', 'dashboard'],
+                                                verbosity=CallVerbosity.QUIET_UNLESS_ERROR))
+        if cert_key:
+            cert_file = write_tmp(cert_key['cert'], uid, gid)
+            key_file = write_tmp(cert_key['key'], uid, gid)
+            mounts = {
+                cert_file.name: '/tmp/dashboard.crt:z',
+                key_file.name: '/tmp/dashboard.key:z'
+            }
+
+    cli(['dashboard', 'set-ssl-certificate', '-i', '/tmp/dashboard.crt'], extra_mounts=mounts)
+    cli(['dashboard', 'set-ssl-certificate-key', '-i', '/tmp/dashboard.key'], extra_mounts=mounts)
 
     logger.info('Creating initial admin user...')
     password = ctx.initial_dashboard_password or generate_password()
@@ -3564,6 +3589,12 @@ def list_daemons(
                                     pass
                                 elif daemon_type == SNMPGateway.daemon_type:
                                     version = SNMPGateway.get_version(ctx, fsid, daemon_id)
+                                    seen_versions[image_id] = version
+                                elif daemon_type == MgmtGateway.daemon_type:
+                                    version = MgmtGateway.get_version(ctx, container_id)
+                                    seen_versions[image_id] = version
+                                elif daemon_type == OAuth2Proxy.daemon_type:
+                                    version = OAuth2Proxy.get_version(ctx, fsid, daemon_id)
                                     seen_versions[image_id] = version
                                 else:
                                     logger.warning('version for unknown daemon type %s' % daemon_type)
