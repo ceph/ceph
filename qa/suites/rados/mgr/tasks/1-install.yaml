@@ -1,0 +1,7 @@
+tasks:
+  - install:
+      extra_system_packages:
+        rpm:
+          - sqlite-devel
+        deb:
+          - sqlite3
