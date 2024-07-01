@@ -11,6 +11,11 @@
   live disk synchronization and backup use cases.
 * RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
   so it can be run for images in the trash.
+* RBD: `RBD_IMAGE_OPTION_CLONE_FORMAT` option has been exposed in Python
+  bindings via `clone_format` optional parameter to `clone`, `deep_copy` and
+  `migration_prepare` methods.
+* RBD: `RBD_IMAGE_OPTION_FLATTEN` option has been exposed in Python bindings via
+  `flatten` optional parameter to `deep_copy` and `migration_prepare` methods.
 
 >=17.2.7
 --------
