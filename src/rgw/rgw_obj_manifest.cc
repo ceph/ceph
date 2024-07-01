@@ -582,6 +582,10 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("tail_instance", tail_instance, f);
   ::encode_json("tail_placement", tail_placement, f);
 
+  if (tier_type == "cloud-s3") {
+    ::encode_json("tier_config", tier_config, f);
+  }
+
   // nullptr being passed into iterators since there
   // is no cct and we aren't doing anything with these
   // iterators that would write do the log
