@@ -2695,7 +2695,8 @@ int RadosLifecycle::list_entries(const std::string& oid, const std::string& mark
     return ret;
 
   for (auto& entry : cls_entries) {
-    entries.push_back(LCEntry(entry.bucket, entry.start_time, entry.status));
+    entries.push_back(LCEntry(entry.bucket, oid, entry.start_time,
+			      entry.status));
   }
 
   return ret;
@@ -2719,6 +2720,7 @@ int RadosLifecycle::get_head(const std::string& oid, LCHead& head)
 
   head.marker = cls_head.marker;
   head.start_date = cls_head.start_date;
+  head.shard_rollover_date = cls_head.shard_rollover_date;
 
   return ret;
 }
@@ -2729,6 +2731,7 @@ int RadosLifecycle::put_head(const std::string& oid, const LCHead& head)
 
   cls_head.marker = head.marker;
   cls_head.start_date = head.start_date;
+  cls_head.shard_rollover_date = head.shard_rollover_date;
 
   return cls_rgw_lc_put_head(*store->getRados()->get_lc_pool_ctx(), oid, cls_head);
 }
