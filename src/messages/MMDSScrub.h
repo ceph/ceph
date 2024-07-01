@@ -130,11 +130,11 @@ private:
   static constexpr unsigned FLAG_RECURSIVE	= 1<<2;
   static constexpr unsigned FLAG_REPAIR		= 1<<3;
 
-  int op;
+  int32_t op;
   inodeno_t ino;
   fragset_t frags;
   std::string tag;
   inodeno_t origin;
-  unsigned flags = 0;
+  uint32_t flags = 0;
 };
 #endif // CEPH_MMDSSCRUB_H
