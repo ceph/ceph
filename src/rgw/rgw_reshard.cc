@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <algorithm>
 #include <limits>
 #include <sstream>
 
@@ -246,6 +247,85 @@ public:
         ret = r;
       }
       delete shard;
+    }
+    target_shards.clear();
+    return ret;
+  }
+}; // class BucketReshardManager
+
+class BucketReshardManagerFast {
+  int job_id_ = 0;
+  int prev_shard_count_ = 0;
+  int growth_factor_ = 0;
+  rgw::sal::RadosStore *store;
+  const RGWBucketInfo& target_bucket_info;
+  deque<librados::AioCompletion *> completions;
+  vector<BucketReshardShard*> target_shards;
+
+public:
+  BucketReshardManagerFast(
+      const DoutPrefixProvider *dpp,
+      rgw::sal::RadosStore *_store,
+      const RGWBucketInfo& _target_bucket_info,
+      int job_id,
+      int growth_factor,
+      int current_shard_num,
+      int target_shard_num)
+      : job_id_(job_id)
+        , prev_shard_count_(current_shard_num)
+        , growth_factor_(growth_factor)
+        , store(_store)
+        , target_bucket_info(_target_bucket_info)
+  {
+    const auto& idx_layout = target_bucket_info.layout.current_index;
+    const uint32_t num_shards = growth_factor;
+    target_shards.reserve(num_shards);
+    for (uint32_t i = 0; i < growth_factor; ++i) {
+      target_shards.emplace_back(new BucketReshardShard(dpp, store, target_bucket_info, i * prev_shard_count_ + job_id, idx_layout, completions));
+    }
+  }
+
+  ~BucketReshardManagerFast() {
+    for (auto& shard : target_shards) {
+      int ret = shard->wait_all_aio();
+      if (ret < 0) {
+        ldout(store->ctx(), 20) << __func__ <<
+            ": shard->wait_all_aio() returned ret=" << ret << dendl;
+      }
+    }
+  }
+
+  int add_entry(int shard_index,
+                rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
+                const rgw_bucket_category_stats& entry_stats) {
+    int target_index = (shard_index - job_id_) / prev_shard_count_;
+
+    int ret = target_shards[target_index]->add_entry(entry, account, category,
+                                                    entry_stats);
+    if (ret < 0) {
+      derr << "ERROR: target_shards.add_entry(" << entry.idx <<
+          ") returned error: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    return 0;
+  }
+
+  int finish() {
+    int ret = 0;
+    for (auto& shard : target_shards) {
+      int r = shard->flush();
+      if (r < 0) {
+        //derr << "ERROR: target_shards[" << shard->get_shard_id() << "].flush() returned error: " << cpp_strerror(-r) << dendl;
+        ret = r;
+      }
+    }
+    for (auto& shard : target_shards) {
+      int r = shard->wait_all_aio();
+      if (r < 0) {
+        //derr << "ERROR: target_shards[" << shard->get_shard_id() << "].wait_all_aio() returned error: " << cpp_strerror(-r) << dendl;
+        ret = r;
+      }
     }
     target_shards.clear();
     return ret;
@@ -706,6 +786,211 @@ int RGWBucketReshard::do_reshard(int num_shards,
   // NB: some error clean-up is done by ~BucketInfoReshardUpdate
 } // RGWBucketReshard::do_reshard
 
+bool RGWBucketReshard::is_fast_reshard(int current_shards, int target_shards) {
+  // fast reshard is when new number of shards is multiple of the previous one
+  if (current_shards >= target_shards) {
+    return false;
+  }
+  if (target_shards % current_shards == 0) {
+    return true;
+  }
+  return false;
+}
+
+int RGWBucketReshard::do_reshard_fast(RGWBucketInfo &new_bucket_info,
+                                      int current_shards, int target_shards,
+                                      int max_entries, bool verbose,
+                                      std::ostream *out, Formatter *formatter,
+                                      const DoutPrefixProvider *dpp,
+                                      optional_yield y) {
+  ldpp_dout(dpp, 1) << __func__ << " INFO: fast-reshard of bucket \""
+                    << bucket_info.bucket.name << "\" from \""
+                    << bucket_info.bucket.get_key() << "\" to \""
+                    << new_bucket_info.bucket.get_key() << "\"" << dendl;
+
+  if (out) {
+    const rgw_bucket &bucket = bucket_info.bucket;
+    (*out) << "fast-reshard tenant: " << bucket.tenant << std::endl;
+    (*out) << "bucket name: " << bucket.name << std::endl;
+    (*out) << "old bucket instance id: " << bucket.bucket_id << std::endl;
+    (*out) << "new bucket instance id: " << new_bucket_info.bucket.bucket_id
+           << std::endl;
+  }
+
+  int num_jobs = current_shards; // number of parallel reshard jobs
+  int growth_factor = target_shards / current_shards;
+
+  // NB: destructor cleans up sharding state if reshard does not
+  // complete successfully
+  BucketInfoReshardUpdate bucket_info_updater(
+      dpp, store, bucket_info, bucket_attrs, new_bucket_info.bucket.bucket_id);
+
+  int ret = bucket_info_updater.start();
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << __func__
+                      << ": failed to update bucket info ret=" << ret << dendl;
+    return ret;
+  }
+
+  std::vector<int> jobs;
+  for (int i = 0; i < num_jobs; ++i) {
+    jobs.emplace_back(i);
+  }
+
+  auto reshard_fut = std::async(std::launch::async, [&]() -> bool {
+    std::vector<std::future<int>> worker_threads;
+    for (int i = 0; i < num_jobs; ++i) {
+      auto reshard_job_future =
+          std::async(std::launch::async, [&, job_id = i]() -> int {
+            int res = do_reshard_fast_process(
+                new_bucket_info, current_shards, target_shards, job_id,
+                growth_factor, max_entries, dpp, null_yield);
+            return res;
+          });
+      worker_threads.emplace_back(std::move(reshard_job_future));
+    };
+
+    int res = 0;
+    for (auto &t : worker_threads) {
+      if (auto job_result = t.get(); job_result != 0) {
+        res = job_result;
+      }
+    }
+    return res;
+  });
+
+  // renew the lock
+  while (true) {
+    auto status = reshard_fut.wait_for(std::chrono::seconds(1));
+    if (status == std::future_status::ready) {
+      break;
+    }
+
+    Clock::time_point now = Clock::now();
+    if (reshard_lock.should_renew(now)) {
+      // assume outer locks have timespans at least the size of ours, so
+      // can call inside conditional
+      if (outer_reshard_lock) {
+        ret = outer_reshard_lock->renew(now);
+        if (ret < 0) {
+          return ret;
+        }
+      }
+      ret = reshard_lock.renew(now);
+      if (ret < 0) {
+        ldpp_dout(dpp, -1) << "Error renewing bucket lock: " << ret << dendl;
+        return ret;
+      }
+    }
+  }
+
+  ret = reshard_fut.get();
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "unable to reshard bucket (bucket_id="
+                       << new_bucket_info.bucket.bucket_id << ": "
+                       << cpp_strerror(-ret) << ")" << dendl;
+    return ret;
+  }
+
+  ret = store->ctl()->bucket->link_bucket(
+      new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time,
+      null_yield, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "failed to link new bucket instance (bucket_id="
+                       << new_bucket_info.bucket.bucket_id << ": "
+                       << cpp_strerror(-ret) << ")" << dendl;
+    return ret;
+  }
+
+  ret = bucket_info_updater.complete();
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << __func__
+                      << ": failed to update bucket info ret=" << ret << dendl;
+    /* don't error out, reshard process succeeded */
+  }
+  return 0;
+}
+
+int RGWBucketReshard::do_reshard_fast_process(
+    RGWBucketInfo &new_bucket_info, int current_shards, int target_shards,
+    int job_id, int growth_factor, int max_entries,
+    const DoutPrefixProvider *dpp, optional_yield y) {
+  BucketReshardManagerFast reshard_manager(dpp, store, new_bucket_info, job_id,
+                                           growth_factor, current_shards,
+                                           target_shards);
+
+  int ret = -1;
+  list<rgw_cls_bi_entry> entries;
+  string marker;
+  const std::string null_object_filter;
+  bool is_truncated = true;
+
+  while (is_truncated) {
+    entries.clear();
+    ret = store->getRados()->bi_list(dpp, bucket_info, job_id,
+                                     null_object_filter, marker, max_entries,
+                                     &entries, &is_truncated);
+    if (ret == -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
+                        << job_id << ", skipping" << dendl;
+      // break out of the is_truncated loop and move on to the next shard
+      break;
+    } else if (ret < 0) {
+      derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+      rgw_cls_bi_entry &entry = *iter;
+      marker = entry.idx;
+
+      int target_shard_id;
+      cls_rgw_obj_key cls_key;
+      RGWObjCategory category;
+      rgw_bucket_category_stats stats;
+      bool account = entry.get_info(&cls_key, &category, &stats);
+      rgw_obj_key key(cls_key);
+      if (entry.type == BIIndexType::OLH && key.empty()) {
+        // bogus entry created by https://tracker.ceph.com/issues/46456
+        // to fix, skip so it doesn't get include in the new bucket instance
+        // total_entries--;
+        ldpp_dout(dpp, 10) << "Dropping entry with empty name, idx=" << marker
+                           << dendl;
+        continue;
+      }
+      rgw_obj obj(new_bucket_info.bucket, key);
+      RGWMPObj mp;
+      if (key.ns == RGW_OBJ_NS_MULTIPART && mp.from_meta(key.name)) {
+        // place the multipart .meta object on the same shard as its head
+        // object
+        obj.index_hash_source = mp.get_key();
+      }
+      ret = store->getRados()->get_target_shard_id(
+          new_bucket_info.layout.current_index.layout.normal,
+          obj.get_hash_object(), &target_shard_id);
+      if (ret < 0) {
+        ldpp_dout(dpp, -1) << "ERROR: get_target_shard_id() returned ret="
+                           << ret << dendl;
+        return ret;
+      }
+
+      int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
+      ret = reshard_manager.add_entry(shard_index, entry, account, category,
+                                      stats);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+  }
+
+  ret = reshard_manager.finish();
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to reshard" << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
 int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_bucket_instance_entry> *status)
 {
   return store->svc()->bi_rados->get_reshard_status(dpp, bucket_info, status);
@@ -744,10 +1029,17 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     goto error_out;
   }
 
-  ret = do_reshard(num_shards,
-		   new_bucket_info,
-		   max_op_entries,
-                   verbose, out, formatter, dpp);
+  if (is_fast_reshard(
+          bucket_info.layout.current_index.layout.normal.num_shards,
+          num_shards)) {
+    ret = do_reshard_fast(new_bucket_info,
+                          bucket_info.layout.current_index.layout.normal.num_shards,
+                          num_shards,
+                          max_op_entries, verbose, out, formatter, dpp, null_yield);
+  } else {
+    ret = do_reshard(num_shards, new_bucket_info, max_op_entries, verbose, out,
+                   formatter, dpp);
+  }
   if (ret < 0) {
     goto error_out;
   }
