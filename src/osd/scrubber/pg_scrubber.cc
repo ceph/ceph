@@ -579,12 +579,12 @@ void PgScrubber::on_primary_active_clean()
  *   guarantees that the PG is locked and the interval is still the same.
  * - in the 2nd case - we know the PG state and we know we are only called
  *   for a Primary.
-*/
-void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
+ */
+void PgScrubber::update_scrub_job(Scrub::delay_ready_t delay_ready)
 {
   if (!is_primary() || !m_scrub_job) {
     dout(10) << fmt::format(
-		    "{}: pg[{}]: not Primary or no scrub-job", __func__,
+		    "{}: PG[{}]: not Primary or no scrub-job", __func__,
 		    m_pg_id)
 	     << dendl;
     return;
@@ -599,7 +599,7 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
   }
 
   dout(15) << fmt::format(
-		  "{}: flags:<{}> job on entry:{}", __func__, request_flags,
+		  "{}: flags:<{}> job on entry:{}", __func__, m_planned_scrub,
 		  *m_scrub_job)
 	   << dendl;
   if (m_scrub_job->target_queued) {
@@ -610,7 +610,6 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
 	     << dendl;
   }
 
-
   ceph_assert(m_pg->is_locked());
   const auto applicable_conf = populate_config_params();
   const auto scrub_clock_now = ceph_clock_now();
@@ -620,10 +619,10 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
   m_scrub_job->target_queued = true;
   m_pg->publish_stats_to_osd();
 
-  dout(15) << fmt::format(
-                  "{}: flags:<{}> job on exit:{}", __func__, request_flags,
-                  *m_scrub_job)
-           << dendl;
+  dout(10) << fmt::format(
+		  "{}: flags:<{}> job on exit:{}", __func__, m_planned_scrub,
+		  *m_scrub_job)
+	   << dendl;
 }
 
 scrub_level_t PgScrubber::scrub_requested(
@@ -651,7 +650,7 @@ scrub_level_t PgScrubber::scrub_requested(
   req_flags.req_scrub = true;
   dout(20) << fmt::format("{}: planned scrub:{}", __func__, req_flags) << dendl;
 
-  update_scrub_job(req_flags);
+  update_scrub_job(delay_ready_t::no_delay);
   return deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
 }
 
@@ -661,7 +660,7 @@ void PgScrubber::request_rescrubbing(requested_scrub_t& request_flags)
   dout(10) << __func__ << " flags: " << request_flags << dendl;
 
   request_flags.need_auto = true;
-  update_scrub_job(request_flags);
+  update_scrub_job(delay_ready_t::no_delay);
 }
 
 bool PgScrubber::reserve_local()
@@ -726,7 +725,7 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
   configs.deep_randomize_ratio = conf->osd_deep_scrub_randomize_ratio;
   configs.mandatory_on_invalid = conf->osd_scrub_invalid_stats;
 
-  dout(15) << fmt::format("updated config:{}", configs) << dendl;
+  dout(15) << fmt::format("{}: updated config:{}", __func__, configs) << dendl;
   return configs;
 }
 
@@ -2035,7 +2034,9 @@ void PgScrubber::scrub_finish()
     int tr = m_osds->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
     ceph_assert(tr == 0);
   }
-  update_scrub_job(m_planned_scrub);
+
+  // determine the next scrub time
+  update_scrub_job(delay_ready_t::delay_ready);
 
   if (has_error) {
     m_pg->queue_peering_event(PGPeeringEventRef(

@@ -107,6 +107,10 @@ enum class schedule_result_t {
   target_specific_failure,  // failed to scrub this specific target
   osd_wide_failure	    // failed to scrub any target
 };
+
+/// rescheduling param: should we delay jobs already ready to execute?
+enum class delay_ready_t : bool { delay_ready = true, no_delay = false };
+
 }  // namespace Scrub
 
 namespace fmt {
@@ -547,7 +551,7 @@ struct ScrubPgIF {
    * This function assumes that the queue registration status is up-to-date,
    * i.e. the OSD "knows our name" if-f we are the Primary.
    */
-  virtual void update_scrub_job(const requested_scrub_t& request_flags) = 0;
+  virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
 
   /**
    * route incoming replica-reservations requests/responses to the
