@@ -3,6 +3,8 @@
 
 #include "rgw_s3select_private.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 namespace rgw::s3select {
 RGWOp* create_s3select_op()
 {
