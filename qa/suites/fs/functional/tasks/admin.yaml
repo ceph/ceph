@@ -9,4 +9,4 @@ tasks:
   - cephfs_test_runner:
       fail_on_skip: false
       modules:
-        - tasks.cephfs.test_admin
+        - tasks.cephfs.test_admin.TestAaaFSDown
