@@ -1121,6 +1121,10 @@ public:
   virtual val_t get_val() const = 0;
   virtual key_t get_key() const = 0;
   virtual PhysicalNodeMappingRef<key_t, val_t> duplicate() const = 0;
+  virtual PhysicalNodeMappingRef<key_t, val_t> refresh_with_pending_parent() {
+    ceph_abort("impossible");
+    return {};
+  }
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
   virtual uint16_t get_pos() const = 0;
@@ -1155,6 +1159,7 @@ public:
     return !get_val().is_real();
   }
   virtual bool is_parent_viewable() const = 0;
+  virtual bool is_parent_valid() const = 0;
   virtual bool parent_modified() const {
     ceph_abort("impossible");
     return false;
