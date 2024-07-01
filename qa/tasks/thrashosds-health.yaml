@@ -28,3 +28,5 @@ overrides:
       - mons down
       - mon down
       - out of quorum
+      - noscrub
+      - nodeep-scrub
