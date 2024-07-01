@@ -14,6 +14,10 @@ alerting:
 scrape_configs:
   - job_name: 'ceph'
     honor_labels: true
+    relabel_configs:
+    - source_labels: [instance]
+      target_label: instance
+      replacement: 'ceph_cluster'
     static_configs:
 {% for mgr in mgr_scrape_list %}
     - targets: ['{{ mgr }}']
