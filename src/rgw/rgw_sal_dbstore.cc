@@ -1913,7 +1913,14 @@ namespace rgw::sal {
 
   int DBStore::add_persistent_topic(const DoutPrefixProvider* dpp,
                                     optional_yield y,
-                                    const std::string& topic_queue)
+                                    const rgw_pubsub_dest &dest)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::update_persistent_topic_attrs(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const rgw_pubsub_dest &dest)
   {
     return -ENOTSUP;
   }

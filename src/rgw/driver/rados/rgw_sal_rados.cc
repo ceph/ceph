@@ -1728,10 +1728,18 @@ int RadosStore::list_account_topics(const DoutPrefixProvider* dpp,
 
 int RadosStore::add_persistent_topic(const DoutPrefixProvider* dpp,
                                      optional_yield y,
-                                     const std::string& topic_queue)
+                                     const rgw_pubsub_dest &dest)
 {
   return rgw::notify::add_persistent_topic(
-      dpp, getRados()->get_notif_pool_ctx(), topic_queue, y);
+      dpp, getRados()->get_notif_pool_ctx(), dest, y);
+}
+
+int RadosStore::update_persistent_topic_attrs(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     const rgw_pubsub_dest &dest)
+{
+  return rgw::notify::update_persistent_topic_attrs(
+      dpp, getRados()->get_notif_pool_ctx(), dest, y);
 }
 
 int RadosStore::remove_persistent_topic(const DoutPrefixProvider* dpp,

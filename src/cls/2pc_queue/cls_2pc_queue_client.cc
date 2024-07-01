@@ -243,3 +243,65 @@ void cls_2pc_queue_expire_reservations(librados::ObjectWriteOperation& op, ceph:
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_EXPIRE_RESERVATIONS, in);
 }
 
+int cls_2pc_queue_get_topic_attrs_result(const bufferlist &bl, std::string &push_endpoint, std::string &push_endpoint_args,
+                                     std::string &arn_topic, bool &topic_attrs_set) {
+  cls_queue_get_topic_attrs_ret op_ret;
+  auto iter = bl.cbegin();
+  try {
+    decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  push_endpoint = op_ret.push_endpoint;
+  push_endpoint_args = op_ret.push_endpoint_args;
+  arn_topic = op_ret.arn_topic;
+  topic_attrs_set = op_ret.topic_attrs_set;
+
+  return 0;
+}
+
+#ifndef CLS_CLIENT_HIDE_IOCTX
+int cls_2pc_queue_get_topic_attrs(IoCtx &io_ctx, const std::string &queue_name, std::string &push_endpoint,
+                                  std::string &push_endpoint_args, std::string &arn_topic, bool &topic_attrs_set) {
+  bufferlist in, out;
+  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_ATTRS, in, out);
+  if (r < 0 ) {
+    return r;
+  }
+
+  return cls_2pc_queue_get_topic_attrs_result(out, push_endpoint, push_endpoint_args, arn_topic, topic_attrs_set);
+}
+#endif
+
+// optionally async method for getting push_endpoint, push_endpoint_args and arn_topic (std::string)
+// after answer is received, call cls_2pc_queue_get_topic_attrs_result() to parse the results
+void cls_2pc_queue_get_topic_attrs(ObjectReadOperation& op, bufferlist* obl, int* prval) {
+  bufferlist in;
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_ATTRS, in, obl, prval);
+}
+
+#ifndef CLS_CLIENT_HIDE_IOCTX
+int cls_2pc_queue_update_attrs(IoCtx& io_ctx, const std::string& queue_name, const std::string& push_endpoint,
+                                  const std::string& push_endpoint_args, const std::string& arn_topic) {
+  bufferlist in, out;
+  cls_2pc_queue_update_attrs_op update_op;
+  update_op.push_endpoint = push_endpoint;
+  update_op.push_endpoint_args = push_endpoint_args;
+  update_op.arn_topic = arn_topic;
+  encode(update_op, in);
+  return io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_UPDATE_ATTRS, in, out);
+}
+#endif
+
+void cls_2pc_queue_update_attrs(ObjectWriteOperation& op, std::string& push_endpoint,
+                                std::string& push_endpoint_args, std::string& arn_topic) {
+  bufferlist in;
+  cls_2pc_queue_update_attrs_op update_op;
+  update_op.push_endpoint = push_endpoint;
+  update_op.push_endpoint_args = push_endpoint_args;
+  update_op.arn_topic = arn_topic;
+  encode(update_op, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_UPDATE_ATTRS, in);
+}
+

@@ -46,6 +46,7 @@ struct rgw_pubsub_bucket_topics;
 class RGWZonePlacementInfo;
 struct rgw_pubsub_topic;
 struct RGWOIDCProviderInfo;
+struct rgw_pubsub_dest;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
@@ -503,7 +504,10 @@ class Driver {
     // write_topic_v2()/remove_topic_v2()
     virtual int add_persistent_topic(const DoutPrefixProvider* dpp,
                                      optional_yield y,
-                                     const std::string& topic_queue) = 0;
+                                     const rgw_pubsub_dest& dest) = 0;
+    virtual int update_persistent_topic_attrs(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     const rgw_pubsub_dest& dest) = 0;
     virtual int remove_persistent_topic(const DoutPrefixProvider* dpp,
                                         optional_yield y,
                                         const std::string& topic_queue) = 0;

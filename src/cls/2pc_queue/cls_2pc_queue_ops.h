@@ -207,3 +207,56 @@ struct cls_2pc_queue_remove_op {
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_remove_op)
+
+struct cls_2pc_queue_update_attrs_op {
+  std::string push_endpoint;
+  std::string push_endpoint_args;
+  std::string arn_topic;
+
+  cls_2pc_queue_update_attrs_op() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(push_endpoint, bl);
+    encode(push_endpoint_args, bl);
+    encode(arn_topic, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(push_endpoint, bl);
+    decode(push_endpoint_args, bl);
+    decode(arn_topic, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_2pc_queue_update_attrs_op)
+
+struct cls_queue_get_topic_attrs_ret {
+  std::string push_endpoint;
+  std::string push_endpoint_args;
+  std::string arn_topic;
+  bool topic_attrs_set;
+
+  cls_queue_get_topic_attrs_ret() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(push_endpoint, bl);
+    encode(push_endpoint_args, bl);
+    encode(arn_topic, bl);
+    encode(topic_attrs_set, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(push_endpoint, bl);
+    decode(push_endpoint_args, bl);
+    decode(arn_topic, bl);
+    decode(topic_attrs_set, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_queue_get_topic_attrs_ret)

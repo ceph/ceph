@@ -465,9 +465,16 @@ std::unique_ptr<Notification> FilterDriver::get_notification(
 
 int FilterDriver::add_persistent_topic(const DoutPrefixProvider* dpp,
                                        optional_yield y,
-                                       const std::string& topic_queue)
+                                       const rgw_pubsub_dest &dest)
 {
-  return next->add_persistent_topic(dpp, y, topic_queue);
+  return next->add_persistent_topic(dpp, y, dest);
+}
+
+int FilterDriver::update_persistent_topic_attrs(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const rgw_pubsub_dest &dest)
+{
+  return next->update_persistent_topic_attrs(dpp, y, dest);
 }
 
 int FilterDriver::remove_persistent_topic(const DoutPrefixProvider* dpp,

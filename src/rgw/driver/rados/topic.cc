@@ -357,7 +357,7 @@ class MetadataHandler : public RGWMetadataHandler {
       librados::IoCtx ioctx;
       r = rgw_init_ioctx(dpp, &rados, zone.notif_pool, ioctx, true, false);
       if (r >= 0) {
-        r = rgw::notify::add_persistent_topic(dpp, ioctx, info.dest.persistent_queue, y);
+        r = rgw::notify::add_persistent_topic(dpp, ioctx, info.dest, y);
       }
       if (r < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to create queue for persistent topic "

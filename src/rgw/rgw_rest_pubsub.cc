@@ -415,15 +415,30 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
     dest.persistent_queue = string_cat_reserve(
         get_account_or_tenant(s->owner.id), ":", topic_name);
 
-    op_ret = driver->add_persistent_topic(this, y, dest.persistent_queue);
+    op_ret = driver->add_persistent_topic(this, y, dest);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "CreateTopic Action failed to create queue for "
                             "persistent topics. error:"
                          << op_ret << dendl;
       return;
     }
+  } else if (already_persistent && !topic_needs_queue(dest)) {
+    // changing the persistent topic to non-persistent.
+    op_ret = driver->remove_persistent_topic(this, y, topic->dest.persistent_queue);
+    if (op_ret != -ENOENT && op_ret < 0) {
+      ldpp_dout(this, 1) << "CreateTopic Action failed to remove queue for "
+                            "persistent topics. error:"
+                         << op_ret << dendl;
+      return;
+    }
   } else if (already_persistent) {  // redundant call to CreateTopic
     dest.persistent_queue = topic->dest.persistent_queue;
+    driver->update_persistent_topic_attrs(this, y, dest);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "CreateTopic Action failed to update queue with topic attrs. error:"
+                         << op_ret << dendl;
+      return;
+    }
   }
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
@@ -876,7 +891,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
     dest.persistent_queue = string_cat_reserve(
         get_account_or_tenant(s->owner.id), ":", topic_name);
 
-    op_ret = driver->add_persistent_topic(this, y, dest.persistent_queue);
+    op_ret = driver->add_persistent_topic(this, y, dest);
     if (op_ret < 0) {
       ldpp_dout(this, 4)
           << "SetTopicAttributes Action failed to create queue for "
@@ -891,6 +906,16 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       ldpp_dout(this, 4) << "SetTopicAttributes Action failed to remove queue "
                             "for persistent topics. error:"
                          << op_ret << dendl;
+      return;
+    }
+  } else if (already_persistent) {
+    // changing the persistent topic push_endpoint or its args
+    dest.persistent_queue = result.dest.persistent_queue;
+    op_ret = driver->update_persistent_topic_attrs(this, y, dest);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4)
+            << "SetTopicAttributes Action failed to update queue with topic attrs. error:"
+            << op_ret << dendl;
       return;
     }
   }

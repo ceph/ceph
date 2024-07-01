@@ -195,8 +195,9 @@ private:
 
   // processing of a specific entry
   // return whether processing was successful (true) or not (false)
-  EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
-                                      const cls_queue_entry& entry, boost::asio::yield_context yield) {
+  EntryProcessingResult process_entry(const ConfigProxy &conf, persistency_tracker &entry_persistency_tracker, const cls_queue_entry &entry,
+                std::string &arn_topic_attr, std::string &push_endpoint_attr, std::string &push_endpoint_args_attr,
+                bool &topic_attrs_set, bool &got_topic_attrs_from_entry, boost::asio::yield_context yield) {
     event_entry_t event_entry;
     auto iter = entry.data.cbegin();
     try {
@@ -204,6 +205,14 @@ private:
     } catch (buffer::error& err) {
       ldpp_dout(this, 5) << "WARNING: failed to decode entry. error: " << err.what() << dendl;
       return EntryProcessingResult::Failure;
+    }
+
+    if (!topic_attrs_set) {
+      push_endpoint_attr = event_entry.push_endpoint;
+      push_endpoint_args_attr = event_entry.push_endpoint_args;
+      arn_topic_attr = event_entry.arn_topic;
+      topic_attrs_set = true;
+      got_topic_attrs_from_entry = true;
     }
 
     if (event_entry.creation_time == ceph::coarse_real_clock::zero()) {
@@ -240,10 +249,10 @@ private:
                         << " current time: " << time_now << dendl;
     try {
       // TODO move endpoint creation to queue level
-      const auto push_endpoint = RGWPubSubEndpoint::create(event_entry.push_endpoint, event_entry.arn_topic,
-          RGWHTTPArgs(event_entry.push_endpoint_args, this), 
+      const auto push_endpoint = RGWPubSubEndpoint::create(push_endpoint_attr, arn_topic_attr,
+          RGWHTTPArgs(push_endpoint_args_attr, this),
           cct);
-      ldpp_dout(this, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
+      ldpp_dout(this, 20) << "INFO: push endpoint created: " << push_endpoint_attr <<
         " for entry: " << entry.marker << dendl;
       const auto ret = push_endpoint->send(event_entry.event, yield);
       if (ret < 0) {
@@ -352,6 +361,13 @@ private:
 
       // get list of entries in the queue
       auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
+      std::string push_endpoint, push_endpoint_args, arn_topic;
+      bool topic_attrs_set;
+      if (const auto r = cls_2pc_queue_get_topic_attrs(rados_ioctx, queue_name, push_endpoint, push_endpoint_args,
+                                                       arn_topic, topic_attrs_set) < 0 ) {
+        ldpp_dout(this, 5) << "Warning: fetching topic attrs for topic: " << queue_name << ". error: " << r << dendl;
+      }
+
       is_idle = true;
       bool truncated = false;
       std::string end_marker;
@@ -411,6 +427,9 @@ private:
       auto entry_idx = 1U;
       tokens_waiter waiter(io_context);
       std::vector<bool> needs_migration_vector(entries.size(), false);
+      // in the situation where the header of the persistent queue doesn't have their attrs set,
+      // we will get it from the entries and set he queue
+      auto got_topic_attrs_from_entry = false;
       for (auto& entry : entries) {
         if (has_error) {
           // bail out on first error
@@ -420,10 +439,12 @@ private:
         entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
         boost::asio::spawn(yield, std::allocator_arg, make_stack_allocator(),
           [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
-           &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](boost::asio::yield_context yield) {
+           &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector, &arn_topic, &push_endpoint,
+           &push_endpoint_args, &topic_attrs_set, &got_topic_attrs_from_entry](boost::asio::yield_context yield) {
             const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
-            auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
+            auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, arn_topic,
+                                        push_endpoint, push_endpoint_args, topic_attrs_set, got_topic_attrs_from_entry, yield);
             if (result == EntryProcessingResult::Successful || result == EntryProcessingResult::Expired
                 || result == EntryProcessingResult::Migrating) {
               ldpp_dout(this, 20) << "INFO: processing of entry: " << entry.marker
@@ -451,6 +472,14 @@ private:
       // wait for all pending work to finish
       waiter.async_wait(yield);
 
+      if (got_topic_attrs_from_entry) {
+        if (auto r = cls_2pc_queue_update_attrs(rados_ioctx, queue_name, push_endpoint, push_endpoint_args, arn_topic) < 0) {
+          ldpp_dout(this, 1) << "Error: updating topic attrs for topic: " << queue_name << " with attrs:{ arn_topic:"
+                             << arn_topic << ", push_endpoint:" << push_endpoint << ", push_endpoint_args:"
+                             << push_endpoint_args << "}. error: " << r << dendl;
+          return;
+        }
+      }
       // delete all published entries from queue
       if (remove_entries) {
         std::vector<cls_queue_entry> entries_to_migrate;
@@ -791,9 +820,9 @@ void shutdown() {
   s_manager.reset();
 }
 
-int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx,
-                         const std::string& topic_queue, optional_yield y)
+int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const rgw_pubsub_dest &dest, optional_yield y)
 {
+  const std::string& topic_queue = dest.persistent_queue;
   if (topic_queue == Q_LIST_OBJECT_NAME) {
     ldpp_dout(dpp, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
     return -EINVAL;
@@ -813,6 +842,14 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
     return ret;
   }
 
+  ret = update_persistent_topic_attrs(dpp, rados_ioctx, dest, y);
+  if (ret < 0) {
+    // failed to update attrs, removing the queue
+    op.remove();
+    rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
+    return ret;
+  }
+
   bufferlist empty_bl;
   std::map<std::string, bufferlist> new_topic{{topic_queue, empty_bl}};
   op.omap_set(new_topic);
@@ -821,7 +858,19 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
     ldpp_dout(dpp, 1) << "ERROR: failed to add queue: " << topic_queue << " to queue list. error: " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << "INFO: queue: " << topic_queue << " added to queue list"  << dendl;
+  ldpp_dout(dpp, 20) << "INFO: queue: " << topic_queue << " added to queue list" << dendl;
+  return 0;
+}
+
+int update_persistent_topic_attrs(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const rgw_pubsub_dest &dest, optional_yield y)
+{
+  if (auto ret = cls_2pc_queue_update_attrs(rados_ioctx, dest.persistent_queue, dest.push_endpoint,
+                                            dest.push_endpoint_args, dest.arn_topic) < 0) {
+    // failed to create queue
+    ldpp_dout(dpp, 1) << "ERROR: failed to update queue attrs for topic: " << dest.persistent_queue << ". error: " << ret << dendl;
+    return ret;
+  }
+
   return 0;
 }
 

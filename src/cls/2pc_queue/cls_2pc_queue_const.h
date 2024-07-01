@@ -12,4 +12,6 @@
 #define TPC_QUEUE_LIST_ENTRIES "2pc_queue_list_entries"
 #define TPC_QUEUE_REMOVE_ENTRIES "2pc_queue_remove_entries"
 #define TPC_QUEUE_EXPIRE_RESERVATIONS "2pc_queue_expire_reservations"
+#define TPC_QUEUE_GET_TOPIC_ATTRS "2pc_queue_get_topic_attrs"
+#define TPC_QUEUE_UPDATE_ATTRS "2pc_queue_update_attrs"
 

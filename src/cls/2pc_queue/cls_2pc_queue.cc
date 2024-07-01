@@ -645,6 +645,79 @@ static int cls_2pc_queue_remove_entries(cls_method_context_t hctx, bufferlist *i
   return queue_write_head(hctx, head);
 }
 
+static int cls_2pc_queue_get_topic_attrs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_queue_get_topic_attrs_ret op_ret;
+
+  // get head
+  cls_queue_head head;
+  auto ret = queue_read_head(hctx, head);
+  if (ret < 0) {
+    return ret;
+  }
+
+  cls_2pc_urgent_data urgent_data;
+  try {
+    auto in_iter = head.bl_urgent_data.cbegin();
+    decode(urgent_data, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_get_topic_attrs: failed to decode header of queue: %s", err.what());
+    return -EINVAL;
+  }
+  op_ret.push_endpoint = urgent_data.push_endpoint;
+  op_ret.push_endpoint_args = urgent_data.push_endpoint_args;
+  op_ret.arn_topic = urgent_data.arn_topic;
+  op_ret.topic_attrs_set = urgent_data.topic_attrs_set;
+
+  encode(op_ret, *out);
+
+  return 0;
+}
+
+static int cls_2pc_queue_update_attrs(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  auto in_iter = in->cbegin();
+  cls_2pc_queue_update_attrs_op update_attrs_op;
+  try {
+    decode(update_attrs_op, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_update_attrs: failed to decode entry: %s", err.what());
+    return -EINVAL;
+  }
+
+  cls_queue_head head;
+  auto ret = queue_read_head(hctx, head);
+  if (ret < 0) {
+    return ret;
+  }
+
+  cls_2pc_urgent_data urgent_data;
+  try {
+    auto in_iter = head.bl_urgent_data.cbegin();
+    decode(urgent_data, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_update_attrs: failed to decode header of queue: %s", err.what());
+    return -EINVAL;
+  }
+
+  if (urgent_data.push_endpoint == update_attrs_op.push_endpoint &&
+      urgent_data.push_endpoint_args == update_attrs_op.push_endpoint_args &&
+      urgent_data.arn_topic == update_attrs_op.arn_topic) {
+    // redundant call to update attrs
+    return 0;
+  }
+
+  urgent_data.push_endpoint = update_attrs_op.push_endpoint;
+  urgent_data.push_endpoint_args = update_attrs_op.push_endpoint_args;
+  urgent_data.arn_topic = update_attrs_op.arn_topic;
+  urgent_data.topic_attrs_set = true;
+  // write back head
+  head.bl_urgent_data.clear();
+  encode(urgent_data, head.bl_urgent_data);
+
+  return queue_write_head(hctx, head);
+}
+
 CLS_INIT(2pc_queue)
 {
   CLS_LOG(1, "Loaded 2pc queue class!");
@@ -660,6 +733,8 @@ CLS_INIT(2pc_queue)
   cls_method_handle_t h_2pc_queue_list_entries;
   cls_method_handle_t h_2pc_queue_remove_entries;
   cls_method_handle_t h_2pc_queue_expire_reservations;
+  cls_method_handle_t h_2pc_queue_get_topic_attrs;
+  cls_method_handle_t h_2pc_queue_update_attrs;
 
   cls_register(TPC_QUEUE_CLASS, &h_class);
 
@@ -673,6 +748,8 @@ CLS_INIT(2pc_queue)
   cls_register_cxx_method(h_class, TPC_QUEUE_LIST_ENTRIES, CLS_METHOD_RD, cls_2pc_queue_list_entries, &h_2pc_queue_list_entries);
   cls_register_cxx_method(h_class, TPC_QUEUE_REMOVE_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_remove_entries, &h_2pc_queue_remove_entries);
   cls_register_cxx_method(h_class, TPC_QUEUE_EXPIRE_RESERVATIONS, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_expire_reservations, &h_2pc_queue_expire_reservations);
+  cls_register_cxx_method(h_class, TPC_QUEUE_GET_TOPIC_ATTRS, CLS_METHOD_RD, cls_2pc_queue_get_topic_attrs, &h_2pc_queue_get_topic_attrs);
+  cls_register_cxx_method(h_class, TPC_QUEUE_UPDATE_ATTRS, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_update_attrs, &h_2pc_queue_update_attrs);
 
   return;
 }
