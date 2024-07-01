@@ -12,7 +12,17 @@ test ${CONT_COUNT} -eq 2
 
 for i in ${ISCSI_CONT_IDS}
 do
-  test $(sudo podman exec ${i} cat /sys/fs/cgroup/pids/pids.max) == max
+  # cgroups v1 and v2 have slightly different file locations for the pids.max
+  # so check both spots
+  if [ $(sudo podman exec ${i} cat /sys/fs/cgroup/pids/pids.max) ]; then
+    pid_limit=$(sudo podman exec ${i} cat /sys/fs/cgroup/pids/pids.max)
+  elif [ $(sudo podman exec ${i} cat /sys/fs/cgroup/pids.max) ]; then
+    pid_limit=$(sudo podman exec ${i} cat /sys/fs/cgroup/pids.max)
+  else
+    echo "could not find pids.max inside container"
+    exit 1
+  fi
+  test $pid_limit == max
 done
 
 for i in ${ISCSI_CONT_IDS}
