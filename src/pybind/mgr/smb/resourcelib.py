@@ -650,6 +650,7 @@ def load(data: Simplified) -> List[Any]:
     """
     # Given a bare list/iterator. Assume it contains loadable objects.
     if not isinstance(data, dict):
+        assert not isinstance(data, (str, bytes))
         return list(chain.from_iterable(load(v) for v in data))
     # Given a "list object"
     if _RESOURCE_TYPE not in data and _RESOURCES in data:

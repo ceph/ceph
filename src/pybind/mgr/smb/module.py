@@ -6,7 +6,16 @@ import orchestrator
 from ceph.deployment.service_spec import PlacementSpec, SMBSpec
 from mgr_module import MgrModule, Option
 
-from . import cli, fs, handler, mon_store, rados_store, resources, results
+from . import (
+    cli,
+    fs,
+    handler,
+    mon_store,
+    rados_store,
+    resources,
+    results,
+    utils,
+)
 from .enums import AuthMode, JoinSourceType, UserGroupSourceType
 from .proto import AccessAuthorizer, Simplified
 
@@ -116,7 +125,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         'a domain join username & password value'
                         ' must contain a "%" separator'
                     )
-                rname = handler.rand_name(cluster_id)
+                rname = utils.rand_name(cluster_id)
                 join_sources.append(
                     resources.JoinSource(
                         source_type=JoinSourceType.RESOURCE,
@@ -156,7 +165,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             for unpw in define_user_pass or []:
                 username, password = unpw.split('%', 1)
                 users.append({'name': username, 'password': password})
-            rname = handler.rand_name(cluster_id)
+            rname = utils.rand_name(cluster_id)
             user_group_settings.append(
                 resources.UserGroupSource(
                     source_type=UserGroupSourceType.RESOURCE, ref=rname

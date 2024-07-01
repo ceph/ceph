@@ -2,8 +2,9 @@ from typing import Iterable, Iterator, List, Optional
 
 import errno
 
-from .proto import Simplified, one
+from .proto import Simplified
 from .resources import SMBResource
+from .utils import one
 
 _DOMAIN = 'domain'
 
