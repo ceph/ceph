@@ -241,6 +241,9 @@ public:
 
   bool is_reintegrate_pending(CDentry *dn);
   void wait_for_pending_reintegrate(CDentry *dn, MDRequestRef& mdr);
+  
+  // check layout
+  bool is_valid_layout(file_layout_t *layout);
 
   // open
   void handle_client_open(MDRequestRef& mdr);
