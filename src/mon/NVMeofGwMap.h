@@ -49,6 +49,8 @@ public:
     void  handle_removed_subsystems     (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const std::vector<NvmeNqnId> &current_subsystems, bool &propose_pending);
     void  start_timer (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid, uint8_t value);
 private:
+    void add_grp_id   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid);
+    void remove_grp_id(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid);
     void fsm_handle_gw_down    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
     void fsm_handle_gw_delete  (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
     void fsm_handle_gw_alive   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  NvmeGwMonState & gw_state, gw_states_per_group_t state,

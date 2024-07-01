@@ -369,14 +369,25 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     const auto& nqn = nqn_state_pair.first;
     nqn_ana_states nas;
     nas.set_nqn(nqn);
-    for (NvmeAnaGrpId  ana_grp_index = 0; ana_grp_index < sub.ana_state.size(); ana_grp_index++) {
-      const auto& old_nqn_state_pair = old_gw_state.subsystems.find(nqn);
-      auto found_old_nqn_state = (old_nqn_state_pair != old_gw_state.subsystems.end());
-      auto new_group_state = sub.ana_state[ana_grp_index];
+    const auto& old_nqn_state_pair = old_gw_state.subsystems.find(nqn);
+    auto found_old_nqn_state = (old_nqn_state_pair != old_gw_state.subsystems.end());
+
+    // old and new ana group id ranges could be different
+    auto ana_state_size = (found_old_nqn_state) ?
+       std::max(old_nqn_state_pair->second.ana_state.size(), sub.ana_state.size()) :
+       sub.ana_state.size();
+
+    for (NvmeAnaGrpId  ana_grp_index = 0; ana_grp_index < ana_state_size; ana_grp_index++) {
+      const auto initial_ana_state = std::make_pair(gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE, (epoch_t)0);
+      auto new_group_state = (ana_grp_index < sub.ana_state.size()) ?
+	sub.ana_state[ana_grp_index] :
+	initial_ana_state;
+      auto old_group_state = (got_old_gw_state && found_old_nqn_state && ana_grp_index < old_nqn_state_pair->second.ana_state.size()) ?
+        old_nqn_state_pair->second.ana_state[ana_grp_index] :
+	initial_ana_state;
 
       // if no state change detected for this nqn, group id
-      if (got_old_gw_state && found_old_nqn_state &&
-           new_group_state == old_nqn_state_pair->second.ana_state[ana_grp_index]) {
+      if (new_group_state.first == old_group_state.first) {
         continue;
       }
       ana_group_state gs;
