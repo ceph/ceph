@@ -238,6 +238,7 @@ class FakeMgr:
         self.default_version = 'quincy'
         self.version_overrides = {}
         self.daemon_to_host = {}
+        self.config_checks_enabled = True
 
         self.cache = HostCache(self)
         self.upgrade = CephadmUpgrade(self)
@@ -623,9 +624,7 @@ class TestConfigCheck:
         assert 'ceph_release' in checker.skipped_checks
 
     def test_skip_when_disabled(self, mgr):
-        mgr.module_option.update({
-            "config_checks_enabled": "false"
-        })
+        mgr.config_checks_enabled = False
         checker = CephadmConfigChecks(mgr)
         checker.cluster_network_list = []
         checker.public_network_list = ['10.9.64.0/24']
