@@ -1,0 +1,9 @@
+# When the NFS test class is constructed, the `MgrTestCase.setup_mgrs` invokes
+# `mgr fail` to restart the MGR which sometimes crashes the daemon and the
+# warning `MGR_DOWN` is generated. This is an intermittent failure which is
+# irrelevant to the NFS suite, and therefore should be ignored.
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - MGR_DOWN
