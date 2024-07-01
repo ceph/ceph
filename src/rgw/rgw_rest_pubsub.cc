@@ -358,7 +358,8 @@ void RGWHandler_REST_PSTopic_AWS::rgw_topic_parse_input() {
           if (key == "Action") {
             s->info.args.append(key, t.substr(pos + 1, t.size() - 1));
           } else if (key == "Name" || key == "TopicArn") {
-            const auto value = url_decode(t.substr(pos + 1, t.size() - 1));
+            constexpr bool in_query = true; // replace '+' with ' '
+            const auto value = url_decode(t.substr(pos + 1, t.size() - 1), in_query);
             s->info.args.append(key, value);
           } else {
             update_attribute_map(t, map);
