@@ -568,7 +568,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
 
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/yearly"
         self.mount_a.run_shell(['mkdir', '-p', test_dir])
-        self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='1Y')
+        self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='1y')
 
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/bad_period_spec"
         self.mount_a.run_shell(['mkdir', '-p', test_dir])
