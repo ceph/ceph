@@ -225,6 +225,10 @@ public:
     }
     return !is_unviewable_by_trans(*parent, ctx.trans);
   }
+  bool is_parent_valid() const final {
+    ceph_assert(parent);
+    return parent->is_valid();
+  }
 };
 
 }
