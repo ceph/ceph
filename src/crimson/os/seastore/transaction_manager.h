@@ -183,11 +183,16 @@ public:
   {
     auto fut = base_iertr::make_ready_future<LBAMappingRef>();
     if (!pin->is_parent_viewable()) {
-      fut = get_pin(t, pin->get_key()
-      ).handle_error_interruptible(
-	crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
-	crimson::ct_error::input_output_error::pass_further{}
-      );
+      if (pin->is_parent_valid()) {
+	pin = pin->refresh();
+	fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
+      } else {
+	fut = get_pin(t, pin->get_key()
+	).handle_error_interruptible(
+	  crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
+	  crimson::ct_error::input_output_error::pass_further{}
+	);
+      }
     } else {
       pin->maybe_fix_pos();
       fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
@@ -475,15 +480,19 @@ public:
       auto fut = base_iertr::now();
       if (!pin->is_indirect()) {
 	if (!pin->is_parent_viewable()) {
-	  fut = get_pin(t, pin->get_key()
-	  ).si_then([&pin](auto npin) {
-	    assert(npin);
-	    pin = std::move(npin);
-	    return seastar::now();
-	  }).handle_error_interruptible(
-	    crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
-	    crimson::ct_error::input_output_error::pass_further{}
-	  );
+	  if (pin->is_parent_valid()) {
+	    pin = pin->refresh();
+	  } else {
+	    fut = get_pin(t, pin->get_key()
+	    ).si_then([&pin](auto npin) {
+	      assert(npin);
+	      pin = std::move(npin);
+	      return seastar::now();
+	    }).handle_error_interruptible(
+	      crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
+	      crimson::ct_error::input_output_error::pass_further{}
+	    );
+	  }
 	} else {
 	  pin->maybe_fix_pos();
 	}

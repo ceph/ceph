@@ -176,6 +176,14 @@ public:
     auto &p = static_cast<LBALeafNode&>(*parent);
     p.maybe_fix_mapping_pos(*this);
   }
+
+  LBAMappingRef refresh() final {
+    assert(is_parent_valid() && !is_parent_viewable());
+    auto &p = static_cast<LBALeafNode&>(*parent);
+    auto &viewable_p = static_cast<LBALeafNode&>(
+      *p.find_dest(ctx.trans, get_key()));
+    return viewable_p.get_mapping(ctx, get_key());
+  }
 protected:
   std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
     op_context_t<laddr_t> ctx) const final {
