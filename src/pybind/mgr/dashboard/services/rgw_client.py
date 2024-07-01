@@ -764,6 +764,83 @@ class RgwClient(RestClient):
             raise DashboardException(msg=str(e), component='rgw')
         return result
 
+    @RestClient.api_get('/{bucket_name}?lifecycle')
+    def get_lifecycle(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()  # type: ignore
+            result = {'LifecycleConfiguration': result}
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get(
+                        'Code') == 'NoSuchLifecycleConfiguration':
+                    return None
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @staticmethod
+    def dict_to_xml(data):
+        if not data or data == '{}':
+            return ''
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                raise DashboardException('Could not load json string')
+
+        def transform(data):
+            xml: str = ''
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if isinstance(value, list):
+                        for item in value:
+                            if key == 'Rules':
+                                key = 'Rule'
+                            xml += f'<{key}>\n{transform(item)}</{key}>\n'
+                    elif isinstance(value, dict):
+                        xml += f'<{key}>\n{transform(value)}</{key}>\n'
+                    else:
+                        xml += f'<{key}>{str(value)}</{key}>\n'
+
+            elif isinstance(data, list):
+                for item in data:
+                    xml += transform(item)
+            else:
+                xml += f'{data}'
+
+            return xml
+
+        return transform(data)
+
+    @RestClient.api_put('/{bucket_name}?lifecycle')
+    def set_lifecycle(self, bucket_name, lifecycle, request=None):
+        # pylint: disable=unused-argument
+        lifecycle = lifecycle.strip()
+        if lifecycle.startswith('{'):
+            lifecycle = RgwClient.dict_to_xml(lifecycle)
+        try:
+            if lifecycle and '<LifecycleConfiguration>' not in str(lifecycle):
+                lifecycle = f'<LifecycleConfiguration>{lifecycle}</LifecycleConfiguration>'
+            result = request(data=lifecycle)  # type: ignore
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get("Code") == "MalformedXML":
+                    msg = "Invalid Lifecycle document"
+                    raise DashboardException(msg=msg, component='rgw')
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
+    @RestClient.api_delete('/{bucket_name}?lifecycle')
+    def delete_lifecycle(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request()
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
     @RestClient.api_get('/{bucket_name}?object-lock')
     def get_bucket_locking(self, bucket_name, request=None):
         # type: (str, Optional[object]) -> dict

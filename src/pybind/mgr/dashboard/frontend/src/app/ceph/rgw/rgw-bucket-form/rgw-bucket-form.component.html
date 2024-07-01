@@ -467,15 +467,15 @@
                             class="form-control resize-vertical"
                             id="bucket_policy"
                             formControlName="bucket_policy"
-                            (change)="bucketPolicyOnChange()">
+                            (change)="textAreaOnChange('bucketPolicyTextArea')">
                   </textarea>
                   <span class="invalid-feedback"
                         *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
-                        i18n>Invalid json text</span>
+                        i18n>Invalid json text.</span>
                   <button type="button"
                           id="clear-bucket-policy"
                           class="btn btn-light my-3"
-                          (click)="clearBucketPolicy()"
+                          (click)="clearTextArea('bucket_policy', '{}')"
                           i18n>
                     <i [ngClass]="[icons.destroy]"></i>
                     Clear
@@ -498,6 +498,50 @@
                             i18n>
                       <i [ngClass]="[icons.externalUrl]"></i>
                       Policy generator
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Lifecycle -->
+              <div *ngIf="editing"
+                   class="form-group row">
+              <label i18n
+                     class="cd-col-form-label"
+                     for="id">Lifecycle
+                <cd-helper>JSON or XML formatted document</cd-helper>
+              </label>
+                <div class="cd-col-form-input">
+                  <textarea #lifecycleTextArea
+                            class="form-control resize-vertical"
+                            id="lifecycle"
+                            formControlName="lifecycle"
+                            (change)="textAreaOnChange('lifecycleTextArea')">
+                  </textarea>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('lifecycle', frm, 'invalidJson')"
+                        i18n>Invalid json text.</span>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('lifecycle', frm, 'invalidXml')"
+                        i18n>Invalid xml text.</span>
+                  <button type="button"
+                          id="clear-lifecycle"
+                          class="btn btn-light my-3"
+                          (click)="clearTextArea('lifecycle', '{}')"
+                          i18n>
+                    <i [ngClass]="[icons.destroy]"></i>
+                    Clear
+                  </button>
+                  <div class="btn-group float-end"
+                       role="group"
+                       aria-label="bucket-policy-helpers">
+                    <button type="button"
+                            id="lifecycle-examples-button"
+                            class="btn btn-light my-3"
+                            (click)="openUrl('https://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-lifecycle.html#examples')"
+                            i18n>
+                      <i [ngClass]="[icons.externalUrl]"></i>
+                      Policy examples
                     </button>
                   </div>
                 </div>

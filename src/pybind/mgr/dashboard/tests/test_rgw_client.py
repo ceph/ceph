@@ -355,3 +355,47 @@ class RgwClientHelperTest(TestCase):
             _parse_frontend_config('mongoose port=8080')
         self.assertEqual(str(ctx.exception),
                          'Failed to determine RGW port from "mongoose port=8080"')
+
+
+class TestDictToXML(TestCase):
+    def test_empty_dict(self):
+        result = RgwClient.dict_to_xml({})
+        self.assertEqual(result, '')
+
+    def test_empty_string(self):
+        result = RgwClient.dict_to_xml("")
+        self.assertEqual(result, '')
+
+    def test_invalid_json_string(self):
+        with self.assertRaises(DashboardException):
+            RgwClient.dict_to_xml("invalid json")
+
+    def test_simple_dict(self):
+        data = {"name": "Foo", "age": 30}
+        expected_xml = "<name>Foo</name>\n<age>30</age>\n"
+        result = RgwClient.dict_to_xml(data)
+        self.assertEqual(result, expected_xml)
+
+    def test_nested_dict(self):
+        data = {"person": {"name": "Foo", "age": 30}}
+        expected_xml = "<person>\n<name>Foo</name>\n<age>30</age>\n</person>\n"
+        result = RgwClient.dict_to_xml(data)
+        self.assertEqual(result, expected_xml)
+
+    def test_list_in_dict(self):
+        data = {"names": ["Foo", "Boo"]}
+        expected_xml = "<names>\nFoo</names>\n<names>\nBoo</names>\n"
+        result = RgwClient.dict_to_xml(data)
+        self.assertEqual(result, expected_xml)
+
+    def test_rules_list_in_dict(self):
+        data = {"Rules": [{"id": 1}, {"id": 2}]}
+        expected_xml = "<Rule>\n<id>1</id>\n</Rule>\n<Rule>\n<id>2</id>\n</Rule>\n"
+        result = RgwClient.dict_to_xml(data)
+        self.assertEqual(result, expected_xml)
+
+    def test_json_string(self):
+        data = '{"name": "Foo", "age": 30}'
+        expected_xml = "<name>Foo</name>\n<age>30</age>\n"
+        result = RgwClient.dict_to_xml(data)
+        self.assertEqual(result, expected_xml)

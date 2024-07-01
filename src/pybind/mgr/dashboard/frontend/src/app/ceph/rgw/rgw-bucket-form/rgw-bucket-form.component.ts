@@ -39,6 +39,7 @@ import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-js
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
+import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -49,6 +50,8 @@ import { map, switchMap } from 'rxjs/operators';
 export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewChecked {
   @ViewChild('bucketPolicyTextArea')
   public bucketPolicyTextArea: ElementRef<any>;
+  @ViewChild('lifecycleTextArea')
+  public lifecycleTextArea: ElementRef<any>;
 
   bucketForm: CdFormGroup;
   editing = false;
@@ -96,6 +99,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     private notificationService: NotificationService,
     private rgwEncryptionModal: RgwBucketEncryptionModel,
     private textAreaJsonFormatterService: TextAreaJsonFormatterService,
+    private textAreaXmlFormatterService: TextAreaXmlFormatterService,
     public actionLabels: ActionLabelsI18n,
     private readonly changeDetectorRef: ChangeDetectorRef,
     private rgwMultisiteService: RgwMultisiteService,
@@ -110,7 +114,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   ngAfterViewChecked(): void {
     this.changeDetectorRef.detectChanges();
-    this.bucketPolicyOnChange();
+    this.textAreaOnChange(this.bucketPolicyTextArea);
+    this.textAreaOnChange(this.lifecycleTextArea);
   }
 
   createForm() {
@@ -160,6 +165,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       lock_mode: ['COMPLIANCE'],
       lock_retention_period_days: [10, [CdValidators.number(false), lockDaysValidator]],
       bucket_policy: ['{}', CdValidators.json()],
+      lifecycle: ['{}', CdValidators.jsonOrXml()],
       grantee: [Grantee.Owner, [Validators.required]],
       aclPermission: [[aclPermission.FullControl], [Validators.required]],
       replication: [false]
@@ -257,6 +263,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               bidResp['acl'],
               bidResp['owner']
             );
+            value['lifecycle'] = JSON.stringify(bidResp['lifecycle'] || {});
           }
           this.bucketForm.setValue(value);
           if (this.editing) {
@@ -335,7 +342,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           xmlStrTags,
           bucketPolicy,
           cannedAcl,
-          values['replication']
+          values['replication'],
+          values['lifecycle']
         )
         .subscribe(
           () => {
@@ -433,9 +441,11 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     });
   }
 
-  bucketPolicyOnChange() {
-    if (this.bucketPolicyTextArea) {
-      this.textAreaJsonFormatterService.format(this.bucketPolicyTextArea);
+  textAreaOnChange(textArea: ElementRef<any>) {
+    if (textArea?.nativeElement?.value?.startsWith?.('<')) {
+      this.textAreaXmlFormatterService.format(textArea);
+    } else {
+      this.textAreaJsonFormatterService.format(textArea);
     }
   }
 
@@ -443,8 +453,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     window.open(url, '_blank');
   }
 
-  clearBucketPolicy() {
-    this.bucketForm.get('bucket_policy').setValue('{}');
+  clearTextArea(field: string, defaultValue: string = '') {
+    this.bucketForm.get(field).setValue(defaultValue);
     this.bucketForm.markAsDirty();
     this.bucketForm.updateValueAndValidity();
   }
