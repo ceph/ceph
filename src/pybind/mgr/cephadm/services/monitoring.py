@@ -85,7 +85,9 @@ class GrafanaService(CephadmService):
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
 
-        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
+        mgmt_gw_daemons = self.mgr.cache.get_daemons_by_service('mgmt-gateway')
+        mgmt_gw_enabled = len(mgmt_gw_daemons) > 0
+        mgmt_gw_ip = dd.ip if dd.ip else self._inventory_get_addr(dd.hostname)
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
                 'anonymous_access': spec.anonymous_access,
@@ -93,7 +95,8 @@ class GrafanaService(CephadmService):
                 'http_port': grafana_port,
                 'protocol': spec.protocol,
                 'http_addr': grafana_ip,
-                'use_url_prefix': mgmt_gw_enabled
+                'mgmt_gw_enabled': mgmt_gw_enabled,
+                'mgmt_gw_ip': mgmt_gw_ip,
             })
 
         if 'dashboard' in self.mgr.get('mgr_map')['modules'] and spec.initial_admin_password:

@@ -393,6 +393,10 @@ class CephadmService(metaclass=ABCMeta):
         addr = self.mgr.inventory.get_addr(hostname)
         return socket.getfqdn(addr)
 
+    def _inventory_get_addr(self, hostname: str) -> str:
+        """Get a host's addr with its hostname."""
+        return self.mgr.inventory.get_addr(hostname)
+
     def _set_value_on_dashboard(self,
                                 service_name: str,
                                 get_mon_cmd: str,
