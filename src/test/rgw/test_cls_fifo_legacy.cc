@@ -41,6 +41,9 @@ namespace RCf = rgw::cls::fifo;
 auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
 const DoutPrefix dp(cct, 1, "test legacy cls fifo: ");
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
 namespace {
 int fifo_create(const DoutPrefixProvider *dpp, R::IoCtx& ioctx,
 		const std::string& oid,

@@ -308,6 +308,9 @@ TEST(WriteAttrs, Empty) {
   ASSERT_TRUE(rdattrs.empty());
 }
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);

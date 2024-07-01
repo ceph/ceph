@@ -38,7 +38,7 @@
 #include "rgw_otp.h"
 #include "rgw_sal_rados.h"
 #include "rgw_user.h"
-#include "rgw_role.h"
+#include "rgw_role_metadata.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
 

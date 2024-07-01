@@ -14,6 +14,8 @@ using ::testing::ActionInterface;
 using ::testing::MakeAction;
 using ::testing::StrEq;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
 
 class MockTransitSecretEngine : public TransitSecretEngine {
 

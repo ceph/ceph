@@ -22,6 +22,9 @@
 
 using namespace std;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
 void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, const string& instance)
 {
   /* parse_raw_oid() */

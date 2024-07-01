@@ -140,6 +140,9 @@ using rgw::IAM::allValue;
 
 using rgw::IAM::get_managed_policy;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
 class FakeIdentity : public Identity {
   const Principal id;
 public:

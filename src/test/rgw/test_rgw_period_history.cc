@@ -20,6 +20,10 @@
 #include <gtest/gtest.h>
 
 using namespace std;
+
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
 namespace {
 
 // construct a period with the given fields

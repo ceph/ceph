@@ -20,6 +20,9 @@
 using namespace std::chrono_literals;
 using Clock = RGWReshardWait::Clock;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
 TEST(ReshardWait, wait_block)
 {
   constexpr ceph::timespan wait_duration = 10ms;
