@@ -415,7 +415,7 @@ else
                 ;;
             *Jammy*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
-                $SUDO apt-get install -y gcc
+                $SUDO apt-get install -y gcc-12
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -492,6 +492,7 @@ else
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
                 elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                    dts_ver=12
                     $SUDO dnf config-manager --set-enabled crb
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
