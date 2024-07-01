@@ -134,7 +134,7 @@ function TEST_journald_cluster_log_level() {
     search_str="1.0 deep-scrub"
     TIMEOUT=60
     sleep $TIMEOUT
-    journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=7 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
+    sudo journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=7 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
     grep -q "$search_str" $dir/journal.log
     return_code=$?
     if [ $return_code -ne 0 ]; then
@@ -145,7 +145,7 @@ function TEST_journald_cluster_log_level() {
     ceph osd down 0
     TIMEOUT=20 wait_for_osd up 0 || return 1
     search_str="osd.0.*boot"
-    journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=6 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
+    sudo journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=6 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
     grep -q "$search_str" $dir/journal.log
     return_code=$?
     if [ $return_code -ne 0 ]; then
@@ -158,7 +158,7 @@ function TEST_journald_cluster_log_level() {
     TIMEOUT=60
     sleep $TIMEOUT
     search_str="1.1 deep-scrub"
-    journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=7 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
+    sudo journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=7 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
     grep -q "$search_str" $dir/journal.log
     return_code=$?
     if [ $return_code -eq 0 ]; then
@@ -172,7 +172,7 @@ function TEST_journald_cluster_log_level() {
     ceph osd unset noup
     TIMEOUT=60 wait_for_osd up 0 || return 1
     search_str="Health check failed: noup flag(s) set (OSDMAP_FLAGS)"
-    journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=4 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
+    sudo journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=4 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
     grep -q "$search_str" $dir/journal.log
     return_code=$?
     if [ $return_code -ne 0 ]; then
@@ -185,7 +185,7 @@ function TEST_journald_cluster_log_level() {
     WAIT_FOR_CLEAN_TIMEOUT=60 wait_for_clean
     search_str="Client client.admin marked osd.0 out, while it was still marked up"
     ceph log last | grep -q "$search_str" || return 1
-    journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=6 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
+    sudo journalctl _COMM=ceph-mon CEPH_CHANNEL=cluster PRIORITY=6 --output=json-pretty --since "60 seconds ago" |jq '.MESSAGE' > $dir/journal.log
     grep -q "$search_str" $dir/journal.log
     return_code=$?
     if [ $return_code -eq 0 ]; then
