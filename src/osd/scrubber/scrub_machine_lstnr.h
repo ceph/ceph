@@ -206,18 +206,6 @@ struct ScrubMachineListener {
   virtual void set_scrub_duration(std::chrono::milliseconds duration) = 0;
 
   /**
-   * No new scrub session will start while a scrub was initiate on a PG,
-   * and that PG is trying to acquire replica resources.
-   * set_reserving_now()/clear_reserving_now() let's the OSD scrub-queue know
-   * we are busy reserving.
-   *
-   * set_reserving_now() returns 'false' if there already is a PG in the
-   * reserving stage of the scrub session.
-   */
-  virtual bool set_reserving_now() = 0;
-  virtual void clear_reserving_now() = 0;
-
-  /**
    * Manipulate the 'I am being scrubbed now' Scrubber's flag
    */
   virtual void set_queued_or_active() = 0;
