@@ -1,7 +1,6 @@
 overrides:
   install:
-    ceph:
-      extra_system_packages:
+    extra_system_packages:
       - python3-pytest
 tasks:
 - workunit:
