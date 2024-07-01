@@ -134,6 +134,28 @@ struct FixedKVNode : ChildableCachedExtent {
     copy_dests.dests_by_key.erase(dest);
   }
 
+  FixedKVNodeRef find_pending_version(Transaction &t, node_key_t key) {
+    assert(is_stable());
+    auto mut_iter = mutation_pendings.find(
+      t.get_trans_id(), trans_spec_view_t::cmp_t());
+    if (mut_iter != mutation_pendings.end()) {
+      assert(copy_dests_by_trans.find(t.get_trans_id()) ==
+	copy_dests_by_trans.end());
+      return (FixedKVNode*)(&(*mut_iter));
+    }
+    auto iter = copy_dests_by_trans.find(
+      t.get_trans_id(), trans_spec_view_t::cmp_t());
+    ceph_assert(iter != copy_dests_by_trans.end());
+    auto &copy_dests = static_cast<copy_dests_t&>(*iter);
+    auto it = copy_dests.dests_by_key.lower_bound(key);
+    if ((*it)->range.begin > key) {
+      ceph_assert(it != copy_dests.dests_by_key.begin());
+      --it;
+    }
+    ceph_assert((*it)->range.begin <= key && key < (*it)->range.end);
+    return *it;
+  }
+
   bool is_linked() {
     assert(!has_parent_tracker() || !(bool)root_block);
     return (bool)has_parent_tracker() || (bool)root_block;
