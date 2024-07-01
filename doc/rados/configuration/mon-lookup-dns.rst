@@ -21,6 +21,11 @@ which is configured by the *mon_dns_srv_name* configuration directive.
 
 .. confval:: mon_dns_srv_name
 
+.. note:: It is possible to manually designate the search domain by passing the
+   search domain's name followed by an underscore to ``mon_dns_srv_name``. For
+   example: pass ``ceph-mon_example.com`` and make sure that records are placed
+   in ``ceph-mon._example.com``.
+
 Example
 -------
 When the DNS search domain is set to *example.com* a DNS zone file might contain the following elements.
