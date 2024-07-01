@@ -148,12 +148,6 @@ void Formatter::dump_format_unquoted(std::string_view name, const char *fmt, ...
 
 // -----------------------
 
-JSONFormatter::JSONFormatter(bool p)
-: m_pretty(p), m_is_pending_string(false)
-{
-  reset();
-}
-
 void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
@@ -175,30 +169,33 @@ void JSONFormatter::reset()
 
 void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
 {
+  auto& ss = get_ss();
   if (entry.size) {
     if (m_pretty) {
-      m_ss << ",\n";
+      ss << ",\n";
       for (unsigned i = 1; i < m_stack.size(); i++)
-        m_ss << "    ";
+        ss << "    ";
     } else {
-      m_ss << ",";
+      ss << ",";
     }
   } else if (m_pretty) {
-    m_ss << "\n";
+    ss << "\n";
     for (unsigned i = 1; i < m_stack.size(); i++)
-      m_ss << "    ";
+      ss << "    ";
   }
   if (m_pretty && entry.is_array)
-    m_ss << "    ";
+    ss << "    ";
 }
 
 void JSONFormatter::print_quoted_string(std::string_view s)
 {
-  m_ss << '\"' << json_stream_escaper(s) << '\"';
+  auto& ss = get_ss();
+  ss << '\"' << json_stream_escaper(s) << '\"';
 }
 
 void JSONFormatter::print_name(std::string_view name)
 {
+  auto& ss = get_ss();
   finish_pending_string();
   if (m_stack.empty())
     return;
@@ -206,19 +203,20 @@ void JSONFormatter::print_name(std::string_view name)
   print_comma(entry);
   if (!entry.is_array) {
     if (m_pretty) {
-      m_ss << "    ";
+      ss << "    ";
     }
-    m_ss << "\"" << name << "\"";
+    ss << "\"" << name << "\"";
     if (m_pretty)
-      m_ss << ": ";
+      ss << ": ";
     else
-      m_ss << ':';
+      ss << ':';
   }
   ++entry.size;
 }
 
 void JSONFormatter::open_section(std::string_view name, const char *ns, bool is_array)
 {
+  auto& ss = get_ss();
   if (handle_open_section(name, ns, is_array)) {
     return;
   }
@@ -230,9 +228,9 @@ void JSONFormatter::open_section(std::string_view name, const char *ns, bool is_
     print_name(name);
   }
   if (is_array)
-    m_ss << '[';
+    ss << '[';
   else
-    m_ss << '{';
+    ss << '{';
 
   json_formatter_stack_entry_d n;
   n.is_array = is_array;
@@ -261,7 +259,7 @@ void JSONFormatter::open_object_section_in_ns(std::string_view name, const char 
 
 void JSONFormatter::close_section()
 {
-
+  auto& ss = get_ss();
   if (handle_close_section()) {
     return;
   }
@@ -270,14 +268,14 @@ void JSONFormatter::close_section()
 
   struct json_formatter_stack_entry_d& entry = m_stack.back();
   if (m_pretty && entry.size) {
-    m_ss << "\n";
+    ss << "\n";
     for (unsigned i = 1; i < m_stack.size(); i++)
-      m_ss << "    ";
+      ss << "    ";
   }
-  m_ss << (entry.is_array ? ']' : '}');
+  ss << (entry.is_array ? ']' : '}');
   m_stack.pop_back();
   if (m_pretty && m_stack.empty())
-    m_ss << "\n";
+    ss << "\n";
 }
 
 void JSONFormatter::finish_pending_string()
@@ -300,12 +298,13 @@ void JSONFormatter::add_value(std::string_view name, T val)
 
 void JSONFormatter::add_value(std::string_view name, std::string_view val, bool quoted)
 {
+  auto& ss = get_ss();
   if (handle_value(name, val, quoted)) {
     return;
   }
   print_name(name);
   if (!quoted) {
-    m_ss << val;
+    ss << val;
   } else {
     print_quoted_string(val);
   }
@@ -354,12 +353,12 @@ void JSONFormatter::dump_format_va(std::string_view name, const char *ns, bool q
 
 int JSONFormatter::get_len() const
 {
-  return m_ss.str().size();
+  return m_ss.tellp();
 }
 
 void JSONFormatter::write_raw_data(const char *data)
 {
-  m_ss << data;
+  get_ss() << data;
 }
 
 const char *XMLFormatter::XML_1_DTD =
