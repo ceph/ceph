@@ -793,9 +793,10 @@ tasks.cephfs.fuse_mount.FuseMount = LocalFuseMount
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
 class LocalCephManager(CephManager):
-    def __init__(self, ctx=None, cluster_name=None):
+    def __init__(self, ctx=None):
         self.ctx = ctx
-        self.cluster = cluster_name
+        if self.ctx:
+            self.cluster = self.ctx.config['cluster']
 
         # Deliberately skip parent init, only inheriting from it to get
         # util methods like osd_dump that sit on top of raw_cluster_cmd
@@ -843,10 +844,10 @@ class LocalCephManager(CephManager):
 
 
 class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase):
-    def __init__(self, ctx, cluster_name='ceph'):
+    def __init__(self, ctx):
         # Deliberately skip calling CephCluster constructor
         self._ctx = ctx
-        self.mon_manager = LocalCephManager(ctx=self._ctx, cluster_name=cluster_name)
+        self.mon_manager = LocalCephManager(ctx=self._ctx)
         self._conf = defaultdict(dict)
 
     @property
@@ -915,8 +916,8 @@ class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase):
 tasks.cephfs.filesystem.CephCluster = LocalCephCluster
 
 class LocalMDSCluster(LocalCephCluster, tasks.cephfs.filesystem.MDSClusterBase):
-    def __init__(self, ctx, cluster_name='ceph'):
-        LocalCephCluster.__init__(self, ctx, cluster_name=cluster_name)
+    def __init__(self, ctx):
+        LocalCephCluster.__init__(self, ctx)
         # Deliberately skip calling MDSCluster constructor
         self._mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
         log.debug("Discovered MDS IDs: {0}".format(self._mds_ids))
@@ -956,10 +957,10 @@ class LocalMgrCluster(LocalCephCluster, tasks.mgr.mgr_test_case.MgrClusterBase):
 tasks.mgr.mgr_test_case.MgrCluster = LocalMgrCluster
 
 class LocalFilesystem(LocalMDSCluster, tasks.cephfs.filesystem.FilesystemBase):
-    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph',
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False,
                  **kwargs):
         # Deliberately skip calling Filesystem constructor
-        LocalMDSCluster.__init__(self, ctx, cluster_name=cluster_name)
+        LocalMDSCluster.__init__(self, ctx)
 
         self.id = None
         self.name = name
@@ -970,7 +971,7 @@ class LocalFilesystem(LocalMDSCluster, tasks.cephfs.filesystem.FilesystemBase):
         self.fs_config = fs_config
         self.ec_profile = fs_config.get('ec_profile')
 
-        self.mon_manager = LocalCephManager(ctx=self._ctx, cluster_name=cluster_name)
+        self.mon_manager = LocalCephManager(ctx=self._ctx)
 
         self.client_remote = LocalRemote()
 
@@ -1042,7 +1043,7 @@ class LocalContext(object):
         self.summary = get_summary("vstart_runner", None)
         if not hasattr(self, 'managers'):
             self.managers = {}
-        self.managers[cluster_name] = LocalCephManager(ctx=self, cluster_name=cluster_name)
+        self.managers[self.config['cluster']] = LocalCephManager(ctx=self)
 
         # Shove some LocalDaemons into the ctx.daemons DaemonGroup instance so that any
         # tests that want to look these up via ctx can do so.
