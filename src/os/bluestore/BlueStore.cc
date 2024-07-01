@@ -10477,10 +10477,8 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         dout(1) << "fsck bdev label at 0x" << std::hex << position << std::dec
                 <<  "taken by bluefs, cannot be fixed" << dendl;
       } else {
-        if (repair) {
-          // Mark blocks so we could move offending objects away.
-          bdev_labels_in_repair.push_back(position);
-        }
+        // Mark blocks so we could move offending objects away.
+        bdev_labels_in_repair.push_back(position);
       }
     }
     // Mark locations of those bdev labels that are not taken by bluefs.
@@ -11064,7 +11062,10 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         ceph_assert(bdev_label_valid_locations.empty());
       }
       //unmark extra bdev copies, will collide with the check
-      for (uint64_t location : bdev_label_valid_locations) {
+
+      std::vector<uint64_t> sum = bdev_label_valid_locations;
+      sum.insert(sum.end(), bdev_labels_in_repair.begin(), bdev_labels_in_repair.end());
+      for (uint64_t location : sum) {
         uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
         if (location != BDEV_FIRST_LABEL_POSITION) {
           apply_for_bitset_range(location, length, alloc_size, used_blocks,
@@ -11163,6 +11164,11 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     // Now fix bdev_labels that were detected to be broken & repairable.
     string p = path + "/block";
     _write_bdev_label(cct, bdev, p, bdev_label, bdev_labels_in_repair);
+    for (uint64_t pos : bdev_labels_in_repair) {
+      if (pos != BDEV_FIRST_LABEL_POSITION) {
+        bdev_label_valid_locations.push_back(pos);
+      }
+    }
     repaired += bdev_labels_in_repair.size();
   }
 

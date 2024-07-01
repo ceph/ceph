@@ -10693,6 +10693,10 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
     }
   }
   umount();
+  // Need to do 2 passes of repair:
+  // - the first one moves offending objects away
+  // - the second can then fix bdev labels
+  store->repair(false);
   ASSERT_EQ(store->repair(false), 0);
   ASSERT_EQ(store->fsck(false), 0);
   bluestore_bdev_label_t label;
