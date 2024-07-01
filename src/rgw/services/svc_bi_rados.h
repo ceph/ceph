@@ -22,6 +22,7 @@
 
 #include "svc_bi.h"
 #include "svc_rados.h"
+#include "svc_tier_rados.h"
 
 struct rgw_bucket_dir_header;
 
@@ -31,6 +32,12 @@ class RGWSI_BILog_RADOS;
 
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
+
+/*
+ * Defined Bucket Index Namespaces
+ */
+#define RGW_OBJ_NS_MULTIPART "multipart"
+#define RGW_OBJ_NS_SHADOW    "shadow"
 
 class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {
@@ -94,6 +101,21 @@ public:
     uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
     uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
     return rgw_shards_mod(sid2, num_shards);
+  }
+
+  static uint32_t bucket_shard_index(const rgw_obj_key& obj_key,
+				     int num_shards)
+  {
+    std::string sharding_key;
+    if (obj_key.ns == RGW_OBJ_NS_MULTIPART) {
+      RGWMPObj mp;
+      mp.from_meta(obj_key.name);
+      sharding_key = mp.get_key();
+    } else {
+      sharding_key = obj_key.name;
+    }
+
+    return bucket_shard_index(sharding_key, num_shards);
   }
 
   int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
