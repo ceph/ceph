@@ -254,6 +254,11 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   exposed via the new `--snap-id` option for `rbd clone` command.
 * RBD: The output of `rbd snap ls --all` command now includes the original
   type for trashed snapshots.
+* RBD: `rbd group info` and `rbd group snap info` commands are introduced to
+  show information about a group and a group snapshot respectively.
+* RBD: `rbd group snap ls` output now includes the group snap IDs. The 'state'
+  of a group snapshot that was shown as 'okay' is now shown as 'complete',
+  which is more descriptive.
 
 >=18.0.0
 

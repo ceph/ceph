@@ -2,6 +2,15 @@
 
 set -ex
 
+if type xmlstarlet > /dev/null 2>&1; then
+    XMLSTARLET=xmlstarlet
+elif type xml > /dev/null 2>&1; then
+    XMLSTARLET=xml
+else
+    echo "Missing xmlstarlet binary!"
+    exit 1
+fi
+
 #
 # rbd_consistency_groups.sh - test consistency groups cli commands
 #
@@ -182,12 +191,37 @@ check_snapshot_not_in_group()
 {
     local group_name=$1
     local snap_name=$2
-    for v in $(list_snapshots $group_name | awk '{print $1}'); do
+    local snap_names=$(
+        rbd group snap ls $group_name --format=xml |
+	$XMLSTARLET sel -t -v "//group_snaps/group_snap/snapshot")
+    for v in $snap_names; do
         if [ "$v" = "$snap_name" ]; then
             return 1
         fi
     done
     return 0
+}
+
+check_snap_id_in_list_snapshots()
+{
+    local group_name=$1
+    rbd group snap ls $group_name --format=xml |
+        $XMLSTARLET sel -t -v "//group_snaps/group_snap/id"
+}
+
+check_snapshot_info()
+{
+    local group_name=$1
+    local snap_name=$2
+    local image_name=$3
+    local snap_xml=$(rbd group snap info $group_name@$snap_name --format=xml)
+    local actual_snap_name=$(
+        $XMLSTARLET sel -t -v "//group_snapshot/name" <<< "$snap_xml")
+    test $actual_snap_name = $snap_name || return 1
+    local actual_image_name=$(
+        $XMLSTARLET sel -t -v "//group_snapshot/images/image/image_name" \
+        <<< "$snap_xml")
+    test $actual_image_name = $image_name || return 1
 }
 
 echo "TEST: create remove consistency group"
@@ -246,11 +280,26 @@ create_image $image
 create_group $group
 add_image_to_group $image $group
 create_snapshots $group $snap 10
+check_snap_id_in_list_snapshots $group
 check_snapshots_count_in_group $group $snap 10
 remove_snapshots $group $snap 10
 create_snapshots $group $snap 100
 check_snapshots_count_in_group $group $snap 100
 remove_snapshots $group $snap 100
+remove_group $group
+remove_image $image
+echo "PASSED"
+
+echo "TEST: get information about a group snapshot"
+image="test_image"
+group="test_consistency_group"
+snap="group_snap"
+create_image $image
+create_group $group
+add_image_to_group $image $group
+create_snapshot $group $snap
+check_snapshot_info $group $snap $image
+remove_snapshot $group $snap
 remove_group $group
 remove_image $image
 echo "PASSED"

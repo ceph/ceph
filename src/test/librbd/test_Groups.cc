@@ -489,3 +489,241 @@ TEST_F(TestGroup, add_snapshotPP)
   ASSERT_EQ(0, rbd.group_snap_remove(ioctx, group_name, snap_name));
   ASSERT_EQ(0, rbd.group_remove(ioctx, group_name));
 }
+
+TEST_F(TestGroup, snap_get_info)
+{
+  REQUIRE_FORMAT_V2();
+
+  std::string pool_name2 = get_temp_pool_name("test-librbd-");
+  ASSERT_EQ(0, rados_pool_create(_cluster, pool_name2.c_str()));
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, _pool_name.c_str(), &ioctx);
+  BOOST_SCOPE_EXIT(&ioctx) {
+    rados_ioctx_destroy(ioctx);
+  } BOOST_SCOPE_EXIT_END;
+
+  rados_ioctx_t ioctx2;
+  rados_ioctx_create(_cluster, pool_name2.c_str(), &ioctx2);
+  BOOST_SCOPE_EXIT(&ioctx2) {
+    rados_ioctx_destroy(ioctx2);
+  } BOOST_SCOPE_EXIT_END;
+
+  const char *image_name="snap_get_info_image1";
+  uint64_t features;
+  int order =0;
+  ASSERT_TRUE(get_features(&features));
+  ASSERT_EQ(0, rbd_create2(ioctx2, image_name, m_image_size, features,
+                           &order));
+
+  const char *gp_name = "snap_group";
+  ASSERT_EQ(0, rbd_group_create(ioctx, gp_name));
+  ASSERT_EQ(0, rbd_group_image_add(ioctx, gp_name, ioctx2, image_name));
+
+
+  const char *gp_snap_name = "snap_snapshot";
+  ASSERT_EQ(0, rbd_group_snap_create(ioctx, gp_name, gp_snap_name));
+
+  rbd_group_snap_info2_t gp_snap_info;
+  ASSERT_EQ(-ENOENT, rbd_group_snap_get_info(ioctx, gp_name, "absent",
+                                             &gp_snap_info));
+
+  ASSERT_EQ(0, rbd_group_snap_get_info(ioctx, gp_name, gp_snap_name,
+                                       &gp_snap_info));
+  ASSERT_STREQ(gp_snap_name, gp_snap_info.name);
+  ASSERT_EQ(1U, gp_snap_info.image_snaps_count);
+  ASSERT_STREQ(image_name, gp_snap_info.image_snaps[0].image_name);
+  ASSERT_EQ(rados_ioctx_get_id(ioctx2), gp_snap_info.image_snaps[0].pool_id);
+
+  rbd_group_snap_get_info_cleanup(&gp_snap_info);
+  ASSERT_EQ(0, rbd_group_snap_remove(ioctx, gp_name, gp_snap_name));
+  ASSERT_EQ(0, rbd_group_remove(ioctx, gp_name));
+  ASSERT_EQ(0, rados_pool_delete(_cluster, pool_name2.c_str()));
+}
+
+TEST_F(TestGroup, snap_get_infoPP)
+{
+  REQUIRE_FORMAT_V2();
+
+  std::string pool_name2 = get_temp_pool_name("test-librbd-");
+  ASSERT_EQ(0, _rados.pool_create(pool_name2.c_str()));
+
+  librados::IoCtx ioctx2;
+  ASSERT_EQ(0, _rados.ioctx_create(pool_name2.c_str(), ioctx2));
+
+  const char *image_name="snap_get_infoPP_image1";
+  ASSERT_EQ(0, create_image_pp(m_rbd, ioctx2, image_name, m_image_size));
+
+  const char *gp_name = "snap_group";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, gp_name));
+  ASSERT_EQ(0, m_rbd.group_image_add(m_ioctx, gp_name, ioctx2,
+                                     image_name));
+
+  const char *gp_snap_name = "snap_snapshot";
+  ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, gp_name, gp_snap_name));
+
+  librbd::group_snap_info2_t gp_snap_info;
+  ASSERT_EQ(-ENOENT, m_rbd.group_snap_get_info(m_ioctx, gp_name, "not_present",
+                                               &gp_snap_info));
+
+  ASSERT_EQ(0, m_rbd.group_snap_get_info(m_ioctx, gp_name, gp_snap_name,
+                                         &gp_snap_info));
+  ASSERT_EQ(gp_snap_name, gp_snap_info.name);
+  ASSERT_EQ(1U, gp_snap_info.image_snaps.size());
+  ASSERT_EQ(image_name, gp_snap_info.image_snaps[0].image_name);
+  ASSERT_EQ(ioctx2.get_id(), gp_snap_info.image_snaps[0].pool_id);
+
+  ASSERT_EQ(0, m_rbd.group_snap_remove(m_ioctx, gp_name, gp_snap_name));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, gp_name));
+  ASSERT_EQ(0, _rados.pool_delete(pool_name2.c_str()));
+}
+
+TEST_F(TestGroup, snap_list2)
+{
+  REQUIRE_FORMAT_V2();
+
+  std::string pool_name2 = get_temp_pool_name("test-librbd-");
+  ASSERT_EQ(0, rados_pool_create(_cluster, pool_name2.c_str()));
+  BOOST_SCOPE_EXIT(pool_name2) {
+    ASSERT_EQ(0, rados_pool_delete(_cluster, pool_name2.c_str()));
+  } BOOST_SCOPE_EXIT_END;
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, _pool_name.c_str(), &ioctx);
+  BOOST_SCOPE_EXIT(&ioctx) {
+    rados_ioctx_destroy(ioctx);
+  } BOOST_SCOPE_EXIT_END;
+
+  rados_ioctx_t ioctx2;
+  rados_ioctx_create(_cluster, pool_name2.c_str(), &ioctx2);
+  BOOST_SCOPE_EXIT(&ioctx2) {
+    rados_ioctx_destroy(ioctx2);
+  } BOOST_SCOPE_EXIT_END;
+
+  const char *image_name1="snap_list_image1";
+  uint64_t features;
+  int order =0;
+  ASSERT_TRUE(get_features(&features));
+  ASSERT_EQ(0, rbd_create2(ioctx, image_name1, m_image_size, features,
+                           &order));
+
+  const char *image_name2="snap_list_image2";
+  ASSERT_EQ(0, rbd_create2(ioctx2, image_name2, m_image_size, features,
+                           &order));
+
+  const char *gp_name = "snap_group";
+  ASSERT_EQ(0, rbd_group_create(ioctx, gp_name));
+
+  rbd_group_snap_info2_t *gp_snaps = NULL;
+  size_t num_snaps = 10U;
+  gp_snaps = static_cast<rbd_group_snap_info2_t*>(realloc(
+    gp_snaps, num_snaps * sizeof(rbd_group_snap_info2_t)));
+  BOOST_SCOPE_EXIT(&gp_snaps, &num_snaps) {
+    if (gp_snaps) {
+      rbd_group_snap_list2_cleanup(gp_snaps, num_snaps);
+      free(gp_snaps);
+    }
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, rbd_group_snap_list2(ioctx, gp_name, gp_snaps, &num_snaps));
+  ASSERT_EQ(0U, num_snaps);
+
+  const char *gp_snap_name0 = "snap_snapshot0";
+  ASSERT_EQ(0, rbd_group_snap_create(ioctx, gp_name, gp_snap_name0));
+
+  const char *gp_snap_name1 = "snap_snapshot1";
+  ASSERT_EQ(0, rbd_group_image_add(ioctx, gp_name, ioctx, image_name1));
+  ASSERT_EQ(0, rbd_group_snap_create(ioctx, gp_name, gp_snap_name1));
+
+  const char *gp_snap_name2 = "snap_snapshot2";
+  ASSERT_EQ(0, rbd_group_image_remove(ioctx, gp_name, ioctx, image_name1));
+  ASSERT_EQ(0, rbd_group_image_add(ioctx, gp_name, ioctx2, image_name2));
+  ASSERT_EQ(0, rbd_group_snap_create(ioctx, gp_name, gp_snap_name2));
+
+  num_snaps= 10U;
+  ASSERT_EQ(3, rbd_group_snap_list2(ioctx, gp_name, gp_snaps, &num_snaps));
+  ASSERT_EQ(3U, num_snaps);
+
+  for (int i = 0; i < 3; i++) {
+    if (!strcmp(gp_snaps[i].name, gp_snap_name0)) {
+      ASSERT_EQ(0U, gp_snaps[i].image_snaps_count);
+    } else if (!strcmp(gp_snaps[i].name, gp_snap_name1)) {
+      ASSERT_EQ(1U, gp_snaps[i].image_snaps_count);
+      ASSERT_STREQ(image_name1, gp_snaps[i].image_snaps[0].image_name);
+      ASSERT_EQ(rados_ioctx_get_id(ioctx), gp_snaps[i].image_snaps[0].pool_id);
+    } else if (!strcmp(gp_snaps[i].name, gp_snap_name2)) {
+      ASSERT_EQ(1U, gp_snaps[i].image_snaps_count);
+      ASSERT_STREQ(image_name2, gp_snaps[i].image_snaps[0].image_name);
+      ASSERT_EQ(rados_ioctx_get_id(ioctx2), gp_snaps[i].image_snaps[0].pool_id);
+    } else {
+      FAIL() << "Unexpected group snap: " << gp_snaps[i].name;
+    }
+  }
+  ASSERT_EQ(0, rbd_group_snap_remove(ioctx, gp_name, gp_snap_name1));
+  ASSERT_EQ(0, rbd_group_snap_remove(ioctx, gp_name, gp_snap_name2));
+  ASSERT_EQ(0, rbd_group_remove(ioctx, gp_name));
+}
+
+TEST_F(TestGroup, snap_list2PP)
+{
+  REQUIRE_FORMAT_V2();
+
+  std::string pool_name2 = get_temp_pool_name("test-librbd-");
+  ASSERT_EQ(0, _rados.pool_create(pool_name2.c_str()));
+
+  librados::IoCtx ioctx2;
+  ASSERT_EQ(0, _rados.ioctx_create(pool_name2.c_str(), ioctx2));
+
+  const char *image_name1="snap_list2PP_image1";
+  ASSERT_EQ(0, create_image_pp(m_rbd, m_ioctx, image_name1, m_image_size));
+
+  const char *image_name2="snap_list2PP_image2";
+  ASSERT_EQ(0, create_image_pp(m_rbd, ioctx2, image_name2, m_image_size));
+
+  const char *gp_name= "snap_group";
+  ASSERT_EQ(0, m_rbd.group_create(m_ioctx, gp_name));
+
+  std::vector<librbd::group_snap_info2_t> gp_snaps;
+  ASSERT_EQ(0, m_rbd.group_snap_list2(m_ioctx, gp_name, &gp_snaps));
+  ASSERT_EQ(0U, gp_snaps.size());
+
+  const char *gp_snap_name0 = "snap_snapshot0";
+  ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, gp_name, gp_snap_name0));
+
+  const char *gp_snap_name1 = "snap_snapshot1";
+  ASSERT_EQ(0, m_rbd.group_image_add(m_ioctx, gp_name, m_ioctx,
+                                     image_name1));
+  ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, gp_name, gp_snap_name1));
+
+  const char *gp_snap_name2 = "snap_snapshot2";
+  ASSERT_EQ(0, m_rbd.group_image_remove(m_ioctx, gp_name,
+                                        m_ioctx, image_name1));
+  ASSERT_EQ(0, m_rbd.group_image_add(m_ioctx, gp_name, ioctx2,
+                                     image_name2));
+  ASSERT_EQ(0, m_rbd.group_snap_create(m_ioctx, gp_name, gp_snap_name2));
+
+  ASSERT_EQ(0, m_rbd.group_snap_list2(m_ioctx, gp_name, &gp_snaps));
+  ASSERT_EQ(3U, gp_snaps.size());
+
+  for (const auto &i : gp_snaps) {
+    if (i.name == gp_snap_name0) {
+      ASSERT_EQ(0U, i.image_snaps.size());
+    } else if (i.name == gp_snap_name1) {
+      ASSERT_EQ(1U, i.image_snaps.size());
+      ASSERT_EQ(image_name1, i.image_snaps[0].image_name);
+      ASSERT_EQ(m_ioctx.get_id(), i.image_snaps[0].pool_id);
+    } else if(i.name == gp_snap_name2) {
+      ASSERT_EQ(1U, i.image_snaps.size());
+      ASSERT_EQ(image_name2, i.image_snaps[0].image_name);
+      ASSERT_EQ(ioctx2.get_id(), i.image_snaps[0].pool_id);
+    } else {
+      FAIL() << "Unexpected group snap: " << i.name;
+    }
+  }
+
+  ASSERT_EQ(0, m_rbd.group_snap_remove(m_ioctx, gp_name, gp_snap_name0));
+  ASSERT_EQ(0, m_rbd.group_snap_remove(m_ioctx, gp_name, gp_snap_name1));
+  ASSERT_EQ(0, m_rbd.group_snap_remove(m_ioctx, gp_name, gp_snap_name2));
+  ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, gp_name));
+  ASSERT_EQ(0, _rados.pool_delete(pool_name2.c_str()));
+}

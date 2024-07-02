@@ -2882,6 +2882,32 @@ class TestGroups(object):
         with Image(ioctx, image_name) as image:
             eq(0, image.op_features() & RBD_OPERATION_FEATURE_GROUP)
 
+    def test_group_snap_get_info(self):
+        self.image_names.append(create_image())
+        self.image_names.sort()
+        self.group.add_image(ioctx, self.image_names[0])
+        self.group.add_image(ioctx, self.image_names[1])
+        pool_id = ioctx.get_pool_id()
+
+        global snap_name
+        self.group.create_snap(snap_name)
+
+        snap_info_dict = self.group.get_snap_info(snap_name)
+
+        image_names = []
+        img_snap_keys = sorted(['pool_id', 'snap_id', 'image_name'])
+        eq(sorted(['id', 'name', 'state', 'image_snap_name', 'images']),
+           sorted(snap_info_dict.keys()))
+        eq(snap_name, snap_info_dict['name'])
+        for i in snap_info_dict['images']:
+            eq(img_snap_keys, sorted(i.keys()))
+            eq(pool_id, i['pool_id'])
+            image_names.append(i['image_name'])
+        eq(self.image_names, sorted(image_names))
+
+        self.group.remove_image(ioctx, self.image_names[0])
+        self.group.remove_image(ioctx, self.image_names[1])
+
     def test_group_snap(self):
         global snap_name
         eq([], list(self.group.list_snaps()))
@@ -2919,6 +2945,12 @@ class TestGroups(object):
         eq([], list(self.group.list_snaps()))
 
     def test_group_snap_list_many(self):
+        self.image_names.append(create_image())
+        self.image_names.sort()
+        self.group.add_image(ioctx, self.image_names[0])
+        self.group.add_image(ioctx, self.image_names[1])
+        pool_id = ioctx.get_pool_id()
+
         global snap_name
         eq([], list(self.group.list_snaps()))
         snap_names = []
@@ -2928,9 +2960,21 @@ class TestGroups(object):
             snap_name = get_temp_snap_name()
 
         snap_names.sort()
-        answer = [snap['name'] for snap in self.group.list_snaps()]
-        answer.sort()
-        eq(snap_names, answer)
+        gp_snaps_list = self.group.list_snaps()
+        gp_snap_names = []
+        gp_snap_keys = sorted(['id', 'name', 'state', 'image_snap_name', 'images'])
+        img_snap_keys = sorted(['pool_id', 'snap_id', 'image_name'])
+        for gp_snap in gp_snaps_list:
+            eq(gp_snap_keys, sorted(gp_snap.keys()))
+            gp_snap_names.append(gp_snap['name'])
+            image_names = []
+            for i in gp_snap['images']:
+                eq(img_snap_keys, sorted(i.keys()))
+                eq(pool_id, i['pool_id'])
+                image_names.append(i['image_name'])
+            eq(self.image_names, sorted(image_names))
+        gp_snap_names.sort()
+        eq(snap_names, gp_snap_names)
 
     def test_group_snap_namespace(self):
         global snap_name

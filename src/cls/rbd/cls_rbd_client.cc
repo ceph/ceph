@@ -2757,6 +2757,7 @@ int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
 
   return 0;
 }
+
 int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupSnapshot &start,
                     uint64_t max_return,
