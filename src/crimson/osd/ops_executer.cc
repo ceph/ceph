@@ -1031,7 +1031,6 @@ OpsExecuter::flush_clone_metadata(
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context
      obc->ssc->snapset.seq = snapc.seq;
-     obc->ssc->snapset.snaps.clear();
   }
   logger().debug("{} done, initial snapset={}, new snapset={}",
     __func__, obc->obs.oi.soid, obc->ssc->snapset);

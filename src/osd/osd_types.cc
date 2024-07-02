@@ -5813,9 +5813,10 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
 
 void SnapSet::encode(ceph::buffer::list& bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   encode(seq, bl);
   encode(true, bl);  // head_exists
+  std::vector<snapid_t> snaps;  // removed in 4
   encode(snaps, bl);
   encode(clones, bl);
   encode(clone_overlap, bl);
@@ -5826,9 +5827,10 @@ void SnapSet::encode(ceph::buffer::list& bl) const
 
 void SnapSet::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(seq, bl);
   bl += 1u;  // skip legacy head_exists (always true)
+  std::vector<snapid_t> snaps;  // removed in 4
   decode(snaps, bl);
   decode(clones, bl);
   decode(clone_overlap, bl);
@@ -5876,12 +5878,8 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
   o.push_back(new SnapSet);
   o.push_back(new SnapSet);
   o.back()->seq = 123;
-  o.back()->snaps.push_back(123);
-  o.back()->snaps.push_back(12);
   o.push_back(new SnapSet);
   o.back()->seq = 123;
-  o.back()->snaps.push_back(123);
-  o.back()->snaps.push_back(12);
   o.back()->clones.push_back(12);
   o.back()->clone_size[12] = 12345;
   o.back()->clone_overlap[12];
@@ -5890,8 +5888,7 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
 
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
-  return out << cs.seq << "=" << cs.snaps << ":"
-	     << cs.clone_snaps;
+  return out << cs.seq << "=" << cs.clone_snaps;
 }
 
 void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
@@ -5929,13 +5926,6 @@ void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
   clones.reserve(_clones.size());
   for (auto p = _clones.begin(); p != _clones.end(); ++p)
     clones.push_back(*p);
-
-  // descending
-  snaps.clear();
-  snaps.reserve(_snaps.size());
-  for (auto p = _snaps.rbegin();
-       p != _snaps.rend(); ++p)
-    snaps.push_back(*p);
 }
 
 uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
@@ -5946,23 +5936,6 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
   const interval_set<uint64_t> &overlap = clone_overlap.find(clone)->second;
   ceph_assert(size >= (uint64_t)overlap.size());
   return size - overlap.size();
-}
-
-void SnapSet::filter(const pg_pool_t &pinfo)
-{
-  vector<snapid_t> oldsnaps;
-  oldsnaps.swap(snaps);
-  for (auto i = oldsnaps.cbegin(); i != oldsnaps.cend(); ++i) {
-    if (!pinfo.is_removed_snap(*i))
-      snaps.push_back(*i);
-  }
-}
-
-SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
-{
-  SnapSet ss = *this;
-  ss.filter(pinfo);
-  return ss;
 }
 
 // -- watch_info_t --
