@@ -1006,19 +1006,6 @@ bool CInode::is_ancestor_of(const CInode *other, std::unordered_map<CInode const
   return false;
 }
 
-bool CInode::is_any_ancestor_inode_a_replica() {
-  CDentry *pdn = get_parent_dn();
-  while (pdn) {
-    CInode *diri = pdn->get_dir()->get_inode();
-    if (!diri->is_auth()) {
-      return true;
-    }
-    pdn = diri->get_parent_dn();
-  }
-
-  return false;
-}
-
 bool CInode::is_projected_ancestor_of(const CInode *other) const
 {
   while (other) {
@@ -1336,7 +1323,7 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
   CDentry *pdn = get_parent_dn();
   while (pdn) {
     CInode *diri = pdn->get_dir()->get_inode();
-    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->get_name(), in->get_inode()->version));
+    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->get_name(), in->get_inode()->version, diri->is_auth()));
     in = diri;
     pdn = in->get_parent_dn();
   }
@@ -4783,7 +4770,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       const int64_t pool = in->get_backtrace_pool();
       inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
       in->build_backtrace(pool, memory_backtrace);
-      bool equivalent, divergent;
+      bool divergent;
       int memory_newer;
 
       MDCache *mdcache = in->mdcache;  // For the benefit of dout
@@ -4835,7 +4822,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       }
 
       memory_newer = memory_backtrace.compare(results->backtrace.ondisk_value,
-					      &equivalent, &divergent);
+					      &divergent);
 
       if (divergent || memory_newer < 0) {
         // we're divergent, or on-disk version is newer
@@ -4849,11 +4836,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
           dout(20) << "divergent backtraces are acceptable when dn "
                       "is being purged or has been renamed or moved to a "
                       "different directory " << *in << dendl;
-        } else if (in->is_any_ancestor_inode_a_replica()) {
-          results->backtrace.passed = true;
-          dout(20) << "divergent backtraces are acceptable when some "
-	              "ancestor inodes are replicas " << *in << dendl;
-	}
+        }
       } else {
         results->backtrace.passed = true;
       }

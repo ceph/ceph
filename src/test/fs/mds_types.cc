@@ -115,6 +115,7 @@ TEST(inode_backtrace_t, compare_equal)
   foo.old_pools.push_back(5);
 
   inode_backpointer_t foop;
+  foop.is_auth = 1;
   foop.dirino = 3;
   foop.dname = "l3";
   foop.version = 15;
@@ -131,12 +132,10 @@ TEST(inode_backtrace_t, compare_equal)
   bar = foo;
   
   int compare_r;
-  bool equivalent;
   bool divergent;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(0, compare_r);
-  EXPECT_TRUE(equivalent);
   EXPECT_FALSE(divergent);
 }
 
@@ -155,6 +154,7 @@ TEST(inode_backtrace_t, compare_newer)
   bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
+  foop.is_auth = 1;
   foop.dirino = 3;
   foop.dname = "l3";
   foop.version = 15;
@@ -176,32 +176,27 @@ TEST(inode_backtrace_t, compare_newer)
   bar.ancestors.push_back(foop);
 
   int compare_r;
-  bool equivalent;
   bool divergent;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(1, compare_r);
-  EXPECT_TRUE(equivalent);
   EXPECT_FALSE(divergent);
 
-  compare_r = bar.compare(foo, &equivalent, &divergent);
+  compare_r = bar.compare(foo, &divergent);
   EXPECT_EQ(-1, compare_r);
-  EXPECT_TRUE(equivalent);
   EXPECT_FALSE(divergent);
 
   bar.ancestors.back().dirino = 75;
   bar.ancestors.back().dname = "l1-old";
   bar.ancestors.back().version = 70;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(1, compare_r);
-  EXPECT_FALSE(equivalent);
-  EXPECT_FALSE(divergent);
+  EXPECT_TRUE(divergent);
 
-  compare_r = bar.compare(foo, &equivalent, &divergent);
+  compare_r = bar.compare(foo, &divergent);
   EXPECT_EQ(-1, compare_r);
-  EXPECT_FALSE(equivalent);
-  EXPECT_FALSE(divergent);
+  EXPECT_TRUE(divergent);
 }
 
 TEST(inode_backtrace_t, compare_divergent)
@@ -219,6 +214,7 @@ TEST(inode_backtrace_t, compare_divergent)
   bar.old_pools.push_back(10);
 
   inode_backpointer_t foop;
+  foop.is_auth = 1;
   foop.dirino = 3;
   foop.dname = "l3";
   foop.version = 15;
@@ -240,13 +236,12 @@ TEST(inode_backtrace_t, compare_divergent)
   bar.ancestors.push_back(foop);
 
   int compare_r;
-  bool equivalent;
   bool divergent;
 
-  compare_r = foo.compare(bar, &equivalent, &divergent);
+  compare_r = foo.compare(bar, &divergent);
   EXPECT_EQ(1, compare_r);
   EXPECT_TRUE(divergent);
-  compare_r = bar.compare(foo, &equivalent, &divergent);
+  compare_r = bar.compare(foo, &divergent);
   EXPECT_EQ(-1, compare_r);
   EXPECT_TRUE(divergent);
 }
