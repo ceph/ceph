@@ -84,7 +84,7 @@ function recover {
   ceph fs fail "$FS"
   sleep 5
   cephfs-journal-tool --rank="$FS":0 event recover_dentries summary
-  cephfs-journal-tool --rank="$FS":0 journal reset
+  cephfs-journal-tool --rank="$FS":0 journal reset --yes-i-really-really-mean-it
   "$PYTHON" $FIRST_DAMAGE --debug /tmp/debug1 --memo /tmp/memo1 "$METADATA_POOL"
   "$PYTHON" $FIRST_DAMAGE --debug /tmp/debug2 --memo /tmp/memo2 --repair-nosnap  "$METADATA_POOL"
   "$PYTHON" $FIRST_DAMAGE --debug /tmp/debug3 --memo /tmp/memo3 --remove "$METADATA_POOL"

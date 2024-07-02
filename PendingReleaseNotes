@@ -133,6 +133,11 @@
   cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
   and the new feature bit for more information.
 
+* cls_cxx_gather is marked as deprecated.
+* CephFS: cephfs-journal-tool is guarded against running on an online file system.
+  The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
+  'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
+  commands require '--yes-i-really-really-mean-it'.
 
 * CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
   confirmation flag when some MDSs exhibit health warning MDS_TRIM or
