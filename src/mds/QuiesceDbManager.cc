@@ -82,7 +82,7 @@ void* QuiesceDbManager::quiesce_db_thread_main()
         std::chrono::seconds(10)
     );
 
-    while (!db_thread_has_work()) {
+    while (!db_thread_has_work() || bootstrap_delay.has_value()) {
       auto db_age = db.get_age();
       if (next_event_at_age <= db_age) {
         break;
@@ -102,9 +102,9 @@ void* QuiesceDbManager::quiesce_db_thread_main()
 
       ls.unlock();
 
+      auto bootstrap_delay = leader_bootstrap(std::move(db_updates));
       if (membership.is_leader()) {
-        const QuiesceTimeInterval bootstrap_delay = leader_bootstrap(std::move(db_updates));
-        if (bootstrap_delay == QuiesceTimeInterval::zero()){
+        if (!bootstrap_delay.has_value()){
           // we're good to process things
           next_event_at_age = leader_upkeep(std::move(acks), std::move(requests));
         } else {
@@ -119,18 +119,6 @@ void* QuiesceDbManager::quiesce_db_thread_main()
           while (!acks.empty()) {
             pending_acks.emplace_front(std::move(acks.back()));
             acks.pop_back();
-          }
-          if (pending_db_updates.empty()) {
-            // we are waiting here because if requests/acks aren't empty
-            // the code above will skip the sleep due to the `db_thread_has_work`
-            // returning true, causing a busy-loop of the quiesce manager thread.
-            // This sleep may be interrupted by the submit_condition, in which case
-            // we will re-consider everything and may end up here again, but with a shorter
-            // bootstrap_delay.
-            dout(5) << "bootstrap: waiting for new peers with pending acks: " << pending_acks.size()
-              << " requests: " << pending_requests.size()
-              << ". Wait timeout: " << bootstrap_delay << dendl;
-            submit_condition.wait_for(ls, bootstrap_delay);
           }
           continue;
         }
@@ -341,7 +329,7 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
   return QuiesceTimeInterval::max();
 }
 
-QuiesceTimeInterval QuiesceDbManager::leader_bootstrap(decltype(pending_db_updates)&& db_updates)
+std::optional<QuiesceTimeInterval> QuiesceDbManager::leader_bootstrap(decltype(pending_db_updates)&& db_updates)
 {
   const QuiesceTimeInterval PEER_DISCOVERY_INTERVAL = std::chrono::seconds(1);
   QuiesceTimeInterval bootstrap_delay = PEER_DISCOVERY_INTERVAL;
@@ -404,7 +392,7 @@ QuiesceTimeInterval QuiesceDbManager::leader_bootstrap(decltype(pending_db_updat
 
   // add some margin to hit the discovery interval for the earliest discovery.
   const QuiesceTimeInterval a_little_more = std::chrono::milliseconds(100);
-  return all_peers_known ? QuiesceTimeInterval::zero() : (bootstrap_delay + a_little_more);
+  return all_peers_known ? std::nullopt : (bootstrap_delay + a_little_more);
 }
 
 QuiesceTimeInterval QuiesceDbManager::leader_upkeep(decltype(pending_acks)&& acks, decltype(pending_requests)&& requests)

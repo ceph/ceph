@@ -289,7 +289,7 @@ class QuiesceDbManager {
 
     QuiesceTimeInterval replica_upkeep(decltype(pending_db_updates)&& db_updates);
     // returns zero interval if bootstrapped, otherwise the time to sleep while we wait for peer responses
-    QuiesceTimeInterval leader_bootstrap(decltype(pending_db_updates)&& db_updates);
+    std::optional<QuiesceTimeInterval> leader_bootstrap(decltype(pending_db_updates)&& db_updates);
     QuiesceTimeInterval leader_upkeep(decltype(pending_acks)&& acks, decltype(pending_requests)&& requests);
     
 
