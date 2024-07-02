@@ -11,7 +11,7 @@ jobs:
       # (NOTE: pinning the action to a given commit is a security best-practice:
       # https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/security-hardening-for-github-actions)
       - name: Check if PR needs rebase
-        uses: eps1lon/actions-label-merge-conflict@b8bf8341285ec9a4567d4318ba474fee998a6919
+        uses: eps1lon/actions-label-merge-conflict@6d74047dcef155976a15e4a124dde2c7fe0c5522
         with:
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
           dirtyLabel: "needs-rebase"
