@@ -30,9 +30,9 @@ fsid=$(cat /etc/ceph/ceph.conf | grep fsid | awk '{ print $3}')
 cephadm_shell="$CEPHADM shell --fsid ${fsid} -c /etc/ceph/ceph.conf -k /etc/ceph/ceph.client.admin.keyring"
 
 {% for number in range(1, nodes) %}
-  ssh-copy-id -f -i /etc/ceph/ceph.pub  -o StrictHostKeyChecking=no root@192.168.100.10{{ number }}
+  ssh-copy-id -f -i /etc/ceph/ceph.pub  -o StrictHostKeyChecking=no root@192.168.100.1${CLUSTER}{{ number }}
   {% if expanded_cluster is defined %}
-    ${cephadm_shell} ceph orch host add {{ prefix }}-node-0{{ number }}
+    ${cephadm_shell} ceph orch host add {{ prefix }}-node-0{{ number }} 192.168.100.1${CLUSTER}{{ number }}
   {% endif %}
 {% endfor %}
 
