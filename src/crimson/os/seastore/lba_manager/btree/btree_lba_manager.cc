@@ -782,6 +782,56 @@ BtreeLBAManager::update_refcount(
   });
 }
 
+BtreeLBAManager::_update_mappings_ret
+BtreeLBAManager::_update_mappings(
+  Transaction &t,
+  std::pair<laddr_t, extent_len_t> range,
+  update_func_t &&f)
+{
+  LOG_PREFIX(BtreeLBAManager::_update_mappings);
+  TRACET("{}~{}", t, range.first, range.second);
+  auto c = get_context(t);
+  return seastar::do_with(
+    std::move(range),
+    std::move(f),
+    [c, this, FNAME](auto &range, auto &f) {
+    return with_btree<LBABtree>(
+      cache,
+      c,
+      [&range, &f, c, FNAME](auto &btree) {
+      auto start_addr = range.first;
+      return LBABtree::iterate_repeat(
+	c,
+	btree.lower_bound(c, start_addr),
+	[c, &btree, &range, &f, FNAME](auto &pos) {
+	auto laddr = range.first;
+	auto len = range.second;
+	auto pos_key = pos.get_key();
+	if (pos_key == laddr + len) {
+	  return typename LBABtree::iterate_repeat_ret_inner(
+	    interruptible::ready_future_marker{},
+	    seastar::stop_iteration::yes);
+	}
+	ceph_assert(!pos.is_end());
+	ceph_assert(pos_key >= laddr);
+	auto pos_val = pos.get_val();
+	ceph_assert(pos_key + pos_val.len <= laddr + len);
+	auto ret = f(pos_val);
+	ceph_assert(ret.refcount > 0); // TODO: we don't support removing
+				       // range during batch lba updates
+	TRACET("updated mapping for key {}, val {}", c.trans, pos_key, ret);
+	return btree.update(c, pos, ret, nullptr
+	).si_then([&pos] (auto iter) {
+	  pos = std::move(iter);
+	  return typename LBABtree::iterate_repeat_ret_inner(
+	    interruptible::ready_future_marker{},
+	    seastar::stop_iteration::no);
+	});
+      });
+    });
+  });
+}
+
 BtreeLBAManager::_update_mapping_ret
 BtreeLBAManager::_update_mapping(
   Transaction &t,
