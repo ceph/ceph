@@ -758,15 +758,39 @@ Here is an example of an ``in-progress`` clone:
 ::
 
     {
-        "status": {
-            "state": "in-progress",
-            "source": {
-                "volume": "cephfs",
-                "subvolume": "subvol1",
-                "snapshot": "snap1"
-            }
+      "status": {
+        "state": "in-progress",
+        "source": {
+          "volume": "cephfs",
+          "subvolume": "subvol1",
+          "snapshot": "snap1"
+        },
+        "progress_report": {
+          "percentage cloned": "12.24%",
+          "amount cloned": "376M/3.0G",
+          "files cloned": "4/6"
         }
+      }
     }
+
+A progress report is also printed in the output when clone is ``in-progress``.
+Here the progress is reported only for the specific clone. For collective
+progress made by all ongoing clones, a progress bar is printed at the bottom
+in ouput of ``ceph status`` command::
+
+  progress:
+    3 ongoing clones - average progress is 47.569% (10s)
+      [=============...............] (remaining: 11s)
+
+If the number of clone jobs are more than cloner threads, two progress bars
+are printed, one for ongoing clones (same as above) and other for all
+(ongoing+pending) clones::
+
+  progress:
+    4 ongoing clones - average progress is 27.669% (15s)
+      [=======.....................] (remaining: 41s)
+    Total 5 clones - average progress is 41.667% (3s)
+      [===========.................] (remaining: 4s)
 
 .. note:: The ``failure`` section will be shown only if the clone's state is ``failed`` or ``cancelled``
 
