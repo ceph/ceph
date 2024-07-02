@@ -843,6 +843,7 @@ if(WITH_LIBCEPHFS)
   if(LINUX)
     add_subdirectory(mount)
   endif()
+  add_subdirectory(proxy)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_LIBCEPHSQLITE)
