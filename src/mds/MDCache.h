@@ -20,6 +20,7 @@
 #include <thread>
 
 #include "common/DecayCounter.h"
+#include "common/MemoryModel.h"
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "include/filepath.h"
@@ -1539,6 +1540,8 @@ private:
   time upkeep_last_trim = clock::zero();
   time upkeep_last_release = clock::zero();
   std::atomic<bool> upkeep_trim_shutdown{false};
+  std::optional<MemoryModel> upkeep_memory_stats;
+  MemoryModel::mem_snap_t upkeep_mem_baseline;
 
   uint64_t kill_shutdown_at = 0;
 
