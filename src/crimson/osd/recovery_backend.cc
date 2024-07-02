@@ -43,7 +43,7 @@ void RecoveryBackend::clear_temp_obj(const hobject_t &oid)
 }
 
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
-			       std::string_view why)
+			       interrupt_cause_t why)
 {
   for (auto& soid : temp_contents) {
     t.remove(pg.get_collection_ref()->get_cid(),
@@ -63,6 +63,36 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
     }
   }
   recovering.clear();
+}
+
+void RecoveryBackend::WaitForObjectRecovery::interrupt(interrupt_cause_t why) {
+  switch(why) {
+  case interrupt_cause_t::INTERVAL_CHANGE:
+    if (readable) {
+      readable->set_exception(
+	crimson::common::actingset_changed(pg.is_primary()));
+      readable.reset();
+    }
+    if (recovered) {
+      recovered->set_exception(
+	crimson::common::actingset_changed(pg.is_primary()));
+      recovered.reset();
+    }
+    if (pulled) {
+      pulled->set_exception(
+	crimson::common::actingset_changed(pg.is_primary()));
+      pulled.reset();
+    }
+    for (auto& [pg_shard, pr] : pushes) {
+      pr.set_exception(
+	crimson::common::actingset_changed(pg.is_primary()));
+    }
+    pushes.clear();
+    break;
+  default:
+    ceph_abort("impossible");
+    break;
+  }
 }
 
 void RecoveryBackend::WaitForObjectRecovery::stop() {
