@@ -83,7 +83,7 @@ function TEST_balancer() {
     ! ceph balancer optimize plan_crush $TEST_POOL1 || return 1
     ceph balancer status || return 1
     eval RESULT=$(ceph balancer status | jq '.optimize_result')
-    test "$RESULT" = "Distribution is already perfect" || return 1
+    test "$RESULT" = "Unable to find further optimizations" || return 1
 
     ceph balancer on || return 1
     ACTIVE=$(ceph balancer status | jq '.active')
@@ -104,7 +104,7 @@ function TEST_balancer() {
     ! ceph balancer optimize plan_upmap $TEST_POOL || return 1
     ceph balancer status || return 1
     eval RESULT=$(ceph balancer status | jq '.optimize_result')
-    test "$RESULT" = "Unable to find further optimization, or pool(s) pg_num is decreasing, or distribution is already perfect" || return 1
+    test "$RESULT" = "Unable to find further optimizations or pool(s) pg_num is decreasing" || return 1
 
     ceph balancer on || return 1
     ACTIVE=$(ceph balancer status | jq '.active')

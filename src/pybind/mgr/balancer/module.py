@@ -191,7 +191,7 @@ class Eval:
             dev = 0.0
 
             # score is a measure of how uneven the data distribution is.
-            # score lies between [0, 1), 0 means perfect distribution.
+            # score lies between [0, 1), 0 means no optimization is attempted.
             score = 0.0
             sum_weight = 0.0
 
@@ -1063,8 +1063,7 @@ class Module(MgrModule):
     def do_read_balancing(self, plan: Plan) -> Tuple[int, str]:
         self.log.info('do_read_balancing')
         osdmap_dump = plan.osdmap_dump
-        msg = 'Unable to find further optimization, ' \
-              'or distribution is already perfect'
+        msg = 'Unable to find further optimizations'
 
         if len(plan.pools):
             pools = plan.pools
@@ -1201,9 +1200,8 @@ class Module(MgrModule):
         self.log.info('prepared %d/%d upmap changes' % (total_did, max_optimizations))
         if total_did == 0:
             self.no_optimization_needed = True
-            return -errno.EALREADY, 'Unable to find further optimization, ' \
-                                    'or pool(s) pg_num is decreasing, ' \
-                                    'or distribution is already perfect'
+            return -errno.EALREADY, 'Unable to find further optimizations ' \
+                                    'or pool(s) pg_num is decreasing'
         return 0, ''
 
     def do_crush_compat(self, plan: MsPlan) -> Tuple[int, str]:
@@ -1224,7 +1222,7 @@ class Module(MgrModule):
         min_score_to_optimize = cast(float, self.get_module_option('min_score'))
         if pe.score <= min_score_to_optimize:
             if pe.score == 0:
-                detail = 'Distribution is already perfect'
+                detail = 'Unable to find further optimizations'
             else:
                 detail = 'score %f <= min_score %f, will not optimize' \
                          % (pe.score, min_score_to_optimize)
