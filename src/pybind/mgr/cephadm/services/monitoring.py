@@ -155,7 +155,7 @@ class GrafanaService(CephadmService):
             host_fqdn = socket.getfqdn(daemon_spec.host)
             node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
             cert, pkey = self.mgr.cert_mgr.generate_cert([host_fqdn, "grafana_servers"], node_ip)
-            #cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
+            # cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
             self.mgr.cert_key_store.save_cert('grafana_cert', cert, host=daemon_spec.host)
             self.mgr.cert_key_store.save_key('grafana_key', pkey, host=daemon_spec.host)
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
