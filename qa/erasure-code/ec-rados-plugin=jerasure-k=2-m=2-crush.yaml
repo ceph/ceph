@@ -1,13 +1,3 @@
-roles: 
-- [mon.a, mgr.y, osd.0]
-- [mon.b, osd.1] 
-- [mon.c, osd.2] 
-- [mgr.x, osd.3, client.0]
-overrides:
-  ceph:
-    conf:
-      osd:
-        osd shutdown pgref assert: true
 tasks:
 - rados:
     clients: [client.0]
