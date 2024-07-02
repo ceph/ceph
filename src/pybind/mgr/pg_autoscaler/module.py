@@ -231,7 +231,7 @@ class PgAutoscaler(MgrModule):
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
                     final,
-                    'off' if self.has_noautoscale_flag() else p['pg_autoscale_mode'],
+                    str(p['pg_autoscale_mode']),
                     str(p['bulk'])
                 ])
             return 0, table.get_string(), ''
@@ -669,6 +669,11 @@ class PgAutoscaler(MgrModule):
 
         ret, _, _ = self._get_pool_pg_targets(osdmap, even_pools, crush_map, root_map,
                                          pool_stats, ret, threshold, 'third', overlapped_roots)
+
+        # If noautoscale flag is set, we set pg_autoscale_mode to off
+        if self.has_noautoscale_flag():
+            for p in ret:
+                p['pg_autoscale_mode'] = 'off'
 
         return (ret, root_map)
 
