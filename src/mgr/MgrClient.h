@@ -153,12 +153,15 @@ public:
   int start_command(
     const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
     ceph::buffer::list *outbl, std::string *outs,
-    Context *onfinish);
+    Context *onfinish,
+    uint64_t *tid=nullptr);
   int start_tell_command(
     const std::string& name,
     const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
     ceph::buffer::list *outbl, std::string *outs,
-    Context *onfinish);
+    Context *onfinish,
+    uint64_t *tid=nullptr);
+  void discard_command(uint64_t tid);
 
   int update_daemon_metadata(
     const std::string& service,
