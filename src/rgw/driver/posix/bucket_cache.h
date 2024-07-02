@@ -29,6 +29,7 @@
 
 #include "fmt/format.h"
 
+#define dout_subsys ceph_subsys_rgw
 namespace file::listing {
 
 namespace bi = boost::intrusive;
@@ -281,7 +282,7 @@ public:
 
   typedef std::tuple<BucketCacheEntry<D, B>*, uint32_t> GetBucketResult;
 
-  GetBucketResult get_bucket(const std::string& name, uint32_t flags)
+  GetBucketResult get_bucket(const DoutPrefixProvider* dpp, const std::string& name, uint32_t flags)
     {
       /* this fn returns a bucket locked appropriately, having atomically
        * found or inserted the required BucketCacheEntry in_avl*/
@@ -309,10 +310,11 @@ public:
       } else {
 	/* BucketCacheEntry not in cache */
 	if (! (flags & BucketCache<D, B>::FLAG_CREATE)) {
-	  /* the caller does not want to instantiate a new cache
+          /* the caller does not want to instantiate a new cache
 	   * entry (i.e., only wants to notify on an existing one) */
-	  return result;
-	}
+        lat.lock->unlock();
+        return result;
+        }
 	/* we need to create it */
 	b = static_cast<BucketCacheEntry<D, B>*>(
 	  lru.insert(&fac, cohort::lru::Edge::MRU, iflags));
@@ -399,7 +401,7 @@ public:
 
     int rc __attribute__((unused)) = 0;
     GetBucketResult gbr =
-      get_bucket(sal_bucket->get_name(),
+      get_bucket(dpp, sal_bucket->get_name(),
 		 BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b /* XXX again, can this fail? */) {
@@ -450,6 +452,10 @@ public:
       } else {
 	/* position at start of index */
 	auto rc = cursor.get(key, data, MDB_FIRST);
+	if (rc == MDB_NOTFOUND) {
+	  /* no initial key */
+	  return 0;
+	}
 	if (rc == MDB_SUCCESS) {
 	  proc_result();
 	}
@@ -472,12 +478,12 @@ public:
     using namespace LMDBSafe;
 
     int rc{0};
-    GetBucketResult gbr = get_bucket(bname, BucketCache<D, B>::FLAG_LOCK);
+    GetBucketResult gbr = get_bucket(nullptr, bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b) {
       unique_lock ulk{b->mtx, std::adopt_lock};
       if ((b->name != bname) ||
-	  (b != opaque) ||
+	  (opaque && (b != opaque)) ||
 	  (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED))) {
 	/* do nothing */
 	return 0;
@@ -544,6 +550,78 @@ public:
     return rc;
   } /* notify */
   
+  int add_entry(const DoutPrefixProvider* dpp, std::string bname, rgw_bucket_dir_entry bde) {
+    using namespace LMDBSafe;
+
+    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
+    auto [b /* BucketCacheEntry */, flags] = gbr;
+    if (b) {
+      unique_lock ulk{b->mtx, std::adopt_lock};
+      ulk.unlock();
+
+      auto txn = b->env->getRWTransaction();
+      auto concat_k = concat_key(bde.key);
+      std::string ser_data;
+      zpp::bits::out out(ser_data);
+      struct timespec ts {
+        ceph::real_clock::to_timespec(bde.meta.mtime)
+      };
+      auto errc =
+          out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
+              bde.ver.pool, bde.ver.epoch, bde.exists, bde.meta.category,
+              bde.meta.size, ts.tv_sec, ts.tv_nsec, bde.meta.owner,
+              bde.meta.owner_display_name, bde.meta.accounted_size,
+              bde.meta.storage_class, bde.meta.appendable, bde.meta.etag);
+      if (errc.code != std::errc{0}) {
+        abort();
+      }
+      txn->put(b->dbi, concat_k, ser_data);
+
+      txn->commit();
+      lru.unref(b, cohort::lru::FLAG_NONE);
+    } /* b */
+
+    return 0;
+  } /* add_entry */
+
+  int remove_entry(const DoutPrefixProvider* dpp, std::string bname, cls_rgw_obj_key key) {
+    using namespace LMDBSafe;
+
+    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
+    auto [b /* BucketCacheEntry */, flags] = gbr;
+    if (b) {
+      unique_lock ulk{b->mtx, std::adopt_lock};
+      ulk.unlock();
+
+      auto txn = b->env->getRWTransaction();
+      auto concat_k = concat_key(key);
+      txn->del(b->dbi, concat_k);
+      txn->commit();
+
+      lru.unref(b, cohort::lru::FLAG_NONE);
+    } /* b */
+
+    return 0;
+  } /* remove_entry */
+
+  int invalidate_bucket(const DoutPrefixProvider* dpp, std::string bname) {
+    using namespace LMDBSafe;
+
+    GetBucketResult gbr = get_bucket(dpp, bname, BucketCache<D, B>::FLAG_LOCK);
+    auto [b /* BucketCacheEntry */, flags] = gbr;
+    if (b) {
+      unique_lock ulk{b->mtx, std::adopt_lock};
+
+      auto txn = b->env->getRWTransaction();
+      mdb_drop(*txn, b->dbi, 0);
+      txn->commit();
+      b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
+
+      ulk.unlock();
+    } /* b */
+
+    return 0;
+  } /* invalidate_bucket */
 }; /* BucketCache */
 
 } // namespace file::listing
