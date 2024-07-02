@@ -4420,6 +4420,7 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 20) << "storing " << RGW_ATTR_COMPRESSION
         << " with type=" << cs_info.compression_type
         << ", orig_size=" << cs_info.orig_size
+        << ", compressor_message=" << cs_info.compressor_message
         << ", blocks=" << cs_info.blocks.size() << dendl;
   }
   if (torrent) {

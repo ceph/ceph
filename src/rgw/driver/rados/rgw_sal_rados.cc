@@ -3319,9 +3319,13 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bool part_compressed = (obj_part.cs_info.compression_type != "none");
       if ((handled_parts > 0) &&
           ((part_compressed != compressed) ||
-            (cs_info.compression_type != obj_part.cs_info.compression_type))) {
-          ldpp_dout(dpp, 0) << "ERROR: compression type was changed during multipart upload ("
-                           << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << ")" << dendl;
+           (cs_info.compression_type != obj_part.cs_info.compression_type) ||
+           (cs_info.compressor_message.has_value() &&
+           (cs_info.compressor_message != obj_part.cs_info.compressor_message)))) {
+          ldpp_dout(dpp, 0) << "ERROR: compression type or compressor message was changed during multipart upload ("
+                            << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << "), "
+                            << cs_info.compressor_message << ">>" << obj_part.cs_info.compressor_message << ") "
+                            << dendl;
           ret = -ERR_INVALID_PART;
           return ret;
       }
@@ -3340,8 +3344,11 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
           cs_info.blocks.push_back(cb);
           new_ofs = cb.new_ofs + cb.len;
         }
-        if (!compressed)
+        if (!compressed) {
           cs_info.compression_type = obj_part.cs_info.compression_type;
+          if (obj_part.cs_info.compressor_message.has_value())
+            cs_info.compressor_message = obj_part.cs_info.compressor_message;
+        }
         cs_info.orig_size += obj_part.cs_info.orig_size;
         compressed = true;
       }
