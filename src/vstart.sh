@@ -192,7 +192,6 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
     debug echo "ceph-mgr dashboard not built - disabling."
     with_mgr_dashboard=false
 fi
-with_mgr_restful=false
 
 kstore_path=
 declare -a block_devs
@@ -205,7 +204,6 @@ VSTART_SEC="client.vstart.sh"
 
 MON_ADDR=""
 DASH_URLS=""
-RESTFUL_URLS=""
 
 conf_fn="$CEPH_CONF_PATH/ceph.conf"
 keyring_fn="$CEPH_CONF_PATH/keyring"
@@ -558,9 +556,6 @@ case $1 in
     --without-dashboard)
         with_mgr_dashboard=false
         ;;
-    --with-restful)
-        with_mgr_restful=true
-        ;;
     --seastore-device-size)
         seastore_size="$2"
         shift
@@ -781,9 +776,6 @@ prepare_conf() {
     local mgr_modules="iostat nfs"
     if $with_mgr_dashboard; then
         mgr_modules+=" dashboard"
-    fi
-    if $with_mgr_restful; then
-        mgr_modules+=" restful"
     fi
 
     local msgr_conf=''
@@ -1010,7 +1002,7 @@ EOF
         ; see src/vstart.sh for more info
         public bind addr =
 EOF
-    fi   
+    fi
 }
 
 write_logrotate_conf() {
@@ -1254,22 +1246,6 @@ EOF
     fi
 }
 
-create_mgr_restful_secret() {
-    while ! ceph_adm -h | grep -c -q ^restful ; do
-        debug echo 'waiting for mgr restful module to start'
-        sleep 1
-    done
-    local secret_file
-    if ceph_adm restful create-self-signed-cert > /dev/null; then
-        secret_file=`mktemp`
-        ceph_adm restful create-key admin -o $secret_file
-        RESTFUL_SECRET=`cat $secret_file`
-        rm $secret_file
-    else
-        debug echo MGR Restful is not working, perhaps the package is not installed?
-    fi
-}
-
 start_mgr() {
     local mgr=0
     local ssl=${DASHBOARD_SSL:-1}
@@ -1309,15 +1285,7 @@ EOF
 	    MGR_PORT=$(($MGR_PORT + 1000))
 	    ceph_adm config set mgr mgr/prometheus/$name/server_port $PROMETHEUS_PORT --force
 	    PROMETHEUS_PORT=$(($PROMETHEUS_PORT + 1000))
-
-	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT --force
-            if [ $mgr -eq 1 ]; then
-                RESTFUL_URLS="https://$IP:$MGR_PORT"
-            else
-                RESTFUL_URLS+=", https://$IP:$MGR_PORT"
-            fi
-	    MGR_PORT=$(($MGR_PORT + 1000))
-        fi
+       fi
 
         debug echo "Starting mgr.${name}"
         run 'mgr' $name $CEPH_BIN/ceph-mgr -i $name $ARGS
@@ -1327,7 +1295,7 @@ EOF
         debug echo 'waiting for mgr to become available'
         sleep 1
     done
-    
+
     if [ "$new" -eq 1 ]; then
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
@@ -1352,9 +1320,6 @@ EOF
                 echo "Adding nvmeof-gateway ${NVMEOF_GW} to dashboard"
                 ceph_adm dashboard nvmeof-gateway-add -i <(echo "${NVMEOF_GW}") "${NVMEOF_GW/:/_}"
             fi
-        fi
-        if $with_mgr_restful; then
-            create_mgr_restful_secret
         fi
     fi
 
@@ -2044,12 +2009,6 @@ if [ "$new" -eq 1 ]; then
         cat <<EOF
 dashboard urls: $DASH_URLS
   w/ user/pass: admin / admin
-EOF
-    fi
-    if $with_mgr_restful; then
-        cat <<EOF
-restful urls: $RESTFUL_URLS
-  w/ user/pass: admin / $RESTFUL_SECRET
 EOF
     fi
 fi

@@ -227,6 +227,13 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
   'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
   commands require '--yes-i-really-really-mean-it'.
+* mgr/restful, mgr/zabbix: both modules, already deprecated since 2020, have been
+  finally removed. They have not been actively maintenance in the last years,
+  and started suffering from vulnerabilities in their dependency chain (e.g.:
+  CVE-2023-46136).  As alternatives, for the `restful` module, the `dashboard` module
+  provides a richer and better maintained RESTful API. Regarding the `zabbix` module,
+  there are alternative monitoring solutions, like `prometheus`, which is the most
+  widely adopted among the Ceph user community.
 
 * Dashboard: Rearranged Navigation Layout: The navigation layout has been reorganized
   for improved usability and easier access to key features.
