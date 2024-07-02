@@ -113,7 +113,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         click: () => this.cloneModal()
       },
       {
-        name: this.actionLabels.DELETE,
+        name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
         disable: () => !this.selection.hasSingleSelection,
@@ -224,7 +224,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     const subVolumeGroupName = this.activeGroupName;
     const fsName = this.fsName;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      actionDescription: 'Delete',
+      actionDescription: this.actionLabels.REMOVE,
       itemNames: [snapshotName],
       itemDescription: 'Snapshot',
       submitAction: () =>
@@ -270,7 +270,8 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
               this.cephfsSubvolumeService,
               null,
               null,
-              this.fsName
+              this.fsName,
+              this.activeGroupName
             )
           ],
           required: true,
@@ -284,12 +285,23 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
           name: 'groupName',
           value: this.activeGroupName,
           label: $localize`Group name`,
+          valueChangeListener: true,
+          dependsOn: 'cloneName',
           typeConfig: {
             options: allGroups
           }
         }
       ],
       submitButtonText: $localize`Create Clone`,
+      updateAsyncValidators: (value: any) =>
+        CdValidators.unique(
+          this.cephfsSubvolumeService.exists,
+          this.cephfsSubvolumeService,
+          null,
+          null,
+          this.fsName,
+          value
+        ),
       onSubmit: (value: any) => {
         this.cephfsSubvolumeService
           .createSnapshotClone(
