@@ -197,7 +197,7 @@ void handle_connection(boost::asio::io_context& context,
                        RGWProcessEnv& env, Stream& stream,
                        timeout_timer& timeout, size_t header_limit,
                        parse_buffer& buffer, bool is_ssl,
-                       SharedMutex& pause_mutex,
+                       size_t discard_limit, SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
                        const std::string& uri_prefix,
                        boost::system::error_code& ec,
@@ -322,6 +322,14 @@ void handle_connection(boost::asio::io_context& context,
 
     // if we failed before reading the entire message, discard any remaining
     // bytes before reading the next
+    // Discard maximum discard_limit number of bytes. Otherwise just close the connection.
+    if (parser.content_length_remaining().value_or(0) > discard_limit) {
+        ldout(cct, 5) << "too much data left unread in the request; bytes_left="
+                      << parser.content_length_remaining().value()
+                      << "; closing connection"
+                      << dendl;
+        return;
+    }
     while (!expect_continue && !parser.is_done()) {
       static std::array<char, 1024*1024> discard_buffer;
 
@@ -407,6 +415,7 @@ class AsioFrontend {
   std::string uri_prefix;
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
   size_t header_limit = 16384;
+  size_t discard_limit = std::numeric_limits<size_t>::max();
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   boost::optional<ssl::context> ssl_context;
   int get_config_key_val(string name,
@@ -595,6 +604,18 @@ int AsioFrontend::init()
           << " capped at maximum value " << header_limit << dendl;
     } else {
       header_limit = *limit;
+    }
+  }
+
+  auto max_discard_bytes = config.find("request_max_discard_bytes");
+  if (max_discard_bytes != config.end()) {
+    auto discard_bytes = ceph::parse<size_t>(max_discard_bytes->second);
+    if (discard_bytes) {
+      discard_limit = *discard_bytes;
+    } else {
+      lderr(ctx()) << "WARNING: invalid value for request_max_discard_bytes: "
+      << max_discard_bytes->second << " setting it to the default value: "
+      << discard_limit << dendl;
     }
   }
 
@@ -1041,8 +1062,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         }
         conn->buffer.consume(bytes);
         handle_connection(context, env, stream, timeout, header_limit,
-                          conn->buffer, true, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          conn->buffer, true, discard_limit, pause_mutex,
+                          scheduler.get(), uri_prefix, ec, yield);
 
         if (!ec || ec == http::error::end_of_stream) {
           // ssl shutdown (ignoring errors)
@@ -1064,8 +1085,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
-                          conn->buffer, false, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          conn->buffer, false, discard_limit, pause_mutex,
+                          scheduler.get(), uri_prefix, ec, yield);
         conn->socket.shutdown(tcp::socket::shutdown_both, ec);
       }, [] (std::exception_ptr eptr) {
         if (eptr) std::rethrow_exception(eptr);
