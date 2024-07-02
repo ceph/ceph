@@ -3031,7 +3031,9 @@ void PeeringState::proc_primary_info(
   ceph_assert(!is_primary());
 
   update_history(oinfo.history);
-  if (!info.stats.stats_invalid && info.stats.stats.sum.num_scrub_errors) {
+  bool has_scrub_error = (!info.stats.stats_invalid && info.stats.stats.sum.num_scrub_errors);
+  info.stats.stats.sum = oinfo.stats.stats.sum;
+  if (has_scrub_error) {
     info.stats.stats.sum.num_scrub_errors = 0;
     info.stats.stats.sum.num_shallow_scrub_errors = 0;
     info.stats.stats.sum.num_deep_scrub_errors = 0;
