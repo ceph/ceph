@@ -1873,9 +1873,9 @@ int mirror_mode_set(librados::IoCtx *ioctx,
   bufferlist in_bl;
   encode(static_cast<uint32_t>(mirror_mode), in_bl);
 
-  bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_mode_set", in_bl,
-                      out_bl);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "mirror_mode_set", in_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
   }
@@ -1968,9 +1968,9 @@ int mirror_peer_remove(librados::IoCtx *ioctx,
   bufferlist in_bl;
   encode(uuid, in_bl);
 
-  bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_remove", in_bl,
-                      out_bl);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "mirror_peer_remove", in_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
   }
@@ -1984,9 +1984,9 @@ int mirror_peer_set_client(librados::IoCtx *ioctx,
   encode(uuid, in_bl);
   encode(client_name, in_bl);
 
-  bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_client",
-                      in_bl, out_bl);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "mirror_peer_set_client", in_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
   }
@@ -2000,9 +2000,9 @@ int mirror_peer_set_cluster(librados::IoCtx *ioctx,
   encode(uuid, in_bl);
   encode(cluster_name, in_bl);
 
-  bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_cluster",
-                      in_bl, out_bl);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "mirror_peer_set_cluster", in_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
   }
@@ -2016,9 +2016,9 @@ int mirror_peer_set_direction(
   encode(uuid, in_bl);
   encode(static_cast<uint8_t>(mirror_peer_direction), in_bl);
 
-  bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_direction",
-                      in_bl, out_bl);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "mirror_peer_set_direction", in_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
   }
@@ -2596,39 +2596,47 @@ int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
 int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
                   const std::string &name, const std::string &id)
 {
-  bufferlist in, out;
+  bufferlist in;
   encode(name, in);
   encode(id, in);
-  return ioctx->exec(oid, "rbd", "group_dir_add", in, out);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "group_dir_add", in);
+  return ioctx->operate(oid, &op);
 }
 
 int group_dir_rename(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &src, const std::string &dest,
                      const std::string &id)
 {
-  bufferlist in, out;
+  bufferlist in;
   encode(src, in);
   encode(dest, in);
   encode(id, in);
-  return ioctx->exec(oid, "rbd", "group_dir_rename", in, out);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "group_dir_rename", in);
+  return ioctx->operate(oid, &op);
 }
 
 int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &name, const std::string &id)
 {
-  bufferlist in, out;
+  bufferlist in;
   encode(name, in);
   encode(id, in);
-  return ioctx->exec(oid, "rbd", "group_dir_remove", in, out);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "group_dir_remove", in);
+  return ioctx->operate(oid, &op);
 }
 
 int group_image_remove(librados::IoCtx *ioctx, const std::string &oid,
                        const cls::rbd::GroupImageSpec &spec)
 {
-  bufferlist bl, bl2;
+  bufferlist bl;
   encode(spec, bl);
 
-  return ioctx->exec(oid, "rbd", "group_image_remove", bl, bl2);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "group_image_remove", bl);
+  return ioctx->operate(oid, &op);
 }
 
 int group_image_list(librados::IoCtx *ioctx,
@@ -2658,28 +2666,34 @@ int group_image_list(librados::IoCtx *ioctx,
 int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupImageStatus &st)
 {
-  bufferlist bl, bl2;
+  bufferlist bl;
   encode(st, bl);
 
-  return ioctx->exec(oid, "rbd", "group_image_set", bl, bl2);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "group_image_set", bl);
+  return ioctx->operate(oid, &op);
 }
 
 int image_group_add(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupSpec &group_spec)
 {
-  bufferlist bl, bl2;
+  bufferlist bl;
   encode(group_spec, bl);
 
-  return ioctx->exec(oid, "rbd", "image_group_add", bl, bl2);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "image_group_add", bl);
+  return ioctx->operate(oid, &op);
 }
 
 int image_group_remove(librados::IoCtx *ioctx, const std::string &oid,
                        const cls::rbd::GroupSpec &group_spec)
 {
-  bufferlist bl, bl2;
+  bufferlist bl;
   encode(group_spec, bl);
 
-  return ioctx->exec(oid, "rbd", "image_group_remove", bl, bl2);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "image_group_remove", bl);
+  return ioctx->operate(oid, &op);
 }
 
 void image_group_get_start(librados::ObjectReadOperation *op)
@@ -2719,9 +2733,11 @@ int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
                    const cls::rbd::GroupSnapshot &snapshot)
 {
   using ceph::encode;
-  bufferlist inbl, outbl;
+  bufferlist inbl;
   encode(snapshot, inbl);
-  int r = ioctx->exec(oid, "rbd", "group_snap_set", inbl, outbl);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "group_snap_set", inbl);
+  int r = ioctx->operate(oid, &op);
   return r;
 }
 
@@ -2729,9 +2745,11 @@ int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
                       const std::string &snap_id)
 {
   using ceph::encode;
-  bufferlist inbl, outbl;
+  bufferlist inbl;
   encode(snap_id, inbl);
-  return ioctx->exec(oid, "rbd", "group_snap_remove", inbl, outbl);
+  librados::ObjectWriteOperation op;
+  op.exec("rbd", "group_snap_remove", inbl);
+  return ioctx->operate(oid, &op);
 }
 
 int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,

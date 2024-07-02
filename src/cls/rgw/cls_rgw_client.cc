@@ -449,7 +449,9 @@ int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_e
   rgw_cls_bi_put_op call;
   call.entry = entry;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_PUT, in, out);
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_BI_PUT, in);
+  int r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
 
@@ -965,8 +967,9 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, const string& oid, cls_rgw_lc_obj_head& h
   cls_rgw_lc_put_head_op call;
   call.head = head;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_PUT_HEAD, in, out);
-  return r;
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_LC_PUT_HEAD, in);
+  return io_ctx.operate(oid, &op);
 }
 
 int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, const string& oid, const string& marker,
@@ -999,8 +1002,9 @@ int cls_rgw_lc_rm_entry(IoCtx& io_ctx, const string& oid,
   cls_rgw_lc_rm_entry_op call;
   call.entry = entry;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_RM_ENTRY, in, out);
- return r;
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_LC_RM_ENTRY, in);
+  return io_ctx.operate(oid, &op);
 }
 
 int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid,
@@ -1010,8 +1014,9 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid,
   cls_rgw_lc_set_entry_op call;
   call.entry = entry;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_SET_ENTRY, in, out);
-  return r;
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_LC_SET_ENTRY, in);
+  return io_ctx.operate(oid, &op);
 }
 
 int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid,
@@ -1165,7 +1170,9 @@ int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   cls_rgw_set_bucket_resharding_op call;
   call.entry = entry;
   encode(call, in);
-  return io_ctx.exec(oid, RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in, out);
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING, in);
+  return io_ctx.operate(oid, &op);
 }
 
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
@@ -1173,7 +1180,9 @@ int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid)
   bufferlist in, out;
   cls_rgw_clear_bucket_resharding_op call;
   encode(call, in);
-  return io_ctx.exec(oid, RGW_CLASS, RGW_CLEAR_BUCKET_RESHARDING, in, out);
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_CLEAR_BUCKET_RESHARDING, in);
+  return io_ctx.operate(oid, &op);
 }
 
 int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
