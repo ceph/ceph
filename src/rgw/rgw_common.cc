@@ -1118,26 +1118,35 @@ struct perm_state_from_req_state : public perm_state_base {
 };
 
 Effect eval_or_pass(const DoutPrefixProvider* dpp,
-		    const boost::optional<Policy>& policy,
-		    const rgw::IAM::Environment& env,
-		    boost::optional<const rgw::auth::Identity&> id,
-		    const uint64_t op,
-		    const ARN& resource,
-				boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
+                    const boost::optional<Policy>& policy,
+                    const rgw::IAM::Environment& env,
+                    boost::optional<const rgw::auth::Identity&> id,
+                    const uint64_t op,
+                    const ARN& resource,
+                    const rgw_owner& bucket_owner,
+                    bool restrict_public_buckets,
+                    boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
   if (!policy)
     return Effect::Pass;
-  else
-    return policy->eval(env, id, op, resource, princ_type);
+
+  // If RestrictPublicBuckets is enabled and the policy allows public access, deny the request if the requester is not in the bucket owner account
+  if (restrict_public_buckets && rgw::IAM::is_public(*policy) && !id->is_owner_of(bucket_owner)) {
+    return Effect::Deny;
+  }
+
+  return policy->eval(env, id, op, resource, princ_type);
 }
 
 Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
-			  const vector<Policy>& policies,
+                          const vector<Policy>& policies,
                           const rgw::IAM::Environment& env,
                           const uint64_t op,
-                          const ARN& arn) {
+                          const ARN& arn,
+                          const rgw_owner& bucket_owner,
+                          bool restrict_public_buckets) {
   auto policy_res = Effect::Pass, prev_res = Effect::Pass;
   for (auto& policy : policies) {
-    if (policy_res = eval_or_pass(dpp, policy, env, boost::none, op, arn);
+    if (policy_res = eval_or_pass(dpp, policy, env, boost::none, op, arn, bucket_owner, restrict_public_buckets);
         policy_res == Effect::Deny) {
       ldpp_dout(dpp, 10) << __func__ << " Deny from " << policy << dendl;
       return policy_res;
@@ -1161,9 +1170,11 @@ Effect evaluate_iam_policies(
     bool account_root, uint64_t op, const rgw::ARN& arn,
     const boost::optional<Policy>& resource_policy,
     const vector<Policy>& identity_policies,
-    const vector<Policy>& session_policies)
+    const vector<Policy>& session_policies,
+    const rgw_owner& bucket_owner,
+    bool restrict_public_buckets)
 {
-  auto identity_res = eval_identity_or_session_policies(dpp, identity_policies, env, op, arn);
+  auto identity_res = eval_identity_or_session_policies(dpp, identity_policies, env, op, arn, bucket_owner, restrict_public_buckets);
   if (identity_res == Effect::Deny) {
     ldpp_dout(dpp, 10) << __func__ << ": explicit deny from identity-based policy" << dendl;
     return Effect::Deny;
@@ -1171,7 +1182,7 @@ Effect evaluate_iam_policies(
 
   PolicyPrincipal princ_type = PolicyPrincipal::Other;
   auto resource_res = eval_or_pass(dpp, resource_policy, env, identity,
-                                   op, arn, princ_type);
+                                   op, arn, bucket_owner, restrict_public_buckets, princ_type);
   if (resource_res == Effect::Deny) {
     ldpp_dout(dpp, 10) << __func__ << ": explicit deny from resource-based policy" << dendl;
     return Effect::Deny;
@@ -1179,7 +1190,7 @@ Effect evaluate_iam_policies(
 
   //Take into account session policies, if the identity making a request is a role
   if (!session_policies.empty()) {
-    auto session_res = eval_identity_or_session_policies(dpp, session_policies, env, op, arn);
+    auto session_res = eval_identity_or_session_policies(dpp, session_policies, env, op, arn, bucket_owner, restrict_public_buckets);
     if (session_res == Effect::Deny) {
       ldpp_dout(dpp, 10) << __func__ << ": explicit deny from session policy" << dendl;
       return Effect::Deny;
@@ -1244,9 +1255,11 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             bool mandatory_policy)
 {
   const bool account_root = (s->identity->get_identity_type() == TYPE_ROOT);
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
   const auto effect = evaluate_iam_policies(dpp, s->env, *s->identity,
                                             account_root, op, res, {},
-                                            user_policies, session_policies);
+                                            user_policies, session_policies,
+                                            s->bucket_info.owner, restrict_public_buckets);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1313,7 +1326,7 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 
   if (s->identity->is_owner_of(s->bucket_info.owner))
     return true;
-  
+
   if (s->identity->is_anonymous()) {
     return false;
   }
@@ -1332,7 +1345,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               bool account_root,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
-			      const boost::optional<Policy>& bucket_policy,
+                              const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
                               const uint64_t op)
@@ -1344,9 +1357,11 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 16) << __func__ << ": policy: " << bucket_policy.get()
 		       << " resource: " << arn << dendl;
   }
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, arn,
-      bucket_policy, identity_policies, session_policies);
+      bucket_policy, identity_policies, session_policies,
+      s->bucket_info.owner, restrict_public_buckets);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1475,7 +1490,7 @@ static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
 }
 
 bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
-			      const rgw_obj& obj, bool account_root,
+                              const rgw_obj& obj, bool account_root,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
                               const RGWAccessControlPolicy& object_acl,
@@ -1487,9 +1502,11 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   if (!verify_requester_payer_permission(s))
     return false;
 
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, ARN(obj),
-      bucket_policy, identity_policies, session_policies);
+      bucket_policy, identity_policies, session_policies,
+      s->bucket_info.owner, restrict_public_buckets);
   if (effect == Effect::Deny) {
     return false;
   }

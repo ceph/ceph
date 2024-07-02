@@ -1776,7 +1776,9 @@ rgw::IAM::Effect evaluate_iam_policies(
     bool account_root, uint64_t op, const rgw::ARN& arn,
     const boost::optional<rgw::IAM::Policy>& resource_policy,
     const std::vector<rgw::IAM::Policy>& identity_policies,
-    const std::vector<rgw::IAM::Policy>& session_policies);
+    const std::vector<rgw::IAM::Policy>& session_policies,
+    const rgw_owner& bucket_owner,
+    bool restrict_public_buckets);
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             req_state * const s,
