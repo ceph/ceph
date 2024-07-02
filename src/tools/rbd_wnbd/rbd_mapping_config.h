@@ -30,6 +30,8 @@
 struct Config {
   bool exclusive = false;
   bool readonly = false;
+  // Enable persistent reservations;
+  bool enable_pr = false;
 
   std::string cluster_name;
   std::string entity_name;
