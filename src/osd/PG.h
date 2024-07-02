@@ -269,7 +269,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change();
+    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
   }
 
   static void set_last_deep_scrub_stamp(
@@ -285,7 +285,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change();
+    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
   }
 
   static void add_objects_scrubbed_count(
@@ -531,7 +531,7 @@ public:
    * - pg stat scrub timestamps
    * - etc
    */
-  void on_scrub_schedule_input_change();
+  void on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready);
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -701,7 +701,8 @@ public:
   bool get_must_scrub() const;
 
   Scrub::schedule_result_t start_scrubbing(
-      Scrub::OSDRestrictions osd_restrictions);
+    std::unique_ptr<Scrub::ScrubJob> candidate,
+    Scrub::OSDRestrictions osd_restrictions);
 
   unsigned int scrub_requeue_priority(
       Scrub::scrub_prio_t with_priority,
