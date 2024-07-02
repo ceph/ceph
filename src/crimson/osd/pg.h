@@ -165,6 +165,19 @@ public:
     return std::size(snap_trimq);
   }
 
+  seastar::future<> complete_rctx(PeeringCtx &&rctx) {
+    return seastar::when_all_succeed(
+      get_need_up_thru()
+      ? shard_services.send_alive(
+	get_same_interval_since())
+      : seastar::now(),
+      shard_services.dispatch_context(
+	get_collection_ref(),
+	std::move(rctx)),
+      shard_services.send_pg_temp()
+    ).then([](auto){});
+  }
+
   void send_cluster_message(
     int osd, MessageURef m,
     epoch_t epoch, bool share_map_update=false) final {

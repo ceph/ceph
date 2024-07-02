@@ -105,17 +105,7 @@ seastar::future<> PGAdvanceMap::start()
 	  shard_services.pg_created(pg->get_pgid(), pg);
 	  logger().info("PGAdvanceMap::start new pg {}", *pg);
 	}
-	return seastar::when_all_succeed(
-	  pg->get_need_up_thru()
-	  ? shard_services.send_alive(
-	    pg->get_same_interval_since())
-	  : seastar::now(),
-	  shard_services.dispatch_context(
-	    pg->get_collection_ref(),
-	    std::move(rctx)));
-      }).then_unpack([this] {
-	logger().debug("{}: sending pg temp", *this);
-	return shard_services.send_pg_temp();
+	return pg->complete_rctx(std::move(rctx));
       });
   }).then([this] {
     logger().debug("{}: complete", *this);
