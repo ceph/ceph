@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(exporter_srcs
   ceph_exporter.cc
   DaemonMetricCollector.cc

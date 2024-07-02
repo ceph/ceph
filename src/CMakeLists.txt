@@ -1,5 +1,6 @@
 include(GetGitRevisionDescription)
 include(CheckCXXCompilerFlag)
+include(AddCephOptions)
 
 # for erasure and compressor plugins
 set(CEPH_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
@@ -629,6 +630,7 @@ target_link_libraries(rados_snap_set_diff_obj
 
 option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
+add_ceph_options()
 add_subdirectory(include)
 add_subdirectory(librados)
 add_subdirectory(neorados)

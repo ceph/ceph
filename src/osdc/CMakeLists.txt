@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(osdc_files
   Filer.cc
   ObjectCacher.cc

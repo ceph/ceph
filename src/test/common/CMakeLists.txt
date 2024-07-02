@@ -1,3 +1,5 @@
+add_ceph_options()
+
 if(NOT WIN32)
 # get_command_descriptions
 # libmon not currently available on Windows.

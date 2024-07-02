@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # ceph_test_object_map
 add_executable(ceph_test_object_map
   test_object_map.cc

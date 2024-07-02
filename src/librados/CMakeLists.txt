@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_library(librados_impl STATIC
   IoCtxImpl.cc
   RadosXattrIter.cc

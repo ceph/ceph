@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(auth_srcs
   AuthClientHandler.cc
   AuthMethodList.cc

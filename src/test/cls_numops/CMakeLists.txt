@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # ceph_test_cls_numops
 add_executable(ceph_test_cls_numops 
   test_cls_numops.cc)

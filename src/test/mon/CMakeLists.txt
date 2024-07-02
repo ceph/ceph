@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # ceph_test_mon_workloadgen
 add_executable(ceph_test_mon_workloadgen
   test_mon_workloadgen.cc

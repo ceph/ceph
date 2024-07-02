@@ -181,6 +181,8 @@ if(WITH_EVENTTRACE)
   list(APPEND common_srcs EventTrace.cc)
 endif()
 
+add_ceph_options()
+
 add_library(common-common-objs OBJECT
   ${common_srcs})
 # Let's not rely on the default system headers and point Cmake to the

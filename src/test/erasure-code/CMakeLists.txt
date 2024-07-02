@@ -1,3 +1,4 @@
+add_ceph_options()
 
 add_executable(ceph_erasure_code_benchmark 
   ${CMAKE_SOURCE_DIR}/src/erasure-code/ErasureCode.cc

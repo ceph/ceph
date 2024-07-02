@@ -1,4 +1,5 @@
 ## System tests
+add_ceph_options()
 
 set(libsystest_srcs 
   cross_process_sem.cc
