@@ -7259,14 +7259,13 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
     ASSERT_EQ(r, (int)block_size);
     expected.append(string(block_size, 'b'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
   }
@@ -7284,14 +7283,13 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
     ASSERT_EQ(r, (int)block_size);
     expected.append(string(block_size, 'b'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
   }
@@ -7307,11 +7305,6 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     ASSERT_EQ(r, 0);
   }
   {
-    // we need to wait some time for mempool
-    // thread to update stats to be able to check blob/extent numbers from
-    // perf counters.
-    sleep(1);
-
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
     ASSERT_EQ(r, (int)block_size);
@@ -7354,6 +7347,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     expected.append(string(block_size * 2, 'e'));
     ASSERT_TRUE(bl_eq(expected, bl));
   }
+  store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
   ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
 
@@ -7728,7 +7722,7 @@ TEST_P(StoreTestSpecificAUSize, ZeroBlockDetectionBigOverwrite) {
   }
 }
 
-TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite1) {
 
   if (string(GetParam()) != "bluestore")
     return;
@@ -7845,7 +7839,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     bufferlist bl;
 
     bl.append(std::string(block_size, 'e'));
-    t.write(cid, hoid2, block_size , bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    t.write(cid, hoid2, block_size, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -7902,17 +7896,50 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 5);
     ASSERT_LE(statfs.allocated, (unsigned)block_size * 5);
   }
+  store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
   ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
-
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
 
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: no deferred" << std::endl;
+    return;
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "131072");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+  ghobject_t hoid2(hobject_t("test2", "", CEPH_NOSNAP, 0, -1, ""));
+
+  PerfCounters* logger = const_cast<PerfCounters*>(store->get_perf_counters());
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
   {
     ObjectStore::Transaction t;
     bufferlist bl;
@@ -7922,8 +7949,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 6u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 3u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
 
   {
     ObjectStore::Transaction t;
@@ -7945,7 +7972,6 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     expected.append(string(block_size * 2 - 100, 'f'));
     ASSERT_TRUE(bl_eq(expected, bl));
   }
-  sleep(2);
   {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
@@ -7953,6 +7979,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2 - 100);
     ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
   }
+  store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
   ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
 
@@ -7965,8 +7992,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 7u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 2u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
   {
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
@@ -7989,6 +8016,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     ASSERT_EQ(statfs.data_stored, (unsigned)block_size * 2);
     ASSERT_LE(statfs.allocated, (unsigned)block_size * 2);
   }
+  store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
   ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
 
@@ -8002,8 +8030,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 8u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 3u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
 
   {
     bufferlist bl, expected;
@@ -8025,10 +8053,43 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+}
 
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: no deferred" << std::endl;
+    return;
+  }
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  SetVal(g_conf(), "bluestore_max_blob_size", "131072");
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", "65536");
+
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+  ghobject_t hoid2(hobject_t("test2", "", CEPH_NOSNAP, 0, -1, ""));
+
+  PerfCounters* logger = const_cast<PerfCounters*>(store->get_perf_counters());
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
   {
     ObjectStore::Transaction t;
     bufferlist bl;
@@ -8040,8 +8101,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 10u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 2u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 0u);
 
   // check whether overwrite (less than prefer_deferred_size) partially overlapping two adjacent blobs goes
   // deferred
@@ -8054,8 +8115,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 11u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 6u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 3u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 2u);
 
   {
     bufferlist bl, expected;
@@ -8097,9 +8158,8 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  sleep(2);
-  ASSERT_EQ(logger->get(l_bluestore_write_big), 12u);
-  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 8u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big), 4u);
+  ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 4u);
 
   {
     bufferlist bl, expected;
@@ -8142,7 +8202,6 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  sleep(2);
   ASSERT_EQ(logger->get(l_bluestore_write_big), 1u);
   ASSERT_EQ(logger->get(l_bluestore_write_big_deferred), 1u);
   ASSERT_EQ(logger->get(l_bluestore_issued_deferred_writes), 1u);
@@ -8167,7 +8226,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite) {
   }
 }
 
-TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite4) {
 
   if (string(GetParam()) != "bluestore")
     return;
@@ -8243,7 +8302,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite2) {
   }
 }
 
-TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite3) {
+TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite5) {
 
   if (string(GetParam()) != "bluestore")
     return;
@@ -8472,15 +8531,14 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 9, block_size * 2, bl);
     ASSERT_EQ(r, (int)block_size * 2);
     expected.append(string(block_size, 'b'));
     expected.append(string(block_size, 'a'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
   }
@@ -8499,9 +8557,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 7, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8509,6 +8565,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 0));
     expected.append(string(block_size, 'b'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
   }
@@ -8526,9 +8583,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 11, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8536,6 +8591,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 0));
     expected.append(string(block_size, 'd'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 3u);
   }
@@ -8555,9 +8611,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 17, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8565,6 +8619,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 0));
     expected.append(string(block_size, 'e'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 5u);
   }
@@ -8583,9 +8638,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 16, block_size * 4, bl);
     ASSERT_EQ(r, (int)block_size * 4);
@@ -8594,6 +8647,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 'f'));
     expected.append(string(block_size, 'e'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 4u);
   }
@@ -8658,9 +8712,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8671,6 +8723,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     expected.append(string(block_size, 'a'));
     ASSERT_TRUE(bl_eq(expected, bl));
 
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 3u);
   }
