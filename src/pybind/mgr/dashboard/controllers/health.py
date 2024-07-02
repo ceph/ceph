@@ -300,3 +300,7 @@ class Health(BaseController):
     @Endpoint()
     def get_cluster_fsid(self):
         return mgr.get('config')['fsid']
+
+    @Endpoint()
+    def get_telemetry_status(self):
+        return mgr.get_module_option_ex('telemetry', 'enabled', False)
