@@ -1,8 +1,6 @@
 
-from typing import Any, Tuple, IO
+from typing import Any, Tuple, IO, List
 import ipaddress
-import tempfile
-import logging
 
 from datetime import datetime, timedelta
 from cryptography import x509
@@ -10,7 +8,6 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
-from mgr_util import verify_tls_files
 
 from orchestrator import OrchestratorError
 
@@ -67,7 +64,7 @@ class SSLCerts:
 
         return (cert_str, key_str)
 
-    def generate_cert(self, host: str, addr: str) -> Tuple[str, str]:
+    def generate_cert(self, hosts: Any, addr: str) -> Tuple[str, str]:
         have_ip = True
         try:
             ip = x509.IPAddress(ipaddress.ip_address(addr))
@@ -86,20 +83,19 @@ class SSLCerts:
         builder = builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(public_key)
+
+        if isinstance(hosts, str):
+            hosts = [hosts]
+        san_list: List[x509.GeneralName] = [x509.DNSName(host) for host in hosts]
         if have_ip:
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName(
-                    [ip, x509.DNSName(host)]
-                ),
-                critical=False
-            )
-        else:
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName(
-                    [x509.DNSName(host)]
-                ),
-                critical=False
-            )
+            san_list.append(ip)
+
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName(
+                san_list
+            ),
+            critical=False
+        )
         builder = builder.add_extension(x509.BasicConstraints(
             ca=False, path_length=None), critical=True,)
 
@@ -112,20 +108,6 @@ class SSLCerts:
                                             ).decode('utf-8')
 
         return (cert_str, key_str)
-
-    def generate_cert_files(self, host: str, addr: str) -> Tuple[str, str]:
-        cert, key = self.generate_cert(host, addr)
-
-        self.cert_file = tempfile.NamedTemporaryFile()
-        self.cert_file.write(cert.encode('utf-8'))
-        self.cert_file.flush()  # cert_tmp must not be gc'ed
-
-        self.key_file = tempfile.NamedTemporaryFile()
-        self.key_file.write(key.encode('utf-8'))
-        self.key_file.flush()  # pkey_tmp must not be gc'ed
-
-        verify_tls_files(self.cert_file.name, self.key_file.name)
-        return self.cert_file.name, self.key_file.name
 
     def get_root_cert(self) -> str:
         try:

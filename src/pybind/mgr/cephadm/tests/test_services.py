@@ -619,8 +619,6 @@ class TestMonitoring:
             cephadm_module.secure_monitoring_stack = True
             cephadm_module.set_store(AlertmanagerService.USER_CFG_KEY, 'alertmanager_user')
             cephadm_module.set_store(AlertmanagerService.PASS_CFG_KEY, 'alertmanager_plain_password')
-            cephadm_module.http_server.service_discovery.ssl_certs.generate_cert = MagicMock(side_effect=gen_cert)
-            cephadm_module.http_server.service_discovery.ssl_certs.get_root_cert = MagicMock(side_effect=get_root_cert)
             with with_service(cephadm_module, AlertManagerSpec()):
 
                 y = dedent(f"""
@@ -695,9 +693,6 @@ class TestMonitoring:
                     }),
                     use_current_daemon_image=False,
                 )
-
-                assert cephadm_module.cert_key_store.get_cert('alertmanager_cert', host='test') == 'mycert'
-                assert cephadm_module.cert_key_store.get_key('alertmanager_key', host='test') == 'mykey'
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
@@ -856,8 +851,6 @@ class TestMonitoring:
             cephadm_module.set_store(AlertmanagerService.PASS_CFG_KEY, 'alertmanager_plain_password')
             cephadm_module.http_server.service_discovery.username = 'sd_user'
             cephadm_module.http_server.service_discovery.password = 'sd_password'
-            cephadm_module.http_server.service_discovery.ssl_certs.generate_cert = MagicMock(
-                side_effect=gen_cert)
             # host "test" needs to have networks for keepalive to be placed
             cephadm_module.cache.update_host_networks('test', {
                 '1.2.3.0/24': {

@@ -378,11 +378,6 @@ def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
     assert cephadm_module.cert_key_store.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
     assert cephadm_module.cert_key_store.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')
 
-    assert cephadm_module.cert_key_store.get_cert('agent_endpoint_root_cert')
-    assert cephadm_module.cert_key_store.get_key('agent_endpoint_key')
-    assert cephadm_module.cert_key_store.get_cert('service_discovery_root_cert')
-    assert cephadm_module.cert_key_store.get_key('service_discovery_key')
-
     assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host1')
     assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host2')
     assert cephadm_module.cert_key_store.get_key('grafana_key', host='host1')

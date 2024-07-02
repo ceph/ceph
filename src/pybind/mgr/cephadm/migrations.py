@@ -421,32 +421,6 @@ class Migrations:
                 logger.info(f'Migrating certs/keys for {spec.service_name()} spec to cert store')
                 self.mgr.spec_store._save_certs_and_keys(spec)
 
-        # Migrate service discovery and agent endpoint certs
-        # These constants were taken from where these certs were
-        # originally generated and should be the location they
-        # were store at prior to the cert store
-        KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
-        KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
-        KV_STORE_SD_ROOT_CERT = 'service_discovery/root/cert'
-        KV_STORE_SD_ROOT_KEY = 'service_discovery/root/key'
-
-        agent_endpoint_cert = self.mgr.get_store(KV_STORE_AGENT_ROOT_CERT)
-        if agent_endpoint_cert:
-            logger.info('Migrating agent root cert to cert store')
-            self.mgr.cert_key_store.save_cert('agent_endpoint_root_cert', agent_endpoint_cert)
-        agent_endpoint_key = self.mgr.get_store(KV_STORE_AGENT_ROOT_KEY)
-        if agent_endpoint_key:
-            logger.info('Migrating agent root key to cert store')
-            self.mgr.cert_key_store.save_key('agent_endpoint_key', agent_endpoint_key)
-        service_discovery_cert = self.mgr.get_store(KV_STORE_SD_ROOT_CERT)
-        if service_discovery_cert:
-            logger.info('Migrating service discovery cert to cert store')
-            self.mgr.cert_key_store.save_cert('service_discovery_root_cert', service_discovery_cert)
-        service_discovery_key = self.mgr.get_store(KV_STORE_SD_ROOT_KEY)
-        if service_discovery_key:
-            logger.info('Migrating service discovery key to cert store')
-            self.mgr.cert_key_store.save_key('service_discovery_key', service_discovery_key)
-
         # grafana certs are stored based on the host they are placed on
         for grafana_daemon in self.mgr.cache.get_daemons_by_type('grafana'):
             logger.info(f'Checking for cert/key for {grafana_daemon.name()}')
