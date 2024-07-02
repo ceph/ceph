@@ -359,13 +359,23 @@ public:
     return get_sm()->states[state].can_wrlock == ANY ||
       (get_sm()->states[state].can_wrlock == AUTH && parent->is_auth()) ||
       (get_sm()->states[state].can_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
-								    get_excl_client() == client));
+                                                                    (get_excl_client() == client &&
+                                                                     !(parent->is_dir() &&
+                                                                       (type->type == CEPH_LOCK_IFILE ||
+                                                                        type->type == CEPH_LOCK_IAUTH ||
+                                                                        type->type == CEPH_LOCK_ILINK ||
+                                                                        type->type == CEPH_LOCK_IXATTR)))));
   }
   bool can_force_wrlock(client_t client) const {
     return get_sm()->states[state].can_force_wrlock == ANY ||
       (get_sm()->states[state].can_force_wrlock == AUTH && parent->is_auth()) ||
       (get_sm()->states[state].can_force_wrlock == XCL && client >= 0 && (get_xlock_by_client() == client ||
-									  get_excl_client() == client));
+                                                                          (get_excl_client() == client &&
+                                                                           !(parent->is_dir() &&
+                                                                             (type->type == CEPH_LOCK_IFILE ||
+                                                                              type->type == CEPH_LOCK_IAUTH ||
+                                                                              type->type == CEPH_LOCK_ILINK ||
+                                                                              type->type == CEPH_LOCK_IXATTR)))));
   }
   bool can_xlock(client_t client) const {
     return get_sm()->states[state].can_xlock == ANY ||
