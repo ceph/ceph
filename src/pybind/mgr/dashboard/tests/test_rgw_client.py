@@ -6,8 +6,8 @@ from unittest.mock import Mock, patch
 
 from .. import mgr
 from ..exceptions import DashboardException
-from ..services.rgw_client import NoCredentialsException, \
-    NoRgwDaemonsException, RgwClient, _parse_frontend_config
+from ..services.rgw_client import NoRgwDaemonsException, RgwClient, _parse_frontend_config
+from ..services.service import NoCredentialsException
 from ..settings import Settings
 from ..tests import CLICommandTestMixin, RgwStub
 
