@@ -6,6 +6,7 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
@@ -15,6 +16,8 @@ struct Context;
 
 namespace librbd {
 
+struct ImageCtx;
+
 namespace io {
 struct AioCompletion;
 struct ReadResult;
@@ -22,13 +25,13 @@ struct ReadResult;
 
 namespace migration {
 
+template <typename ImageCtxT = ImageCtx>
 struct FormatInterface {
-  typedef std::map<uint64_t, SnapInfo> SnapInfos;
-
   virtual ~FormatInterface() {
   }
 
-  virtual void open(Context* on_finish) = 0;
+  virtual void open(librados::IoCtx& dst_io_ctx, ImageCtxT* dst_image_ctx,
+                    ImageCtxT** src_image_ctx, Context* on_finish) = 0;
   virtual void close(Context* on_finish) = 0;
 
   virtual void get_snapshots(SnapInfos* snap_infos, Context* on_finish) = 0;

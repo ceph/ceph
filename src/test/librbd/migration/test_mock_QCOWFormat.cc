@@ -19,7 +19,25 @@ namespace {
 struct MockTestImageCtx : public MockImageCtx {
   MockTestImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
   }
+
+  static MockTestImageCtx *create(const std::string &image_name,
+                                  const std::string &image_id,
+                                  librados::snap_t snap_id, librados::IoCtx& p,
+                                  bool read_only) {
+    auto ictx = ImageCtx::create(
+            image_name, image_id, snap_id, p, read_only);
+    auto mock_image_ctx = new MockTestImageCtx(*ictx);
+    mock_image_ctx->m_image_ctx = ictx;
+    m_ictxs.insert(mock_image_ctx);
+    return mock_image_ctx;
+  }
+
+  ImageCtx* m_image_ctx = nullptr;
+
+  static std::set<MockTestImageCtx *> m_ictxs;
 };
+
+std::set<librbd::MockTestImageCtx *> MockTestImageCtx::m_ictxs;
 
 } // anonymous namespace
 
@@ -28,7 +46,8 @@ namespace migration {
 template<>
 struct SourceSpecBuilder<librbd::MockTestImageCtx> {
 
-  MOCK_CONST_METHOD2(build_stream, int(const json_spirit::mObject&,
+  MOCK_CONST_METHOD3(build_stream, int(librbd::MockTestImageCtx*,
+                                       const json_spirit::mObject&,
                                        std::shared_ptr<StreamInterface>*));
 
 };
@@ -71,12 +90,26 @@ public:
     json_spirit::mObject stream_obj;
     stream_obj["type"] = "file";
     json_object["stream"] = stream_obj;
+
+    MockTestImageCtx::m_ictxs.clear();
+  }
+
+  void TearDown() {
+    for (auto iter = MockTestImageCtx::m_ictxs.begin();
+         iter != MockTestImageCtx::m_ictxs.end(); ++iter) {
+      auto mock_image_ctx = *iter;
+      auto ictx = mock_image_ctx->m_image_ctx;
+      delete mock_image_ctx;
+      ictx->state->close();
+    }
+
+    TestMockFixture::TearDown();
   }
 
   void expect_build_stream(MockSourceSpecBuilder& mock_source_spec_builder,
                            MockStreamInterface* mock_stream_interface, int r) {
-    EXPECT_CALL(mock_source_spec_builder, build_stream(_, _))
-      .WillOnce(WithArgs<1>(Invoke([mock_stream_interface, r]
+    EXPECT_CALL(mock_source_spec_builder, build_stream(_, _, _))
+      .WillOnce(WithArgs<2>(Invoke([mock_stream_interface, r]
         (std::shared_ptr<StreamInterface>* ptr) {
           ptr->reset(mock_stream_interface);
           return r;
@@ -282,7 +315,8 @@ public:
 };
 
 TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -326,11 +360,11 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(expected_open_ret_val, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -339,7 +373,8 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV1) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, OpenCloseV2) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -351,11 +386,11 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV2) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -364,7 +399,8 @@ TEST_F(TestMockMigrationQCOWFormat, OpenCloseV2) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ProbeInvalidMagic) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -378,11 +414,11 @@ TEST_F(TestMockMigrationQCOWFormat, ProbeInvalidMagic) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EINVAL, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -391,7 +427,8 @@ TEST_F(TestMockMigrationQCOWFormat, ProbeInvalidMagic) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ProbeInvalidVersion) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -405,11 +442,11 @@ TEST_F(TestMockMigrationQCOWFormat, ProbeInvalidVersion) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EINVAL, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -418,7 +455,8 @@ TEST_F(TestMockMigrationQCOWFormat, ProbeInvalidVersion) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ProbeError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -432,11 +470,11 @@ TEST_F(TestMockMigrationQCOWFormat, ProbeError) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EIO, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -447,7 +485,8 @@ TEST_F(TestMockMigrationQCOWFormat, ProbeError) {
 #ifdef WITH_RBD_MIGRATION_FORMAT_QCOW_V1
 
 TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV1Error) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -476,11 +515,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV1Error) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EPERM, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -491,7 +530,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV1Error) {
 #endif // WITH_RBD_MIGRATION_FORMAT_QCOW_V1
 
 TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV2Error) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -507,11 +547,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV2Error) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EIO, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -520,7 +560,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadHeaderV2Error) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadL1TableError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -538,11 +579,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL1TableError) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EPERM, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -551,7 +592,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL1TableError) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, Snapshots) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -575,19 +617,19 @@ TEST_F(TestMockMigrationQCOWFormat, Snapshots) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
-  FormatInterface::SnapInfos snap_infos;
+  SnapInfos snap_infos;
   C_SaferCond ctx2;
   mock_qcow_format.get_snapshots(&snap_infos, &ctx2);
   ASSERT_EQ(0, ctx2.wait());
 
-  FormatInterface::SnapInfos expected_snap_infos{
+  SnapInfos expected_snap_infos{
     {1, {"snap1", cls::rbd::UserSnapshotNamespace{}, 1<<29, {}, 0, 0, {}}},
     {2, {"snap2", cls::rbd::UserSnapshotNamespace{}, 1<<29, {}, 0, 0, {}}}};
   ASSERT_EQ(expected_snap_infos, snap_infos);
@@ -598,7 +640,8 @@ TEST_F(TestMockMigrationQCOWFormat, Snapshots) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, SnapshotHeaderError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -618,11 +661,11 @@ TEST_F(TestMockMigrationQCOWFormat, SnapshotHeaderError) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EINVAL, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -631,7 +674,8 @@ TEST_F(TestMockMigrationQCOWFormat, SnapshotHeaderError) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, SnapshotExtraError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -653,11 +697,11 @@ TEST_F(TestMockMigrationQCOWFormat, SnapshotExtraError) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EINVAL, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -666,7 +710,8 @@ TEST_F(TestMockMigrationQCOWFormat, SnapshotExtraError) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, SnapshotL1TableError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -689,11 +734,11 @@ TEST_F(TestMockMigrationQCOWFormat, SnapshotL1TableError) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(-EINVAL, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -702,7 +747,8 @@ TEST_F(TestMockMigrationQCOWFormat, SnapshotL1TableError) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, GetImageSize) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -714,11 +760,11 @@ TEST_F(TestMockMigrationQCOWFormat, GetImageSize) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   uint64_t size = 0;
@@ -733,7 +779,8 @@ TEST_F(TestMockMigrationQCOWFormat, GetImageSize) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, GetImageSizeSnap) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -755,11 +802,11 @@ TEST_F(TestMockMigrationQCOWFormat, GetImageSizeSnap) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   uint64_t size = 0;
@@ -774,7 +821,8 @@ TEST_F(TestMockMigrationQCOWFormat, GetImageSizeSnap) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, GetImageSizeSnapDNE) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -786,11 +834,11 @@ TEST_F(TestMockMigrationQCOWFormat, GetImageSizeSnapDNE) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   uint64_t size = 0;
@@ -804,7 +852,8 @@ TEST_F(TestMockMigrationQCOWFormat, GetImageSizeSnapDNE) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, Read) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -823,11 +872,11 @@ TEST_F(TestMockMigrationQCOWFormat, Read) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -846,7 +895,8 @@ TEST_F(TestMockMigrationQCOWFormat, Read) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadL1DNE) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -858,11 +908,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL1DNE) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -883,7 +933,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL1DNE) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadL2DNE) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -898,11 +949,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL2DNE) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -923,7 +974,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL2DNE) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadZero) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -938,11 +990,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadZero) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -963,7 +1015,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadZero) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadSnap) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -992,11 +1045,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadSnap) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -1015,7 +1068,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadSnap) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadSnapDNE) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -1027,11 +1081,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadSnapDNE) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -1049,7 +1103,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadSnapDNE) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadClusterCacheHit) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -1078,11 +1133,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadClusterCacheHit) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -1111,7 +1166,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadClusterCacheHit) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadClusterError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -1130,11 +1186,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadClusterError) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -1152,7 +1208,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadClusterError) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ReadL2TableError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -1167,11 +1224,11 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL2TableError) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                  &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -1189,7 +1246,8 @@ TEST_F(TestMockMigrationQCOWFormat, ReadL2TableError) {
 }
 
 TEST_F(TestMockMigrationQCOWFormat, ListSnaps) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -1231,11 +1289,11 @@ TEST_F(TestMockMigrationQCOWFormat, ListSnaps) {
 
   expect_stream_close(*mock_stream_interface, 0);
 
-  MockQCOWFormat mock_qcow_format(&mock_image_ctx, json_object,
-                                 &mock_source_spec_builder);
+  MockQCOWFormat mock_qcow_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_qcow_format.open(&ctx1);
+  mock_qcow_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                        &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;

@@ -31,8 +31,7 @@ template <typename I>
 int SourceSpecBuilder<I>::parse_source_spec(
     const std::string& source_spec,
     json_spirit::mObject* source_spec_object) const {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   json_spirit::mValue json_root;
   if(json_spirit::read(source_spec, json_root)) {
@@ -43,35 +42,34 @@ int SourceSpecBuilder<I>::parse_source_spec(
     }
   }
 
-  lderr(cct) << "invalid source-spec JSON" << dendl;
+  lderr(m_cct) << "invalid source-spec JSON" << dendl;
   return -EBADMSG;
 }
 
 template <typename I>
 int SourceSpecBuilder<I>::build_format(
     const json_spirit::mObject& source_spec_object, bool import_only,
-    std::unique_ptr<FormatInterface>* format) const {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+    std::unique_ptr<FormatInterface<I>>* format) const {
+  ldout(m_cct, 10) << dendl;
 
   auto type_value_it = source_spec_object.find(TYPE_KEY);
   if (type_value_it == source_spec_object.end() ||
       type_value_it->second.type() != json_spirit::str_type) {
-    lderr(cct) << "failed to locate format type value" << dendl;
+    lderr(m_cct) << "failed to locate format type value" << dendl;
     return -EINVAL;
   }
 
   auto& type = type_value_it->second.get_str();
   if (type == "native") {
-    format->reset(NativeFormat<I>::create(m_image_ctx, source_spec_object,
+    format->reset(NativeFormat<I>::create(source_spec_object,
                                           import_only));
   } else if (type == "qcow") {
-    format->reset(QCOWFormat<I>::create(m_image_ctx, source_spec_object, this));
+    format->reset(QCOWFormat<I>::create(source_spec_object, this));
   } else if (type == "raw") {
-    format->reset(RawFormat<I>::create(m_image_ctx, source_spec_object, this));
+    format->reset(RawFormat<I>::create(source_spec_object, this));
   } else {
-    lderr(cct) << "unknown or unsupported format type '" << type << "'"
-               << dendl;
+    lderr(m_cct) << "unknown or unsupported format type '" << type << "'"
+                 << dendl;
     return -ENOSYS;
   }
   return 0;
@@ -79,25 +77,24 @@ int SourceSpecBuilder<I>::build_format(
 
 template <typename I>
 int SourceSpecBuilder<I>::build_snapshot(
-    const json_spirit::mObject& source_spec_object, uint64_t index,
-    std::shared_ptr<SnapshotInterface>* snapshot) const {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+    I* image_ctx, const json_spirit::mObject& source_spec_object,
+    uint64_t index, std::shared_ptr<SnapshotInterface>* snapshot) const {
+  ldout(m_cct, 10) << dendl;
 
   auto type_value_it = source_spec_object.find(TYPE_KEY);
   if (type_value_it == source_spec_object.end() ||
       type_value_it->second.type() != json_spirit::str_type) {
-    lderr(cct) << "failed to locate snapshot type value" << dendl;
+    lderr(m_cct) << "failed to locate snapshot type value" << dendl;
     return -EINVAL;
   }
 
   auto& type = type_value_it->second.get_str();
   if (type == "raw") {
-    snapshot->reset(RawSnapshot<I>::create(m_image_ctx, source_spec_object,
+    snapshot->reset(RawSnapshot<I>::create(image_ctx, source_spec_object,
                                            this, index));
   } else {
-    lderr(cct) << "unknown or unsupported format type '" << type << "'"
-               << dendl;
+    lderr(m_cct) << "unknown or unsupported format type '" << type << "'"
+                 << dendl;
     return -ENOSYS;
   }
   return 0;
@@ -105,15 +102,14 @@ int SourceSpecBuilder<I>::build_snapshot(
 
 template <typename I>
 int SourceSpecBuilder<I>::build_stream(
-    const json_spirit::mObject& source_spec_object,
+    I* image_ctx, const json_spirit::mObject& source_spec_object,
     std::shared_ptr<StreamInterface>* stream) const {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+  ldout(m_cct, 10) << dendl;
 
   auto stream_value_it = source_spec_object.find(STREAM_KEY);
   if (stream_value_it == source_spec_object.end() ||
       stream_value_it->second.type() != json_spirit::obj_type) {
-    lderr(cct) << "failed to locate stream object" << dendl;
+    lderr(m_cct) << "failed to locate stream object" << dendl;
     return -EINVAL;
   }
 
@@ -121,20 +117,20 @@ int SourceSpecBuilder<I>::build_stream(
   auto type_value_it = stream_obj.find(TYPE_KEY);
   if (type_value_it == stream_obj.end() ||
       type_value_it->second.type() != json_spirit::str_type) {
-    lderr(cct) << "failed to locate stream type value" << dendl;
+    lderr(m_cct) << "failed to locate stream type value" << dendl;
     return -EINVAL;
   }
 
   auto& type = type_value_it->second.get_str();
   if (type == "file") {
-    stream->reset(FileStream<I>::create(m_image_ctx, stream_obj));
+    stream->reset(FileStream<I>::create(image_ctx, stream_obj));
   } else if (type == "http") {
-    stream->reset(HttpStream<I>::create(m_image_ctx, stream_obj));
+    stream->reset(HttpStream<I>::create(image_ctx, stream_obj));
   } else if (type == "s3") {
-    stream->reset(S3Stream<I>::create(m_image_ctx, stream_obj));
+    stream->reset(S3Stream<I>::create(image_ctx, stream_obj));
   } else {
-    lderr(cct) << "unknown or unsupported stream type '" << type << "'"
-               << dendl;
+    lderr(m_cct) << "unknown or unsupported stream type '" << type << "'"
+                 << dendl;
     return -ENOSYS;
   }
 

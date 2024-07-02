@@ -28,7 +28,8 @@ namespace migration {
 template<>
 struct SourceSpecBuilder<librbd::MockTestImageCtx> {
 
-  MOCK_CONST_METHOD2(build_stream, int(const json_spirit::mObject&,
+  MOCK_CONST_METHOD3(build_stream, int(librbd::MockTestImageCtx*,
+                                       const json_spirit::mObject&,
                                        std::shared_ptr<StreamInterface>*));
 
 };
@@ -67,8 +68,8 @@ public:
 
   void expect_build_stream(MockSourceSpecBuilder& mock_source_spec_builder,
                            MockStreamInterface* mock_stream_interface, int r) {
-    EXPECT_CALL(mock_source_spec_builder, build_stream(_, _))
-      .WillOnce(WithArgs<1>(Invoke([mock_stream_interface, r]
+    EXPECT_CALL(mock_source_spec_builder, build_stream(_, _, _))
+      .WillOnce(WithArgs<2>(Invoke([mock_stream_interface, r]
         (std::shared_ptr<StreamInterface>* ptr) {
           ptr->reset(mock_stream_interface);
           return r;

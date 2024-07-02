@@ -15,17 +15,20 @@ struct ImageCtx;
 
 namespace migration {
 
+template <typename ImageCtxT>
 struct FormatInterface;
 
 template <typename ImageCtxT>
 class ImageDispatch : public io::ImageDispatchInterface {
 public:
-  static ImageDispatch* create(ImageCtxT* image_ctx,
-                               std::unique_ptr<FormatInterface> source) {
+  static ImageDispatch* create(
+          ImageCtxT* image_ctx,
+          std::unique_ptr<FormatInterface<ImageCtxT>> source) {
     return new ImageDispatch(image_ctx, std::move(source));
   }
 
-  ImageDispatch(ImageCtxT* image_ctx, std::unique_ptr<FormatInterface> source);
+  ImageDispatch(ImageCtxT* image_ctx,
+                std::unique_ptr<FormatInterface<ImageCtxT>> source);
 
   void shut_down(Context* on_finish) override;
 
@@ -86,7 +89,7 @@ public:
 
 private:
   ImageCtxT* m_image_ctx;
-  std::unique_ptr<FormatInterface> m_format;
+  std::unique_ptr<FormatInterface<ImageCtxT>> m_format;
 
   void fail_io(int r, io::AioCompletion* aio_comp,
                io::DispatchResult* dispatch_result);

@@ -18,7 +18,7 @@ namespace migration {
 
 template <typename I>
 ImageDispatch<I>::ImageDispatch(I* image_ctx,
-                                std::unique_ptr<FormatInterface> format)
+                                std::unique_ptr<FormatInterface<I>> format)
   : m_image_ctx(image_ctx), m_format(std::move(format)) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << "ictx=" << image_ctx << dendl;

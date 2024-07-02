@@ -151,7 +151,8 @@ void RawSnapshot<I>::open(SnapshotInterface* previous_snapshot,
 
   ldout(cct, 10) << "name=" << m_snap_info.name << dendl;
 
-  int r = m_source_spec_builder->build_stream(m_json_object, &m_stream);
+  int r = m_source_spec_builder->build_stream(m_image_ctx, m_json_object,
+                                              &m_stream);
   if (r < 0) {
     lderr(cct) << "failed to build migration stream handler" << cpp_strerror(r)
                << dendl;
