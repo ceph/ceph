@@ -458,6 +458,79 @@
         ...
 }
 {
+        centos 9 leak from usr/src/debug/glibc
+        Memcheck:Leak
+        ...
+        fun:UnknownInlinedFun
+        fun:_dl_new_object
+        ...
+}
+{
+        centos 9 leak from usr/src/debug/glibc
+        Memcheck:Leak
+        ...
+        fun:UnknownInlinedFun
+        fun:add_dependency
+        ...
+}
+{
+        centos 9 leak from usr/src/debug/glibc
+        Memcheck:Leak
+        ...
+        fun:UnknownInlinedFun
+        fun:decompose_rpath
+        ...
+}
+{
+        centos 9 leak from usr/src/debug/glibc
+        Memcheck:Leak
+        ...
+        fun:UnknownInlinedFun
+        fun:dl_open_worker_begin
+        ...
+}
+{
+        centos 9 leak from usr/src/debug/glibc
+        Memcheck:Leak
+        ...
+        fun:UnknownInlinedFun
+        fun:_dl_check_map_versions
+        ...
+}
+{
+        centos 9 leak from usr/src/debug/glibc
+        Memcheck:Leak
+        ...
+        fun:UnknownInlinedFun
+        fun:add_to_global_resize
+        ...
+}
+{
+        centos 9 rocksdb FileSystem
+        Memcheck:Leak
+        ...
+        fun:*rocksdb*FileSystem*
+        fun:*__static_initialization_and_destruction_0*
+        ...
+}
+{
+        centos 9 intentional rocksdb valgrind leak
+        Memcheck:Leak
+        ...
+        fun:*__static_initialization_and_destruction_0*
+        fun:*_GLOBAL__*
+        ...
+}
+{
+        centos 9 rocksdb malloc
+        Memcheck:Leak
+        ...
+        fun:malloc
+        fun:strdup
+        fun:_dl_load_cache_lookup
+        ...
+}
+{
 	libstdc++ leak on xenial
 	Memcheck:Leak
 	fun:malloc
