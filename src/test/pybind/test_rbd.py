@@ -1730,6 +1730,11 @@ class TestClone(object):
 
     def test_clone_format(self):
         clone_name2 = get_temp_image_name()
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, image_name,
+                       'snap1', ioctx, clone_name2, features, clone_format=0)
+        assert_raises(InvalidArgument, self.rbd.clone, ioctx, image_name,
+                       'snap1', ioctx, clone_name2, features, clone_format=3)
+
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
                        features, clone_format=1)
         with Image(ioctx, clone_name2) as clone2:

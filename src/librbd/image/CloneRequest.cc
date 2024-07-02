@@ -87,8 +87,8 @@ void CloneRequest<I>::validate_options() {
 
   uint64_t format = 0;
   m_opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
-  if (format < 2) {
-    lderr(m_cct) << "format 2 or later required for clone" << dendl;
+  if (format != 2) {
+    lderr(m_cct) << "unsupported format for clone: " << format << dendl;
     complete(-EINVAL);
     return;
   }
@@ -122,6 +122,12 @@ void CloneRequest<I>::validate_options() {
         m_clone_format = 1;
       }
     }
+  }
+
+  if (m_clone_format < 1 || m_clone_format > 2) {
+    lderr(m_cct) << "unsupported clone format: " << m_clone_format << dendl;
+    complete(-EINVAL);
+    return;
   }
 
   if (m_clone_format == 1 &&

@@ -638,6 +638,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     uint64_t format;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
       format = cct->_conf.get_val<uint64_t>("rbd_default_format");
+
+    if (format < 1 || format > 2) {
+      lderr(cct) << "unsupported format: " << format << dendl;
+      return -EINVAL;
+    }
     bool old_format = format == 1;
 
     // make sure it doesn't already exist, in either format
