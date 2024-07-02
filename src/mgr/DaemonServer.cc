@@ -80,15 +80,15 @@ DaemonServer::DaemonServer(MonClient *monc_,
 					g_conf().get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
-      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
+      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messages",
 				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
-      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
+      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messages",
 				     g_conf().get_val<uint64_t>("mgr_mds_messages"))),
       mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mon_bytes"))),
-      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
+      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messages",
 				     g_conf().get_val<uint64_t>("mgr_mon_messages"))),
       msgr(nullptr),
       monc(monc_),
@@ -1909,13 +1909,13 @@ bool DaemonServer::_handle_command(
 
     set<pg_t> candidates; // deduped
     if (granularity == "pg") {
-      // covnert pg names to pgs, discard any invalid ones while at it
+      // convert pg names to pgs, discard any invalid ones while at it
       vector<string> pgids;
       cmd_getval(cmdctx->cmdmap, "pgid", pgids);
       for (auto& i : pgids) {
         pg_t pgid;
         if (!pgid.parse(i.c_str())) {
-          ss << "invlaid pgid '" << i << "'; ";
+          ss << "invalid pgid '" << i << "'; ";
           r = -EINVAL;
           continue;
         }
@@ -2797,7 +2797,7 @@ void DaemonServer::adjust_pgs()
 
       // FIXME: These checks are fundamentally racy given that adjust_pgs()
       // can run more frequently than we get updated pg stats from OSDs.  We
-      // may make multiple adjustments with stale informaiton.
+      // may make multiple adjustments with stale information.
       double misplaced_ratio, degraded_ratio;
       double inactive_pgs_ratio, unknown_pgs_ratio;
       pg_map.get_recovery_stats(&misplaced_ratio, &degraded_ratio,

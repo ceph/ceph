@@ -842,7 +842,7 @@ public:
   void request_osdmap_update(epoch_t e);
 
   // -- heartbeats --
-  ceph::mutex hb_stamp_lock = ceph::make_mutex("OSDServce::hb_stamp_lock");
+  ceph::mutex hb_stamp_lock = ceph::make_mutex("OSDService::hb_stamp_lock");
 
   /// osd -> heartbeat stamps
   std::vector<HeartbeatStampsRef> hb_stamps;
@@ -1440,7 +1440,7 @@ private:
   double daily_loadavg;
   ceph::mono_time startup_time;
 
-  // Track ping repsonse times using vector as a circular buffer
+  // Track ping response times using vector as a circular buffer
   // MUST BE A POWER OF 2
   const uint32_t hb_vector_size = 16;
 

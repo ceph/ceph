@@ -130,9 +130,9 @@ const char *ceph_osd_op_flag_name(unsigned flag);
 
 /// convert CEPH_OSD_FLAG_* op flags to a std::string
 std::string ceph_osd_flag_string(unsigned flags);
-/// conver CEPH_OSD_OP_FLAG_* op flags to a std::string
+/// convert CEPH_OSD_OP_FLAG_* op flags to a std::string
 std::string ceph_osd_op_flag_string(unsigned flags);
-/// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a std::string
+/// convert CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a std::string
 std::string ceph_osd_alloc_hint_flag_string(unsigned flags);
 
 typedef std::map<std::string,std::string> osd_alert_list_t;
@@ -431,7 +431,7 @@ struct pg_t {
   }
 
   static const uint8_t calc_name_buf_size = 36;  // max length for max values len("18446744073709551615.ffffffff") + future suffix len("_head") + '\0'
-  char *calc_name(char *buf, const char *suffix_backwords) const;
+  char *calc_name(char *buf, const char *suffix_backwards) const;
 
   void set_ps(ps_t p) {
     m_seed = p;
@@ -541,9 +541,9 @@ struct spg_t {
   }
 
   static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
-  char *calc_name(char *buf, const char *suffix_backwords) const;
+  char *calc_name(char *buf, const char *suffix_backwards) const;
   // and a (limited) version that uses an internal buffer:
-  std::string calc_name_sring() const;
+  std::string calc_name_string() const;
  
   bool parse(const char *s);
   bool parse(const std::string& s) {
@@ -1039,7 +1039,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_FORCED_RECOVERY    (1ULL << 30) // force recovery of this pg before any other
 #define PG_STATE_FORCED_BACKFILL    (1ULL << 31) // force backfill of this pg before any other
 #define PG_STATE_FAILED_REPAIR      (1ULL << 32) // A repair failed to fix all errors
-#define PG_STATE_LAGGY              (1ULL << 33) // PG is laggy/unreabable due to slow/delayed pings
+#define PG_STATE_LAGGY              (1ULL << 33) // PG is laggy/unreadable due to slow/delayed pings
 #define PG_STATE_WAIT               (1ULL << 34) // PG is waiting for prior intervals' readable period to expire
 
 std::string pg_state_string(uint64_t state);
@@ -1464,7 +1464,7 @@ private:
 public:
   std::map<std::string, std::string> properties;  ///< OBSOLETE
   std::string erasure_code_profile; ///< name of the erasure code profile in OSDMap
-  epoch_t last_change = 0;      ///< most recent epoch changed, exclusing snapshot changes
+  epoch_t last_change = 0;      ///< most recent epoch changed, excluding snapshot changes
   // If non-zero, require OSDs in at least this many different instances...
   uint32_t peering_crush_bucket_count = 0;
   // of this bucket type...
@@ -3108,7 +3108,7 @@ struct pg_fast_info_t {
     utime_t last_fullsized;
     int64_t log_size;  // (also ondisk_log_size, which has the same value)
     struct { // object_stat_collection_t stats;
-      struct { // objct_stat_sum_t sum
+      struct { // object_stat_sum_t sum
 	int64_t num_bytes;    // in bytes
 	int64_t num_objects;
 	int64_t num_object_copies;
@@ -6307,7 +6307,7 @@ struct ScrubMapBuilder {
   int64_t data_pos = 0;
   std::string omap_pos;
   int ret = 0;
-  ceph::buffer::hash data_hash, omap_hash;  ///< accumulatinng hash value
+  ceph::buffer::hash data_hash, omap_hash;  ///< accumulating hash value
   uint64_t omap_keys = 0;
   uint64_t omap_bytes = 0;
 

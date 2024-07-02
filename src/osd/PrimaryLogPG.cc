@@ -4475,7 +4475,7 @@ void PrimaryLogPG::do_scan(
 
       BackfillInterval bi;
       bi.begin = m->begin;
-      // No need to flush, there won't be any in progress writes occuring
+      // No need to flush, there won't be any in progress writes occurring
       // past m->begin
       scan_range(
 	cct->_conf->osd_backfill_scan_min,
@@ -6013,7 +6013,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     auto bp = osd_op.indata.cbegin();
 
-    // user-visible modifcation?
+    // user-visible modification?
     switch (op.op) {
       // non user-visible modifications
     case CEPH_OSD_OP_WATCH:
@@ -10764,7 +10764,7 @@ int PrimaryLogPG::finish_set_dedup(hobject_t oid, int r, ceph_tid_t tid, uint64_
     * In this case, if the new chunk_map is as follows,
     * new_chunk_map : [0, 2) ddd, [6, 2) bbb, [8, 2) ccc
     * we should drop aaa from head by using calc_refs_to_drop_on_removal().
-    * So, the precedure is 
+    * So, the procedure is 
     * 	1. calc_refs_to_drop_on_removal()
     * 	2. register old references to drop after tier_flush() is committed
     * 	3. update new chunk_map
@@ -12977,7 +12977,7 @@ void PrimaryLogPG::on_shutdown()
 
   apply_and_flush_repops(false);
   cancel_log_updates();
-  // we must remove PGRefs, so do this this prior to release_backoffs() callers
+  // we must remove PGRefs, so do this prior to release_backoffs() callers
   clear_backoffs();
   // clean up snap trim references
   snap_trimmer_machine.process_event(Reset());

@@ -1645,7 +1645,7 @@ public:
 #endif
 };
 
-// BuferCacheShard
+// BufferCacheShard
 
 BlueStore::BufferCacheShard *BlueStore::BufferCacheShard::create(
     CephContext* cct,
@@ -4454,7 +4454,7 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   ceph_assert(b->get_blob().get_logical_length() != 0);
 
   // Do get_ref prior to punch_hole to prevent from putting reused blob into 
-  // old_extents list if we overwre the blob totally
+  // old_extents list if we overwrite the blob totally
   // This might happen during WAL overwrite.
   b->get_ref(onode->c, blob_offset, length);
 
@@ -6111,8 +6111,8 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
 		"Average kv_queued state latency",
 		"skql", PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_commiting_lat",
-		 "Average kv_commiting state latency",
+  b.add_time_avg(l_bluestore_state_kv_committing_lat, "state_kv_committing_lat",
+		 "Average kv_committing state latency",
 		 "skcl", PerfCountersBuilder::PRIO_USEFUL);
   b.add_time_avg(l_bluestore_state_kv_done_lat, "state_kv_done_lat",
 		 "Average kv_done state latency",
@@ -7438,7 +7438,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  // we can't change bluestore allocation so no need to invlidate allocation-file
+  // we can't change bluestore allocation so no need to invalidate allocation-file
   if (fm->is_null_manager() && !read_only && !to_repair) {
     // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
     // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
@@ -7998,7 +7998,7 @@ int BlueStore::_setup_block_symlink_or_file(
       // a transport id for PCIe looks like: "trtype:PCIe traddr:0000:02:00.0"
       // where "0000:02:00.0" is the selector of a PCI device, see
       // the first column of "lspci -mm -n -D"
-      // a transport id for tcp looks like: "trype:TCP adrfam:IPv4 traddr:172.31.89.152 trsvcid:4420"
+      // a transport id for tcp looks like: "trtype:TCP adrfam:IPv4 traddr:172.31.89.152 trsvcid:4420"
       string trid = epath.substr(strlen(SPDK_PREFIX));
       r = ::write(fd, trid.c_str(), trid.size());
       ceph_assert(r == static_cast<int>(trid.size()));
@@ -9956,7 +9956,7 @@ void BlueStore::_fsck_check_objects(
       thread_pool.start();
     }
 
-    // fill global if not overriden below
+    // fill global if not overridden below
     CollectionRef c;
     int64_t pool_id = -1;
     spg_t pgid;
@@ -10189,7 +10189,7 @@ Detection stage (in processing order):
     Prepare list of extents that are improperly referenced
     Enumerate Onode records that might use 'misreferenced' pextents
     (Bloom-like filter applied to reduce computation)
-      Per each questinable Onode enumerate all blobs and identify broken ones 
+      Per each questionable Onode enumerate all blobs and identify broken ones 
       (i.e. blobs having 'misreferences')
       Rewrite each broken blob data by allocating another extents and 
       copying data there
@@ -10208,7 +10208,7 @@ Detection stage (in processing order):
   - Apply 'Remove' actions
   - Apply fix for misreference pextents
   - Apply Shared Blob recreate 
-    (can be merged with the step above if misreferences were dectected)
+    (can be merged with the step above if misreferences were detected)
   - Apply StatFS update
 */
 int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
@@ -10486,7 +10486,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   it = db->get_iterator(PREFIX_SHARED_BLOB, KeyValueDB::ITERATOR_NOCACHE);
   if (it) {
     // FIXME minor: perhaps simplify for shallow mode?
-    // fill global if not overriden below
+    // fill global if not overridden below
     auto expected_statfs = &expected_store_statfs;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       string key = it->key();
@@ -10570,7 +10570,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     interval_set<uint64_t> to_release;
     it = db->get_iterator(PREFIX_OBJ, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
-      // fill global if not overriden below
+      // fill global if not overridden below
       auto expected_statfs = &expected_store_statfs;
 
       CollectionRef c;
@@ -12226,7 +12226,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (cct->_conf->bluestore_debug_inject_csum_err_probability > 0 &&
       (rand() % 10000) < cct->_conf->bluestore_debug_inject_csum_err_probability * 10000.0) {
-    derr << __func__ << " injecting bluestore checksum verifcation error" << dendl;
+    derr << __func__ << " injecting bluestore checksum verification error" << dendl;
     bad = blob_xoffset;
     r = -1;
     bad_csum = 0xDEADBEEF;
@@ -14685,7 +14685,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     ceph_assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
-      dout(20) << __func__ << " dequeueing" << dendl;
+      dout(20) << __func__ << " dequeuing" << dendl;
       {
 	deferred_lock.lock();
 	auto q = deferred_queue.iterator_to(*osr);
@@ -17750,7 +17750,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
                          nonexistent_count + 1, false, &ls, &next);
     if (r >= 0) {
-      // If true mean collecton has more objects than nonexistent_count,
+      // If true mean collection has more objects than nonexistent_count,
       // so bypass check.
       bool exists = (!next.is_max());
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
@@ -18106,7 +18106,7 @@ void BlueStore::BlueStoreThrottle::complete(TransContext &txc)
 const string prefix_onode = "o";
 const string prefix_onode_shard = "x";
 const string prefix_other = "Z";
-//Itrerates through the db and collects the stats
+//Iterates through the db and collects the stats
 void BlueStore::generate_db_histogram(Formatter *f)
 {
   //globals
@@ -18850,7 +18850,7 @@ bool RocksDBBlueFSVolumeSelector::compare(BlueFSVolumeSelector* other) {
 // This cause a delay in write path and add significant load to the CPU/Memory/Disk.
 // The reason for the RocksDB updates is that it allows Ceph to survive any failure without losing the allocation state.
 //
-// We changed the code skiping RocksDB updates on allocation time and instead performing a full desatge of the allocator object
+// We changed the code skipping RocksDB updates on allocation time and instead performing a full destage of the allocator object
 // with all the OSD allocation state in a single step during umount().
 // This change leads to a 25% increase in IOPS and reduced latency in small random-write workload, but exposes the system
 // to losing allocation info in failure cases where we don't call umount.
@@ -18880,7 +18880,7 @@ static uint32_t    s_serial         = 0x01;
 #define HTOCEPH_64 htobe64
 #endif
 
-// 48 Bytes header for on-disk alloator image
+// 48 Bytes header for on-disk allocator image
 const uint64_t ALLOCATOR_IMAGE_VALID_SIGNATURE = 0x1FACE0FF;
 struct allocator_image_header {
   uint32_t format_version;	// 0x00
@@ -18945,7 +18945,7 @@ struct allocator_image_header {
 };
 WRITE_CLASS_DENC(allocator_image_header)
 
-// 56 Bytes trailer for on-disk alloator image
+// 56 Bytes trailer for on-disk allocator image
 struct allocator_image_trailer {
   extent_t null_extent;         // 0x00
 
@@ -19064,7 +19064,7 @@ WRITE_CLASS_DENC(allocator_image_trailer)
 // we can safely ignore non-existing file
 int BlueStore::invalidate_allocation_file_on_bluefs()
 {
-  // mark that allocation-file was invalidated and we should destage a new copy whne closing db
+  // mark that allocation-file was invalidated and we should destage a new copy when closing db
   need_to_destage_allocation_file = true;
   dout(10) << __func__ << " need_to_destage_allocation_file was set" << dendl;
 
@@ -19996,7 +19996,7 @@ Allocator* BlueStore::clone_allocator_without_bluefs(Allocator *src_allocator)
   uint64_t num_entries = 0;
   copy_allocator(src_allocator, allocator, &num_entries);
 
-  // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allcoator-file
+  // BlueFS stores its internal allocation outside RocksDB (FM) so we should not destage them to the allocator-file
   // we are going to hide bluefs allocation during allocator-destage as they are stored elsewhere
   {
     bluefs->foreach_block_extents(
@@ -20069,7 +20069,7 @@ Allocator* BlueStore::initialize_allocator_from_freelist(FreelistManager *real_f
 //---------------------------------------------------------
 // close the active fm and open it in a new mode like makefs()
 // but make sure to mark the full device space as allocated
-// later we will mark all exetents from the allocator as free
+// later we will mark all extents from the allocator as free
 int BlueStore::reset_fm_for_restore()
 {
   dout(5) << "<<==>> fm->clear_null_manager()" << dendl;
@@ -20161,7 +20161,7 @@ int BlueStore::push_allocation_to_rocksdb()
   // remove all objects of PREFIX_ALLOC_BITMAP from RocksDB to guarantee a clean start
   clear_allocation_objects_from_rocksdb(db, cct, path);
 
-  // then open fm in new mode with the full devie marked as alloctaed
+  // then open fm in new mode with the full device marked as allocated
   if (reset_fm_for_restore() != 0) {
     return db_cleanup(-1);
   }

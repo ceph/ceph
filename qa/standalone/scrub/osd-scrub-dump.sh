@@ -165,7 +165,7 @@ function TEST_recover_unexpected() {
 
     echo $total total reservations seen
 
-    # Sort of arbitraty number based on PGS * POOLS * POOL_SIZE as the number of total scrub
+    # Sort of arbitrary number based on PGS * POOLS * POOL_SIZE as the number of total scrub
     # reservations that must occur.  However, the loop above might see the same reservation more
     # than once.
     actual_reservations=$(expr $PGS \* $POOLS \* $POOL_SIZE)

@@ -201,7 +201,7 @@ void Elector::reset_timer(double plus)
    *
    * When the election expires, we will check if we were the ones who won, and
    * if so we will declare victory. If that is not the case, then we assume
-   * that the one we defered to didn't declare victory quickly enough (in fact,
+   * that the one we deferred to didn't declare victory quickly enough (in fact,
    * as far as we know, we may even be dead); so, just propose ourselves as the
    * Leader.
    */
@@ -747,7 +747,7 @@ void Elector::notify_rank_removed(unsigned rank_removed, unsigned new_rank)
      because it's not indexed anywhere (and adding indexing
      would also be annoying).
      In the case where we are removing any rank that is not the
-     higest, we start with the removed rank and examine the state
+     highest, we start with the removed rank and examine the state
      of the surrounding ranks.
      Everybody who remains with larger rank gets a new rank one lower
      than before, and we have to figure out the remaining scheduled

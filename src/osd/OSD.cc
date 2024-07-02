@@ -781,7 +781,7 @@ float OSDService::get_failsafe_full_ratio()
 
 OSDService::s_names OSDService::recalc_full_state(float ratio, float pratio, string &inject)
 {
-  // The OSDMap ratios take precendence.  So if the failsafe is .95 and
+  // The OSDMap ratios take precedence.  So if the failsafe is .95 and
   // the admin sets the cluster full to .96, the failsafe moves up to .96
   // too.  (Not that having failsafe == full is ideal, but it's better than
   // dropping writes before the clusters appears full.)
@@ -4032,7 +4032,7 @@ int OSD::init()
   osd_op_tp.start();
 
   // start the heartbeat
-  heartbeat_thread.create("osd_srv_heartbt");
+  heartbeat_thread.create("osd_srv_heartbeat");
 
   // tick
   tick_timer.add_event_after(get_tick_interval(),
@@ -4234,7 +4234,7 @@ void OSD::final_init()
 
   r = admin_socket->register_command("compact",
 				     asok_hook,
-				     "Commpact object store's omap."
+				     "Compact object store's omap."
                                      " WARNING: Compaction probably slows your requests");
   ceph_assert(r == 0);
 
@@ -4572,7 +4572,7 @@ int OSD::shutdown()
     if (cct->_conf->osd_fast_shutdown_notify_mon)
       service.prepare_to_stop();
 
-    // There is no state we need to keep wehn running in NULL-FM moode
+    // There is no state we need to keep when running in NULL-FM mode
     if (!store->has_null_manager()) {
       cct->_log->flush();
       _exit(0);
@@ -5220,7 +5220,7 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
   if (pg->is_primary())
     service.logger->dec(l_osd_pg_primary);
   else if (pg->is_nonprimary())
-    service.logger->dec(l_osd_pg_replica); // misnomver
+    service.logger->dec(l_osd_pg_replica); // misnomer
   else
     service.logger->dec(l_osd_pg_stray);
 
@@ -5965,7 +5965,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	      i->second.hb_total_front = i->second.hb_max_front = 0;
 	      i->second.hb_min_front = UINT_MAX;
 
-	      // Record per osd interace ping times
+	      // Record per osd interface ping times
 	      // Based on osd_heartbeat_interval ignoring that it is randomly short than this interval
 	      if (i->second.hb_back_pingtime.size() == 0) {
 		ceph_assert(i->second.hb_front_pingtime.size() == 0);
@@ -6863,7 +6863,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 
 void OSD::_get_purged_snaps()
 {
-  // NOTE: this is a naive, stateless implementaiton.  it may send multiple
+  // NOTE: this is a naive, stateless implementation.  it may send multiple
   // overlapping requests to the mon, which will be somewhat inefficient, but
   // it should be reliable.
   dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
@@ -8048,7 +8048,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   {
     // we extend the map cache pins to accomodate pgs slow to consume maps
     // for some period, until we hit the max_lag_factor bound, at which point
-    // we block here to stop injesting more maps than they are able to keep
+    // we block here to stop ingesting more maps than they are able to keep
     // up with.
     epoch_t max_lag = cct->_conf->osd_map_cache_size *
       m_osd_pg_epoch_max_lag_factor;
@@ -8579,7 +8579,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	set<int> avoid_ports;
 #if defined(__FreeBSD__)
         // prevent FreeBSD from grabbing the client_messenger port during
-        // rebinding. In which case a cluster_meesneger will connect also
+        // rebinding. In which case a cluster_messenger will connect also
 	// to the same port
 	client_messenger->get_myaddrs().get_ports(&avoid_ports);
 #endif
@@ -11229,7 +11229,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
 void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
   if (unlikely(m_fast_shutdown) ) {
-    // stop enqueing when we are in the middle of a fast shutdown
+    // stop enqueuing when we are in the middle of a fast shutdown
     return;
   }
 
@@ -11261,7 +11261,7 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
 void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)
 {
   if (unlikely(m_fast_shutdown) ) {
-    // stop enqueing when we are in the middle of a fast shutdown
+    // stop enqueuing when we are in the middle of a fast shutdown
     return;
   }
 

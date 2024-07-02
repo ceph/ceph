@@ -440,7 +440,7 @@ void OSDMap::Incremental::encode_client_old(ceph::buffer::list& bl) const
     // legacy is map<int32_t,uint8_t>
     map<int32_t, uint8_t> os;
     for (auto p : new_state) {
-      // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+      // new_state may only include some new flags(e.g., CEPH_OSD_NOOUT)
       // that an old client could not understand.
       // skip those!
       uint8_t s = p.second;
@@ -494,7 +494,7 @@ void OSDMap::Incremental::encode_classic(ceph::buffer::list& bl, uint64_t featur
   {
     map<int32_t, uint8_t> os;
     for (auto p : new_state) {
-      // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+      // new_state may only include some new flags(e.g., CEPH_OSD_NOOUT)
       // that an old client could not understand.
       // skip those!
       uint8_t s = p.second;
@@ -614,7 +614,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     } else {
       map<int32_t, uint8_t> os;
       for (auto p : new_state) {
-        // new_state may only inculde some new flags(e.g., CEPH_OSD_NOOUT)
+        // new_state may only include some new flags(e.g., CEPH_OSD_NOOUT)
         // that an old client could not understand.
         // skip those!
         uint8_t s = p.second;
@@ -6077,7 +6077,7 @@ std::default_random_engine OSDMap::get_random_engine(
   // This function creates a random_engine to be used for shuffling.
   // When p_seed == nullptr it generates random engine with a seed from /dev/random
   // when p_seed is not null, it uses (*p_seed + seed_set) as the seed and 
-  // increments seed_set. This is used in order to craete regression test without 
+  // increments seed_set. This is used in order to create regression test without 
   // random effect on the results. 
   //
   static std::random_device::result_type seed_set = 0;
@@ -6105,8 +6105,8 @@ bool OSDMap::try_drop_remap_overfull(
   map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>>& to_upmap)
 {
   //
-  // This function tries to drop existimg upmap items which map data to overfull 
-  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
+  // This function tries to drop existing upmap items which map data to overfull 
+  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and returns true 
   // if it found an item that can be dropped, false if not. 
   //
   for (auto pg : pgs) {
@@ -6162,8 +6162,8 @@ bool OSDMap::try_drop_remap_underfull(
     map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap)
 {
   // 
-  // This function tries to drop existimg upmap items which map data from underfull
-  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and rerturns true 
+  // This function tries to drop existing upmap items which map data from underfull
+  // OSDs. It updates temp_pgs_by_osd, to_unmap and to_upmap and returns true 
   // if it found an item that can be dropped, false if not. 
   //
   for (auto& [pg, um_pairs] : candidates) {
@@ -6251,7 +6251,7 @@ int OSDMap::find_best_remap (
 {
   //
   // Find the best remap from the suggestions in orig and out - the best remap 
-  // is the one which maps from the OSD with the largest deviatoion (from the 
+  // is the one which maps from the OSD with the largest deviation (from the 
   // OSDs which are part of orig)
   //
   int best_pos = -1;

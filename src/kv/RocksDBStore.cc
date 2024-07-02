@@ -341,7 +341,7 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
     if (ret != 0)
       return ret;
   } else {
-    //unrecognize config options.
+    //unrecognized config options.
     return -EINVAL;
   }
   return 0;
@@ -1359,7 +1359,7 @@ int RocksDBStore::repair(std::ostream &out)
       derr << __func__ << " cannot write to " << sharding_recreate << dendl;
       return -1;
     }
-    // fiinalize sharding recreate
+    // finalize sharding recreate
     if (do_open(out, false, false)) {
       derr << __func__ << " cannot finalize repair" << dendl;
       return -1;
@@ -2624,7 +2624,7 @@ public:
 	      r = shards_seek_to_first();
 	    }
 	  } else {
-	    //if we have resurected shards, kill it
+	    //if we have resurrected shards, kill it
 	    if (shards_valid()) {
 	      shards_next();
 	    }
@@ -2717,7 +2717,7 @@ public:
       return r;
     if (current_shard->second->valid())
       return 0;
-    //current shard exhaused, search for key
+    //current shard exhausted, search for key
     ++current_shard;
     while (current_shard != shards.end()) {
       r = current_shard->second->seek_to_first();

@@ -1725,7 +1725,7 @@ static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t loca
 // the OSDService::stat_lock which protects all OSD usage
 bool PG::try_reserve_recovery_space(
   int64_t primary_bytes, int64_t local_bytes) {
-  // Use tentative_bacfill_full() to make sure enough
+  // Use tentative_backfill_full() to make sure enough
   // space is available to handle target bytes from primary.
 
   // TODO: If we passed num_objects from primary we could account for
@@ -2055,7 +2055,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   // before the pg advances to this new osdmap, the repop replies before this
   // repop can be discarded by that replica OSD, because the primary resets the
   // connection to it when handling the new osdmap marking it down, and also
-  // resets the messenger sesssion when the replica reconnects. to avoid the
+  // resets the messenger session when the replica reconnects. to avoid the
   // out-of-order replies, the messages from that replica should be discarded.
   OSDMapRef next_map = osd->get_next_osdmap();
   if (next_map->is_down(from)) {
@@ -2452,7 +2452,7 @@ int PG::pg_stat_adjust(osd_stat_t *ns)
   // or near to backfillfull.
   if (reserved_num_bytes > 0) {
     // TODO: Handle compression by adjusting by the PGs average
-    // compression precentage.
+    // compression percentage.
     dout(20) << __func__ << " reserved_num_bytes " << (reserved_num_bytes >> 10) << "KiB"
              << " Before kb_used " << new_stat.statfs.kb_used() << "KiB" << dendl;
     if (new_stat.statfs.available > reserved_num_bytes)

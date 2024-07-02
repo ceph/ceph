@@ -145,7 +145,7 @@ void usage(ostream& out)
 "                                    set allocation hint for an object\n"
 "   set-redirect <object A> --target-pool <caspool> <target object A> [--with-reference]\n"
 "                                    set redirect target\n"
-"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference]\n"
+"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <target-offset> [--with-reference]\n"
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "   unset-manifest <obj-name>	     unset redirect or chunked object\n"
@@ -1909,7 +1909,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   std::string run_name;
   std::string prefix;
-  bool forcefull = false;
+  bool force_full = false;
   unique_ptr<Formatter> formatter = nullptr;
   bool pretty_format = false;
   const char *output = NULL;
@@ -1958,7 +1958,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   i = opts.find("force-full");
   if (i != opts.end()) {
-    forcefull = true;
+    force_full = true;
   }
   i = opts.find("prefix");
   if (i != opts.end()) {
@@ -3075,7 +3075,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       oids.push_back(*obj_name);
     }
     for (const auto& oid : oids) {
-      if (forcefull) {
+      if (force_full) {
           ret = detail::remove(io_ctx, oid, (CEPH_OSD_FLAG_FULL_FORCE |
                                CEPH_OSD_FLAG_FULL_TRY), use_striper);
       } else {

@@ -412,7 +412,7 @@ public:
                      Buffer *buffer, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
       if (buffer->is_writing()) {
-        // we might get already cached data for which resetting mempool is inppropriate
+        // we might get already cached data for which resetting mempool is inappropriate
         // hence calling try_assign_to_mempool
         buffer->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
         if (writing.empty() || writing.rbegin()->seq <= buffer->seq) {
@@ -4011,7 +4011,7 @@ public:
   // Maintains two lists of bloom filters for both cids and oids
   //   where each list entry is a BF for specific disk pextent
   //   The length of the extent per filter is measured on init.
-  // Allows to filter out 'uninteresting' pextents to speadup subsequent
+  // Allows to filter out 'uninteresting' pextents to speedup subsequent
   //  'is_used' access. 
   struct StoreSpaceTracker {
     const uint64_t BLOOM_FILTER_SALT_COUNT = 2;

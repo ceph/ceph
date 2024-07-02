@@ -1074,7 +1074,7 @@ protected:
   // ops waiting on peered
   std::list<OpRequestRef>            waiting_for_peered;
 
-  /// ops waiting on readble
+  /// ops waiting on readable
   std::list<OpRequestRef>            waiting_for_readable;
 
   // ops waiting on active (require peered as well)

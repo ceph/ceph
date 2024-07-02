@@ -381,7 +381,7 @@ struct BasicStatCompletionData : CompletionData {
   // MultiAioCompletionImpl used to handle the double aysnc
   // call in the back (stat + getxattr)
   libradosstriper::MultiAioCompletionImpl *m_multiCompletion;
-  // where to store the size of first objct
+  // where to store the size of first object
   // this will be ignored but we need a place to store it when
   // async stat is called
   uint64_t m_objectSize;
@@ -1491,7 +1491,7 @@ int libradosstriper::RadosStriperImpl::truncate(const std::string& soid,
   libradosstriper::MultiAioCompletionImplPtr multi_completion{
     new libradosstriper::MultiAioCompletionImpl, false};
   multi_completion->set_complete_callback(cdata->get() /* create ref! */, striper_truncate_aio_req_complete);
-  // call asynchrous version of truncate
+  // call asynchronous version of truncate
   int rc = aio_truncate(soid, multi_completion, original_size, size, layout);
   // wait for completion of the truncation
   multi_completion->finish_adding_requests();

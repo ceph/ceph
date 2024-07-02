@@ -602,7 +602,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
         revert_to > (int64_t)version) {
       err = -EINVAL;
       ss << "must specify a valid historical version to revert to; "
-         << "see 'ceph config log' for a list of avialable configuration "
+         << "see 'ceph config log' for a list of available configuration "
          << "historical versions";
       goto reply;
     }

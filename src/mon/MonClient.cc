@@ -208,7 +208,7 @@ int MonClient::get_monmap_and_config()
  * the provided @p result_reply, if this last parameter is not NULL.
  *
  * So that we don't rely on the MonClient's default messenger, set up
- * during connect(), we create our own messenger to comunicate with the
+ * during connect(), we create our own messenger to communicate with the
  * specified monitor.  This is advantageous in the following ways:
  *
  * - Isolate the ping procedure from the rest of the MonClient's operations,
@@ -1019,7 +1019,7 @@ void MonClient::_un_backoff()
     cct->_conf.get_val<double>("mon_client_hunt_interval_min_multiple"),
     reopen_interval_multiplier /
     cct->_conf.get_val<double>("mon_client_hunt_interval_backoff"));
-  ldout(cct, 20) << __func__ << " reopen_interval_multipler now "
+  ldout(cct, 20) << __func__ << " reopen_interval_multiplier now "
 		 << reopen_interval_multiplier << dendl;
 }
 
@@ -1283,7 +1283,7 @@ void MonClient::_resend_mon_commands()
     auto cmd = p->second;
     ++p;
     if (cmd->is_tell() && monmap.min_mon_release >= ceph_release_t::octopus) {
-      // starting with octopus, tell commands use their own connetion and need no
+      // starting with octopus, tell commands use their own connection and need no
       // special resend when we finish hunting.
     } else {
       _send_command(cmd); // might remove cmd from mon_commands
@@ -1758,7 +1758,7 @@ int MonConnection::get_auth_request(
   int r = _init_auth(*method, entity_name, want_keys, keyring, true);
   ceph_assert(r == 0);
 
-  // initial requset includes some boilerplate...
+  // initial request includes some boilerplate...
   encode((char)AUTH_MODE_MON, *bl);
   encode(entity_name, *bl);
   encode(global_id, *bl);

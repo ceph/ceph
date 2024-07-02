@@ -128,7 +128,7 @@ struct HeartbeatStamps : public RefCountedObject {
   //
   // conversely, if we have a remote timestamp T, then that is
   // [T - ub, T - lb] in terms of the local clock.  i.e., if you are
-  // substracting the delta, then take care that you swap the role of the
+  // subtracting the delta, then take care that you swap the role of the
   // lb and ub values.
 
   /// lower bound on peer clock - local clock
@@ -1883,7 +1883,7 @@ public:
    * @param pg_stats_publish the latest pg_stat possessed by caller
    * @param unstable_stats additional stats which should be included in the
    *        returned stats
-   * @return the up to date stats if it is different from the specfied
+   * @return the up to date stats if it is different from the specified
    *         @c pg_stats_publish
    */
   std::optional<pg_stat_t> prepare_stats_for_publish(
@@ -1979,7 +1979,7 @@ public:
   bool discover_all_missing(
     BufferedRecoveryMessages &rctx);
 
-  /// Notify that hoid has been fully recocovered
+  /// Notify that hoid has been fully recovered
   void object_recovered(
     const hobject_t &hoid,
     const object_stat_sum_t &stat_diff) {

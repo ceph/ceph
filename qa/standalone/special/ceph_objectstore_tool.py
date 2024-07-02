@@ -435,7 +435,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
         assert(ret == 0)
         old_crush_file, new_crush_file = new_crush_file, old_crush_file
 
-    # change them back, since we don't need to preapre for another round
+    # change them back, since we don't need to prepare for another round
     old_crush_file, new_crush_file = new_crush_file, old_crush_file
     old_crush_file.close()
 
@@ -453,7 +453,7 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
     assert(ret == 0)
 
     # osdmaptool increases the epoch of the changed osdmap, so we need to force the tool
-    # to use use a different epoch than the one in osdmap
+    # to use a different epoch than the one in osdmap
     cmd = CFSD_PREFIX + "--op set-osdmap --file {osdmap_file} --epoch {epoch} --force"
     cmd = cmd.format(osd=osd_path, osdmap_file=osdmap_file.name, epoch=epoch)
     ret = call(cmd, stdout=DEVNULL, shell=True)

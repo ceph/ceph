@@ -109,7 +109,7 @@ struct RadosStriperImpl {
   // asynchronous remove. Note that the removal is not 100% parallelized :
   // the removal of the first rados object of the striped object will be
   // done via a syncrhonous call after the completion of all other removals.
-  // These are done asynchrounously and in parallel
+  // These are done asynchronously and in parallel
   int aio_remove(const std::string& soid, librados::AioCompletionImpl *c, int flags=0);
 
   // reference counting

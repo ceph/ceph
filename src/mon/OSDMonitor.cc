@@ -1563,7 +1563,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
   mapping_job.reset();
 
-  // ensure we don't have blank new_state updates.  these are interrpeted as
+  // ensure we don't have blank new_state updates.  these are interpreted as
   // CEPH_OSD_UP (and almost certainly not what we want!).
   auto p = pending_inc.new_state.begin();
   while (p != pending_inc.new_state.end()) {
@@ -2451,7 +2451,7 @@ void OSDMonitor::prune_init(osdmap_manifest_t& manifest)
 
   version_t pin_first;
 
-  // verify constrainsts on stable in-memory state
+  // verify constraints on stable in-memory state
   if (!has_osdmap_manifest) {
     // we must have never pruned, OR if we pruned the state must no longer
     // be relevant (i.e., the state must have been removed alongside with
@@ -7963,7 +7963,7 @@ int OSDMonitor::check_pg_num(int64_t pool,
 /**
  * @param name The name of the new pool
  * @param crush_rule The crush rule to use. If <0, will use the system default
- * @param crush_rule_name The crush rule to use, if crush_rulset <0
+ * @param crush_rule_name The crush rule to use, if crush_ruleset <0
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param pg_num_min min pg_num
@@ -10127,7 +10127,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = r;
 	goto reply_no_propose;
       }
-      dout(10) << __func__ << " crush somke test duration: "
+      dout(10) << __func__ << " crush smoke test duration: "
                << duration << ", result: " << ess.str() << dendl;
     }
 
@@ -10273,7 +10273,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
         // note that we do not verify if class_is_in_use here
         // in case the device is misclassified and user wants
-        // to overridely reset...
+        // to override reset...
 
         err = newcrush.remove_device_class(cct, osd, &ss);
         if (err < 0) {
@@ -11158,7 +11158,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (osdmap.crush->rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
+      // From the user point of view, the rule is more meaningful.
       ss << "rule " << name << " already exists";
       err = 0;
       goto reply_no_propose;
@@ -11168,7 +11168,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (newcrush.rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
+      // From the user point of view, the rule is more meaningful.
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
@@ -11196,7 +11196,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (osdmap.crush->rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
+      // From the user point of view, the rule is more meaningful.
       ss << "rule " << name << " already exists";
       err = 0;
       goto reply_no_propose;
@@ -11206,7 +11206,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (newcrush.rule_exists(name)) {
       // The name is uniquely associated to a ruleid and the rule it contains
-      // From the user point of view, the rule is more meaningfull.
+      // From the user point of view, the rule is more meaningful.
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
@@ -13678,7 +13678,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      */
 
     // We check if the transition is valid against the current pool mode, as
-    // it is the only committed state thus far.  We will blantly squash
+    // it is the only committed state thus far.  We will blindly squash
     // whatever mode is on the pending state.
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&

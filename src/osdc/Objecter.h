@@ -1841,7 +1841,7 @@ public:
     ///< true if we have ever mapped to a valid pool
     bool pool_ever_existed = false;
 
-    ///< explcit pg target, if any
+    ///< explicit pg target, if any
     pg_t base_pgid;
 
     pg_t pgid; ///< last (raw) pg we mapped to

@@ -513,7 +513,7 @@ public:
 		      uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
-   * readv -- read specfic intervals from an object;
+   * readv -- read specific intervals from an object;
    * caller must call fiemap to fill in the extent-map first.
    *
    * Note: if reading from an offset past the end of the object, we
@@ -566,7 +566,7 @@ public:
 
   /**
    * dump_onode -- dumps onode metadata in human readable form,
-     intended primiarily for debugging
+     intended primarily for debugging
    *
    * @param cid collection for object
    * @param oid oid of object
@@ -782,7 +782,7 @@ public:
 
   /**
   * Estimates additional disk space used by the specified amount of objects and caused by file allocation granularity and metadata store
-  * - num objects - total (including witeouts) object count to measure used space for.
+  * - num objects - total (including whiteouts) object count to measure used space for.
   */
   virtual uint64_t estimate_objects_overhead(uint64_t num_objects) = 0;
 

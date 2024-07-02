@@ -249,7 +249,7 @@ namespace ceph {
     virtual unsigned int get_coding_chunk_count() const = 0;
 
     /**
-     * Return the number of sub chunks chunks created by a call to the
+     * Return the number of sub chunks created by a call to the
      * **encode** method. Each chunk can be viewed as union of sub-chunks
      * For the case of array codes, the sub-chunk count > 1, where as the
      * scalar codes have sub-chunk count = 1.
@@ -454,7 +454,7 @@ namespace ceph {
      * Returns 0 on success.
      *
      * @param [in] chunks map chunk indexes to chunk data
-     * @param [out] decoded concatenante of the data chunks
+     * @param [out] decoded concatenate of the data chunks
      * @return **0** on success or a negative errno on error.
      */
     virtual int decode_concat(const std::map<int, bufferlist> &chunks,

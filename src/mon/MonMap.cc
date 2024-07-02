@@ -156,7 +156,7 @@ void MonMap::calc_legacy_ranks()
   // while only containing the names of each individual monitor.
   // The only way of achieving this with std::sort() would be to first
   // insert every mon_info_t entry into a vector 'foo', std::sort() 'foo'
-  // with custom comparison functions, and then copy each invidual entry
+  // with custom comparison functions, and then copy each individual entry
   // to a new vector. Unless there's a simpler way, we don't think the
   // added complexity makes up for the additional memory usage of a 'set'.
   set<mon_info_t, rank_cmp> tmp;

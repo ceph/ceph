@@ -1319,7 +1319,7 @@ void ECBackend::handle_sub_read_reply(
 	    rop.complete[iter->first].errors.clear();
 	  }
 	}
-	// avoid re-read for completed object as we may send remaining reads for uncopmpleted objects
+	// avoid re-read for completed object as we may send remaining reads for uncompleted objects
 	rop.to_read.at(iter->first).need.clear();
 	rop.to_read.at(iter->first).want_attrs = false;
 	++is_complete;

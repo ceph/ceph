@@ -153,7 +153,7 @@ void Paxos::dump_info(Formatter *f)
 // leader
 void Paxos::collect(version_t oldpn)
 {
-  // we're recoverying, it seems!
+  // we're recovering, it seems!
   state = STATE_RECOVERING;
   ceph_assert(mon.is_leader());
 
@@ -230,7 +230,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
 
   ceph_assert(mon.is_peon()); // mon epoch filter should catch strays
 
-  // we're recoverying, it seems!
+  // we're recovering, it seems!
   state = STATE_RECOVERING;
 
   //update the peon recovery timeout 

@@ -58,7 +58,7 @@ struct TxHandler {
   // called and another round of update-...-update-final will take place.
   //
   // The input parameter informs implementation how the -update sequence
-  // is fragmented and allows to make concious decision about allocation
+  // is fragmented and allows to make conscious decision about allocation
   // or reusage of provided memory. One implementation could do in-place
   // encryption while other might prefer one huge output buffer.
   //
@@ -105,7 +105,7 @@ public:
   // Perform decryption ciphertext must be ALWAYS aligned to 16 bytes.
   virtual void authenticated_decrypt_update(ceph::bufferlist& bl) = 0;
 
-  // Perform decryption of last cipertext's portion and verify signature
+  // Perform decryption of last ciphertext's portion and verify signature
   // for overall decryption sequence.
   // Throws on integrity/authenticity checks
   virtual void authenticated_decrypt_update_final(ceph::bufferlist& bl) = 0;
@@ -114,7 +114,7 @@ public:
 struct rxtx_t {
   //rxtx_t(rxtx_t&& r) : rx(std::move(rx)), tx(std::move(tx)) {}
   // Each peer can use different handlers.
-  // Hmm, isn't that too much flexbility?
+  // Hmm, isn't that too much flexibility?
   std::unique_ptr<RxHandler> rx;
   std::unique_ptr<TxHandler> tx;
 

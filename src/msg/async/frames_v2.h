@@ -177,7 +177,7 @@ static constexpr uint32_t FRAME_PREAMBLE_WITH_INLINE_SIZE =
 // For msgr 2.1, FRAME_EARLY_X flags are sent as part of epilogue.
 //
 // This flag indicates whether frame segments have been compressed by 
-// sender, and used in segments' disassemblig phase. 
+// sender, and used in segments' disassembling phase. 
 #define FRAME_EARLY_DATA_COMPRESSED       0X1
 
 struct FrameError : std::runtime_error {
@@ -273,7 +273,7 @@ public:
   // For msgr2.1, the epilogue is generated only if the frame has
   // more than one segment (i.e. at least one of second to fourth
   // segments is not empty).  In crc mode, it stores crcs for
-  // second to fourh segments; the preamble and the first segment
+  // second to fourth segments; the preamble and the first segment
   // are covered by their own crcs.  In secure mode, the epilogue
   // auth tag covers second to fourth segments; the preamble and the
   // first segment (if not fully inlined into the preamble inline
@@ -441,7 +441,7 @@ protected:
   // this tuple is only used when decoding values from a payload segment
   std::tuple<Args...> _values;
 
-  // FIXME: for now, we assume specific features for the purpoess of encoding
+  // FIXME: for now, we assume specific features for the purposes of encoding
   // the frames themselves (*not* messages in message frames!).
   uint64_t features = msgr2_frame_assumed;
 

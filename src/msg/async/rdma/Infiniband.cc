@@ -361,7 +361,7 @@ int Infiniband::QueuePair::init()
   if (!srq) {
     int rq_wrs = infiniband.post_chunks_to_rq(max_recv_wr, this);
     if (rq_wrs  == 0) {
-      lderr(cct) << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num
+      lderr(cct) << __func__ << " initialize no SRQ Queue Pair, qp number: " << qp->qp_num
                  << " fatal error: can't post SQ WR " << dendl;
       return -1;
     }
@@ -420,7 +420,7 @@ int Infiniband::QueuePair::recv_cm_meta(CephContext *cct, int socket_fd)
   } else { // valid message
     sscanf(msg, "%hx:%x:%x:%x:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn), gid);
     wire_gid_to_gid(gid, &peer_cm_meta);
-    ldout(cct, 5) << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn
+    ldout(cct, 5) << __func__ << " received: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn
                   << ", " << peer_cm_meta.psn << ", " << peer_cm_meta.peer_qpn << ", " << gid << dendl;
   }
   return r;
@@ -888,7 +888,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
   minfo->mr = ibv_reg_mr(manager->pd->pd, minfo->chunks, block_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
   if (minfo->mr == NULL) {
     lderr(cct) << __func__ << " failed to do rdma memory registration " << block_size << " bytes. "
-      " relase allocated memory now." << dendl;
+      " release allocated memory now." << dendl;
     manager->free(minfo);
     return NULL;
   }
@@ -1194,7 +1194,7 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp)
         ::free(isge);
         return 0;
       }
-      break; //get some buffers, so we need post them to recevie queue
+      break; //get some buffers, so we need post them to receive queue
     }
 
     isge[i].addr = reinterpret_cast<uint64_t>(chunk->data);
