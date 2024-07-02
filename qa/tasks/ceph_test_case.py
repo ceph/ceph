@@ -52,7 +52,7 @@ class RunCephCmd:
                 args = args[0]
             kwargs['args'] = args
         kwargs['stdout'] = kwargs.pop('stdout', StringIO())
-        return self.run_ceph_cmd(**kwargs).stdout.getvalue()
+        return self.run_ceph_cmd(**kwargs).stdout.getvalue().strip()
 
     def assert_retval(self, proc_retval, exp_retval):
         msg = (f'expected return value: {exp_retval}\n'
