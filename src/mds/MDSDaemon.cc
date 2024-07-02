@@ -1151,11 +1151,11 @@ bool MDSDaemon::parse_caps(const AuthCapsInfo& info, MDSAuthCaps& caps)
   }
 }
 
-int MDSDaemon::ms_handle_fast_authentication(Connection *con)
+bool MDSDaemon::ms_handle_fast_authentication(Connection *con)
 {
   /* N.B. without mds_lock! */
   MDSAuthCaps caps;
-  return parse_caps(con->get_peer_caps_info(), caps) ? 0 : -1;
+  return parse_caps(con->get_peer_caps_info(), caps);
 }
 
 void MDSDaemon::ms_handle_accept(Connection *con)
