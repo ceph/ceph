@@ -55,4 +55,12 @@ export class RgwMultisiteService {
   modifySyncPolicyGroup(payload: { group_id: string; status: string; bucket_name?: string }) {
     return this.http.put(`${this.url}/sync-policy-group`, payload);
   }
+
+  removeSyncPolicyGroup(group_id: string, bucket_name?: string) {
+    let params = new HttpParams();
+    if (bucket_name) {
+      params = params.append('bucket_name', bucket_name);
+    }
+    return this.http.delete(`${this.url}/sync-policy-group/${group_id}`, { params });
+  }
 }

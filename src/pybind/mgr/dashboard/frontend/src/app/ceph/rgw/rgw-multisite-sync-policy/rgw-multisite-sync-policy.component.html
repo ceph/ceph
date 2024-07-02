@@ -7,16 +7,18 @@
 </legend>
 <cd-table
   #table
+  [autoReload]="false"
   [data]="syncPolicyData"
   [columns]="columns"
   columnMode="flex"
-  selectionType="single"
+  selectionType="multiClick"
   [searchableObjects]="true"
   [hasDetails]="false"
   [serverSide]="false"
   [count]="0"
   [maxLimit]="25"
   [toolHeader]="true"
+  (fetchData)="getPolicyList($event)"
   (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
     <cd-table-actions
@@ -27,3 +29,10 @@
     </cd-table-actions>
   </div>
 </cd-table>
+
+<ng-template #deleteTpl>
+  <cd-alert-panel type="danger"
+                  i18n>
+    Are you sure you want to delete these policy groups?
+  </cd-alert-panel>
+</ng-template>

@@ -74,4 +74,12 @@ describe('RgwMultisiteService', () => {
     expect(req.request.body).toEqual(postData);
     req.flush(null);
   });
+
+  it('should remove Sync Policy Group', () => {
+    const group_id = 'test';
+    service.removeSyncPolicyGroup(group_id).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-policy-group/' + group_id);
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
+  });
 });
