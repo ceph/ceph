@@ -105,6 +105,8 @@ bluestore:
   - src/os/bluestore/**
 
 core:
+  - "**/CMakeLists.txt"
+  - admin/**
   - doc/man/8/ceph-authtool.rst
   - doc/man/8/ceph-conf.rst
   - doc/man/8/ceph-create-keys.rst
@@ -117,6 +119,16 @@ core:
   - doc/man/8/monmaptool.rst
   - doc/man/8/rados.rst
   - doc/rados/**
+  - ceph.spec.in
+  - cmake/**
+  - debian/**
+  - do_cmake.sh
+  - do_freebsd.sh
+  - install-deps.sh
+  - keys/**
+  - make-debs.sh
+  - make-dist
+  - make-srpm.sh
   - qa/standalone/**
   - qa/suites/rados/**
   - qa/workunits/erasure-code/**
@@ -124,6 +136,7 @@ core:
   - qa/workunits/mon/**
   - qa/workunits/objectstore/**
   - qa/workunits/rados/**
+  - run-make-check.sh
   - src/ceph.in
   - src/ceph_osd.cc
   - src/ceph_mon.cc
@@ -148,6 +161,8 @@ core:
   - src/tools/rados/**
   - src/test/librados/**
   - src/test/osd/**
+  - win32_build.sh
+  - win32_deps_build.sh
 
 crimson:
   - doc/dev/crimson/**
