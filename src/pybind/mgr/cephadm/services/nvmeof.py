@@ -53,6 +53,23 @@ class NvmeofService(CephService):
 
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'ceph-nvmeof.conf': gw_conf}
+
+        if spec.enable_auth:
+            if (
+                not spec.client_cert
+                or not spec.client_key
+                or not spec.server_cert
+                or not spec.server_key
+            ):
+                self.mgr.log.error(f'enable_auth set for {spec.service_name()} spec, but at '
+                                   'least one of server/client cert/key fields missing. TLS '
+                                   f'not being set up for {daemon_spec.name()}')
+            else:
+                daemon_spec.extra_files['server_cert'] = spec.server_cert
+                daemon_spec.extra_files['client_cert'] = spec.client_cert
+                daemon_spec.extra_files['server_key'] = spec.server_key
+                daemon_spec.extra_files['client_key'] = spec.client_key
+
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
         return daemon_spec
