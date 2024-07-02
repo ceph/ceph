@@ -9,6 +9,7 @@
 #include "librbd/crypto/BlockCrypto.h"
 #include "librbd/crypto/CryptoInterface.h"
 #include "librbd/crypto/CryptoObjectDispatch.h"
+#include "librbd/crypto/CryptoImageDispatch.h"
 #include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/crypto/openssl/DataCryptor.h"
 #include "librbd/io/ImageDispatcherInterface.h"
@@ -30,8 +31,14 @@ void set_crypto(I *image_ctx,
 
   auto crypto = encryption_format->get_crypto();
 
-  auto object_dispatch = CryptoObjectDispatch<I>::create(image_ctx, crypto);
-  image_ctx->io_object_dispatcher->register_dispatch(object_dispatch);
+  if (image_ctx->io_image_dispatcher->exists(
+          io::IMAGE_DISPATCH_LAYER_MIGRATION)) {
+    auto image_dispatch = CryptoImageDispatch<I>::create(image_ctx, crypto);
+    image_ctx->io_image_dispatcher->register_dispatch(image_dispatch);
+  } else {
+    auto object_dispatch = CryptoObjectDispatch<I>::create(image_ctx, crypto);
+    image_ctx->io_object_dispatcher->register_dispatch(object_dispatch);
+  }
 
   image_ctx->encryption_format = std::move(encryption_format);
 }

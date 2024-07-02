@@ -53,6 +53,14 @@ public:
     return true;
   }
 
+  inline void align_image_extents(const io::Extents& extents,
+                                  io::Extents* aligned_extents) {
+    for (auto& [offset, length]: extents) {
+      auto aligned = align(offset, length);
+      aligned_extents->emplace_back(aligned.first, aligned.second);
+    }
+  }
+
   inline void align_extents(const io::ReadExtents& extents,
                             io::ReadExtents* aligned_extents) {
     for (const auto& extent: extents) {

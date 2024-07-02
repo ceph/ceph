@@ -6,6 +6,7 @@
 #include "test/librbd/mock/migration/MockSnapshotInterface.h"
 #include "include/rbd_types.h"
 #include "common/ceph_mutex.h"
+#include "librbd/io/Utils.h"
 #include "librbd/migration/RawFormat.h"
 #include "librbd/migration/SourceSpecBuilder.h"
 #include "gtest/gtest.h"
@@ -18,9 +19,32 @@ namespace {
 struct MockTestImageCtx : public MockImageCtx {
   MockTestImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
   }
+
+  uint64_t data_offset = 0;
 };
 
 } // anonymous namespace
+
+namespace io {
+namespace util {
+
+template <>
+uint64_t area_to_raw_offset(const MockTestImageCtx& image_ctx, uint64_t offset,
+                            ImageArea area) {
+  switch (area) {
+    case ImageArea::DATA:
+      return offset + image_ctx.data_offset;
+    case ImageArea::CRYPTO_HEADER:
+      // direct mapping
+      ceph_assert(image_ctx.data_offset != 0);
+      return offset;
+    default:
+      ceph_abort();
+  }
+}
+
+} // namespace util
+} // namespace io
 
 namespace migration {
 
@@ -347,6 +371,48 @@ TEST_F(TestMockMigrationRawFormat, Read) {
   io::ReadResult read_result{&bl};
   ASSERT_TRUE(mock_raw_format.read(aio_comp, CEPH_NOSNAP, {{123, 123}},
                                    std::move(read_result), 0, 0, {}));
+  ASSERT_EQ(123, ctx2.wait());
+  ASSERT_EQ(expect_bl, bl);
+
+  C_SaferCond ctx3;
+  mock_raw_format.close(&ctx3);
+  ASSERT_EQ(0, ctx3.wait());
+}
+
+TEST_F(TestMockMigrationRawFormat, ReadRemapped) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  mock_image_ctx.data_offset = 4096;
+
+  InSequence seq;
+  MockSourceSpecBuilder mock_source_spec_builder;
+
+  auto mock_snapshot_interface = new MockSnapshotInterface();
+  expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
+          mock_snapshot_interface, 0);
+
+  expect_snapshot_open(*mock_snapshot_interface, 0);
+
+  bufferlist expect_bl;
+  expect_bl.append(std::string(123, '1'));
+  expect_snapshot_read(
+          *mock_snapshot_interface, {{4096 + 123, 123}}, expect_bl, 0);
+
+  expect_snapshot_close(*mock_snapshot_interface, 0);
+
+  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
+                                &mock_source_spec_builder);
+
+  C_SaferCond ctx1;
+  mock_raw_format.open(&ctx1);
+  ASSERT_EQ(0, ctx1.wait());
+
+  C_SaferCond ctx2;
+  auto aio_comp = io::AioCompletion::create_and_start(
+          &ctx2, m_image_ctx, io::AIO_TYPE_READ);
+  bufferlist bl;
+  io::ReadResult read_result{&bl};
+  ASSERT_TRUE(mock_raw_format.read(aio_comp, CEPH_NOSNAP, {{123, 123}},
+  std::move(read_result), 0, 0, {}));
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl, bl);
 
