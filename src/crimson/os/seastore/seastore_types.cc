@@ -92,6 +92,18 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_t &l)
+{
+  auto str = fmt::format("{}", l);
+  return out << str;
+}
+
+std::ostream &operator<<(std::ostream &out, const loffset_t &loffset)
+{
+  return out << "loffset(base=" << loffset.get_base()
+	     << ", offset=" << loffset.get_offset() << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
   if (pladdr.is_laddr()) {
@@ -130,6 +142,97 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     out << "INVALID!";
   }
   return out << ">";
+}
+
+laddr_t laddr_t::get_data_hint(
+  uint8_t pool,
+  uint8_t shard,
+  uint32_t crush,
+  local_clone_id_t clone_id)
+{
+  static thread_local random_generator_t gen;
+  auto ret = L_ADDR_MIN;
+  ret.set_pool(pool);
+  ret.set_shard(shard);
+  ret.set_crush(crush);
+  ret.set_local_clone_id(clone_id);
+  auto r = gen();
+  ret.set_random(r);
+
+  while (BOOST_UNLIKELY(!ret.has_valid_prefix())) {
+    // avoid conflicting with L_ADDR_MIN and L_ADDR_NULL
+    ret.set_random(++r);
+  }
+
+  assert(ret.has_valid_prefix());
+  assert(ret.get_pool() == pool);
+  assert(ret.get_shard() == shard);
+  assert(ret.get_crush() == crush);
+  assert(!ret.is_metadata());
+  assert(ret.get_local_clone_id() == clone_id);
+  assert(ret.get_offset() == 0);
+  return ret;
+}
+
+laddr_t laddr_t::get_next_hint(laddr_t laddr)
+{
+  auto l = laddr;
+
+  if (laddr.has_valid_prefix()) {
+    // data: when random is full, loop back to 0
+    assert(l.get_offset() == 0);
+    auto r = laddr.get_random();
+    do {
+      l.set_random(++r);
+      // avoid conflicting with L_ADDR_MIN and L_ADDR_NULL
+    } while (BOOST_UNLIKELY(!l.has_valid_prefix()));
+  } else {
+    // metadata
+    auto offset_mask = OffsetSpec::MASK;
+    if ((laddr.value & offset_mask) == offset_mask) {
+      // offset field is full, overflow to random field
+      l.set_random(laddr.get_random() + 1);
+      l.set_offset(0);
+    } else {
+      l.value++;
+    }
+  }
+
+  assert(l.get_pool() == laddr.get_pool());
+  assert(l.get_shard() == laddr.get_shard());
+  assert(l.get_crush() == laddr.get_crush());
+  assert(l.is_metadata() == laddr.is_metadata());
+  assert(l.get_local_clone_id() == laddr.get_local_clone_id());
+  return l;
+}
+
+std::pair<laddr_t, extent_len_t> laddr_t::get_aligned_range(
+  laddr_t base, extent_len_t offset, extent_len_t length)
+{
+  auto loff = base + offset;
+  auto begin = loff.get_base();
+  loff += length;
+  return std::make_pair(begin, loff.get_roundup_laddr() - begin);
+}
+
+laddr_t laddr_t::get_hint_from_offset(uint64_t offset) {
+  ceph_assert(p2align(offset, UNIT_SIZE) == offset);
+  offset >>= UNIT_SHIFT;
+  auto l = L_ADDR_MIN;
+  l.value = offset & OffsetSpec::MASK;
+  l.value |= internal128_t{offset >> OffsetSpec::len}
+             << (OffsetSpec::len + LocalCloneIdSpec::len + MetadataSpec::len +
+                 RecoverSpec::len);
+  return l;
+}
+
+uint64_t laddr_t::get_original_offset() const {
+  uint64_t offset = value & OffsetSpec::MASK;
+  auto off = OffsetSpec::len + LocalCloneIdSpec::len + MetadataSpec::len +
+             RecoverSpec::len;
+  offset |= static_cast<uint64_t>(value >> off) << OffsetSpec::len;
+  offset <<= UNIT_SHIFT;
+  return offset;
 }
 
 journal_seq_t journal_seq_t::add_offset(

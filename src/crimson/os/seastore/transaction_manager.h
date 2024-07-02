@@ -117,6 +117,7 @@ public:
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::get_pins);
     SUBDEBUGT(seastore_tm, "{}~{}", t, offset, length);
+    assert(length % laddr_t::UNIT_SIZE == 0);
     return lba_manager->get_mappings(
       t, offset, length);
   }
@@ -337,7 +338,6 @@ public:
     LOG_PREFIX(TransactionManager::alloc_non_data_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
     auto ext = cache->alloc_new_non_data_extent<T>(
       t,
       len,
@@ -377,7 +377,6 @@ public:
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
     auto exts = cache->alloc_new_data_extents<T>(
       t,
       len,
@@ -567,7 +566,6 @@ public:
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}", t, len, hint);
-    ceph_assert(is_aligned(hint, epm->get_block_size()));
     return lba_manager->reserve_region(
       t,
       hint,
@@ -600,7 +598,6 @@ public:
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}, clone_offset {}",
       t, mapping.get_length(), hint, intermediate_key);
-    ceph_assert(is_aligned(hint, epm->get_block_size()));
     return lba_manager->clone_mapping(
       t,
       hint,

@@ -23,7 +23,7 @@ namespace {
   }
 }
 
-const int STR_LEN = 50;
+const int STR_LEN = 1024;
 
 std::string rand_name(const int len)
 {

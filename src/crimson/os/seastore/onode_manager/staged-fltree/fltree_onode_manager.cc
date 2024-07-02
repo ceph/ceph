@@ -12,7 +12,8 @@ namespace crimson::os::seastore::onode {
 void FLTreeOnode::Recorder::apply_value_delta(
   ceph::bufferlist::const_iterator &bliter,
   NodeExtentMutable &value,
-  laddr_t value_addr)
+  laddr_t value_addr,
+  node_offset_t offset)
 {
   LOG_PREFIX(FLTreeOnode::Recorder::apply_value_delta);
   delta_op_t op;
