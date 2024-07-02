@@ -5,10 +5,7 @@
   </ng-container>
 
   <ng-container class="modal-content">
-    <form name="deletionForm"
-          #formDir="ngForm"
-          [formGroup]="deletionForm"
-          novalidate>
+    <form [formGroup]="deletionForm" novalidate>
       <div class="modal-body">
         <cd-alert-panel *ngIf="infoMessage"
                         type="info"
@@ -19,30 +16,34 @@
         <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
         <div class="question">
           <span *ngIf="itemNames; else noNames">
-            <p *ngIf="itemNames.length === 1; else manyNames"
-               i18n>Are you sure that you want to {{ actionDescription | lowercase }} <strong>{{ itemNames[0] }}</strong>?</p>
+            <p *ngIf="itemNames.length === 1; else manyNames" i18n>
+              Are you sure that you want to {{ actionDescription | lowercase }} <strong>{{ itemNames[0] }}</strong>?
+            </p>
             <ng-template #manyNames>
               <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected items?</p>
               <ul>
-                <li *ngFor="let itemName of itemNames"><strong>{{ itemName }}</strong></li>
+                <li *ngFor="let itemName of itemNames">
+                  <strong>{{ itemName }}</strong>
+                </li>
               </ul>
-            </ng-template >
+            </ng-template>
           </span>
           <ng-template #noNames>
             <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
           </ng-template>
           <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
           <div class="form-group">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     name="confirmation"
-                     id="confirmation"
-                     formControlName="confirmation"
-                     autofocus>
-              <label class="custom-control-label"
-                     for="confirmation"
-                     i18n>Yes, I am sure.</label>
+            <label for="confirmationInput" i18n>Please type the resource name(s) to confirm deletion:</label>
+            <input type="text"
+                   class="form-control"
+                   id="confirmationInput"
+                   formControlName="confirmationInput"
+                   [ngClass]="{'is-invalid': deletionForm.controls.confirmationInput.invalid && (deletionForm.controls.confirmationInput.dirty || deletionForm.controls.confirmationInput.touched)}"
+                   (input)="onInputChange()"
+                   autofocus>
+            <div *ngIf="deletionForm.controls.confirmationInput.invalid && (deletionForm.controls.confirmationInput.dirty || deletionForm.controls.confirmationInput.touched)"
+                 class="invalid-feedback" i18n>
+              Resource name(s) should exactly match to confirm deletion.
             </div>
           </div>
         </div>

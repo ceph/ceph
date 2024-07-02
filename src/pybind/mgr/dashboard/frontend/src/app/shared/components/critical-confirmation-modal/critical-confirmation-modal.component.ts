@@ -23,18 +23,25 @@ export class CriticalConfirmationModalComponent implements OnInit {
   backAction: Function;
   deletionForm: CdFormGroup;
   itemDescription: 'entry';
-  itemNames: string[];
+  itemNames: { poolName: string, namespace: string, imageName: string }[] = [];
   actionDescription = 'delete';
   infoMessage: string;
 
   childFormGroup: CdFormGroup;
   childFormGroupTemplate: TemplateRef<any>;
 
+  providedName: string;
+
   constructor(public activeModal: NgbActiveModal) {}
 
   ngOnInit() {
+    this.providedName = '';
+
     const controls = {
-      confirmation: new UntypedFormControl(false, [Validators.requiredTrue])
+      confirmationInput: new UntypedFormControl('', [
+        Validators.required,
+        this.confirmationValidator.bind(this)
+      ])
     };
     if (this.childFormGroup) {
       controls['child'] = this.childFormGroup;
@@ -43,6 +50,36 @@ export class CriticalConfirmationModalComponent implements OnInit {
     if (!(this.submitAction || this.submitActionObservable)) {
       throw new Error('No submit action defined');
     }
+  }
+
+  git clone --depth 1 --single-branch git@github.com:ceph/ceph.git
+  git clone --depth 1 --single-branch https://github.com/himanshu-0611/ceph-dev.git
+  
+  confirmationValidator(control: UntypedFormControl) {
+    const input = control.value;
+    this.providedName = input;
+  
+    let resourceName = 'default';
+  
+    if (this.itemNames.length > 0) {
+      const item = this.itemNames[0];
+  
+      if (typeof item === 'string') {
+        resourceName = item;
+      } else if (item.poolName && item.imageName) {
+        resourceName = `${item.poolName}/${item.imageName}`;
+      } else if (item.poolName) {
+        resourceName = item.poolName;
+      } else if (item.imageName) {
+        resourceName = item.imageName;
+      }
+    }
+  
+    return input === resourceName ? null : { mismatch: true };
+  }
+
+  onInputChange() {
+    this.deletionForm.controls.confirmationInput.updateValueAndValidity();
   }
 
   callSubmitAction() {
