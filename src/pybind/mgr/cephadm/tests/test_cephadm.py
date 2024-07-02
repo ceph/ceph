@@ -854,7 +854,7 @@ class TestCephadm(object):
                 with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
                     CephadmServe(cephadm_module)._check_daemons()
                     _mon_cmd.assert_any_call(
-                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://[1::4]:3000'},
+                        {'prefix': 'dashboard set-grafana-api-url', 'value': 'https://host_fqdn:3000'},
                         None)
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -1727,6 +1727,7 @@ class TestCephadm(object):
             'iscsi_ssl_cert': False,
             'ingress_ssl_cert': False,
             'mgmt_gw_cert': False,
+            'oauth2_proxy_cert': False,
             'cephadm_root_ca_cert': False,
             'grafana_cert': False,
             'nvmeof_client_cert': False,
@@ -1779,6 +1780,7 @@ class TestCephadm(object):
         expected_ls = {
             'grafana_key': False,
             'mgmt_gw_key': False,
+            'oauth2_proxy_key': False,
             'cephadm_root_ca_key': False,
             'iscsi_ssl_key': False,
             'ingress_ssl_key': False,
