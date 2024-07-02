@@ -1131,8 +1131,8 @@ int KernelDevice::_discard(uint64_t offset, uint64_t len)
     return 0;
   }
   dout(10) << __func__
-	   << " 0x" << std::hex << offset << "~" << len << std::dec
-	   << dendl;
+           << " 0x" << std::hex << offset << "~" << len << std::dec
+           << dendl;
   r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
   return r;
 }
