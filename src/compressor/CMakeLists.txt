@@ -11,6 +11,13 @@ if(HAVE_QATZIP AND HAVE_QAT)
                        )
 endif()
 
+if (HAVE_UADK)
+  add_library(uadk_compressor OBJECT UadkAccel.cc)
+  target_link_libraries(uadk_compressor PUBLIC
+	                uadk::uadk
+			uadk::uadkwd)
+endif()
+
 ## compressor plugins
 
 set(compressor_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/compressor)

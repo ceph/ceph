@@ -790,6 +790,12 @@ options:
   level: advanced
   desc: Set the maximum number of session within Qatzip when using QAT compressor
   default: 256
+- name: uadk_compressor_enabled
+  type: bool
+  level: advanced
+  desc: Enable UADK acceleration support for compression if available
+  default: false
+  with_legacy: true
 - name: plugin_crypto_accelerator
   type: str
   level: advanced
