@@ -539,7 +539,7 @@ public:
           if (child_node->is_mutation_pending()) {
             auto &prior = (child_node_t &)*child_node->get_prior_instance();
             assert(prior.is_valid());
-            assert(prior.is_parent_valid());
+            assert(prior.is_parent_viewable());
             if (node->is_mutation_pending()) {
               auto &n = node->get_stable_for_key(i->get_key());
               assert(prior.get_parent_node().get() == &n);
@@ -556,7 +556,7 @@ public:
             auto child = node->children[pos];
             assert(child);
             assert(child == cnode.get());
-            assert(cnode->is_parent_valid());
+            assert(cnode->is_parent_viewable());
           }
         } else {
           ceph_assert(!child_node->is_valid());
@@ -1045,7 +1045,7 @@ public:
         fixed_kv_extent.get_user_hint(),
         // get target rewrite generation
         fixed_kv_extent.get_rewrite_generation());
-      n_fixed_kv_extent->rewrite(fixed_kv_extent, 0);
+      n_fixed_kv_extent->rewrite(fixed_kv_extent, 0, c.trans);
       
       SUBTRACET(
         seastore_fixedkv_tree,
