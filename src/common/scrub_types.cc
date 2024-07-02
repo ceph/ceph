@@ -58,7 +58,6 @@ void shard_info_wrapper::set_object(const ScrubMap::object& object)
   // logically no-op, changes the comparator from std::less<void>
   // while avoiding `reinterpret_cast<const std::map<std::string,
   // ceph::bufferlist>&>(object.attrs)`
-  attrs.clear();
   for (const auto& kv : object.attrs) {
     attrs.insert(kv);
   }
