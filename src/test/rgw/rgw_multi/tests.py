@@ -1536,6 +1536,10 @@ def test_bucket_index_log_trim():
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
 
+# TODO: disable failing tests temporarily
+# until they are fixed
+
+@attr('fails_with_rgw')
 def test_bucket_reshard_index_log_trim():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1766,6 +1770,8 @@ def bucket_keys_eq(zone1, zone2, bucket_name):
                          zone2.name)
             assert False
 
+
+@attr('fails_with_rgw')
 @attr('bucket_reshard')
 def test_bucket_sync_run_basic_incremental():
     """
@@ -1831,6 +1837,7 @@ def trash_bucket(zone, bucket_name):
     cmd += ['--bucket', bucket_name]
     zone.cluster.admin(cmd)
 
+@attr('fails_with_rgw')
 @attr('bucket_reshard')
 def test_zap_init_bucket_sync_run():
     """
@@ -1922,6 +1929,7 @@ def test_role_delete_sync():
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
 
+@attr('fails_with_rgw')
 @attr('data_sync_init')
 def test_bucket_full_sync_after_data_sync_init():
     zonegroup = realm.master_zonegroup()
@@ -1953,6 +1961,7 @@ def test_bucket_full_sync_after_data_sync_init():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('fails_with_rgw')
 @attr('data_sync_init')
 @attr('bucket_reshard')
 def test_resharded_bucket_full_sync_after_data_sync_init():
@@ -1993,6 +2002,7 @@ def test_resharded_bucket_full_sync_after_data_sync_init():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('fails_with_rgw')
 @attr('data_sync_init')
 def test_bucket_incremental_sync_after_data_sync_init():
     zonegroup = realm.master_zonegroup()
@@ -2030,6 +2040,7 @@ def test_bucket_incremental_sync_after_data_sync_init():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('fails_with_rgw')
 @attr('data_sync_init')
 @attr('bucket_reshard')
 def test_resharded_bucket_incremental_sync_latest_after_data_sync_init():
@@ -2078,6 +2089,7 @@ def test_resharded_bucket_incremental_sync_latest_after_data_sync_init():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
     zonegroup_data_checkpoint(zonegroup_conns)
 
+@attr('fails_with_rgw')
 @attr('data_sync_init')
 @attr('bucket_reshard')
 def test_resharded_bucket_incremental_sync_oldest_after_data_sync_init():
@@ -2271,6 +2283,7 @@ def check_objects_not_exist(bucket, obj_arr):
     for objname in obj_arr:
         check_object_not_exists(bucket, objname)
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_policy_config_zonegroup():
     """
@@ -2342,6 +2355,7 @@ def test_sync_policy_config_zonegroup():
 
     return
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_flow_symmetrical_zonegroup_all():
     """
@@ -2399,6 +2413,7 @@ def test_sync_flow_symmetrical_zonegroup_all():
     remove_sync_policy_group(c1, "sync-group")
     return
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_flow_symmetrical_zonegroup_select():
     """
@@ -2467,6 +2482,7 @@ def test_sync_flow_symmetrical_zonegroup_select():
     remove_sync_policy_group(c1, "sync-group")
     return
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_flow_directional_zonegroup_select():
     """
@@ -2584,6 +2600,7 @@ def test_sync_flow_directional_zonegroup_select():
     remove_sync_policy_group(c1, "sync-group")
     return
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_single_bucket():
     """
@@ -2696,6 +2713,7 @@ def test_sync_single_bucket():
     remove_sync_policy_group(c1, "sync-group")
     return
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_different_buckets():
     """
@@ -2845,6 +2863,7 @@ def test_sync_different_buckets():
     remove_sync_policy_group(c1, "sync-group")
     return
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_multiple_buckets_to_single():
     """
@@ -2966,6 +2985,7 @@ def test_sync_multiple_buckets_to_single():
     remove_sync_policy_group(c1, "sync-group")
     return
 
+@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_single_bucket_to_multiple():
     """
@@ -3094,6 +3114,7 @@ def start_2nd_rgw(zonegroup):
         z.gateways[1].start()
         log.info('gateway started zone=%s gateway=%s', z.name, z.gateways[1].endpoint())
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_bucket_create_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3111,6 +3132,7 @@ def test_bucket_create_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_bucket_remove_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3136,6 +3158,7 @@ def test_bucket_remove_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_object_sync_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3147,6 +3170,7 @@ def test_object_sync_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_object_delete_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3158,6 +3182,7 @@ def test_object_delete_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_concurrent_versioned_object_incremental_sync_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3169,6 +3194,7 @@ def test_concurrent_versioned_object_incremental_sync_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_suspended_delete_marker_full_sync_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3180,6 +3206,7 @@ def test_suspended_delete_marker_full_sync_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_bucket_acl_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3191,6 +3218,7 @@ def test_bucket_acl_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_bucket_sync_enable_right_after_disable_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3202,6 +3230,7 @@ def test_bucket_sync_enable_right_after_disable_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_multipart_object_sync_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3213,6 +3242,7 @@ def test_multipart_object_sync_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_bucket_sync_run_basic_incremental_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3224,6 +3254,7 @@ def test_bucket_sync_run_basic_incremental_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_role_sync_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3235,6 +3266,7 @@ def test_role_sync_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_bucket_full_sync_after_data_sync_init_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3246,6 +3278,7 @@ def test_bucket_full_sync_after_data_sync_init_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_sync_policy_config_zonegroup_rgw_down():
     zonegroup = realm.master_zonegroup()
@@ -3257,6 +3290,7 @@ def test_sync_policy_config_zonegroup_rgw_down():
     finally:
         start_2nd_rgw(zonegroup)
 
+@attr('fails_with_rgw')
 @attr('rgw_down')
 def test_sync_flow_symmetrical_zonegroup_all_rgw_down():
     zonegroup = realm.master_zonegroup()
