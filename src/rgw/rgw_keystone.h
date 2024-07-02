@@ -29,12 +29,6 @@ static inline std::string rgw_get_token_id(const std::string& token)
 namespace rgw {
 namespace keystone {
 
-enum class ApiVersion {
-  VER_2,
-  VER_3
-};
-
-
 class Config {
 protected:
   Config() = default;
@@ -42,7 +36,6 @@ protected:
 
 public:
   virtual std::string get_endpoint_url() const noexcept = 0;
-  virtual ApiVersion get_api_version() const noexcept = 0;
 
   virtual std::string get_admin_token() const noexcept = 0;
   virtual std::string_view get_admin_user() const noexcept = 0;
@@ -66,7 +59,6 @@ public:
   }
 
   std::string get_endpoint_url() const noexcept override;
-  ApiVersion get_api_version() const noexcept override;
 
   std::string get_admin_token() const noexcept override;
 
@@ -156,7 +148,6 @@ public:
     Token() : expires(0) { }
     std::string id;
     time_t expires;
-    Project tenant_v2;
     void decode_json(JSONObj *obj);
   };
 
@@ -181,7 +172,6 @@ public:
     std::string id;
     std::string name;
     Domain domain;
-    std::list<Role> roles_v2;
     void decode_json(JSONObj *obj);
   };
 
@@ -190,8 +180,7 @@ public:
   User user;
   std::list<Role> roles;
 
-  void decode_v3(JSONObj* obj);
-  void decode_v2(JSONObj* obj);
+  void decode(JSONObj* obj);
 
 public:
   /* We really need the default ctor because of the internals of TokenCache. */
@@ -212,8 +201,7 @@ public:
   }
   int parse(const DoutPrefixProvider *dpp,
             const std::string& token_str,
-            ceph::buffer::list& bl /* in */,
-            ApiVersion version);
+            ceph::buffer::list& bl /* in */);
   void update_roles(const std::vector<std::string> & admin,
                     const std::vector<std::string> & reader);
 };
@@ -295,47 +283,28 @@ private:
 };
 
 
-class AdminTokenRequest {
+class TokenRequestBase {
 public:
-  virtual ~AdminTokenRequest() = default;
+  virtual ~TokenRequestBase() = default;
   virtual void dump(Formatter* f) const = 0;
 };
 
-class AdminTokenRequestVer2 : public AdminTokenRequest {
+class AdminTokenRequest : public TokenRequestBase {
   const Config& conf;
 
 public:
-  explicit AdminTokenRequestVer2(const Config& conf)
-    : conf(conf) {
-  }
+  explicit AdminTokenRequest(const Config& conf)
+     : conf(conf) {
+   }
   void dump(Formatter *f) const override;
 };
 
-class AdminTokenRequestVer3 : public AdminTokenRequest {
-  const Config& conf;
 
-public:
-  explicit AdminTokenRequestVer3(const Config& conf)
-    : conf(conf) {
-  }
-  void dump(Formatter *f) const override;
-};
-
-class BarbicanTokenRequestVer2 : public AdminTokenRequest {
+class BarbicanTokenRequest : public TokenRequestBase {
   CephContext *cct;
 
 public:
-  explicit BarbicanTokenRequestVer2(CephContext * const _cct)
-    : cct(_cct) {
-  }
-  void dump(Formatter *f) const override;
-};
-
-class BarbicanTokenRequestVer3 : public AdminTokenRequest {
-  CephContext *cct;
-
-public:
-  explicit BarbicanTokenRequestVer3(CephContext * const _cct)
+  explicit BarbicanTokenRequest(CephContext * const _cct)
     : cct(_cct) {
   }
   void dump(Formatter *f) const override;

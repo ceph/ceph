@@ -775,16 +775,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_keystone_api_version
-  type: int
-  level: advanced
-  desc: Version of Keystone API to use (2 or 3).
-  fmt_desc: The version (2 or 3) of OpenStack Identity API that should be
-    used for communication with the Keystone server.
-  default: 2
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_keystone_accepted_roles
   type: str
   level: advanced
