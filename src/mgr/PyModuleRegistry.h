@@ -55,6 +55,7 @@ private:
   // before ClusterState exists.
   MgrMap mgr_map;
 
+  static std::string get_site_packages();
   /**
    * Discover python modules from local disk
    */
