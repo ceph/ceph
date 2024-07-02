@@ -1369,7 +1369,7 @@ struct cls_rgw_reshard_entry
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(time, bl);
     decode(tenant, bl);
     decode(bucket_name, bl);
