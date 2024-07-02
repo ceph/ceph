@@ -182,6 +182,11 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   notifications to topics owned by other users. A new configuration parameter:
   ``rgw_topic_require_publish_policy`` can be enabled to deny ``sns:Publish``
   permissions unless explicitly granted by topic policy.
+* RGW: Fix issue with persistent notifications where the changes to topic param that
+  were modified while persistent notifications were in the queue will be reflected in notifications.
+  So if user sets up topic with incorrect config (password/ssl) causing failure while delivering the
+  notifications to broker, can now modify the incorrect topic attribute and on retry attempt to delivery
+  the notifications, new configs will be used.
 * RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
   so it can be run for images in the trash.
 * PG dump: The default output of `ceph pg dump --format json` has changed. The

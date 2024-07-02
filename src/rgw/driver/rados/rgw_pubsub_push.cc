@@ -289,8 +289,7 @@ private:
   };
   const std::string topic;
   const ack_level_t ack_level;
-  std::string conn_name;
-
+  kafka::connection_id_t conn_id;
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
     bool exists;
@@ -311,27 +310,24 @@ public:
       const RGWHTTPArgs& args) : 
         topic(_topic),
         ack_level(get_ack_level(args)) {
-    if (!kafka::connect(conn_name, _endpoint,
-                        get_bool(args, "use-ssl", false),
-                        get_bool(args, "verify-ssl", true),
-                        args.get_optional("ca-location"),
-                        args.get_optional("mechanism"),
-                        args.get_optional("user-name"),
-                        args.get_optional("password"))) {
-      throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
-    }
-  }
+   if (!kafka::connect(
+           conn_id, _endpoint, get_bool(args, "use-ssl", false),
+           get_bool(args, "verify-ssl", true), args.get_optional("ca-location"),
+           args.get_optional("mechanism"), args.get_optional("user-name"),
+           args.get_optional("password"))) {
+     throw configuration_error("Kafka: failed to create connection to: " +
+                               _endpoint);
+   }
+ }
 
   int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn_name, topic, json_format_pubsub_event(event));
+      return kafka::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
       auto w = std::make_unique<Waiter>();
-      const auto rc = kafka::publish_with_confirm(conn_name, 
-        topic,
-        json_format_pubsub_event(event),
-        [wp = w.get()](int r) { wp->finish(r); }
-      );
+      const auto rc = kafka::publish_with_confirm(
+          conn_id, topic, json_format_pubsub_event(event),
+          [wp = w.get()](int r) { wp->finish(r); });
       if (rc < 0) {
         // failed to publish, does not wait for reply
         return rc;
@@ -342,7 +338,7 @@ public:
 
   std::string to_str() const override {
     std::string str("Kafka Endpoint");
-    str += "\nBroker: " + conn_name;
+    str += "\nBroker: " + to_string(conn_id);
     str += "\nTopic: " + topic;
     return str;
   }

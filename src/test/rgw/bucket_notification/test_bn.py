@@ -5113,3 +5113,188 @@ def test_ps_s3_data_path_v2_mixed_migration():
     for conn, bucket in zip(connections_list, buckets_list):
         conn.delete_bucket(bucket.name)
 
+
+@attr('kafka_test')
+def test_notification_caching():
+    """ test notification caching """
+    conn = connection()
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start kafka receiver
+    task, receiver = create_kafka_receiver_thread(topic_name)
+    task.start()
+    incorrect_port = 8080
+    endpoint_address = 'kafka://' + kafka_server + ':' + str(incorrect_port)
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&kafka-ack-level=broker' + '&persistent=true'
+
+    # create s3 topic
+    zonegroup = get_config_zonegroup()
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup,
+                           endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status / 100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024 * 1024))
+        thr = threading.Thread(target=set_contents_from_string,
+                               args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for creation + async notification is: ' + str(
+      time_diff * 1000 / number_of_objects) + ' milliseconds')
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target=key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for deletion + async notification is: ' + str(
+      time_diff * 1000 / number_of_objects) + ' milliseconds')
+
+    time.sleep(30)
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name],
+                   get_config_cluster())
+    assert_equal(result[1], 0)
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 2 * number_of_objects)
+
+    # remove the port and update the topic, so its pointing to correct endpoint.
+    endpoint_address = 'kafka://' + kafka_server
+    # update s3 topic
+    topic_conf.set_attributes(attribute_name="push-endpoint",
+                              attribute_val=endpoint_address)
+    keys = list(bucket.list())
+    wait_for_queue_to_drain(topic_name)
+    receiver.verify_s3_events(keys, deletions=True)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    receiver.close(task)
+
+
+@attr('kafka_test')
+def test_connection_caching():
+    """ test connection caching """
+    conn = connection()
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name_1 = bucket_name + TOPIC_SUFFIX + "-without-ssl"
+    topic_name_2 = bucket_name + TOPIC_SUFFIX + "-with-ssl"
+
+    # start kafka receiver
+    task_1, receiver_1 = create_kafka_receiver_thread(topic_name_1)
+    task_1.start()
+    task_2, receiver_2 = create_kafka_receiver_thread(topic_name_2)
+    task_2.start()
+    endpoint_address = 'kafka://' + kafka_server
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&kafka-ack-level=broker&use-ssl=true' + '&persistent=true'
+
+    # initially create both s3 topics with `use-ssl=true`
+    zonegroup = get_config_zonegroup()
+    topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup,
+                             endpoint_args=endpoint_args)
+    topic_arn_1 = topic_conf_1.set_config()
+    topic_conf_2 = PSTopicS3(conn, topic_name_2, zonegroup,
+                             endpoint_args=endpoint_args)
+    topic_arn_2 = topic_conf_2.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name + '_1', 'TopicArn': topic_arn_1,
+                        'Events': []
+                        },
+                       {'Id': notification_name + '_2', 'TopicArn': topic_arn_2,
+                        'Events': []}]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status / 100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = str(os.urandom(1024))
+        thr = threading.Thread(target=set_contents_from_string,
+                               args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for creation + async notification is: ' + str(
+        time_diff * 1000 / number_of_objects) + ' milliseconds')
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target=key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    time_diff = time.time() - start_time
+    print('average time for deletion + async notification is: ' + str(
+        time_diff * 1000 / number_of_objects) + ' milliseconds')
+
+    time.sleep(30)
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name_1],
+                   get_config_cluster())
+    assert_equal(result[1], 0)
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 2 * number_of_objects)
+
+    # remove the ssl from topic1 and update the topic.
+    endpoint_address = 'kafka://' + kafka_server
+    topic_conf_1.set_attributes(attribute_name="use-ssl",
+                                attribute_val="false")
+    keys = list(bucket.list())
+    wait_for_queue_to_drain(topic_name_1)
+    receiver_1.verify_s3_events(keys, deletions=True)
+    # topic stats for 2nd topic will still reflect entries
+    result = admin(['topic', 'stats', '--topic', topic_name_2],
+                   get_config_cluster())
+    assert_equal(result[1], 0)
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 2 * number_of_objects)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf_1.del_config()
+    topic_conf_2.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    receiver_1.close(task_1)
+    receiver_2.close(task_2)
