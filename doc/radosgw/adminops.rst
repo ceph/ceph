@@ -486,6 +486,19 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 :Example: tenant1
 :Required: No
 
+``default-placement``
+
+:Description: default placement for the user.
+:Type: string
+:Example: default-placement
+:Required: No
+
+``default-storage-class``
+:Description: default storage class for the user, default-placement must be defined when setting this option.
+:Type: string
+:Example: STANDARD-1A
+:Required: No
+
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
@@ -681,6 +694,19 @@ Request Parameters
 :Description: The op-mask of the user to be modified.
 :Type: String
 :Example: ``read, write, delete, *``
+:Required: No
+
+``default-placement``
+
+:Description: default placement for the user.
+:Type: string
+:Example: default-placement
+:Required: No
+
+``default-storage-class``
+:Description: default storage class for the user, default-placement must be defined when setting this option.
+:Type: string
+:Example: STANDARD-1A
 :Required: No
 
 Response Entities
