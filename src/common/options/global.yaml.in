@@ -4184,6 +4184,7 @@ options:
   - stupid
   - avl
   - hybrid
+  - hybrid_btree2
   with_legacy: true
 - name: bluefs_log_replay_check_allocations
   type: bool
@@ -4989,6 +4990,7 @@ options:
   - stupid
   - avl
   - hybrid
+  - hybrid_btree2
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
@@ -5491,6 +5493,11 @@ options:
   level: dev
   desc: Maximum RAM hybrid allocator should use before enabling bitmap supplement
   default: 64_M
+- name: bluestore_btree2_alloc_weight_factor
+  type: float
+  level: dev
+  desc: Large continuous extents weight factor
+  default: 2
 - name: bluestore_volume_selection_policy
   type: str
   level: dev

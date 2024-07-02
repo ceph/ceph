@@ -6,14 +6,14 @@
 
 #include "os/bluestore/HybridAllocator.h"
 
-class TestHybridAllocator : public HybridAllocator {
+class TestHybridAllocator : public HybridAvlAllocator {
 public:
   TestHybridAllocator(CephContext* cct,
                       int64_t device_size,
                       int64_t _block_size,
                       uint64_t max_entries,
       const std::string& name) :
-    HybridAllocator(cct, device_size, _block_size,
+    HybridAvlAllocator(cct, device_size, _block_size,
       max_entries,
       name) {
   }

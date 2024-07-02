@@ -32,6 +32,9 @@ public:
   void init_close() {
     alloc.reset(0);
   }
+  void dump_alloc() {
+    alloc->dump();
+  }
 };
 
 TEST_P(AllocTest, test_alloc_init)
@@ -68,13 +71,14 @@ TEST_P(AllocTest, test_init_add_free)
 
 TEST_P(AllocTest, test_alloc_min_alloc)
 {
-  int64_t block_size = 1024;
-  int64_t capacity = 4 * 1024 * block_size;
+  int64_t block_size = 4096;
+  int64_t capacity = 1024 * block_size;
 
   {
     init_alloc(capacity, block_size);
 
     alloc->init_add_free(block_size, block_size);
+    dump_alloc();
     PExtentVector extents;
     EXPECT_EQ(block_size, alloc->allocate(block_size, block_size,
 					  0, (int64_t) 0, &extents));
@@ -115,9 +119,9 @@ TEST_P(AllocTest, test_alloc_min_alloc)
 
 TEST_P(AllocTest, test_alloc_min_max_alloc)
 {
-  int64_t block_size = 1024;
+  int64_t block_size = 4096;
 
-  int64_t capacity = 4 * 1024 * block_size;
+  int64_t capacity = 1024 * block_size;
   init_alloc(capacity, block_size);
 
   /*
@@ -192,8 +196,17 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
 
 TEST_P(AllocTest, test_alloc_failure)
 {
-  int64_t block_size = 1024;
-  int64_t capacity = 4 * 1024 * block_size;
+  if (!(GetParam() == string("stupid") ||
+    GetParam() == string("avl") ||
+    GetParam() == string("bitmap") ||
+    GetParam() == string("hybrid"))) {
+    // new generation allocator(s) don't care about other-than-4K alignment
+    // hence the test case is not applicable
+    GTEST_SKIP() << "skipping for 'unaligned' allocators";
+  }
+
+  int64_t block_size = 4096;
+  int64_t capacity = 1024 * block_size;
 
   {
     init_alloc(capacity, block_size);
@@ -262,18 +275,18 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   uint64_t alloc_unit = 4096;
   uint64_t want_size = alloc_unit;
   PExtentVector allocated, tmp;
-  
+
   init_alloc(capacity, alloc_unit);
   alloc->init_add_free(0, capacity);
   bool bitmap_alloc = GetParam() == std::string("bitmap");
-  
+
   EXPECT_EQ(0.0, alloc->get_fragmentation());
 
   for (size_t i = 0; i < capacity / alloc_unit; ++i)
   {
     tmp.clear();
     EXPECT_EQ(static_cast<int64_t>(want_size),
-	      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
     allocated.insert(allocated.end(), tmp.begin(), tmp.end());
 
     // bitmap fragmentation calculation doesn't provide such constant
@@ -285,12 +298,8 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   tmp.clear();
   EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
 
-  if (GetParam() == string("avl")) {
-    // AVL allocator uses a different allocating strategy
-    GTEST_SKIP() << "skipping for AVL allocator";
-  } else if (GetParam() == string("hybrid")) {
-    // AVL allocator uses a different allocating strategy
-    GTEST_SKIP() << "skipping for Hybrid allocator";
+  if (!(GetParam() == string("stupid") || GetParam() == string("bitmap"))) {
+    GTEST_SKIP() << "skipping for specific allocators";
   }
 
   for (size_t i = 0; i < allocated.size(); i += 2)
@@ -574,6 +583,14 @@ TEST_P(AllocTest, test_alloc_contiguous)
 
 TEST_P(AllocTest, test_alloc_47883)
 {
+  if (!(GetParam() == string("stupid") ||
+        GetParam() == string("avl") ||
+        GetParam() == string("bitmap") ||
+        GetParam() == string("hybrid"))) {
+    // new generation allocator(s) don't care about other-than-4K alignment
+    // hence the test case is not applicable
+    GTEST_SKIP() << "skipping for 'unaligned' allocators";
+  }
   uint64_t block = 0x1000;
   uint64_t size = 1599858540544ul;
 
@@ -655,4 +672,4 @@ TEST_P(AllocTest, test_init_rm_free_unbound)
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl", "hybrid", "btree"));
+  ::testing::Values("stupid", "bitmap", "avl", "hybrid", "btree", "hybrid_btree2"));
