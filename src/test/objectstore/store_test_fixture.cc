@@ -41,7 +41,7 @@ void StoreTestFixture::SetUp()
     cerr << __func__ << ": unable to create " << data_dir << ": " << cpp_strerror(r) << std::endl;
   }
   ASSERT_EQ(0, r);
-
+  store.reset(nullptr);
   store = ObjectStore::create(g_ceph_context,
                               type,
                               data_dir,
