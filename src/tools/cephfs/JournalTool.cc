@@ -48,7 +48,7 @@ void JournalTool::usage()
     << "      import <path> [--force]\n"
     << "      export <path>\n"
     << "      reset [--force] <--yes-i-really-really-mean-it>\n"
-    << "  cephfs-journal-tool [options] header <get|set> <field> <value>\n"
+    << "  cephfs-journal-tool [options] header {<get|set> <field> <value>|<autorepair> [--force]}\n"
     << "    <field>: [trimmed_pos|expire_pos|write_pos|pool_id]\n"
     << "  cephfs-journal-tool [options] event <effect> <selector> <output> [special options]\n"
     << "    <selector>:\n"
@@ -324,7 +324,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
   }
 
   if (argv.empty()) {
-    derr << "Missing header command, must be [get|set]" << dendl;
+    derr << "Missing header command, must be [get|set|autorepair [--force]]" << dendl;
     return -EINVAL;
   }
   std::vector<const char *>::iterator arg = argv.begin();
@@ -381,6 +381,12 @@ int JournalTool::main_header(std::vector<const char*> &argv)
     output.write_full(js.obj_name(0), header_bl);
     dout(4) << "Write complete." << dendl;
     std::cout << "Successfully updated header." << std::endl;
+  } else if (command == std::string("autorepair")) {
+    bool dry_run = true;
+    if (arg != argv.end() && std::string(*arg) == "--force") {
+      dry_run = false;
+    }
+    return header_autorepair(dry_run);
   } else {
     derr << "Bad header command '" << command << "'" << dendl;
     return -EINVAL;
@@ -389,6 +395,89 @@ int JournalTool::main_header(std::vector<const char*> &argv)
   return 0;
 }
 
+
+int JournalTool::header_autorepair(bool dry_run)
+{
+  int r;
+  JournalFilter filter(std::string("mdlog"));
+
+  JournalScanner js(input, rank, type, filter);
+  r = js.scan();
+  if (r) {
+    derr << "Failed to scan journal (" << cpp_strerror(r) << ")" << dendl;
+    return -EIO;
+  }
+
+  // check if there's a valid SUBTREEMAP event at or before read_pos
+  auto it = js.events.begin();
+  uint64_t next_good_pos = 0;
+
+  uint64_t major_segment_boundary_pos = std::numeric_limits<uint64_t>::max();
+  int32_t major_segment_boundary_event = 0;
+
+  while (it != js.events.end()) {
+    auto pos = it->first;
+    auto& ev = it->second;
+
+    if (next_good_pos) {
+      ceph_assert(next_good_pos == pos);
+    }
+    next_good_pos = pos + ev.raw_size;
+
+    if ((ev.log_event->get_type() == EVENT_SUBTREEMAP) ||
+        (ev.log_event->get_type() == EVENT_LID) ||
+	(ev.log_event->get_type() == EVENT_SEGMENT) ||
+	(ev.log_event->get_type() == EVENT_RESETJOURNAL)) {
+      major_segment_boundary_event = ev.log_event->get_type();
+      major_segment_boundary_pos = pos;
+      break;
+    }
+    ++it;
+  }
+  // do a best effort fixup
+  if (major_segment_boundary_pos == std::numeric_limits<uint64_t>::max()) {
+    dout(4) << "No valid major segment boundary event found" << dendl;
+    return -EIO;
+  }
+
+  auto old_write_pos = js.header->write_pos;
+  auto old_read_pos = js.header->unused_field;
+  auto old_expire_pos = js.header->expire_pos;
+  auto old_trimmed_pos = js.header->trimmed_pos;
+
+  auto last_ev = js.events.rbegin();
+  js.header->write_pos = last_ev->first + last_ev->second.raw_size;
+  js.header->unused_field = major_segment_boundary_pos;
+  js.header->expire_pos = major_segment_boundary_pos;
+  js.header->trimmed_pos = js.events.begin()->first;
+
+  std::unordered_map<int, const char*> event_name = {
+    {EVENT_SUBTREEMAP, "EVENT_SUBTREEMAP"},
+    {EVENT_LID, "EVENT_LID"},
+    {EVENT_SEGMENT, "EVENT_SEGMENT"},
+    {EVENT_RESETJOURNAL, "EVENT_RESETJOURNAL"}
+  };
+
+  std::cout << "Will write header -\n"
+	    << std::hex
+	    << " trimmed_pos: 0x" << old_trimmed_pos << " -> 0x" << js.header->trimmed_pos << "\n"
+	    << "  expire_pos: 0x" << old_expire_pos << " -> 0x" << js.header->expire_pos << "\n"
+	    << "    read_pos: 0x" << old_read_pos << " -> 0x" << js.header->unused_field << "\n"
+	    << "   write_pos: 0x" << old_write_pos << " -> 0x" << js.header->write_pos << "\n"
+	    << std::dec
+	    << " event at proposed read_pos is " << event_name[major_segment_boundary_event]
+	    << "\n";
+
+  if (!dry_run) {
+    bufferlist header_bl;
+    encode(*(js.header), header_bl);
+    output.write_full(js.obj_name(0), header_bl);
+    dout(4) << "Write complete." << dendl;
+    std::cout << "Successfully updated header." << std::endl;
+  }
+
+  return 0;
+}
 
 /**
  * Parse arguments and execute for 'event' mode
