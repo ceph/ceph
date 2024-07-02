@@ -1055,7 +1055,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @param fin Context to call back on completion (or NULL)
    */
   void validate_disk_state(validated_data *results,
-                           MDSContext *fin);
+                           MDSContext *fin, bool remote_dirfrag_dirty=false);
   static void dump_validation_results(const validated_data& results,
                                       ceph::Formatter *f);
 

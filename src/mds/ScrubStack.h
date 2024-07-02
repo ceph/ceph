@@ -165,7 +165,7 @@ private:
    * Kick off as many scrubs as are appropriate, based on the current
    * state of the stack.
    */
-  void kick_off_scrubs();
+  void kick_off_scrubs(bool remote_dirfrag_dirty=false);
 
   /**
    * Move the inode/dirfrag that can't be scrubbed immediately
@@ -175,7 +175,7 @@ private:
   /**
    * Move the inode/dirfrag back to scrub queue.
    */
-  void remove_from_waiting(MDSCacheObject *obj, bool kick=true);
+  void remove_from_waiting(MDSCacheObject *obj, bool kick=true, bool remote_dirfrag_dirty=false);
   /**
    * Validate authority of the inode. If current mds is not auth of the inode,
    * forword scrub to auth mds.
@@ -205,7 +205,7 @@ private:
    * @param added_children set to true if we pushed some of our children
    * @param done set to true if we started to do final scrub
    */
-  void scrub_dir_inode(CInode *in, bool *added_children, bool *done);
+  void scrub_dir_inode(CInode *in, bool *added_children, bool *done, bool remote_dirfrag_dirty=false);
   /**
    * Scrub a dirfrag. It queues child dentries, then does final
    * scrub of the dirfrag.
@@ -219,7 +219,7 @@ private:
    *
    * @param in The directory inode we're doing final scrub on.
    */
-  void scrub_dir_inode_final(CInode *in);
+  void scrub_dir_inode_final(CInode *in, bool remote_dirfrag_dirty=false);
   /**
    * Set scrub state
    * @param next_state State to move the scrub to.
