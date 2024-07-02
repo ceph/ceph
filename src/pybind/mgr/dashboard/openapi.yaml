@@ -3050,6 +3050,55 @@ paths:
       - jwt: []
       tags:
       - Cephfs
+  /api/cephfs/{fs_id}/rename-path:
+    put:
+      description: "\n        Rename a file or directory.\n        :param fs_id: The\
+        \ filesystem identifier.\n        :param src_path: The path to the existing\
+        \ file or directory.\n        :param dst_path: The new name of the file or\
+        \ directory.\n        "
+      parameters:
+      - in: path
+        name: fs_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                dst_path:
+                  type: string
+                src_path:
+                  type: string
+              required:
+              - src_path
+              - dst_path
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Cephfs
   /api/cephfs/{fs_id}/snapshot:
     delete:
       description: "\n        Remove a snapshot.\n        :param fs_id: The filesystem\

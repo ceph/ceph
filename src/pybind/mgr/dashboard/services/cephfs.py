@@ -260,3 +260,12 @@ class CephFS(object):
         if max_files is not None:
             self.cfs.setxattr(path, 'ceph.quota.max_files',
                               str(max_files).encode(), 0)
+
+    def rename_path(self, src_path, dst_path) -> None:
+        """
+        Rename a file or directory.
+        :param src: the path to the existing file or directory.
+        :param dst: the new name of the file or directory.
+        """
+        logger.info("Renaming: from %s to %s", src_path, dst_path)
+        self.cfs.rename(src_path, dst_path)
