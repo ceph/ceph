@@ -171,43 +171,26 @@ local pieChartPanel = import 'piechart_panel.libsonnet';
     },
 
   matchers()::
-    local jobMatcher = 'job=~"$job"';
     local clusterMatcher = '%s=~"$cluster"' % $._config.clusterLabel;
     {
       // Common labels
-      jobMatcher: jobMatcher,
-      clusterMatcher: (if $._config.showMultiCluster then clusterMatcher else ''),
-      matchers: jobMatcher +
-                (if $._config.showMultiCluster then ', ' + clusterMatcher else ''),
+      matchers: (if $._config.showMultiCluster then clusterMatcher + ', ' else ''),
     },
+
 
   addClusterTemplate()::
     $.addTemplateSchema(
       'cluster',
       '$datasource',
-      'label_values(ceph_osd_metadata, %s)' % $._config.clusterLabel,
+      'label_values(ceph_health_status, %s)' % $._config.clusterLabel,
       1,
-      true,
+      false,
       1,
       'cluster',
       '(.*)',
       if !$._config.showMultiCluster then 'variable' else '',
-      multi=true,
-      allValues='.+',
-    ),
-
-  addJobTemplate()::
-    $.addTemplateSchema(
-      'job',
-      '$datasource',
-      'label_values(ceph_osd_metadata{%(clusterMatcher)s}, job)' % $.matchers(),
-      1,
-      true,
-      1,
-      'job',
-      '(.*)',
-      multi=true,
-      allValues='.+',
+      multi=false,
+      allValues=null,
     ),
 
   overviewStyle(alias,
