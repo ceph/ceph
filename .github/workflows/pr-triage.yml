@@ -15,7 +15,7 @@ jobs:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Assign to Dashboard project
         # https://github.com/marketplace/actions/add-to-github-projects?version=v0.5.0
-        uses: actions/add-to-project@31b3f3ccdc584546fc445612dec3f38ff5edb41c
+        uses: actions/add-to-project@9bfe908f2eaa7ba10340b31e314148fcfe6a2458
         with:
           project-url: https://github.com/orgs/ceph/projects/2
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
