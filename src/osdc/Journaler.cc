@@ -493,7 +493,21 @@ void Journaler::_finish_write_head(int r, Header &wrote,
   }
   ceph_assert(!readonly);
   ldout(cct, 10) << "_finish_write_head " << wrote << dendl;
-  last_committed = wrote;
+  if (wrote.write_pos < last_committed.write_pos ||
+      wrote.expire_pos < last_committed.expire_pos ||
+      wrote.trimmed_pos < last_committed.trimmed_pos) {
+    lderr(cct) << __func__ << ": not updating last_committed: "
+	       << "(wrote.write_pos/last_committed.write_pos="
+	       << wrote.write_pos << "," << last_committed.write_pos << "), "
+	       << "(wrote.expire_pos/last_committed.expire_pos="
+	       << wrote.expire_pos << "," << last_committed.expire_pos << "), "
+	       << "(wrote.trimmed_pos/last_committed.trimmed_pos="
+	       << wrote.trimmed_pos << "," << last_committed.trimmed_pos << ")"
+	       << dendl;
+    ceph_abort();
+  } else {
+    last_committed = wrote;
+  }
   if (oncommit) {
     oncommit->complete(r);
   }
