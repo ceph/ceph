@@ -304,10 +304,10 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   bool offset_populated = false, entry_start_processed = false;
   uint64_t data_size = 0, num_ops = 0;
   uint16_t entry_start = 0;
-  bufferlist bl;
   string last_marker;
   do
   {
+    bufferlist bl;
     CLS_LOG(10, "INFO: queue_list_entries(): start_offset is %lu", start_offset);
   
     bufferlist bl_chunk;
