@@ -2989,12 +2989,15 @@ class TestSubvolumes(TestVolumesHelper):
 
         # Induce partial auth update state by modifying the auth metadata file,
         # and then run authorize again.
+        guest_mount.run_shell(["ls", "-l", "volumes"], wait=False)
         guest_mount.run_shell(['sudo', 'sed', '-i', 's/false/true/g', 'volumes/{0}'.format(auth_metadata_filename)], omit_sudo=False)
 
         # Authorize 'guestclient_1' to access the subvolume.
+        guest_mount.run_shell(["ls", "-l", "volumes"], wait=False)
         self._fs_cmd("subvolume", "authorize", self.volname, subvolume, guestclient_1["auth_id"],
                      "--group_name", group, "--tenant_id", guestclient_1["tenant_id"])
 
+        guest_mount.run_shell(["ls", "-l", "volumes"], wait=False)
         auth_metadata_content = self._auth_metadata_get(self.mount_a.read_file("volumes/{0}".format(auth_metadata_filename)))
         self.assertEqual(auth_metadata_content, expected_auth_metadata_content)
 
