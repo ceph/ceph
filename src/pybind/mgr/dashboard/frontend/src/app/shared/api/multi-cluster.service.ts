@@ -125,6 +125,7 @@ export class MultiClusterService {
   }
 
   editCluster(
+    name: string,
     url: any,
     clusterAlias: string,
     username: string,
@@ -132,6 +133,7 @@ export class MultiClusterService {
     ssl_certificate = ''
   ) {
     return this.http.put('api/multi-cluster/edit_cluster', {
+      name: name,
       url,
       cluster_alias: clusterAlias,
       username: username,
