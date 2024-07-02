@@ -28,7 +28,7 @@ if TYPE_CHECKING:
         from typing_extensions import Protocol
 
     class MgrModuleProtocol(Protocol):
-        def tool_exec(self, args: List[str]) -> Tuple[int, str, str]:
+        def tool_exec(self, args: List[str], timeout: int = 10, stdin: Optional[bytes] = None) -> Tuple[int, str, str]:
             ...
 
         def apply_rgw(self, spec: RGWSpec) -> OrchResult[str]:
@@ -66,9 +66,9 @@ class RGWAMOrchMgr(RGWAMEnvMgr):
     def __init__(self, mgr: MgrModuleProtocol):
         self.mgr = mgr
 
-    def tool_exec(self, prog: str, args: List[str]) -> Tuple[List[str], int, str, str]:
+    def tool_exec(self, prog: str, args: List[str], stdin: Optional[bytes] = None) -> Tuple[List[str], int, str, str]:
         cmd = [prog] + args
-        rc, stdout, stderr = self.mgr.tool_exec(args=cmd)
+        rc, stdout, stderr = self.mgr.tool_exec(args=cmd, stdin=stdin)
         return cmd, rc, stdout, stderr
 
     def apply_rgw(self, spec: RGWSpec) -> None:
@@ -282,6 +282,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                                            zone_endpoints,
                                                            realm_token)
             return HandleCommandResult(retval, 'Zone updated successfully', '')
+        except RGWAMException as e:
+            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
+            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
+
+    @CLICommand('rgw zonegroup modify', perm='rw')
+    def update_zonegroup_info(self, realm_name: str, zonegroup_name: str, zone_name: str, hostnames: List[str]) -> HandleCommandResult:
+        try:
+            retval, out, err = RGWAM(self.env).zonegroup_modify(realm_name,
+                                                                zonegroup_name,
+                                                                zone_name,
+                                                                hostnames)
+            return HandleCommandResult(retval, 'Zonegroup updated successfully', '')
         except RGWAMException as e:
             self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
             return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
