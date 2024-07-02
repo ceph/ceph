@@ -69,7 +69,7 @@ export class SettingsService {
   }
 
   private getSettingsValue(data: any): string {
-    return data.value || data.instance || '';
+    return data.value || data.instance || data || '';
   }
 
   validateGrafanaDashboardUrl(uid: string) {

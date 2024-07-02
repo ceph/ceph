@@ -136,6 +136,14 @@ class Prometheus(PrometheusRESTController):
         return self.alert_proxy('GET', '/alerts', params)
 
     @RESTController.Collection(method='GET')
+    def url(self):
+        return Settings.PROMETHEUS_API_HOST
+
+    @RESTController.Collection(method='GET', path='/alertmanager_url')
+    def alertmanager_url(self):
+        return Settings.ALERTMANAGER_API_HOST
+
+    @RESTController.Collection(method='GET')
     def rules(self, **params):
         return self.prometheus_proxy('GET', '/rules', params)
 
