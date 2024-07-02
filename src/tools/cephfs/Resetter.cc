@@ -13,8 +13,8 @@
  */
 #include <memory>
 #include "common/errno.h"
-#include "osdc/Journaler.h"
-#include "mds/JournalPointer.h"
+#include "osdc/RadosJournaler.h"
+#include "mds/RadosJournalPointerStore.h"
 
 #include "mds/mdstypes.h"
 #include "mds/MDCache.h"
@@ -40,25 +40,25 @@ int Resetter::init(mds_role_t role_, const std::string &type, bool hard)
 
   is_mdlog = false;
   if (type == "mdlog") {
-    JournalPointer jp(role.rank, fs.get_mds_map().get_metadata_pool());
+    RadosJournalPointerStore jps(role.rank, fs.get_mds_map().get_metadata_pool(), objecter);
     int rt = 0;
     if (hard) {
-      jp.front = role.rank + MDS_INO_LOG_OFFSET;
-      jp.back = 0;
-      rt = jp.save(objecter);
+      jps.pointer.front = role.rank + MDS_INO_LOG_OFFSET;
+      jps.pointer.back = 0;
+      rt = jps.save();
       if (rt != 0) {
         derr << "Error writing journal pointer:  " << cpp_strerror(rt) << dendl;
         return rt;
       }
-      ino = jp.front; // only need to reset ino for mdlog
+      ino = jps.pointer.front; // only need to reset ino for mdlog
     } else {
-      rt = jp.load(objecter);
+      rt = jps.load();
       if (rt != 0) {
         std::cerr << "Error loading journal: " << cpp_strerror(rt) <<
         ", pass --force to forcibly reset this journal" << std::endl;
         return rt;
       } else {
-        ino = jp.front;
+        ino = jps.pointer.front;
       }
     }
     is_mdlog = true;
@@ -79,7 +79,7 @@ int Resetter::reset()
 
   auto& fs = fsmap->get_filesystem(role.fscid);
 
-  Journaler journaler("resetter", ino,
+  RadosJournaler journaler("resetter", ino,
       fs.get_mds_map().get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC,
       objecter, 0, 0, &finisher);
@@ -148,7 +148,7 @@ int Resetter::reset_hard()
   auto& fs = fsmap->get_filesystem(role.fscid);
   auto& mds_map = fs.get_mds_map();
   
-  Journaler journaler("resetter", ino,
+  RadosJournaler journaler("resetter", ino,
     mds_map.get_metadata_pool(),
     CEPH_FS_ONDISK_MAGIC,
     objecter, 0, 0, &finisher);

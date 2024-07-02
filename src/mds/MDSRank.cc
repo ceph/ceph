@@ -42,6 +42,7 @@
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "Mutation.h"
+#include "RadosJournalPointerStore.h"
 
 #include "MDSRank.h"
 
@@ -62,15 +63,15 @@ using TOPNSPC::common::cmd_getval_or;
 
 class C_Flush_Journal : public MDSInternalContext {
 public:
-  C_Flush_Journal(MDCache *mdcache, MDLog *mdlog, MDSRank *mds,
+  C_Flush_Journal(MDCache *mdcache, MDLog *mdlog, MDSRankBase *mds,
                   std::ostream *ss, Context *on_finish)
     : MDSInternalContext(mds),
       mdcache(mdcache), mdlog(mdlog), ss(ss), on_finish(on_finish),
-      whoami(mds->whoami), incarnation(mds->incarnation) {
+      whoami(mds->get_nodeid()), incarnation(mds->get_incarnation()) {
   }
 
   void send() {
-    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->get_lock()));
 
     dout(20) << __func__ << dendl;
 
@@ -165,26 +166,15 @@ private:
   void expire_segments() {
     dout(20) << __func__ << dendl;
 
-    // Attach contexts to wait for all expiring segments to expire
-    MDSGatherBuilder expiry_gather(g_ceph_context);
+    Context* ctx = new LambdaContext([this](int r) {
+      handle_expire_segments(r);
+    });
 
-    const auto &expiring_segments = mdlog->get_expiring_segments();
-    for (auto p : expiring_segments) {
-      p->wait_for_expiry(expiry_gather.new_sub());
+    if (!mdlog->await_expiring_segments(ctx)) {
+      ctx->complete(0);
+    } else {
+      dout(5) << __func__ << ": waiting for segments to expire" << dendl;
     }
-    dout(5) << __func__ << ": waiting for " << expiry_gather.num_subs_created()
-            << " segments to expire" << dendl;
-
-    if (!expiry_gather.has_subs()) {
-      trim_segments();
-      return;
-    }
-
-    Context *ctx = new LambdaContext([this](int r) {
-        handle_expire_segments(r);
-      });
-    expiry_gather.set_finisher(new MDSInternalContextWrapper(mds, ctx));
-    expiry_gather.activate();
   }
 
   void handle_expire_segments(int r) {
@@ -199,9 +189,9 @@ private:
     dout(20) << __func__ << dendl;
 
     Context *ctx = new C_OnFinisher(new LambdaContext([this](int) {
-          std::lock_guard locker(mds->mds_lock);
+          std::lock_guard locker(mds->get_lock());
           trim_expired_segments();
-        }), mds->finisher);
+        }), MDSRank::from_base(mds)->get_finisher());
     ctx->complete(0);
   }
 
@@ -224,7 +214,7 @@ private:
     dout(20) << __func__ << dendl;
 
     Context *ctx = new LambdaContext([this](int r) {
-        std::lock_guard locker(mds->mds_lock);
+        std::lock_guard locker(mds->get_lock());
         handle_write_head(r);
       });
     // Flush the journal header so that readers will start from after
@@ -272,7 +262,7 @@ public:
   void send() {
     // not really a hard requirement here, but lets ensure this in
     // case we change the logic here.
-    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->get_lock()));
 
     dout(20) << __func__ << dendl;
     f->open_object_section("result");
@@ -286,7 +276,7 @@ private:
   // needs to be explicitly freed.
   class C_ContextTimeout : public MDSInternalContext {
   public:
-    C_ContextTimeout(MDSRank *mds, uint64_t timeout, Context *on_finish)
+    C_ContextTimeout(MDSRankBase *mds, uint64_t timeout, Context *on_finish)
       : MDSInternalContext(mds),
         timeout(timeout),
         on_finish(on_finish) {
@@ -304,7 +294,7 @@ private:
           timer_task = nullptr;
           complete(-CEPHFS_ETIMEDOUT);
         });
-      mds->timer.add_event_after(timeout, timer_task);
+      MDSRank::from_base(mds)->timer.add_event_after(timeout, timer_task);
     }
 
     void finish(int r) override {
@@ -319,7 +309,7 @@ private:
     }
     void complete(int r) override {
       if (timer_task != nullptr) {
-        mds->timer.cancel_event(timer_task);
+        MDSRank::from_base(mds)->timer.cancel_event(timer_task);
       }
 
       finish(r);
@@ -435,7 +425,7 @@ private:
       auto timer = new LambdaContext([this](int) {
         trim_cache();
       });
-      mds->timer.add_event_after(1.0, timer);
+      MDSRank::from_base(mds)->timer.add_event_after(1.0, timer);
     } else {
       cache_status();
     }
@@ -553,6 +543,7 @@ MDSRank::MDSRank(
   locker = new Locker(this, mdcache);
 
   quiesce_db_manager.reset(new QuiesceDbManager());
+  journal_pointer_store.reset(new RadosJournalPointerStore(whoami, metadata_pool, objecter));
 
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
   heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
@@ -606,6 +597,20 @@ MDSRank::~MDSRank()
 
   delete objecter;
   objecter = nullptr;
+}
+
+MDCacheLogProxy*  MDSRank::get_cache_log_proxy() const { return mdcache; }
+
+inline Journaler* MDSRank::make_journaler(const char* name, inodeno_t ino, const char* magic, PerfCounters* latency_logger, int latency_key) const {
+  return new RadosJournaler(
+    name,
+    ino,
+    get_metadata_pool(),
+    magic,
+    get_objecter(),
+    latency_logger,
+    latency_key,
+    get_finisher());
 }
 
 void MDSRankDispatcher::init()
@@ -694,7 +699,7 @@ public:
   C_MDS_MonCommand(MDSRank *m, std::string_view c)
     : MDSInternalContext(m), cmd(c) {}
   void finish(int r) override {
-    mds->_mon_command_finish(r, cmd, outs);
+    MDSRank::from_base(mds)->_mon_command_finish(r, cmd, outs);
   }
 };
 
@@ -908,11 +913,11 @@ class C_MDS_VoidFn : public MDSInternalContext
 
   void finish(int r) override
   {
-    (mds->*fn)();
+    (MDSRank::from_base(mds)->*fn)();
   }
 };
 
-MDSTableClient *MDSRank::get_table_client(int t)
+MDSTableClient *MDSRank::get_table_client(int t) const
 {
   switch (t) {
   case TABLE_ANCHOR: return NULL;
@@ -921,7 +926,7 @@ MDSTableClient *MDSRank::get_table_client(int t)
   }
 }
 
-MDSTableServer *MDSRank::get_table_server(int t)
+MDSTableServer *MDSRank::get_table_server(int t) const
 {
   switch (t) {
   case TABLE_ANCHOR: return NULL;
@@ -995,7 +1000,7 @@ void MDSRank::handle_write_error(int err)
   }
 }
 
-void MDSRank::handle_write_error_with_lock(int err)
+void MDSRank::handle_write_error_unlocked(int err)
 {
   std::scoped_lock l(mds_lock);
   handle_write_error(err);
@@ -1003,7 +1008,7 @@ void MDSRank::handle_write_error_with_lock(int err)
 
 void *MDSRank::ProgressThread::entry()
 {
-  std::unique_lock l(mds->mds_lock);
+  std::unique_lock l(mds->get_lock());
   while (true) {
     cond.wait(l, [this] {
       return (mds->stopping ||
@@ -1024,7 +1029,7 @@ void *MDSRank::ProgressThread::entry()
 
 void MDSRank::ProgressThread::shutdown()
 {
-  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
   ceph_assert(mds->stopping);
 
   if (am_self()) {
@@ -1032,10 +1037,10 @@ void MDSRank::ProgressThread::shutdown()
   } else {
     // Kick the thread to notice mds->stopping, and join it
     cond.notify_all();
-    mds->mds_lock.unlock();
+    mds->get_lock().unlock();
     if (is_started())
       join();
-    mds->mds_lock.lock();
+    mds->get_lock().lock();
   }
 }
 
@@ -1466,7 +1471,7 @@ public:
   C_MDS_RetrySendMessageMDS(MDSRank* mds, mds_rank_t who, ref_t<Message> m)
     : MDSInternalContext(mds), who(who), m(std::move(m)) {}
   void finish(int r) override {
-    mds->send_message_mds(m, who);
+    MDSRank::from_base(mds)->send_message_mds(m, who);
   }
 private:
   mds_rank_t who;
@@ -1615,7 +1620,7 @@ public:
   C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n)
     : MDSInternalContext(m), nextstep(n) {}
   void finish(int r) override {
-    mds->boot_start(nextstep, r);
+    MDSRank::from_base(mds)->boot_start(nextstep, r);
   }
 };
 
@@ -1826,7 +1831,7 @@ public:
   C_MDS_StandbyReplayRestartFinish(MDSRank *mds_, uint64_t old_read_pos_) :
     MDSIOContext(mds_), old_read_pos(old_read_pos_) {}
   void finish(int r) override {
-    mds->_standby_replay_restart_finish(r, old_read_pos);
+    MDSRank::from_base(mds)->_standby_replay_restart_finish(r, old_read_pos);
   }
   void print(ostream& out) const override {
     out << "standby_replay_restart";
@@ -1844,7 +1849,7 @@ void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
     respawn(); /* we're too far back, and this is easier than
 		  trying to reset everything in the cache, etc */
   } else {
-    mdlog->standby_trim_segments();
+    mdlog->standby_cleanup_trimmed_segments();
     boot_start(MDS_BOOT_PREPARE_LOG, r);
   }
 }
@@ -1854,7 +1859,7 @@ public:
   explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
   void finish(int r) override {
     ceph_assert(!r);
-    mds->standby_replay_restart();
+    MDSRank::from_base(mds)->standby_replay_restart();
   }
 };
 

@@ -1695,6 +1695,8 @@ mds_verify_scatter = true
 mds_debug_frag = true
 mds_debug_auth_pins = true
 mds_debug_subtrees = true
+mds_debug_zombie_log_segments = true
+
 EOF
     fi
     if [ "$cephadm" -gt 0 ]; then

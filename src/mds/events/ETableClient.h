@@ -42,7 +42,7 @@ struct ETableClient : public LogEvent {
   }  
 
   //void update_segment();
-  void replay(MDSRank *mds) override;  
+  void replay(MDSRankBase *mdsb) override;
 };
 WRITE_CLASS_ENCODER_FEATURES(ETableClient)
 

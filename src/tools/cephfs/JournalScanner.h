@@ -17,7 +17,7 @@
 #include "include/rados/librados_fwd.hpp"
 
 // For Journaler::Header, can't forward-declare nested classes
-#include <osdc/Journaler.h>
+#include <osdc/RadosJournaler.h>
 
 #include "JournalFilter.h"
 

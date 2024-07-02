@@ -7,6 +7,8 @@ set(mds_srcs
   flock.cc
   locks.c
   journal.cc
+  events/serializers.cc
+  events/test_instances.cc
   Server.cc
   Mutation.cc
   MDCache.cc
@@ -22,7 +24,7 @@ set(mds_srcs
   LogEvent.cc
   MDSTable.cc
   InoTable.cc
-  JournalPointer.cc
+  RadosJournalPointerStore.cc
   MDSTableClient.cc
   MDSTableServer.cc
   ScrubStack.cc
@@ -47,7 +49,7 @@ set(mds_srcs
   MDSRankQuiesce.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
-  ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
+  ${CMAKE_SOURCE_DIR}/src/osdc/RadosJournaler.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE

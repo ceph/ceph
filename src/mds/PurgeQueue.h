@@ -18,7 +18,7 @@
 #include "include/compact_set.h"
 #include "common/Finisher.h"
 #include "mds/MDSMap.h"
-#include "osdc/Journaler.h"
+#include "osdc/RadosJournaler.h"
 
 
 /**
@@ -214,7 +214,7 @@ private:
   Objecter *objecter;
   std::unique_ptr<PerfCounters> logger;
 
-  Journaler journaler;
+  RadosJournaler journaler;
 
   Context *on_error;
 

@@ -5737,9 +5737,9 @@ void MDCache::send_snaps(map<client_t,ref_t<MClientSnap>>& splits)
 void MDCache::clean_open_file_lists()
 {
   dout(10) << "clean_open_file_lists" << dendl;
-  
-  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
-       p != mds->mdlog->segments.end();
+
+  for (auto p = mds->mdlog->unexpired_segments.begin();
+       p != mds->mdlog->unexpired_segments.end();
        ++p) {
     LogSegment *ls = p->second;
 
@@ -5763,8 +5763,8 @@ void MDCache::clean_open_file_lists()
 void MDCache::dump_openfiles(Formatter *f)
 {
   f->open_array_section("openfiles");
-  for (auto p = mds->mdlog->segments.begin();
-       p != mds->mdlog->segments.end();
+  for (auto p = mds->mdlog->unexpired_segments.begin();
+       p != mds->mdlog->unexpired_segments.end();
        ++p) {
     LogSegment *ls = p->second;
     
@@ -6456,9 +6456,9 @@ void MDCache::do_file_recover()
 
 class C_MDC_RetryTruncate : public MDCacheContext {
   CInode *in;
-  LogSegment *ls;
+  AutoSharedLogSegment ls;
 public:
-  C_MDC_RetryTruncate(MDCache *c, CInode *i, LogSegment *l) :
+  C_MDC_RetryTruncate(MDCache *c, CInode *i, const AutoSharedLogSegment &l) :
     MDCacheContext(c), in(i), ls(l) {}
   void finish(int r) override {
     mdcache->_truncate_inode(in, ls);
@@ -6490,9 +6490,9 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 
 struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
   CInode *in;
-  LogSegment *ls;
+  AutoSharedLogSegment ls;
   uint32_t block_size;
-  C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, LogSegment *l, uint32_t bs) :
+  C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, const AutoSharedLogSegment &l, uint32_t bs) :
     MDCacheIOContext(c, false), in(i), ls(l), block_size(bs) {
   }
   void finish(int r) override {
@@ -6506,8 +6506,8 @@ struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
 
 struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
-  LogSegment *ls;
-  C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
+  AutoSharedLogSegment ls;
+  C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, const AutoSharedLogSegment &l) :
     MDCacheIOContext(c, false), in(i), ls(l) {
   }
   void finish(int r) override {
@@ -6708,7 +6708,7 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 {
   dout(20) << "add_recovered_truncate " << *in << " in log segment "
-	   << ls->seq << "/" << ls->offset << dendl;
+	   << ls->seq << "/" << ls->get_offset() << dendl;
   ls->truncating_inodes.insert(in);
   in->get(CInode::PIN_TRUNCATING);
 }
@@ -6716,7 +6716,7 @@ void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 {
   dout(20) << "remove_recovered_truncate " << *in << " in log segment "
-	   << ls->seq << "/" << ls->offset << dendl;
+	   << ls->seq << "/" << ls->get_offset() << dendl;
   // if we have the logseg the truncate started in, it must be in our list.
   set<CInode*>::iterator p = ls->truncating_inodes.find(in);
   ceph_assert(p != ls->truncating_inodes.end());
@@ -6727,8 +6727,8 @@ void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 void MDCache::start_recovered_truncates()
 {
   dout(10) << "start_recovered_truncates" << dendl;
-  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
-       p != mds->mdlog->segments.end();
+  for (auto p = mds->mdlog->unexpired_segments.begin();
+       p != mds->mdlog->unexpired_segments.end();
        ++p) {
     LogSegment *ls = p->second;
     for (set<CInode*>::iterator q = ls->truncating_inodes.begin();
@@ -6754,11 +6754,11 @@ void MDCache::start_recovered_truncates()
 
 class C_MDS_purge_completed_finish : public MDCacheLogContext {
   interval_set<inodeno_t> inos;
-  LogSegment *ls; 
+  AutoSharedLogSegment ls;
   version_t inotablev;
 public:
   C_MDS_purge_completed_finish(MDCache *m, const interval_set<inodeno_t>& _inos,
-			       LogSegment *_ls, version_t iv)
+			       const AutoSharedLogSegment &_ls, version_t iv)
     : MDCacheLogContext(m), inos(_inos), ls(_ls), inotablev(iv) {}
   void finish(int r) override {
     ceph_assert(r == 0);
@@ -6772,7 +6772,7 @@ public:
 
 void MDCache::start_purge_inodes(){
   dout(10) << "start_purge_inodes" << dendl;
-  for (auto& p : mds->mdlog->segments){
+  for (auto& p : mds->mdlog->unexpired_segments){
     LogSegment *ls = p.second;
     if (ls->purging_inodes.size()){
       purge_inodes(ls->purging_inodes, ls);
@@ -6785,13 +6785,13 @@ void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegment *ls)
   dout(10) << __func__ << " purging inos " << inos << " logseg " << ls->seq << dendl;
   // FIXME: handle non-default data pool and namespace
 
-  auto cb = new LambdaContext([this, inos, ls](int r){
+  auto cb = new LambdaContext([this, inos, sls = AutoSharedLogSegment(ls)](int r){
       ceph_assert(r == 0 || r == -2);
       mds->inotable->project_release_ids(inos);
       version_t piv = mds->inotable->get_projected_version();
       ceph_assert(piv != 0);
-      mds->mdlog->submit_entry(new EPurged(inos, ls->seq, piv),
-				     new C_MDS_purge_completed_finish(this, inos, ls, piv));
+      mds->mdlog->submit_entry(new EPurged(inos, sls->seq, piv),
+				     new C_MDS_purge_completed_finish(this, inos, sls, piv));
       mds->mdlog->flush();
     });
   
@@ -14196,7 +14196,7 @@ void MDCache::upkeep_main(void)
     auto trim_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_trim_interval"));
     if (since >= trim_interval*.90) {
       lock.unlock(); /* mds_lock -> upkeep_mutex */
-      std::scoped_lock mds_lock(mds->mds_lock);
+      std::scoped_lock mds_lock(mds->get_lock());
       lock.lock();
       if (upkeep_trim_shutdown.load())
         return;
@@ -14238,4 +14238,10 @@ void MDCache::upkeep_main(void)
     dout(20) << "upkeep thread waiting interval " << interval << dendl;
     upkeep_cvar.wait_for(lock, interval);
   }
+}
+
+MDSRankBase* MDCacheIOContext::get_mds()
+{
+  ceph_assert(mdcache != NULL);
+  return mdcache->mds;
 }

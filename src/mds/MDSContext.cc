@@ -22,9 +22,9 @@
 #define dout_subsys ceph_subsys_mds
 
 void MDSContext::complete(int r) {
-  MDSRank *mds = get_mds();
+  MDSRankBase *mds = get_mds();
   ceph_assert(mds != nullptr);
-  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
   dout(10) << "MDSContext::complete: " << typeid(*this).name() << dendl;
   mds->heartbeat_reset();
   return Context::complete(r);
@@ -33,6 +33,24 @@ void MDSContext::complete(int r) {
 void MDSInternalContextWrapper::finish(int r)
 {
   fin->complete(r);
+}
+
+void MDSLockingWrapper::complete(int r)
+{
+  if (wrapped) {
+    bool do_lock = mds != nullptr;
+    if (auto mds_wrapped = dynamic_cast<MDSContext*>(wrapped); mds_wrapped != nullptr) {
+      do_lock = !(mds == nullptr || mds_wrapped->takes_lock());
+    }
+    if (do_lock) {
+      std::lock_guard l(mds->get_lock());
+      wrapped->complete(r);
+    } else {
+      wrapped->complete(r);
+    }
+    wrapped = nullptr;
+  }
+  delete this;
 }
 
 struct MDSIOContextList {
@@ -93,15 +111,19 @@ bool MDSIOContextBase::check_ios_in_flight(ceph::coarse_mono_time cutoff,
 }
 
 void MDSIOContextBase::complete(int r) {
-  MDSRank *mds = get_mds();
+  MDSRankBase *mds = get_mds();
 
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
   ceph_assert(mds != NULL);
   // Note, MDSIOContext is passed outside the MDS and, strangely, we grab the
   // lock here when MDSContext::complete would otherwise assume the lock is
   // already acquired.
-  std::lock_guard l(mds->mds_lock);
+  std::lock_guard l(mds->get_lock());
+  complete_no_lock(r);
+}
 
+void MDSIOContextBase::complete_no_lock(int r) {
+  MDSRankBase* mds = get_mds();
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
             << typeid(*this).name() << dendl;
@@ -120,13 +142,28 @@ void MDSIOContextBase::complete(int r) {
 }
 
 void MDSLogContextBase::complete(int r) {
-  MDLog *mdlog = get_mds()->mdlog;
-  uint64_t safe_pos = write_pos;
+  MDSRankBase* mds = get_mds();
+  // we have to take the lock here to protect access
+  // to the mdlog variables.
+  // We account for this when we will call the _no_lock
+  // version of the io context base complete method
+  std::lock_guard l(mds->get_lock());
+
+  MDLog *mdlog = get_mds()->get_log();
   pre_finish(r);
-  // MDSIOContext::complete() free this
-  MDSIOContextBase::complete(r);
+  if (log_segment) {
+    log_segment->bounds_upkeep(event_start_pos, event_end_pos);
+  }
+  // MDSIOContext::complete() frees `this`
+  auto safe_pos = event_end_pos;
+  MDSIOContextBase::complete_no_lock(r);
   // safe_pos must be updated after MDSIOContext::complete() call
   mdlog->set_safe_pos(safe_pos);
+}
+
+void MDSLogContextBase::print(std::ostream& out) const
+{
+  out << "log_event(" << event_start_pos << ".." << event_end_pos << " @ " << *log_segment << ")";
 }
 
 void MDSIOContextWrapper::finish(int r)
@@ -138,7 +175,7 @@ void C_IO_Wrapper::complete(int r)
 {
   if (async) {
     async = false;
-    get_mds()->finisher->queue(this, r);
+    get_mds()->get_finisher()->queue(this, r);
   } else {
     MDSIOContext::complete(r);
   }
