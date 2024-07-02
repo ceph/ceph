@@ -230,3 +230,46 @@ class TestSessionMap(CephFSTestCase):
 
         self.mount_a.kill_cleanup()
         self.mount_a.mount_wait()
+
+    def test_session_evict_non_blocklisted(self):
+        """
+        Check that mds evicts without blocklisting client
+        """
+
+        self.config_set('mds', 'mds_session_blocklist_on_evict', False)
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        self.fs.set_ceph_conf('client', 'client reconnect stale', True)
+        self.mount_a.remount()
+        self.mount_b.remount()
+
+        self.mount_a.run_shell_payload("mkdir {d0,d1} && touch {d0,d1}/file")
+        self.mount_a.setfattr("d0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("d1", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/d0', 0), ('/d1', 1)], status=status)
+
+        self.mount_a.run_shell(["touch", "d0/f0"])
+        self.mount_a.run_shell(["touch", "d1/f0"])
+        self.mount_b.run_shell(["touch", "d0/f1"])
+        self.mount_b.run_shell(["touch", "d1/f1"])
+
+        self.assert_session_count(2, mds_id=self.fs.get_rank(rank=0, status=status)['name'])
+        self.assert_session_count(2, mds_id=self.fs.get_rank(rank=1, status=status)['name'])
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id],
+                         mds_id=self.fs.get_rank(rank=0, status=status)['name'])
+
+        self.mount_a.run_shell(["touch", "d0/f00"])
+        self.mount_a.run_shell(["touch", "d1/f00"])
+        self.mount_b.run_shell(["touch", "d0/f10"])
+        self.mount_b.run_shell(["touch", "d1/f10"])
+
+        # 10 seconds should be enough for reconnecting the sessions
+        time.sleep(10)
+        self.assert_session_count(2, mds_id=self.fs.get_rank(rank=0, status=status)['name'])
+        self.assert_session_count(2, mds_id=self.fs.get_rank(rank=1, status=status)['name'])
+
+        self.mount_a.kill_cleanup()
+        self.mount_a.mount_wait()
