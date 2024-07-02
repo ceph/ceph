@@ -13,5 +13,11 @@ roles:
   - osd.4
   - client.1
   - ceph.nvmeof.nvmeof.b
-- - client.2
-- - client.3
+- - host.c
+  - mon.c
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.2
+  - ceph.nvmeof.nvmeof.c
+- - client.3 # initiator

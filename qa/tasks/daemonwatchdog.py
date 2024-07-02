@@ -2,6 +2,7 @@ import logging
 import signal
 import time
 
+from teuthology.orchestra.daemon.cephadmunit import CephadmUnit
 from gevent import sleep
 from gevent.greenlet import Greenlet
 from gevent.event import Event
@@ -53,6 +54,18 @@ class DaemonWatchdog(Greenlet):
     def stop(self):
         self.stopping.set()
 
+    @staticmethod
+    def is_running(daemon):
+        if isinstance(daemon, CephadmUnit):
+            return daemon.running()
+        return daemon.running() and not daemon.proc.finished
+
+    @staticmethod
+    def is_stopped(daemon):
+        if isinstance(daemon, CephadmUnit):
+            return not daemon.running()
+        return daemon.running() and daemon.proc.finished
+
     def bark(self):
         self.log("BARK! unmounting mounts and killing all daemons")
         if hasattr(self.ctx, 'mounts'):
@@ -62,11 +75,11 @@ class DaemonWatchdog(Greenlet):
                 except:
                     self.logger.exception("ignoring exception:")
         daemons = []
-        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('rgw', cluster=self.cluster)))
-        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)))
+        daemons.extend(filter(self.is_running, self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)))
+        daemons.extend(filter(self.is_running, self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)))
+        daemons.extend(filter(self.is_running, self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.cluster)))
+        daemons.extend(filter(self.is_running, self.ctx.daemons.iter_daemons_of_role('rgw', cluster=self.cluster)))
+        daemons.extend(filter(self.is_running, self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)))
 
         for daemon in daemons:
             try:
@@ -90,11 +103,11 @@ class DaemonWatchdog(Greenlet):
             mgrs = self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)
 
             daemon_failures = []
-            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, osds))
-            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, mons))
-            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, mdss))
-            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, rgws))
-            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, mgrs))
+            daemon_failures.extend(filter(self.is_stopped, osds))
+            daemon_failures.extend(filter(self.is_stopped, mons))
+            daemon_failures.extend(filter(self.is_stopped, mdss))
+            daemon_failures.extend(filter(self.is_stopped, rgws))
+            daemon_failures.extend(filter(self.is_stopped, mgrs))
 
             for daemon in daemon_failures:
                 name = daemon.role + '.' + daemon.id_
