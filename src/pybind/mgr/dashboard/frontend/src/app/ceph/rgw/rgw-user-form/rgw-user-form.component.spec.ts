@@ -18,6 +18,7 @@ import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
+import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
@@ -162,14 +163,14 @@ describe('RgwUserFormComponent', () => {
     it('should validate that username is valid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(throwError('foo'));
       formHelper.setValue('user_id', 'ab', true);
-      tick();
+      tick(DUE_TIMER);
       formHelper.expectValid('user_id');
     }));
 
     it('should validate that username is invalid', fakeAsync(() => {
       spyOn(rgwUserService, 'get').and.returnValue(observableOf({}));
       formHelper.setValue('user_id', 'abc', true);
-      tick();
+      tick(DUE_TIMER);
       formHelper.expectError('user_id', 'notUnique');
     }));
   });
