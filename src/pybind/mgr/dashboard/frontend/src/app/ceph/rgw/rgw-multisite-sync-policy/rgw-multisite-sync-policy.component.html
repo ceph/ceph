@@ -1,0 +1,18 @@
+  <legend i18n>
+    Multisite Sync Policy
+    <cd-help-text>
+      Multisite bucket-granularity sync policy provides fine grained control of data movement between buckets in different zones.
+    </cd-help-text>
+  </legend>
+  <cd-table #table
+            [data]="syncPolicyData"
+            [columns]="columns"
+            columnMode="flex"
+            selectionType="single"
+            [searchableObjects]="true"
+            [hasDetails]="false"
+            [serverSide]="false"
+            [count]="0"
+            [maxLimit]="25"
+            [toolHeader]="true">
+  </cd-table>
