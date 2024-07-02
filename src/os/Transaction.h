@@ -10,7 +10,6 @@
 #include "include/buffer.h"
 
 #include "osd/osd_types.h"
-
 #define OPS_PER_PTR 32
 
 void decode_str_str_map_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::list *out);
@@ -103,6 +102,7 @@ void decode_str_set_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::l
  * A and B.
  *
  */
+
 namespace ceph::os {
 class Transaction {
 public:
@@ -179,41 +179,29 @@ public:
 
   struct TransactionData {
     ceph_le64 ops;
-    ceph_le32 largest_data_len;
-    ceph_le32 largest_data_off;
-    ceph_le32 largest_data_off_in_data_bl;
+    ceph_le32 unused1;
+    ceph_le32 unused2;
+    ceph_le32 unused3;
     ceph_le32 fadvise_flags;
 
     TransactionData() noexcept :
       ops(0),
-      largest_data_len(0),
-      largest_data_off(0),
-      largest_data_off_in_data_bl(0),
+      unused1(0),
+      unused2(0),
+      unused3(0),
       fadvise_flags(0) { }
 
     // override default move operations to reset default values
     TransactionData(TransactionData&& other) noexcept :
       ops(other.ops),
-      largest_data_len(other.largest_data_len),
-      largest_data_off(other.largest_data_off),
-      largest_data_off_in_data_bl(other.largest_data_off_in_data_bl),
       fadvise_flags(other.fadvise_flags) {
       other.ops = 0;
-      other.largest_data_len = 0;
-      other.largest_data_off = 0;
-      other.largest_data_off_in_data_bl = 0;
       other.fadvise_flags = 0;
     }
     TransactionData& operator=(TransactionData&& other) noexcept {
       ops = other.ops;
-      largest_data_len = other.largest_data_len;
-      largest_data_off = other.largest_data_off;
-      largest_data_off_in_data_bl = other.largest_data_off_in_data_bl;
       fadvise_flags = other.fadvise_flags;
       other.ops = 0;
-      other.largest_data_len = 0;
-      other.largest_data_off = 0;
-      other.largest_data_off_in_data_bl = 0;
       other.fadvise_flags = 0;
       return *this;
     }
@@ -238,7 +226,24 @@ private:
   uint32_t coll_id = 0;
   uint32_t object_id = 0;
 
-  ceph::buffer::list data_bl;
+  /* Transactions are encoded/decoded in two formats. Old format
+   * does not page align write data in inter-OSD messages and
+   * can degrade performance. New format encodes aligned data
+   * at the start of the message. Transactions are initially
+   * constructed in dual format so messages can be sent to new
+   * and old OSDs. When a message is recevied and decoded the
+   * transaction has a fixed format, thereafter there are
+   * limitations for encode and append operations
+   */
+  ceph::buffer::list old_data_bl;
+  ceph::buffer::list new_data_aligned_bl;
+  ceph::buffer::list new_data_misaligned_bl;
+  enum {
+    FORMAT_OLD,
+    FORMAT_NEW,
+    FORMAT_DUAL
+  } format = FORMAT_DUAL;
+
   ceph::buffer::list op_bl;
 
   std::list<Context *> on_applied;
@@ -248,13 +253,13 @@ private:
 public:
   Transaction() = default;
 
-  explicit Transaction(ceph::buffer::list::const_iterator &dp) {
-    decode(dp);
-  }
-  explicit Transaction(ceph::buffer::list &nbl) {
-    auto dp = nbl.cbegin();
-    decode(dp);
-  }
+  //  explicit Transaction(ceph::buffer::list::const_iterator &dp) {
+  //    decode(dp);
+  //  }
+  //  explicit Transaction(ceph::buffer::list &nbl) {
+  //    auto dp = nbl.cbegin();
+  //    decode(dp);
+  //  }
 
   // override default move operations to reset default values
   Transaction(Transaction&& other) noexcept :
@@ -263,7 +268,10 @@ public:
     object_index(std::move(other.object_index)),
     coll_id(other.coll_id),
     object_id(other.object_id),
-    data_bl(std::move(other.data_bl)),
+    old_data_bl(std::move(other.old_data_bl)),
+    new_data_aligned_bl(std::move(other.new_data_aligned_bl)),
+    new_data_misaligned_bl(std::move(other.new_data_misaligned_bl)),
+    format(other.format),
     op_bl(std::move(other.op_bl)),
     on_applied(std::move(other.on_applied)),
     on_commit(std::move(other.on_commit)),
@@ -278,7 +286,10 @@ public:
     object_index = std::move(other.object_index);
     coll_id = other.coll_id;
     object_id = other.object_id;
-    data_bl = std::move(other.data_bl);
+    old_data_bl = std::move(other.old_data_bl);
+    new_data_aligned_bl = std::move(other.new_data_aligned_bl);
+    new_data_misaligned_bl = std::move(other.new_data_misaligned_bl);
+    format = other.format;
     op_bl = std::move(other.op_bl);
     on_applied = std::move(other.on_applied);
     on_commit = std::move(other.on_commit);
@@ -399,7 +410,10 @@ public:
     std::swap(coll_id, other.coll_id);
     std::swap(object_id, other.object_id);
     op_bl.swap(other.op_bl);
-    data_bl.swap(other.data_bl);
+    old_data_bl.swap(other.old_data_bl);
+    new_data_aligned_bl.swap(other.new_data_aligned_bl);
+    new_data_misaligned_bl.swap(other.new_data_misaligned_bl);
+    std::swap(format, other.format);
   }
 
   void _update_op(Op* op,
@@ -520,11 +534,6 @@ public:
   void append(Transaction& other) {
 
     data.ops = data.ops + other.data.ops;
-    if (other.data.largest_data_len > data.largest_data_len) {
-	data.largest_data_len = other.data.largest_data_len;
-	data.largest_data_off = other.data.largest_data_off;
-	data.largest_data_off_in_data_bl = data_bl.length() + other.data.largest_data_off_in_data_bl;
-    }
     data.fadvise_flags = data.fadvise_flags | other.data.fadvise_flags;
     on_applied.splice(on_applied.end(), other.on_applied);
     on_commit.splice(on_commit.end(), other.on_commit);
@@ -564,15 +573,31 @@ public:
 
     //append op_bl
     op_bl.append(other_op_bl);
-    //append data_bl
-    data_bl.append(other.data_bl);
+    //append data_bl's
+    old_data_bl.append(other.old_data_bl);
+    new_data_aligned_bl.append(other.new_data_aligned_bl);
+    new_data_misaligned_bl.append(other.new_data_misaligned_bl);
+    //appending a transaction in new format with a transaction in old format
+    //or versa versa is not supported. Appends are permitted if the formats
+    //match or one of the transactions is in dual format
+    switch(format) {
+      case FORMAT_OLD:
+        ceph_assert(other.format != FORMAT_NEW);
+	break;
+      case FORMAT_NEW:
+        ceph_assert(other.format != FORMAT_OLD);
+	break;
+      case FORMAT_DUAL:
+        format = other.format;
+	break;
+    }
   }
 
   /** Inquires about the Transaction as a whole. */
 
   /// How big is the encoded Transaction buffer?
   uint64_t get_encoded_bytes() {
-    //layout: data_bl + op_bl + coll_index + object_index + data
+    //layout: old_data_bl + op_bl + coll_index + object_index + data
 
     // coll_index size, object_index size and sizeof(transaction_data)
     // all here, so they may be computed at compile-time
@@ -591,7 +616,7 @@ public:
 	final_size += p->first.encoded_size();
     }
 
-    return data_bl.length() +
+    return old_data_bl.length() +
 	op_bl.length() +
 	final_size;
   }
@@ -599,12 +624,12 @@ public:
   /// Retain old version for regression testing purposes
   uint64_t get_encoded_bytes_test() {
     using ceph::encode;
-    //layout: data_bl + op_bl + coll_index + object_index + data
+    //layout: old_data_bl + op_bl + coll_index + object_index + data
     ceph::buffer::list bl;
     encode(coll_index, bl);
     encode(object_index, bl);
 
-    return data_bl.length() +
+    return old_data_bl.length() +
 	op_bl.length() +
 	bl.length() +
 	sizeof(data);
@@ -613,28 +638,6 @@ public:
   uint64_t get_num_bytes() {
     return get_encoded_bytes();
   }
-  /// Size of largest data buffer to the "write" operation encountered so far
-  uint32_t get_data_length() {
-    return data.largest_data_len;
-  }
-  /// offset within the encoded buffer to the start of the largest data buffer that's encoded
-  uint32_t get_data_offset() {
-    if (data.largest_data_off_in_data_bl) {
-	return data.largest_data_off_in_data_bl +
-	  sizeof(__u8) +      // encode struct_v
-	  sizeof(__u8) +      // encode compat_v
-	  sizeof(__u32) +     // encode len
-	  sizeof(__u32);      // data_bl len
-    }
-    return 0;  // none
-  }
-  /// offset of buffer as aligned to destination within object.
-  int get_data_alignment() {
-    if (!data.largest_data_len)
-	return 0;
-    return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
-  }
-  /// Is the Transaction empty (no operations)
   bool empty() {
     return !data.ops;
   }
@@ -658,7 +661,12 @@ public:
     uint64_t ops;
     char* op_buffer_p;
 
-    ceph::buffer::list::const_iterator data_bl_p;
+    ceph::buffer::list::const_iterator old_data_bl_p;
+    ceph::buffer::list::const_iterator new_data_aligned_bl_p;
+    ceph::buffer::list::const_iterator new_data_misaligned_bl_p;
+    bool new_format;
+
+    Op *op;
 
   public:
     std::vector<coll_t> colls;
@@ -667,7 +675,10 @@ public:
   private:
     explicit iterator(Transaction *t)
       : t(t),
-	  data_bl_p(t->data_bl.cbegin()),
+	  old_data_bl_p(t->old_data_bl.cbegin()),
+        new_data_aligned_bl_p(t->new_data_aligned_bl.cbegin()),
+        new_data_misaligned_bl_p(t->new_data_misaligned_bl.cbegin()),
+        new_format(t->format!=FORMAT_OLD),
         colls(t->coll_index.size()),
         objects(t->object_index.size()) {
 
@@ -699,7 +710,7 @@ public:
     Op* decode_op() {
       ceph_assert(ops > 0);
 
-      Op* op = reinterpret_cast<Op*>(op_buffer_p);
+      op = reinterpret_cast<Op*>(op_buffer_p);
       op_buffer_p += sizeof(Op);
       ops--;
 
@@ -708,34 +719,92 @@ public:
     std::string decode_string() {
 	using ceph::decode;
       std::string s;
-      decode(s, data_bl_p);
+      if (new_format) {
+        decode(s, new_data_misaligned_bl_p);
+      }else{
+        decode(s, old_data_bl_p);
+      }
       return s;
     }
     void decode_bp(ceph::buffer::ptr& bp) {
 	using ceph::decode;
-      decode(bp, data_bl_p);
+      if (new_format) {
+        decode(bp, new_data_misaligned_bl_p);
+      }else{
+        decode(bp, old_data_bl_p);
+      }
     }
     void decode_bl(ceph::buffer::list& bl) {
 	using ceph::decode;
-      decode(bl, data_bl_p);
+      if (new_format) {
+	if (op->op == OP_WRITE) {
+          uint64_t alignstart = (0 - op->off) & ~CEPH_PAGE_MASK;
+          if (op->len >= CEPH_PAGE_SIZE + alignstart) {
+            uint64_t alignlen = (op->len - alignstart) & CEPH_PAGE_MASK;
+            uint64_t suffixstart = alignstart + alignlen;
+            if (alignstart!=0) {
+              // Misaligned chunk at start
+              bufferlist prefix;
+              decode_nohead(alignstart, prefix, new_data_misaligned_bl_p);
+	      bl.append(prefix);
+            }
+            // Aligned chunk in middle
+            bufferlist aligned;
+            decode_nohead(alignlen, aligned, new_data_aligned_bl_p);
+	    bl.append(aligned);
+            if (suffixstart != op->len) {
+              // Misaligned chunk at end
+              bufferlist suffix;
+              decode_nohead(op->len-suffixstart, suffix, new_data_misaligned_bl_p);
+	      bl.append(suffix);
+            }
+          }else{
+            decode_nohead(op->len, bl, new_data_misaligned_bl_p);
+          }
+	}else{
+          decode(bl, new_data_misaligned_bl_p);
+	}
+      }else{
+        decode(bl, old_data_bl_p);
+      }
     }
     void decode_attrset(std::map<std::string,ceph::buffer::ptr>& aset) {
 	using ceph::decode;
-      decode(aset, data_bl_p);
+      if (new_format) {
+        decode(aset, new_data_misaligned_bl_p);
+      }else{
+        decode(aset, old_data_bl_p);
+      }
     }
     void decode_attrset(std::map<std::string,ceph::buffer::list>& aset) {
 	using ceph::decode;
-      decode(aset, data_bl_p);
+      if (new_format) {
+        decode(aset, new_data_misaligned_bl_p);
+      }else{
+        decode(aset, old_data_bl_p);
+      }
     }
     void decode_attrset_bl(ceph::buffer::list *pbl) {
-	decode_str_str_map_to_bl(data_bl_p, pbl);
+      if (new_format) {
+	  decode_str_str_map_to_bl(new_data_misaligned_bl_p, pbl);
+      }else{
+	  decode_str_str_map_to_bl(old_data_bl_p, pbl);
+      }
     }
     void decode_keyset(std::set<std::string> &keys){
 	using ceph::decode;
-      decode(keys, data_bl_p);
+      if (new_format) {
+        decode(keys, new_data_misaligned_bl_p);
+      }else{
+        decode(keys, old_data_bl_p);
+      }
     }
     void decode_keyset_bl(ceph::buffer::list *pbl){
-      decode_str_set_to_bl(data_bl_p, pbl);
+      if (new_format) {
+        decode_str_set_to_bl(new_data_misaligned_bl_p, pbl);
+      }else{
+        decode_str_set_to_bl(old_data_bl_p, pbl);
+      }
     }
 
     const ghobject_t &get_oid(uint32_t oid_id) {
@@ -847,22 +916,38 @@ public:
   void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
 	       const ceph::buffer::list& write_data, uint32_t flags = 0) {
     using ceph::encode;
-    uint32_t orig_len = data_bl.length();
     Op* _op = _get_next_op();
+    uint64_t alignstart = (0-off) & ~CEPH_PAGE_MASK;
     _op->op = OP_WRITE;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
     _op->off = off;
     _op->len = len;
-    encode(write_data, data_bl);
-
     ceph_assert(len == write_data.length());
-    data.fadvise_flags = data.fadvise_flags | flags;
-    if (write_data.length() > data.largest_data_len) {
-	data.largest_data_len = write_data.length();
-	data.largest_data_off = off;
-	data.largest_data_off_in_data_bl = orig_len + sizeof(__u32);  // we are about to
+    encode(write_data, old_data_bl);
+    if (len >= CEPH_PAGE_SIZE + alignstart) {
+      uint64_t alignlen = (len - alignstart) & CEPH_PAGE_MASK;
+      uint64_t suffixstart = alignstart + alignlen;
+      if (alignstart != 0) {
+        // Misaligned chunk at start
+        bufferlist prefix;
+        prefix.substr_of(write_data, 0, alignstart);
+        encode_nohead(prefix, new_data_misaligned_bl);
+      }
+      // Aligned chunk in middle
+      bufferlist aligned;
+      aligned.substr_of(write_data, alignstart, alignlen);
+      encode_nohead(aligned, new_data_aligned_bl);
+      if (suffixstart != len) {
+        // Misaligned chunk at end
+        bufferlist suffix;
+        suffix.substr_of(write_data, suffixstart, len-suffixstart);
+        encode_nohead(suffix, new_data_misaligned_bl);
+      }
+    }else{
+      encode_nohead(write_data, new_data_misaligned_bl);
     }
+    data.fadvise_flags = data.fadvise_flags | flags;
     data.ops = data.ops + 1;
   }
   /**
@@ -909,12 +994,15 @@ public:
   /// Set an xattr of an object
   void setattr(const coll_t& cid, const ghobject_t& oid, const std::string& s, ceph::buffer::list& val) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTR;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(s, data_bl);
-    encode(val, data_bl);
+    encode(s, bl);
+    encode(val, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
   /// Set multiple xattrs of an object
@@ -922,11 +1010,14 @@ public:
 		const ghobject_t& oid,
 		const std::map<std::string,ceph::buffer::ptr,std::less<>>& attrset) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(attrset, data_bl);
+    encode(attrset, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
   /// Set multiple xattrs of an object
@@ -934,11 +1025,14 @@ public:
 		const ghobject_t& oid,
 		const std::map<std::string,ceph::buffer::list,std::less<>>& attrset) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_SETATTRS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(attrset, data_bl);
+    encode(attrset, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
   /// remove an xattr from an object
@@ -949,11 +1043,14 @@ public:
   /// remove an xattr from an object
   void rmattr(const coll_t& cid, const ghobject_t& oid, const std::string& s) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_RMATTR;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(s, data_bl);
+    encode(s, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
   /// remove all xattrs from an object
@@ -1029,11 +1126,14 @@ public:
    */
   void collection_hint(const coll_t& cid, uint32_t type, const ceph::buffer::list& hint) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_COLL_HINT;
     _op->cid = _get_coll_id(cid);
     _op->hint = type;
-    encode(hint, data_bl);
+    encode(hint, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
 
@@ -1099,11 +1199,14 @@ public:
     const std::map<std::string, ceph::buffer::list> &attrset ///< [in] Replacement keys and values
     ) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_OMAP_SETKEYS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(attrset, data_bl);
+    encode(attrset, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
 
@@ -1117,7 +1220,8 @@ public:
     _op->op = OP_OMAP_SETKEYS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    data_bl.append(attrset_bl);
+    old_data_bl.append(attrset_bl);
+    new_data_misaligned_bl.append(attrset_bl);
     data.ops = data.ops + 1;
   }
 
@@ -1128,11 +1232,14 @@ public:
     const std::set<std::string> &keys ///< [in] Keys to clear
     ) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_OMAP_RMKEYS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(keys, data_bl);
+    encode(keys, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
 
@@ -1142,13 +1249,16 @@ public:
     const ghobject_t &oid,  ///< [in] Object from which to remove the omap
     const std::string& key ///< [in] Keys to clear
     ) {
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_OMAP_RMKEYS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
     using ceph::encode;
-    encode((uint32_t)1, data_bl);
-    encode(key, data_bl);
+    encode((uint32_t)1, bl);
+    encode(key, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
 
@@ -1162,7 +1272,8 @@ public:
     _op->op = OP_OMAP_RMKEYS;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    data_bl.append(keys_bl);
+    old_data_bl.append(keys_bl);
+    new_data_misaligned_bl.append(keys_bl);
     data.ops = data.ops + 1;
   }
 
@@ -1174,12 +1285,15 @@ public:
     const std::string& last      ///< [in] first key past range, range is [first,last)
     ) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_OMAP_RMKEYRANGE;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(first, data_bl);
-    encode(last, data_bl);
+    encode(first, bl);
+    encode(last, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
 
@@ -1193,7 +1307,8 @@ public:
     _op->op = OP_OMAP_RMKEYRANGE;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    data_bl.append(keys_bl);
+    old_data_bl.append(keys_bl);
+    new_data_misaligned_bl.append(keys_bl);
     data.ops = data.ops + 1;
   }
 
@@ -1201,14 +1316,17 @@ public:
   void omap_setheader(
     const coll_t &cid,             ///< [in] Collection containing oid
     const ghobject_t &oid,  ///< [in] Object
-    const ceph::buffer::list &bl    ///< [in] Header value
+    const ceph::buffer::list &hdr_bl    ///< [in] Header value
     ) {
     using ceph::encode;
+    ceph::buffer::list bl;
     Op* _op = _get_next_op();
     _op->op = OP_OMAP_SETHEADER;
     _op->cid = _get_coll_id(cid);
     _op->oid = _get_object_id(oid);
-    encode(bl, data_bl);
+    encode(hdr_bl, bl);
+    old_data_bl.append(bl);
+    new_data_misaligned_bl.append(bl);
     data.ops = data.ops + 1;
   }
 
@@ -1270,36 +1388,84 @@ public:
     data.ops = data.ops + 1;
   }
 
-  void encode(ceph::buffer::list& bl) const {
-    //layout: data_bl + op_bl + coll_index + object_index + data
-    ENCODE_START(9, 9, bl);
-    encode(data_bl, bl);
-    encode(op_bl, bl);
-    encode(coll_index, bl);
-    encode(object_index, bl);
-    data.encode(bl);
-    ENCODE_FINISH(bl);
+  void encode(ceph::buffer::list& bl) const
+  {
+    encode(bl,bl);
+  }
+
+  void encode(ceph::buffer::list &p_bl,ceph::buffer::list &d_bl) const
+  {
+    //see also get_encoded_bytes which assumes layout version 9
+
+    //layout version 9:
+    // buffer = old_data_bl + op_bl + coll_index + object_index + data
+    //layout version 10 (for inter-OSD messages):
+    // payload = op_bl + coll_index + object_index + data
+    // data = new_data_aligned_bl + misaligned data_bl
+
+    uint8_t ver = (&p_bl == &d_bl)?9:10;
+    switch (format) {
+    case FORMAT_OLD:
+      //must use old format
+      ver = 9;
+      break;
+    case FORMAT_NEW:
+      //cannot encode a new format transaction in the old format
+      ceph_assert(ver >= 10);
+      break;
+    case FORMAT_DUAL:
+      break;
+    }
+    ENCODE_START(ver, ver, p_bl);
+    if (ver < 10) {
+      encode(old_data_bl, p_bl);
+    }
+    encode(op_bl, p_bl);
+    encode(coll_index, p_bl);
+    encode(object_index, p_bl);
+    data.encode(p_bl);
+
+    if (ver >= 10) {
+      encode(new_data_aligned_bl, p_bl, d_bl);
+      encode(new_data_misaligned_bl, p_bl, d_bl);
+    }
+    ENCODE_FINISH(p_bl);
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(9, bl);
+    decode(bl,bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &p_bl,ceph::buffer::list::const_iterator &d_bl) {
+    DECODE_START(10, p_bl);
     DECODE_OLDEST(9);
 
-    decode(data_bl, bl);
-    decode(op_bl, bl);
-    decode(coll_index, bl);
-    decode(object_index, bl);
-    data.decode(bl);
+    if (struct_v < 10) {
+      decode(old_data_bl, p_bl);
+      format = FORMAT_OLD;
+    }
+    decode(op_bl, p_bl);
+    decode(coll_index, p_bl);
+    decode(object_index, p_bl);
+    data.decode(p_bl);
     coll_id = coll_index.size();
     object_id = object_index.size();
 
-    DECODE_FINISH(bl);
+    if (struct_v >= 10) {
+      decode(new_data_aligned_bl, p_bl, d_bl);
+      decode(new_data_misaligned_bl, p_bl, d_bl);
+      format = FORMAT_NEW;
+    }
+
+    DECODE_FINISH(p_bl);
   }
 
   void dump(ceph::Formatter *f);
   static void generate_test_instances(std::list<Transaction*>& o);
 };
+
 WRITE_CLASS_ENCODER(ceph::os::Transaction)
+WRITE_CLASS_ENCODER_WITH_DATA(ceph::os::Transaction)
 WRITE_CLASS_ENCODER(ceph::os::Transaction::TransactionData)
 
 std::ostream& operator<<(std::ostream& out, const Transaction& tx);

@@ -17,6 +17,7 @@
 #define CEPH_MOSDREPOP_H
 
 #include "MOSDFastDispatchOp.h"
+#include "os/ObjectStore.h"
 
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
@@ -24,7 +25,7 @@
 
 class MOSDRepOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -34,6 +35,7 @@ public:
   osd_reqid_t reqid;
 
   spg_t pgid;
+  ObjectStore::Transaction op_t;
 
   ceph::buffer::list::const_iterator p;
   // Decoding flags. Decoding is only needed for messages caught by pipe reader.
@@ -118,6 +120,14 @@ public:
       eversion_t pg_roll_forward_to;
       decode(pg_roll_forward_to, p);
     }
+
+    auto d = data.cbegin();
+    if (header.version >= 4) {
+      decode(op_t, p, d);
+    }else{
+      decode(op_t, d, d);
+    }
+
     final_decode_needed = false;
   }
 
@@ -142,6 +152,13 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(min_last_complete_ondisk, payload);
+
+    if (!HAVE_FEATURE(features, SERVER_SQUID)) {
+      header.version = 3;
+      encode(op_t, data, data);
+    } else {
+      encode(op_t, payload, data);
+    }
   }
 
   MOSDRepOp()
@@ -150,12 +167,13 @@ public:
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
-	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v)
+	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v, ObjectStore::Transaction& op_t)
     : MOSDFastDispatchOp{MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(mape),
       min_epoch(min_epoch),
       reqid(r),
       pgid(p),
+      op_t(op_t),
       final_decode_needed(false),
       from(from),
       poid(po),
@@ -187,6 +205,10 @@ public:
       }
     }
     out << ")";
+  }
+
+  void clear_buffers() override {
+    op_t = ObjectStore::Transaction();
   }
 private:
   template<class T, typename... Args>

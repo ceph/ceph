@@ -49,8 +49,6 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
     pending_trans.try_emplace(tid, pg_shards.size(), osd_op_p.at_version).first;
-  bufferlist encoded_txn;
-  encode(txn, encoded_txn);
 
   auto sends = std::make_unique<std::vector<seastar::future<>>>();
   for (auto pg_shard : pg_shards) {
@@ -64,8 +62,8 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 	map_epoch,
 	min_epoch,
 	tid,
-	osd_op_p.at_version);
-      m->set_data(encoded_txn);
+	osd_op_p.at_version,
+	txn);
       pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
       encode(log_entries, m->logbl);
       m->pg_trim_to = osd_op_p.pg_trim_to;

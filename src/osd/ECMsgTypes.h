@@ -80,7 +80,9 @@ struct ECSubWrite {
     backfill_or_async_recovery = other.backfill_or_async_recovery;
   }
   void encode(ceph::buffer::list &bl) const;
+  void encode(ceph::buffer::list &bl,ceph::buffer::list &datal) const;
   void decode(ceph::buffer::list::const_iterator &bl);
+  void decode(ceph::buffer::list::const_iterator &bl,ceph::buffer::list::const_iterator &datal);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<ECSubWrite*>& o);
 private:
@@ -88,7 +90,9 @@ private:
   ECSubWrite(ECSubWrite& other);
   const ECSubWrite& operator=(const ECSubWrite& other);
 };
+
 WRITE_CLASS_ENCODER(ECSubWrite)
+WRITE_CLASS_ENCODER_WITH_DATA(ECSubWrite)
 
 struct ECSubWriteReply {
   pg_shard_t from;
@@ -124,11 +128,14 @@ struct ECSubReadReply {
   std::map<hobject_t, std::map<std::string, ceph::buffer::list, std::less<>>> attrs_read;
   std::map<hobject_t, int> errors;
   void encode(ceph::buffer::list &bl) const;
+  void encode(ceph::buffer::list &bl,ceph::buffer::list &datal) const;
   void decode(ceph::buffer::list::const_iterator &bl);
+  void decode(ceph::buffer::list::const_iterator &bl,ceph::buffer::list::const_iterator &datal);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<ECSubReadReply*>& o);
 };
 WRITE_CLASS_ENCODER(ECSubReadReply)
+WRITE_CLASS_ENCODER_WITH_DATA(ECSubReadReply)
 
 std::ostream &operator<<(
   std::ostream &lhs, const ECSubWrite &rhs);
