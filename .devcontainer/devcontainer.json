@@ -1,0 +1,22 @@
+
+{
+    "name": "Ceph Developer Environment",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "containerUser": "user",
+    "postCreateCommand": ".devcontainer/post_create.sh",
+    "shutdownAction": "stopContainer",
+    "customizations": {
+        "vscode": {
+          "extensions": [
+            "streetsidesoftware.code-spell-checker",
+            "ms-vscode.cpptools-extension-pack",
+            "mwinters-stuff.ninjabuild",
+            "ms-vscode.cmake-tools",
+            "josetr.cmake-language-support-vscode",
+            "vscjava.vscode-java-pack"
+           ]
+        }
+    }
+}
