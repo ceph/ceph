@@ -4,7 +4,6 @@ from typing import List, Any, Tuple, Dict, cast
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
-from cephadm.ssl_cert_utils import SSLCerts
 
 logger = logging.getLogger(__name__)
 
@@ -42,24 +41,14 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
     def get_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str]:
-        self.ssl_certs = SSLCerts()
-        old_cert = self.mgr.cert_key_store.get_cert('mgmt_gw_root_cert')
-        old_key = self.mgr.cert_key_store.get_key('mgmt_gw_root_key')
-        if old_cert and old_key:
-            self.ssl_certs.load_root_credentials(old_cert, old_key)
-        else:
-            self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
-            self.mgr.cert_key_store.save_cert('mgmt_gw_root_cert', self.ssl_certs.get_root_cert())
-            self.mgr.cert_key_store.save_key('mgmt_gw_root_key', self.ssl_certs.get_root_key())
-
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-        internal_cert, internal_pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
+        internal_cert, internal_pkey = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
         cert = svc_spec.ssl_certificate
         pkey = svc_spec.ssl_certificate_key
         if not (cert and pkey):
             # In case the user has not provided certificates then we generate self-signed ones
-            cert, pkey = self.ssl_certs.generate_cert(host_fqdn, node_ip)
+            cert, pkey = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
 
         return internal_cert, internal_pkey, cert, pkey
 

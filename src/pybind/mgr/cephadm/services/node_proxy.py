@@ -35,26 +35,25 @@ class NodeProxy(CephService):
         self.agent_endpoint = self.mgr.http_server.agent
         try:
             assert self.agent_endpoint
-            assert self.agent_endpoint.ssl_certs.get_root_cert()
             assert self.agent_endpoint.server_port
         except Exception:
             raise OrchestratorError(
                 'Cannot deploy node-proxy daemons until cephadm endpoint has finished generating certs')
 
-        listener_cert, listener_key = self.agent_endpoint.ssl_certs.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
+        listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
         cfg = {
             'target_ip': self.mgr.get_mgr_ip(),
             'target_port': self.agent_endpoint.server_port,
             'name': f'node-proxy.{daemon_spec.host}',
             'keyring': daemon_spec.keyring,
-            'root_cert.pem': self.agent_endpoint.ssl_certs.get_root_cert(),
+            'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
             'listener.crt': listener_cert,
             'listener.key': listener_key,
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 
         return config, sorted([str(self.mgr.get_mgr_ip()), str(self.agent_endpoint.server_port),
-                               self.agent_endpoint.ssl_certs.get_root_cert()])
+                               self.mgr.cert_mgr.get_root_ca()])
 
     def handle_hw_monitoring_setting(self) -> bool:
         # function to apply or remove node-proxy service spec depending
@@ -77,7 +76,7 @@ class NodeProxy(CephService):
             return False
 
     def get_ssl_ctx(self) -> ssl.SSLContext:
-        ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
+        ssl_root_crt = self.mgr.cert_mgr.get_root_ca()
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = True
         ssl_ctx.verify_mode = ssl.CERT_REQUIRED
