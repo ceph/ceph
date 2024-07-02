@@ -6093,7 +6093,7 @@ out:
 
 int Client::may_open(Inode *in, int flags, const UserPerm& perms)
 {
-  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *in << "; flags " << flags << " " << perms << dendl;
   unsigned want = 0;
 
   if ((flags & O_ACCMODE) == O_WRONLY)
@@ -6104,6 +6104,10 @@ int Client::may_open(Inode *in, int flags, const UserPerm& perms)
     want = CLIENT_MAY_READ;
   if (flags & O_TRUNC)
     want |= CLIENT_MAY_WRITE;
+
+  if (flags & CEPH_O_FMODE_EXEC) {
+    want &= ~MAY_READ;
+  }
 
   int r = 0;
   switch (in->mode & S_IFMT) {
@@ -6179,7 +6183,8 @@ out:
   return r;
 }
 
-int Client::may_delete(const char *relpath, const UserPerm& perms) {
+int Client::may_delete(const char *relpath, const UserPerm& perms)
+{
   ldout(cct, 20) << __func__ << " " << relpath << "; " << perms << dendl;
 
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
@@ -15598,7 +15603,7 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, const UserPerm& perms)
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) << dendl;
+  ldout(cct, 3) << "ll_open " << vino << " " << ceph_flags_sys2wire(flags) << " flags: " << flags << dendl;
   tout(cct) << "ll_open" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << ceph_flags_sys2wire(flags) << std::endl;
