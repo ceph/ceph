@@ -419,6 +419,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
     }
   }
 
+  std::optional<ECSubRead> local_read_op;
   std::vector<std::pair<int, Message*>> m;
   m.reserve(messages.size());
   for (map<pg_shard_t, ECSubRead>::iterator i = messages.begin();
@@ -427,6 +428,10 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
     op.in_progress.insert(i->first);
     shard_to_read_map[i->first].insert(op.tid);
     i->second.tid = tid;
+    if (i->first == get_parent()->whoami_shard()) {
+      local_read_op = std::move(i->second);
+      continue;
+    }
     MOSDECSubOpRead *msg = new MOSDECSubOpRead;
     msg->set_priority(priority);
     msg->pgid = spg_t(
@@ -434,7 +439,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
       i->first.shard);
     msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_interval_start_epoch();
-    msg->op = i->second;
+    msg->op = std::move(i->second);
     msg->op.from = get_parent()->whoami_shard();
     msg->op.tid = tid;
     if (op.trace) {
@@ -443,12 +448,20 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
       msg->trace.keyval("shard", i->first.shard.id);
     }
     m.push_back(std::make_pair(i->first.osd, msg));
+    dout(10) << __func__ << ": will send msg " << *msg
+             << " to osd." << i->first.osd << dendl;
+    ++i;
   }
   if (!m.empty()) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
-
   dout(10) << __func__ << ": started " << op << dendl;
+  if (local_read_op) {
+    handle_sub_read_n_reply(
+      get_parent()->whoami_shard(),
+      *local_read_op,
+      op.trace);
+  }
 }
 
 void ECCommon::ReadPipeline::get_want_to_read_shards(
