@@ -871,3 +871,107 @@ class RgwApiCredentialsTest(RgwTestCase):
         self.assertIn('available', data)
         self.assertIn('message', data)
         self.assertTrue(data['available'])
+
+
+class RgwSyncPolicyTest(RgwTestCase):
+
+    AUTH_ROLES = ['rgw-manager']
+
+    @classmethod
+    def setUpClass(cls):
+        return super(RgwSyncPolicyTest, cls).setUpClass()
+
+    def _create_sync_policy_group(self, group_id, status):
+        self._post(
+            '/api/rgw/multisite/sync-policy-group',
+            data={
+                'group_id': group_id,
+                'status': status
+            })
+        self.assertStatus(200)
+
+    def _assert_in_sync_policy_group(self, group_id, status,
+                                     flow_payload=None, pipe_payload=None):
+        data = self._get('/api/rgw/multisite/sync-policy-group/{}'.format(group_id))
+        self.assertStatus(200)
+        self.assertEqual(data['id'], group_id)
+        self.assertEqual(data['status'], status)
+        if flow_payload:
+            flow_type = flow_payload['flow_type']
+            self.assertIn(flow_type, data['data_flow'])
+            self.assertEqual(data['data_flow'][flow_type][0]
+                             ['source_zone'], flow_payload['source_zone'])
+            self.assertEqual(data['data_flow'][flow_type][0]['dest_zone'],
+                             flow_payload['destination_zone'])
+
+        if pipe_payload:
+            pipe_id = pipe_payload['pipe_id']
+            self.assertEqual(data['pipes'][0]['id'], pipe_id)
+
+    def test_get_sync_policy(self):
+        data = self._get('/api/rgw/multisite/sync-policy')
+        self.assertStatus(200)
+        self.assertSchema(data, JObj(sub_elems={
+            'groups': JList(JObj(sub_elems={}, allow_unknown=True))
+        }))
+
+    def test_create_sync_policy_group(self):
+        self._create_sync_policy_group('group1', 'enabled')
+        self._assert_in_sync_policy_group('group1', 'enabled')
+
+    def test_update_sync_policy_group(self):
+        self._create_sync_policy_group('group1', 'enabled')
+        self._assert_in_sync_policy_group('group1', 'enabled')
+
+        self._put(
+            '/api/rgw/multisite/sync-policy-group',
+            data={
+                'group_id': 'group1',
+                'status': 'forbidden'
+            })
+        self.assertStatus(200)
+
+        self._assert_in_sync_policy_group('group1', 'forbidden')
+
+    def test_delete_sync_policy_group(self):
+        self._create_sync_policy_group('group1', 'enabled')
+        self._assert_in_sync_policy_group('group1', 'enabled')
+
+        self._delete('/api/rgw/multisite/sync-policy-group/group1')
+        self.assertStatus(200)
+
+        data = self._get('/api/rgw/multisite/sync-policy-group/group1')
+        self.assertStatus(404)
+        self.assertIn('detail', data)
+        self.assertIn('Unable to get sync policy group', data['detail'])
+
+    def test_sync_policy_group_flows_and_pipes(self):
+        self._create_sync_policy_group('group1', 'enabled')
+        self._assert_in_sync_policy_group('group1', 'enabled')
+
+        flow_payload = {
+            'flow_id': 'test-flow',
+            'flow_type': 'directional',
+            'group_id': 'group1',
+            'source_zone': 'zone1',
+            'destination_zone': 'zone2',
+        }
+
+        pipe_payload = {
+            'pipe_id': 'test-pipe',
+            'group_id': 'group1',
+            'source_zones': '*',
+            'destination_zones': '*'
+        }
+
+        self._put(
+            '/api/rgw/multisite/sync-flow',
+            data=flow_payload)
+        self.assertStatus(200)
+
+        self._put(
+            '/api/rgw/multisite/sync-pipe',
+            data=pipe_payload)
+        self.assertStatus(200)
+
+        self._assert_in_sync_policy_group('group1', 'enabled', flow_payload, pipe_payload)
