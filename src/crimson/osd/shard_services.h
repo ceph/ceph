@@ -334,6 +334,8 @@ private:
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
   void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
+  std::optional<epoch_t> get_epoch_from_osdmap_object(const ghobject_t& osdmap);
+  seastar::future<int> trim_stale_maps(ceph::os::Transaction& t);
 };
 
 /**

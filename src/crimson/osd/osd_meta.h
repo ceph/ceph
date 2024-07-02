@@ -50,6 +50,7 @@ public:
 
   seastar::future<bufferlist> load_map(epoch_t e);
   read_errorator::future<ceph::bufferlist> load_inc_map(epoch_t e);
+  seastar::future<std::vector<ghobject_t>> list_all_map();
 
   void store_superblock(ceph::os::Transaction& t,
                         const OSDSuperblock& sb);

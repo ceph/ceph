@@ -555,6 +555,37 @@ void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
   ceph_assert(min <= osdmaps.cached_key_lower_bound());
 }
 
+std::optional<epoch_t> OSDSingletonState::get_epoch_from_osdmap_object(const ghobject_t& osdmap) {
+  const auto& name = osdmap.hobj.oid.name;
+  std::string osdmap_prefix = "osdmap.";
+  auto osdmap_pos = name.find(osdmap_prefix);
+  if (osdmap_pos == std::string::npos) {
+    return std::nullopt;
+  }
+  auto osdmap_string = name.substr(osdmap_pos + osdmap_prefix.size());
+  LOG_PREFIX(OSDSingletonState::get_epoch_from_osdmap_object);
+  ERROR("{}", osdmap_string);
+  return stoul(osdmap_string);
+}
+
+seastar::future<int> OSDSingletonState::trim_stale_maps(ceph::os::Transaction& t)
+{
+  LOG_PREFIX(OSDSingletonState::trim_stale_maps);
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  return meta_coll->list_all_map().then([FNAME, this, &t](vector<ghobject_t> maps) {
+    DEBUG("maps lens: {}", maps.size());
+    for (const auto& osdmap_obj : maps) {
+    if (auto epoch = get_epoch_from_osdmap_object(osdmap_obj);
+      epoch.has_value() && epoch < superblock.get_oldest_map()) {
+      DEBUG("trim_stale_maps removing stale osdmap epoch {}", epoch.value());
+      meta_coll->remove_map(t, epoch.value());
+      }
+    }
+
+    return t.get_num_ops();
+  });
+}
+
 seastar::future<Ref<PG>> ShardServices::make_pg(
   OSDMapService::cached_map_t create_map,
   spg_t pgid,

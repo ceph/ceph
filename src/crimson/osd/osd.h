@@ -247,6 +247,7 @@ private:
 
 public:
   seastar::future<> send_beacon();
+  seastar::future<int> trim_stale_maps();
 
 private:
   LogClient log_client;
