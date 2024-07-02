@@ -3,7 +3,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
@@ -12,6 +11,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { BootstrapImportModalComponent } from './bootstrap-import-modal.component';
+import { CheckboxModule, InputModule, ModalModule, SelectModule } from 'carbon-components-angular';
 
 describe('BootstrapImportModalComponent', () => {
   let component: BootstrapImportModalComponent;
@@ -27,9 +27,12 @@ describe('BootstrapImportModalComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot()
-    ],
-    providers: [NgbActiveModal]
+      ToastrModule.forRoot(),
+      ModalModule,
+      SelectModule,
+      InputModule,
+      CheckboxModule
+    ]
   });
 
   beforeEach(() => {
@@ -65,7 +68,7 @@ describe('BootstrapImportModalComponent', () => {
   describe('import token', () => {
     beforeEach(() => {
       spyOn(rbdMirroringService, 'refresh').and.stub();
-      spyOn(component.activeModal, 'close').and.callThrough();
+      spyOn(component, 'closeModal').and.callThrough();
       fixture.detectChanges();
     });
 

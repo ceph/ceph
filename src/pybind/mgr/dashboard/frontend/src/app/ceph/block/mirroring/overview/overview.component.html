@@ -2,33 +2,39 @@
       #formDir="ngForm"
       [formGroup]="rbdmirroringForm"
       novalidate>
-  <div class="row mb-3">
-    <div class="col-md-auto">
-      <label class="col-form-label"
-             for="siteName"
-             i18n>Site Name</label></div>
-
-    <div class="col-sm-4 d-flex">
-      <input type="text"
-             class="form-control"
-             id="siteName"
-             name="siteName"
-             formControlName="siteName"
-             [attr.disabled]="!editing ? true : null">
-      <button class="btn btn-light"
-              id="editSiteName"
-              (click)="updateSiteName()"
-              [attr.title]="editing ? 'Save' : 'Edit'">
-        <i [ngClass]="icons.edit"
-           *ngIf="!editing"></i>
-        <i [ngClass]="icons.check"
-           *ngIf="editing"></i>
-      </button>
-      <cd-copy-2-clipboard-button [source]="siteName"
-                                  [byId]="false">
-      </cd-copy-2-clipboard-button>
-    </div>
-    <div class="col">
+  <div class="form-item">
+    <div cdsCol
+         [columnNumbers]="{md: 4}"
+         class="d-flex">
+      <cds-text-label for="siteName"
+                      i18n>Site Name
+        <div class="cds-input-group">
+          <input type="text"
+                 id="siteName"
+                 name="siteName"
+                 formControlName="siteName"
+                 [attr.disabled]="!editing ? true : null"
+                 cdsText>
+          <cds-icon-button kind="ghost"
+                           size="md"
+                           (click)="updateSiteName()"
+                           [title]="editing ? 'Save' : 'Edit'">
+            <svg cdsIcon="edit"
+                 size="32"
+                 class="cds--btn__icon"
+                 *ngIf="!editing"></svg>
+            <svg cdsIcon="checkmark"
+                 size="32"
+                 class="cds--btn__icon"
+                 *ngIf="editing"></svg>
+          </cds-icon-button>
+          <cd-copy-2-clipboard-button [source]="siteName"
+                                      [byId]="false">
+          </cd-copy-2-clipboard-button>
+        </div>
+        </cds-text-label>
+      </div>
+      <div cdsCol="{md:5}">
       <cd-table-actions class="table-actions float-end"
                         [permission]="permission"
                         [selection]="selection"

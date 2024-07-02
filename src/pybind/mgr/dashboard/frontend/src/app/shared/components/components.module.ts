@@ -15,12 +15,7 @@ import {
 import { ClickOutsideModule } from 'ng-click-outside';
 import { NgChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
-import {
-  UIShellModule,
-  ButtonModule,
-  NotificationModule,
-  IconModule
-} from 'carbon-components-angular';
+import { UIShellModule, ButtonModule, NotificationModule, IconModule, IconService, TooltipModule, GridModule, AccordionModule, LoadingModule, ModalModule, InputModule, CheckboxModule, DatePickerModule, TimePickerModule, TimePickerSelectModule } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
@@ -64,6 +59,9 @@ import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
 import { UpgradableComponent } from './upgradable/upgradable.component';
 
+// Icons
+import InfoIcon from '@carbon/icons/es/information/16';
+
 @NgModule({
   imports: [
     CommonModule,
@@ -86,7 +84,17 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
     UIShellModule,
     ButtonModule,
     NotificationModule,
-    IconModule
+    IconModule,
+    TooltipModule,
+    GridModule,
+    AccordionModule,
+    LoadingModule,
+    ModalModule,
+    InputModule,
+    CheckboxModule,
+    DatePickerModule,
+    TimePickerModule,
+    TimePickerSelectModule
   ],
   declarations: [
     SparklineComponent,
@@ -168,4 +176,8 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
     UpgradableComponent
   ]
 })
-export class ComponentsModule {}
+export class ComponentsModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([InfoIcon]);
+  }
+}

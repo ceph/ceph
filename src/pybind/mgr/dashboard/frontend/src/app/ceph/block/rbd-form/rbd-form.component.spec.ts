@@ -21,6 +21,7 @@ import { RbdImageFeature } from './rbd-feature.interface';
 import { RbdFormMode } from './rbd-form-mode.enum';
 import { RbdFormResponseModel } from './rbd-form-response.model';
 import { RbdFormComponent } from './rbd-form.component';
+import { ButtonModule, CheckboxModule, GridModule, InputModule, NumberModule, RadioModule, SelectModule } from 'carbon-components-angular';
 
 describe('RbdFormComponent', () => {
   const urlPrefix = {
@@ -55,7 +56,14 @@ describe('RbdFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       ToastrModule.forRoot(),
-      SharedModule
+      SharedModule,
+      CheckboxModule,
+      InputModule,
+      SelectModule,
+      RadioModule,
+      NumberModule,
+      GridModule,
+      ButtonModule
     ],
     declarations: [RbdFormComponent, RbdConfigurationFormComponent],
     providers: [
@@ -300,8 +308,8 @@ describe('RbdFormComponent', () => {
       fixture.detectChanges();
       expect(
         queryNativeElement('cd-rbd-configuration-form')
-          .closest('.accordion-collapse')
-          .classList.contains('show')
+          .closest('.cds--accordion__item ')
+          .classList.contains('.cds--accordion__item--active')
       ).toBeFalsy();
     });
 
@@ -309,8 +317,8 @@ describe('RbdFormComponent', () => {
       queryNativeElement('#advanced-fieldset').click();
       fixture.detectChanges();
       expect(
-        queryNativeElement('cd-rbd-configuration-form').closest('.accordion-collapse').classList
-      ).toContain('show');
+        queryNativeElement('cd-rbd-configuration-form cds-accordion-item').closest('.cds--accordion__heading').getAttribute('aria-expanded')
+      ).toBe('true');
     });
   });
 

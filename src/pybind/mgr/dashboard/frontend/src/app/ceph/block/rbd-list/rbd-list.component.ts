@@ -1,6 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Observable, Subscriber } from 'rxjs';
 
@@ -24,7 +23,7 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { CdTableServerSideService } from '~/app/shared/services/cd-table-server-side.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+// import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -32,6 +31,7 @@ import { RbdFormEditRequestModel } from '../rbd-form/rbd-form-edit-request.model
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RBDImageFormat, RbdModel } from './rbd-model';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const BASE_URL = 'block/rbd';
 
@@ -82,7 +82,6 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   icons = Icons;
   count = 0;
   private tableContext: CdTableFetchDataContext = null;
-  modalRef: NgbModalRef;
   errorMessage: string;
 
   builders = {
@@ -125,11 +124,11 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     private rbdService: RbdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private dimlessPipe: DimlessPipe,
-    private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     public taskListService: TaskListService,
     private urlBuilder: URLBuilderService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    protected cdsModalService: ModalCdsService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rbdImage;
@@ -427,7 +426,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const imageName = this.selection.first().name;
     const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'RBD',
       itemNames: [imageSpec],
       bodyTemplate: this.deleteTpl,
@@ -451,7 +450,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     const imageName = this.selection.first().name;
     const imageSpec = new ImageSpec(poolName, namespace, imageName);
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'RBD',
       itemNames: [imageSpec],
       actionDescription: 'resync',
@@ -472,7 +471,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       imageName: this.selection.first().name,
       hasSnapshots: this.hasSnapshots()
     };
-    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, initialState);
+    this.cdsModalService.show(RbdTrashMoveModalComponent, initialState);
   }
 
   flattenRbd(imageSpec: ImageSpec) {
@@ -485,7 +484,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       })
       .subscribe({
         complete: () => {
-          this.modalRef.close();
+          this.cdsModalService.dismissAll();
         }
       });
   }
@@ -515,7 +514,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       }
     };
 
-    this.modalRef = this.modalService.show(ConfirmationModalComponent, initialState);
+    this.cdsModalService.show(ConfirmationModalComponent, initialState);
   }
 
   editRequest() {
@@ -533,7 +532,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       this.selection.first().name
     );
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       actionDescription: 'remove scheduling on',
       itemDescription: $localize`image`,
       itemNames: [`${imageName}`],
@@ -549,7 +548,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
             .subscribe({
               error: (resp) => observer.error(resp),
               complete: () => {
-                this.modalRef.close();
+                this.cdsModalService.dismissAll();
               }
             });
         })
@@ -579,7 +578,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
           if (primary) {
             this.errorMessage = error.error['detail'].replace(/\[.*?\]\s*/, '');
             request.force = true;
-            this.modalRef = this.modalService.show(ConfirmationModalComponent, {
+            this.cdsModalService.show(ConfirmationModalComponent, {
               titleText: $localize`Warning`,
               buttonText: $localize`Enforce`,
               warning: true,
@@ -587,10 +586,10 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
               onSubmit: () => {
                 this.rbdService.update(imageSpec, request).subscribe(
                   () => {
-                    this.modalRef.close();
+                    this.cdsModalService.dismissAll();
                   },
                   () => {
-                    this.modalRef.close();
+                    this.cdsModalService.dismissAll();
                   }
                 );
               }
