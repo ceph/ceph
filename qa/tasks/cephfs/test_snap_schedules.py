@@ -586,18 +586,25 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='')
 
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/minutes"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/hourly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/daily"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/weekly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/monthly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/yearly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/bad_period_spec"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
 
 
