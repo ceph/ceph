@@ -1133,7 +1133,7 @@ public:
                std::string *ptag,
                std::string *petag, optional_yield y);
 
-  int fetch_remote_obj(RGWObjectCtx& obj_ctx,
+  int fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
                        const rgw_user& user_id,
                        req_info *info,
                        const rgw_zone_id& source_zone,
@@ -1180,7 +1180,8 @@ public:
    *                             are overwritten by values contained in attrs parameter.
    * Returns: 0 on success, -ERR# otherwise.
    */
-  int copy_obj(RGWObjectCtx& obj_ctx,
+  int copy_obj(RGWObjectCtx& src_obj_ctx,
+               RGWObjectCtx& dest_obj_ctx,
                const ACLOwner& owner, // owner of destination object
                const rgw_user& remote_user, // uid for fetch_remote_obj() auth
                req_info *info,
