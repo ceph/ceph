@@ -92,7 +92,7 @@ public:
     return (p != s.end() && *p <= last);
   }
 
-  inodeno_t get_subvolume_ino() {
+  inodeno_t get_subvolume_ino() const {
     check_cache();
     return cached_subvolume_ino;
   }

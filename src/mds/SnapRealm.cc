@@ -46,6 +46,7 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
       << " cr " << realm.srnode.created;
   if (realm.srnode.created != realm.srnode.current_parent_since)
     out << " cps " << realm.srnode.current_parent_since;
+  out << " subvolume_ino " << realm.get_subvolume_ino();
   out << " snaps=" << realm.srnode.snaps;
   if (realm.srnode.past_parent_snaps.size() > 0) {
     out << " past_parent_snaps=" << realm.srnode.past_parent_snaps;
