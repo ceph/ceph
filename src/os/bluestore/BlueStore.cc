@@ -6651,11 +6651,9 @@ int BlueStore::_open_bdev(bool create)
     bdev->try_discard(whole_device, false);
   }
 
-  if (bdev->supported_bdev_label()) {
-    r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
-    if (r < 0)
-      goto fail_close;
-  }
+  r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
+  if (r < 0)
+    goto fail_close;
 
   // initialize global block parameters
   block_size = bdev->get_block_size();
@@ -7177,17 +7175,15 @@ int BlueStore::_minimal_open_bluefs(bool create)
       goto free_bluefs;
     }
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
-      r = _check_or_set_bdev_label(
-	bfn,
-	bluefs->get_block_device_size(BlueFS::BDEV_DB),
-        "bluefs db", create);
-      if (r < 0) {
-        derr << __func__
-	      << " check block device(" << bfn << ") label returned: "
-              << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
+    r = _check_or_set_bdev_label(
+      bfn,
+      bluefs->get_block_device_size(BlueFS::BDEV_DB),
+      "bluefs db", create);
+    if (r < 0) {
+      derr << __func__
+           << " check block device(" << bfn << ") label returned: "
+           << cpp_strerror(r) << dendl;
+      goto free_bluefs;
     }
     bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
     bluefs_layout.dedicated_db = true;
@@ -7224,16 +7220,14 @@ int BlueStore::_minimal_open_bluefs(bool create)
       goto free_bluefs;
     }
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
-      r = _check_or_set_bdev_label(
-	bfn,
-	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
-        "bluefs wal", create);
-      if (r < 0) {
-        derr << __func__ << " check block device(" << bfn
-              << ") label returned: " << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
+    r = _check_or_set_bdev_label(
+      bfn,
+      bluefs->get_block_device_size(BlueFS::BDEV_WAL),
+      "bluefs wal", create);
+    if (r < 0) {
+      derr << __func__ << " check block device(" << bfn
+           << ") label returned: " << cpp_strerror(r) << dendl;
+      goto free_bluefs;
     }
 
     bluefs_layout.dedicated_wal = true;
@@ -8327,14 +8321,12 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
-      r = _check_or_set_bdev_label(
-	p,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
-        "bluefs wal",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      p,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+      "bluefs wal",
+      true);
+    ceph_assert(r == 0);
 
     bluefs_layout.dedicated_wal = true;
   } else if (id == BlueFS::BDEV_NEWDB) {
@@ -8348,14 +8340,12 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
-      r = _check_or_set_bdev_label(
-	p,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
-        "bluefs db",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      p,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+      "bluefs db",
+      true);
+    ceph_assert(r == 0);
     bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
     bluefs_layout.dedicated_db = true;
   }
@@ -8477,14 +8467,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
-      r = _check_or_set_bdev_label(
-	dev_path,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
-        "bluefs wal",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      dev_path,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+      "bluefs wal",
+      true);
+    ceph_assert(r == 0);
   } else if (id == BlueFS::BDEV_NEWDB) {
     target_name = "block.db";
     target_size = cct->_conf->bluestore_block_db_size;
@@ -8495,14 +8483,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
-      r = _check_or_set_bdev_label(
-	dev_path,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
-        "bluefs db",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      dev_path,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+      "bluefs db",
+      true);
+    ceph_assert(r == 0);
   }
 
   bluefs->umount();
@@ -8600,12 +8586,10 @@ int BlueStore::expand_devices(ostream& out)
 	    <<": can't find device path " << dendl;
       continue;
     }
-    if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(p, size) >= 0) {
-        out << devid
+    if (_set_bdev_label_size(p, size) >= 0) {
+      out << devid
           << " : size label updated to " << size
           << std::endl;
-      }
     }
   }
   uint64_t size0 = fm->get_size();
@@ -8615,12 +8599,10 @@ int BlueStore::expand_devices(ostream& out)
       << " : expanding " << " from 0x" << std::hex
       << size0 << " to 0x" << size << std::dec << std::endl;
     _write_out_fm_meta(size);
-    if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
-        out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
-      }
+    if (_set_bdev_label_size(path, size) >= 0) {
+      out << bluefs_layout.shared_bdev
+        << " : size label updated to " << size
+        << std::endl;
     }
     _close_db_and_around();
 

@@ -200,7 +200,6 @@ public:
 
   static BlockDevice *create(
     CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
-  virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 
   // HM-SMR-specific calls
