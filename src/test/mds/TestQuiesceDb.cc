@@ -91,6 +91,19 @@ class QuiesceDbTest: public testing::Test {
         submit_condition.notify_all();
         return ++cluster_membership->epoch;
       }
+      std::atomic<std::optional<bool>> has_work_override;
+      bool db_thread_has_work() const override {
+        if (auto has_work = has_work_override.load()) {
+          return *has_work;
+        }
+        return QuiesceDbManager::db_thread_has_work();
+      }
+
+      void spurious_submit_wakeup()
+      {
+        std::lock_guard l(submit_mutex);
+        submit_condition.notify_all();
+      }
     };
 
     epoch_t epoch = 0;
@@ -110,6 +123,16 @@ class QuiesceDbTest: public testing::Test {
     {
       std::lock_guard l(comms_mutex);
       auto &&[_, promise] = ack_hooks.emplace_back(predicate, std::promise<void> {});
+      return promise.get_future();
+    }
+
+    using ListingHook = std::function<bool(QuiesceInterface::PeerId, QuiesceDbListing&)>;
+    std::list<std::pair<ListingHook, std::promise<void>>> listing_hooks;
+
+    std::future<void> add_listing_hook(ListingHook&& predicate)
+    {
+      std::lock_guard l(comms_mutex);
+      auto&& [_, promise] = listing_hooks.emplace_back(predicate, std::promise<void> {});
       return promise.get_future();
     }
 
@@ -153,7 +176,17 @@ class QuiesceDbTest: public testing::Test {
             std::unique_lock l(comms_mutex);
             if (epoch == this->epoch) {
               if (this->managers.contains(recipient)) {
+                std::queue<std::promise<void>> done_hooks;
                 dout(10) << "listing from " << me << " (leader=" << leader << ") to " << recipient << " for version " << listing.db_version << " with " << listing.sets.size() << " sets" << dendl;
+
+                for (auto it = listing_hooks.begin(); it != listing_hooks.end();) {
+                  if (it->first(recipient, listing)) {
+                    done_hooks.emplace(std::move(it->second));
+                    it = listing_hooks.erase(it);
+                  } else {
+                    it++;
+                  }
+                }
 
                 ceph::bufferlist bl;
                 encode(listing, bl);
@@ -163,6 +196,11 @@ class QuiesceDbTest: public testing::Test {
 
                 this->managers[recipient]->submit_peer_listing({me, std::move(listing)});
                 comms_cond.notify_all();
+                l.unlock();
+                while (!done_hooks.empty()) {
+                  done_hooks.front().set_value();
+                  done_hooks.pop();
+                }
                 return 0;
               }
             }
@@ -1343,6 +1381,34 @@ TEST_F(QuiesceDbTest, LeaderShutdown)
     auto& r = *pending_requests.front();
     EXPECT_EQ(ERR(ENOTTY), r.check_result());
     pending_requests.pop();
+  }
+}
+
+/* ================================================================ */
+TEST_F(QuiesceDbTest, MultiRankBootstrap)
+{
+  // create a cluster with a peer that doesn't process messages
+  managers.at(mds_gid_t(2))->has_work_override = false;
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({  mds_gid_t(1), mds_gid_t(2) }));
+
+  const QuiesceTimeInterval PEER_DISCOVERY_INTERVAL = std::chrono::milliseconds(1100);
+
+  // we should be now in the bootstrap loop,
+  // which should send discoveries to silent peers
+  // once in PEER_DISCOVERY_INTERVAL
+  for (int i = 0; i < 5; i++) {
+
+    if (i > 2) {
+      // through a wrench by disrupting the wait sleep in the bootstrap flow
+      managers.at(mds_gid_t(1))->spurious_submit_wakeup();
+    }
+
+    // wait for the next peer discovery request
+    auto saw_discovery = add_listing_hook([](auto recipient, auto const& listing) {
+      return recipient == mds_gid_t(2) && listing.db_version.set_version == 0;
+    });
+
+    EXPECT_EQ(std::future_status::ready, saw_discovery.wait_for(PEER_DISCOVERY_INTERVAL + std::chrono::milliseconds(100)));
   }
 }
 
