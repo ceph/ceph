@@ -4978,6 +4978,18 @@ options:
   flags:
   - create
   with_legacy: false
+- name: bluestore_write_v2
+  type: bool
+  level: advanced
+  desc: Use faster write path
+  long_desc: Original write path was developed over long time by constantly adding features.
+    The price was layered inefficiencies gained along the way.
+    Rework of write path done from scratch clears it and optimizes for typical cases.
+    Write_v2 is necessary for recompression feature.
+  default: false
+  flags:
+  - startup
+  with_legacy: false
 - name: bluestore_allocator
   type: str
   level: advanced
@@ -6471,6 +6483,17 @@ options:
   level: advanced
   desc: How long cleaner should sleep before re-checking utilization
   default: 5
+  with_legacy: true
+- name: bluestore_onode_segment_size
+  type: uint
+  level: advanced
+  desc: Size of segment for onode.
+  long_desc: When objects size grows too large BlueStore splits allocation metadata into
+    smaller RocksDB keys (shards). When multiple blobs overlap each other
+    some of them will belongs to more then one shards. The encoding for such case
+    is inefficient (spanning blobs). Segmentation of data prevents blobs from crossing
+    specific separation lines, preventing spanning blobs altogether.
+  default: 0
   with_legacy: true
 - name: jaeger_tracing_enable
   type: bool
