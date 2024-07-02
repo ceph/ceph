@@ -1599,7 +1599,7 @@ public:
 	return recovery_msg_priority_t::FORCED;
       } else if (is_undersized()) {
 	return recovery_msg_priority_t::UNDERSIZED;
-      } else if (is_degraded()) {
+      } else if (cct->_conf->osd_mclock_backfill_must_be_recovery || is_degraded()) {
 	return recovery_msg_priority_t::DEGRADED;
       } else {
 	return recovery_msg_priority_t::BEST_EFFORT;
