@@ -296,9 +296,12 @@ public:
   void handle_client_lssnap(const MDRequestRef& mdr);
   void handle_client_mksnap(const MDRequestRef& mdr);
   void _mksnap_finish(const MDRequestRef& mdr, CInode *diri, SnapInfo &info);
+  void _mksnap_finish_final(MDRequestRef& mdr, CInode *in, version_t stid, int op);
   void handle_client_rmsnap(const MDRequestRef& mdr);
+  void _rmsnap_finish_final(MDRequestRef& mdr, CInode *in, version_t stid, int op);
   void _rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_renamesnap(const MDRequestRef& mdr);
+  void _renamesnap_finish_final(MDRequestRef& mdr, CInode *in, version_t stid, int op);
   void _renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_readdir_snapdiff(const MDRequestRef& mdr);
 
