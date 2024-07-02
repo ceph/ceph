@@ -70,7 +70,12 @@ seastar::future<> InternalClientRequest::start()
             client_pp().recover_missing);
         }).then_interruptible([this] {
           return do_recover_missing(pg, get_target_oid(), osd_reqid_t());
-        }).then_interruptible([this] {
+        }).then_interruptible([this](bool unfound) {
+          if (unfound) {
+            throw std::system_error(
+              std::make_error_code(std::errc::operation_canceled),
+              fmt::format("{} is unfound, drop it!", get_target_oid()));
+          }
           return enter_stage<interruptor>(
             client_pp().get_obc);
         }).then_interruptible([this] () -> PG::load_obc_iertr::future<> {
@@ -128,6 +133,9 @@ seastar::future<> InternalClientRequest::start()
       }, pg);
     }).then([this] {
       track_event<CompletionEvent>();
+    }).handle_exception_type([](std::system_error &error) {
+      logger().debug("error {}, message: {}", error.code(), error.what());
+      return seastar::now();
     }).finally([this] {
       logger().debug("{}: exit", *this);
       handle.exit();

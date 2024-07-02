@@ -286,6 +286,7 @@ ClientRequest::recover_missing_snaps(
   ObjectContextRef head,
   std::set<snapid_t> &snaps)
 {
+  LOG_PREFIX(ClientRequest::process_op);
   co_await ihref.enter_stage<interruptor>(
     client_pp(*pg).recover_missing_snaps, *this);
   for (auto &snap : snaps) {
@@ -299,7 +300,12 @@ ClientRequest::recover_missing_snaps(
      * we skip the oid as there is no corresponding clone to recover.
      * See https://tracker.ceph.com/issues/63821 */
     if (oid) {
-      co_await do_recover_missing(pg, *oid, m->get_reqid());
+      auto unfound = co_await do_recover_missing(pg, *oid, m->get_reqid());
+      if (unfound) {
+        DEBUGDPP("{} unfound, hang it for now", *pg, m->get_hobj().get_head());
+        co_await interruptor::make_interruptible(
+          pg->get_recovery_backend()->add_unfound(m->get_hobj().get_head()));
+      }
     }
   }
 }
@@ -317,7 +323,14 @@ ClientRequest::process_op(
       "Skipping recover_missings on non primary pg for soid {}",
       *pg, m->get_hobj());
   } else {
-    co_await do_recover_missing(pg, m->get_hobj().get_head(), m->get_reqid());
+    auto unfound = co_await do_recover_missing(
+      pg, m->get_hobj().get_head(), m->get_reqid());
+    if (unfound) {
+      DEBUGDPP("{} unfound, hang it for now", *pg, m->get_hobj().get_head());
+      co_await interruptor::make_interruptible(
+        pg->get_recovery_backend()->add_unfound(m->get_hobj().get_head()));
+    }
+
     std::set<snapid_t> snaps = snaps_need_to_recover();
     if (!snaps.empty()) {
       // call with_obc() in order, but wait concurrently for loading.
