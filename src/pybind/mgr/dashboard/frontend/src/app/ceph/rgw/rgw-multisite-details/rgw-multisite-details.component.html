@@ -1,6 +1,7 @@
 <nav ngbNav
      #nav="ngbNav"
      class="nav-tabs"
+     [(activeId)]="activeId"
      (navChange)="onNavChange($event)">
   <ng-container ngbNavItem="configuration">
     <a ngbNavLink
