@@ -1660,3 +1660,79 @@ TEST_F(QuiesceDbTest, AckDuringEpochMismatch)
     r.await = sec(10);
   }));
 }
+
+/* ==================================== */
+TEST_F(QuiesceDbTest, QuiesceRootMerge)
+{
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1) }));
+  managers.at(mds_gid_t(1))->reset_agent_callback(QUIESCING_AGENT_CB);
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.timeout = sec(60);
+    r.expiration = sec(60);
+    r.await = sec(60);
+    r.include_roots({ "root1", "root2" });
+  }));
+
+  EXPECT_EQ(QS_QUIESCED, last_request->response.sets.at("set1").rstate.state);
+  auto set1_exp = last_request->response.sets.at("set1").expiration;
+
+  // reset the agent callback to SILENT so that
+  // our sets stay RELEASING and QUIESCING forever
+  managers.at(mds_gid_t(1))->reset_agent_callback(SILENT_AGENT_CB);
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.release();
+  }));
+
+  EXPECT_EQ(QS_RELEASING, last_request->response.sets.at("set1").rstate.state);
+
+  ASSERT_EQ(OK(), run_request([=](auto& r) {
+    r.set_id = "set2";
+    r.timeout = set1_exp*2;
+    r.expiration = set1_exp*2;
+    r.include_roots({ "root2", "root3" });
+  }));
+
+  EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set2").rstate.state);
+
+  // at this point, we should expect to have root1 RELEASING, root3 QUIESCING
+  // and root2, which is shared, should take the min state (QUIESCING) and the max ttl
+
+  auto agent_map = [this]() -> std::optional<QuiesceMap> {
+    std::promise<QuiesceMap> agent_map_promise;
+    auto agent_map_future = agent_map_promise.get_future();
+
+    managers.at(mds_gid_t(1))->reset_agent_callback([&agent_map_promise](QuiesceMap& map) -> bool {
+      try {
+        agent_map_promise.set_value(map);
+      } catch (std::future_error) {
+        // ignore this if we accidentally get called more than once
+      }
+      return false;
+    });
+
+    if (std::future_status::ready == agent_map_future.wait_for(std::chrono::seconds(10))) {
+      return agent_map_future.get();
+    }
+    else {
+      return std::nullopt;
+    }
+  }();
+
+  ASSERT_TRUE(agent_map.has_value());
+  EXPECT_EQ(3, agent_map->roots.size());
+
+  {
+    auto const & r1 = agent_map->roots.at("file:/root1");
+    auto const & r2 = agent_map->roots.at("file:/root2");
+    auto const & r3 = agent_map->roots.at("file:/root3");
+
+    EXPECT_EQ(QS_RELEASING, r1.state);
+    EXPECT_EQ(QS_QUIESCING, r2.state);
+    EXPECT_EQ(QS_QUIESCING, r3.state);
+    EXPECT_EQ(std::max(r1.ttl, r3.ttl), r2.ttl);
+  }
+}

@@ -1208,10 +1208,11 @@ void QuiesceDbManager::calculate_quiesce_map(QuiesceMap &map)
         auto ttl = get_root_ttl(set, member, db_age);
         auto root_it = map.roots.try_emplace(root, QuiesceMap::RootInfo { requested, ttl }).first;
 
-        // the min below resolves conditions when members representing the same root have different state/ttl
-        // e.g. if at least one member is QUIESCING then the root should be QUIESCING
+        // the logic below resolves conditions when members representing the same root have different state/ttl
+        // The state should be min, e.g. QUIESCING if at least one member is QUIESCING
+        // The ttl should be large enough to cover all aggregated states, i.e. max
         root_it->second.state = std::min(root_it->second.state, requested);
-        root_it->second.ttl = std::min(root_it->second.ttl, ttl);
+        root_it->second.ttl = std::max(root_it->second.ttl, ttl);
       }
     }
   }
