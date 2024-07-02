@@ -444,6 +444,19 @@ std::string rgw_pubsub_dest::to_json_str() const
   return ss.str();
 }
 
+namespace rgw::notify {
+void event_entry_t::dump(Formatter *f) const {
+  Formatter::ObjectSection s(*f, "entry");
+  {
+    Formatter::ObjectSection sub_s(*f, "event");
+    event.dump(f);
+  }
+  encode_json("pushEndpoint", push_endpoint, f);
+  encode_json("pushEndpointArgs", push_endpoint_args, f);
+  encode_json("topic", arn_topic, f);
+}
+}
+
 RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver, const std::string& _tenant)
   : driver(_driver), tenant(_tenant)
 {}
