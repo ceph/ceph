@@ -4,6 +4,7 @@
 #include "common/Thread.h"
 #include "include/compat.h"
 #include "common/errno.h"
+#include "rgw_asio_thread.h"
 #include "rgw_common.h"
 #include "rgw_kmip_client.h"
 
@@ -15,10 +16,14 @@
 RGWKMIPManager *rgw_kmip_manager;
 
 int
-RGWKMIPTransceiver::wait(optional_yield y)
+RGWKMIPTransceiver::wait(const DoutPrefixProvider* dpp, optional_yield y)
 {
   if (done)
     return ret;
+
+  // TODO: when given a coroutine yield context, suspend instead of blocking
+  maybe_warn_about_blocking(dpp);
+
   std::unique_lock l{lock};
   if (!done)
     cond.wait(l);
@@ -39,12 +44,12 @@ RGWKMIPTransceiver::send()
 }
 
 int
-RGWKMIPTransceiver::process(optional_yield y)
+RGWKMIPTransceiver::process(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int r = send();
   if (r < 0)
     return r;
-  return wait(y);
+  return wait(dpp, y);
 }
 
 RGWKMIPTransceiver::~RGWKMIPTransceiver()

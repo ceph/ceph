@@ -84,7 +84,8 @@ RGWStreamReadHTTPResourceCRF::~RGWStreamReadHTTPResourceCRF()
 {
   if (req) {
     req->cancel();
-    req->wait(null_yield);
+    auto dpp = NoDoutPrefix{cct, ceph_subsys_rgw};
+    req->wait(&dpp, null_yield);
     delete req;
   }
 }
@@ -188,7 +189,8 @@ RGWStreamWriteHTTPResourceCRF::~RGWStreamWriteHTTPResourceCRF()
 {
   if (req) {
     req->cancel();
-    req->wait(null_yield);
+    auto dpp = NoDoutPrefix{cct, ceph_subsys_rgw};
+    req->wait(&dpp, null_yield);
     delete req;
   }
 }

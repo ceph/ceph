@@ -2230,6 +2230,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_asio_assert_yielding
+  type: bool
+  level: dev
+  desc: Trigger an assertion failure if an operation would block an asio thread
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_user_quota_bucket_sync_interval
   type: int
   level: advanced

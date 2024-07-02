@@ -248,7 +248,7 @@ private:
                         << " retry_number: "
                         << entry_persistency_tracker.retires_num
                         << " current time: " << time_now << dendl;
-    const auto ret = push_endpoint->send(event_entry.event, yield);
+    const auto ret = push_endpoint->send(this, event_entry.event, yield);
     if (ret < 0) {
       ldpp_dout(this, 5) << "WARNING: push entry marker: " << entry.marker
                          << " failed. error: " << ret
@@ -1266,7 +1266,7 @@ int publish_commit(rgw::sal::Object* obj,
 	  dpp->get_cct());
         ldpp_dout(res.dpp, 20) << "INFO: push endpoint created: "
 			       << topic.cfg.dest.push_endpoint << dendl;
-        const auto ret = push_endpoint->send(event_entry.event, res.yield);
+        const auto ret = push_endpoint->send(dpp, event_entry.event, res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1)
               << "ERROR: failed to push sync notification event with error: "

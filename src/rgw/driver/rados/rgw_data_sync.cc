@@ -277,7 +277,7 @@ public:
           return io_block(0);
         }
         yield {
-          op_ret = http_op->wait(shard_info, null_yield);
+          op_ret = http_op->wait(dpp, shard_info, null_yield);
           http_op->put();
         }
 
@@ -377,7 +377,7 @@ public:
         }
         yield {
           timer.reset();
-          op_ret = http_op->wait(&response, null_yield);
+          op_ret = http_op->wait(dpp, &response, null_yield);
           http_op->put();
         }
 
@@ -495,7 +495,7 @@ public:
   }
 
   int request_complete() override {
-    int ret = http_op->wait(result, null_yield);
+    int ret = http_op->wait(sync_env->dpp, result, null_yield);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(sync_env->dpp, 5) << "ERROR: failed to list remote datalog shard, ret=" << ret << dendl;

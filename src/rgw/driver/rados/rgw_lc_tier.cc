@@ -269,7 +269,7 @@ static int cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
   }
 
   /* fetch headers */
-  ret = tier_ctx.conn.complete_request(in_req, nullptr, nullptr, nullptr, nullptr, &headers, null_yield);
+  ret = tier_ctx.conn.complete_request(tier_ctx.dpp, in_req, nullptr, nullptr, nullptr, nullptr, &headers, null_yield);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(tier_ctx.dpp, 20) << "ERROR: " << __func__ << "(): conn.complete_request() returned ret=" << ret << dendl;
     return ret;
@@ -704,8 +704,7 @@ RGWGetDataCB *RGWLCCloudStreamPut::get_cb() {
 }
 
 int RGWLCCloudStreamPut::complete_request() {
-  int ret = conn.complete_request(out_req, etag, &obj_properties.mtime, null_yield);
-  return ret;
+  return conn.complete_request(dpp, out_req, etag, &obj_properties.mtime, null_yield);
 }
 
 /* Read local copy and write to Cloud endpoint */

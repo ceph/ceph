@@ -88,7 +88,7 @@ admin_token_retry:
 
   validate.set_url(url);
 
-  ret = validate.process(y);
+  ret = validate.process(dpp, y);
 
   /* NULL terminate for debug output. */
   token_body_bl.append(static_cast<char>(0));
@@ -464,7 +464,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   validate.set_send_length(os.str().length());
 
   /* send request */
-  ret = validate.process(y);
+  ret = validate.process(dpp, y);
 
   /* if the supplied signature is wrong, we will get 401 from Keystone */
   if (validate.get_http_status() ==
@@ -544,7 +544,7 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
   secret.set_verify_ssl(cct->_conf->rgw_keystone_verify_ssl);
 
   /* send request */
-  ret = secret.process(y);
+  ret = secret.process(dpp, y);
 
   /* if the supplied access key isn't found, we will get 404 from Keystone */
   if (secret.get_http_status() ==

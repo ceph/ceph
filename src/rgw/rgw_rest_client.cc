@@ -452,7 +452,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   method = new_info.method;
   url = new_url;
 
-  int r = process(y);
+  int r = process(dpp, y);
   if (r < 0){
     if (r == -EINVAL){
       // curl_easy has errored, generally means the service is not available
@@ -922,14 +922,15 @@ int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
   return RGWHTTPStreamRWRequest::send(mgr);
 }
 
-int RGWHTTPStreamRWRequest::complete_request(optional_yield y,
+int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
+                                             optional_yield y,
                                              string *etag,
                                              real_time *mtime,
                                              uint64_t *psize,
                                              map<string, string> *pattrs,
                                              map<string, string> *pheaders)
 {
-  int ret = wait(y);
+  int ret = wait(dpp, y);
   if (ret < 0) {
     return ret;
   }
