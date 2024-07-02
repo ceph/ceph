@@ -7,3 +7,4 @@ overrides:
   ceph:
     log-ignorelist:
       - MGR_DOWN
+      - CEPHADM_FAILED_DAEMON

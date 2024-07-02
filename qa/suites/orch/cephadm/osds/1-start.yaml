@@ -22,6 +22,7 @@ overrides:
   ceph:
     log-ignorelist:
       - OSD_DOWN
+      - CEPHADM_FAILED_DAEMON
     conf:
       osd:
         osd shutdown pgref assert: true
