@@ -109,14 +109,6 @@ seastar::future<> PeeringEvent<T>::with_pg(
       }).then_interruptible([this, pg, &shard_services] {
 	return complete_rctx(shard_services, pg);
       });
-    }).then_interruptible([pg, &shard_services]()
-			  -> typename T::template interruptible_future<> {
-      if (!pg->get_need_up_thru()) {
-	return seastar::now();
-      }
-      return shard_services.send_alive(pg->get_same_interval_since());
-    }).then_interruptible([&shard_services] {
-      return shard_services.send_pg_temp();
     });
   }, [this](std::exception_ptr ep) {
     LOG_PREFIX(PeeringEvent<T>::with_pg);
@@ -142,9 +134,7 @@ PeeringEvent<T>::complete_rctx(ShardServices &shard_services, Ref<PG> pg)
   using interruptor = typename T::interruptor;
   LOG_PREFIX(PeeringEvent<T>::complete_rctx);
   DEBUGI("{}: submitting ctx", *this);
-  return shard_services.dispatch_context(
-    pg->get_collection_ref(),
-    std::move(ctx));
+  return pg->complete_rctx(std::move(ctx));
 }
 
 ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
