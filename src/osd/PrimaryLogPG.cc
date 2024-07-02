@@ -533,6 +533,11 @@ void PrimaryLogPG::schedule_recovery_work(
     recovery_state.get_recovery_op_priority());
 }
 
+common::intrusive_timer &PrimaryLogPG::get_pg_timer()
+{
+  return osd->pg_timer;
+}
+
 void PrimaryLogPG::replica_clear_repop_obc(
   const vector<pg_log_entry_t> &logv,
   ObjectStore::Transaction &t)
@@ -2043,6 +2048,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
+  if (!is_primary()) {
+    osd->logger->inc(l_osd_replica_read);
+  }
+
   if (!check_laggy(op)) {
     return;
   }
@@ -2173,6 +2182,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // missing object?
   if (is_unreadable_object(head)) {
     if (!is_primary()) {
+      osd->logger->inc(l_osd_replica_read_redirect_missing);
       osd->reply_op_error(op, -EAGAIN);
       return;
     }
@@ -2304,11 +2314,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       dout(20) << __func__
                << ": unstable write on replica, bouncing to primary "
 	       << *m << dendl;
+      osd->logger->inc(l_osd_replica_read_redirect_conflict);
       osd->reply_op_error(op, -EAGAIN);
       return;
     }
     dout(20) << __func__ << ": serving replica read on oid " << oid
              << dendl;
+    osd->logger->inc(l_osd_replica_read_served);
   }
 
   int r = find_object_context(
@@ -11480,7 +11492,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     ctx->at_version,
     std::move(ctx->op_t),
     recovery_state.get_pg_trim_to(),
-    recovery_state.get_min_last_complete_ondisk(),
+    recovery_state.get_pg_committed_to(),
     std::move(ctx->log),
     ctx->updated_hset_history,
     on_all_commit,
@@ -11612,7 +11624,7 @@ void PrimaryLogPG::submit_log_entries(
       eversion_t old_last_update = info.last_update;
       recovery_state.merge_new_log_entries(
 	entries, t, recovery_state.get_pg_trim_to(),
-	recovery_state.get_min_last_complete_ondisk());
+	recovery_state.get_pg_committed_to());
 
       set<pg_shard_t> waiting_on;
       for (set<pg_shard_t>::const_iterator i = get_acting_recovery_backfill().begin();
@@ -11632,7 +11644,7 @@ void PrimaryLogPG::submit_log_entries(
 	    get_last_peering_reset(),
 	    repop->rep_tid,
 	    recovery_state.get_pg_trim_to(),
-	    recovery_state.get_min_last_complete_ondisk());
+	    recovery_state.get_pg_committed_to());
 	  osd->send_message_osd_cluster(
 	    peer.osd, m, get_osdmap_epoch());
 	  waiting_on.insert(peer);
@@ -12626,17 +12638,18 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
     op->get_req());
   ceph_assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
-  std::optional<eversion_t> op_trim_to, op_roll_forward_to;
+  std::optional<eversion_t> op_trim_to, op_pg_committed_to;
   if (m->pg_trim_to != eversion_t())
     op_trim_to = m->pg_trim_to;
-  if (m->pg_roll_forward_to != eversion_t())
-    op_roll_forward_to = m->pg_roll_forward_to;
+  if (m->pg_committed_to != eversion_t())
+    op_pg_committed_to = m->pg_committed_to;
 
   dout(20) << __func__
-	   << " op_trim_to = " << op_trim_to << " op_roll_forward_to = " << op_roll_forward_to << dendl;
+	   << " op_trim_to = " << op_trim_to << " op_pg_committed_to = "
+	   << op_pg_committed_to << dendl;
 
   recovery_state.append_log_entries_update_missing(
-    m->entries, t, op_trim_to, op_roll_forward_to);
+    m->entries, t, op_trim_to, op_pg_committed_to);
   eversion_t new_lcod = info.last_complete;
 
   Context *complete = new LambdaContext(
