@@ -837,7 +837,7 @@ class RGWAM:
             realm_token_b = secondary_realm_token.to_json().encode('utf-8')
             realm_token_s = base64.b64encode(realm_token_b).decode('utf-8')
             rgw_spec.update_endpoints = True
-            rgw_spec.rgw_token = realm_token_s
+            rgw_spec.rgw_realm_token = realm_token_s
             rgw_spec.rgw_zonegroup = zonegroup.name  # master zonegroup is used
             self.env.mgr.apply_rgw(rgw_spec)
 
