@@ -702,7 +702,7 @@ class CephadmServe:
         if service_type == 'agent':
             try:
                 assert self.mgr.http_server.agent
-                assert self.mgr.http_server.agent.ssl_certs.get_root_cert()
+                assert self.mgr.cert_mgr.get_root_ca()
             except Exception:
                 self.log.info(
                     'Delaying applying agent spec until cephadm endpoint root cert created')
