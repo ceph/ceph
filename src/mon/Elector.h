@@ -245,6 +245,19 @@ class Elector : public ElectionOwner, RankProvider {
   std::set<int> disallowed_leaders;
   const std::set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
   /**
+   * Check if the monitor is the tiebreaker in a stretch cluster.
+   *
+   * @returns true if the Monitor is the tiebreaker, false otherwise.
+   */
+  bool is_tiebreaker(int rank) const;
+  /**
+   * Check if the mon is marked dwon in stretch mode.
+   *
+   * @returns true if the monitor is marked down in stretch mode,
+   * otherwise return false.
+   */
+  bool is_stretch_marked_down_mons(int from) const;
+  /**
    * Reset the expire_event timer so we can limit the amount of time we 
    * will be electing. Clean up our peer_info.
    *
