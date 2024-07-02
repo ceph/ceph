@@ -11,7 +11,7 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
     SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from cephadm.services.mgmt_gateway import MgmtGatewayService
-from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url, get_cert_issuer_info, password_hash
+from mgr_util import verify_tls, ServerConfigException, build_url, get_cert_issuer_info, password_hash
 from ceph.deployment.utils import wrap_ipv6
 
 logger = logging.getLogger(__name__)
@@ -57,13 +57,18 @@ class GrafanaService(CephadmService):
 
             deps.append(dd.name())
 
-        root_cert = self.mgr.http_server.service_discovery.ssl_certs.get_root_cert()
+        root_cert = self.mgr.cert_mgr.get_root_ca()
+        cert, pkey = self.prepare_certificates(daemon_spec)
         oneline_root_cert = '\\n'.join([line.strip() for line in root_cert.splitlines()])
+        oneline_cert = '\\n'.join([line.strip() for line in cert.splitlines()])
+        oneline_key = '\\n'.join([line.strip() for line in pkey.splitlines()])
         grafana_data_sources = self.mgr.template.render('services/grafana/ceph-dashboard.yml.j2',
                                                         {'hosts': prom_services,
                                                          'prometheus_user': prometheus_user,
                                                          'prometheus_password': prometheus_password,
                                                          'cephadm_root_ca': oneline_root_cert,
+                                                         'cert': oneline_cert,
+                                                         'key': oneline_key,
                                                          'security_enabled': self.mgr.secure_monitoring_stack,
                                                          'loki_host': loki_host})
 
@@ -103,7 +108,6 @@ class GrafanaService(CephadmService):
             }
         )
 
-        cert, pkey = self.prepare_certificates(daemon_spec)
         config_file = {
             'files': {
                 "grafana.ini": grafana_ini,
@@ -318,6 +322,8 @@ class AlertmanagerService(CephadmService):
                 self.mgr.cert_key_store.save_cert('alertmanager_cert', cert, host=daemon_spec.host)
                 self.mgr.cert_key_store.save_key('alertmanager_key', key, host=daemon_spec.host)
             context = {
+                'enable_mtls': mgmt_gw_enabled,
+                'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
                 'alertmanager_web_user': alertmanager_user,
                 'alertmanager_web_password': password_hash(alertmanager_password),
             }
@@ -327,7 +333,7 @@ class AlertmanagerService(CephadmService):
                     'alertmanager.crt': cert,
                     'alertmanager.key': key,
                     'web.yml': self.mgr.template.render('services/alertmanager/web.yml.j2', context),
-                    'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert()
+                    'root_cert.pem': self.mgr.cert_mgr.get_root_ca()
                 },
                 'peers': peers,
                 'web_config': '/etc/alertmanager/web.yml',
@@ -496,44 +502,32 @@ class PrometheusService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(port): ip_to_bind_to}
 
+        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         web_context = {
+            'enable_mtls': mgmt_gw_enabled,
+            'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
             'prometheus_web_user': prometheus_user,
             'prometheus_web_password': password_hash(prometheus_password),
         }
 
-        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         if self.mgr.secure_monitoring_stack:
-            # NOTE: this prometheus root cert is managed by the prometheus module
-            # we are using it in a read only fashion in the cephadm module
-            cfg_key = 'mgr/prometheus/root/cert'
-            cmd = {'prefix': 'config-key get', 'key': cfg_key}
-            ret, mgr_prometheus_rootca, err = self.mgr.mon_command(cmd)
-            if ret != 0:
-                logger.error(f'mon command to get config-key {cfg_key} failed: {err}')
-            else:
-                node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-                host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-                cert = self.mgr.cert_key_store.get_cert('prometheus_cert', host=daemon_spec.host)
-                key = self.mgr.cert_key_store.get_key('prometheus_key', host=daemon_spec.host)
-                if not (cert and key):
-                    cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(host_fqdn, node_ip)
-                    self.mgr.cert_key_store.save_cert('prometheus_cert', cert, host=daemon_spec.host)
-                    self.mgr.cert_key_store.save_key('prometheus_key', key, host=daemon_spec.host)
-                r: Dict[str, Any] = {
-                    'files': {
-                        'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
-                        'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert(),
-                        'mgr_prometheus_cert.pem': mgr_prometheus_rootca,
-                        'web.yml': self.mgr.template.render('services/prometheus/web.yml.j2', web_context),
-                        'prometheus.crt': cert,
-                        'prometheus.key': key,
-                    },
-                    'retention_time': retention_time,
-                    'retention_size': retention_size,
-                    'ip_to_bind_to': ip_to_bind_to,
-                    'web_config': '/etc/prometheus/web.yml',
-                    'use_url_prefix': mgmt_gw_enabled
-                }
+            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+            cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "prometheus_servers"], node_ip)
+            r: Dict[str, Any] = {
+                'files': {
+                    'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
+                    'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
+                    'web.yml': self.mgr.template.render('services/prometheus/web.yml.j2', web_context),
+                    'prometheus.crt': cert,
+                    'prometheus.key': key,
+                },
+                'retention_time': retention_time,
+                'retention_size': retention_size,
+                'ip_to_bind_to': ip_to_bind_to,
+                'web_config': '/etc/prometheus/web.yml',
+                'use_url_prefix': mgmt_gw_enabled
+            }
         else:
             r = {
                 'files': {
@@ -679,10 +673,13 @@ class NodeExporterService(CephadmService):
                     host_fqdn, node_ip)
                 self.mgr.cert_key_store.save_cert('node_exporter_cert', cert, host=daemon_spec.host)
                 self.mgr.cert_key_store.save_key('node_exporter_key', key, host=daemon_spec.host)
+            #cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
+            mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
             r = {
                 'files': {
-                    'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2', {}),
-                    'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert(),
+                    'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2',
+                                                        {'enable_mtls': mgmt_gw_enabled}),
+                    'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
                     'node_exporter.crt': cert,
                     'node_exporter.key': key,
                 },
