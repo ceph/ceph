@@ -513,6 +513,21 @@ Context *PG::on_clean()
   return nullptr;
 }
 
+void PG::queue_snap_retrim(snapid_t snap)
+{
+  if (!is_primary()) {
+    logger().debug("{} snap {} - not active and primary", __func__, snap);
+    return;
+  }
+  if (!snap_trimq.contains(snap)) {
+    snap_trimq.insert(snap);
+    logger().debug("{} snap {}, trimq now {}", __func__, snap, snap_trimq);
+    on_active_actmap();
+  } else {
+    logger().debug("{} snap {} already in trimq {}", __func__, snap, snap_trimq);
+  }
+}
+
 PG::interruptible_future<seastar::stop_iteration> PG::trim_snap(
   snapid_t to_trim,
   bool needs_pause)

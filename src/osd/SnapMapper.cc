@@ -259,6 +259,11 @@ bool SnapMapper::is_mapping(const string &to_test)
   return to_test.substr(0, MAPPING_PREFIX.size()) == MAPPING_PREFIX;
 }
 
+bool SnapMapper::is_purged(const string &to_test)
+{
+  return to_test.substr(0, strlen(PURGED_SNAP_PREFIX)) == PURGED_SNAP_PREFIX;
+}
+
 string SnapMapper::to_object_key(const hobject_t &hoid) const
 {
   return OBJECT_PREFIX + shard_prefix + hoid.to_str();
@@ -942,8 +947,129 @@ void SnapMapper::Scrubber::run()
   psit = ObjectMap::ObjectMapIterator();
   mapit = ObjectMap::ObjectMapIterator();
 }
-#endif // !WITH_SEASTAR
+#else
+seastar::future<bool> SnapMapper::Scrubber::_parse_p()
+{
+  using crimson::os::FuturizedStore;
+  return store->omap_get_values(
+    ch_p, purged_snaps_hoid, next_key_p
+  ).safe_then_unpack([this] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
+    if (auto nit = std::begin(vals);
+        nit == std::end(vals) || !SnapMapper::is_purged(nit->first)) {
+      return false;
+    } else {
+      CRIMSON_DEBUG("SnapMapper::Scrubber::_parse_p key {} got omap values", nit->first);
+      assert(nit->first > next_key_p);
+      next_key_p = nit->first;
+      ceph::buffer::list v = nit->second;
+      auto p = v.cbegin();
+      ceph::decode(pool, p);
+      ceph::decode(begin, p);
+      ceph::decode(end, p);
+      return true;
+    }
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
+    return false;
+  }));
+}
 
+seastar::future<bool> SnapMapper::Scrubber::_parse_m()
+{
+  using crimson::os::FuturizedStore;
+  return store->omap_get_values(
+    ch_m, mapping_hoid, next_key_m
+  ).safe_then_unpack([this] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
+    if (auto nit = std::begin(vals);
+        nit == std::end(vals) || !SnapMapper::is_mapping(nit->first)) {
+      return false;
+    } else {
+      CRIMSON_DEBUG("SnapMapper::Scrubber::_parse_m key {} got omap values", nit->first);
+      assert(nit->first > next_key_m);
+      next_key_m = nit->first;
+      ceph::buffer::list v = nit->second;
+      auto p = v.cbegin();
+      mapping.decode(p);
+
+      {
+        unsigned long long p;
+        unsigned long long s;
+        long sh;
+        string k = nit->first;
+        int r = sscanf(k.c_str(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
+        if (r != 1) {
+          shard = shard_id_t::NO_SHARD;
+        } else {
+          shard = shard_id_t(sh);
+        }
+      }
+      return true;
+    }
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
+    return false;
+  }));
+}
+
+seastar::future<> SnapMapper::Scrubber::run()
+{
+  CRIMSON_DEBUG("{}", __func__);
+  using ertr = crimson::errorator<crimson::ct_error::invarg>;
+  return crimson::repeat([this] {
+    return _parse_m().then([this](auto success) {
+      if (!success) {
+        CRIMSON_DEBUG("{} get mapping empty.", __func__);
+        return ertr::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes
+          );
+      }
+      return _parse_p().then([this](auto success) {
+        return seastar::do_until(
+        [this] {
+          return pool < 0 ||
+          (mapping.hoid.pool <= pool &&
+          (mapping.hoid.pool != pool || mapping.snap < end));
+        },
+        [this] {
+          return _parse_p().then([](auto success) {
+            return seastar::now();
+          });
+        }).then([this] {
+          if (pool < 0) {
+            CRIMSON_DEBUG("{} passed final purged_snaps interval, rest ok", __func__);
+            return ertr::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::yes
+            );
+          }
+          if (mapping.hoid.pool < pool ||
+            mapping.snap < begin) {
+            // ok
+            CRIMSON_DEBUG("{} ok snap {} precedes pool {} purged_snaps [{}, {})",
+              __func__, mapping.snap, pool, begin, end);
+          } else {
+            assert(mapping.snap >= begin &&
+            mapping.snap < end &&
+            mapping.hoid.pool == pool);
+            // invalid
+            CRIMSON_DEBUG("{} stray {} snap {} in pool {} shard {} purged_snaps [{}, {})",
+              __func__, mapping.hoid, mapping.snap, pool, shard, begin, end);
+            stray.emplace_back(
+              pool, mapping.snap, mapping.hoid.get_hash(),
+              shard);
+          }
+          return ertr::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::no
+            );
+        });
+      });
+    });
+  }).safe_then([this] {
+    CRIMSON_DEBUG("{} end, found {} stray", __func__, stray.size());
+    return seastar::now();
+  }).handle_error(
+    crimson::ct_error::assert_all{
+    "Invalid error in SnapMapper::Scrubber::run()"
+  });
+}
+#endif // !WITH_SEASTAR
 
 // -------------------------------------
 // legacy conversion/support

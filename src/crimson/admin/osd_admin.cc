@@ -571,4 +571,29 @@ private:
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpRecoveryReservationsHook>(crimson::osd::ShardServices& shard_services);
 
+class ScrubPurgedSnapsHook : public AdminSocketHook {
+public:
+  explicit ScrubPurgedSnapsHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"scrub_purged_snaps", "", "Scrub purged_snaps vs snapmapper index"},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    logger().info("{}", __func__);
+    return osd.scrub_purged_snaps().then([]() {
+      ceph::bufferlist bl;
+      bl.append(fmt::format("Scrub purged snaps\n"));
+      return seastar::make_ready_future<tell_result_t>(0,
+                  std::string{},
+                  std::move(bl));
+    });
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<ScrubPurgedSnapsHook>(crimson::osd::OSD& osd);
+
 } // namespace crimson::admin
