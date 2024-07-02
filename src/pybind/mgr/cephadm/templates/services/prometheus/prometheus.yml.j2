@@ -20,6 +20,8 @@ alerting:
         password: {{ alertmanager_web_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
       http_sd_configs:
         - url: {{ alertmanager_sd_url }}
           basic_auth:
@@ -39,7 +41,7 @@ scrape_configs:
 {% if secure_monitoring_stack %}
     scheme: https
     tls_config:
-      ca_file: mgr_prometheus_cert.pem
+      ca_file: root_cert.pem
     honor_labels: true
     relabel_configs:
     - source_labels: [instance]
@@ -71,6 +73,8 @@ scrape_configs:
     scheme: https
     tls_config:
       ca_file: root_cert.pem
+      cert_file: prometheus.crt
+      key_file:  prometheus.key
     http_sd_configs:
     - url: {{ node_exporter_sd_url }}
       basic_auth:

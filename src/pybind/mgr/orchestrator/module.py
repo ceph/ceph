@@ -46,6 +46,7 @@ from ._interface import (
     RGWSpec,
     SMBSpec,
     SNMPGatewaySpec,
+    MgmtGatewaySpec,
     ServiceDescription,
     TunedProfileSpec,
     _cli_read_command,
@@ -1770,6 +1771,32 @@ Usage:
             trusted_ip_list=trusted_ip_list,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
+            preview_only=dry_run
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply mgmt-gateway')
+    def _apply_mgmt_gateway(self,
+                            port: Optional[int] = None,
+                            disable_https: Optional[bool] = False,
+                            placement: Optional[str] = None,
+                            unmanaged: bool = False,
+                            dry_run: bool = False,
+                            format: Format = Format.plain,
+                            no_overwrite: bool = False,
+                            inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Add a cluster gateway service (cephadm only)"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = MgmtGatewaySpec(
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            port=port,
+            disable_https=disable_https,
             preview_only=dry_run
         )
 
