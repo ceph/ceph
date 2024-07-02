@@ -15,6 +15,7 @@ from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
+from ..constants import UID_NOBODY, GID_NOGROUP
 
 
 logger = logging.getLogger()
@@ -87,7 +88,7 @@ class Tracing(ContainerDaemonForm):
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
-        return 65534, 65534
+        return UID_NOBODY, GID_NOGROUP
 
     def get_daemon_args(self) -> List[str]:
         return self.components[self.identity.daemon_type].get(
