@@ -153,7 +153,9 @@ class GrafanaService(CephadmService):
         if not certs_present or (org == 'Ceph' and cn == 'cephadm'):
             logger.info('Regenerating cephadm self-signed grafana TLS certificates')
             host_fqdn = socket.getfqdn(daemon_spec.host)
-            cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
+            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            cert, pkey = self.mgr.cert_mgr.generate_cert([host_fqdn, "grafana_servers"], node_ip)
+            #cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
             self.mgr.cert_key_store.save_cert('grafana_cert', cert, host=daemon_spec.host)
             self.mgr.cert_key_store.save_key('grafana_key', pkey, host=daemon_spec.host)
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
@@ -256,6 +258,17 @@ class AlertmanagerService(CephadmService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        cert = self.mgr.cert_key_store.get_cert('alertmanager_cert', host=daemon_spec.host)
+        key = self.mgr.cert_key_store.get_key('alertmanager_key', host=daemon_spec.host)
+        if not (cert and key):
+            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+            cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
+            self.mgr.cert_key_store.save_cert('alertmanager_cert', cert, host=daemon_spec.host)
+            self.mgr.cert_key_store.save_key('alertmanager_key', key, host=daemon_spec.host)
+        return cert, key
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
@@ -312,15 +325,7 @@ class AlertmanagerService(CephadmService):
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
             if alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
-            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            cert = self.mgr.cert_key_store.get_cert('alertmanager_cert', host=daemon_spec.host)
-            key = self.mgr.cert_key_store.get_key('alertmanager_key', host=daemon_spec.host)
-            if not (cert and key):
-                cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
-                    host_fqdn, node_ip)
-                self.mgr.cert_key_store.save_cert('alertmanager_cert', cert, host=daemon_spec.host)
-                self.mgr.cert_key_store.save_key('alertmanager_key', key, host=daemon_spec.host)
+            cert, key = self.get_alertmanager_certificates(daemon_spec)
             context = {
                 'enable_mtls': mgmt_gw_enabled,
                 'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
@@ -426,6 +431,17 @@ class PrometheusService(CephadmService):
             # we shouldn't get here (mon will tell the mgr to respawn), but no
             # harm done if we do.
 
+    def get_prometheus_mgr_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        cert = self.mgr.cert_key_store.get_cert('prometheus_mgr_cert', host=daemon_spec.host)
+        key = self.mgr.cert_key_store.get_key('prometheus_mgr_key', host=daemon_spec.host)
+        if not (cert and key):
+            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+            cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "prometheus_servers"], node_ip)
+            self.mgr.cert_key_store.save_cert('prometheus_mgr_cert', cert, host=daemon_spec.host)
+            self.mgr.cert_key_store.save_key('prometheus_mgr_key', key, host=daemon_spec.host)
+        return cert, key
+
     def prepare_create(
             self,
             daemon_spec: CephadmDaemonDeploySpec,
@@ -511,9 +527,7 @@ class PrometheusService(CephadmService):
         }
 
         if self.mgr.secure_monitoring_stack:
-            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "prometheus_servers"], node_ip)
+            cert, key = self.get_prometheus_mgr_certificates(daemon_spec)
             r: Dict[str, Any] = {
                 'files': {
                     'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
@@ -660,20 +674,22 @@ class NodeExporterService(CephadmService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    def get_node_exporter_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        cert = self.mgr.cert_key_store.get_cert('node_exporter_cert', host=daemon_spec.host)
+        key = self.mgr.cert_key_store.get_key('node_exporter_key', host=daemon_spec.host)
+        if not (cert and key):
+            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+            cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
+            self.mgr.cert_key_store.save_cert('node_exporter_cert', cert, host=daemon_spec.host)
+            self.mgr.cert_key_store.save_key('node_exporter_key', key, host=daemon_spec.host)
+        return cert, key
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps = [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         if self.mgr.secure_monitoring_stack:
-            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            cert = self.mgr.cert_key_store.get_cert('node_exporter_cert', host=daemon_spec.host)
-            key = self.mgr.cert_key_store.get_key('node_exporter_key', host=daemon_spec.host)
-            if not (cert and key):
-                cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
-                    host_fqdn, node_ip)
-                self.mgr.cert_key_store.save_cert('node_exporter_cert', cert, host=daemon_spec.host)
-                self.mgr.cert_key_store.save_key('node_exporter_key', key, host=daemon_spec.host)
-            #cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
+            cert, key = self.get_node_exporter_certificates(daemon_spec)
             mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
             r = {
                 'files': {
