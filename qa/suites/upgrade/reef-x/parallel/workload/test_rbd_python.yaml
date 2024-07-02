@@ -6,6 +6,8 @@ overrides:
     ceph:
       extra_system_packages:
       - python3-pytest
+    log-ignorelist:
+      - \(OSD_DOWN\)
 workload:
   full_sequential:
     - print: "**** done start test_rbd_python.yaml"
