@@ -790,7 +790,7 @@ public:
   void submit_sync_caps(Inode *in, ceph_tid_t want, Context *onfinish);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
   void wait_sync_caps(ceph_tid_t want);
-  void queue_cap_snap(Inode *in, SnapContext &old_snapc);
+  void queue_cap_snap(Inode *in, const SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap &capsnap, int used);
 
   void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
