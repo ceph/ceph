@@ -240,10 +240,10 @@ int RGWAsyncLockSystemObj::_send_request(const DoutPrefixProvider *dpp)
 RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
                       RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
                        const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                                              obj(_obj),
-                                                              lock_name(_name),
-                                                              cookie(_cookie),
-                                                              duration_secs(_duration_secs)
+				 obj(_obj),
+				 lock_name(_name),
+				 cookie(_cookie),
+				 duration_secs(_duration_secs)
 {
 }
 
@@ -519,17 +519,17 @@ int RGWRadosRemoveOidCR::request_complete()
 }
 
 RGWSimpleRadosLockCR::RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
-                      const rgw_raw_obj& _obj,
-                      const string& _lock_name,
-                      const string& _cookie,
+  const rgw_raw_obj& _obj,
+  const string& _lock_name,
+  const string& _cookie,
                       uint32_t _duration) : RGWSimpleCoroutine(_store->ctx()),
-                                                async_rados(_async_rados),
-                                                store(_store),
-                                                lock_name(_lock_name),
-                                                cookie(_cookie),
-                                                duration(_duration),
-                                                obj(_obj),
-                                                req(NULL)
+			     async_rados(_async_rados),
+			     store(_store),
+			     lock_name(_lock_name),
+			     cookie(_cookie),
+           duration(_duration),
+			     obj(_obj),
+			     req(nullptr)
 {
   set_description() << "rados lock dest=" << obj << " lock=" << lock_name << " cookie=" << cookie << " duration=" << duration;
 }
@@ -941,7 +941,7 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
       current_time = ceph::coarse_mono_clock::now();
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
       if (latency) {
-	latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+	      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
       }
       current_time = ceph::coarse_mono_clock::now();
       if (current_time - last_renew_try_time > interval_tolerance) {
