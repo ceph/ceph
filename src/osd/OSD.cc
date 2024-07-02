@@ -527,6 +527,15 @@ void OSDService::shutdown()
   next_osdmap = OSDMapRef();
 }
 
+void OSDService::fast_shutdown()
+{
+  mono_timer.suspend();
+  {
+    std::lock_guard l(watch_lock);
+    watch_timer.shutdown();
+  }
+}
+
 void OSDService::init()
 {
   reserver_finisher.start();
@@ -4576,6 +4585,7 @@ int OSD::shutdown()
 
     utime_t  start_time_umount = ceph_clock_now();
     store->prepare_for_fast_shutdown();
+    service.fast_shutdown();
     std::lock_guard lock(osd_lock);
     // TBD: assert in allocator that nothing is being add
     store->umount();
