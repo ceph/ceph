@@ -334,6 +334,11 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "Status of scrub operations(s)");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("scrub purge_status "
+				     "name=tag,type=CephString,req=true",
+                                     asok_hook,
+                                     "Purge status of scrub tag|all");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("tag path name=path,type=CephString"
                                      " name=tag,type=CephString",
                                      asok_hook,
