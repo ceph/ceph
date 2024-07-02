@@ -254,8 +254,9 @@ class NFSGaneshaUi(BaseController):
         try:
             cfs = CephFS(fs_name)
             paths = [root_dir]
-            paths.extend([p['path'].rstrip('/')
-                          for p in cfs.ls_dir(root_dir, depth)])
+            with cfs:
+                paths.extend([p['path'].rstrip('/')
+                              for p in cfs.ls_dir(root_dir, depth)])
         except (cephfs.ObjectNotFound, cephfs.PermissionError):
             paths = []
         return {'paths': paths}

@@ -38,12 +38,19 @@ class CephFS(object):
     def __init__(self, fs_name=None):
         logger.debug("initializing cephfs connection")
         self.cfs = cephfs.LibCephFS(rados_inst=mgr.rados)
-        logger.debug("mounting cephfs filesystem: %s", fs_name)
-        if fs_name:
-            self.cfs.mount(filesystem_name=fs_name)
+        self.fs_name = fs_name
+
+    def __enter__(self):
+        logger.debug("mounting cephfs filesystem: %s", self.fs_name)
+        if self.fs_name:
+            self.cfs.mount(filesystem_name=self.fs_name)
         else:
             self.cfs.mount()
         logger.debug("mounted cephfs filesystem")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        logger.debug("shutting down cephfs filesystem: %s", self.fs_name)
+        self.cfs.shutdown()
 
     @contextmanager
     def opendir(self, dirpath):
