@@ -2118,8 +2118,8 @@ void PeeringState::calc_replicated_acting_stretch(
    */
   while (!aheap.is_empty() && want->size() < pool.info.size) {
     auto next = aheap.pop();
-    pop_ancestor(next.get());
     if (next.get().get_num_selected() < bucket_max) {
+      pop_ancestor(next.get());
       aheap.push_if_nonempty(next);
     }
   }
