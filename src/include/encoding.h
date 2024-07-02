@@ -1445,6 +1445,21 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   const auto starting_bl_len = (bl).length();		     \
   using ::ceph::encode;					     \
   do {
+  
+#define ENCODE_START_FILLER(v, compat, filler_in)			     \
+  __u8 struct_v = v;                                         \
+  __u8 struct_compat = compat;		                     \
+  ceph_le32 struct_len;				             \
+  auto& filler = filler_in;	     \
+  filler.copy_in(sizeof(struct_v), (char *)&struct_v);       \
+  filler.copy_in(sizeof(struct_compat),			     \
+    (char *)&struct_compat);				     \
+  char* struct_len_ptr = filler.c_str(); \
+  filler.advance(sizeof(struct_len)); \
+  const auto starting_bl_len = filler.c_str();		     \
+  using ::ceph::encode;					     \
+  do {
+
 
 /**
  * finish encoding block
@@ -1463,6 +1478,18 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     (char *)&struct_compat);				     \
   filler.copy_in(sizeof(struct_len), (char *)&struct_len);
 
+
+/**
+  * finish encoding block with filler
+  *
+  * @param bl bufferlist we were encoding to
+  * @param new_struct_compat struct-compat value to use
+  */
+#define ENCODE_FINISH_FILLER()      \
+  } while (false);                                           \
+  struct_len = filler.c_str() - starting_bl_len;              \
+  *((ceph_le32*)struct_len_ptr) = struct_len;
+  
 #define ENCODE_FINISH(bl) ENCODE_FINISH_NEW_COMPAT(bl, 0)
 
 #define DECODE_ERR_OLDVERSION(func, v, compatv)					\

@@ -340,7 +340,8 @@ int main(int argc, char **argv)
         "free-fragmentation, "
         "bluefs-stats, "
         "reshard, "
-        "show-sharding")
+        "show-sharding, "
+        "downgrade-wal-v1")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -453,7 +454,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if (action == "fsck" || action == "repair" || action == "quick-fix" || action == "allocmap" || action == "qfsck" || action == "restore_cfb") {
+  if (action == "fsck" || action == "repair" || action == "quick-fix" || action == "allocmap" || action == "qfsck" || action == "restore_cfb" || action == "downgrade-wal-v1") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -626,7 +627,8 @@ int main(int argc, char **argv)
   }
   else if (action == "fsck" ||
       action == "repair" ||
-      action == "quick-fix") {
+      action == "quick-fix" ||
+      action == "downgrade-wal-v1") {
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
     int r;
@@ -634,6 +636,8 @@ int main(int argc, char **argv)
       r = bluestore.fsck(fsck_deep);
     } else if (action == "repair") {
       r = bluestore.repair(fsck_deep);
+    } else if (action == "downgrade-wal-v1") {
+      r = bluestore.migrate_wal_to_v1();
     } else {
       r = bluestore.quick_fix();
     }

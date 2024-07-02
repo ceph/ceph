@@ -10261,6 +10261,20 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   return _fsck_on_open(depth, repair);
 }
 
+int BlueStore::migrate_wal_to_v1() {
+  dout(5) << __func__ << dendl;
+
+  int r = _open_db_and_around(false);
+  if (r < 0) {
+    return r;
+  }
+  auto close_db = make_scope_guard([&] {
+    _close_db_and_around();
+  });
+  return bluefs->migrate_wal_to_v1();
+	
+}
+
 int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 {
   uint64_t sb_hash_size = uint64_t(
