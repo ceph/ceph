@@ -6,7 +6,6 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Operations.h"
-#include "common/config_proxy.h"
 #include "common/environment.h"
 #include "common/hostname.h"
 #include "librbd/plugin/Api.h"
@@ -32,7 +31,7 @@ void ImageCacheState<I>::init_from_config() {
   clean = true;
   host = "";
   path = "";
-  ConfigProxy &config = m_image_ctx->config;
+  ImageConfigProxy &config = m_image_ctx->config;
   mode = config.get_val<std::string>("rbd_persistent_cache_mode");
   size = 0;
 }
