@@ -317,6 +317,11 @@ std::ostream& RGWHTTPClient::gen_prefix(std::ostream& out) const
 
 void RGWHTTPClient::init()
 {
+  if (!cct->_conf->rgw_verify_ssl_cacert.empty()) {
+    set_ca_path(cct->_conf->rgw_verify_ssl_cacert);
+    dout(20) << "custom ca cert "<< std::quoted(ca_path) << " configured for ssl client" << dendl;
+  }
+
   auto pos = url.find("://");
   if (pos == string::npos) {
     host = url;
