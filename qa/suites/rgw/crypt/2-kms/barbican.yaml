@@ -68,7 +68,7 @@ tasks:
           project: s3
 - barbican:
     client.0:
-      force-branch: stable/xena
+      force-branch: stable/2023.1
       use-keystone-role: client.0
       keystone_authtoken:
         auth_plugin: password
