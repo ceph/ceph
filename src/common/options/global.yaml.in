@@ -5444,6 +5444,19 @@ options:
   - hdd
   - ssd
   with_legacy: true
+- name: bluestore_allocator_lookup_policy
+  type: str
+  level: advanced
+  desc: Determines how to perform the next free extent lookup.
+  long_desc: With '''hdd_optimized'' allocator uses the previous found position to start the next lookup from.
+    This could help in making writes to disk contiguous. ''ssd-optimized'' instructs allocator to perform lookup
+    starting from volume's beginning. This could help SSD disks firmware to perform garbage collection more
+    efficiently. With ''auto'' policy bluestore uses the mode corresponding to the actual device type.
+  default: auto
+  enum_values:
+  - hdd_optimized
+  - ssd_optimized
+  - auto
 - name: bluestore_avl_alloc_ff_max_search_count
   type: uint
   level: dev
