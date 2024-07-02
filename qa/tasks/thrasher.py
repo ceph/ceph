@@ -19,6 +19,9 @@ class Thrasher(object):
     def set_thrasher_exception(self, e):
         self._exception = e
 
+    def stop(self):
+        raise NotImplementedError("Subclasses didn't implement this method.")
+
 class ThrasherGreenlet(Thrasher, Greenlet):
 
     class Stopped(Exception): ...
@@ -46,3 +49,7 @@ class ThrasherGreenlet(Thrasher, Greenlet):
         if self.is_stopped and raise_stopped:
             raise self.Stopped()
         return not self.is_stopped
+
+    def stop_and_join(self):
+        self.stop()
+        return self.join()
