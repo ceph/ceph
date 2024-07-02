@@ -151,10 +151,11 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OBJ_REPLICATION_TIMESTAMP RGW_ATTR_PREFIX "replicated-at"
 
 /* IAM Policy */
-#define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
-#define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"
-#define RGW_ATTR_MANAGED_POLICY RGW_ATTR_PREFIX "managed-policy"
-#define RGW_ATTR_PUBLIC_ACCESS  RGW_ATTR_PREFIX "public-access"
+#define RGW_ATTR_IAM_POLICY                    RGW_ATTR_PREFIX "iam-policy"
+#define RGW_ATTR_USER_POLICY                   RGW_ATTR_PREFIX "user-policy"
+#define RGW_ATTR_MANAGED_POLICY                RGW_ATTR_PREFIX "managed-policy"
+#define RGW_ATTR_PUBLIC_ACCESS                 RGW_ATTR_PREFIX "public-access"
+#define RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS RGW_ATTR_PREFIX "iam-policy-remove-self-access"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"

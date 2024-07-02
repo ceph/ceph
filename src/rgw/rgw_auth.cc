@@ -242,6 +242,13 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return match_owner(o, id, account);
     }
 
+    bool is_root() const override {
+      if (account)
+        return get_identity_type() == TYPE_ROOT;
+
+      return get_perm_mask() == RGW_PERM_FULL_CONTROL;
+    }
+
     bool is_identity(const Principal& p) const override {
       if (p.is_wildcard()) {
         return true;
@@ -829,6 +836,11 @@ bool rgw::auth::RemoteApplier::is_owner_of(const rgw_owner& o) const
   return info.acct_user == *uid;
 }
 
+bool rgw::auth::RemoteApplier::is_root() const
+{
+  return get_perm_mask() == RGW_PERM_FULL_CONTROL;
+}
+
 bool rgw::auth::RemoteApplier::is_identity(const Principal& p) const {
   // We also need to cover cases where rgw_keystone_implicit_tenants
   // was enabled.
@@ -1048,6 +1060,14 @@ bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
 bool rgw::auth::LocalApplier::is_owner_of(const rgw_owner& o) const
 {
   return match_owner(o, user_info.user_id, account);
+}
+
+bool rgw::auth::LocalApplier::is_root() const
+{
+  if (account)
+    return get_identity_type() == TYPE_ROOT;
+
+  return get_perm_mask() == RGW_PERM_FULL_CONTROL;
 }
 
 bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {

@@ -56,6 +56,15 @@ public:
    * On internal error throws rgw::auth::Exception storing the reason. */
   virtual bool is_owner_of(const rgw_owner& o) const = 0;
 
+  /* Verify whether a given identity is the root user. */
+  virtual bool is_root() const = 0;
+
+  /* Verify whether a given identity is the root user and the owner of the
+   * rgw_owner specified in @o. */
+  virtual bool is_root_of(const rgw_owner& o) const {
+    return is_root() && is_owner_of(o);
+  }
+
   /* Return the permission mask that is used to narrow down the set of
    * operations allowed for a given identity. This method reflects the idea
    * of subuser tied to RGWUserInfo. On  error throws rgw::auth::Exception
@@ -476,6 +485,10 @@ public:
 
   bool is_owner_of(const rgw_owner& o) const override;
 
+  bool is_root() const override {
+    return false;
+  }
+
   uint32_t get_perm_mask() const override {
     return RGW_PERM_NONE;
   }
@@ -649,6 +662,7 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_owner& o) const override;
   bool is_owner_of(const rgw_owner& o) const override;
+  bool is_root() const override;
   bool is_identity(const Principal& p) const override;
 
   uint32_t get_perm_mask() const override { return info.perm_mask; }
@@ -720,6 +734,7 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_owner& o) const override;
   bool is_owner_of(const rgw_owner& o) const override;
+  bool is_root() const override;
   bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     if (this->perm_mask == RGW_PERM_INVALID) {
@@ -795,6 +810,9 @@ public:
     return false;
   }
   bool is_owner_of(const rgw_owner& o) const override;
+  bool is_root() const override {
+    return false;
+  }
   bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     return RGW_PERM_NONE; 
