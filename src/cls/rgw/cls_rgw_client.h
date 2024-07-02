@@ -284,6 +284,7 @@ protected:
   // Return true if multiple rounds of OPs might be needed, this happens when
   // OP needs to be re-send until a certain code is returned.
   virtual bool need_multiple_rounds() { return false; }
+  virtual bool need_retries() { return true; }
   // Add a new object to the end of the container.
   virtual void add_object(int shard, const std::string& oid) {}
   virtual void reset_container(std::map<int, std::string>& objs) {}
@@ -429,10 +430,12 @@ class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
   uint32_t num_entries;
   bool list_versions;
   std::map<int, rgw_cls_list_ret>& result; // request_id -> return value
+  bool retry;
 
 protected:
   int issue_op(int shard_id, const std::string& oid) override;
   void reset_container(std::map<int, std::string>& objs) override;
+  bool need_retries() override { return retry; }
 
 public:
   CLSRGWIssueBucketList(librados::IoCtx& io_ctx,
@@ -444,11 +447,12 @@ public:
                         std::map<int, std::string>& oids, // shard_id -> shard_oid
 			// shard_id -> return value
                         std::map<int, rgw_cls_list_ret>& list_results,
-                        uint32_t max_aio) :
+                        uint32_t max_aio,
+                        bool _retry = true) :
   CLSRGWConcurrentIO(io_ctx, oids, max_aio),
     start_obj(_start_obj), filter_prefix(_filter_prefix), delimiter(_delimiter),
     num_entries(_num_entries), list_versions(_list_versions),
-    result(list_results)
+    result(list_results), retry(_retry)
   {}
 };
 
@@ -491,6 +495,7 @@ protected:
   // Trim until -ENODATA is returned.
   int valid_ret_code() override { return -ENODATA; }
   bool need_multiple_rounds() override { return true; }
+  bool need_retries() { return false; }
   void add_object(int shard, const std::string& oid) override { objs_container[shard] = oid; }
   void reset_container(std::map<int, std::string>& objs) override {
     objs_container.swap(objs);
