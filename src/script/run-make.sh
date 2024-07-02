@@ -134,7 +134,8 @@ function build() {
         bdir="$BUILD_DIR"
     fi
     $DRY_RUN cd "${bdir}"
-    BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    BUILD_MAKEOPTS=-j72
+    #BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     # older cmake does not support --parallel or -j, so pass it to underlying generator
     ci_debug "Running cmake"
