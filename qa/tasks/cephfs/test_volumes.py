@@ -311,6 +311,12 @@ class TestVolumesHelper(CephFSTestCase):
             else:
                 raise
 
+    def _set_config_options_back_to_default(self):
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 4)
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 0)
+        self.config_set('mgr', 'mgr/volumes/periodic_async_work', False)
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', True)       
+
     def _assert_meta_location_and_version(self, vol_name, subvol_name, subvol_group=None, version=2, legacy=False):
         if legacy:
             subvol_path = self._get_subvolume_path(vol_name, subvol_name, group_name=subvol_group)
@@ -5791,6 +5797,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         for clone in clone_list:
             self._fs_cmd("subvolume", "rm", self.volname, clone)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -5841,6 +5850,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         for clone in clone_list:
             self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # set the config options back to default
+        self._set_config_options_back_to_default()
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
@@ -5897,6 +5909,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, target_group)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -5954,6 +5969,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # verify snapshot info (has_pending_clones should be no)
         self.assertEqual(res['has_pending_clones'], "no")
+
+        # set the config options back to default
+        self._set_config_options_back_to_default()
 
     def test_non_clone_status(self):
         subvolume = self._gen_subvol_name()
@@ -6113,6 +6131,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6161,6 +6182,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6209,6 +6233,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6586,6 +6613,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone1)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6631,6 +6661,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6675,6 +6708,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6722,6 +6758,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6846,6 +6885,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -6977,6 +7019,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -7048,6 +7093,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
             self._fs_cmd("subvolume", "rm", self.volname, clone)
         for clone in to_cancel:
             self._fs_cmd("subvolume", "rm", self.volname, clone, "--force")
+
+        # set the config options back to default
+        self._set_config_options_back_to_default()
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
@@ -7395,6 +7443,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -7417,6 +7468,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
         self.assertEqual(max_concurrent_clones, 2)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+
     def test_subvolume_snapshot_config_snapshot_clone_delay(self):
         """
         Validate 'snapshot_clone_delay' config option
@@ -7435,6 +7489,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
         max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
         self.assertEqual(max_concurrent_clones, 2)
+
+        # set the config options back to default
+        self._set_config_options_back_to_default()
 
     def test_periodic_async_work(self):
         """
@@ -7559,14 +7616,6 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify clone3
         self._verify_clone(subvolume, snapshot, clone3)
 
-        # set number of cloner threads to default
-        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 4)
-        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
-        self.assertEqual(max_concurrent_clones, 4)
-
-        # set the snapshot_clone_delay to default
-        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 0)
-
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
 
@@ -7576,6 +7625,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, clone2)
         self._fs_cmd("subvolume", "rm", self.volname, clone3)
 
+        # set the config options back to default
+        self._set_config_options_back_to_default()
+        
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
@@ -7630,16 +7682,6 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # verify clone3
         self._verify_clone(subvolume, snapshot, clone3)
 
-        # set the snapshot_clone_no_wait config option to default
-        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', True)
-        threads_available = self.config_get('mgr', 'mgr/volumes/snapshot_clone_no_wait')
-        self.assertEqual(threads_available, 'true')
-
-        # set number of cloner threads to default
-        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 4)
-        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
-        self.assertEqual(max_concurrent_clones, 4)
-
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
 
@@ -7648,6 +7690,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "rm", self.volname, clone1)
         self._fs_cmd("subvolume", "rm", self.volname, clone2)
         self._fs_cmd("subvolume", "rm", self.volname, clone3)
+
+        # set the config options back to default
+        self._set_config_options_back_to_default()
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
