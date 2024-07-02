@@ -307,4 +307,12 @@ describe('RgwBucketFormComponent', () => {
       expectValidLockInputs(false, 'Compliance', '2');
     });
   });
+
+  describe('bucket replication', () => {
+    it('should validate replication input', () => {
+      formHelper.setValue('replication', true);
+      fixture.detectChanges();
+      formHelper.expectValid('replication');
+    });
+  });
 });

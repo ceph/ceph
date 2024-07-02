@@ -22,6 +22,11 @@
             </tr>
             <tr>
               <td i18n
+                  class="bold">Replication</td>
+              <td>{{ replicationStatus }}</td>
+            </tr>
+            <tr>
+              <td i18n
                   class="bold">MFA Delete</td>
               <td>{{ selection.mfa_delete }}</td>
             </tr>
@@ -129,6 +134,11 @@
               <td i18n
                   class="bold w-25">Bucket policy</td>
               <td><pre>{{ selection.bucket_policy | json}}</pre></td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold w-25">Replication policy</td>
+              <td><pre>{{ selection.replication | json}}</pre></td>
             </tr>
             <tr>
               <td i18n
