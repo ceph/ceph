@@ -210,7 +210,12 @@ ceph::ref_t<Message> LogClient::get_mon_log_message(bool flush)
 bool LogClient::are_pending()
 {
   std::lock_guard l(log_lock);
-  return last_log > last_log_sent;
+  if (last_log > last_log_sent &&
+      !log_queue.empty() &&
+      log_queue.back().seq > last_log_sent) {
+    return true;
+  }
+  return false;
 }
 
 ceph::ref_t<Message> LogClient::_get_mon_log_message()
@@ -226,7 +231,13 @@ ceph::ref_t<Message> LogClient::_get_mon_log_message()
   if (last_log_sent == last_log)
     return {};
 
+  // all entries in queue have been sent
+  if (log_queue.back().seq <= last_log_sent)
+    return {};
+
   // limit entries per message
+  // since `last_log` always increase despite clog_to_monitors option, `num_unsent`
+  // maybe greater than actual num of entries that waiting to be sent.
   unsigned num_unsent = last_log - last_log_sent;
   unsigned num_send;
   if (cct->_conf->mon_client_max_log_entries_per_message > 0)
@@ -234,23 +245,30 @@ ceph::ref_t<Message> LogClient::_get_mon_log_message()
   else
     num_send = num_unsent;
 
-  ldout(cct,10) << " log_queue is " << log_queue.size() << " last_log " << last_log << " sent " << last_log_sent
-		<< " num " << log_queue.size()
-		<< " unsent " << num_unsent
-		<< " sending " << num_send << dendl;
-  ceph_assert(num_unsent <= log_queue.size());
+  ldout(cct,10) << " log_queue is " << log_queue.size() << " last_log " << last_log
+		<< " last sent " << last_log_sent
+		<< " max unsent " << num_unsent
+		<< " max sending " << num_send << dendl;
+  // find the first entry to send
   std::deque<LogEntry>::iterator p = log_queue.begin();
   std::deque<LogEntry> o;
   while (p->seq <= last_log_sent) {
     ++p;
     ceph_assert(p != log_queue.end());
   }
-  while (num_send--) {
-    ceph_assert(p != log_queue.end());
-    o.push_back(*p);
-    last_log_sent = p->seq;
-    ldout(cct,10) << " will send " << *p << dendl;
-    ++p;
+  // find at most #num_send entries from log_queue
+  while (o.size() < num_send && p != log_queue.end()) {
+    if (p->seq != last_log_sent + 1) {
+      // log entry is missing, this may occur when clog_to_monitors config was
+      // changed from enabled to disabled and now enabled again, just take it
+      // as has been sent.
+      last_log_sent++;
+    } else {
+      o.push_back(*p);
+      last_log_sent = p->seq;
+      ldout(cct,10) << " will send " << *p << dendl;
+      ++p;
+    }
   }
   
   return ceph::make_message<MLog>(monmap->get_fsid(),
