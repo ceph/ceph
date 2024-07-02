@@ -53,6 +53,23 @@ class NvmeofService(CephService):
 
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'ceph-nvmeof.conf': gw_conf}
+
+        if spec.enable_auth:
+            if (
+                not spec.client_cert
+                or not spec.client_key
+                or not spec.server_cert
+                or not spec.server_key
+            ):
+                self.mgr.log.error(f'enable_auth set for {spec.service_name()} spec, but at '
+                                   'least one of server/client cert/key fields missing. TLS '
+                                   f'not being set up for {daemon_spec.name()}')
+            else:
+                daemon_spec.extra_files['server_cert'] = spec.server_cert
+                daemon_spec.extra_files['client_cert'] = spec.client_cert
+                daemon_spec.extra_files['server_key'] = spec.server_key
+                daemon_spec.extra_files['client_key'] = spec.client_key
+
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
         return daemon_spec
@@ -67,10 +84,27 @@ class NvmeofService(CephService):
 
             for dd in daemon_descrs:
                 assert dd.hostname is not None
+                service_name = dd.service_name()
 
                 if not spec:
-                    logger.warning(f'No ServiceSpec found for {dd.service_name()}')
+                    logger.warning(f'No ServiceSpec found for {service_name}')
                     continue
+
+                self.mgr.check_mon_command({
+                    'prefix': 'config-key set',
+                    'key': f'mgr/dashboard/{service_name}/mtls_server_cert',
+                    'val': spec.server_cert if spec.server_cert else '',
+                })
+                self.mgr.check_mon_command({
+                    'prefix': 'config-key set',
+                    'key': f'mgr/dashboard/{service_name}/mtls_client_key',
+                    'val': spec.server_key if spec.server_key else '',
+                })
+                self.mgr.check_mon_command({
+                    'prefix': 'config-key set',
+                    'key': f'mgr/dashboard/{service_name}/mtls_client_cert',
+                    'val': spec.client_cert if spec.client_cert else '',
+                })
 
                 ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
                 if type(ip_address(ip)) is IPv6Address:
@@ -82,7 +116,7 @@ class NvmeofService(CephService):
                     cmd_dicts.append({
                         'prefix': 'dashboard nvmeof-gateway-add',
                         'inbuf': service_url,
-                        'name': dd.hostname
+                        'name': service_name
                     })
             return cmd_dicts
 

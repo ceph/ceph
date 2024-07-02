@@ -3,6 +3,7 @@
 import json
 
 from .. import mgr
+from ..exceptions import DashboardException
 
 
 class NvmeofGatewayAlreadyExists(Exception):
@@ -58,3 +59,33 @@ class NvmeofGatewaysConfig(object):
             raise NvmeofGatewayDoesNotExist(name)
         del config['gateways'][name]
         cls._save_config(config)
+
+    @classmethod
+    def get_service_info(cls):
+        try:
+            config = cls.get_gateways_config()
+            service_name =  list(config['gateways'].keys())[0]
+            addr = config['gateways'][service_name]['service_url']
+            return service_name, addr
+        except KeyError as e:
+            raise DashboardException(
+                msg=f'NVMe-oF configuration is not set: {e}',
+            )
+
+    @classmethod
+    def get_client_cert(cls, service_name: str):
+        client_cert = mgr.get_store(f'{service_name}/mtls_client_cert')
+        if client_cert:
+            return client_cert.encode()
+
+    @classmethod
+    def get_client_key(cls, service_name: str):
+        client_key = mgr.get_store(f'{service_name}/mtls_client_key')
+        if client_key:
+            return client_key.encode()
+
+    @classmethod
+    def get_server_cert(cls, service_name: str):
+        server_cert = mgr.get_store(f'{service_name}/mtls_server_cert')
+        if server_cert:
+            return server_cert.encode()
