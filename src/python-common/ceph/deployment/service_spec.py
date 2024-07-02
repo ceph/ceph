@@ -1067,7 +1067,7 @@ class ServiceSpec(object):
                 continue
             if hasattr(val, 'to_json'):
                 val = val.to_json()
-            if val:
+            if val or val == False:
                 c[key] = val
         if c:
             ret['spec'] = c
