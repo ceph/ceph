@@ -163,11 +163,11 @@ struct btree_test_base :
 		}
 		if (!extent->is_logical() ||
 		    !extent->get_last_committed_crc()) {
-		  auto crc = extent->calc_crc32c();
+		  auto crc = extent->calc_crc32c(false);
 		  extent->set_last_committed_crc(crc);
 		  extent->update_in_extent_chksum_field(crc);
 		}
-		assert(extent->calc_crc32c() == extent->get_last_committed_crc());
+		assert(extent->calc_crc32c(false) == extent->get_last_committed_crc());
 	      };
 	      t.for_each_finalized_fresh_block(chksum_func);
 	      t.for_each_existing_block(chksum_func);
@@ -250,11 +250,11 @@ struct lba_btree_test : btree_test_base {
 	    }
 	    if (!extent->is_logical() ||
 		!extent->get_last_committed_crc()) {
-	      auto crc = extent->calc_crc32c();
+	      auto crc = extent->calc_crc32c(false);
 	      extent->set_last_committed_crc(crc);
 	      extent->update_in_extent_chksum_field(crc);
 	    }
-	    assert(extent->calc_crc32c() == extent->get_last_committed_crc());
+	    assert(extent->calc_crc32c(false) == extent->get_last_committed_crc());
 	  };
 
 	  t->for_each_finalized_fresh_block(chksum_func);
@@ -457,11 +457,11 @@ struct btree_lba_manager_test : btree_test_base {
 	    }
 	    if (extent->is_logical()) {
 	      if (!extent->get_last_committed_crc()) {
-		auto crc = extent->calc_crc32c();
+		auto crc = extent->calc_crc32c(false);
 		extent->set_last_committed_crc(crc);
 		extent->update_in_extent_chksum_field(crc);
 	      }
-	      assert(extent->calc_crc32c() == extent->get_last_committed_crc());
+	      assert(extent->calc_crc32c(false) == extent->get_last_committed_crc());
 	      lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
 	    } else {
 	      pextents.push_back(extent);
@@ -481,7 +481,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  ).si_then([&pextents] {
 	    for (auto &extent : pextents) {
 	      assert(!extent->is_logical() && extent->is_valid());
-	      auto crc = extent->calc_crc32c();
+	      auto crc = extent->calc_crc32c(false);
 	      extent->set_last_committed_crc(crc);
 	      extent->update_in_extent_chksum_field(crc);
 	    }

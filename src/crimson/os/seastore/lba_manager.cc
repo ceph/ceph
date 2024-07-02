@@ -13,7 +13,9 @@ LBAManager::update_mappings(
 {
   return trans_intr::do_for_each(extents,
 				 [this, &t](auto &extent) {
-    assert(extent->get_last_committed_crc());
+    if (!get_checksum_needed(extent)) {
+      assert(extent->get_last_committed_crc());
+    }
     return update_mapping(
       t,
       extent->get_laddr(),

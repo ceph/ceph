@@ -572,6 +572,10 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
+  
+  bool get_checksum_needed(CachedExtentRef extent) final {
+    return cache.get_checksum_needed(extent->get_paddr());
+  }
 private:
   Cache &cache;
 

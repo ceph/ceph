@@ -1073,7 +1073,7 @@ CachedExtentRef Cache::duplicate_for_write(
   if (i->is_exist_clean()) {
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
-    i->last_committed_crc = i->calc_crc32c();
+    i->last_committed_crc = i->calc_crc32c(epm.get_checksum_needed(i->get_paddr()));
     // deepcopy the buffer of exist clean extent beacuse it shares
     // buffer with original clean extent.
     auto bp = i->get_bptr();
@@ -1186,7 +1186,7 @@ record_t Cache::prepare_record(
     i->prepare_commit();
 
     assert(i->get_version() > 0);
-    auto final_crc = i->calc_crc32c();
+    auto final_crc = i->calc_crc32c(epm.get_checksum_needed(i->get_paddr()));
     if (i->get_type() == extent_types_t::ROOT) {
       SUBTRACET(seastore_t, "writing out root delta {}B -- {}",
                 t, delta_length, *i);
@@ -1562,7 +1562,8 @@ void Cache::complete_commit(
       is_inline = true;
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
-    assert(i->get_last_committed_crc() == i->calc_crc32c());
+    assert(i->get_last_committed_crc() ==
+      i->calc_crc32c(epm.get_checksum_needed(i->get_paddr())));
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
 
@@ -1858,7 +1859,7 @@ Cache::replay_delta(
     TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
           journal_seq, record_base, delta, *root);
     remove_extent(root);
-    root->apply_delta_and_adjust_crc(record_base, delta.bl);
+    root->apply_delta_and_adjust_crc(record_base, delta.bl, false);
     root->dirty_from_or_retired_at = journal_seq;
     root->state = CachedExtent::extent_state_t::DIRTY;
     DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
@@ -1917,12 +1918,14 @@ Cache::replay_delta(
 	  !can_inplace_rewrite(delta.type)) {
 	ceph_assert_always(extent->last_committed_crc == delta.prev_crc);
 	assert(extent->version == delta.pversion);
-	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+	extent->apply_delta_and_adjust_crc(record_base, delta.bl,
+	  epm.get_checksum_needed(delta.paddr));
 	extent->set_modify_time(modify_time);
 	ceph_assert_always(extent->last_committed_crc == delta.final_crc);
       } else {
 	assert(delta.paddr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
-	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+	extent->apply_delta_and_adjust_crc(record_base, delta.bl,
+	  epm.get_checksum_needed(delta.paddr));
 	extent->set_modify_time(modify_time);
 	// crc will be checked after journal replay is done
       }

@@ -711,7 +711,10 @@ struct FixedKVInternalNode
     return this->get_size();
   }
 
-  uint32_t calc_crc32c() const final {
+  uint32_t calc_crc32c(bool checksum_offloaded_to_device) const final {
+    if (checksum_offloaded_to_device) {
+      return 0;
+    }
     return this->calc_phy_checksum();
   }
 
@@ -941,14 +944,14 @@ struct FixedKVInternalNode
   }
 
   void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &_bl) {
+    paddr_t base, const ceph::bufferlist &_bl, bool checksum_offloaded_to_device) {
     assert(_bl.length());
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     typename node_layout_t::delta_buffer_t buffer;
     buffer.copy_in(bl.front().c_str(), bl.front().length());
     buffer.replay(*this);
-    auto crc = calc_crc32c();
+    auto crc = calc_crc32c(checksum_offloaded_to_device);
     this->set_last_committed_crc(crc);
     this->update_in_extent_chksum_field(crc);
     resolve_relative_addrs(base);
@@ -1192,7 +1195,10 @@ struct FixedKVLeafNode
     return this->get_size();
   }
 
-  uint32_t calc_crc32c() const final {
+  uint32_t calc_crc32c(bool checksum_offloaded_to_device) const final {
+    if (checksum_offloaded_to_device) {
+      return 0;
+    }
     return this->calc_phy_checksum();
   }
 
@@ -1300,14 +1306,14 @@ struct FixedKVLeafNode
   }
 
   void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &_bl) {
+    paddr_t base, const ceph::bufferlist &_bl, bool checksum_offloaded_to_device) {
     assert(_bl.length());
     ceph::bufferlist bl = _bl;
     bl.rebuild();
     typename node_layout_t::delta_buffer_t buffer;
     buffer.copy_in(bl.front().c_str(), bl.front().length());
     buffer.replay(*this);
-    auto crc = calc_crc32c();
+    auto crc = calc_crc32c(checksum_offloaded_to_device);
     this->set_last_committed_crc(crc);
     this->update_in_extent_chksum_field(crc);
     this->resolve_relative_addrs(base);

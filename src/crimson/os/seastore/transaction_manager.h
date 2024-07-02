@@ -887,7 +887,7 @@ private:
 	extent.maybe_set_intermediate_laddr(pref);
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
-      auto crc = ref->calc_crc32c();
+      auto crc = ref->calc_crc32c(epm->get_checksum_needed(ref->get_paddr()));
       SUBTRACET(
 	seastore_tm,
 	"got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",
@@ -953,7 +953,7 @@ private:
 	lextent.maybe_set_intermediate_laddr(pref);
       }
     ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
-      auto crc = ref->calc_crc32c();
+      auto crc = ref->calc_crc32c(epm->get_checksum_needed(ref->get_paddr()));
       SUBTRACET(
 	seastore_tm,
 	"got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",

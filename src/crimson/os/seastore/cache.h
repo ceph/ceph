@@ -517,6 +517,10 @@ public:
     return epm.get_block_size();
   }
 
+  bool get_checksum_needed(paddr_t paddr) const {
+    return epm.get_checksum_needed(paddr);
+  }
+
 // Interfaces only for tests.
 public:
   CachedExtentRef test_query_cache(paddr_t offset) {
@@ -1651,7 +1655,7 @@ private:
       extent->get_length(),
       extent->get_bptr()
     ).safe_then(
-      [extent=std::move(extent)]() mutable {
+      [extent=std::move(extent), this]() mutable {
         LOG_PREFIX(Cache::read_extent);
 	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
 	  extent->state = CachedExtent::extent_state_t::CLEAN;
@@ -1662,7 +1666,7 @@ private:
 	if (extent->is_valid()) {
 	  // crc will be checked against LBA leaf entry for logical extents,
 	  // or check against in-extent crc for physical extents.
-	  extent->last_committed_crc = extent->calc_crc32c();
+	  extent->last_committed_crc = extent->calc_crc32c(epm.get_checksum_needed(extent->get_paddr()));
 	  extent->on_clean_read();
 	}
         extent->complete_io();

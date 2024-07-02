@@ -30,7 +30,7 @@ ceph::bufferlist TestBlockPhysical::get_delta() {
 }
 
 void TestBlockPhysical::apply_delta_and_adjust_crc(
-    paddr_t, const ceph::bufferlist &bl) {
+    paddr_t, const ceph::bufferlist &bl, bool checksum_offloaded_to_device) {
   auto biter = bl.begin();
   decltype(delta) deltas;
   decode(deltas, biter);

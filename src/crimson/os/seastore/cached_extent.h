@@ -385,7 +385,7 @@ public:
    * apply_delta override for LogicalCachedExtent implementers.
    */
   virtual void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) = 0;
+    paddr_t base, const ceph::bufferlist &bl, bool checksum_offloaded_to_device) = 0;
 
   /**
    * Called on dirty CachedExtent implementation after replay.
@@ -558,7 +558,10 @@ public:
   }
 
   /// Returns crc32c of buffer
-  virtual uint32_t calc_crc32c() const {
+  virtual uint32_t calc_crc32c(bool checksum_offloaded_to_device) const {
+    if (checksum_offloaded_to_device) {
+      return 0;
+    }
     return ceph_crc32c(
       1,
       reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
@@ -1213,7 +1216,7 @@ public:
   }
 
   void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
+    paddr_t base, const ceph::bufferlist &bl, bool checksum_offloaded_to_device) final {
     ceph_assert(0 == "Should never happen for a placeholder");
   }
 
@@ -1334,9 +1337,13 @@ public:
   }
 
   void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
+    paddr_t base, const ceph::bufferlist &bl, bool checksum_offloaded_to_device) final {
     apply_delta(bl);
-    set_last_committed_crc(calc_crc32c());
+    if (!checksum_offloaded_to_device) {
+      set_last_committed_crc(calc_crc32c(checksum_offloaded_to_device));
+    } else {
+      set_last_committed_crc(0);
+    }
   }
 
   bool is_logical() const final {

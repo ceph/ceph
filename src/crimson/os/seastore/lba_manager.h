@@ -252,6 +252,8 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
+  virtual bool get_checksum_needed(CachedExtentRef extent) = 0;
+
   virtual ~LBAManager() {}
 };
 using LBAManagerRef = std::unique_ptr<LBAManager>;
