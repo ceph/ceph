@@ -9724,6 +9724,7 @@ int OSDMonitor::prepare_command_osd_new(
     if (has_lockbox) {
       ceph_assert(nullptr != svc);
       svc->do_osd_new(uuid, dmcrypt_key);
+      mon.should_backup();
     }
   }
 

@@ -96,6 +96,10 @@ enum {
   l_mon_election_call,
   l_mon_election_win,
   l_mon_election_lose,
+  l_mon_backup_started,
+  l_mon_backup_success,
+  l_mon_backup_failed,
+  l_mon_backup_duration,
   l_mon_last,
 };
 
@@ -1024,6 +1028,8 @@ private:
 
   OpTracker op_tracker;
 
+  bool mon_backup_requested;
+
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
@@ -1068,6 +1074,13 @@ private:
 		       ceph::Formatter *f,
 		       std::ostream& err,
 		       std::ostream& out);
+
+  // Notify monitor that it should create a new database backup
+  void should_backup() {
+    mon_backup_requested = true;
+  }
+  // Execute mon database backup
+  int backup();
 
 private:
   // don't allow copying
