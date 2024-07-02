@@ -768,7 +768,16 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         for track_id in pending_track_id_list:
             try:
-                link_path = self.fs.readlink(os.path.join(index_path, track_id), 4096)
+                path = os.path.join(index_path, track_id)
+                link_path = self.fs.readlink(path, 4096)
+                try:
+                    self.fs.stat(link_path)
+                except cephfs.Error as e:
+                    if e.args[0] == errno.ENOENT:
+                        self.fs.unlink(path)
+                        self._remove_snap_clone(track_id)
+                    else:
+                        log.warning(f"Unlink operation could not be processed with the exception: {e}")
             except cephfs.Error as e:
                 if e.errno != errno.ENOENT:
                     raise VolumeException(-e.args[0], e.args[1])
