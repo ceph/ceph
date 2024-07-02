@@ -225,11 +225,14 @@ class TestMirroring(CephFSTestCase):
     def check_peer_snap_in_progress(self, fs_name, fs_id,
                                     peer_spec, dir_name, snap_name):
         peer_uuid = self.get_peer_uuid(peer_spec)
-        res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
-                                         'fs', 'mirror', 'peer', 'status',
-                                         f'{fs_name}@{fs_id}', peer_uuid)
-        self.assertTrue('syncing' == res[dir_name]['state'])
-        self.assertTrue(res[dir_name]['current_syncing_snap']['name'] == snap_name)
+        with safe_while(sleep=1, tries=30, action=f'wait for status: {peer_spec}') as proceed:
+            while proceed():
+                res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
+                                                 'fs', 'mirror', 'peer', 'status',
+                                                 f'{fs_name}@{fs_id}', peer_uuid)
+                if('syncing' == res[dir_name]['state'] and \
+                   res[dir_name]['current_syncing_snap']['name'] == snap_name):
+                    break
 
     def verify_snapshot(self, dir_name, snap_name):
         snap_list = self.mount_b.ls(path=f'{dir_name}/.snap')

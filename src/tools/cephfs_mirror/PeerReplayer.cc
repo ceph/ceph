@@ -1268,6 +1268,12 @@ int PeerReplayer::do_synchronize(const std::string &dir_root, const Snapshot &cu
       break;
     }
 
+    r = pre_sync_check_and_open_handles(dir_root, current, boost::none, &fh);
+    if (r < 0) {
+      dout(5) << ": cannot proceed with sync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
     dout(20) << ": " << sync_stack.size() << " entries in stack" << dendl;
     std::string e_name;
     auto &entry = sync_stack.top();
