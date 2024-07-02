@@ -18,6 +18,7 @@
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/tracer.h"
+#include "common/mClockCommon.h"
 /**
  * The OpRequest takes in a Message* and takes over a single reference
  * to it, which it puts() when destroyed.
@@ -95,7 +96,8 @@ public:
 
   bool hitset_inserted;
   jspan_ptr osd_parent_span;
-
+  uint64_t qos_cost;
+  dmc::PhaseType qos_phase;
   template<class T>
   const T* get_req() const { return static_cast<const T*>(request); }
 

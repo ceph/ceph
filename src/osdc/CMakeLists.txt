@@ -3,9 +3,11 @@ set(osdc_files
   ObjectCacher.cc
   Objecter.cc
   error_code.cc
-  Striper.cc)
+  Striper.cc
+  QosProfileMgr.cc)
 add_library(osdc STATIC ${osdc_files})
 target_link_libraries(osdc ceph-common)
 if(WITH_EVENTTRACE)
   add_dependencies(osdc eventtrace_tp)
 endif()
+target_link_libraries(osdc dmclock)

@@ -23,6 +23,7 @@
 #include "osd/PG.h"
 #include "osd/PGPeeringEvent.h"
 #include "messages/MOSDOp.h"
+#include "common/mClockCommon.h"
 
 
 class OSD;
@@ -102,6 +103,12 @@ private:
    */
   uint32_t qos_cost = 0;
 
+  /// ReqParams - delta and rho parameters
+  dmc::ReqParams qos_req_params;
+
+  /// client_qos_params_t - The client specific res, wgt and lim parameters
+  client_qos_params_t qos_profile_params;
+
   /// True iff queued via mclock proper, not the high/immediate queues
   bool was_queued_via_mclock() const {
     return qos_cost > 0;
@@ -120,7 +127,17 @@ public:
       priority(priority),
       start_time(start_time),
       owner(owner),
-      map_epoch(e) {}
+      map_epoch(e)
+  {
+    if (auto op = maybe_get_op()) {
+      auto req = (*op)->get_req();
+      if (req->get_type() == CEPH_MSG_OSD_OP) {
+        const MOSDOp *m = static_cast<const MOSDOp*>(req);
+        qos_req_params = m->get_qos_req_params();
+        qos_profile_params = m->get_qos_profile_params();
+      }
+    }
+  }
   OpSchedulerItem(OpSchedulerItem &&) = default;
   OpSchedulerItem(const OpSchedulerItem &) = delete;
   OpSchedulerItem &operator=(OpSchedulerItem &&) = default;
@@ -148,6 +165,10 @@ public:
   utime_t get_start_time() const { return start_time; }
   uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
+  dmc::ReqParams get_qos_req_params() const { return qos_req_params; }
+  const client_qos_params_t& get_qos_profile_params() const {
+    return qos_profile_params;
+  }
 
   bool is_peering() const {
     return qitem->is_peering();
@@ -223,10 +244,12 @@ public:
 };
 
 class PGOpItem : public PGOpQueueable {
+  utime_t time_queued;
   OpRequestRef op;
 
 public:
-  PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
+  PGOpItem(spg_t pg, OpRequestRef op)
+    : PGOpQueueable(pg), time_queued(ceph_clock_now()), op(std::move(op)) {}
 
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";

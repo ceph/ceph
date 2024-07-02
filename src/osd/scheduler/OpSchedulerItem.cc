@@ -30,6 +30,10 @@ void PGOpItem::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
+  if (op_scheduler_class::client == get_scheduler_class()) {
+    auto latency = time_queued - ceph_clock_now();
+    osd->logger->tinc(l_osd_op_queue_lat, latency);
+  }
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }

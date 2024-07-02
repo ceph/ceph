@@ -57,6 +57,7 @@ mClockScheduler::mClockScheduler(CephContext *cct,
   set_config_defaults_from_profile();
   client_registry.update_from_config(
     cct->_conf, osd_bandwidth_capacity_per_shard);
+  client_registry.init_clear_timer(cct);
 }
 
 /* ClientRegistry holds the dmclock::ClientInfo configuration parameters
@@ -136,15 +137,18 @@ void mClockScheduler::ClientRegistry::update_from_config(
 const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_external_client(
   const client_profile_id_t &client) const
 {
+  std::lock_guard rl(reg_lock);
   auto ret = external_client_infos.find(client);
-  if (ret == external_client_infos.end())
+  if (ret == external_client_infos.end()) {
     return &default_external_client_info;
-  else
+  } else {
     return &(ret->second);
+  }
 }
 
 const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_info(
-  const scheduler_id_t &id) const {
+  const scheduler_id_t &id) const
+{
   switch (id.class_id) {
   case op_scheduler_class::immediate:
     ceph_assert(0 == "Cannot schedule immediate");
@@ -155,6 +159,222 @@ const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_info(
     ceph_assert(static_cast<size_t>(id.class_id) < internal_client_infos.size());
     return &internal_client_infos[static_cast<size_t>(id.class_id)];
   }
+}
+
+void mClockScheduler::ClientRegistry::set_info(
+  const ConfigProxy &conf,
+  const bool is_rotational,
+  const scheduler_id_t &id,
+  const client_qos_params_t &qos_params,
+  const double capacity_per_shard)
+{
+  std::lock_guard rl(reg_lock);
+  if (op_scheduler_class::client == id.class_id) {
+    auto osd_iops_capacity = [&]() {
+      if (is_rotational) {
+        return std::max<double>(1.0,
+          conf.get_val<double>("osd_mclock_max_capacity_iops_hdd"));
+      } else {
+        return std::max<double>(1.0,
+          conf.get_val<double>("osd_mclock_max_capacity_iops_ssd"));
+      }
+    };
+
+    auto get_res = [&]() {
+      if (qos_params.reservation == 0) {
+        return default_min;
+      }
+      /**
+       * Cap the maximum reservation requested by a client to the current
+       * osd_mclock_scheduler_client_res specification. This is to prevent
+       * clients from overprovisioning the OSD's bandwidth and deny
+       * reservations requested by other services on the OSD.
+       */
+      double max_allowed_res = conf.get_val<double>(
+        "osd_mclock_scheduler_client_res");
+      double res_req = std::min<double>(
+        max_allowed_res, qos_params.reservation / osd_iops_capacity());
+      // Return reservation in terms of bytes/sec
+      return res_req * capacity_per_shard;
+    };
+
+    auto get_lim = [&]() {
+      if (qos_params.limit == 0) {
+        return default_max;
+      }
+      double lim_req = std::min<double>(
+        1.0, qos_params.limit / osd_iops_capacity());
+      // Return limit in terms of bytes/sec
+      return lim_req * capacity_per_shard;
+    };
+
+    double res;
+    double lim;
+    double wgt;
+    bool client_info_changed = false;
+    auto ci = external_client_infos_tracker.find(id.client_profile_id);
+    if (ci == external_client_infos_tracker.end()) {
+      res = get_res();
+      lim = get_lim();
+      wgt = double(qos_params.weight);
+      client_info_changed = true;
+    } else {
+      enum { RES, WGT, LIM };
+      // Return changed client info parameter
+      auto get_ci_param = [&](int type, uint64_t val) -> std::optional<double> {
+        switch (type) {
+          case RES:
+            if (val != qos_params.reservation) {
+              return get_res();
+            }
+            break;
+          case LIM:
+            if (val != qos_params.limit) {
+              return get_lim();
+            }
+            break;
+          case WGT:
+            if (val != qos_params.weight) {
+              return double(qos_params.weight);
+            }
+            break;
+          default:
+            ceph_assert(0 == "Unknown client info type");
+        }
+        return std::nullopt;
+      };
+
+      auto _res = get_ci_param(RES, ci->second.res_iops);
+      auto _lim = get_ci_param(LIM, ci->second.lim_iops);
+      auto _wgt = get_ci_param(WGT, ci->second.wgt);
+      client_info_changed =
+        (_res.has_value() || _lim.has_value() || _wgt.has_value());
+
+      res = _res.value_or(ci->second.res_bw);
+      lim = _lim.value_or(ci->second.lim_bw);
+      wgt = _wgt.value_or(ci->second.wgt);
+    }
+
+    // Add/update QoS profile params for the client in the client infos map
+    if (client_info_changed) {
+      auto r =
+        external_client_infos.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(id.client_profile_id),
+          std::forward_as_tuple(res, wgt, lim));
+      if (!r.second) {
+        r.first->second.update(res, wgt, lim);
+      }
+    }
+
+    // Set/update tick version for the client in the client infos tracker map
+    set_client_infos_tracker(id.client_profile_id, qos_params, res, lim, wgt);
+  }
+}
+
+void mClockScheduler::ClientRegistry::clear_info(const scheduler_id_t &id)
+{
+  std::lock_guard rl(reg_lock);
+  auto ret = external_client_infos.find(id.client_profile_id);
+  if (ret != external_client_infos.end()) {
+    external_client_infos.erase(ret);
+  }
+}
+
+void mClockScheduler::ClientRegistry::set_client_infos_tracker(
+  const client_profile_id_t &id,
+  const client_qos_params_t &qos_params,
+  const double res_bw,
+  const double lim_bw,
+  const double wgt)
+{
+  ceph_assert(ceph_mutex_is_locked(reg_lock));
+  ++tick;
+  auto r =
+    external_client_infos_tracker.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(id),
+      std::forward_as_tuple(
+        tick,
+        qos_params.reservation,
+        qos_params.limit,
+        res_bw,
+        lim_bw,
+        wgt));
+  if (!r.second) {
+    r.first->second.update(tick, qos_params.reservation, qos_params.limit,
+      res_bw, lim_bw, wgt);
+  }
+}
+
+/*
+ * This is being called regularly by the clear_timer thread. Every
+ * time it's called it notes the time and version counter (mark
+ * point) in a deque. It also looks at the deque to find the most
+ * recent mark point that is older than clear_age. It then walks
+ * the map and delete all external client entries that were last
+ * used before that mark point.
+ */
+void mClockScheduler::ClientRegistry::do_clean()
+{
+  ceph_assert(ceph_mutex_is_locked(reg_lock));
+  TimePoint now = std::chrono::steady_clock::now();
+  clear_mark_points.emplace_back(MarkPoint(now, tick));
+
+  counter_t clear_point = 0;
+  auto point = clear_mark_points.front();
+  while (point.first <= now - ceph::make_timespan(clear_age)) {
+    clear_point = point.second;
+    clear_mark_points.pop_front();
+    point = clear_mark_points.front();
+  }
+
+  counter_t cleared_num = 0;
+  if (clear_point > 0) {
+    for (auto i = external_client_infos_tracker.begin();
+         i != external_client_infos_tracker.end();
+         /* empty */) {
+      auto i2 = i++;
+      if (cleared_num < clear_max &&
+          i2->second.tick_count <= clear_point) {
+        // Clear the entry from both the external client infos
+        // and external client infos tracker map.
+        auto ci = external_client_infos.find(i2->first);
+        if (ci != external_client_infos.end()) {
+          external_client_infos.erase(ci);
+        }
+        external_client_infos_tracker.erase(i2);
+        cleared_num++;
+      }
+    }
+  }
+  clear_timer->add_event_after(clear_period, new Clear_Registry(this));
+}
+
+void mClockScheduler::ClientRegistry::dump(ceph::Formatter *f) const
+{
+  // Display external client registry info
+  std::lock_guard rl(reg_lock);
+  f->open_object_section("client_registry");
+  f->dump_unsigned("size", external_client_infos.size());
+  f->dump_float("clear_age", clear_age);
+  f->dump_float("clear_period", clear_period);
+  f->open_array_section("client_infos_top");
+  // Dump the top 5 external client info entries
+  for (int client_count = 5; auto const& [key, val] : external_client_infos) {
+    f->open_object_section("client");
+    f->dump_unsigned("client_id", key.client_id);
+    f->dump_unsigned("profile_id", key.profile_id);
+    f->dump_float("res", val.reservation);
+    f->dump_float("wgt", val.weight);
+    f->dump_float("lim", val.limit);
+    f->close_section();
+    if (!client_count--) {
+      break;
+    }
+  }
+  f->close_section();
+  f->close_section();
 }
 
 void mClockScheduler::set_osd_capacity_params_from_config()
@@ -381,6 +601,9 @@ void mClockScheduler::dump(ceph::Formatter &f) const
     f.dump_int("queue_size", it->second.size());
   }
   f.close_section();
+
+  // Dump client registry info
+  client_registry.dump(&f);
 }
 
 void mClockScheduler::enqueue(OpSchedulerItem&& item)
@@ -401,10 +624,27 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
              << " scaled_cost: " << cost
              << dendl;
 
-    // Add item to scheduler queue
+    /**
+     * If this is a client Op with a non-zero qos_profile_id, it indicates that
+     * a valid QoS profile and therefore QoS based on the profile and request
+     * params must be provided to the client. Therefore, an entry is either
+     * created or updated in the external client registry.
+     */
+    const client_qos_params_t& qos_profile_params =
+      item.get_qos_profile_params();
+    dmc::ReqParams qos_req_params = item.get_qos_req_params();
+    if (qos_profile_params.qos_profile_id != 0) {
+      client_registry.set_info(cct->_conf, is_rotational, id,
+        qos_profile_params, osd_bandwidth_capacity_per_shard);
+      dout(20) << __func__ << " qos_profile_params: "
+               << qos_profile_params << dendl;
+      dout(20) << __func__ << " qos_req_params: "
+               << qos_req_params << dendl;
+    }
     scheduler.add_request(
       std::move(item),
       id,
+      qos_req_params, // delta & rho = 0 if qos_profile_id == 0
       cost);
   }
 
@@ -474,6 +714,16 @@ WorkItem mClockScheduler::dequeue()
       ceph_assert(result.is_retn());
 
       auto &retn = result.get_retn();
+      std::optional<OpRequestRef> _op = retn.request->maybe_get_op();
+      if (_op.has_value()) {
+        auto req = (*_op)->get_req();
+        if (req->get_type() == CEPH_MSG_OSD_OP) {
+          (*_op)->qos_phase = retn.phase; // 'reservation' or 'priority'
+          (*_op)->qos_cost = retn.cost; // cost in terms of Bytes
+          dout(20) << __func__ << " qos_phase: " << (*_op)->qos_phase
+                   << " qos_cost: " << (*_op)->qos_cost << dendl;
+        }
+      }
       return std::move(*retn.request);
     }
   }
@@ -594,6 +844,7 @@ void mClockScheduler::handle_conf_change(
 mClockScheduler::~mClockScheduler()
 {
   cct->_conf.remove_observer(this);
+  client_registry.shutdown_clear_timer();
 }
 
 }

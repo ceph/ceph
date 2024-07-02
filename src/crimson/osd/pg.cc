@@ -21,6 +21,8 @@
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 
+#include "common/mClockCommon.h"
+
 #include "osd/OSDMap.h"
 #include "osd/osd_types_fmt.h"
 
@@ -1188,7 +1190,9 @@ PG::do_osd_ops(
                                              result,
                                              get_osdmap_epoch(),
                                              0,
-                                             false);
+                                             false,
+                                             1,
+                                             dmc::PhaseType::reservation);
       reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
       logger().debug(
         "do_osd_ops: {} - object {} sending reply",
@@ -1219,7 +1223,8 @@ PG::log_reply(
   const std::error_code& e)
 {
   auto reply = crimson::make_message<MOSDOpReply>(
-    m.get(), -e.value(), get_osdmap_epoch(), 0, false);
+    m.get(), -e.value(), get_osdmap_epoch(), 0, false,
+    1, dmc::PhaseType::reservation);
   if (m->ops.empty() ? 0 :
     m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
       reply->set_result(0);
@@ -1293,14 +1298,15 @@ PG::interruptible_future<MURef<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
   }).then_interruptible([m, this, ox = std::move(ox)] {
     auto reply = crimson::make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
                                            CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK,
-                                           false);
+                                           false, 1, dmc::PhaseType::reservation);
     reply->claim_op_out_data(m->ops);
     reply->set_reply_versions(peering_state.get_info().last_update,
       peering_state.get_info().last_user_version);
     return seastar::make_ready_future<MURef<MOSDOpReply>>(std::move(reply));
   }).handle_exception_type_interruptible([=, this](const crimson::osd::error& e) {
     auto reply = crimson::make_message<MOSDOpReply>(
-      m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
+      m.get(), -e.code().value(), get_osdmap_epoch(), 0, false,
+      1, dmc::PhaseType::reservation);
     reply->set_enoent_reply_versions(peering_state.get_info().last_update,
 				     peering_state.get_info().last_user_version);
     return seastar::make_ready_future<MURef<MOSDOpReply>>(std::move(reply));

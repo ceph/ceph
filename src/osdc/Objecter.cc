@@ -3243,6 +3243,14 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
      m->otel_trace = jspan_context(*op->otel_trace);
   }
 
+  if (op->qos_profile != nullptr &&
+      op->qos_profile->qos_params().qos_profile_id != 0) {
+    dmc::ReqParams rp =
+      op->qos_profile->service_tracker().get_req_params(op->target.osd);
+    m->set_qos_req_params(rp);
+    m->set_qos_profile_params(op->qos_profile->qos_params());
+  }
+
   logger->inc(l_osdc_op_send);
   ssize_t sum = 0;
   for (unsigned i = 0; i < m->ops.size(); i++) {
@@ -3618,6 +3626,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   logger->inc(l_osdc_op_reply);
   logger->tinc(l_osdc_op_latency, ceph::coarse_mono_time::clock::now() - op->stamp);
   logger->set(l_osdc_op_inflight, num_in_flight);
+
+
+  if (op->qos_profile != nullptr &&
+      op->qos_profile->qos_params().qos_profile_id != 0) {
+    op->qos_profile->service_tracker().track_resp(op->target.osd,
+                                                  m->get_qos_resp(),
+                                                  m->get_qos_cost());
+  }
 
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);

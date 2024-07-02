@@ -1622,7 +1622,8 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
 
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags,
-				       !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+				       !m->has_flag(CEPH_OSD_FLAG_RETURNVEC),
+                                       op->qos_cost, op->qos_phase);
   reply->set_reply_versions(v, uv);
   reply->set_op_returns(op_returns);
   m->get_connection()->send_message(reply);
@@ -10954,6 +10955,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     }
 
     work_item = sdata->scheduler->dequeue();
+    osd->logger->dec(l_osd_op_queue_size);
     if (osd->is_stopping()) {
       sdata->shard_lock.unlock();
       for (auto c : oncommits) {
@@ -11256,6 +11258,7 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
       sdata->sdata_cond.notify_one();
     }
   }
+  osd->logger->inc(l_osd_op_queue_size);
 }
 
 void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)

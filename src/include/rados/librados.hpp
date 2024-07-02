@@ -525,6 +525,7 @@ inline namespace v14_2_0 {
 		      uint64_t tgt_version, int flag = 0);
     void tier_promote();
     void unset_manifest();
+    void set_qos_profile(rados_qos_profile_t qos_profile);
 
     friend class IoCtx;
   };
@@ -1335,6 +1336,8 @@ inline namespace v14_2_0 {
     void set_namespace(const std::string& nspace);
     std::string get_namespace() const;
 
+    void set_qos_profile(rados_qos_profile_t qos_profile);
+
     int64_t get_id();
 
     // deprecated versions
@@ -1540,6 +1543,13 @@ inline namespace v14_2_0 {
                       uint32_t expire_seconds);
 
     std::string get_addrs() const;
+
+    /// QoS calls
+    rados_qos_profile_t qos_profile_create(uint64_t reservation,
+                                           uint64_t weight,
+                                           uint64_t limit);
+    int qos_profile_release(rados_qos_profile_t qos_profile);
+    uint64_t qos_profile_get_id(rados_qos_profile_t qos_profile);
 
     /*
      * pool aio
