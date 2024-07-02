@@ -130,7 +130,7 @@ struct FixedKVNode : ChildableCachedExtent {
       children[offset] = child;
       set_child_ptracker(child);
     } else {
-      // this can only happen when reserving lba spaces
+      // this can happen when reserving lba spaces and cloning mappings
       ceph_assert(is_leaf_and_has_children());
       // this is to avoid mistakenly copying pointers from
       // copy sources when committing this lba node, because
