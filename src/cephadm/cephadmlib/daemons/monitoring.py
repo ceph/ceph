@@ -260,8 +260,11 @@ class Monitoring(ContainerDaemonForm):
                 retention_size = config.get(
                     'retention_size', '0'
                 )  # default to disabled
+                enable_admin_api = config.get('enable_admin_api', False)
                 r += [f'--storage.tsdb.retention.time={retention_time}']
                 r += [f'--storage.tsdb.retention.size={retention_size}']
+                if enable_admin_api:
+                    r += ['--web.enable-admin-api']
                 scheme = 'http'
                 host = get_fqdn()
                 # in case host is not an fqdn then we use the IP to
