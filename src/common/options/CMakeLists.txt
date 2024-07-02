@@ -1,6 +1,8 @@
 set(common_options_srcs build_options.cc)
-set(legacy_options_headers)
 set(options_yamls)
+
+# interface target that depends on all of the generated headers
+add_library(legacy-option-headers INTERFACE)
 
 # to mimic the behavior of file(CONFIGURE ...)
 file(GENERATE OUTPUT configure_file.cmake
@@ -41,8 +43,9 @@ function(add_options name)
       DEPENDS ${yaml_file})
   list(APPEND common_options_srcs ${cc_file})
   set(common_options_srcs ${common_options_srcs} PARENT_SCOPE)
-  list(APPEND legacy_options_headers ${h_file})
-  set(legacy_options_headers ${legacy_options_headers} PARENT_SCOPE)
+  # workaround for cmake < 3.20 where the GENERATED property doesn't propagate through target_sources()
+  # https://gitlab.kitware.com/cmake/cmake/-/issues/18399
+  add_dependencies(legacy-option-headers INTERFACE ${h_file})
 endfunction()
 
 set(osd_erasure_code_plugins "jerasure" "lrc")
@@ -104,10 +107,6 @@ add_options(rgw)
 
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
-add_library(legacy-option-headers INTERFACE)
-target_sources(legacy-option-headers
-  PRIVATE
-    ${legacy_options_headers})
 
 include(AddCephTest)
 add_ceph_test(validate-options
