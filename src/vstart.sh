@@ -1220,11 +1220,6 @@ EOF
             prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
                 2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log
 
-            local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
-            cat > $key_fn<<EOF
-[osd.$osd]
-        key = $OSD_SECRET
-EOF
         fi
         echo start osd.$osd
         local osd_pid

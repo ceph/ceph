@@ -216,6 +216,7 @@ int KernelDevice::open(const string& p)
     if (r < 0) {
       derr << __func__ << " failed to lock " << path << ": " << cpp_strerror(r)
 	   << dendl;
+      r = -EBUSY;
       goto out_fail;
     }
   }

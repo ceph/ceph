@@ -6009,16 +6009,15 @@ int BlueStore::_set_cache_sizes()
 
 int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
+  dout(5) << __func__ << " key=" << key << " value=" << value << dendl;
   bluestore_bdev_label_t label;
   string p = path + "/block";
   int r = _read_bdev_label(cct, p, &label);
-  if (r < 0) {
-    return ObjectStore::write_meta(key, value);
-  }
+  ceph_assert(r == 0);
   label.meta[key] = value;
   r = _write_bdev_label(cct, p, label);
   ceph_assert(r == 0);
-  return ObjectStore::write_meta(key, value);
+  return 0;
 }
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
@@ -6026,12 +6025,12 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
   bluestore_bdev_label_t label;
   string p = path + "/block";
   int r = _read_bdev_label(cct, p, &label);
-  if (r < 0) {
-    return ObjectStore::read_meta(key, value);
+  if (r != 0) {
+    return r;
   }
   auto i = label.meta.find(key);
   if (i == label.meta.end()) {
-    return ObjectStore::read_meta(key, value);
+    return -ENOENT;
   }
   *value = i->second;
   return 0;
@@ -6651,11 +6650,9 @@ int BlueStore::_open_bdev(bool create)
     bdev->try_discard(whole_device, false);
   }
 
-  if (bdev->supported_bdev_label()) {
-    r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
-    if (r < 0)
-      goto fail_close;
-  }
+  r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
+  if (r < 0)
+    goto fail_close;
 
   // initialize global block parameters
   block_size = bdev->get_block_size();
@@ -6985,84 +6982,15 @@ void BlueStore::_close_alloc()
   alloc = nullptr;
 }
 
-int BlueStore::_open_fsid(bool create)
-{
-  ceph_assert(fsid_fd < 0);
-  int flags = O_RDWR|O_CLOEXEC;
-  if (create)
-    flags |= O_CREAT;
-  fsid_fd = ::openat(path_fd, "fsid", flags, 0644);
-  if (fsid_fd < 0) {
-    int err = -errno;
-    derr << __func__ << " " << cpp_strerror(err) << dendl;
-    return err;
-  }
-  return 0;
-}
-
 int BlueStore::_read_fsid(uuid_d *uuid)
 {
-  char fsid_str[40];
-  memset(fsid_str, 0, sizeof(fsid_str));
-  int ret = safe_read(fsid_fd, fsid_str, sizeof(fsid_str));
-  if (ret < 0) {
-    derr << __func__ << " failed: " << cpp_strerror(ret) << dendl;
-    return ret;
-  }
-  if (ret > 36)
-    fsid_str[36] = 0;
-  else
-    fsid_str[ret] = 0;
-  if (!uuid->parse(fsid_str)) {
-    derr << __func__ << " unparsable uuid " << fsid_str << dendl;
-    return -EINVAL;
-  }
-  return 0;
-}
-
-int BlueStore::_write_fsid()
-{
-  int r = ::ftruncate(fsid_fd, 0);
-  if (r < 0) {
-    r = -errno;
-    derr << __func__ << " fsid truncate failed: " << cpp_strerror(r) << dendl;
+  bluestore_bdev_label_t label;
+  string p = path + "/block";
+  int r = _read_bdev_label(cct, p, &label);
+  if (r != 0) {
     return r;
   }
-  string str = stringify(fsid) + "\n";
-  r = safe_write(fsid_fd, str.c_str(), str.length());
-  if (r < 0) {
-    derr << __func__ << " fsid write failed: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  r = ::fsync(fsid_fd);
-  if (r < 0) {
-    r = -errno;
-    derr << __func__ << " fsid fsync failed: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
-}
-
-void BlueStore::_close_fsid()
-{
-  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
-  fsid_fd = -1;
-}
-
-int BlueStore::_lock_fsid()
-{
-  struct flock l;
-  memset(&l, 0, sizeof(l));
-  l.l_type = F_WRLCK;
-  l.l_whence = SEEK_SET;
-  int r = ::fcntl(fsid_fd, F_SETLK, &l);
-  if (r < 0) {
-    int err = errno;
-    derr << __func__ << " failed to lock " << path << "/fsid"
-	 << " (is another ceph-osd still running?)"
-	 << cpp_strerror(err) << dendl;
-    return -err;
-  }
+  *uuid = label.osd_uuid;
   return 0;
 }
 
@@ -7076,22 +7004,14 @@ bool BlueStore::is_rotational()
   int r = _open_path();
   if (r < 0)
     goto out;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
   r = _read_fsid(&fsid);
   if (r < 0)
-    goto out_fsid;
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
+    goto out_path;
   r = _open_bdev(false);
   if (r < 0)
-    goto out_fsid;
+    goto out_path;
   rotational = bdev->is_rotational();
   _close_bdev();
- out_fsid:
-  _close_fsid();
  out_path:
   _close_path();
   out:
@@ -7146,14 +7066,11 @@ bool BlueStore::test_mount_in_use()
   int r = _open_path();
   if (r < 0)
     return false;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
-  r = _lock_fsid();
-  if (r < 0)
-    ret = true; // if we can't lock, it is in use
-  _close_fsid();
- out_path:
+  r = _open_bdev(false);
+  if (r == -EBUSY) {
+    ret = true;
+  }
+  _close_bdev();
   _close_path();
   return ret;
 }
@@ -7177,17 +7094,15 @@ int BlueStore::_minimal_open_bluefs(bool create)
       goto free_bluefs;
     }
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
-      r = _check_or_set_bdev_label(
-	bfn,
-	bluefs->get_block_device_size(BlueFS::BDEV_DB),
-        "bluefs db", create);
-      if (r < 0) {
-        derr << __func__
-	      << " check block device(" << bfn << ") label returned: "
-              << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
+    r = _check_or_set_bdev_label(
+      bfn,
+      bluefs->get_block_device_size(BlueFS::BDEV_DB),
+      "bluefs db", create);
+    if (r < 0) {
+      derr << __func__
+           << " check block device(" << bfn << ") label returned: "
+           << cpp_strerror(r) << dendl;
+      goto free_bluefs;
     }
     bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
     bluefs_layout.dedicated_db = true;
@@ -7224,16 +7139,14 @@ int BlueStore::_minimal_open_bluefs(bool create)
       goto free_bluefs;
     }
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
-      r = _check_or_set_bdev_label(
-	bfn,
-	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
-        "bluefs wal", create);
-      if (r < 0) {
-        derr << __func__ << " check block device(" << bfn
-              << ") label returned: " << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
+    r = _check_or_set_bdev_label(
+      bfn,
+      bluefs->get_block_device_size(BlueFS::BDEV_WAL),
+      "bluefs wal", create);
+    if (r < 0) {
+      derr << __func__ << " check block device(" << bfn
+           << ") label returned: " << cpp_strerror(r) << dendl;
+      goto free_bluefs;
     }
 
     bluefs_layout.dedicated_wal = true;
@@ -7383,21 +7296,14 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   int r = _open_path();
   if (r < 0)
     return r;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
 
   r = _read_fsid(&fsid);
   if (r < 0)
-    goto out_fsid;
-
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
+    goto out_path;
 
   r = _open_bdev(false);
   if (r < 0)
-    goto out_fsid;
+    goto out_path;
 
   // GBH: can probably skip open_db step in REad-Only mode when operating in NULL-FM mode
   // (might need to open if failed to restore from file)
@@ -7469,8 +7375,6 @@ out_fm:
   _close_db();
  out_bdev:
   _close_bdev();
- out_fsid:
-  _close_fsid();
  out_path:
   _close_path();
   return r;
@@ -7492,7 +7396,6 @@ void BlueStore::_close_around_db()
   _close_fm();
   _close_alloc();
   _close_bdev();
-  _close_fsid();
   _close_path();
 }
 
@@ -8083,75 +7986,44 @@ int BlueStore::mkfs()
       return r; // idempotent
     }
   }
-
-  {
-    string type;
-    r = read_meta("type", &type);
-    if (r == 0) {
-      if (type != "bluestore") {
-	derr << __func__ << " expected bluestore, but type is " << type << dendl;
-	return -EIO;
-      }
-    } else {
-      r = write_meta("type", "bluestore");
-      if (r < 0)
-        return r;
-    }
-  }
-
   r = _open_path();
   if (r < 0)
     return r;
-
-  r = _open_fsid(true);
-  if (r < 0)
-    goto out_path_fd;
-
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_close_fsid;
-
-  r = _read_fsid(&old_fsid);
-  if (r < 0 || old_fsid.is_zero()) {
-    if (fsid.is_zero()) {
-      fsid.generate_random();
-      dout(1) << __func__ << " generated fsid " << fsid << dendl;
-    } else {
-      dout(1) << __func__ << " using provided fsid " << fsid << dendl;
-    }
-    // we'll write it later.
-  } else {
-    if (!fsid.is_zero() && fsid != old_fsid) {
-      derr << __func__ << " on-disk fsid " << old_fsid
-	   << " != provided " << fsid << dendl;
-      r = -EINVAL;
-      goto out_close_fsid;
-    }
-    fsid = old_fsid;
-  }
 
   r = _setup_block_symlink_or_file("block", cct->_conf->bluestore_block_path,
 				   cct->_conf->bluestore_block_size,
 				   cct->_conf->bluestore_block_create);
   if (r < 0)
-    goto out_close_fsid;
+    goto out_path_fd;
   if (cct->_conf->bluestore_bluefs) {
     r = _setup_block_symlink_or_file("block.wal", cct->_conf->bluestore_block_wal_path,
 	cct->_conf->bluestore_block_wal_size,
 	cct->_conf->bluestore_block_wal_create);
     if (r < 0)
-      goto out_close_fsid;
+      goto out_path_fd;
     r = _setup_block_symlink_or_file("block.db", cct->_conf->bluestore_block_db_path,
 	cct->_conf->bluestore_block_db_size,
 	cct->_conf->bluestore_block_db_create);
     if (r < 0)
-      goto out_close_fsid;
+      goto out_path_fd;
   }
-
+  // _open_bdev creates superlabel block and sets fsid,
+  // so prepare fsid value earlier
+  if (fsid.is_zero()) {
+    fsid.generate_random();
+    dout(1) << __func__ << " generated fsid " << fsid << dendl;
+  } else {
+    dout(1) << __func__ << " using provided fsid " << fsid << dendl;
+  }
   r = _open_bdev(true);
   if (r < 0)
-    goto out_close_fsid;
+    goto out_path_fd;
 
+  {
+    r = write_meta("type", "bluestore");
+    if (r < 0)
+      return r;
+  }
   freelist_type = "bitmap";
   dout(10) << " freelist_type " << freelist_type << dendl;
 
@@ -8253,14 +8125,6 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fm;
 
-  if (fsid != old_fsid) {
-    r = _write_fsid();
-    if (r < 0) {
-      derr << __func__ << " error writing fsid: " << cpp_strerror(r) << dendl;
-      goto out_close_fm;
-    }
-  }
-
  out_close_fm:
   _close_fm();
  out_close_db:
@@ -8269,8 +8133,6 @@ int BlueStore::mkfs()
   _close_alloc();
  out_close_bdev:
   _close_bdev();
- out_close_fsid:
-  _close_fsid();
  out_path_fd:
   _close_path();
 
@@ -8327,14 +8189,12 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
-      r = _check_or_set_bdev_label(
-	p,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
-        "bluefs wal",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      p,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+      "bluefs wal",
+      true);
+    ceph_assert(r == 0);
 
     bluefs_layout.dedicated_wal = true;
   } else if (id == BlueFS::BDEV_NEWDB) {
@@ -8348,14 +8208,12 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
-      r = _check_or_set_bdev_label(
-	p,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
-        "bluefs db",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      p,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+      "bluefs db",
+      true);
+    ceph_assert(r == 0);
     bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
     bluefs_layout.dedicated_db = true;
   }
@@ -8477,14 +8335,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
-      r = _check_or_set_bdev_label(
-	dev_path,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
-        "bluefs wal",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      dev_path,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+      "bluefs wal",
+      true);
+    ceph_assert(r == 0);
   } else if (id == BlueFS::BDEV_NEWDB) {
     target_name = "block.db";
     target_size = cct->_conf->bluestore_block_db_size;
@@ -8495,14 +8351,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
-    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
-      r = _check_or_set_bdev_label(
-	dev_path,
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
-        "bluefs db",
-	true);
-      ceph_assert(r == 0);
-    }
+    r = _check_or_set_bdev_label(
+      dev_path,
+      bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+      "bluefs db",
+      true);
+    ceph_assert(r == 0);
   }
 
   bluefs->umount();
@@ -8600,12 +8454,10 @@ int BlueStore::expand_devices(ostream& out)
 	    <<": can't find device path " << dendl;
       continue;
     }
-    if (bluefs->bdev_support_label(devid)) {
-      if (_set_bdev_label_size(p, size) >= 0) {
-        out << devid
+    if (_set_bdev_label_size(p, size) >= 0) {
+      out << devid
           << " : size label updated to " << size
           << std::endl;
-      }
     }
   }
   uint64_t size0 = fm->get_size();
@@ -8615,12 +8467,10 @@ int BlueStore::expand_devices(ostream& out)
       << " : expanding " << " from 0x" << std::hex
       << size0 << " to 0x" << size << std::dec << std::endl;
     _write_out_fm_meta(size);
-    if (bdev->supported_bdev_label()) {
-      if (_set_bdev_label_size(path, size) >= 0) {
-        out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
-      }
+    if (_set_bdev_label_size(path, size) >= 0) {
+      out << bluefs_layout.shared_bdev
+        << " : size label updated to " << size
+        << std::endl;
     }
     _close_db_and_around();
 
@@ -8727,21 +8577,14 @@ int BlueStore::_mount_readonly()
   int r = _open_path();
   if (r < 0)
     return r;
-  r = _open_fsid(false);
-  if (r < 0)
-    goto out_path;
 
   r = _read_fsid(&fsid);
   if (r < 0)
-    goto out_fsid;
-
-  r = _lock_fsid();
-  if (r < 0)
-    goto out_fsid;
+    goto out_path;
 
   r = _open_bdev(false);
   if (r < 0)
-    goto out_fsid;
+    goto out_path;
 
   r = _open_db(false, false, true);
   if (r < 0)
@@ -8757,8 +8600,6 @@ out_db:
   _close_db();
 out_bdev:
   _close_bdev();
-  out_fsid:
-  _close_fsid();
 out_path:
   _close_path();
   return r;
@@ -8794,7 +8635,6 @@ int BlueStore::_umount_readonly()
     _close_bluefs();
   }
   _close_bdev();
-  _close_fsid();
   _close_path();
   return 0;
 }
@@ -11421,16 +11261,7 @@ int BlueStore::get_devices(set<string> *ls)
   auto close_path = make_scope_guard([&] {
     _close_path();
   });
-  if (int r = _open_fsid(false); r < 0) {
-    return r;
-  }
-  auto close_fsid = make_scope_guard([&] {
-    _close_fsid();
-  });
   if (int r = _read_fsid(&fsid); r < 0) {
-    return r;
-  }
-  if (int r = _lock_fsid(); r < 0) {
     return r;
   }
   if (int r = _open_bdev(false); r < 0) {
