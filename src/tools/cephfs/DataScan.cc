@@ -1281,7 +1281,7 @@ int DataScan::scan_links()
 
     for (auto& q : p.second) {
       // in the middle of dir fragmentation?
-      if (newest.dirino == q.dirino && newest.name == q.name) {
+      if (newest.dirino == q.dirino && newest.name == q.name && newest.frag == q.frag) {
 	snaps.insert(make_move_iterator(begin(q.snaps)),
 		     make_move_iterator(end(q.snaps)));
 	continue;
@@ -1358,7 +1358,7 @@ int DataScan::scan_links()
       derr << "Unexpected error reading dentry "
 	   << p.second.dirfrag() << "/" << p.second.name
 	   << ": " << cpp_strerror(r) << dendl;
-      return r;
+      continue;
     }
 
     if (inode.inode->ino != p.first || inode.inode->version != p.second.version)
@@ -1384,7 +1384,7 @@ int DataScan::scan_links()
       derr << "Unexpected error reading dentry "
 	<< p.second.dirfrag() << "/" << p.second.name
 	<< ": " << cpp_strerror(r) << dendl;
-      return r;
+      continue;
     }
 
     if (first != CEPH_NOSNAP) {
