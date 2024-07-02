@@ -79,3 +79,27 @@ TEST(formatter, utime)
   EXPECT_EQ(input.sec(), output.sec());
   EXPECT_EQ(input.nsec(), output.nsec());
 }
+
+TEST(formatter, dump_inf_or_nan)
+{
+  JSONFormatter formatter;
+  formatter.open_object_section("inf_and_nan");
+  double inf = std::numeric_limits<double>::infinity();
+  formatter.dump_float("positive_infinity", inf);
+  formatter.dump_float("negative_infinity", -inf);
+  formatter.dump_float("nan_val", std::numeric_limits<double>::quiet_NaN());
+  formatter.dump_float("nan_val_alt", std::nan(""));
+  formatter.dump_float("double_max", std::numeric_limits<double>::max());
+  formatter.dump_float("double_min", std::numeric_limits<double>::min());
+  formatter.close_section();
+  bufferlist bl;
+  formatter.flush(bl);
+  JSONParser parser;
+  parser.parse(bl.c_str(), bl.length());
+  cout << std::string(bl.c_str(), bl.length()) << endl;
+  EXPECT_TRUE(parser.parse(bl.c_str(), bl.length()));
+  EXPECT_EQ(parser.find_obj("positive_infinity")->get_data(), "null");
+  EXPECT_EQ(parser.find_obj("negative_infinity")->get_data(), "null");
+  EXPECT_EQ(parser.find_obj("nan_val")->get_data(), "null");
+  EXPECT_EQ(parser.find_obj("nan_val_alt")->get_data(), "null");
+}
