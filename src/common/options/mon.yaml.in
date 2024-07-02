@@ -55,6 +55,15 @@ options:
   default: 1_min
   services:
   - mon
+- name: mon_down_uptime_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds that the cluster may have a mon down after this (leader) monitor comes up.
+  default: 1_min
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_mgr_beacon_grace
   type: secs
   level: advanced

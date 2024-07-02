@@ -3,3 +3,5 @@ overrides:
     conf:
       mon:
         mon op complaint time: 120
+        # cephadm can take up to 5 minutes to bring up remaining mons
+        mon down mkfs grace: 300
