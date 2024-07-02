@@ -135,15 +135,6 @@ class OsdScrub {
       bool high_priority_scrub) const;
 
   /**
-   * No new scrub session will start while a scrub was initiated on a PG,
-   * and that PG is trying to acquire replica resources.
-   * \retval false if the flag was already set (due to a race)
-   */
-  bool set_reserving_now(spg_t reserving_id, utime_t now_is);
-
-  void clear_reserving_now(spg_t reserving_id);
-
-  /**
    * push the 'not_before' time out by 'delay' seconds, so that this scrub target
    * would not be retried before 'delay' seconds have passed.
    */

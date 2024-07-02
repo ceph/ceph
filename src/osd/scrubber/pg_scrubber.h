@@ -456,9 +456,6 @@ class PgScrubber : public ScrubPgIF,
 
   int build_replica_map_chunk() final;
 
-  bool set_reserving_now() final;
-  void clear_reserving_now() final;
-
   [[nodiscard]] bool was_epoch_changed() const final;
 
   void set_queued_or_active() final;
