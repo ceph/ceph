@@ -1224,6 +1224,8 @@ class RGWSpec(ServiceSpec):
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
                  rgw_bucket_counters_cache_size: Optional[int] = None,
+                 rgw_op_counters_dump_expiration: Optional[int] = 600,
+                 rgw_op_counters_time_filtered: Optional[bool] = False
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1273,6 +1275,11 @@ class RGWSpec(ServiceSpec):
         self.rgw_bucket_counters_cache = rgw_bucket_counters_cache
         #: Used to set number of entries in each cache of bucket counters
         self.rgw_bucket_counters_cache_size = rgw_bucket_counters_cache_size
+        #: Time in seconds greater than 0 after which performance counters that are not
+        # updated will not be dumped
+        self.rgw_op_counters_dump_expiration = rgw_op_counters_dump_expiration
+        #: rgw operation perfomance counters will not be dumped if they are not recently updated
+        self.rgw_op_counters_time_filtered = rgw_op_counters_time_filtered
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]

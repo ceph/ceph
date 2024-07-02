@@ -336,6 +336,7 @@ networks:
 - 192.168.0.0/16
 spec:
   rgw_frontend_type: civetweb
+  rgw_op_counters_dump_expiration: 600
   rgw_realm: default-rgw-realm
   rgw_zone: eu-central-1
 ---

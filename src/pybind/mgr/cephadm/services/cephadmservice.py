@@ -1076,6 +1076,22 @@ class RgwService(CephService):
                 'value': str(spec.rgw_bucket_counters_cache_size),
             })
 
+        if spec.rgw_op_counters_dump_expiration:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': daemon_name,
+                'name': 'rgw_op_counters_dump_expiration',
+                'value': str(spec.rgw_op_counters_dump_expiration),
+            })
+
+        if spec.rgw_op_counters_time_filtered:
+            ret, out, err = self.mgr.check_mon_command({
+                'prefix': 'config set',
+                'who': daemon_name,
+                'name': 'rgw_op_counters_time_filtered',
+                'value': 'true',
+            })
+
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
