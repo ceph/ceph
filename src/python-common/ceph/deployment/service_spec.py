@@ -766,6 +766,7 @@ class ServiceSpec(object):
         'grafana',
         'ingress',
         'mgmt-gateway',
+        'oauth2-proxy',
         'iscsi',
         'jaeger-agent',
         'jaeger-collector',
@@ -821,6 +822,7 @@ class ServiceSpec(object):
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'mgmt-gateway': MgmtGatewaySpec,
+            'oauth2-proxy': OAuth2ProxySpec,
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
@@ -1785,6 +1787,7 @@ class MgmtGatewaySpec(ServiceSpec):
                  networks: Optional[List[str]] = None,
                  placement: Optional[PlacementSpec] = None,
                  disable_https: Optional[bool] = False,
+                 enable_auth: Optional[bool] = False,
                  port: Optional[int] = None,
                  ssl_certificate: Optional[str] = None,
                  ssl_certificate_key: Optional[str] = None,
@@ -1816,6 +1819,8 @@ class MgmtGatewaySpec(ServiceSpec):
         )
         #: Is a flag to disable HTTPS. If True, the server will use unsecure HTTP
         self.disable_https = disable_https
+        #: Is a flag to enable SSO auth. Requires oauth2-proxy to be active for SSO authentication.
+        self.enable_auth = enable_auth
         #: The port number on which the server will listen
         self.port = port
         #: A multi-line string that contains the SSL certificate
@@ -1904,6 +1909,125 @@ class MgmtGatewaySpec(ServiceSpec):
 
 
 yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
+
+
+class OAuth2ProxySpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'oauth2-proxy',
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 https_address: Optional[str] = None,
+                 provider_display_name: Optional[str] = None,
+                 client_id: Optional[str] = None,
+                 client_secret: Optional[str] = None,
+                 oidc_issuer_url: Optional[str] = None,
+                 redirect_url: Optional[str] = None,
+                 cookie_secret: Optional[str] = None,
+                 ssl_certificate: Optional[str] = None,
+                 ssl_certificate_key: Optional[str] = None,
+                 unmanaged: bool = False,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'oauth2-proxy'
+
+        super(OAuth2ProxySpec, self).__init__(
+            'oauth2-proxy', service_id=service_id,
+            placement=placement, config=config,
+            networks=networks,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs
+        )
+        #: The address for HTTPS connections, formatted as 'host:port'.
+        self.https_address = https_address
+        #: The display name for the identity provider (IDP) in the UI.
+        self.provider_display_name = provider_display_name
+        #: The client ID for authenticating with the identity provider.
+        self.client_id = client_id
+        #: The client secret for authenticating with the identity provider.
+        self.client_secret = client_secret
+        #: The URL of the OpenID Connect (OIDC) issuer.
+        self.oidc_issuer_url = oidc_issuer_url
+        #: The URL oauth2-proxy will redirect to after a successful login. If not provided
+        # cephadm will calculate automatically the value of this url.
+        self.redirect_url = redirect_url
+        #: The secret key used for signing cookies. Its length must be 16,
+        # 24, or 32 bytes to create an AES cipher.
+        self.cookie_secret = cookie_secret
+        #: The multi-line SSL certificate for encrypting communications.
+        self.ssl_certificate = ssl_certificate
+        #: The multi-line SSL certificate private key for decrypting communications.
+        self.ssl_certificate_key = ssl_certificate_key
+        self.unmanaged = unmanaged
+
+    def get_port_start(self) -> List[int]:
+        ports = [4180]
+        return ports
+
+    def validate(self) -> None:
+        super(OAuth2ProxySpec, self).validate()
+        self._validate_non_empty_string(self.provider_display_name, "provider_display_name")
+        self._validate_non_empty_string(self.client_id, "client_id")
+        self._validate_non_empty_string(self.client_secret, "client_secret")
+        self._validate_cookie_secret(self.cookie_secret)
+        self._validate_url(self.oidc_issuer_url, "oidc_issuer_url")
+        if self.redirect_url is not None:
+            self._validate_url(self.redirect_url, "redirect_url")
+        if self.https_address is not None:
+            self._validate_https_address(self.https_address)
+
+    def _validate_non_empty_string(self, value: Optional[str], field_name: str) -> None:
+        if not value or not isinstance(value, str) or not value.strip():
+            raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
+
+    def _validate_url(self, url: Optional[str], field_name: str) -> None:
+        from urllib.parse import urlparse
+        try:
+            result = urlparse(url)
+        except Exception as e:
+            raise SpecValidationError(f"Invalid {field_name}: {e}. Must be a valid URL.")
+        else:
+            if not all([result.scheme, result.netloc]):
+                raise SpecValidationError(f"Error parsing {field_name} field: Must be a valid URL.")
+
+    def _validate_https_address(self, https_address: Optional[str]) -> None:
+        from urllib.parse import urlparse
+        result = urlparse(f'http://{https_address}')
+        # Check if netloc contains a valid IP or hostname and a port
+        if not result.netloc or ':' not in result.netloc:
+            raise SpecValidationError("Invalid https_address: Valid format [IP|hostname]:port.")
+        # Split netloc into hostname and port
+        hostname, port = result.netloc.rsplit(':', 1)
+        # Validate port
+        if not port.isdigit() or not (0 <= int(port) <= 65535):
+            raise SpecValidationError("Invalid https_address: Port must be between 0 and 65535.")
+
+    def _validate_cookie_secret(self, cookie_secret: Optional[str]) -> None:
+        if cookie_secret is None:
+            return
+        if not isinstance(cookie_secret, str):
+            raise SpecValidationError("Invalid cookie_secret: Must be a non-empty string.")
+
+        import base64
+        import binascii
+        try:
+            # Try decoding the cookie_secret as base64
+            decoded_secret = base64.urlsafe_b64decode(cookie_secret)
+            length = len(decoded_secret)
+        except binascii.Error:
+            # If decoding fails, consider it as a plain string
+            length = len(cookie_secret.encode('utf-8'))
+
+        if length not in [16, 24, 32]:
+            raise SpecValidationError(f"cookie_secret is {length} bytes "
+                                      "but must be 16, 24, or 32 bytes to create an AES cipher.")
+
+
+yaml.add_representer(OAuth2ProxySpec, ServiceSpec.yaml_representer)
 
 
 class InitContainerSpec(object):

@@ -140,6 +140,15 @@ class Inventory:
                 return stored_name
         return host
 
+    def get_fqdn(self, hname: str) -> Optional[str]:
+        if hname in self._inventory:
+            if hname in self._all_known_names:
+                all_names = self._all_known_names[hname]  # [hostname, shortname, fqdn]
+                if all_names:
+                    return all_names[2]
+            return hname  # names info is not yet available!
+        return None
+
     def update_known_hostnames(self, hostname: str, shortname: str, fqdn: str) -> None:
         for hname in [hostname, shortname, fqdn]:
             # if we know the host by any of the names, store the full set of names
@@ -1943,6 +1952,7 @@ class CertKeyStore():
             'nvmeof_client_cert': {},  # service-name -> cert
             'nvmeof_root_ca_cert': {},  # service-name -> cert
             'mgmt_gw_cert': Cert(),  # cert
+            'oauth2_proxy_cert': Cert(),  # cert
             'cephadm_root_ca_cert': Cert(),  # cert
             'grafana_cert': {},  # host -> cert
         }
@@ -1951,6 +1961,7 @@ class CertKeyStore():
         # so there is no need to store a separate key
         self.known_keys = {
             'mgmt_gw_key': PrivKey(),  # cert
+            'oauth2_proxy_key': PrivKey(),  # cert
             'cephadm_root_ca_key': PrivKey(),  # cert
             'grafana_key': {},  # host -> key
             'iscsi_ssl_key': {},  # service-name -> key
