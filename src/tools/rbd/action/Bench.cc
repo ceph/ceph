@@ -39,7 +39,8 @@ enum io_type_t {
   IO_TYPE_READ = 0,
   IO_TYPE_WRITE,
   IO_TYPE_RW,
-
+  IO_TYPE_WRITE_ZEROES,
+  IO_TYPE_DISCARD,
   IO_TYPE_NUM,
 };
 
@@ -88,6 +89,10 @@ io_type_t get_io_type(std::string io_type_string) {
     return IO_TYPE_WRITE;
   else if (io_type_string == "readwrite" || io_type_string == "rw")
     return IO_TYPE_RW;
+  else if (io_type_string == "writezeroes" || io_type_string == "write_zeroes")
+    return IO_TYPE_WRITE_ZEROES;
+  else if (io_type_string == "discard")
+    return IO_TYPE_DISCARD;
   else
     return IO_TYPE_NUM;
 }
@@ -162,7 +167,13 @@ struct rbd_bencher {
     } else {
       c = new librbd::RBD::AioCompletion((void *)(new bencher_completer(this, NULL)),
 					 rbd_bencher_completion);
-      image->aio_write2(off, len, write_bl, c, op_flags);
+      if (io_type == IO_TYPE_WRITE_ZEROES) {
+        image->aio_write_zeroes(off, len, c, RBD_WRITE_ZEROES_FLAG_THICK_PROVISION, op_flags);
+      } else if (io_type == IO_TYPE_DISCARD) {
+        image->aio_discard(off, len, c);
+      } else {
+        image->aio_write2(off, len, write_bl, c, op_flags);
+      }
     }
   }
 
@@ -190,6 +201,12 @@ void rbd_bencher_completion(void *vc, void *pc)
   } else if (b->io_type == IO_TYPE_READ && (unsigned int)ret != b->io_size) {
     std::cout << "read error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
+  } else if (b->io_type == IO_TYPE_WRITE_ZEROES && ret !=0) {
+    std::cout << "write_zeroes error: " << cpp_strerror(ret) << std::endl;
+    exit(ret < 0 ? -ret : ret);
+  } else if (b->io_type == IO_TYPE_DISCARD && ret !=0) {
+    std::cout << "discard error: " << cpp_strerror(ret) << std::endl;
+    exit(ret < 0 ? -ret : ret);
   }
   b->lock.lock();
   b->in_flight--;
@@ -212,7 +229,7 @@ bool should_read(uint64_t read_proportion)
 int do_bench(librbd::Image& image, io_type_t io_type,
 		   uint64_t io_size, uint64_t io_threads,
 		   uint64_t io_bytes, io_pattern_t io_pattern,
-                   uint64_t read_proportion)
+                   uint64_t read_proportion, uint64_t io_start)
 {
   uint64_t size = 0;
   image.size(&size);
@@ -237,7 +254,9 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   std::cout << "bench "
        << " type " << (io_type == IO_TYPE_READ ? "read" :
-                       io_type == IO_TYPE_WRITE ? "write" : "readwrite")
+                       io_type == IO_TYPE_WRITE ? "write" :
+                       io_type == IO_TYPE_RW ? "readwrite" :
+                       io_type == IO_TYPE_WRITE_ZEROES ? "writezeroes" : "discard")
        << (io_type == IO_TYPE_RW ? " read:write=" +
            std::to_string(read_proportion) + ":" +
 	   std::to_string(100 - read_proportion) : "")
@@ -279,10 +298,10 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       start_pos = (rand() % (size / io_size)) * io_size;
       break;
     case IO_PATTERN_SEQ:
-      start_pos = seq_chunk_length * i;
+      start_pos = (io_start + seq_chunk_length * i) % size;
       break;
     case IO_PATTERN_FULL_SEQ:
-      start_pos = i * io_size;
+      start_pos = io_start + i * io_size;
       break;
     default:
       break;
@@ -442,6 +461,7 @@ void add_bench_common_options(po::options_description *positional,
     ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
     ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
     ("io-pattern", po::value<IOPattern>(), "IO pattern (rand, seq, or full-seq) [default: seq]")
+    ("io-start", po::value<Size>(), "start offset for seq or full-seq IO [default: 0]")
     ("rw-mix-read", po::value<uint64_t>(), "read proportion in readwrite (<= 100) [default: 50]");
 }
 
@@ -455,7 +475,7 @@ void get_arguments_for_bench(po::options_description *positional,
   add_bench_common_options(positional, options);
 
   options->add_options()
-    ("io-type", po::value<IOType>()->required(), "IO type (read, write, or readwrite(rw))");
+    ("io-type", po::value<IOType>()->required(), "IO type (read, write, readwrite(rw), write_zeroes or discard)");
 }
 
 int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
@@ -514,7 +534,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   uint64_t bench_read_proportion;
   if (bench_io_type == IO_TYPE_READ) {
     bench_read_proportion = 100;
-  } else if (bench_io_type == IO_TYPE_WRITE) {
+  } else if (bench_io_type != IO_TYPE_RW) {
     bench_read_proportion = 0;
   } else {
     if (vm.count("rw-mix-read")) {
@@ -527,6 +547,17 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
       std::cerr << "rbd: --rw-mix-read should not be larger than 100." << std::endl;
       return -EINVAL;
     }
+  }
+
+  uint64_t bench_io_start;
+  if (vm.count("io-start")) {
+    if (bench_pattern == IO_PATTERN_RAND) {
+      std::cerr << "rbd: --io-start cannot be used with --io-type rand." << std::endl;
+      return -EINVAL;
+    }
+    bench_io_start = vm["io-start"].as<uint64_t>();
+  } else {
+    bench_io_start = 0;
   }
 
   librados::Rados rados;
@@ -544,7 +575,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
   r = do_bench(image, bench_io_type, bench_io_size, bench_io_threads,
-		     bench_bytes, bench_pattern, bench_read_proportion);
+	       bench_bytes, bench_pattern, bench_read_proportion, bench_io_start);
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_signal);
