@@ -10,5 +10,11 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
+      osd.0:
+        crimson seastar cpu cores: 0-0
+      osd.1:
+        crimson seastar cpu cores: 1-1
+      osd.2:
+        crimson seastar cpu cores: 2-2
 roles:
 - [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
