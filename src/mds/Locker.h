@@ -51,6 +51,8 @@ public:
 
   void nudge_log(SimpleLock *lock);
 
+  void detect_dead_locks(const MDRequestRef& mdr, int lock_type);
+
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
