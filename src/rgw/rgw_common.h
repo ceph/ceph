@@ -1062,6 +1062,11 @@ struct RGWBucketInfo {
 
   std::optional<rgw_sync_policy_info> sync_policy;
 
+  /** via this time to judge if the bucket is resharding, when the reshard status of bucket changed
+   * or the reshard status is read, this time will be updated.
+   */
+  ceph::real_time judge_reshard_lock_time;
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
 

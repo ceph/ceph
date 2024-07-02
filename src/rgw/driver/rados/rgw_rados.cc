@@ -6931,6 +6931,10 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
     *pbs = bs;
   }
 
+  if (target->bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
+    store->reshard_failed_while_logrecord(target->bucket_info, y, dpp);
+  }
+
   return 0;
 }
 
@@ -7624,9 +7628,76 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
     return r;
   }
 
+  if (bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
+    reshard_failed_while_logrecord(bucket_info, y, dpp);
+  }
+
   return 0;
 }
 
+int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info, optional_yield y,
+                                             const DoutPrefixProvider *dpp)
+{
+  real_time now = real_clock::now();
+  double r = rand() / (double)RAND_MAX;
+  double reshard_progress_judge_interval = cct->_conf.get_val<uint64_t>("rgw_reshard_progress_judge_interval");
+  // avoid getting reshard_lock simultaneously by mass differrent operation
+  reshard_progress_judge_interval +=
+    reshard_progress_judge_interval * cct->_conf.get_val<double>("rgw_reshard_progress_judge_ratio") * r;
+  if (now - bucket_info.judge_reshard_lock_time >= make_timespan(reshard_progress_judge_interval)) {
+
+    map<string, bufferlist> bucket_attrs;
+    int ret = get_bucket_info(&svc, bucket_info.bucket.tenant, bucket_info.bucket.name,
+                              bucket_info, nullptr, y, dpp, &bucket_attrs);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ <<
+        " ERROR: failed to refresh bucket info : " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    if (bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord &&
+        now - bucket_info.judge_reshard_lock_time >= make_timespan(reshard_progress_judge_interval))
+      return reshard_failed_while_logrecord(bucket_info, bucket_attrs, y, dpp);
+  }
+  return 0;
+}
+
+int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info,
+                                            map<string, bufferlist>& bucket_attrs,
+                                            optional_yield y,
+                                            const DoutPrefixProvider *dpp)
+{
+  RGWBucketReshardLock reshard_lock(this->driver, bucket_info, true);
+  int ret = reshard_lock.lock(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << __func__ <<
+      " INFO: failed to take reshard lock for bucket " <<
+      bucket_info.bucket.bucket_id << "; expected if resharding underway" << dendl;
+    // update the judge time
+    bucket_info.judge_reshard_lock_time = real_clock::now();
+    ret = put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs, dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ <<
+        " ERROR: error putting bucket instance info: " << cpp_strerror(-ret) << dendl;
+    }
+  } else {
+    ldpp_dout(dpp,20) << __func__ << ": reshard lock success, " <<
+      "that means the reshard has failed for bucekt " << bucket_info.bucket.bucket_id << dendl;
+    // clear the RESHARD_IN_PROGRESS status after reshard failed, also set bucket instance
+    // status to CLS_RGW_RESHARD_NONE
+    ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
+    reshard_lock.unlock();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ <<
+        " ERROR: failed to clear resharding flags for bucket " <<
+        bucket_info.bucket.bucket_id << dendl;
+    } else {
+      ldpp_dout(dpp, 5) << __func__ <<
+        " INFO: apparently successfully cleared resharding flags for "
+        "bucket " << bucket_info.bucket.bucket_id << dendl;
+    } // if clear resharding succeeded
+  } // if taking of lock succeeded
+  return 0;
+}
 
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
                                      const rgw_obj& obj_instance,
@@ -9130,6 +9201,17 @@ int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_
   return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry);
 }
 
+int RGWRados::bi_get_vals(BucketShard& bs, set<string>& log_entries_wanted,
+                          list<rgw_cls_bi_entry> *entries, optional_yield y)
+{
+  auto& ref = bs.bucket_obj;
+  int ret = cls_rgw_bi_get_vals(ref.ioctx, ref.obj.oid, log_entries_wanted, entries);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 void RGWRados::bi_put(ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry, optional_yield y)
 {
   auto& ref = bs.bucket_obj;
@@ -9163,6 +9245,14 @@ int RGWRados::bi_put(const DoutPrefixProvider *dpp, rgw_bucket& bucket, rgw_obj&
   }
 
   return bi_put(bs, entry, y);
+}
+
+void RGWRados::bi_process_log_put(ObjectWriteOperation& op, BucketShard& bs,
+                                  rgw_cls_bi_process_log_entry& entry,
+                                  optional_yield y)
+{
+  auto& ref = bs.bucket_obj;
+  cls_rgw_bi_process_log_put(op, ref.obj.oid, entry);
 }
 
 int RGWRados::bi_list(const DoutPrefixProvider *dpp, rgw_bucket& bucket,
@@ -9228,6 +9318,30 @@ int RGWRados::bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs)
   }
 
   return 0;
+}
+
+int RGWRados::reshard_log_list(BucketShard& bs, const string& marker, uint32_t max, uint64_t gen,
+                               std::list<rgw_cls_bi_entry> *entries,
+                               bool *is_truncated, optional_yield y)
+{
+  auto& ref = bs.bucket_obj;
+  int ret = cls_rgw_reshard_log_list(ref.ioctx, ref.obj.oid, marker, max, gen, entries, is_truncated);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWRados::trim_reshard_log_entries(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
+{
+  librados::IoCtx index_pool;
+  map<int, string> bucket_objs;
+
+  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
+  if (r < 0) {
+    return r;
+  }
+  return CLSRGWIssueReshardLogTrim(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 int RGWRados::gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::ObjectWriteOperation *op, optional_yield y)

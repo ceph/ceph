@@ -80,16 +80,20 @@ void decode_json_obj(BucketHashType& t, JSONObj *obj)
 // bucket_index_normal_layout
 void encode(const bucket_index_normal_layout& l, bufferlist& bl, uint64_t f)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(l.num_shards, bl);
   encode(l.hash_type, bl);
+  encode(l.reshard_gen, bl);
   ENCODE_FINISH(bl);
 }
 void decode(bucket_index_normal_layout& l, bufferlist::const_iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(l.num_shards, bl);
   decode(l.hash_type, bl);
+  if (struct_v >= 2) {
+    decode(l.reshard_gen, bl);
+  }
   DECODE_FINISH(bl);
 }
 void encode_json_impl(const char *name, const bucket_index_normal_layout& l, ceph::Formatter *f)
@@ -299,6 +303,7 @@ std::string_view to_string(const BucketReshardState& s)
 {
   switch (s) {
   case BucketReshardState::None: return "None";
+  case BucketReshardState::InLogrecord: return "InLogrecord";
   case BucketReshardState::InProgress: return "InProgress";
   default: return "Unknown";
   }
@@ -307,6 +312,10 @@ bool parse(std::string_view str, BucketReshardState& s)
 {
   if (boost::iequals(str, "None")) {
     s = BucketReshardState::None;
+    return true;
+  }
+  if (boost::iequals(str, "InLogrecord")) {
+    s = BucketReshardState::InLogrecord;
     return true;
   }
   if (boost::iequals(str, "InProgress")) {

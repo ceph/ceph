@@ -386,6 +386,11 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
                                 rgw_bucket_category_stats *accounted_stats)
 {
   using ceph::decode;
+  if (del) {
+    *key = this->key;
+    return false;
+  }
+
   auto iter = data.cbegin();
   if (type == BIIndexType::OLH) {
     rgw_bucket_olh_entry entry;
@@ -427,6 +432,40 @@ void rgw_cls_bi_entry::generate_test_instances(list<rgw_cls_bi_entry*>& o)
   encode(entry,m->data);
   o.push_back(m);
   o.push_back(new rgw_cls_bi_entry);
+}
+
+void rgw_reshard_log_entry::dump(Formatter *f) const {
+  encode_json("key", key, f);
+  encode_json("del", del, f);
+}
+
+void rgw_reshard_log_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("del", del, obj);
+}
+
+void rgw_reshard_log_entry::generate_test_instances(list<rgw_reshard_log_entry*>& ls)
+{
+  ls.push_back(new rgw_reshard_log_entry);
+  ls.push_back(new rgw_reshard_log_entry);
+  ls.back()->key.name = "key.name";
+  ls.back()->key.instance = "key.instance";
+}
+
+void rgw_cls_bi_process_log_entry::dump(Formatter *f) const
+{
+  encode_json("idx", idx, f);
+  encode_json("exists", exists, f);
+  f->open_object_section("bi_entry");
+  bi_entry.dump(f);
+  f->close_section();
+}
+
+void rgw_cls_bi_process_log_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("idx", idx, obj);
+  JSONDecoder::decode_json("exists", exists, obj);
+  JSONDecoder::decode_json("bi_entry", bi_entry, obj);
 }
 
 void rgw_bucket_olh_entry::dump(Formatter *f) const
@@ -519,6 +558,7 @@ void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("key", key, obj);
   JSONDecoder::decode_json("delete_marker", delete_marker, obj);
 }
+
 void rgw_bi_log_entry::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("op_id", id, obj);
@@ -864,6 +904,7 @@ void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>
 void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 {
   encode_json("reshard_status", to_string(reshard_status), f);
+  encode_json("gen", gen, f);
 }
 
 void cls_rgw_bucket_instance_entry::generate_test_instances(
@@ -905,6 +946,9 @@ std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_status status) {
   switch (status) {
   case cls_rgw_reshard_status::NOT_RESHARDING:
     out << "NOT_RESHARDING";
+    break;
+  case cls_rgw_reshard_status::IN_LOGRECORD:
+    out << "IN_LOGRECORD";
     break;
   case cls_rgw_reshard_status::IN_PROGRESS:
     out << "IN_PROGRESS";

@@ -76,6 +76,26 @@ def get_bucket_num_shards(bucket_name, bucket_id):
     num_shards = json_op['data']['bucket_info']['num_shards']
     return num_shards
 
+def get_bucket_rehshard_gen(bucket_name):
+    """
+    function to get bucket reshard gen
+    """
+    cmd = exec_cmd("radosgw-admin bucket stats --bucket {}".format(bucket_name))
+    json_op = json.loads(cmd)
+    #print(json.dumps(json_op, indent = 4, sort_keys=True))
+    reshard_gen = json_op['reshard_gen']
+    return reshard_gen
+
+def get_bucket_reshard_status(bucket_name):
+    """
+    function to get bucket reshard status
+    """
+    cmd = exec_cmd("radosgw-admin bucket stats --bucket {}".format(bucket_name))
+    json_op = json.loads(cmd)
+    #print(json.dumps(json_op, indent = 4, sort_keys=True))
+    reshard_status = json_op['reshard_status']
+    return reshard_status
+
 def run_bucket_reshard_cmd(bucket_name, num_shards, **kwargs):
     cmd = 'radosgw-admin bucket reshard --bucket {} --num-shards {}'.format(bucket_name, num_shards)
     cmd += ' --rgw-reshard-bucket-lock-duration 30' # reduce to minimum
@@ -139,6 +159,11 @@ def test_bucket_reshard(conn, name, **fault):
         bucket.delete_objects(Delete={'Objects':[{'Key':o.key} for o in objs]})
         bucket.delete()
 
+def calc_reshardlog_count(json_op):
+    cnt = 0
+    for shard in json_op:
+        cnt += len(shard['shard_entries'])
+    return cnt
 
 def main():
     """
@@ -223,6 +248,62 @@ def main():
     log.debug('TEST: reshard bucket with abort at do_reshard\n')
     test_bucket_reshard(connection, 'abort-at-do-reshard', abort_at='do_reshard')
 
+    log.debug('TEST: reshard bucket with EIO injected at logrecord_writes\n')
+    test_bucket_reshard(connection, 'error-at-logrecord-writes', error_at='logrecord_writes')
+    log.debug('TEST: reshard bucket with abort at logrecord_writes\n')
+    test_bucket_reshard(connection, 'abort-at-logrecord-writes', abort_at='logrecord_writes')
+
+    log.debug('TEST: reshard bucket with EIO injected at change_reshard_state\n')
+    test_bucket_reshard(connection, 'error-at-change-reshard-state', error_at='change_reshard_state')
+    log.debug('TEST: reshard bucket with ECANCELED injected at change_reshard_state\n')
+    test_bucket_reshard(connection, 'error-at-change-reshard-state', error_at='change_reshard_state', error_code=errno.ECANCELED)
+    log.debug('TEST: reshard bucket with abort at change_reshard_state\n')
+    test_bucket_reshard(connection, 'abort-at-change-reshard-state', abort_at='change_reshard_state')
+
+    # TESTCASE 'check reshard gen'
+    log.debug(' test: reshard gen progressive increase when reshard failed')
+    num_shards = get_bucket_stats(BUCKET_NAME).num_shards
+    old_reshard_gen = get_bucket_rehshard_gen(BUCKET_NAME)
+    _, ret = run_bucket_reshard_cmd(BUCKET_NAME, num_shards + 1, check_retcode=False, error_at='do_reshard')
+    assert(ret != 0 and ret != errno.EBUSY)
+    new_reshard_gen = get_bucket_rehshard_gen(BUCKET_NAME)
+    assert new_reshard_gen == old_reshard_gen + 1
+    log.debug('check reshard gen successfully')
+
+    # TESTCASE 'logrecord could be stopped after reshard failed'
+    log.debug(' test: logrecord could be stopped after reshard failed')
+    num_shards = get_bucket_stats(BUCKET_NAME).num_shards
+    assert "None" == get_bucket_reshard_status(BUCKET_NAME)
+    _, ret = run_bucket_reshard_cmd(BUCKET_NAME, num_shards + 1, check_retcode=False, abort_at='change_reshard_state')
+    assert(ret != 0 and ret != errno.EBUSY)
+    assert "InLogrecord" == get_bucket_reshard_status(BUCKET_NAME)
+
+    bucket.put_object(Key='put_during_logrecord', Body=b"some_data")
+    cmd = exec_cmd('radosgw-admin reshardlog list --bucket %s' % BUCKET_NAME)
+    json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
+    assert calc_reshardlog_count(json_op) == 1
+
+    # a log will be recorded then end up with logrecord status
+    time.sleep(30)
+    assert "InLogrecord" == get_bucket_reshard_status(BUCKET_NAME)
+    bucket.put_object(Key='put_during_logrecord1', Body=b"some_data1")
+    cmd = exec_cmd('radosgw-admin reshardlog list --bucket %s' % BUCKET_NAME)
+    json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
+    assert calc_reshardlog_count(json_op) == 2
+    assert "None" == get_bucket_reshard_status(BUCKET_NAME)
+
+    # already end up with logrecord status
+    bucket.put_object(Key='put_during_logrecord2', Body=b"some_data2")
+    cmd = exec_cmd('radosgw-admin reshardlog list --bucket %s' % BUCKET_NAME)
+    json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
+    assert calc_reshardlog_count(json_op) == 2
+
+    exec_cmd('radosgw-admin reshardlog purge --bucket %s' % BUCKET_NAME)
+    cmd = exec_cmd('radosgw-admin reshardlog list --bucket %s' % BUCKET_NAME)
+    json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
+    assert calc_reshardlog_count(json_op) == 0
+    log.debug('check reshard logrecord successfully')
+
     # TESTCASE 'versioning reshard-','bucket', reshard','versioning reshard','succeeds'
     log.debug(' test: reshard versioned bucket')
     num_shards_expected = get_bucket_stats(VER_BUCKET_NAME).num_shards + 1
@@ -276,6 +357,8 @@ def main():
     time.sleep(1)
     ver_bucket.put_object(Key='put_during_reshard', Body=b"some_data")
     log.debug('put object successful')
+    # waiter for delay reshard to finish
+    time.sleep(5)
 
     # TESTCASE 'check that bucket stats are correct after reshard with unlinked entries'
     log.debug('TEST: check that bucket stats are correct after reshard with unlinked entries\n')

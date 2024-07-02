@@ -26,6 +26,7 @@
 class RGWReshard;
 
 
+class BucketReshardManager;
 namespace rgw { namespace sal {
   class RadosStore;
 } }
@@ -84,12 +85,29 @@ class RGWBucketReshard {
   // allocated in at once
   static const std::initializer_list<uint16_t> reshard_primes;
 
+  int calc_target_shard(const RGWBucketInfo& bucket_info, const rgw_obj_key& key,
+                        int& shard, const DoutPrefixProvider *dpp);
+  int reshard_in_logrecord_state(const rgw::bucket_index_layout_generation& current,
+                                 int& max_entries,
+                                 BucketReshardManager& target_shards_mgr,
+                                 bool verbose_json_out,
+                                 std::ostream *out,
+                                 Formatter *formatter,
+                                 const DoutPrefixProvider *dpp, optional_yield y);
+  int reshard_in_progress_state(const rgw::bucket_index_layout_generation& current,
+                               int& max_entries,
+                               BucketReshardManager& target_shards_mgr,
+                               bool verbose_json_out,
+                               std::ostream *out,
+                               Formatter *formatter,
+                               const DoutPrefixProvider *dpp, optional_yield y);
   int do_reshard(const rgw::bucket_index_layout_generation& current,
                  const rgw::bucket_index_layout_generation& target,
                  int max_entries,
                  bool verbose,
                  std::ostream *os,
 		 Formatter *formatter,
+                 ReshardFaultInjector& fault,
                  const DoutPrefixProvider *dpp, optional_yield y);
 public:
 
@@ -107,6 +125,7 @@ public:
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
+  int renew_lock_if_needed(const DoutPrefixProvider *dpp);
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,

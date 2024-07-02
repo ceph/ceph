@@ -55,6 +55,7 @@ struct bucket_index_normal_layout {
   uint32_t num_shards = 1;
 
   BucketHashType hash_type = BucketHashType::Mod;
+  uint64_t reshard_gen = 0;
 
   friend std::ostream& operator<<(std::ostream& out, const bucket_index_normal_layout& l) {
     out << "num_shards=" << l.num_shards << ", hash_type=" << to_string(l.hash_type);
@@ -220,6 +221,7 @@ inline bucket_index_layout_generation log_to_index_layout(const bucket_log_layou
 enum class BucketReshardState : uint8_t {
   None,
   InProgress,
+  InLogrecord,
 };
 std::string_view to_string(const BucketReshardState& s);
 bool parse(std::string_view str, BucketReshardState& s);

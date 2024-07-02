@@ -493,19 +493,23 @@ struct rgw_cls_bucket_update_stats_op
 {
   bool absolute{false};
   std::map<RGWObjCategory, rgw_bucket_category_stats> stats;
+  std::map<RGWObjCategory, rgw_bucket_category_stats> dec_stats;
 
   rgw_cls_bucket_update_stats_op() {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(absolute, bl);
     encode(stats, bl);
+    encode(dec_stats, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(absolute, bl);
     decode(stats, bl);
+    if (struct_v >= 2)
+      decode(dec_stats, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -727,6 +731,23 @@ struct rgw_cls_bi_get_ret {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
 
+struct rgw_cls_bi_get_vals_op {
+  std::set<std::string> log_entries_wanted;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(log_entries_wanted, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(log_entries_wanted, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_get_vals_op)
+
 struct rgw_cls_bi_put_op {
   rgw_cls_bi_entry entry;
 
@@ -755,6 +776,25 @@ struct rgw_cls_bi_put_op {
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_put_op)
+
+struct rgw_cls_bi_process_log_put_op {
+  rgw_cls_bi_process_log_entry entry;
+
+  rgw_cls_bi_process_log_put_op() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_process_log_put_op)
 
 struct rgw_cls_bi_list_op {
   uint32_t max;
@@ -830,6 +870,32 @@ struct rgw_cls_bi_list_ret {
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_list_ret)
+
+struct cls_rgw_reshard_log_list_op {
+  std::string marker;
+  uint32_t max;
+  uint64_t gen;
+
+  cls_rgw_reshard_log_list_op() : max(0) {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(marker, bl);
+    encode(max, bl);
+    encode(gen, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(marker, bl);
+    decode(max, bl);
+    decode(gen, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_log_list_op)
 
 struct rgw_cls_usage_log_read_op {
   uint64_t start_epoch;
@@ -1630,13 +1696,13 @@ struct cls_rgw_set_bucket_resharding_op  {
   cls_rgw_bucket_instance_entry entry;
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
   }

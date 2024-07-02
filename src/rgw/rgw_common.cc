@@ -2255,7 +2255,7 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
   const rgw_user* user = std::get_if<rgw_user>(&owner);
   std::string empty;
 
-  ENCODE_START(24, 4, bl);
+  ENCODE_START(25, 4, bl);
   encode(bucket, bl);
   if (user) {
     encode(user->id, bl);
@@ -2303,12 +2303,13 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
   }
   ceph::versioned_variant::encode(owner, bl); // v24
 
+  encode(judge_reshard_lock_time, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   rgw_user user;
-  DECODE_START_LEGACY_COMPAT_LEN_32(24, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN_32(25, 4, 4, bl);
   decode(bucket, bl);
   if (struct_v >= 2) {
     string s;
@@ -2389,6 +2390,9 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     ceph::versioned_variant::decode(owner, bl);
   } else {
     owner = std::move(user); // user was decoded piecewise above
+  }
+  if (struct_v >= 25) {
+    decode(judge_reshard_lock_time, bl);
   }
 
   if (layout.logs.empty() &&
@@ -2515,6 +2519,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("quota", quota, f);
   encode_json("num_shards", layout.current_index.layout.normal.num_shards, f);
   encode_json("bi_shard_hash_type", (uint32_t)layout.current_index.layout.normal.hash_type, f);
+  encode_json("reshard_gen", layout.current_index.layout.normal.reshard_gen, f);
   encode_json("requester_pays", requester_pays, f);
   encode_json("has_website", has_website, f);
   if (has_website) {
@@ -2526,6 +2531,8 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("mdsearch_config", mdsearch_config, f);
   encode_json("reshard_status", (int)reshard_status, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
+  utime_t jt(judge_reshard_lock_time);
+  encode_json("judge_reshard_lock_time", jt, f);
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
   }
@@ -2566,7 +2573,9 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
-
+  JSONDecoder::decode_json("reshard_gen", layout.current_index.layout.normal.reshard_gen, obj);
+  JSONDecoder::decode_json("judge_reshard_lock_time", ut, obj);
+  judge_reshard_lock_time = ut.to_real_time();
   rgw_sync_policy_info sp;
   JSONDecoder::decode_json("sync_policy", sp, obj);
   if (!sp.empty()) {

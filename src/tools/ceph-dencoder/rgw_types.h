@@ -58,6 +58,7 @@ TYPE(rgw_usage_log_info)
 TYPE(rgw_user_bucket)
 TYPE(cls_rgw_lc_entry)
 TYPE(rgw_zone_set)
+TYPE(rgw_reshard_log_entry)
 
 #include "cls/rgw/cls_rgw_ops.h"
 TYPE(cls_rgw_lc_get_entry_ret)

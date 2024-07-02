@@ -182,6 +182,8 @@
     reshard cancel                   cancel resharding a bucket
     reshard stale-instances list     list stale-instances from bucket resharding
     reshard stale-instances delete   cleanup stale-instances from bucket resharding
+    reshardlog list                  list bucket reshard newest generation log
+    reshardlog purge                 trim all bucket resharding log
     sync error list                  list sync error
     sync error trim                  trim sync error
     mfa create                       create a new MFA TOTP token
