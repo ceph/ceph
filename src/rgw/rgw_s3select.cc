@@ -734,7 +734,6 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
       op_ret = -ERR_INVALID_REQUEST;
       return;
     }
-    s3select_syntax.parse_query(m_sql_query.c_str());
     status = run_s3select_on_parquet(m_sql_query.c_str());
     if (status) {
       ldout(s->cct, 10) << "S3select: failed to process query <" << m_sql_query << "> on object " << s->object->get_name() << dendl;
