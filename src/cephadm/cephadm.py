@@ -2466,6 +2466,14 @@ def prepare_bootstrap_config(
     ):
         cp.set('mon', 'auth_allow_insecure_global_id_reclaim', 'false')
 
+    if not cp.has_section('osd'):
+        cp.add_section('osd')
+    if (
+            not cp.has_option('osd', 'osd_memory_target_autotune')
+            and not cp.has_option('osd', 'osd memory target autotune')
+    ):
+        cp.set('osd', 'osd_memory_target_autotune', 'true')
+
     if ctx.single_host_defaults:
         logger.info('Adjusting default settings to suit single-host cluster...')
         # replicate across osds, not hosts
@@ -2711,7 +2719,7 @@ def command_bootstrap(ctx):
         if not os.path.isfile(ctx.custom_prometheus_alerts):
             raise Error(f'No custom prometheus alerts file found at {ctx.custom_prometheus_alerts}')
 
-    (user_conf, _) = get_config_and_keyring(ctx)
+    _, _ = get_config_and_keyring(ctx)
 
     if ctx.ssh_user != 'root':
         check_ssh_connectivity(ctx)
@@ -2811,18 +2819,17 @@ def command_bootstrap(ctx):
     # create mgr
     create_mgr(ctx, uid, gid, fsid, mgr_id, mgr_key, config, cli)
 
-    if user_conf:
-        # user given config settings were already assimilated earlier
-        # but if the given settings contained any attributes in
-        # the mgr (e.g. mgr/cephadm/container_image_prometheus)
-        # they don't seem to be stored if there isn't a mgr yet.
-        # Since re-assimilating the same conf settings should be
-        # idempotent we can just do it again here.
-        with tempfile.NamedTemporaryFile(buffering=0) as tmp:
-            tmp.write(user_conf.encode('utf-8'))
-            cli(['config', 'assimilate-conf',
-                 '-i', '/var/lib/ceph/user.conf'],
-                {tmp.name: '/var/lib/ceph/user.conf:z'})
+    # user given config settings were already assimilated earlier
+    # but if the given settings contained any attributes in
+    # the mgr (e.g. mgr/cephadm/container_image_prometheus)
+    # they don't seem to be stored if there isn't a mgr yet.
+    # Since re-assimilating the same conf settings should be
+    # idempotent we can just do it again here.
+    with tempfile.NamedTemporaryFile(buffering=0) as tmp:
+        tmp.write(config.encode('utf-8'))
+        cli(['config', 'assimilate-conf',
+             '-i', '/var/lib/ceph/user.conf'],
+            {tmp.name: '/var/lib/ceph/user.conf:z'})
 
     if getattr(ctx, 'log_dest', None):
         ldkey = 'mgr/cephadm/cephadm_log_destination'
@@ -2903,10 +2910,6 @@ def command_bootstrap(ctx):
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
     save_cluster_config(ctx, uid, gid, fsid)
-
-    # enable autotune for osd_memory_target
-    logger.info('Enabling autotune for osd_memory_target')
-    cli(['config', 'set', 'osd', 'osd_memory_target_autotune', 'true'])
 
     # Notify the Dashboard to show the 'Expand cluster' page on first log in.
     cli(['config-key', 'set', 'mgr/dashboard/cluster/status', 'INSTALLED'])
