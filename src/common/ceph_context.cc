@@ -771,7 +771,7 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command(
       "config diff get name=var,type=CephString", _admin_hook,
       "dump diff get <field>: dump diff of current and default config setting <field>");
-  _admin_socket->register_command("injectargs name=injected_args,type=CephString,n=N", _admin_hook, "inject configuration arguments into running daemon"),
+  _admin_socket->register_command("injectargs name=injected_args,type=CephString,n=N", _admin_hook, "inject configuration arguments into running daemon");
   _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
