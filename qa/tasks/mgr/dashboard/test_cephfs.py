@@ -94,6 +94,12 @@ class CephfsTest(DashboardTestCase):
         self.assertIsInstance(data, dict)
         return data
 
+    def rename(self, src_path, dst_path):
+        params = {'src_path': src_path, 'dst_path': dst_path}
+        self._put(f"/api/cephfs/{self.get_fs_id()}/_rename",
+                  params=params)
+        self.assertStatus(200)
+
     @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
     def test_access_permissions(self):
         fs_id = self.get_fs_id()
@@ -361,3 +367,9 @@ class CephfsTest(DashboardTestCase):
         self.fs.set_joinable()
         self._get(f"/api/cephfs/{fs_id}/clients")
         self.assertStatus(200)
+
+    def test_rename(self):
+        self.mk_dirs('/apple')
+        self.rename('/apple', '/orange')
+        self.ls_dir('/orange', 1)
+        self.rm_dir('/orange')
