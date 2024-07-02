@@ -27,6 +27,7 @@
 
 #include "include/buffer.h"
 #include "include/common_fwd.h"
+#include "common/admin_finisher.h"
 #include "common/ref.h"
 #include "common/cmdparse.h"
 
@@ -34,6 +35,8 @@ class MCommand;
 class MMonCommand;
 
 inline constexpr auto CEPH_ADMIN_SOCK_VERSION = std::string_view("2");
+
+typedef std::function<void(int,std::string_view,ceph::buffer::list&)> asok_finisher;
 
 class AdminSocketHook {
 public:
@@ -93,7 +96,7 @@ public:
     const cmdmap_t& cmdmap,
     ceph::Formatter *f,
     const ceph::buffer::list& inbl,
-    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) {
+    asok_finisher on_finish) {
     // by default, call the synchronous handler and then finish
     ceph::buffer::list out;
     std::ostringstream errss;
@@ -151,7 +154,7 @@ public:
   void execute_command(
     const std::vector<std::string>& cmd,
     const ceph::buffer::list& inbl,
-    std::function<void(int,const std::string&,ceph::buffer::list&)> on_fin);
+    asok_finisher on_fin);
 
   /// execute (blocking)
   int execute_command(

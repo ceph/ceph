@@ -101,7 +101,7 @@ class MDSDaemon : public Dispatcher {
     const cmdmap_t& cmdmap,
     Formatter *f,
     const bufferlist &inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish);
+    asok_finisher on_finish);
 
   void dump_status(Formatter *f);
 

@@ -25,6 +25,7 @@
 #include "Watch.h"
 #include "TierAgentState.h"
 #include "messages/MOSDOpReply.h"
+#include "common/admin_finisher.h"
 #include "common/Checksummer.h"
 #include "common/sharedptr_registry.hpp"
 #include "common/shared_cache.hpp"
@@ -1499,7 +1500,7 @@ public:
     std::string_view prefix,
     const cmdmap_t& cmdmap,
     const ceph::buffer::list& idata,
-    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) override;
+    asok_finisher on_finish) override;
 
   void clear_cache() override;
   int get_cache_obj_count() override {
@@ -1891,7 +1892,7 @@ public:
 
   void mark_all_unfound_lost(
     int what,
-    std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish);
+    asok_finisher on_finish);
   eversion_t pick_newest_available(const hobject_t& oid);
 
   void do_update_log_missing(
