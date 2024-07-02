@@ -4724,7 +4724,6 @@ class CephContainer:
             cmd_args.append('--cap-add=SYS_PTRACE')
         if self.init:
             cmd_args.append('--init')
-            envs += ['-e', 'CEPH_USE_RANDOM_NONCE=1']
         if self.cname:
             cmd_args.extend(['--name', self.cname])
         if self.envs:
@@ -4768,7 +4767,6 @@ class CephContainer:
             ])
         if self.init:
             cmd_args.append('--init')
-            envs += ['-e', 'CEPH_USE_RANDOM_NONCE=1']
         if self.envs:
             for env in self.envs:
                 envs.extend(['-e', env])
