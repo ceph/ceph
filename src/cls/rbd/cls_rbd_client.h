@@ -584,6 +584,10 @@ int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupSnapshot &start,
                     uint64_t max_return,
                     std::vector<cls::rbd::GroupSnapshot> *snapshots);
+int group_snap_list_sorted(librados::IoCtx *ioctx, const std::string &oid,
+                           const cls::rbd::GroupSnapshot &start,
+                           uint64_t max_return,
+                           std::vector<cls::rbd::GroupSnapshot> *snapshots);
 
 // operations on rbd_trash object
 void trash_add(librados::ObjectWriteOperation *op,
