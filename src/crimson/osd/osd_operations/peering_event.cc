@@ -102,12 +102,11 @@ seastar::future<> PeeringEvent<T>::with_pg(
        * now, but we'll want to remove that as well.
        * https://tracker.ceph.com/issues/66708
        */
-      return interruptor::async([this, pg] {
+      return interruptor::async([this, pg, &shard_services] {
 	pg->do_peering_event(evt, ctx);
+	complete_rctx(shard_services, pg).get();
       }).then_interruptible([this] {
 	return that()->get_handle().complete();
-      }).then_interruptible([this, pg, &shard_services] {
-	return complete_rctx(shard_services, pg);
       });
     });
   }, [this](std::exception_ptr ep) {
