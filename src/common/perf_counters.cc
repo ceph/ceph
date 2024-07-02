@@ -314,6 +314,23 @@ void PerfCounters::tset(int idx, utime_t amt)
     ceph_abort();
 }
 
+void PerfCounters::tset(int idx, ceph::timespan amt)
+{
+#ifndef WITH_SEASTAR
+  if (!m_cct->_conf->perf)
+    return;
+#endif
+
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
+  perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  if (!(data.type & PERFCOUNTER_TIME))
+    return;
+  data.u64 = amt.count();
+  if (data.type & PERFCOUNTER_LONGRUNAVG)
+    ceph_abort();
+}
+
 utime_t PerfCounters::tget(int idx) const
 {
 #ifndef WITH_SEASTAR
