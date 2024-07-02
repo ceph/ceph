@@ -651,8 +651,8 @@ public:
     }
     if (dummy_bl.length() != 0) {
       ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault making a key: "
-	<< dummy_bl
-	<< dendl;
+        << std::string_view(dummy_bl.c_str(), dummy_bl.length())
+        << dendl;
     }
     return 0;
   }
@@ -688,24 +688,26 @@ public:
     int res = send_request(dpp, "POST", "", config_path,
                            post_data, y, dummy_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault marking key to delete, ret: "
+        << res << " response: "
+        << std::string_view(dummy_bl.c_str(), dummy_bl.length())
+        << dendl;
       return res;
-    }
-    if (dummy_bl.length() != 0) {
-      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault marking key to delete: "
-	<< dummy_bl
-	<< dendl;
-      return -EINVAL;
     }
 
     res = send_request(dpp, "DELETE", "", delete_path,
                        string{}, y, dummy_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault deleting key, ret: "
+        << res << " response: "
+        << std::string_view(dummy_bl.c_str(), dummy_bl.length())
+        << dendl;
       return res;
     }
     if (dummy_bl.length() != 0) {
       ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault deleting key: "
-	<< dummy_bl
-	<< dendl;
+        << std::string_view(dummy_bl.c_str(), dummy_bl.length())
+        << dendl;
       return -EINVAL;
     }
     return 0;
