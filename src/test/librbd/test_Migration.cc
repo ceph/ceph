@@ -330,6 +330,17 @@ struct TestMigration : public TestFixture {
     ASSERT_EQ(0, m_ictx->operations->resize(size, true, no_op));
   }
 
+  void test_children(bool have, std::string initial_image_name) {
+    std::vector<librbd::linked_image_spec_t> images;
+    librbd::ImageCtx *initial_ictx = nullptr;
+    open_image(m_ioctx, initial_image_name, &initial_ictx);
+    EXPECT_EQ(0, librbd::api::Image<>::snap_set(
+                initial_ictx, cls::rbd::UserSnapshotNamespace(), "snap"));
+    ASSERT_EQ(0, librbd::api::Image<>::list_children(initial_ictx, &images));
+    auto expect = have ? 1 : 0;
+    ASSERT_EQ(expect, images.size());
+  }
+
   void test_no_snaps() {
     uint64_t len = (1 << m_ictx->order) * 2 + 1;
     write(0 * len, len, '1');
@@ -1046,10 +1057,11 @@ TEST_F(TestMigration, CloneParent) {
   migration_abort(m_ioctx, m_image_name);
 }
 
-
 TEST_F(TestMigration, CloneUpdateAfterPrepare)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  auto initial_image_name = m_image_name;
 
   write(0, 10, 'X');
   snap_create("snap");
@@ -1061,6 +1073,29 @@ TEST_F(TestMigration, CloneUpdateAfterPrepare)
 
   migration_execute(m_ioctx, m_image_name);
   migration_commit(m_ioctx, m_image_name);
+  test_children(true, initial_image_name);
+}
+
+TEST_F(TestMigration, FlattenMigration)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  auto initial_image_name = m_image_name;
+
+  write(0, 10, 'X');
+  snap_create("snap");
+  clone("snap");
+
+  uint64_t flatten = 1;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_FLATTEN, flatten));
+
+  migration_prepare(m_ioctx, m_image_name);
+
+  write(0, 1, 'Y');
+
+  migration_execute(m_ioctx, m_image_name);
+  migration_commit(m_ioctx, m_image_name);
+  test_children(false, initial_image_name);
 }
 
 TEST_F(TestMigration, TriggerAssertSnapcSeq)
