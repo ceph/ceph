@@ -352,23 +352,37 @@ struct foo_t {
 };
 WRITE_CLASS_DENC_BOUNDED(foo_t)
 
-struct foo2_t {
-  int32_t c = 0;
-  uint64_t d = 123;
+struct foo2_accept1_t {
+  int32_t a = 0;
+  uint64_t b = 123;
+  int32_t c = -1; // uninitialized for v1
 
-  DENC(foo2_t, v, p) {
-    DENC_START(1, 1, p);
-    ::denc(v.c, p);
-    ::denc(v.d, p);
+  DENC(foo2_accept1_t, v, p) {
+    DENC_START(2, 1, p);
+    ::denc(v.a, p);
+    ::denc(v.b, p);
+    if (struct_v >= 2) {
+      ::denc(v.c, p);
+    }
     DENC_FINISH(p);
   }
+};
+WRITE_CLASS_DENC_BOUNDED(foo2_accept1_t)
 
-  friend bool operator==(const foo2_t& l, const foo2_t& r) {
-    return l.c == r.c && l.d == r.d;
+struct foo2_only2_t {
+  int32_t a = 0;
+  uint64_t b = 123;
+  uint32_t c = 55;
+
+  DENC(foo2_only2_t, v, p) {
+    DENC_START_COMPAT_2(2, 2, p);
+    ::denc(v.a, p);
+    ::denc(v.b, p);
+    ::denc(v.c, p);
+    DENC_FINISH(p);
   }
 };
-WRITE_CLASS_DENC_BOUNDED(foo2_t)
-
+WRITE_CLASS_DENC_BOUNDED(foo2_only2_t)
 
 struct bar_t {
   int32_t a = 0;
@@ -740,4 +754,43 @@ TEST(denc, no_copy_if_segmented_and_lengthy)
     ASSERT_EQ(0u, Legacy::n_denc);
     ASSERT_EQ(CEPH_PAGE_SIZE * 2, Legacy::n_decode);
   }
+}
+
+TEST(denc, compat_allows)
+{
+  foo_t v1;
+  v1.a = 5001; v1.b = 6002;
+  size_t s = 0;
+  denc(v1, s);
+  bufferlist bl;
+  {
+    auto app = bl.get_contiguous_appender(s);
+    denc(v1, app);
+  }
+
+  foo2_accept1_t v2;
+  v2.a = 111; v2.b = 111; v2.c = 111;
+  auto bpi = bl.front().begin();
+  denc(v2, bpi);
+  ASSERT_EQ(v1.a, v2.a);
+  ASSERT_EQ(v1.b, v2.b);
+  ASSERT_EQ(111, v2.c);
+}
+
+TEST(denc, compat_disallows)
+{
+  foo2_only2_t v2;
+  v2.a = 5001; v2.b = 6002; v2.c = 7003;
+  size_t s = 0;
+  denc(v2, s);
+  bufferlist bl;
+  {
+    auto app = bl.get_contiguous_appender(s);
+    denc(v2, app);
+  }
+
+  foo_t v1;
+  v1.a = 111; v1.b = 111;
+  auto bpi = bl.front().begin();
+  ASSERT_ANY_THROW(denc(v1,bpi));
 }
