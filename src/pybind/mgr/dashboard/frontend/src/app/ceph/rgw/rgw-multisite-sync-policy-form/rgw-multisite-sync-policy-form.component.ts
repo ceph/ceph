@@ -1,6 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Observable, timer as observableTimer, of } from 'rxjs';
 import { map, switchMapTo } from 'rxjs/operators';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -11,13 +11,14 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwMultisiteSyncPolicyStatus } from '../models/rgw-multisite';
+import { CdForm } from '~/app/shared/forms/cd-form';
 
 @Component({
   selector: 'cd-rgw-multisite-sync-policy-form',
   templateUrl: './rgw-multisite-sync-policy-form.component.html',
   styleUrls: ['./rgw-multisite-sync-policy-form.component.scss']
 })
-export class RgwMultisiteSyncPolicyFormComponent {
+export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnInit {
   syncPolicyForm: CdFormGroup;
   editing = false;
   action: string;
@@ -26,16 +27,49 @@ export class RgwMultisiteSyncPolicyFormComponent {
 
   constructor(
     private router: Router,
+    private route: ActivatedRoute,
     public actionLabels: ActionLabelsI18n,
     private fb: CdFormBuilder,
     private rgwMultisiteService: RgwMultisiteService,
     private notificationService: NotificationService,
     private rgwBucketService: RgwBucketService
   ) {
+    super();
     this.editing = this.router.url.startsWith(`/rgw/multisite/sync-policy/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`Sync Policy Group`;
     this.createForm();
+    this.loadingReady();
+  }
+
+  ngOnInit(): void {
+    if (this.editing) {
+      this.route.paramMap.subscribe((params) => {
+        const groupName = params.get('groupName');
+        if (groupName) {
+          this.loadingStart();
+          this.rgwMultisiteService
+            .getSyncPolicy('', '', true)
+            .subscribe((syncPolicies: Array<Object>) => {
+              this.loadingReady();
+              if (syncPolicies && syncPolicies.length > 0) {
+                const syncPolicyToEdit: any = syncPolicies.find(
+                  (policy) => policy['id'] === decodeURIComponent(groupName)
+                );
+                if (syncPolicyToEdit) {
+                  this.syncPolicyForm.patchValue({
+                    group_id: syncPolicyToEdit.id,
+                    status: syncPolicyToEdit.status,
+                    bucket_name: syncPolicyToEdit.bucketName
+                  });
+                } else {
+                  this.goToListView();
+                }
+              }
+            });
+        }
+      });
+    }
   }
 
   createForm() {
@@ -62,20 +96,36 @@ export class RgwMultisiteSyncPolicyFormComponent {
       return;
     }
 
-    // Add
-    this.rgwMultisiteService.createSyncPolicyGroup(this.syncPolicyForm.value).subscribe(
-      () => {
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`Created Sync Policy Group '${this.syncPolicyForm.getValue('group_id')}'`
-        );
-        this.goToListView();
-      },
-      () => {
-        // Reset the 'Submit' button.
-        this.syncPolicyForm.setErrors({ cdSubmitButton: true });
-      }
-    );
+    if (!this.editing) {
+      // Add
+      this.rgwMultisiteService.createSyncPolicyGroup(this.syncPolicyForm.value).subscribe(
+        () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Created Sync Policy Group '${this.syncPolicyForm.getValue('group_id')}'`
+          );
+          this.goToListView();
+        },
+        () => {
+          // Reset the 'Submit' button.
+          this.syncPolicyForm.setErrors({ cdSubmitButton: true });
+        }
+      );
+    } else {
+      this.rgwMultisiteService.modifySyncPolicyGroup(this.syncPolicyForm.value).subscribe(
+        () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Modified Sync Policy Group '${this.syncPolicyForm.getValue('group_id')}'`
+          );
+          this.goToListView();
+        },
+        () => {
+          // Reset the 'Submit' button.
+          this.syncPolicyForm.setErrors({ cdSubmitButton: true });
+        }
+      );
+    }
   }
 
   bucketExistence(requiredExistenceResult: boolean): AsyncValidatorFn {

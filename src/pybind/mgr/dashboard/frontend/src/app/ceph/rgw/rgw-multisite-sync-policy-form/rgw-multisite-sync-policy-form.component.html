@@ -3,6 +3,7 @@
     name="bucketForm"
     #frm="ngForm"
     [formGroup]="syncPolicyForm"
+    *cdFormLoading="loading"
     novalidate>
     <div class="card">
       <div
@@ -26,7 +27,8 @@
               type="text"
               i18n-placeholder
               placeholder="Group Id..."
-              formControlName="group_id"/>
+              formControlName="group_id"
+              [readonly]="editing"/>
             <span
               class="invalid-feedback"
               *ngIf="syncPolicyForm.showError('group_id', frm, 'required')"
@@ -77,7 +79,8 @@
               type="text"
               i18n-placeholder
               placeholder="Bucket Name..."
-              formControlName="bucket_name"/>
+              formControlName="bucket_name"
+              [readonly]="editing"/>
             <span
               class="invalid-feedback"
               *ngIf="syncPolicyForm.showError('bucket_name', frm, 'bucketNameNotAllowed')"

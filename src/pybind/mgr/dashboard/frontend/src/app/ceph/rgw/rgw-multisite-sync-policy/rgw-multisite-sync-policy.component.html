@@ -16,7 +16,8 @@
   [serverSide]="false"
   [count]="0"
   [maxLimit]="25"
-  [toolHeader]="true">
+  [toolHeader]="true"
+  (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
     <cd-table-actions
       [permission]="permission"

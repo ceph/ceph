@@ -208,6 +208,11 @@ const routes: Routes = [
         path: `sync-policy/${URLVerbs.CREATE}`,
         component: RgwMultisiteSyncPolicyFormComponent,
         data: { breadcrumbs: `${ActionLabels.CREATE} Sync Policy` }
+      },
+      {
+        path: `sync-policy/${URLVerbs.EDIT}/:groupName`,
+        component: RgwMultisiteSyncPolicyFormComponent,
+        data: { breadcrumbs: `${ActionLabels.EDIT} Sync Policy` }
       }
     ]
   },

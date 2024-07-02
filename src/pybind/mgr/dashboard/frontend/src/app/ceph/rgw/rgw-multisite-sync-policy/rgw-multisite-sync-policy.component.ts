@@ -71,13 +71,21 @@ export class RgwMultisiteSyncPolicyComponent implements OnInit {
         flexGrow: 1
       }
     ];
+    const getSyncGroupName = () =>
+      this.selection.first() && `${encodeURIComponent(this.selection.first().groupName)}`;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE
     };
-    this.tableActions = [addAction];
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => this.urlBuilder.getEdit(getSyncGroupName()),
+      name: this.actionLabels.EDIT
+    };
+    this.tableActions = [addAction, editAction];
     this.rgwMultisiteService
       .getSyncPolicy('', '', true)
       .subscribe((allSyncPolicyData: Array<Object>) => {
@@ -93,5 +101,9 @@ export class RgwMultisiteSyncPolicyComponent implements OnInit {
           this.syncPolicyData = [...this.syncPolicyData];
         }
       });
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 }

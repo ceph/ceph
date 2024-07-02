@@ -5,6 +5,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { ReactiveFormsModule } from '@angular/forms';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ComponentsModule } from '~/app/shared/components/components.module';
+import { RouterTestingModule } from '@angular/router/testing';
 
 describe('RgwMultisiteSyncPolicyFormComponent', () => {
   let component: RgwMultisiteSyncPolicyFormComponent;
@@ -18,7 +19,8 @@ describe('RgwMultisiteSyncPolicyFormComponent', () => {
         ReactiveFormsModule,
         ToastrModule.forRoot(),
         PipesModule,
-        ComponentsModule
+        ComponentsModule,
+        RouterTestingModule
       ],
       providers: []
     }).compileComponents();

@@ -65,4 +65,13 @@ describe('RgwMultisiteService', () => {
     expect(req.request.body).toEqual(postData);
     req.flush(null);
   });
+
+  it('should modify Sync Policy Group', () => {
+    const postData = { group_id: 'test', status: 'enabled', bucket_name: 'test' };
+    service.modifySyncPolicyGroup(postData).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-policy-group');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(postData);
+    req.flush(null);
+  });
 });
