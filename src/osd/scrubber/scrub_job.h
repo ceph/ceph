@@ -205,8 +205,9 @@ struct sched_conf_t {
 
   /**
    * a randomization factor aimed at preventing 'thundering herd' problems
-   * upon deep-scrubs common intervals. If polling a random number smaller
-   * than that percentage, the next shallow scrub is upgraded to deep.
+   * upon deep-scrubs common intervals. The actual deep scrub interval will
+   * be selected with a normal distribution around the configured interval,
+   * with a standard deviation of <deep_randomize_ratio> * <interval>.
    */
   double deep_randomize_ratio{0.0};
 

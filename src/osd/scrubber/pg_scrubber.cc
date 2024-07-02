@@ -656,7 +656,7 @@ bool PgScrubber::reserve_local()
 Scrub::sched_conf_t PgScrubber::populate_config_params() const
 {
   const pool_opts_t& pool_conf = m_pg->get_pgpool().info.opts;
-  auto& conf = get_pg_cct()->_conf;  // for brevity
+  const auto& conf = get_pg_cct()->_conf;  // for brevity
   Scrub::sched_conf_t configs;
 
   // deep-scrub optimal interval
@@ -695,7 +695,7 @@ Scrub::sched_conf_t PgScrubber::populate_config_params() const
       std::max(configs.max_shallow.value_or(0.0), configs.deep_interval);
 
   configs.interval_randomize_ratio = conf->osd_scrub_interval_randomize_ratio;
-  configs.deep_randomize_ratio = conf->osd_deep_scrub_randomize_ratio;
+  configs.deep_randomize_ratio = conf.get_val<double>("osd_deep_scrub_interval_cv");
   configs.mandatory_on_invalid = conf->osd_scrub_invalid_stats;
 
   dout(15) << fmt::format("updated config:{}", configs) << dendl;
