@@ -195,6 +195,12 @@ void PGRecovery::run(
   pg->unlock();
 }
 
+PGRecovery::~PGRecovery()
+{
+  if (reserved_pushes > 0)
+    osd->release_reserved_pushes(reserved_pushes);
+}
+
 void PGRecoveryContext::run(
   OSD *osd,
   OSDShard *sdata,
