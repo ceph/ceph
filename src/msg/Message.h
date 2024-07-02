@@ -242,6 +242,12 @@
 // *** ceph-mgr <-> MON daemons ***
 #define MSG_MGR_UPDATE     0x70b
 
+// *** nvmeof mon -> gw daemons ***
+#define MSG_MNVMEOF_GW_MAP        0x800
+
+// *** gw daemons -> nvmeof mon  ***
+#define MSG_MNVMEOF_GW_BEACON     0x801
+
 // ======================================================
 
 // abstract Message class

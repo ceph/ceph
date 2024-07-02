@@ -712,6 +712,11 @@ public:
     return (class KVMonitor*) paxos_service[PAXOS_KV].get();
   }
 
+  class NVMeofGwMon *nvmegwmon() {
+      return (class NVMeofGwMon*) paxos_service[PAXOS_NVMEGW].get();
+  }
+
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
