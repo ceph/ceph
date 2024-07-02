@@ -194,6 +194,18 @@ void S3Stream<I>::process_request(HttpRequest& http_request) {
                    << "authorization=" << authorization << dendl;
 }
 
+template <typename I>
+void S3Stream<I>::list_raw_snap(io::Extents&& image_extents,
+                                io::SparseExtents* sparse_extents, 
+                                Context* on_finish) {
+  // raw does support sparse extents so list the full IO extent as a delta
+  for (auto& [image_offset, image_length] : image_extents) {
+    sparse_extents->insert(image_offset, image_length,
+                           {io::SPARSE_EXTENT_STATE_DATA, image_length});
+  }
+  on_finish->complete(0);
+}
+
 } // namespace migration
 } // namespace librbd
 
