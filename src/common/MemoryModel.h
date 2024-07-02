@@ -33,9 +33,9 @@ public:
 	     heap(0)
     {}
 
-    long get_total() { return size; }
-    long get_rss() { return rss; }
-    long get_heap() { return heap; }
+    long get_total() const { return size; }
+    long get_rss() const { return rss; }
+    long get_heap() const { return heap; }
   } last;
 
 private:

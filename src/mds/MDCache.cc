@@ -46,7 +46,6 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 
-#include "common/MemoryModel.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/safe_io.h"
@@ -7830,12 +7829,10 @@ void MDCache::trim_client_leases()
   }
 }
 
-void MDCache::check_memory_usage()
+void MDCache::check_memory_usage(const MemoryModel::snap &baseline)
 {
-  static MemoryModel mm(g_ceph_context);
-  static MemoryModel::snap last;
-  mm.sample(&last);
-  static MemoryModel::snap baseline = last;
+  MemoryModel mm(g_ceph_context);
+  mm.sample();
 
   // check client caps
   ceph_assert(CInode::count() == inode_map.size() + snap_inode_map.size() + num_shadow_inodes);
@@ -7844,17 +7841,17 @@ void MDCache::check_memory_usage()
     caps_per_inode = (double)Capability::count() / (double)CInode::count();
 
   dout(2) << "Memory usage: "
-	   << " total " << last.get_total()
-	   << ", rss " << last.get_rss()
-	   << ", heap " << last.get_heap()
+	   << " total " << mm.last.get_total()
+	   << ", rss " << mm.last.get_rss()
+	   << ", heap " << mm.last.get_heap()
 	   << ", baseline " << baseline.get_heap()
 	   << ", " << num_inodes_with_caps << " / " << CInode::count() << " inodes have caps"
 	   << ", " << Capability::count() << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
 
   mds->update_mlogger();
-  mds->mlogger->set(l_mdm_rss, last.get_rss());
-  mds->mlogger->set(l_mdm_heap, last.get_heap());
+  mds->mlogger->set(l_mdm_rss, mm.last.get_rss());
+  mds->mlogger->set(l_mdm_heap, mm.last.get_heap());
 }
 
 
@@ -14190,6 +14187,14 @@ bool MDCache::is_ready_to_trim_cache(void)
 void MDCache::upkeep_main(void)
 {
   std::unique_lock lock(upkeep_mutex);
+
+  // get initial sample upon thread creation
+  MemoryModel::snap baseline;
+  {
+    MemoryModel mm(g_ceph_context);
+    mm.sample(&baseline);
+  }
+
   while (!upkeep_trim_shutdown.load()) {
     auto now = clock::now();
     auto since = now-upkeep_last_trim;
@@ -14200,7 +14205,7 @@ void MDCache::upkeep_main(void)
       lock.lock();
       if (upkeep_trim_shutdown.load())
         return;
-      check_memory_usage();
+      check_memory_usage(baseline);
       if (mds->is_cache_trimmable()) {
         dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;
         bool active_with_clients = mds->is_active() || mds->is_clientreplay() || mds->is_stopping();
