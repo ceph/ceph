@@ -690,6 +690,10 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   auto m = op->get_req<MLog>();
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
+  const version_t trim_max = g_conf().get_val<version_t>("paxos_service_trim_max");
+  const uint64_t trim_max_multiplier = g_conf().get_val<uint64_t>("paxos_service_trim_max_multiplier");
+  const version_t last_to_remove = get_last_to_remove();
+  const bool is_insufficient_space = mon.paxos_service[PAXOS_HEALTH]->is_insufficient_space();
 
   MonSession *session = op->get_session();
   if (!session)
@@ -699,7 +703,16 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
 	    << session->caps << dendl;
     goto done;
   }
-  
+
+  if (last_to_remove >= trim_max * trim_max_multiplier || is_insufficient_space) {
+    dout(10) << "last trim quantities reached max or store.db space is insufficient, ignore this op to avoid crash."
+            << " last_to_remove: " << last_to_remove
+            << " is_insufficient_space: " << is_insufficient_space
+            << dendl;
+    _updated_log(op);
+    return true;
+  }
+
   for (auto p = m->entries.begin();
        p != m->entries.end();
        ++p) {
