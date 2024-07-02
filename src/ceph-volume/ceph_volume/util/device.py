@@ -3,12 +3,11 @@
 import logging
 import os
 from functools import total_ordering
-from ceph_volume import sys_info
+from ceph_volume import sys_info, allow_loop_devices
 from ceph_volume.api import lvm
 from ceph_volume.util import disk, system
 from ceph_volume.util.lsmdisk import LSMDisk
 from ceph_volume.util.constants import ceph_disk_guids
-from ceph_volume.util.disk import allow_loop_devices
 
 
 logger = logging.getLogger(__name__)

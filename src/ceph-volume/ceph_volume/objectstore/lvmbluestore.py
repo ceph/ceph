@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 class LvmBlueStore(BlueStore):
     def __init__(self, args: "argparse.Namespace") -> None:
         super().__init__(args)
+        self.method = 'lvm'
         self.tags: Dict[str, Any] = {}
-        self.block_lv: Optional["Volume"] = None
 
     def pre_prepare(self) -> None:
-        if self.encrypted:
-            self.secrets['dmcrypt_key'] = encryption_utils.create_dmcrypt_key()
+        if self.encrypted and not self.with_tpm:
+            self.secrets['dmcrypt_key'] = self.dmcrypt_key
 
         cluster_fsid = self.get_cluster_fsid()
 
@@ -63,6 +63,7 @@ class LvmBlueStore(BlueStore):
         self.tags['ceph.block_uuid'] = self.block_lv.__dict__['lv_uuid']
         self.tags['ceph.cephx_lockbox_secret'] = self.cephx_lockbox_secret
         self.tags['ceph.encrypted'] = self.encrypted
+        self.tags['ceph.with_tpm'] = 1 if self.with_tpm else 0
         self.tags['ceph.vdo'] = api.is_vdo(self.block_lv.__dict__['lv_path'])
 
     def prepare_data_device(self,
@@ -158,7 +159,7 @@ class LvmBlueStore(BlueStore):
         self.block_lv.set_tags(self.tags)  # type: ignore
 
         # 3/ encryption-only operations
-        if self.secrets.get('dmcrypt_key'):
+        if self.encrypted:
             self.prepare_dmcrypt()
 
         # 4/ osd_prepare req
@@ -175,24 +176,18 @@ class LvmBlueStore(BlueStore):
         # done on activation. Format and open ('decrypt' devices) and
         # re-assign the device and journal variables so that the rest of the
         # process can use the mapper paths
-        key = self.secrets['dmcrypt_key']
 
-        self.block_device_path = \
-            self.luks_format_and_open(key,
-                                      self.block_device_path,
-                                      'block',
-                                      self.tags)
-        self.wal_device_path = self.luks_format_and_open(key,
-                                                         self.wal_device_path,
-                                                         'wal',
-                                                         self.tags)
-        self.db_device_path = self.luks_format_and_open(key,
-                                                        self.db_device_path,
-                                                        'db',
-                                                        self.tags)
+        device_types = ('block', 'db', 'wal')
+
+        for device_type in device_types:
+            attr_name: str = f'{device_type}_device_path'
+            path: str = self.__dict__[attr_name]
+            if path:
+                self.__dict__[attr_name] = self.luks_format_and_open(path,
+                                                                     device_type,
+                                                                     self.tags)
 
     def luks_format_and_open(self,
-                             key: Optional[str],
                              device: str,
                              device_type: str,
                              tags: Dict[str, Any]) -> str:
@@ -206,14 +201,18 @@ class LvmBlueStore(BlueStore):
         uuid = tags[tag_name]
         # format data device
         encryption_utils.luks_format(
-            key,
+            self.dmcrypt_key,
             device
         )
+
+        if self.with_tpm:
+            self.enroll_tpm2(device)
+
         encryption_utils.luks_open(
-            key,
+            self.dmcrypt_key,
             device,
-            uuid
-        )
+            uuid,
+            self.with_tpm)
 
         return '/dev/mapper/%s' % uuid
 
@@ -346,7 +345,7 @@ class LvmBlueStore(BlueStore):
             raise RuntimeError('could not find a bluestore OSD to activate')
 
         is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
-        dmcrypt_secret = None
+        dmcrypt_secret = ''
         osd_id = osd_block_lv.tags['ceph.osd_id']
         conf.cluster = osd_block_lv.tags['ceph.cluster_name']
         osd_fsid = osd_block_lv.tags['ceph.osd_fsid']
@@ -368,13 +367,16 @@ class LvmBlueStore(BlueStore):
         if is_encrypted:
             osd_lv_path = '/dev/mapper/%s' % osd_block_lv.__dict__['lv_uuid']
             lockbox_secret = osd_block_lv.tags['ceph.cephx_lockbox_secret']
-            encryption_utils.write_lockbox_keyring(osd_id,
-                                                   osd_fsid,
-                                                   lockbox_secret)
-            dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+            self.with_tpm = bool(osd_block_lv.tags.get('ceph.with_tpm', 0))
+            if not self.with_tpm:
+                encryption_utils.write_lockbox_keyring(osd_id,
+                                                       osd_fsid,
+                                                       lockbox_secret)
+                dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
             encryption_utils.luks_open(dmcrypt_secret,
                                        osd_block_lv.__dict__['lv_path'],
-                                       osd_block_lv.__dict__['lv_uuid'])
+                                       osd_block_lv.__dict__['lv_uuid'],
+                                       with_tpm=self.with_tpm)
         else:
             osd_lv_path = osd_block_lv.__dict__['lv_path']
 
