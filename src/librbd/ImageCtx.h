@@ -122,6 +122,12 @@ namespace librbd {
     librados::IoCtx data_ctx;
     librados::IoCtx md_ctx;
 
+    // optional handle to an external rados cluster that will be set
+    // iff this image is being migrated from an external rados cluster.
+    // this handle is defined here to bound its lifetime to the lifetime
+    // of this ImageCtx.
+    std::unique_ptr<librados::Rados> migration_rados;
+
     ConfigWatcher<ImageCtx> *config_watcher = nullptr;
     ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;

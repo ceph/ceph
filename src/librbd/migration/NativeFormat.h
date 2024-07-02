@@ -59,6 +59,7 @@ public:
 
 private:
   ImageCtxT* m_image_ctx;
+  CephContext* m_cct;
   json_spirit::mObject m_json_object;
   bool m_import_only;
 
