@@ -129,3 +129,7 @@ void StoreTestFixture::CloseAndReopen() {
   ASSERT_EQ(0, store->mount());
   g_conf().set_safe_to_start_threads();
 }
+
+void StoreTestFixture::RemoveTestObjectStore() {
+  rm_r(data_dir);
+}
