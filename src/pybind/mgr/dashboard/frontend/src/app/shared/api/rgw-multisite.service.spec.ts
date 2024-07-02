@@ -47,4 +47,22 @@ describe('RgwMultisiteService', () => {
     expect(req.request.method).toBe('GET');
     req.flush(mockSyncPolicyData);
   });
+
+  it('should create Sync Policy Group w/o bucket_name', () => {
+    const postData = { group_id: 'test', status: 'enabled' };
+    service.createSyncPolicyGroup(postData).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-policy-group');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(postData);
+    req.flush(null);
+  });
+
+  it('should create Sync Policy Group with bucket_name', () => {
+    const postData = { group_id: 'test', status: 'enabled', bucket_name: 'test' };
+    service.createSyncPolicyGroup(postData).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-policy-group');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(postData);
+    req.flush(null);
+  });
 });

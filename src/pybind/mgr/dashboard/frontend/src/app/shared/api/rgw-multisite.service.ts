@@ -47,4 +47,8 @@ export class RgwMultisiteService {
     params = params.append('all_policy', fetchAllPolicy);
     return this.http.get(`${this.url}/sync-policy`, { params });
   }
+
+  createSyncPolicyGroup(payload: { group_id: string; status: string; bucket_name?: string }) {
+    return this.http.post(`${this.url}/sync-policy-group`, payload);
+  }
 }
