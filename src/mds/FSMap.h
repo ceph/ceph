@@ -169,6 +169,7 @@ struct MirrorInfo {
   Peers peers;
 
   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<MirrorInfo*>& ls);
   void print(std::ostream& out) const;
 
   void encode(ceph::buffer::list &bl) const;

@@ -10,6 +10,7 @@
 
 #include "include/denc.h"
 #include "include/stringify.h"
+#include "common/Formatter.h"
 
 #include "mds/mdstypes.h"
 #include "mgr/Types.h"
@@ -40,7 +41,7 @@ struct MDSPerfMetricSubKeyDescriptor {
   MDSPerfMetricSubKeyDescriptor() {
   }
   MDSPerfMetricSubKeyDescriptor(MDSPerfMetricSubKeyType type, const std::string &regex_str)
-    : type(type), regex_str(regex_str) {
+      : type(type), regex_str(regex_str) {
   }
 
   bool operator<(const MDSPerfMetricSubKeyDescriptor &other) const {
@@ -58,6 +59,10 @@ struct MDSPerfMetricSubKeyDescriptor {
     denc(v.type, p);
     denc(v.regex_str, p);
     DENC_FINISH(p);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("type", static_cast<uint8_t>(type));
+    f->dump_string("regex_str", regex_str);
   }
 };
 WRITE_CLASS_DENC(MDSPerfMetricSubKeyDescriptor)
@@ -77,7 +82,7 @@ struct denc_traits<MDSPerfMetricKeyDescriptor> {
     if (size) {
       size_t per = 0;
       denc(v.front(), per);
-      p +=  per * size;
+      p += per * size;
     }
   }
   static void encode(const MDSPerfMetricKeyDescriptor& v,
@@ -183,6 +188,9 @@ struct MDSPerformanceCounterDescriptor {
     denc(v.type, p);
     DENC_FINISH(p);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("type", static_cast<uint8_t>(type));
+  }
 
   void pack_counter(const PerformanceCounter &c, ceph::buffer::list *bl) const;
   void unpack_counter(ceph::buffer::list::const_iterator& bl, PerformanceCounter *c) const;
@@ -204,7 +212,7 @@ struct denc_traits<MDSPerformanceCounterDescriptors> {
     if (size) {
       size_t per = 0;
       denc(v.front(), per);
-      p +=  per * size;
+      p += per * size;
     }
   }
   static void encode(const MDSPerformanceCounterDescriptors& v,
@@ -237,7 +245,7 @@ struct MDSPerfMetricLimit {
   MDSPerfMetricLimit() {
   }
   MDSPerfMetricLimit(const MDSPerformanceCounterDescriptor &order_by, uint64_t max_count)
-    : order_by(order_by), max_count(max_count) {
+      : order_by(order_by), max_count(max_count) {
   }
 
   bool operator<(const MDSPerfMetricLimit &other) const {
@@ -254,6 +262,10 @@ struct MDSPerfMetricLimit {
     denc(v.max_count, p);
     DENC_FINISH(p);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("order_by", order_by);
+    f->dump_unsigned("max_count", max_count);
+  }
 };
 WRITE_CLASS_DENC(MDSPerfMetricLimit)
 
@@ -268,7 +280,7 @@ struct MDSPerfMetricQuery {
   }
   MDSPerfMetricQuery(const MDSPerfMetricKeyDescriptor &key_descriptor,
                      const MDSPerformanceCounterDescriptors &performance_counter_descriptors)
-    : key_descriptor(key_descriptor),
+      : key_descriptor(key_descriptor),
       performance_counter_descriptors(performance_counter_descriptors)
   {
   }
@@ -320,6 +332,11 @@ struct MDSPerfMetricQuery {
     DENC_FINISH(p);
   }
 
+  void dump(ceph::Formatter *f) const {
+    f->dump_stream("key_descriptor") << key_descriptor;
+    f->dump_stream("performance_counter_descriptors") << performance_counter_descriptors;
+  }
+
   void pack_counters(const PerformanceCounters &counters, ceph::buffer::list *bl) const;
 };
 WRITE_CLASS_DENC(MDSPerfMetricQuery)
@@ -332,7 +349,7 @@ struct MDSPerfCollector : PerfCollector {
   utime_t last_updated_mono;
 
   MDSPerfCollector(MetricQueryID query_id)
-    : PerfCollector(query_id) {
+      : PerfCollector(query_id) {
   }
 };
 
@@ -346,6 +363,15 @@ struct MDSPerfMetrics {
     denc(v.group_packed_performance_counters, p);
     DENC_FINISH(p);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_stream("performance_counter_descriptors") << performance_counter_descriptors;
+    f->open_array_section("group_packed_performance_counters");
+    for (auto &i : group_packed_performance_counters) {
+      f->dump_stream("key") << i.first;
+      f->dump_stream("value") << i.second;
+    }
+    f->close_section();
+  }
 };
 
 struct MDSPerfMetricReport {
@@ -358,6 +384,24 @@ struct MDSPerfMetricReport {
     denc(v.reports, p);
     denc(v.rank_metrics_delayed, p);
     DENC_FINISH(p);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->open_array_section("reports");
+    for (auto &i : reports) {
+      f->open_object_section("query");
+      f->dump_object("query",i.first);
+      f->close_section();
+      f->open_object_section("metrics");
+      f->dump_object("metrics",i.second);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(std::list<MDSPerfMetricReport *> &o) {
+    o.push_back(new MDSPerfMetricReport);
+    o.push_back(new MDSPerfMetricReport);
+    o.back()->reports.emplace(MDSPerfMetricQuery(), MDSPerfMetrics());
+    o.back()->rank_metrics_delayed.insert(1);
   }
 };
 
