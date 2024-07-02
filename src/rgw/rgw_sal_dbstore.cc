@@ -715,7 +715,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
+  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags, RGWObjVersionTracker* objv)
   {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);

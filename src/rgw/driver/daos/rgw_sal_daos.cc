@@ -1196,7 +1196,7 @@ int DaosObject::DaosDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 }
 
 int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                              uint32_t flags) {
+                              uint32_t flags, RGWObjVersionTracker* objv) {
   ldpp_dout(dpp, 20) << "DEBUG: delete_object" << dendl;
   DaosObject::DaosDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;

@@ -2283,7 +2283,14 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
   read_op.params.obj_size = &state.size;
   read_op.params.lastmod = &state.mtime;
 
-  return read_op.prepare(y, dpp);
+  int ret = read_op.prepare(y, dpp);
+
+  RGWObjStateManifest *sm = rados_ctx->get_state(get_obj());
+  if (sm != nullptr) {
+    state.objv_tracker = sm->state.objv_tracker;
+  }
+
+  return ret;
 }
 
 int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
@@ -2824,7 +2831,8 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
 
 int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 			       optional_yield y,
-			       uint32_t flags)
+			       uint32_t flags,
+			       RGWObjVersionTracker* objv)
 {
   RGWRados::Object del_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Delete del_op(&del_target);
@@ -2832,6 +2840,9 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   del_op.params.bucket_owner = bucket->get_info().owner;
   del_op.params.versioning_status = (flags & FLAG_PREVENT_VERSIONING)
                                     ? 0 : bucket->get_info().versioning_status();
+  if (objv) {
+      del_op.params.check_objv = objv->version_for_check();
+  }
 
   return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
 }
@@ -2996,7 +3007,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 	std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
 				    rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
 	obj->set_hash_source(mp_obj.get_key());
-	ret = obj->delete_object(dpp, y, 0);
+	ret = obj->delete_object(dpp, y, 0, nullptr);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {

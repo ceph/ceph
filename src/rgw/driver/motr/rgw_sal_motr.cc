@@ -585,7 +585,7 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
 
       std::unique_ptr<rgw::sal::Object> object = get_object(key);
 
-      ret = object->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP);
+      ret = object->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr);
       if (ret < 0 && ret != -ENOENT) {
         ldpp_dout(dpp, 0) << "ERROR: remove_bucket rgw_remove_object failed rc=" << ret << dendl;
 	      return ret;
@@ -1502,7 +1502,7 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   return 0;
 }
 
-int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
+int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags, RGWObjVersionTracker* objv)
 {
   MotrObject::MotrDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;
