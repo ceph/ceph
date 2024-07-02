@@ -136,6 +136,7 @@ class TestAccounter : public io::Accounter, public io::BasicClient {
 
 protected:
   virtual int init_env(CephContext *cct) override {
+    env.init(cct);
     return 0;
   }
 
@@ -188,6 +189,7 @@ inline std::unique_ptr<sal::RadosStore> make_store() {
   auto store = make_store();                   \
   pe.lua.manager = store->get_lua_manager(""); \
   RGWEnv e; \
+  e.init(g_cct); \
   req_state s(g_cct, pe, &e, 0);
 
 #define INIT_TRACE tracer.init(g_cct, "test"); \
