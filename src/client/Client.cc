@@ -14,6 +14,7 @@
 
 
 // unix-ey fs stuff
+#include <algorithm>
 #include <unistd.h>
 #include <sys/types.h>
 #include <time.h>
@@ -9249,14 +9250,16 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
 //};
 void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off)
 {
-  strncpy(de->d_name, name, 255);
-  de->d_name[255] = '\0';
+  size_t len = strlen(name);
+  len = std::min(len, (size_t)255);
+  memcpy(de->d_name, name, len);
+  de->d_name[len] = '\0';
 #if !defined(__CYGWIN__) && !(defined(_WIN32))
   de->d_ino = ino;
 #if !defined(__APPLE__) && !defined(__FreeBSD__)
   de->d_off = next_off;
 #endif
-  de->d_reclen = 1;
+  de->d_reclen = (uintptr_t)&de->d_name[len] - (uintptr_t)de + 1;
   de->d_type = IFTODT(type);
   ldout(cct, 10) << __func__ << " '" << de->d_name << "' -> " << inodeno_t(de->d_ino)
 	   << " type " << (int)de->d_type << " w/ next_off " << hex << next_off << dec << dendl;
