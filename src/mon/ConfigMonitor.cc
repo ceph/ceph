@@ -542,6 +542,14 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     name = ConfFile::normalize_key_name(name);
     
     if (prefix == "config set" && !force) {
+
+      // Check if 'who' contains any special symbols
+      if (who.find_first_of("!@#$%^&*") != std::string::npos) {
+          ss << "Cannot contain special symbols '" << who << "'";
+          err = -EINVAL;
+          goto reply;
+      }
+
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon.mgrmon()->find_module_option(name);
