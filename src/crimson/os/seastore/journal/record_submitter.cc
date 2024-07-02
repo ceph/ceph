@@ -493,7 +493,7 @@ void RecordSubmitter::account_submission(
   stats.record_batch_stats.increment(rg.get_size());
 
   for (const record_t& r : rg.records) {
-    auto src = r.type;
+    auto src = r.trans_type;
     assert(is_modify_transaction(src));
     auto& trans_stats = get_by_src(stats.stats_by_src, src);
     ++(trans_stats.num_records);
