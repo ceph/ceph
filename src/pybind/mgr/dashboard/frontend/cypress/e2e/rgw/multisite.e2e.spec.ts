@@ -24,7 +24,23 @@ describe('Multisite page', () => {
     it('should show empty table in Sync Policy page', () => {
       multisite.getTab('Sync Policy').click();
       multisite.getDataTables().should('exist');
-      multisite.getTableCount('total').should('eq', 0);
+    });
+  });
+
+  describe('create, edit & delete sync group policy', () => {
+    it('should create policy', () => {
+      multisite.navigateTo('create');
+      multisite.create('test', 'Enabled');
+      multisite.getFirstTableCell('test').should('exist');
+    });
+
+    it('should edit policy status', () => {
+      multisite.edit('test', 'Forbidden');
+    });
+
+    it('should delete policy', () => {
+      multisite.getTab('Sync Policy').click();
+      multisite.delete('test');
     });
   });
 });

@@ -318,6 +318,16 @@ export class TaskMessageService {
       this.rbd_mirroring.pool_peer,
       () => ({})
     ),
+    'rgw/multisite/sync-policy/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.group_names.length > 1
+            ? 'selected policy groups'
+            : `policy group '${metadata.group_names[0]}'`
+        }`;
+      }
+    ),
     // iSCSI target tasks
     'iscsi/target/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.iscsiTarget(metadata)
