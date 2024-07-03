@@ -335,6 +335,46 @@ class TestRmdir(TestCephFSShell):
         self.mount_a.stat(self.dir_name)
 
 
+class TestRm(TestCephFSShell):
+    dir_name = "testdir"
+
+    def assert_dir_does_not_exists(self):
+        """
+        Tests that directory does not exists
+        """
+        try:
+            self.mount_a.stat(self.dir_name)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, 2)
+
+    def test_rm_r(self):
+        """
+        Test that rm -r deletes the directory containing a file
+        """
+        self.run_cephfs_shell_cmd("mkdir " + self.dir_name)
+        self.run_cephfs_shell_cmd(f"put - {self.dir_name}/dumpfile", stdin="Valid File")
+        self.run_cephfs_shell_cmd("rm -r " + self.dir_name)
+        self.assert_dir_does_not_exists()
+
+    def test_rm_r_dir_with_file(self):
+        """
+        Test that rm -r deletes the directory containing files and sub-directory
+        """
+        self.run_cephfs_shell_cmd(f"mkdir -p {self.dir_name}/t1/t2/t3")
+        self.run_cephfs_shell_cmd(f"put - {self.dir_name}/t1/file1", stdin="Valid File")
+        self.run_cephfs_shell_cmd(f"put - {self.dir_name}/t1/t2/file2", stdin="Valid File")
+        self.run_cephfs_shell_cmd(f"put - {self.dir_name}/t1/t2/t3/file3", stdin="Valid File")
+        self.run_cephfs_shell_cmd("rm -r " + self.dir_name)
+        self.assert_dir_does_not_exists()
+
+    def test_rm_r_non_existing_dir(self):
+        """
+        Test that rm -r does not delete an invalid directory
+        """
+        self.negtest_cephfs_shell_cmd(cmd=f"rm -r {self.dir_name}")
+        self.assert_dir_does_not_exists()
+
+
 class TestLn(TestCephFSShell):
     dir1 = 'test_dir1'
     dir2 = 'test_dir2'
