@@ -6395,6 +6395,18 @@ options:
   - localize
   flags:
   - runtime
+- name: rados_replica_read_policy_on_objclass
+  type: bool
+  level: advanced
+  desc: enable read policy for sending read requests to OSD on objclass ops
+  fmt_desc : |
+    This would enable objclass ops to leverage read policy that can
+    determine which OSD will receive read operation. The reason
+    we might want to disable this is because objclass operations may
+    not be flagged correctly as read or write ops and we don't want
+    write ops to be sent to the wrong OSD (and system won't function
+    correctly).
+  default: false
 # true if LTTng-UST tracepoints should be enabled
 - name: rados_tracing
   type: bool

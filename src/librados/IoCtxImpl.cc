@@ -241,6 +241,9 @@ librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
     oloc(poolid),
     aio_write_seq(0), objecter(objecter)
 {
+  if (!c->cct->_conf.get_val<bool>("rados_replica_read_policy_on_objclass")) {
+    objclass_flags_mask = ~(CEPH_OSD_FLAG_LOCALIZE_READS | CEPH_OSD_FLAG_BALANCE_READS);
+  }
 }
 
 void librados::IoCtxImpl::set_snap_read(snapid_t s)
@@ -1313,7 +1316,7 @@ int librados::IoCtxImpl::exec(const object_t& oid,
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.call(cls, method, inbl);
-  return operate_read(oid, &rd, &outbl, 0, ~(CEPH_OSD_FLAG_LOCALIZE_READS | CEPH_OSD_FLAG_BALANCE_READS));
+  return operate_read(oid, &rd, &outbl, 0, objclass_flags_mask);
 }
 
 int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
@@ -1333,7 +1336,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   prepare_assert_ops(&rd);
   rd.call(cls, method, inbl);
   Objecter::Op *o = objecter->prepare_read_op(
-    oid, oloc, rd, snap_seq, outbl, extra_op_flags, ~(CEPH_OSD_FLAG_LOCALIZE_READS | CEPH_OSD_FLAG_BALANCE_READS), oncomplete, &c->objver);
+    oid, oloc, rd, snap_seq, outbl, extra_op_flags, objclass_flags_mask, oncomplete, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
@@ -1359,7 +1362,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   prepare_assert_ops(&rd);
   rd.call(cls, method, inbl);
   Objecter::Op *o = objecter->prepare_read_op(
-    oid, oloc, rd, snap_seq, &c->bl, extra_op_flags, ~(CEPH_OSD_FLAG_LOCALIZE_READS | CEPH_OSD_FLAG_BALANCE_READS), oncomplete, &c->objver);
+    oid, oloc, rd, snap_seq, &c->bl, extra_op_flags, objclass_flags_mask, oncomplete, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
 }

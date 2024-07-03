@@ -41,6 +41,7 @@ struct librados::IoCtxImpl {
   uint32_t notify_timeout = 30;
   object_locator_t oloc;
   int extra_op_flags = 0;
+  int objclass_flags_mask = -1;
 
   ceph::mutex aio_write_list_lock =
     ceph::make_mutex("librados::IoCtxImpl::aio_write_list_lock");
