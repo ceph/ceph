@@ -242,12 +242,6 @@ if(WITH_XFS)
   set(HAVE_LIBXFS ${XFS_FOUND})
 endif()
 
-option(WITH_ZFS "enable LibZFS if found" OFF)
-if(WITH_ZFS)
-  find_package(zfs)
-  set(HAVE_LIBZFS ${ZFS_FOUND})
-endif()
-
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
   if(LINUX)
