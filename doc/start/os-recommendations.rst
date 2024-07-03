@@ -43,7 +43,7 @@ package (i.e., sysvinit, systemd).
 +--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
 | Release Name | Tag    | CentOS                 | Ubuntu                         | OpenSUSE :sup:`C` | Debian :sup:`C` |
 +==============+========+========================+================================+===================+=================+
-| Quincy       | 17.2.z | 8 :sup:`A`             | 20.04 :sup:`A`                 | 15.3              | 11              |
+| Quincy       | 17.2.z | 9 :sup:`A` :sup:`1`    | 20.04 :sup:`A`                 | 15.3              | 11              |
 +--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
 | Pacific      | 16.2.z | 8 :sup:`A`             | 18.04 :sup:`C`, 20.04 :sup:`A` | 15.2              | 10, 11          |
 +--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
@@ -53,6 +53,7 @@ package (i.e., sysvinit, systemd).
 - **A**: Ceph provides packages and has done comprehensive tests on the software in them.
 - **B**: Ceph provides packages and has done basic tests on the software in them.
 - **C**: Ceph provides packages only. No tests have been done on these releases.
+- **1**: Testing has been done on Centos 9 starting on version 17.2.8 for Quincy.
 
 Ceph does not require a specific Linux distribution. Ceph can run on any
 distribution that includes a supported kernel and supported system startup
