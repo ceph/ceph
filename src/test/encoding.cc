@@ -327,7 +327,7 @@ TEST(EncodingException, Macros) {
   } tests[] = {
     {
       DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100, 200),
-      fmt::format("{} no longer understand old encoding version 100 < 200: Malformed input",
+      fmt::format("{} no longer understands old encoding version 100 < 200: Malformed input",
                   __PRETTY_FUNCTION__)
     },
     {
