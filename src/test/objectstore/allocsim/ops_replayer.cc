@@ -1,8 +1,6 @@
 #include <algorithm>
 #include <cassert>
 #include <fcntl.h>
-#include <ranges>
-#include <string_view>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <thread>
@@ -15,7 +13,6 @@
 #include <rados/librados.hpp>
 #include <atomic>
 #include <fmt/format.h>
-#include <fstream>
 #include <map>
 #include <memory>
 #include <random>
@@ -219,14 +216,18 @@ void worker_thread_entry(uint64_t id, uint64_t nworker_threads, vector<Op> &ops,
       op.completion = librados::Rados::aio_create_completion(static_cast<void*>(&op), completion_cb);
       switch (op.type) {
         case Write: {
-          int ret = io->aio_write(*op.object, op.completion, bl, op.length, op.offset);
+          bufferlist trimmed;
+          trimmed.substr_of(bl, 0, op.length);
+          int ret = io->aio_write(*op.object, op.completion, trimmed, op.length, op.offset);
           if (ret != 0) {
             cout << fmt::format("Error writing ecode={}", ret) << endl;;
           }
           break;
         }
         case WriteFull: {
-          int ret = io->aio_write_full(*op.object, op.completion, bl);
+          bufferlist trimmed;
+          trimmed.substr_of(bl, 0, op.length);
+          int ret = io->aio_write_full(*op.object, op.completion, trimmed);
           if (ret != 0) {
             cout << fmt::format("Error writing full ecode={}", ret) << endl;;
           }
