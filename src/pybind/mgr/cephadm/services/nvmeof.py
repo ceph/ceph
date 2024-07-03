@@ -60,15 +60,20 @@ class NvmeofService(CephService):
                 or not spec.client_key
                 or not spec.server_cert
                 or not spec.server_key
+                or not spec.root_ca_cert
             ):
-                self.mgr.log.error(f'enable_auth set for {spec.service_name()} spec, but at '
-                                   'least one of server/client cert/key fields missing. TLS '
-                                   f'not being set up for {daemon_spec.name()}')
+                err_msg = 'enable_auth is true but '
+                for cert_key_attr in ['server_key', 'server_cert', 'client_key', 'client_cert', 'root_ca_cert']:
+                    if not hasattr(spec, cert_key_attr):
+                        err_msg += f'{cert_key_attr}, '
+                err_msg += 'attribute(s) missing from nvmeof spec'
+                self.mgr.log.error(err_msg)
             else:
                 daemon_spec.extra_files['server_cert'] = spec.server_cert
                 daemon_spec.extra_files['client_cert'] = spec.client_cert
                 daemon_spec.extra_files['server_key'] = spec.server_key
                 daemon_spec.extra_files['client_key'] = spec.client_key
+                daemon_spec.extra_files['root_ca_cert'] = spec.root_ca_cert
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
