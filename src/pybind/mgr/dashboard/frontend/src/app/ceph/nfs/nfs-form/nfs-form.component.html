@@ -44,6 +44,36 @@
           </div>
         </div>
 
+        <!-- RGW Export Type -->
+        <div *ngIf="storageBackend === 'RGW' && !isEdit"
+             class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="rgw_export_type"
+                 i18n>Type</label>
+          <div class="col-md-auto custom-checkbox form-check-inline ms-3">
+            <input class="form-check-input"
+                   formControlName="rgw_export_type"
+                   id="bucket_export"
+                   type="radio"
+                   value="bucket"
+                   (change)="setBucket()">
+            <label class="form-check-label"
+                   for="bucket_export"
+                   i18n>Bucket</label>
+          </div>
+          <div class="col-md-auto custom-checkbox form-check-inline">
+            <input class="form-check-input"
+                   formControlName="rgw_export_type"
+                   id="user_export"
+                   type="radio"
+                   value="user"
+                   (change)="setUsers()">
+            <label class="form-check-label"
+                   for="user_export"
+                   i18n>User</label>
+          </div>
+        </div>
+
         <!-- FSAL -->
         <div formGroupName="fsal">
           <!-- CephFS Volume -->
@@ -72,6 +102,38 @@
               </select>
               <span class="invalid-feedback"
                     *ngIf="nfsForm.showError('fs_name', formDir, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <!-- RGW User -->
+          <div class="form-group row"
+               *ngIf="storageBackend === 'RGW' && nfsForm.getValue('rgw_export_type') === 'user'">
+            <label class="cd-col-form-label"
+                   for="user_id">
+              <span class="required"
+                    i18n>User</span>
+            </label>
+            <div class="cd-col-form-input">
+              <select class="form-select"
+                      formControlName="user_id"
+                      name="user_id"
+                      id="user_id"
+                      (change)="pathChangeHandler()">
+                <option *ngIf="allRGWUsers === null"
+                        value=""
+                        i18n>Loading...</option>
+                <option *ngIf="allRGWUsers !== null && allRGWUsers.length === 0"
+                        value=""
+                        i18n>-- No RGW User available --</option>
+                <option *ngIf="allRGWUsers !== null && allRGWUsers.length > 0"
+                        value=""
+                        i18n>-- Select the RGW User --</option>
+                <option *ngFor="let user of allRGWUsers"
+                        [value]="user.user_id">{{ user.user_id }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="nfsForm.showError('user_id', formDir, 'required')"
                     i18n>This field is required.</span>
             </div>
           </div>
@@ -201,7 +263,7 @@
 
         <!-- Bucket -->
         <div class="form-group row"
-             *ngIf="storageBackend === 'RGW'">
+             *ngIf="storageBackend === 'RGW' && nfsForm.getValue('rgw_export_type') === 'bucket'">
           <label class="cd-col-form-label"
                  for="path">
             <span class="required"
@@ -214,7 +276,9 @@
                    id="path"
                    data-testid="rgw_path"
                    formControlName="path"
-                   [ngbTypeahead]="bucketDataSource">
+                   [ngbTypeahead]="bucketDataSource"
+                   (selectItem)="pathChangeHandler()"
+                   (blur)="pathChangeHandler()">
 
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'required')"
@@ -222,8 +286,8 @@
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'bucketNameNotAllowed')"
                   i18n>The bucket does not exist or is not in the default realm (if multiple realms are configured).
-                       To continue, <a routerLink="/rgw/bucket/create"
-                                       class="btn-link">create a new bucket</a>.</span>
+                      To continue, <a routerLink="/rgw/bucket/create"
+                                      class="btn-link">create a new bucket</a>.</span>
           </div>
         </div>
 
