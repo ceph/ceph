@@ -426,10 +426,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = ./server.key
-client_key = ./client.key
-server_cert = ./server.crt
-client_cert = ./client.crt
+server_key = /server.key
+client_key = /client.key
+server_cert = /server.cert
+client_cert = /client.cert
+root_ca_cert = /root.ca.cert
 
 [spdk]
 tgt_path = /usr/local/bin/nvmf_tgt
