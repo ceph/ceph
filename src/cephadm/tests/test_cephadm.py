@@ -282,7 +282,8 @@ class TestCephAdm(object):
     @mock.patch('cephadmlib.firewalld.Firewalld', mock_bad_firewalld)
     @mock.patch('cephadm.Firewalld', mock_bad_firewalld)
     @mock.patch('cephadm.logger')
-    def test_skip_firewalld(self, _logger, cephadm_fs):
+    @mock.patch('cephadm.json_loads_retry', return_value=None)
+    def test_skip_firewalld(self, _logger, _jlr, cephadm_fs):
         """
         test --skip-firewalld actually skips changing firewall
         """
