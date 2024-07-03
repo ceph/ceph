@@ -363,7 +363,7 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
       // option, so we can assume it won't change while the RGW server
       // is running, so we'll handle it once before we loop
       double sync_interval_factor = 1.0;
-      const uint64_t debug_interval = cct->_conf->rgw_reshard_debug_interval;
+      const int64_t debug_interval = cct->_conf->rgw_reshard_debug_interval;
       if (debug_interval >= 1) {
 	  constexpr double secs_per_day = 60 * 60 * 24;
 	  sync_interval_factor = debug_interval / secs_per_day;
