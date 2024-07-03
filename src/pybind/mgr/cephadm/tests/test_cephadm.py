@@ -1717,6 +1717,7 @@ class TestCephadm(object):
             'rgw_frontend_ssl_cert': False,
             'iscsi_ssl_cert': False,
             'ingress_ssl_cert': False,
+            'mgmt_gw_cert': False,
             'cephadm_root_ca_cert': False,
             'grafana_cert': False,
         }
@@ -1747,6 +1748,7 @@ class TestCephadm(object):
 
         expected_ls = {
             'grafana_key': False,
+            'mgmt_gw_key': False,
             'cephadm_root_ca_key': False,
             'iscsi_ssl_key': False,
             'ingress_ssl_key': False,

@@ -40,17 +40,31 @@ class MgmtGatewayService(CephadmService):
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
 
-    def get_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str]:
+    def get_external_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        cert = self.mgr.cert_key_store.get_cert('mgmt_gw_cert')
+        key = self.mgr.cert_key_store.get_key('mgmt_gw_key')
+        if not (cert and key):
+            # not available on store, check if provided on the spec
+            if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
+                cert = svc_spec.ssl_certificate
+                key = svc_spec.ssl_certificate_key
+            else:
+                # not provided on the spec, let's generate self-sigend certificates
+                addr = self.mgr.inventory.get_addr(daemon_spec.host)
+                host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, addr)
+            # save certificates
+            if cert and key:
+                self.mgr.cert_key_store.save_cert('mgmt_gw_cert', cert)
+                self.mgr.cert_key_store.save_key('mgmt_gw_key', key)
+            else:
+                logger.error("Failed to obtain certificate and key fro mgmt-gateway.")
+        return cert, key
+
+    def get_internal_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-        internal_cert, internal_pkey = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
-        cert = svc_spec.ssl_certificate
-        pkey = svc_spec.ssl_certificate_key
-        if not (cert and pkey):
-            # In case the user has not provided certificates then we generate self-signed ones
-            cert, pkey = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
-
-        return internal_cert, internal_pkey, cert, pkey
+        return self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
 
     def get_mgmt_gateway_deps(self) -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
@@ -108,7 +122,8 @@ class MgmtGatewayService(CephadmService):
             'grafana_endpoints': grafana_endpoints
         }
 
-        internal_cert, internal_pkey, cert, key = self.get_certificates(svc_spec, daemon_spec)
+        cert, key = self.get_external_certificates(svc_spec, daemon_spec)
+        internal_cert, internal_pkey = self.get_internal_certificates(daemon_spec)
         daemon_config = {
             "files": {
                 "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),
@@ -132,3 +147,7 @@ class MgmtGatewayService(CephadmService):
         # reset the standby dashboard redirection behaviour
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'redirect')
+        if daemon.hostname is not None:
+            # delete cert/key entires for this grafana daemon
+            self.mgr.cert_key_store.rm_cert('mgmt_gw_cert', host=daemon.hostname)
+            self.mgr.cert_key_store.rm_key('mgmt_gw_key', host=daemon.hostname)

@@ -1882,6 +1882,7 @@ class CertKeyStore():
             'rgw_frontend_ssl_cert': {},  # service-name -> cert
             'iscsi_ssl_cert': {},  # service-name -> cert
             'ingress_ssl_cert': {},  # service-name -> cert
+            'mgmt_gw_cert': Cert(),  # cert
             'cephadm_root_ca_cert': Cert(),  # cert
             'grafana_cert': {},  # host -> cert
         }
@@ -1889,6 +1890,7 @@ class CertKeyStore():
         # that don't have a key here are probably certs in PEM format
         # so there is no need to store a separate key
         self.known_keys = {
+            'mgmt_gw_key': PrivKey(),  # cert
             'cephadm_root_ca_key': PrivKey(),  # cert
             'grafana_key': {},  # host -> key
             'iscsi_ssl_key': {},  # service-name -> key
