@@ -28,3 +28,12 @@
   <ng-container *ngIf="value.name==='RGW'"
                 i18n>Object Gateway</ng-container>
 </ng-template>
+
+<ng-template #pathTmpl
+             let-value="value">
+  <span *ngIf="value === ''"
+        i18n
+        i18n-ngbTooltip
+        ngbTooltip="All buckets owned by user">*</span>
+  <span *ngIf="value !== ''">{{ value }}</span>
+</ng-template>
