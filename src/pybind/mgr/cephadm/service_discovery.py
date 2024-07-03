@@ -7,7 +7,6 @@ except ImportError:
         pass
 
 import logging
-import socket
 
 import orchestrator  # noqa
 from mgr_module import ServiceInfoT
@@ -89,9 +88,8 @@ class ServiceDiscovery:
 
     def configure_tls(self, server: Server) -> None:
         addr = self.mgr.get_mgr_ip()
-        host_fqdn = socket.getfqdn(addr)
-        cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, addr)
-
+        host = self.mgr.get_hostname()
+        cert, key = self.mgr.cert_mgr.generate_cert(host, addr)
         self.cert_file = tempfile.NamedTemporaryFile()
         self.cert_file.write(cert.encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed

@@ -1,7 +1,6 @@
 
 from typing import Any, Tuple, IO, List
 import ipaddress
-import logging
 
 from datetime import datetime, timedelta
 from cryptography import x509

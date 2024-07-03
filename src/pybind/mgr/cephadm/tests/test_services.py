@@ -693,9 +693,6 @@ class TestMonitoring:
                     use_current_daemon_image=False,
                 )
 
-                assert cephadm_module.cert_key_store.get_cert('alertmanager_cert', host='test') == 'mycert'
-                assert cephadm_module.cert_key_store.get_key('alertmanager_key', host='test') == 'mykey'
-
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
     def test_prometheus_config_security_disabled(self, _run_cephadm, cephadm_module: CephadmOrchestrator):

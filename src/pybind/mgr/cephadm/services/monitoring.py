@@ -149,7 +149,9 @@ class GrafanaService(CephadmService):
         if not certs_present or (org == 'Ceph' and cn == 'cephadm'):
             logger.info('Regenerating cephadm self-signed grafana TLS certificates')
             host_fqdn = socket.getfqdn(daemon_spec.host)
-            cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
+            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+            cert, pkey = self.mgr.cert_mgr.generate_cert([host_fqdn, "grafana_servers"], node_ip)
+            # cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
             self.mgr.cert_key_store.save_cert('grafana_cert', cert, host=daemon_spec.host)
             self.mgr.cert_key_store.save_key('grafana_key', pkey, host=daemon_spec.host)
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
@@ -252,6 +254,12 @@ class AlertmanagerService(CephadmService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "alertmanager_servers"], node_ip)
+        return cert, key
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps: List[str] = []
@@ -308,15 +316,7 @@ class AlertmanagerService(CephadmService):
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
             if alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
-            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            cert = self.mgr.cert_key_store.get_cert('alertmanager_cert', host=daemon_spec.host)
-            key = self.mgr.cert_key_store.get_key('alertmanager_key', host=daemon_spec.host)
-            if not (cert and key):
-                cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
-                    host_fqdn, node_ip)
-                self.mgr.cert_key_store.save_cert('alertmanager_cert', cert, host=daemon_spec.host)
-                self.mgr.cert_key_store.save_key('alertmanager_key', key, host=daemon_spec.host)
+            cert, key = self.get_alertmanager_certificates(daemon_spec)
             context = {
                 'alertmanager_web_user': alertmanager_user,
                 'alertmanager_web_password': password_hash(alertmanager_password),
@@ -383,15 +383,6 @@ class AlertmanagerService(CephadmService):
                 service_url
             )
 
-    def pre_remove(self, daemon: DaemonDescription) -> None:
-        """
-        Called before alertmanager daemon is removed.
-        """
-        if daemon.hostname is not None:
-            # delete cert/key entires for this grafana daemon
-            self.mgr.cert_key_store.rm_cert('alertmanager_cert', host=daemon.hostname)
-            self.mgr.cert_key_store.rm_key('alertmanager_key', host=daemon.hostname)
-
     def ok_to_stop(self,
                    daemon_ids: List[str],
                    force: bool = False,
@@ -419,6 +410,12 @@ class PrometheusService(CephadmService):
             })
             # we shouldn't get here (mon will tell the mgr to respawn), but no
             # harm done if we do.
+
+    def get_mgr_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "prometheus_servers"], node_ip)
+        return cert, key
 
     def prepare_create(
             self,
@@ -503,37 +500,21 @@ class PrometheusService(CephadmService):
 
         mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         if self.mgr.secure_monitoring_stack:
-            # NOTE: this prometheus root cert is managed by the prometheus module
-            # we are using it in a read only fashion in the cephadm module
-            cfg_key = 'mgr/prometheus/root/cert'
-            cmd = {'prefix': 'config-key get', 'key': cfg_key}
-            ret, mgr_prometheus_rootca, err = self.mgr.mon_command(cmd)
-            if ret != 0:
-                logger.error(f'mon command to get config-key {cfg_key} failed: {err}')
-            else:
-                node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-                host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-                cert = self.mgr.cert_key_store.get_cert('prometheus_cert', host=daemon_spec.host)
-                key = self.mgr.cert_key_store.get_key('prometheus_key', host=daemon_spec.host)
-                if not (cert and key):
-                    cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(host_fqdn, node_ip)
-                    self.mgr.cert_key_store.save_cert('prometheus_cert', cert, host=daemon_spec.host)
-                    self.mgr.cert_key_store.save_key('prometheus_key', key, host=daemon_spec.host)
-                r: Dict[str, Any] = {
-                    'files': {
-                        'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
-                        'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert(),
-                        'mgr_prometheus_cert.pem': mgr_prometheus_rootca,
-                        'web.yml': self.mgr.template.render('services/prometheus/web.yml.j2', web_context),
-                        'prometheus.crt': cert,
-                        'prometheus.key': key,
-                    },
-                    'retention_time': retention_time,
-                    'retention_size': retention_size,
-                    'ip_to_bind_to': ip_to_bind_to,
-                    'web_config': '/etc/prometheus/web.yml',
-                    'use_url_prefix': mgmt_gw_enabled
-                }
+            cert, key = self.get_mgr_prometheus_certificates(daemon_spec)
+            r: Dict[str, Any] = {
+                'files': {
+                    'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context),
+                    'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
+                    'web.yml': self.mgr.template.render('services/prometheus/web.yml.j2', web_context),
+                    'prometheus.crt': cert,
+                    'prometheus.key': key,
+                },
+                'retention_time': retention_time,
+                'retention_size': retention_size,
+                'ip_to_bind_to': ip_to_bind_to,
+                'web_config': '/etc/prometheus/web.yml',
+                'use_url_prefix': mgmt_gw_enabled
+            }
         else:
             r = {
                 'files': {
@@ -638,15 +619,6 @@ class PrometheusService(CephadmService):
                 service_url
             )
 
-    def pre_remove(self, daemon: DaemonDescription) -> None:
-        """
-        Called before prometheus daemon is removed.
-        """
-        if daemon.hostname is not None:
-            # delete cert/key entires for this prometheus daemon
-            self.mgr.cert_key_store.rm_cert('prometheus_cert', host=daemon.hostname)
-            self.mgr.cert_key_store.rm_key('prometheus_key', host=daemon.hostname)
-
     def ok_to_stop(self,
                    daemon_ids: List[str],
                    force: bool = False,
@@ -666,19 +638,18 @@ class NodeExporterService(CephadmService):
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
+    def get_node_exporter_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+        cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
+        return cert, key
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
         deps = [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
         if self.mgr.secure_monitoring_stack:
-            node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-            host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            cert = self.mgr.cert_key_store.get_cert('node_exporter_cert', host=daemon_spec.host)
-            key = self.mgr.cert_key_store.get_key('node_exporter_key', host=daemon_spec.host)
-            if not (cert and key):
-                cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
-                    host_fqdn, node_ip)
-                self.mgr.cert_key_store.save_cert('node_exporter_cert', cert, host=daemon_spec.host)
-                self.mgr.cert_key_store.save_key('node_exporter_key', key, host=daemon_spec.host)
+            cert, key = self.get_node_exporter_certificates(daemon_spec)
+            mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
             r = {
                 'files': {
                     'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2', {}),
@@ -692,15 +663,6 @@ class NodeExporterService(CephadmService):
             r = {}
 
         return r, deps
-
-    def pre_remove(self, daemon: DaemonDescription) -> None:
-        """
-        Called before node-exporter daemon is removed.
-        """
-        if daemon.hostname is not None:
-            # delete cert/key entires for this node-exporter daemon
-            self.mgr.cert_key_store.rm_cert('node_exporter_cert', host=daemon.hostname)
-            self.mgr.cert_key_store.rm_key('node_exporter_key', host=daemon.hostname)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],

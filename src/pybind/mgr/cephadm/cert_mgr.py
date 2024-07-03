@@ -9,8 +9,8 @@ if TYPE_CHECKING:
 
 class CertMgr:
 
-    KV_STORE_ROOT_CERT = 'cert_mgr/root/cert'
-    KV_STORE_ROOT_KEY = 'cert_mgr/root/key'
+    CEPHADM_ROOT_CA_CERT = 'cephadm_root_ca_cert'
+    CEPHADM_ROOT_CA_KEY = 'cephadm_root_ca_key'
 
     def __init__(self, mgr: "CephadmOrchestrator", ip: str) -> None:
         self.lock = Lock()
@@ -21,15 +21,14 @@ class CertMgr:
             self.initialized = True
             self.mgr = mgr
             self.ssl_certs: SSLCerts = SSLCerts()
-            #  TODO(redo): use cert store instead of the following
-            old_cert = self.mgr.get_store(self.KV_STORE_ROOT_CERT)
-            old_key = self.mgr.get_store(self.KV_STORE_ROOT_KEY)
+            old_cert = self.mgr.cert_key_store.get_cert(self.CEPHADM_ROOT_CA_CERT)
+            old_key = self.mgr.cert_key_store.get_key(self.CEPHADM_ROOT_CA_KEY)
             if old_key and old_cert:
                 self.ssl_certs.load_root_credentials(old_cert, old_key)
             else:
                 self.ssl_certs.generate_root_cert(ip)
-                self.mgr.set_store(self.KV_STORE_ROOT_CERT, self.ssl_certs.get_root_cert())
-                self.mgr.set_store(self.KV_STORE_ROOT_KEY, self.ssl_certs.get_root_key())
+                self.mgr.cert_key_store.save_cert(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
+                self.mgr.cert_key_store.save_key(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
 
     def get_root_ca(self) -> str:
         with self.lock:

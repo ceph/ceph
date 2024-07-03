@@ -1701,16 +1701,10 @@ class TestCephadm(object):
     def test_cert_store_save_cert(self, _set_store, cephadm_module: CephadmOrchestrator):
         cephadm_module.cert_key_store._init_known_cert_key_dicts()
 
-        agent_endpoint_root_cert = 'fake-agent-cert'
-        alertmanager_host1_cert = 'fake-alertm-host1-cert'
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
-        cephadm_module.cert_key_store.save_cert('agent_endpoint_root_cert', agent_endpoint_root_cert)
-        cephadm_module.cert_key_store.save_cert('alertmanager_cert', alertmanager_host1_cert, host='host1')
         cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
 
         expected_calls = [
-            mock.call(f'{CERT_STORE_CERT_PREFIX}agent_endpoint_root_cert', json.dumps(Cert(agent_endpoint_root_cert).to_json())),
-            mock.call(f'{CERT_STORE_CERT_PREFIX}alertmanager_cert', json.dumps({'host1': Cert(alertmanager_host1_cert).to_json()})),
             mock.call(f'{CERT_STORE_CERT_PREFIX}rgw_frontend_ssl_cert', json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})),
         ]
         _set_store.assert_has_calls(expected_calls)
@@ -1723,25 +1717,9 @@ class TestCephadm(object):
             'rgw_frontend_ssl_cert': False,
             'iscsi_ssl_cert': False,
             'ingress_ssl_cert': False,
-            'agent_endpoint_root_cert': False,
-            'service_discovery_root_cert': False,
-            'mgmt_gw_root_cert': False,
+            'cephadm_root_ca_cert': False,
             'grafana_cert': False,
-            'alertmanager_cert': False,
-            'prometheus_cert': False,
-            'node_exporter_cert': False,
         }
-        assert cephadm_module.cert_key_store.cert_ls() == expected_ls
-
-        cephadm_module.cert_key_store.save_cert('agent_endpoint_root_cert', 'xxx')
-        expected_ls['agent_endpoint_root_cert'] = True
-        assert cephadm_module.cert_key_store.cert_ls() == expected_ls
-
-        cephadm_module.cert_key_store.save_cert('alertmanager_cert', 'xxx', host='host1')
-        cephadm_module.cert_key_store.save_cert('alertmanager_cert', 'xxx', host='host2')
-        expected_ls['alertmanager_cert'] = {}
-        expected_ls['alertmanager_cert']['host1'] = True
-        expected_ls['alertmanager_cert']['host2'] = True
         assert cephadm_module.cert_key_store.cert_ls() == expected_ls
 
         cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', 'xxx', service_name='rgw.foo', user_made=True)
@@ -1755,13 +1733,10 @@ class TestCephadm(object):
     def test_cert_store_save_key(self, _set_store, cephadm_module: CephadmOrchestrator):
         cephadm_module.cert_key_store._init_known_cert_key_dicts()
 
-        agent_endpoint_key = 'fake-agent-key'
         grafana_host1_key = 'fake-grafana-host1-cert'
-        cephadm_module.cert_key_store.save_key('agent_endpoint_key', agent_endpoint_key)
         cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
 
         expected_calls = [
-            mock.call(f'{CERT_STORE_KEY_PREFIX}agent_endpoint_key', json.dumps(PrivKey(agent_endpoint_key).to_json())),
             mock.call(f'{CERT_STORE_KEY_PREFIX}grafana_key', json.dumps({'host1': PrivKey(grafana_host1_key).to_json()})),
         ]
         _set_store.assert_has_calls(expected_calls)
@@ -1771,49 +1746,27 @@ class TestCephadm(object):
         cephadm_module.cert_key_store._init_known_cert_key_dicts()
 
         expected_ls = {
-            'agent_endpoint_key': False,
-            'service_discovery_key': False,
             'grafana_key': False,
-            'alertmanager_key': False,
-            'mgmt_gw_root_key': False,
-            'prometheus_key': False,
-            'node_exporter_key': False,
+            'cephadm_root_ca_key': False,
             'iscsi_ssl_key': False,
             'ingress_ssl_key': False,
         }
-        assert cephadm_module.cert_key_store.key_ls() == expected_ls
-
-        cephadm_module.cert_key_store.save_key('agent_endpoint_key', 'xxx')
-        expected_ls['agent_endpoint_key'] = True
-        assert cephadm_module.cert_key_store.key_ls() == expected_ls
-
-        cephadm_module.cert_key_store.save_key('alertmanager_key', 'xxx', host='host1')
-        cephadm_module.cert_key_store.save_key('alertmanager_key', 'xxx', host='host2')
-        expected_ls['alertmanager_key'] = {}
-        expected_ls['alertmanager_key']['host1'] = True
-        expected_ls['alertmanager_key']['host2'] = True
         assert cephadm_module.cert_key_store.key_ls() == expected_ls
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_store_prefix")
     def test_cert_store_load(self, _get_store_prefix, cephadm_module: CephadmOrchestrator):
         cephadm_module.cert_key_store._init_known_cert_key_dicts()
 
-        agent_endpoint_root_cert = 'fake-agent-cert'
-        alertmanager_host1_cert = 'fake-alertm-host1-cert'
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
-        agent_endpoint_key = 'fake-agent-key'
         grafana_host1_key = 'fake-grafana-host1-cert'
 
         def _fake_prefix_store(key):
             if key == 'cert_store.cert.':
                 return {
-                    f'{CERT_STORE_CERT_PREFIX}agent_endpoint_root_cert': json.dumps(Cert(agent_endpoint_root_cert).to_json()),
-                    f'{CERT_STORE_CERT_PREFIX}alertmanager_cert': json.dumps({'host1': Cert(alertmanager_host1_cert).to_json()}),
                     f'{CERT_STORE_CERT_PREFIX}rgw_frontend_ssl_cert': json.dumps({'rgw.foo': Cert(rgw_frontend_rgw_foo_host2_cert, True).to_json()})
                 }
             elif key == 'cert_store.key.':
                 return {
-                    f'{CERT_STORE_KEY_PREFIX}agent_endpoint_key': json.dumps(PrivKey(agent_endpoint_key).to_json()),
                     f'{CERT_STORE_KEY_PREFIX}grafana_key': json.dumps({'host1': PrivKey(grafana_host1_key).to_json()}),
                 }
             else:
@@ -1821,26 +1774,16 @@ class TestCephadm(object):
 
         _get_store_prefix.side_effect = _fake_prefix_store
         cephadm_module.cert_key_store.load()
-        assert cephadm_module.cert_key_store.known_certs['agent_endpoint_root_cert'] == Cert(agent_endpoint_root_cert)
-        assert cephadm_module.cert_key_store.known_certs['alertmanager_cert']['host1'] == Cert(alertmanager_host1_cert)
         assert cephadm_module.cert_key_store.known_certs['rgw_frontend_ssl_cert']['rgw.foo'] == Cert(rgw_frontend_rgw_foo_host2_cert, True)
-        assert cephadm_module.cert_key_store.known_keys['agent_endpoint_key'] == PrivKey(agent_endpoint_key)
         assert cephadm_module.cert_key_store.known_keys['grafana_key']['host1'] == PrivKey(grafana_host1_key)
 
     def test_cert_store_get_cert_key(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.cert_key_store._init_known_cert_key_dicts()
 
-        agent_endpoint_root_cert = 'fake-agent-cert'
-        alertmanager_host1_cert = 'fake-alertm-host1-cert'
         rgw_frontend_rgw_foo_host2_cert = 'fake-rgw-cert'
-        cephadm_module.cert_key_store.save_cert('agent_endpoint_root_cert', agent_endpoint_root_cert)
-        cephadm_module.cert_key_store.save_cert('alertmanager_cert', alertmanager_host1_cert, host='host1')
         cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
 
-        assert cephadm_module.cert_key_store.get_cert('agent_endpoint_root_cert') == agent_endpoint_root_cert
-        assert cephadm_module.cert_key_store.get_cert('alertmanager_cert', host='host1') == alertmanager_host1_cert
         assert cephadm_module.cert_key_store.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo') == rgw_frontend_rgw_foo_host2_cert
-        assert cephadm_module.cert_key_store.get_cert('service_discovery_root_cert') == ''
         assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host1') == ''
         assert cephadm_module.cert_key_store.get_cert('iscsi_ssl_cert', service_name='iscsi.foo') == ''
 
@@ -1851,15 +1794,10 @@ class TestCephadm(object):
         with pytest.raises(OrchestratorError, match='Need service name to access cert for entity'):
             cephadm_module.cert_key_store.get_cert('rgw_frontend_ssl_cert', host='foo')
 
-        agent_endpoint_key = 'fake-agent-key'
         grafana_host1_key = 'fake-grafana-host1-cert'
-        cephadm_module.cert_key_store.save_key('agent_endpoint_key', agent_endpoint_key)
         cephadm_module.cert_key_store.save_key('grafana_key', grafana_host1_key, host='host1')
 
-        assert cephadm_module.cert_key_store.get_key('agent_endpoint_key') == agent_endpoint_key
         assert cephadm_module.cert_key_store.get_key('grafana_key', host='host1') == grafana_host1_key
-        assert cephadm_module.cert_key_store.get_key('service_discovery_key') == ''
-        assert cephadm_module.cert_key_store.get_key('alertmanager_key', host='host1') == ''
 
         with pytest.raises(OrchestratorError, match='Attempted to access priv key for unknown entity'):
             cephadm_module.cert_key_store.get_key('unknown_entity')
