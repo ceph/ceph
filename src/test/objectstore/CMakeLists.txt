@@ -141,11 +141,9 @@ if(WITH_BLUESTORE)
 endif()
 
 # fragmentation simulator
-add_library(ObjectStoreImitator OBJECT ObjectStoreImitator.cc)
-
 add_executable(ceph_test_fragmentation_sim
   Fragmentation_simulator.cc
-  $<TARGET_OBJECTS:ObjectStoreImitator>)
+  ObjectStoreImitator.cc)
 add_ceph_unittest(ceph_test_fragmentation_sim)
 target_link_libraries(ceph_test_fragmentation_sim os global)
 
