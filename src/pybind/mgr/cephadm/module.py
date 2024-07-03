@@ -3140,6 +3140,40 @@ Then run the following:
         return self.cert_key_store.key_ls()
 
     @handle_orch_error
+    def cert_store_get_cert(
+        self,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None
+    ) -> str:
+        cert = self.cert_key_store.get_cert(entity, service_name or '', hostname or '')
+        if not cert:
+            err_msg = f'No cert found for entity {entity}'
+            if service_name:
+                err_msg += f' with service name {service_name}'
+            if hostname:
+                err_msg += f' with hostname {hostname}'
+            raise OrchestratorError(err_msg)
+        return cert
+
+    @handle_orch_error
+    def cert_store_get_key(
+        self,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None
+    ) -> str:
+        key = self.cert_key_store.get_key(entity, service_name or '', hostname or '')
+        if not key:
+            err_msg = f'No key found for entity {entity}'
+            if service_name:
+                err_msg += f' with service name {service_name}'
+            if hostname:
+                err_msg += f' with hostname {hostname}'
+            raise OrchestratorError(err_msg)
+        return key
+
+    @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
