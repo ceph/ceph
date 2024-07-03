@@ -1015,18 +1015,13 @@ class Module(MgrModule):
 
         info = self.get('pg_status')
         unknown = info.get('unknown_pgs_ratio', 0.0)
-        degraded = info.get('degraded_ratio', 0.0)
         inactive = info.get('inactive_pgs_ratio', 0.0)
         misplaced = info.get('misplaced_ratio', 0.0)
         plan.pg_status = info
-        self.log.debug('unknown %f degraded %f inactive %f misplaced %g',
-                       unknown, degraded, inactive, misplaced)
+        self.log.debug('unknown %f inactive %f misplaced %g',
+                       unknown, inactive, misplaced)
         if unknown > 0.0:
             detail = 'Some PGs (%f) are unknown; try again later' % unknown
-            self.log.info(detail)
-            return -errno.EAGAIN, detail
-        elif degraded > 0.0:
-            detail = 'Some objects (%f) are degraded; try again later' % degraded
             self.log.info(detail)
             return -errno.EAGAIN, detail
         elif inactive > 0.0:
