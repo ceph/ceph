@@ -223,7 +223,7 @@ int main(int argc, char** argv) {
       cv.wait(lock, [&io_depth] { return in_flight_ops < io_depth; });
 
     }
-    cout << fmt::format("Running op {} object={} range={}~{}", op.type, *op.object, op.offset, op.length) << endl;
+    // cout << fmt::format("Running op {} object={} range={}~{}", op.type, *op.object, op.offset, op.length) << endl;
     op.completion = librados::Rados::aio_create_completion(static_cast<void*>(&op), completion_cb);
     switch (op.type) {
       case Write: {
