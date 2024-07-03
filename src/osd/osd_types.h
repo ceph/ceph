@@ -5062,7 +5062,8 @@ public:
   void got(const hobject_t& oid, eversion_t v) {
     std::map<hobject_t, item>::iterator p = missing.find(oid);
     ceph_assert(p != missing.end());
-    ceph_assert(p->second.need <= v || p->second.is_delete());
+    ceph_assert(p->second.need <= v);
+    ceph_assert(p->second.is_delete());
     got(p);
   }
 
