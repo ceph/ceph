@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
   // we expect this input:
   // 2024-05-10 12:06:24.990831+00:00 client.607247697.0:5632274 write 4096~4096 2:d03a455a:::08b0f2fd5f20f504e76c2dd3d24683a1:head 2.1c0b
   while (fstream >> date){
-    cout << date << endl;
+    // cout << date << endl;
     tm t;
     char* res = strptime(date.c_str(), date_format_first_column, &t);
     if (res == nullptr) {
@@ -118,13 +118,13 @@ int main(int argc, char** argv) {
     fstream >> time >> who >> type >> range >> object >> collection;
 
     date += " " + time;
-    cout << date << endl;
+    // cout << date << endl;
     // FIXME: this is wrong  but it returns a reasonable bad timestamp :P
     const char* date_format_full = "%Y-%m-%d %H:%M:%S.%f%z";
     res = strptime(date.c_str(), date_format_full, &t);
     time_t at = mktime(&t);
 
-    cout << fmt::format("{} {} {} {} {} {} {}", date, at, who, type, range, object, collection) << endl;
+    // cout << fmt::format("{} {} {} {} {} {} {}", date, at, who, type, range, object, collection) << endl;
 
     shared_ptr<string> who_ptr = make_shared<string>(who);
     auto who_it = string_cache.find(who);
