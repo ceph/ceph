@@ -1185,7 +1185,9 @@ seastar::future<> OSD::committed_osd_maps(
 	return seastar::now();
       }
     }
-    return fut.then([FNAME, this] {
+    return fut.then([this] {
+      return update_heartbeat_peers();
+    }).then([FNAME, this] {
       return check_osdmap_features().then([FNAME, this] {
         // yay!
         INFO("osd.{}: committed_osd_maps: broadcasting osdmaps up"
