@@ -9,11 +9,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 
-from orchestrator import OrchestratorError
-
-
-logger = logging.getLogger(__name__)
-
 
 class SSLConfigException(Exception):
     pass
@@ -64,19 +59,25 @@ class SSLCerts:
 
         return (cert_str, key_str)
 
-    def generate_cert(self, hosts: Any, addr: str) -> Tuple[str, str]:
-        have_ip = True
+    def generate_cert(self, hosts: Any, addrs: Any) -> Tuple[str, str]:
+
+        if isinstance(addrs, str):
+            addrs = [addrs]
+        if isinstance(hosts, str):
+            hosts = [hosts]
+
+        valid_ips = True
         try:
-            ip = x509.IPAddress(ipaddress.ip_address(addr))
+            ips = [x509.IPAddress(ipaddress.ip_address(addr)) for addr in addrs]
         except Exception:
-            have_ip = False
+            valid_ips = False
 
         private_key = rsa.generate_private_key(
             public_exponent=65537, key_size=4096, backend=default_backend())
         public_key = private_key.public_key()
 
         builder = x509.CertificateBuilder()
-        builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addr), ]))
+        builder = builder.subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, addrs[0]), ]))
         builder = builder.issuer_name(
             x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, u'cephadm-root'), ]))
         builder = builder.not_valid_before(datetime.now())
@@ -84,11 +85,9 @@ class SSLCerts:
         builder = builder.serial_number(x509.random_serial_number())
         builder = builder.public_key(public_key)
 
-        if isinstance(hosts, str):
-            hosts = [hosts]
         san_list: List[x509.GeneralName] = [x509.DNSName(host) for host in hosts]
-        if have_ip:
-            san_list.append(ip)
+        if valid_ips:
+            san_list.extend(ips)
 
         builder = builder.add_extension(
             x509.SubjectAlternativeName(
@@ -129,7 +128,7 @@ class SSLCerts:
         given_cert = x509.load_pem_x509_certificate(cert.encode('utf-8'), backend=default_backend())
         tz = given_cert.not_valid_after.tzinfo
         if datetime.now(tz) >= given_cert.not_valid_after:
-            raise OrchestratorError('Given cert is expired')
+            raise SSLConfigException('Given cert is expired')
         self.root_cert = given_cert
         self.root_key = serialization.load_pem_private_key(
             data=priv_key.encode('utf-8'), backend=default_backend(), password=None)

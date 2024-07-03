@@ -1,5 +1,5 @@
 
-from cephadm.ssl_cert_utils import SSLCerts
+from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from threading import Lock
 from typing import TYPE_CHECKING, Tuple, Union, List
 
@@ -24,7 +24,10 @@ class CertMgr:
             old_cert = self.mgr.cert_key_store.get_cert(self.CEPHADM_ROOT_CA_CERT)
             old_key = self.mgr.cert_key_store.get_key(self.CEPHADM_ROOT_CA_KEY)
             if old_key and old_cert:
-                self.ssl_certs.load_root_credentials(old_cert, old_key)
+                try:
+                    self.ssl_certs.load_root_credentials(old_cert, old_key)
+                except SSLConfigException:
+                    raise Exception("Cannot load cephadm root CA certificates.")
             else:
                 self.ssl_certs.generate_root_cert(ip)
                 self.mgr.cert_key_store.save_cert(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
@@ -36,7 +39,7 @@ class CertMgr:
                 return self.ssl_certs.get_root_cert()
         raise Exception("Not initialized")
 
-    def generate_cert(self, host_fqdn: Union[str, List[str]], node_ip: str) -> Tuple[str, str]:
+    def generate_cert(self, host_fqdn: Union[str, List[str]], node_ip: Union[str, List[str]]) -> Tuple[str, str]:
         with self.lock:
             if self.initialized:
                 return self.ssl_certs.generate_cert(host_fqdn, node_ip)
