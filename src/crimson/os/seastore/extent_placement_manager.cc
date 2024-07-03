@@ -999,57 +999,122 @@ RandomBlockOolWriter::do_write(
   assert(!extents.empty());
   DEBUGT("start with {} allocated extents",
          t, extents.size());
-  return trans_intr::do_for_each(extents,
-    [this, &t, FNAME](auto& ex) {
-    auto paddr = ex->get_paddr();
-    assert(paddr.is_absolute());
-    RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
-    assert(rbm);
-    TRACE("extent {}, allocated addr {}", fmt::ptr(ex.get()), paddr);
-    auto& stats = t.get_ool_write_stats();
-    stats.extents.num += 1;
-    stats.extents.bytes += ex->get_length();
-    stats.num_records += 1;
 
-    ex->prepare_write();
-    extent_len_t offset = 0;
-    bufferptr bp;
-    if (can_inplace_rewrite(t, ex)) {
-      assert(ex->is_logical());
-      auto r = ex->template cast<LogicalCachedExtent>()->get_modified_region();
-      ceph_assert(r.has_value());
-      offset = p2align(r->offset, rbm->get_block_size());
-      extent_len_t len =
-	p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
-      bp = ceph::bufferptr(ex->get_bptr(), offset, len);
-    } else {
-      bp = ex->get_bptr();
-      auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
-      ++(trans_stats.num_records);
-      trans_stats.data_bytes += ex->get_length();
-      w_stats.data_bytes += ex->get_length();
-    }
-    return trans_intr::make_interruptible(
-      rbm->write(paddr + offset,
-	bp
-      ).handle_error(
-	alloc_write_iertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "Invalid error when writing record"}
-      )
-    ).si_then([this, &t, &ex, paddr, FNAME] {
-      TRACET("ool extent written at {} -- {}",
-	     t, paddr, *ex);
-      if (ex->is_initial_pending()) {
-	t.mark_allocated_extent_ool(ex);
-      } else if (can_inplace_rewrite(t, ex)) {
-        assert(ex->is_logical());
-	t.mark_inplace_rewrite_extent_ool(
-          ex->template cast<LogicalCachedExtent>());
+  struct io_desc_t {
+    paddr_t base;
+    extent_len_t len = 0;
+    std::list<CachedExtentRef> consecutive_extents;
+  };
+
+  return seastar::do_with(
+      std::vector<io_desc_t>(),
+      [this, &t, extents, FNAME](auto& io) {
+
+    for (auto& cur : extents) {
+      auto& stats = t.get_ool_write_stats();
+      stats.extents.num += 1;
+      stats.extents.bytes += cur->get_length();
+      stats.num_records += 1;
+      cur->prepare_write();
+
+      RandomBlockManager * rbm = rb_cleaner->get_rbm(cur->get_paddr()); 
+      paddr_t cur_base = cur->get_paddr();
+      assert(cur_base.is_absolute());
+      extent_len_t cur_len = cur->get_length();
+      if (can_inplace_rewrite(t, cur)) {
+	assert(cur->is_logical());
+	auto r = cur->template cast<LogicalCachedExtent>()->get_modified_region();
+	ceph_assert(r.has_value());
+	extent_len_t offset = p2align(r->offset, rbm->get_block_size());
+	cur_len = p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
+	cur_base = cur->get_paddr() + offset;
       } else {
-	ceph_assert("impossible");
+	auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
+	++(trans_stats.num_records);
+	trans_stats.data_bytes += cur->get_length();
+	w_stats.data_bytes += cur->get_length();
       }
-      return alloc_write_iertr::now();
+
+      if (io.size() == 0) {
+	io_desc_t desc;
+	desc.base = cur_base;
+	desc.len = cur_len;
+	desc.consecutive_extents.push_back(cur);
+	io.push_back(desc);
+	continue;
+      } else if (io.back().base + io.back().len == cur_base) {
+	// We can write both the currrent extent and the previous one at once
+	// if the extents are located in a raw
+	io.back().len += cur_len;
+	io.back().consecutive_extents.push_back(cur);
+      } else {
+	// Write a single extent in the existing way
+	io_desc_t desc;
+	desc.len = cur_len;
+	desc.base = cur_base;
+	desc.consecutive_extents.push_back(cur);
+	io.push_back(desc);
+      }
+      TRACE("current extent: base off {} len {}, previous extent: base off {} len {}",
+	cur_base, cur_len, io.back().base, io.back().len);
+    }
+
+    return trans_intr::do_for_each(io,
+      [this, &t, FNAME](auto& e) {
+	bufferptr bp;
+	if (e.consecutive_extents.size() == 1) {
+	  auto ext = e.consecutive_extents.back();
+	  if (e.len == ext->get_bptr().length()) {
+	    bp = ext->get_bptr();
+	  } else {
+	    auto off = e.base.as_blk_paddr().get_device_off() -
+	      ext->get_paddr().as_blk_paddr().get_device_off();
+	    bp = ceph::bufferptr(ext->get_bptr(), off, e.len);
+	  }
+	} else {
+	  // handle multiple extents at once
+	  extent_len_t cursor = 0;
+	  bp = ceph::bufferptr(ceph::buffer::create_page_aligned(e.len));
+	  for (auto& ex : e.consecutive_extents) {
+	    paddr_t end = e.base + e.len > ex->get_paddr() + ex->get_length() ?
+	      ex->get_paddr() + ex->get_length() : e.base + e.len;
+	    extent_len_t cur_len = end.as_blk_paddr().get_device_off() -
+	      ex->get_paddr().as_blk_paddr().get_device_off();
+	    bp.copy_in(cursor, cur_len, ex->get_bptr().c_str());
+	    cursor += cur_len;
+	  }
+	}
+
+	return seastar::do_with(
+	  std::move(bp),
+	  [this, &t, &e, FNAME](auto& bp) {
+	  RandomBlockManager * rbm = rb_cleaner->get_rbm(e.base); 
+	  return trans_intr::make_interruptible(
+	    rbm->write(e.base,
+	      bp
+	    ).handle_error(
+	      alloc_write_iertr::pass_further{},
+	      crimson::ct_error::assert_all{
+		"Invalid error when writing record"}
+	    )
+	  ).si_then([this, &t, &e, FNAME] {
+	    for (auto& ex : e.consecutive_extents) {
+	      auto paddr = ex->get_paddr();
+	      TRACET("ool extent written at {} -- {}",
+		     t, paddr, *ex);
+	      if (ex->is_initial_pending()) {
+		t.mark_allocated_extent_ool(ex);
+	      } else if (can_inplace_rewrite(t, ex)) {
+		assert(ex->is_logical());
+		t.mark_inplace_rewrite_extent_ool(
+		  ex->template cast<LogicalCachedExtent>());
+	      } else {
+		ceph_assert("impossible");
+	      }
+	    }
+	    return alloc_write_iertr::now();
+	  });
+	});
     });
   });
 }
