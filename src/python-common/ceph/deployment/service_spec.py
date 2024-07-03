@@ -1474,9 +1474,11 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         if self.enable_auth:
-            if not all([self.server_key, self.server_cert, self.client_key, self.client_cert, self.root_ca_cert]):
+            if not all([self.server_key, self.server_cert, self.client_key,
+                        self.client_cert, self.root_ca_cert]):
                 err_msg = 'enable_auth is true but '
-                for cert_key_attr in ['server_key', 'server_cert', 'client_key', 'client_cert', 'root_ca_cert']:
+                for cert_key_attr in ['server_key', 'server_cert', 'client_key',
+                                      'client_cert', 'root_ca_cert']:
                     if not hasattr(self, cert_key_attr):
                         err_msg += f'{cert_key_attr}, '
                 err_msg += 'attribute(s) not set in the spec'
