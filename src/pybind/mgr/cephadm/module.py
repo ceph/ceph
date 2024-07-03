@@ -6,6 +6,7 @@ import ipaddress
 import logging
 import re
 import shlex
+import socket
 from collections import defaultdict
 from configparser import ConfigParser
 from contextlib import contextmanager
@@ -770,6 +771,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_cephadm_service(self, service_type: str) -> CephadmService:
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES
         return self.cephadm_services[service_type]
+
+    def get_fqdn(self, hostname: str) -> str:
+        """Get a host's FQDN with its hostname.
+
+           If the FQDN can't be resolved, the address from the inventory will
+           be returned instead.
+        """
+        # TODO(redo): get fqdn from the inventory
+        addr = self.inventory.get_addr(hostname)
+        return socket.getfqdn(addr)
+
+    def _get_security_config(self) -> Tuple[bool, bool]:
+        # TODO(redo): enable when oauth2-proxy code is active
+        # oauth2_proxy_enabled = len(self.mgr.cache.get_daemons_by_service('oauth2-proxy')) > 0
+        mgmt_gw_enabled = len(self.cache.get_daemons_by_service('mgmt-gateway')) > 0
+        security_enabled = self.secure_monitoring_stack or mgmt_gw_enabled
+        return security_enabled, mgmt_gw_enabled
 
     def _get_cephadm_binary_path(self) -> str:
         import hashlib
@@ -2611,9 +2629,6 @@ Then run the following:
                 raise OrchestratorError(
                     f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
 
-        if service_name == 'mgmt-gateway':
-            self.set_module_option('secure_monitoring_stack', False)
-
         found = self.spec_store.rm(service_name)
         if found and service_name.startswith('osd.'):
             self.spec_store.finally_rm(service_name)
@@ -2943,21 +2958,26 @@ Then run the following:
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
             deps += [d.name() for d in self.cache.get_daemons_by_service('mgmt-gateway')]
-            if self.secure_monitoring_stack:
+            security_enabled, _ = self._get_security_config()
+            if security_enabled:
                 if prometheus_user and prometheus_password:
                     deps.append(f'{hash(prometheus_user + prometheus_password)}')
                 if alertmanager_user and alertmanager_password:
                     deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'grafana':
             deps += get_daemon_names(['prometheus', 'loki', 'mgmt-gateway'])
-            if self.secure_monitoring_stack and prometheus_user and prometheus_password:
+            security_enabled, _ = self._get_security_config()
+            if security_enabled and prometheus_user and prometheus_password:
                 deps.append(f'{hash(prometheus_user + prometheus_password)}')
         elif daemon_type == 'alertmanager':
             deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'mgmt-gateway'])
-            if self.secure_monitoring_stack and alertmanager_user and alertmanager_password:
+            security_enabled, _ = self._get_security_config()
+            if security_enabled and alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
             deps += get_daemon_names(['loki'])
+        elif daemon_type in ['ceph-exporter', 'node-exporter']:
+            deps += get_daemon_names(['mgmt-gateway'])
         elif daemon_type == JaegerAgentService.TYPE:
             for dd in self.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
                 assert dd.hostname is not None
@@ -2972,7 +2992,7 @@ Then run the following:
             # this daemon type doesn't need deps mgmt
             pass
 
-        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana', 'mgmt-gateway']:
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
 
         return sorted(deps)
@@ -3088,10 +3108,17 @@ Then run the following:
 
     @handle_orch_error
     def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        import socket
         supported_moduels = ['dashboard', 'prometheus']
         if module_name not in supported_moduels:
             raise OrchestratorError(f'Unsupported modlue {module_name}. Supported moduels are: {supported_moduels}')
-        cert, key = self.cert_mgr.generate_cert(self.get_hostname(), self.get_mgr_ip())
+
+        host_fqdns = [socket.getfqdn(self.get_hostname())]
+        node_ip = self.get_mgr_ip()
+        if module_name == 'dashboard':
+            host_fqdns.append('dashboard_servers')
+
+        cert, key = self.cert_mgr.generate_cert(host_fqdns, node_ip)
         return {'cert': cert, 'key': key}
 
     @handle_orch_error
@@ -3148,6 +3175,9 @@ Then run the following:
 
     @handle_orch_error
     def get_prometheus_access_info(self) -> Dict[str, str]:
+        security_enabled, _ = self._get_security_config()
+        if not security_enabled:
+            return {}
         user, password = self._get_prometheus_credentials()
         return {'user': user,
                 'password': password,
@@ -3155,6 +3185,9 @@ Then run the following:
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:
+        security_enabled, _ = self._get_security_config()
+        if not security_enabled:
+            return {}
         user, password = self._get_alertmanager_credentials()
         return {'user': user,
                 'password': password,
@@ -3402,9 +3435,6 @@ Then run the following:
 
         host_count = len(self.inventory.keys())
         max_count = self.max_count_per_host
-
-        if spec.service_type == 'mgmt-gateway':
-            self.set_module_option('secure_monitoring_stack', True)
 
         if spec.placement.count is not None:
             if spec.service_type in ['mon', 'mgr']:

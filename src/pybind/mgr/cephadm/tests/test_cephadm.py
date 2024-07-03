@@ -346,8 +346,8 @@ class TestCephadm(object):
     ))
     def test_list_daemons(self, cephadm_module: CephadmOrchestrator):
         cephadm_module.service_cache_timeout = 10
-        with with_host(cephadm_module, 'test'):
-            CephadmServe(cephadm_module)._refresh_host_daemons('test')
+        with with_host(cephadm_module, 'myhost'):
+            CephadmServe(cephadm_module)._refresh_host_daemons('myhost')
             dds = wait(cephadm_module, cephadm_module.list_daemons())
             assert {d.name() for d in dds} == {'rgw.myrgw.foobar', 'haproxy.test.bar'}
 
@@ -1705,8 +1705,6 @@ class TestCephadm(object):
         nvmeof_client_cert = 'fake-nvmeof-client-cert'
         nvmeof_server_cert = 'fake-nvmeof-server-cert'
         nvmeof_root_ca_cert = 'fake-nvmeof-root-ca-cert'
-        cephadm_module.cert_key_store.save_cert('agent_endpoint_root_cert', agent_endpoint_root_cert)
-        cephadm_module.cert_key_store.save_cert('alertmanager_cert', alertmanager_host1_cert, host='host1')
         cephadm_module.cert_key_store.save_cert('rgw_frontend_ssl_cert', rgw_frontend_rgw_foo_host2_cert, service_name='rgw.foo', user_made=True)
         cephadm_module.cert_key_store.save_cert('nvmeof_server_cert', nvmeof_server_cert, service_name='nvmeof.foo', user_made=True)
         cephadm_module.cert_key_store.save_cert('nvmeof_client_cert', nvmeof_client_cert, service_name='nvmeof.foo', user_made=True)
@@ -1728,12 +1726,9 @@ class TestCephadm(object):
             'rgw_frontend_ssl_cert': False,
             'iscsi_ssl_cert': False,
             'ingress_ssl_cert': False,
-            'mgmt_gw_root_cert': False,
+            'mgmt_gw_cert': False,
             'cephadm_root_ca_cert': False,
             'grafana_cert': False,
-            'alertmanager_cert': False,
-            'prometheus_cert': False,
-            'node_exporter_cert': False,
             'nvmeof_client_cert': False,
             'nvmeof_server_cert': False,
             'nvmeof_root_ca_cert': False,
@@ -1783,7 +1778,7 @@ class TestCephadm(object):
 
         expected_ls = {
             'grafana_key': False,
-            'mgmt_gw_root_key': False,
+            'mgmt_gw_key': False,
             'cephadm_root_ca_key': False,
             'iscsi_ssl_key': False,
             'ingress_ssl_key': False,

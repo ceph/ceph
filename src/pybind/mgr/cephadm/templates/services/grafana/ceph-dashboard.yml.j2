@@ -27,6 +27,8 @@ datasources:
     secureJsonData:
       basicAuthPassword: {{ prometheus_password }}
       tlsCACert: "{{ cephadm_root_ca }}"
+      tlsClientCert: "{{ cert }}"
+      tlsClientKey: "{{ key }}"
 {% endif %}
 {% endfor %}
 

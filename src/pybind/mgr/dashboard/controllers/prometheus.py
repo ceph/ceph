@@ -30,6 +30,14 @@ class PrometheusReceiver(BaseController):
 
 
 class PrometheusRESTController(RESTController):
+
+    def close_unlink_files(self, files):
+        # type (List[str])
+        valid_entries = [f for f in files if f is not None]
+        for f in valid_entries:
+            f.close()
+            os.unlink(f.name)
+
     def prometheus_proxy(self, method, path, params=None, payload=None):
         # type (str, str, dict, dict)
         user, password, ca_cert_file, cert_file, key_file = self.get_access_info('prometheus')
@@ -39,10 +47,7 @@ class PrometheusRESTController(RESTController):
                                method, path, 'Prometheus', params, payload,
                                user=user, password=password, verify=verify,
                                cert=cert)
-        for f in [ca_cert_file, cert_file, key_file]:
-            if f:
-                f.close()
-                os.unlink(f.name)
+        self.close_unlink_files([ca_cert_file, cert_file, key_file])
         return response
 
     def alert_proxy(self, method, path, params=None, payload=None):
@@ -54,14 +59,21 @@ class PrometheusRESTController(RESTController):
                                method, path, 'Alertmanager', params, payload,
                                user=user, password=password, verify=verify,
                                cert=cert, is_alertmanager=True)
-        for f in [ca_cert_file, cert_file, key_file]:
-            if f:
-                f.close()
-                os.unlink(f.name)
+        self.close_unlink_files([ca_cert_file, cert_file, key_file])
         return response
 
     def get_access_info(self, module_name):
-        # type (str, str, str, str, srt)
+        # type (str, str, str, str, str)
+
+        def write_to_tmp_file(content):
+            # type (str)
+            if content is None:
+                return None
+            tmp_file = tempfile.NamedTemporaryFile(delete=False)
+            tmp_file.write(content.encode('utf-8'))
+            tmp_file.flush()  # tmp_file must not be gc'ed
+            return tmp_file
+
         if module_name not in ['prometheus', 'alertmanager']:
             raise DashboardException(f'Invalid module name {module_name}', component='prometheus')
         user = None
@@ -69,37 +81,18 @@ class PrometheusRESTController(RESTController):
         cert_file = None
         pkey_file = None
         ca_cert_file = None
-
         orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
         if orch_backend == 'cephadm':
-            secure_monitoring_stack = mgr.get_module_option_ex('cephadm',
-                                                               'secure_monitoring_stack',
-                                                               False)
-            if secure_monitoring_stack:
-                cmd = {'prefix': f'orch {module_name} get-credentials'}
-                ret, out, _ = mgr.mon_command(cmd)
-                if ret == 0 and out is not None:
-                    access_info = json.loads(out)
+            cmd = {'prefix': f'orch {module_name} get-credentials'}
+            ret, out, _ = mgr.mon_command(cmd)
+            if ret == 0 and out is not None:
+                access_info = json.loads(out)
+                if access_info:
                     user = access_info['user']
                     password = access_info['password']
-                    certificate = access_info['certificate']
-                    ca_cert_file = tempfile.NamedTemporaryFile(delete=False)
-                    ca_cert_file.write(certificate.encode('utf-8'))
-                    ca_cert_file.flush()
-
-                    cert_file = None
-                    cert = mgr.get_localized_store("crt")  # type: ignore
-                    if cert is not None:
-                        cert_file = tempfile.NamedTemporaryFile(delete=False)
-                        cert_file.write(cert.encode('utf-8'))
-                        cert_file.flush()  # cert_tmp must not be gc'ed
-
-                    pkey_file = None
-                    pkey = mgr.get_localized_store("key")  # type: ignore
-                    if pkey is not None:
-                        pkey_file = tempfile.NamedTemporaryFile(delete=False)
-                        pkey_file.write(pkey.encode('utf-8'))
-                        pkey_file.flush()
+                    ca_cert_file = write_to_tmp_file(access_info['certificate'])
+                    cert_file = write_to_tmp_file(mgr.get_localized_store("crt"))
+                    pkey_file = write_to_tmp_file(mgr.get_localized_store("key"))
 
         return user, password, ca_cert_file, cert_file, pkey_file
 

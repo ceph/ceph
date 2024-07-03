@@ -794,7 +794,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def generate_certificates(self, module_name: str) -> OrchResult[Optional[Dict[str, str]]]:
-        """set prometheus access information"""
+        """generate cert/key for the module with the name module_name"""
         raise NotImplementedError()
 
     def set_custom_prometheus_alerts(self, alerts_file: str) -> OrchResult[str]:

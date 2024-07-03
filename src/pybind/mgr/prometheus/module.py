@@ -1765,18 +1765,23 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_file_sd_config()
 
     def configure(self, server_addr: str, server_port: int) -> None:
-        # cephadm deployments have a TLS monitoring stack setup option.
-        # If the cephadm module is on and the setting is true (defaults to false)
-        # we should have prometheus be set up to interact with that
-        cephadm_secure_monitoring_stack = self.get_module_option_ex(
-            'cephadm', 'secure_monitoring_stack', False)
-        if cephadm_secure_monitoring_stack:
-            try:
-                self.setup_tls_config(server_addr, server_port)
-                return
-            except Exception as e:
-                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                   'Falling back to default configuration')
+        # TODO(redo): this new check is hacky, we should provide an explit cmd
+        # from cephadm to get/check the security status
+
+        # if cephadm is configured with security then TLS must be used
+        cmd = {'prefix': 'orch prometheus get-credentials'}
+        ret, out, _ = self.mon_command(cmd)
+        if ret == 0 and out is not None:
+            access_info = json.loads(out)
+            if access_info:
+                try:
+                    self.setup_tls_using_cephadm(server_addr, server_port)
+                    return
+                except Exception as e:
+                    self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
+                                       'Falling back to default configuration')
+
+        # In any error fallback to plain http mode
         self.setup_default_config(server_addr, server_port)
 
     def setup_default_config(self, server_addr: str, server_port: int) -> None:
@@ -1792,7 +1797,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.set_uri(build_url(scheme='http', host=self.get_server_addr(),
                      port=server_port, path='/'))
 
-    def setup_tls_config(self, server_addr: str, server_port: int) -> None:
+    def setup_tls_using_cephadm(self, server_addr: str, server_port: int) -> None:
         from mgr_util import verify_tls_files
         cmd = {'prefix': 'orch certmgr generate-certificates',
                'module_name': 'prometheus',

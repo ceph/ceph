@@ -2,7 +2,7 @@
 global:
   scrape_interval: 10s
   evaluation_interval: 10s
-{% if not secure_monitoring_stack %}
+{% if not security_enabled %}
   external_labels:
     cluster: {{ cluster_fsid }}
 {% endif %}
@@ -13,13 +13,16 @@ rule_files:
 {% if alertmanager_sd_url %}
 alerting:
   alertmanagers:
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
     - scheme: https
       basic_auth:
         username: {{ alertmanager_web_user }}
         password: {{ alertmanager_web_password }}
       tls_config:
         ca_file: root_cert.pem
+        cert_file: prometheus.crt
+        key_file:  prometheus.key
+      path_prefix: '{{ alertmanager_url_prefix }}'
       http_sd_configs:
         - url: {{ alertmanager_sd_url }}
           basic_auth:
@@ -36,10 +39,10 @@ alerting:
 
 scrape_configs:
   - job_name: 'ceph'
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
     scheme: https
     tls_config:
-      ca_file: mgr_prometheus_cert.pem
+      ca_file: root_cert.pem
     honor_labels: true
     relabel_configs:
     - source_labels: [instance]
@@ -67,10 +70,12 @@ scrape_configs:
 
 {% if node_exporter_sd_url %}
   - job_name: 'node'
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
     scheme: https
     tls_config:
       ca_file: root_cert.pem
+      cert_file: prometheus.crt
+      key_file:  prometheus.key
     http_sd_configs:
     - url: {{ node_exporter_sd_url }}
       basic_auth:
@@ -90,7 +95,7 @@ scrape_configs:
 
 {% if haproxy_sd_url %}
   - job_name: 'haproxy'
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
     scheme: https
     tls_config:
       ca_file: root_cert.pem
@@ -113,7 +118,7 @@ scrape_configs:
 
 {% if ceph_exporter_sd_url %}
   - job_name: 'ceph-exporter'
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
     honor_labels: true
     scheme: https
     tls_config:
@@ -138,7 +143,7 @@ scrape_configs:
 
 {% if nvmeof_sd_url %}
   - job_name: 'nvmeof'
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
     honor_labels: true
     scheme: https
     tls_config:
@@ -156,7 +161,7 @@ scrape_configs:
 {% endif %}
 {% endif %}
 
-{% if not secure_monitoring_stack %}
+{% if not security_enabled %}
   - job_name: 'federate'
     scrape_interval: 15s
     honor_labels: true

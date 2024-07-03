@@ -1942,9 +1942,7 @@ class CertKeyStore():
             'nvmeof_server_cert': {},  # service-name -> cert
             'nvmeof_client_cert': {},  # service-name -> cert
             'nvmeof_root_ca_cert': {},  # service-name -> cert
-            'agent_endpoint_root_cert': Cert(),  # cert
-            'mgmt_gw_root_cert': Cert(),  # cert
-            'service_discovery_root_cert': Cert(),  # cert
+            'mgmt_gw_cert': Cert(),  # cert
             'cephadm_root_ca_cert': Cert(),  # cert
             'grafana_cert': {},  # host -> cert
         }
@@ -1952,6 +1950,7 @@ class CertKeyStore():
         # that don't have a key here are probably certs in PEM format
         # so there is no need to store a separate key
         self.known_keys = {
+            'mgmt_gw_key': PrivKey(),  # cert
             'cephadm_root_ca_key': PrivKey(),  # cert
             'grafana_key': {},  # host -> key
             'iscsi_ssl_key': {},  # service-name -> key
