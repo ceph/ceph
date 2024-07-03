@@ -1183,6 +1183,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
         return _username, _password
 
+    @_cli_write_command('orch certmgr generate-certificates')
+    def _cert_mgr_generate_certificates(self, module_name: str) -> HandleCommandResult:
+        try:
+            completion = self.generate_certificates(module_name)
+            result = raise_if_exception(completion)
+            return HandleCommandResult(stdout=json.dumps(result))
+        except ArgumentError as e:
+            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
+
     @_cli_write_command('orch prometheus set-credentials')
     def _set_prometheus_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
         try:

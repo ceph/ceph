@@ -538,7 +538,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         super(CephadmOrchestrator, self).__init__(*args, **kwargs)
         self._cluster_fsid: str = self.get('mon_map')['fsid']
         self.last_monmap: Optional[datetime.datetime] = None
-        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
 
         # for serve()
         self.run = True
@@ -673,6 +672,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.cert_key_store = CertKeyStore(self)
         self.cert_key_store.load()
+
+        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
@@ -3085,6 +3086,14 @@ Then run the following:
         return (user, password)
 
     @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        supported_moduels = ['dashboard', 'prometheus']
+        if module_name not in supported_moduels:
+            raise OrchestratorError(f'Unsupported modlue {module_name}. Supported moduels are: {supported_moduels}')
+        cert, key = self.cert_mgr.generate_cert(self.get_hostname(), self.get_mgr_ip())
+        return {'cert': cert, 'key': key}
+
+    @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
@@ -3271,13 +3280,6 @@ Then run the following:
         self.tuned_profiles.rm_setting(profile_name, setting)
         self._kick_serve_loop()
         return f'Removed setting {setting} from tuned profile {profile_name}'
-
-    @handle_orch_error
-    def service_discovery_dump_cert(self) -> str:
-        root_cert = self.cert_key_store.get_cert('service_discovery_root_cert')
-        if not root_cert:
-            raise OrchestratorError('No certificate found for service discovery')
-        return root_cert
 
     def set_health_warning(self, name: str, summary: str, count: int, detail: List[str]) -> None:
         self.health_checks[name] = {
