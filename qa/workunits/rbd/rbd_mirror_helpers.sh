@@ -53,7 +53,7 @@
 #
 #   cd $CEPH_SRC_PATH
 #   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd_mirror_helpers.sh setup
+#     ../qa/workunits/rbd/rbd_mirror_helpers.sh setup
 #
 # Also you can execute commands (functions) from the script:
 #
@@ -69,7 +69,7 @@
 #
 #   cd $CEPH_SRC_PATH
 #   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd_mirror_helpers.sh cleanup
+#     ../qa/workunits/rbd/rbd_mirror_helpers.sh cleanup
 #
 
 if type xmlstarlet > /dev/null 2>&1; then
@@ -535,11 +535,11 @@ status()
                 rbd --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" ls -l
                 echo
 
-                echo "${cluster} ${image_pool}${image_ns} mirror pool info"
+                echo "${cluster} ${image_pool} ${image_ns} mirror pool info"
                 rbd --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" mirror pool info
                 echo
 
-                echo "${cluster} ${image_pool}${image_ns} mirror pool status"
+                echo "${cluster} ${image_pool} ${image_ns} mirror pool status"
                 CEPH_ARGS='' rbd --cluster ${cluster} -p ${image_pool} --namespace "${image_ns}" mirror pool status --verbose
                 echo
 
