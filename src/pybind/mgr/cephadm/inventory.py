@@ -19,6 +19,7 @@ from ceph.deployment.service_spec import (
     IngressSpec,
     RGWSpec,
     IscsiServiceSpec,
+    NvmeofServiceSpec,
 )
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
@@ -390,6 +391,31 @@ class SpecStore():
                     ingress_spec.ssl_key,
                     service_name=ingress_spec.service_name(),
                     user_made=True)
+        elif spec.service_type == 'nvmeof':
+            nvmeof_spec = cast(NvmeofServiceSpec, spec)
+            for cert_attr in [
+                'server_cert',
+                'client_cert',
+                'root_ca_cert'
+            ]:
+                cert = getattr(nvmeof_spec, cert_attr, None)
+                if cert:
+                    self.mgr.cert_key_store.save_cert(
+                        f'nvmeof_{cert_attr}',
+                        cert,
+                        service_name=nvmeof_spec.service_name(),
+                        user_made=True)
+            for key_attr in [
+                'server_key',
+                'client_key',
+            ]:
+                key = getattr(nvmeof_spec, key_attr, None)
+                if key:
+                    self.mgr.cert_key_store.save_key(
+                        f'nvmeof_{key_attr}',
+                        key,
+                        service_name=nvmeof_spec.service_name(),
+                        user_made=True)
 
     def rm(self, service_name: str) -> bool:
         if service_name not in self._specs:
@@ -428,6 +454,12 @@ class SpecStore():
         if spec.service_type == 'ingress':
             self.mgr.cert_key_store.rm_cert('ingress_ssl_cert', service_name=spec.service_name())
             self.mgr.cert_key_store.rm_key('ingress_ssl_key', service_name=spec.service_name())
+        if spec.service_type == 'nvmeof':
+            self.mgr.cert_key_store.rm_cert('nvmeof_server_cert', service_name=spec.service_name())
+            self.mgr.cert_key_store.rm_cert('nvmeof_client_cert', service_name=spec.service_name())
+            self.mgr.cert_key_store.rm_cert('nvmeof_root_ca_cert', service_name=spec.service_name())
+            self.mgr.cert_key_store.rm_key('nvmeof_server_key', service_name=spec.service_name())
+            self.mgr.cert_key_store.rm_key('nvmeof_client_key', service_name=spec.service_name())
 
     def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
         return self.spec_created.get(spec.service_name())
@@ -1853,6 +1885,9 @@ class CertKeyStore():
         'rgw_frontend_ssl_cert',
         'iscsi_ssl_cert',
         'ingress_ssl_cert',
+        'nvmeof_server_cert',
+        'nvmeof_client_cert',
+        'nvmeof_root_ca_cert',
     ]
 
     host_cert = [
@@ -1872,6 +1907,8 @@ class CertKeyStore():
     service_name_key = [
         'iscsi_ssl_key',
         'ingress_ssl_key',
+        'nvmeof_server_key',
+        'nvmeof_client_key',
     ]
 
     known_certs: Dict[str, Any] = {}
@@ -1888,6 +1925,9 @@ class CertKeyStore():
             'rgw_frontend_ssl_cert': {},  # service-name -> cert
             'iscsi_ssl_cert': {},  # service-name -> cert
             'ingress_ssl_cert': {},  # service-name -> cert
+            'nvmeof_server_cert': {},  # service-name -> cert
+            'nvmeof_client_cert': {},  # service-name -> cert
+            'nvmeof_root_ca_cert': {},  # service-name -> cert
             'agent_endpoint_root_cert': Cert(),  # cert
             'service_discovery_root_cert': Cert(),  # cert
             'grafana_cert': {},  # host -> cert
@@ -1907,6 +1947,8 @@ class CertKeyStore():
             'node_exporter_key': {},  # host -> key
             'iscsi_ssl_key': {},  # service-name -> key
             'ingress_ssl_key': {},  # service-name -> key
+            'nvmeof_server_key': {},  # service-name -> key
+            'nvmeof_client_key': {},  # service-name -> key
         }
 
     def get_cert(self, entity: str, service_name: str = '', host: str = '') -> str:
