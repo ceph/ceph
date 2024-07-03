@@ -1,0 +1,87 @@
+
+client_name = foo   (mon has some corresponding shared secret)
+client_addr = ip address, port, pid
+
+
+monitor has:
+
+client_auth {
+       client_name;
+       client capabilities;
+       client secret;
+};
+map<client_name, client_auth> users;
+
+struct secret {
+        bufferlist secret;
+        utime_t created;
+};
+map<entity_name, secret> entity_secrets;
+
+struct service_secret_set {
+       secret[3];
+};
+map<string, service_secret_set> svc_secrets;
+
+/*
+svcsecret will be a rotating key.  we regenerate every time T, and keep
+keys for 3*T.  client always get the second-newest key.  all 3 are
+considered valid.  clients and services renew/reverify key at least one
+every time T.
+*/
+
+
+client_ticket {
+       client_addr;
+       map<svc name or type, blob> client_capabilities;
+};
+
+
+
+authenticate principle:
+
+C->M : client_name, client_addr.  authenticate me.
+ ...monitor does lookup in database...
+M->C : A= {client/mon session key, validity}^clientsecret
+       B= {client ticket, validity, client/mon session key}^monsecret
+
+
+authorize principle to do something on monitor:
+
+C->M : B, {client_addr, timestamp}^client/mon session key.  do foo (assign id)
+M->C : result.  and {timestamp+1}^client/mon session key
+
+
+authorize for service:
+
+C->M : B, {client_addr, timestamp}^client/mon session key.  authorize me!
+M->C : E= {svc ticket}^svcsecret
+       F= {svc session key, validity}^client/mon session key
+
+svc ticket = (client addr, validity, svc session key)
+
+
+on opening session to service:
+
+C->O : E + {client_addr, timestamp}^svc session key
+O->C : {timestamp+1}^svc session key
+
+
+
+
+
+To authenticate:
+
+ client -> auth:
+   {client_name, client_addr}^client_secret
+ auth -> client:
+   {session key, validity, nonce}^client_secret
+   {client_ticket, session key}^service_secret  ... "enc_ticket"
+
+where client_ticket is { client_addr, created, expires, none, capabilities }.
+
+To gain access using our ticket:
+
+
+   
+
