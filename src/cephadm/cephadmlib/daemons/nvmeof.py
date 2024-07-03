@@ -80,7 +80,13 @@ class CephNvmeof(ContainerDaemonForm):
         self, data_dir: str, files: Dict[str, str]
     ) -> Dict[str, str]:
         mounts = dict()
-        for fn in ['server_cert', 'server_key', 'client_cert', 'client_key']:
+        for fn in [
+            'server_cert',
+            'server_key',
+            'client_cert',
+            'client_key',
+            'root_ca_cert',
+        ]:
             if fn in files:
                 mounts[
                     os.path.join(data_dir, fn)

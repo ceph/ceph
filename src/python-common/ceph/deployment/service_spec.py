@@ -1333,6 +1333,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
                  client_cert: Optional[str] = None,
+                 root_ca_cert: Optional[str] = None,
                  spdk_path: Optional[str] = None,
                  tgt_path: Optional[str] = None,
                  spdk_timeout: Optional[float] = 60.0,
@@ -1417,6 +1418,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.client_key = client_key
         #: ``client_cert`` client certificate
         self.client_cert = client_cert
+        #: ``root_ca_cert`` CA cert for server/client certs
+        self.root_ca_cert = root_ca_cert
         #: ``spdk_path`` path to SPDK
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
         #: ``tgt_path`` nvmeof target path
@@ -1471,9 +1474,13 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         if self.enable_auth:
-            if not all([self.server_key, self.server_cert, self.client_key, self.client_cert]):
-                raise SpecValidationError(
-                    'enable_auth is true but client/server certificates are missing')
+            if not all([self.server_key, self.server_cert, self.client_key, self.client_cert, self.root_ca_cert]):
+                err_msg = 'enable_auth is true but '
+                for cert_key_attr in ['server_key', 'server_cert', 'client_key', 'client_cert', 'root_ca_cert']:
+                    if not hasattr(self, cert_key_attr):
+                        err_msg += f'{cert_key_attr}, '
+                err_msg += 'attribute(s) not set in the spec'
+                raise SpecValidationError(err_msg)
 
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
