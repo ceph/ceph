@@ -51,6 +51,7 @@
 
 #include "common/convenience.h"
 #include "common/error_code.h"
+#include "common/likely.h"
 #include "ceph_release.h"
 
 template<typename T, typename=void>
@@ -1782,6 +1783,13 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 // wrappers for DENC_{START,FINISH} for inter-version
 // interoperability.
 
+[[maybe_unused]] static void denc_compat_throw(
+  const char* _pretty_function_, uint8_t code_v,
+  uint8_t struct_v, uint8_t struct_compat) {
+  throw ::ceph::buffer::malformed_input("Decoder at '" + std::string(_pretty_function_) +
+    "' v=" + std::to_string(code_v)+ " cannot decode v=" + std::to_string(struct_v) +
+    " minimal_decoder=" + std::to_string(struct_compat));
+}
 #define DENC_HELPERS							\
   /* bound_encode */							\
   static void _denc_start(size_t& p,					\
@@ -1822,10 +1830,8 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
     __u8 code_v = *struct_v;						\
     denc(*struct_v, p);							\
     denc(*struct_compat, p);						\
-    if (code_v < *struct_compat)					\
-      throw ::ceph::buffer::malformed_input(fmt::format(		\
-      "Decoder at '{}' v={} cannot decode v={} minimal_decoder={}",	\
-      __PRETTY_FUNCTION__, code_v, *struct_v, *struct_compat));		\
+    if (unlikely(code_v < *struct_compat))				\
+      denc_compat_throw(__PRETTY_FUNCTION__, code_v, *struct_v, *struct_compat);\
     denc(*struct_len, p);						\
     *start_pos = const_cast<char*>(p.get_pos());			\
   }									\
