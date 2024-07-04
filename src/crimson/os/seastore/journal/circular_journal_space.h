@@ -242,6 +242,10 @@ class CircularJournalSpace : public JournalAllocator {
     return header;
   }
 
+  bool is_checksum_needed() {
+    return !device->is_end_to_end_data_protection();
+  }
+
  private:
   std::string print_name;
   cbj_header_t header;
