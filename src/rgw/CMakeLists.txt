@@ -263,7 +263,9 @@ if(WITH_RADOSGW_D4N)
         driver/d4n/rgw_sal_d4n.cc)
 endif()
 
-list(APPEND librgw_common_srcs rgw_redis_lock.cc)
+list(APPEND librgw_common_srcs 
+            rgw_redis_common.cc
+            rgw_redis_lock.cc)
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 

@@ -146,7 +146,7 @@ TEST_F(RGWRedisLockTest, Timeout) {
   boost::asio::spawn(
       io,
       [this](boost::asio::yield_context yield) {
-        int duration = 1000;
+        int duration = 500;
         const std::string name = "lock:timeout";
         const std::string cookie = "mycookie";
 
@@ -154,7 +154,7 @@ TEST_F(RGWRedisLockTest, Timeout) {
             rgw::redislock::lock(conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        boost::asio::steady_timer timer(io, std::chrono::seconds(2));
+        boost::asio::steady_timer timer(io, std::chrono::seconds(1));
         timer.async_wait(yield);
 
         return_code = rgw::redislock::assert_locked(conn, name, cookie, yield);

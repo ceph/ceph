@@ -1,14 +1,30 @@
-#!lua name=rgwlib
+#pragma once
 
----
---- To be removed later ---
----
+#include "rgw_redis_common.h"
+
+namespace rgw {
+namespace redis {
+
+using boost::redis::config;
+using boost::redis::connection;
+
+int loadLuaFunctions(boost::asio::io_context& io, connection* conn, config* cfg,
+                     optional_yield y) {
+  conn->async_run(*cfg, {}, boost::asio::detached);
+
+  boost::redis::request req;
+  boost::redis::response<std::string> resp;
+  boost::system::error_code ec;
+
+  std::string luaScript = R"(#!lua name=rgwlib
 --- Linux Error codes
+
 local lerrorCodes = {
     EPERM = 1,
     ENOENT = 2,
     EBUSY = 16,
-    EEXIST = 17
+    EEXIST = 17,
+    ENOMEM = 12
 }
 
 --- Assert if the lock is held by the owner of the cookie
@@ -68,7 +84,26 @@ local function unlock(keys, args)
     return lock_status
 end
 
---- Register the functions.
+
+--- Register the lock functions.
 redis.register_function('lock', lock)
 redis.register_function('unlock', unlock)
 redis.register_function('assert_lock', assert_lock)
+
+
+)";
+
+  req.push("FUNCTION", "LOAD", "REPLACE", luaScript);
+  rgw::redis::redis_exec(conn, ec, req, resp, y);
+
+  if (ec) {
+    std::cerr << "EC Message: " << ec.message() << std::endl;
+    return ec.value();
+  }
+  if (std::get<0>(resp).value() != "rgwlib") return -EINVAL;
+
+  return 0;
+}
+
+}  // namespace redis
+}  // namespace rgw

@@ -1,7 +1,6 @@
 #pragma once
 
-#include "boost/redis/connection.hpp"
-#include "common/async/yield_context.h"
+#include "rgw_redis_common.h"
 
 namespace rgw {
 namespace redislock {
