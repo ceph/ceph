@@ -24,7 +24,7 @@ set(dbstore_mgr_srcs
     dbstore_mgr.cc
     )
 
-add_library(dbstore_lib ${dbstore_srcs})
+add_library(dbstore_lib STATIC ${dbstore_srcs})
 target_include_directories(dbstore_lib
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/store/rados"
