@@ -14,6 +14,7 @@ class PG;
 
 class IOInterruptCondition {
 public:
+  IOInterruptCondition(Ref<PG>& pg, epoch_t e);
   IOInterruptCondition(Ref<PG>& pg);
   ~IOInterruptCondition();
 
