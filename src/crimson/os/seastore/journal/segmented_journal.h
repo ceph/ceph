@@ -63,6 +63,11 @@ public:
     return seastar::now();
   }
 
+  bool is_checksum_needed() final {
+    // segmented journal always requires checksum
+    return true;
+  }
+
 private:
   submit_record_ret do_submit_record(
     record_t &&record,

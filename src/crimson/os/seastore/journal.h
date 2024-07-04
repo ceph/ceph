@@ -107,6 +107,8 @@ public:
   virtual ~Journal() {}
 
   virtual backend_type_t get_type() = 0;
+
+  virtual bool is_checksum_needed() = 0; 
 };
 using JournalRef = std::unique_ptr<Journal>;
 
