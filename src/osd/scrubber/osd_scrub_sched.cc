@@ -88,17 +88,19 @@ std::unique_ptr<ScrubJob> ScrubQueue::pop_ready_pg(
 				      jb->schedule.deadline <= time_now))));
   };
 
-  auto not_ripes = rng::partition(to_scrub, eligible_filtr);
-  if (not_ripes.begin() == to_scrub.begin()) {
+  auto not_ripes =
+      std::partition(to_scrub.begin(), to_scrub.end(), eligible_filtr);
+  if (not_ripes == to_scrub.begin()) {
     return nullptr;
   }
-  auto top = rng::min_element(
-      to_scrub.begin(), not_ripes.begin(), rng::less(),
-      [](const std::unique_ptr<ScrubJob>& jb) -> utime_t {
-	return jb->get_sched_time();
+  auto top = std::min_element(
+      to_scrub.begin(), not_ripes,
+      [](const std::unique_ptr<ScrubJob>& lhs,
+	 const std::unique_ptr<ScrubJob>& rhs) -> bool {
+	return lhs->get_sched_time() < rhs->get_sched_time();
       });
 
-  if (top == not_ripes.begin()) {
+  if (top == not_ripes) {
     return nullptr;
   }
 
@@ -129,21 +131,25 @@ std::set<spg_t> ScrubQueue::get_pgs(const ScrubQueue::EntryPred& cond) const
 {
   std::lock_guard lck{jobs_lock};
   std::set<spg_t> pgs_w_matching_entries;
-  rng::transform(
-      to_scrub | std::views::filter(
-		     [&cond](const auto& job) -> bool { return (cond)(*job); }),
-      std::inserter(pgs_w_matching_entries, pgs_w_matching_entries.end()),
-      [](const auto& job) { return job->pgid; });
+  for (const auto& job : to_scrub) {
+    if (cond(*job)) {
+      pgs_w_matching_entries.insert(job->pgid);
+    }
+  }
   return pgs_w_matching_entries;
 }
+
 
 void ScrubQueue::for_each_job(
     std::function<void(const Scrub::ScrubJob&)> fn,
     int max_jobs) const
 {
   std::lock_guard lck(jobs_lock);
-  std::ranges::for_each(
-      to_scrub | std::views::take(max_jobs),
+  // implementation note: not using 'for_each_n()', as it is UB
+  // if there aren't enough elements
+  std::for_each(
+      to_scrub.begin(),
+      to_scrub.begin() + std::min(max_jobs, static_cast<int>(to_scrub.size())),
       [fn](const auto& job) { fn(*job); });
 }
 
