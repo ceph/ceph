@@ -1,11 +1,39 @@
 import logging
-from typing import List, Any, Tuple, Dict, cast
+from typing import List, Any, Tuple, Dict, cast, Optional
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
+from mgr_util import build_url
 
 logger = logging.getLogger(__name__)
+
+
+def get_mgmt_gw_internal_endpoint(svc: CephadmService) -> Optional[str]:
+    mgmt_gw_daemons = svc.mgr.cache.get_daemons_by_service('mgmt-gateway')
+    if not mgmt_gw_daemons:
+        return None
+
+    dd = mgmt_gw_daemons[0]
+    assert dd.hostname is not None
+    mgmt_gw_addr = svc._inventory_get_fqdn(dd.hostname)
+    mgmt_gw_internal_endpoint = build_url(scheme='https', host=mgmt_gw_addr, port=MgmtGatewayService.INTERNAL_SERVICE_PORT)
+    return f'{mgmt_gw_internal_endpoint}/internal'
+
+
+def get_mgmt_gw_external_endpoint(svc: CephadmService) -> Optional[str]:
+    mgmt_gw_daemons = svc.mgr.cache.get_daemons_by_service('mgmt-gateway')
+    if not mgmt_gw_daemons:
+        return None
+
+    dd = mgmt_gw_daemons[0]
+    assert dd.hostname is not None
+    mgmt_gw_spec = cast(MgmtGatewaySpec, svc.mgr.spec_store['mgmt-gateway'].spec)
+    mgmt_gw_port = dd.ports[0] if dd.ports else None
+    mgmt_gw_addr = svc._inventory_get_fqdn(dd.hostname)
+    protocol = 'http' if mgmt_gw_spec.disable_https else 'https'
+    mgmt_gw_external_endpoint = build_url(scheme=protocol, host=mgmt_gw_addr, port=mgmt_gw_port)
+    return mgmt_gw_external_endpoint
 
 
 class MgmtGatewayService(CephadmService):
@@ -100,20 +128,11 @@ class MgmtGatewayService(CephadmService):
             'alertmanager_endpoints': alertmanager_endpoints,
             'grafana_endpoints': grafana_endpoints
         }
-        external_server_context = {
-            'spec': svc_spec,
-            'dashboard_scheme': dashboard_scheme,
-            'grafana_scheme': grafana_protocol,
-            'prometheus_scheme': scheme,
-            'alertmanager_scheme': scheme,
-            'dashboard_endpoints': dashboard_endpoints,
-            'prometheus_endpoints': prometheus_endpoints,
-            'alertmanager_endpoints': alertmanager_endpoints,
-            'grafana_endpoints': grafana_endpoints
-        }
-        internal_server_context = {
+        server_context = {
             'spec': svc_spec,
             'internal_port': self.INTERNAL_SERVICE_PORT,
+            'dashboard_scheme': dashboard_scheme,
+            'dashboard_endpoints': dashboard_endpoints,
             'grafana_scheme': grafana_protocol,
             'prometheus_scheme': scheme,
             'alertmanager_scheme': scheme,
@@ -127,8 +146,8 @@ class MgmtGatewayService(CephadmService):
         daemon_config = {
             "files": {
                 "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),
-                "nginx_external_server.conf": self.mgr.template.render(self.EXTERNAL_SVC_TEMPLATE_PATH, external_server_context),
-                "nginx_internal_server.conf": self.mgr.template.render(self.INTERNAL_SVC_TEMPLATE_PATH, internal_server_context),
+                "nginx_external_server.conf": self.mgr.template.render(self.EXTERNAL_SVC_TEMPLATE_PATH, server_context),
+                "nginx_internal_server.conf": self.mgr.template.render(self.INTERNAL_SVC_TEMPLATE_PATH, server_context),
                 "nginx_internal.crt": internal_cert,
                 "nginx_internal.key": internal_pkey,
                 "ca.crt": self.mgr.cert_mgr.get_root_ca()

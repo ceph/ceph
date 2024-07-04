@@ -8,9 +8,9 @@ from mgr_module import HandleCommandResult
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
-    SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec
+    SNMPGatewaySpec, PrometheusSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
-from cephadm.services.mgmt_gateway import MgmtGatewayService
+from cephadm.services.mgmt_gateway import get_mgmt_gw_internal_endpoint, get_mgmt_gw_external_endpoint
 from mgr_util import verify_tls, ServerConfigException, build_url, get_cert_issuer_info, password_hash
 from ceph.deployment.utils import wrap_ipv6
 
@@ -44,8 +44,14 @@ class GrafanaService(CephadmService):
             port = dd.ports[0] if dd.ports else 9095
             protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
             prom_services.append(build_url(scheme=protocol, host=addr, port=port))
-
             deps.append(dd.name())
+
+        # in case mgmt-gw is enabeld we only use one url pointing to the internal
+        # mgmt gw for dashboard which will take care of HA in this case
+        mgmt_gw_internal_endpoint = get_mgmt_gw_internal_endpoint(self)
+        mgmt_gw_enabled = mgmt_gw_internal_endpoint is not None
+        if mgmt_gw_enabled:
+            prom_services = [f'{mgmt_gw_internal_endpoint}/prometheus']
 
         daemons = self.mgr.cache.get_daemons_by_service('loki')
         loki_host = ''
@@ -85,7 +91,6 @@ class GrafanaService(CephadmService):
                 daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
                 grafana_ip = ip_to_bind_to
 
-        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
                 'anonymous_access': spec.anonymous_access,
@@ -198,15 +203,8 @@ class GrafanaService(CephadmService):
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         spec = cast(GrafanaSpec, self.mgr.spec_store[dd.service_name()].spec)
 
-        mgmt_gw_daemons = self.mgr.cache.get_daemons_by_service('mgmt-gateway')
-        if mgmt_gw_daemons:
-            dd = mgmt_gw_daemons[0]
-            assert dd.hostname is not None
-            mgmt_gw_spec = cast(MgmtGatewaySpec, self.mgr.spec_store['mgmt-gateway'].spec)
-            mgmt_gw_port = dd.ports[0] if dd.ports else None
-            mgmt_gw_addr = self._inventory_get_fqdn(dd.hostname)
-            protocol = 'http' if mgmt_gw_spec.disable_https else 'https'
-            mgmt_gw_external_endpoint = build_url(scheme=protocol, host=mgmt_gw_addr, port=mgmt_gw_port)
+        mgmt_gw_external_endpoint = get_mgmt_gw_external_endpoint(self)
+        if mgmt_gw_external_endpoint is not None:
             self._set_value_on_dashboard(
                 'Grafana',
                 'dashboard get-grafana-api-url',
@@ -287,6 +285,13 @@ class AlertmanagerService(CephadmService):
             # in order to be consistent with _calc_daemon_deps().
             deps.append(dd.name())
 
+        mgmt_gw_internal_endpoint = get_mgmt_gw_internal_endpoint(self)
+        mgmt_gw_enabled = mgmt_gw_internal_endpoint is not None
+        if mgmt_gw_enabled:
+            dashboard_urls = [f'{mgmt_gw_internal_endpoint}/dashboard']
+        else:
+            dashboard_urls = get_dashboard_urls(self)
+
         snmp_gateway_urls: List[str] = []
         for dd in self.mgr.cache.get_daemons_by_service('snmp-gateway'):
             assert dd.hostname is not None
@@ -299,7 +304,7 @@ class AlertmanagerService(CephadmService):
 
         context = {
             'secure_monitoring_stack': self.mgr.secure_monitoring_stack,
-            'dashboard_urls': get_dashboard_urls(self),
+            'dashboard_urls': dashboard_urls,
             'default_webhook_urls': default_webhook_urls,
             'snmp_gateway_urls': snmp_gateway_urls,
             'secure': secure,
@@ -314,7 +319,6 @@ class AlertmanagerService(CephadmService):
             addr = self._inventory_get_fqdn(dd.hostname)
             peers.append(build_url(host=addr, port=port).lstrip('/'))
 
-        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
         if self.mgr.secure_monitoring_stack:
             alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
@@ -362,17 +366,13 @@ class AlertmanagerService(CephadmService):
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
 
-        mgmt_gw_daemons = self.mgr.cache.get_daemons_by_service('mgmt-gateway')
-        if mgmt_gw_daemons:
-            dd = mgmt_gw_daemons[0]
-            assert dd.hostname is not None
-            mgmt_gw_addr = self._inventory_get_fqdn(dd.hostname)
-            mgmt_gw_internal_endpoint = build_url(scheme='https', host=mgmt_gw_addr, port=MgmtGatewayService.INTERNAL_SERVICE_PORT)
+        mgmt_gw_internal_endpoint = get_mgmt_gw_internal_endpoint(self)
+        if mgmt_gw_internal_endpoint is not None:
             self._set_value_on_dashboard(
                 'AlertManager',
                 'dashboard get-alertmanager-api-host',
                 'dashboard set-alertmanager-api-host',
-                f'{mgmt_gw_internal_endpoint}/internal/alertmanager'
+                f'{mgmt_gw_internal_endpoint}/alertmanager'
             )
             self._set_value_on_dashboard(
                 'Alertmanager',
@@ -420,7 +420,7 @@ class PrometheusService(CephadmService):
     def get_mgr_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, "prometheus_servers"], node_ip)
+        cert, key = self.mgr.cert_mgr.generate_cert([host_fqdn, 'prometheus_servers'], node_ip)
         return cert, key
 
     def prepare_create(
@@ -601,17 +601,13 @@ class PrometheusService(CephadmService):
         port = dd.ports[0] if dd.ports else self.DEFAULT_SERVICE_PORT
         protocol = 'https' if self.mgr.secure_monitoring_stack else 'http'
 
-        mgmt_gw_daemons = self.mgr.cache.get_daemons_by_service('mgmt-gateway')
-        if mgmt_gw_daemons:
-            dd = mgmt_gw_daemons[0]
-            assert dd.hostname is not None
-            mgmt_gw_addr = self._inventory_get_fqdn(dd.hostname)
-            mgmt_gw_internal_endpoint = build_url(scheme='https', host=mgmt_gw_addr, port=MgmtGatewayService.INTERNAL_SERVICE_PORT)
+        mgmt_gw_internal_endpoint = get_mgmt_gw_internal_endpoint(self)
+        if mgmt_gw_internal_endpoint is not None:
             self._set_value_on_dashboard(
                 'Prometheus',
                 'dashboard get-prometheus-api-host',
                 'dashboard set-prometheus-api-host',
-                f'{mgmt_gw_internal_endpoint}/internal/prometheus'
+                f'{mgmt_gw_internal_endpoint}/prometheus'
             )
             self._set_value_on_dashboard(
                 'Prometheus',

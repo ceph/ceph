@@ -8,6 +8,14 @@ server {
     ssl_ciphers         AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:RC4-MD5;
     ssl_prefer_server_ciphers on;
 
+{% if dashboard_endpoints %}
+    location /internal/dashboard {
+        rewrite ^/internal/dashboard/(.*) /$1 break;
+        proxy_pass {{ dashboard_scheme }}://dashboard_servers;
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+    }
+{% endif %}
+
 {% if grafana_endpoints %}
     location /internal/grafana {
         rewrite ^/internal/grafana/(.*) /$1 break;

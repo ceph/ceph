@@ -897,6 +897,7 @@ class TestMonitoring:
                         ca_file: root_cert.pem
                         cert_file: prometheus.crt
                         key_file:  prometheus.key
+                      path_prefix: '/'
                       http_sd_configs:
                         - url: https://[::1]:8765/sd/prometheus/sd-config?service=alertmanager
                           basic_auth:
@@ -3350,6 +3351,12 @@ class TestMgmtGateway:
                                                  ssl_protocols       TLSv1.2 TLSv1.3;
                                                  ssl_ciphers         AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:RC4-MD5;
                                                  ssl_prefer_server_ciphers on;
+
+                                                 location /internal/dashboard {
+                                                     rewrite ^/internal/dashboard/(.*) /$1 break;
+                                                     proxy_pass https://dashboard_servers;
+                                                     proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+                                                 }
 
                                                  location /internal/grafana {
                                                      rewrite ^/internal/grafana/(.*) /$1 break;

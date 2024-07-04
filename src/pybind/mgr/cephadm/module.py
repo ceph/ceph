@@ -3087,10 +3087,17 @@ Then run the following:
 
     @handle_orch_error
     def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        import socket
         supported_moduels = ['dashboard', 'prometheus']
         if module_name not in supported_moduels:
             raise OrchestratorError(f'Unsupported modlue {module_name}. Supported moduels are: {supported_moduels}')
-        cert, key = self.cert_mgr.generate_cert(self.get_hostname(), self.get_mgr_ip())
+
+        host_fqdns = [socket.getfqdn(self.get_hostname())]
+        node_ip = self.get_mgr_ip()
+        if module_name == 'dashboard':
+            host_fqdns.append('dashboard_servers')
+
+        cert, key = self.cert_mgr.generate_cert(host_fqdns, node_ip)
         return {'cert': cert, 'key': key}
 
     @handle_orch_error
