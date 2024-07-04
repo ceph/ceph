@@ -338,7 +338,6 @@ int main(int argc, char** argv) {
   string file("input.txt");
   string ceph_conf_path("./ceph.conf");
   string pool("test_pool");
-  string input_ir_output("");
   bool skip_do_ops = false;
 
   po::options_description po_options("Options");
@@ -350,7 +349,6 @@ int main(int argc, char** argv) {
     ("parser-threads", po::value<uint64_t>(&nparser_threads)->default_value(16), "Number of parser threads")
     ("worker-threads", po::value<uint64_t>(&nworker_threads)->default_value(16), "Number of I/O worker threads")
     ("pool", po::value<string>(&pool)->default_value("test_pool"), "Pool to use for I/O")
-    ("optimized-input-path", po::value<string>(&input_ir_output)->default_value(""), "Create a new input file that is optimzed for parsing. If not empty it will create it")
     ("skip-do-ops", po::bool_switch(&skip_do_ops)->default_value(false), "Skip doing operations")
     ;
 
@@ -402,22 +400,11 @@ int main(int argc, char** argv) {
   }
   // reduce
   for (auto context : parser_contexts) {
-      string_cache.insert(context->object_cache.begin(), context->object_cache.end());
-      string_cache.insert(context->collection_cache.begin(), context->collection_cache.end());
-      string_cache.insert(context->who_cache.begin(), context->who_cache.end());
       ops.insert(ops.end(), context->ops.begin(), context->ops.end());
       max_buffer_size = max(context->max_buffer_size, max_buffer_size);
-      context->object_cache.clear();
-      context->collection_cache.clear();
-      context->who_cache.clear();
-      context->ops.clear();
+      // context->ops.clear();
   }
 
-  if (!input_ir_output.empty()) {
-    // Create an optimized file for parsing
-    ofstream output(input_ir_output, ios::out);
-    output << "input-optimized" << endl;
-  }
 
   int ret = cluster.init2("client.admin", "ceph", 0);
   if (ret < 0) {
