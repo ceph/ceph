@@ -22,6 +22,7 @@ alerting:
         ca_file: root_cert.pem
         cert_file: prometheus.crt
         key_file:  prometheus.key
+      path_prefix: '{{ alertmanager_url_prefix }}'
       http_sd_configs:
         - url: {{ alertmanager_sd_url }}
           basic_auth:

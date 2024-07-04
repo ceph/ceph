@@ -470,6 +470,7 @@ class PrometheusService(CephadmService):
         mgr_prometheus_sd_url = f'{srv_end_point}service=mgr-prometheus'  # always included
         ceph_exporter_sd_url = f'{srv_end_point}service=ceph-exporter'  # always included
         nvmeof_sd_url = f'{srv_end_point}service=nvmeof'  # always included
+        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
 
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
@@ -477,6 +478,7 @@ class PrometheusService(CephadmService):
 
         # generate the prometheus configuration
         context = {
+            'alertmanager_url_prefix': '/alertmanager' if mgmt_gw_enabled else '/',
             'alertmanager_web_user': alertmanager_user,
             'alertmanager_web_password': alertmanager_password,
             'secure_monitoring_stack': self.mgr.secure_monitoring_stack,
@@ -499,7 +501,6 @@ class PrometheusService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(port): ip_to_bind_to}
 
-        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         web_context = {
             'enable_mtls': mgmt_gw_enabled,
             'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
