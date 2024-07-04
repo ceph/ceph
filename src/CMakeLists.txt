@@ -140,8 +140,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     endif()
   endif()
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12) # require >= clang-12
-    message(FATAL_ERROR "C++20 support requires a minimum Clang version of 12.")
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16) # require >= clang-16
+    message(FATAL_ERROR "C++20 support requires a minimum Clang version of 16.")
   endif()
   string(APPEND CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_EXPORTS_C_FLAG}")
   string(APPEND CMAKE_LINKER_FLAGS " -rdynamic -export-dynamic ${CMAKE_EXE_EXPORTS_C_FLAG}")
