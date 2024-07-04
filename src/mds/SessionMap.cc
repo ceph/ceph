@@ -1047,11 +1047,28 @@ int Session::check_access(CInode *in, unsigned mask,
            << dendl;
 
   string path;
-  CInode *diri = NULL;
-  if (!in->is_base())
-    diri = in->get_projected_parent_dn()->get_dir()->get_inode();
-  if (diri && diri->is_stray()){
-    path = in->get_projected_inode()->stray_prior_path;
+  if (!in->is_base()) {
+    auto* dn = in->get_projected_parent_dn();
+    auto* pdiri = dn->get_dir()->get_inode();
+    if (pdiri) {
+      if (pdiri->is_stray()) {
+        path = in->get_projected_inode()->stray_prior_path;
+      } else if (!pdiri->is_base()) {
+        /* is the pdiri in the stray (is this inode in a snapshotted deleted directory?) */
+        auto* gpdiri = pdiri->get_projected_parent_dn()->get_dir()->get_inode();
+        /* stray_prior_path will not necessarily be part of the inode because
+         * it's set on unlink but that happens after the snapshot, naturally.
+         * We need to construct it manually.
+         */
+        if (gpdiri->is_stray()) {
+          /* just check access on the parent dir */
+          path = pdiri->get_projected_inode()->stray_prior_path;
+        }
+      }
+    }
+  }
+
+  if (!path.empty()) {
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
     in->make_path_string(path, true);
