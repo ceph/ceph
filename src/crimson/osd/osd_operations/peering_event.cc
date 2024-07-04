@@ -107,7 +107,7 @@ seastar::future<> PeeringEvent<T>::with_pg(
   }, [this](std::exception_ptr ep) {
     LOG_PREFIX(PeeringEvent<T>::with_pg);
     DEBUGI("{}: interrupted with {}", *this, ep);
-  }, pg).finally([this] {
+  }, pg, evt.get_epoch_sent()).finally([this] {
     logger().debug("{}: exit", *this);
     that()->get_handle().exit();
   });
