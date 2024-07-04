@@ -33,8 +33,20 @@ namespace po = boost::program_options;
 using namespace std;
 using namespace ceph;
 
+// compare shared_ptr<string>
+struct StringPtrCompare
+{
+  int operator()(const shared_ptr<string>& lhs, const shared_ptr<string>& rhs) const {
+    if (lhs && rhs) {
+        // Compare the content of the strings
+        return *lhs < *rhs;
+    }
+    return lhs < rhs;
+  }
+};
 
-static map<string, shared_ptr<string>> string_cache;
+
+static set<shared_ptr<string>, StringPtrCompare> string_cache;
 static std::atomic<uint64_t> in_flight_ops(0);
 static std::condition_variable cv;
 static std::mutex in_flight_mutex;
@@ -71,9 +83,9 @@ struct Op {
 };
 
 struct ParserContext {
-    map<string, shared_ptr<string>> collection_cache;
-    map<string, shared_ptr<string>> object_cache;
-    map<string, shared_ptr<string>> who_cache;
+    set<shared_ptr<string>, StringPtrCompare> collection_cache;
+    set<shared_ptr<string>, StringPtrCompare> object_cache;
+    set<shared_ptr<string>, StringPtrCompare> who_cache;
     vector<Op> ops;
     char *start; // starts and ends in new line or eof
     char *end;
@@ -163,27 +175,24 @@ void parse_entry_point(shared_ptr<ParserContext> context) {
     date += " " + time;
     // cout << date << endl;
     // FIXME: this is wrong  but it returns a reasonable bad timestamp :P
-    // const char* date_format_full = "%Y-%m-%d %H:%M:%S.%f%z";
-    // res = strptime(date.c_str(), date_format_full, &t);
-    // time_t at = mktime(&t);
     time_t at = timestamp_parser(date);
 
     // cout << fmt::format("{} {} {} {} {} {} {}", date, at, who, type, range, object, collection) << endl;
 
     shared_ptr<string> who_ptr = make_shared<string>(who);
-    auto who_it = context->who_cache.find(who);
+    auto who_it = context->who_cache.find(who_ptr);
     if (who_it == context->who_cache.end()) {
-      context->who_cache.insert({ who, who_ptr });
+      context->who_cache.insert(who_ptr);
     } else {
-      who_ptr = who_it->second;
+      who_ptr = *who_it;
     }
 
     shared_ptr<string> object_ptr = make_shared<string>(object);
-    auto object_it = context->object_cache.find(object);
+    auto object_it = context->object_cache.find(object_ptr);
     if (object_it == context->object_cache.end()) {
-      context->object_cache.insert({ object, object_ptr });
+      context->object_cache.insert(object_ptr);
     } else {
-      object_ptr = object_it->second;
+      object_ptr = *object_it;
     }
 
     op_type ot;
@@ -219,11 +228,11 @@ void parse_entry_point(shared_ptr<ParserContext> context) {
     }
 
     shared_ptr<string> collection_ptr = make_shared<string>(collection);
-    auto collection_it = context->collection_cache.find(collection);
+    auto collection_it = context->collection_cache.find(collection_ptr);
     if (collection_it == context->collection_cache.end()) {
-      context->collection_cache.insert({ collection, collection_ptr });
+      context->collection_cache.insert(collection_ptr);
     } else {
-      collection_ptr = collection_it->second;
+      collection_ptr = *collection_it;
     }
 
     uint64_t offset = 0, length = 0;
