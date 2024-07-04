@@ -600,37 +600,34 @@ seastar::future<> SeaStore::report_stats()
     }
     constexpr const char* dfmt = "{:.2f}";
     auto d_ts_num_io = static_cast<double>(ts.num_io);
+
     std::ostringstream oss_iops;
-    oss_iops << "device IOPS:"
-             << fmt::format(dfmt, ts.num_io/seconds)
+    auto iops = ts.num_io/seconds;
+    oss_iops << "device IOPS: "
+             << fmt::format(dfmt, iops)
+             << " "
+             << fmt::format(dfmt, iops/shard_device_stats.size())
              << "(";
-    std::ostringstream oss_depth;
-    oss_depth << "device per-writer depth:"
-              << fmt::format(dfmt, ts.total_depth/d_ts_num_io)
-              << "(";
+
     std::ostringstream oss_bd;
-    oss_bd << "device bandwidth(MiB):"
-           << fmt::format(dfmt, ts.total_bytes/seconds/(1<<20))
+    auto bd_mb = ts.total_bytes/seconds/(1<<20);
+    oss_bd << "device bandwidth(MiB): "
+           << fmt::format(dfmt, bd_mb)
+           << " "
+           << fmt::format(dfmt, bd_mb/shard_device_stats.size())
            << "(";
-    std::ostringstream oss_iosz;
-    oss_iosz << "device IO size(B):"
-             << fmt::format(dfmt, ts.total_bytes/d_ts_num_io)
-             << "(";
+
     for (const auto &s : shard_device_stats) {
-      auto d_s_num_io = static_cast<double>(s.num_io);
       oss_iops << fmt::format(dfmt, s.num_io/seconds) << ",";
-      oss_depth << fmt::format(dfmt, s.total_depth/d_s_num_io) << ",";
       oss_bd << fmt::format(dfmt, s.total_bytes/seconds/(1<<20)) << ",";
-      oss_iosz << fmt::format(dfmt, s.total_bytes/d_s_num_io) << ",";
     }
     oss_iops << ")";
-    oss_depth << ")";
     oss_bd << ")";
-    oss_iosz << ")";
+
     INFO("{}", oss_iops.str());
-    INFO("{}", oss_depth.str());
     INFO("{}", oss_bd.str());
-    INFO("{}", oss_iosz.str());
+    INFO("device IO depth per writer: {:.2f}", ts.total_depth/d_ts_num_io);
+    INFO("device bytes per write: {:.2f}", ts.total_bytes/d_ts_num_io);
     return seastar::now();
   });
 }
