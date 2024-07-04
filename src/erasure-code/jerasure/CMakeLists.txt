@@ -5,6 +5,7 @@ set(jerasure_utils_src
   ErasureCodeJerasure.cc)
 
 add_library(jerasure_utils OBJECT ${jerasure_utils_src})
+target_link_libraries(jerasure_utils legacy-option-headers)
 
 # Set the CFLAGS correctly for gf-complete based on SIMD compiler support
 set(GF_COMPILE_FLAGS)
