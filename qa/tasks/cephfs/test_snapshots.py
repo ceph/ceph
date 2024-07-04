@@ -376,6 +376,32 @@ class TestSnapshots(CephFSTestCase):
 
         self.mount_a.run_shell(["rmdir", Raw("d0/d2/dir/.snap/*")])
 
+    def test_snapshot_check_access(self):
+        """
+        """
+
+        self.mount_a.run_shell_payload("mkdir -p dir1/dir2")
+        self.mount_a.umount_wait(require_clean=True)
+
+        newid = 'foo'
+        keyring = self.fs.authorize(newid, ('/dir1', 'rws'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=newid, client_keyring_path=keyring_path, cephfs_mntpt='/dir1')
+
+        self.mount_a.run_shell_payload("pushd dir2; dd if=/dev/urandom of=file bs=4k count=1;")
+        self.mount_a.run_shell_payload("mkdir .snap/one")
+        self.mount_a.run_shell_payload("rm -rf dir2")
+        # ???
+        # Session check_access path ~mds0/stray3/10000000001/file
+        # 2024-07-04T02:05:07.884+0000 7f319ce86640 20 Session check_access: [inode 0x10000000002 [2,2] ~mds0/stray2/10000000001/file ...] caller_uid=1141 caller_gid=1141 caller_gid_list=[1000,1141]
+        # 2024-07-04T02:05:07.884+0000 7f319ce86640 20 Session check_access path ~mds0/stray2/10000000001/file
+        # should be
+        # 2024-07-04T02:11:26.990+0000 7f6b14e71640 20 Session check_access: [inode 0x10000000002 [2,2] ~mds0/stray2/10000000001/file ...] caller_uid=1141 caller_gid=1141 caller_gid_list=[1000,1141]
+        # 2024-07-04T02:11:26.990+0000 7f6b14e71640 20 Session check_access stray_prior_path /dir1/dir2
+        # 2024-07-04T02:11:26.990+0000 7f6b14e71640 10 MDSAuthCap is_capable inode(path /dir1/dir2 owner 1141:1141 mode 0100644) by caller 1141:1141 mask 1 new 0:0 cap: MDSAuthCaps[allow rws fsname=cephfs path="/dir1"]
+        self.mount_a.run_shell_payload("stat .snap/one/dir2/file")
+
+
     def test_multimds_mksnap(self):
         """
         check if snapshot takes effect across authority subtrees
