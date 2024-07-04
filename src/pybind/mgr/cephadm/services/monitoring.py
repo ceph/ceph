@@ -11,7 +11,7 @@ from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceS
     SNMPGatewaySpec, PrometheusSpec, MgmtGatewaySpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_urls
 from cephadm.services.mgmt_gateway import MgmtGatewayService
-from mgr_util import verify_tls, ServerConfigException, create_self_signed_cert, build_url, get_cert_issuer_info, password_hash
+from mgr_util import verify_tls, ServerConfigException, build_url, get_cert_issuer_info, password_hash
 from ceph.deployment.utils import wrap_ipv6
 
 logger = logging.getLogger(__name__)
@@ -57,13 +57,18 @@ class GrafanaService(CephadmService):
 
             deps.append(dd.name())
 
-        root_cert = self.mgr.http_server.service_discovery.ssl_certs.get_root_cert()
+        root_cert = self.mgr.cert_mgr.get_root_ca()
+        cert, pkey = self.prepare_certificates(daemon_spec)
         oneline_root_cert = '\\n'.join([line.strip() for line in root_cert.splitlines()])
+        oneline_cert = '\\n'.join([line.strip() for line in cert.splitlines()])
+        oneline_key = '\\n'.join([line.strip() for line in pkey.splitlines()])
         grafana_data_sources = self.mgr.template.render('services/grafana/ceph-dashboard.yml.j2',
                                                         {'hosts': prom_services,
                                                          'prometheus_user': prometheus_user,
                                                          'prometheus_password': prometheus_password,
                                                          'cephadm_root_ca': oneline_root_cert,
+                                                         'cert': oneline_cert,
+                                                         'key': oneline_key,
                                                          'security_enabled': self.mgr.secure_monitoring_stack,
                                                          'loki_host': loki_host})
 
@@ -103,7 +108,6 @@ class GrafanaService(CephadmService):
             }
         )
 
-        cert, pkey = self.prepare_certificates(daemon_spec)
         config_file = {
             'files': {
                 "grafana.ini": grafana_ini,
@@ -318,6 +322,8 @@ class AlertmanagerService(CephadmService):
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
             cert, key = self.get_alertmanager_certificates(daemon_spec)
             context = {
+                'enable_mtls': mgmt_gw_enabled,
+                'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
                 'alertmanager_web_user': alertmanager_user,
                 'alertmanager_web_password': password_hash(alertmanager_password),
             }
@@ -327,7 +333,7 @@ class AlertmanagerService(CephadmService):
                     'alertmanager.crt': cert,
                     'alertmanager.key': key,
                     'web.yml': self.mgr.template.render('services/alertmanager/web.yml.j2', context),
-                    'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert()
+                    'root_cert.pem': self.mgr.cert_mgr.get_root_ca()
                 },
                 'peers': peers,
                 'web_config': '/etc/alertmanager/web.yml',
@@ -493,12 +499,14 @@ class PrometheusService(CephadmService):
             if ip_to_bind_to:
                 daemon_spec.port_ips = {str(port): ip_to_bind_to}
 
+        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         web_context = {
+            'enable_mtls': mgmt_gw_enabled,
+            'enable_basic_auth': True,  # TODO(redo): disable when ouath2-proxy is enabled
             'prometheus_web_user': prometheus_user,
             'prometheus_web_password': password_hash(prometheus_password),
         }
 
-        mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
         if self.mgr.secure_monitoring_stack:
             cert, key = self.get_mgr_prometheus_certificates(daemon_spec)
             r: Dict[str, Any] = {
@@ -652,8 +660,9 @@ class NodeExporterService(CephadmService):
             mgmt_gw_enabled = len(self.mgr.cache.get_daemons_by_service('mgmt-gateway')) > 0
             r = {
                 'files': {
-                    'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2', {}),
-                    'root_cert.pem': self.mgr.http_server.service_discovery.ssl_certs.get_root_cert(),
+                    'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2',
+                                                        {'enable_mtls': mgmt_gw_enabled}),
+                    'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
                     'node_exporter.crt': cert,
                     'node_exporter.key': key,
                 },

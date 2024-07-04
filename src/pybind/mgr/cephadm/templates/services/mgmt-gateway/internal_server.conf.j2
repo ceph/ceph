@@ -19,6 +19,12 @@ server {
     location /internal/prometheus {
         rewrite ^/internal/prometheus/(.*) /prometheus/$1 break;
         proxy_pass {{ prometheus_scheme }}://prometheus_servers;
+
+        proxy_ssl_certificate /etc/nginx/ssl/nginx_internal.crt;
+        proxy_ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
+        proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
     }
 {% endif %}
 
@@ -26,6 +32,12 @@ server {
     location /internal/alertmanager {
         rewrite ^/internal/alertmanager/(.*) /alertmanager/$1 break;
         proxy_pass {{ alertmanager_scheme }}://alertmanager_servers;
+
+        proxy_ssl_certificate /etc/nginx/ssl/nginx_internal.crt;
+        proxy_ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
+        proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
     }
 {% endif %}
 }
