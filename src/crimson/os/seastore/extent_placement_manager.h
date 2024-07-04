@@ -551,6 +551,15 @@ public:
     return background_process.run_until_halt();
   }
 
+  bool get_checksum_needed(paddr_t addr) {
+    // checksum offloading only for blocks physically stored in the device
+    if (addr.is_fake()) {
+      return true;
+    }
+    assert(addr.is_absolute());
+    return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
+  }
+
 private:
   rewrite_gen_t adjust_generation(
       data_category_t category,
