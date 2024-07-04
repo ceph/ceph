@@ -17,8 +17,6 @@ namespace crimson::osd {
 
 IOInterruptCondition::IOInterruptCondition(Ref<PG>& pg, epoch_t e)
   : pg(pg), e(e) {}
-IOInterruptCondition::IOInterruptCondition(Ref<PG>& pg)
-  : pg(pg), e(pg->get_osdmap_epoch()) {}
 
 IOInterruptCondition::~IOInterruptCondition() {
   // for the sake of forward declaring PG (which is a detivate of
