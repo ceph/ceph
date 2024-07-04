@@ -1040,6 +1040,12 @@ int Session::check_access(CInode *in, unsigned mask,
 			  const vector<uint64_t> *caller_gid_list,
 			  int new_uid, int new_gid)
 {
+  dout(20) << __func__ << ": " << *in
+           << " caller_uid=" << caller_uid
+           << " caller_gid=" << caller_gid
+           << " caller_gid_list=" << *caller_gid_list
+           << dendl;
+
   string path;
   CInode *diri = NULL;
   if (!in->is_base())
