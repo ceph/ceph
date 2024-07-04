@@ -75,9 +75,6 @@
 [submodule "src/qatzip"]
 	path = src/qatzip
 	url = https://github.com/intel/qatzip.git
-[submodule "src/boost_redis"]
-	path = src/boost_redis
-	url = https://github.com/boostorg/redis.git
 [submodule "src/BLAKE3"]
 	path = src/BLAKE3
 	url = https://github.com/BLAKE3-team/BLAKE3.git
