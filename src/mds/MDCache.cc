@@ -8520,7 +8520,6 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	  lov.add_rdlock(&dn->lock);
 	}
 	if (!mds->locker->acquire_locks(mdr, lov)) {
-	  dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
 	  return 1;
 	}
       } else if (!path_locked &&
@@ -8641,7 +8640,6 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		lov.add_rdlock(&dn->lock);
 	      }
 	      if (!mds->locker->acquire_locks(mdr, lov)) {
-		dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
 		return 1;
 	      }
 	    }
