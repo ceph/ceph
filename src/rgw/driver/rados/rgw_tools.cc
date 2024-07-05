@@ -11,8 +11,8 @@
 #include "rgw_tools.h"
 #include "rgw_acl_s3.h"
 #include "rgw_aio_throttle.h"
+#include "rgw_asio_thread.h"
 #include "rgw_compression.h"
-#include "common/BackTrace.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -212,13 +212,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     }
     return -ec.value();
   }
-  // work on asio threads should be asynchronous, so warn when they block
-  if (is_asio_thread) {
-    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
-#ifdef _BACKTRACE_LOGGING
-    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
-#endif
-  }
+  maybe_warn_about_blocking(dpp);
   return ioctx.operate(oid, op, nullptr, flags);
 }
 
@@ -232,12 +226,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     librados::async_operate(yield, ioctx, oid, op, flags, trace_info, yield[ec]);
     return -ec.value();
   }
-  if (is_asio_thread) {
-    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
-#ifdef _BACKTRACE_LOGGING
-    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
-#endif
-  }
+  maybe_warn_about_blocking(dpp);
   return ioctx.operate(oid, op, flags, trace_info);
 }
 
@@ -255,12 +244,7 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
     }
     return -ec.value();
   }
-  if (is_asio_thread) {
-    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
-#ifdef _BACKTRACE_LOGGING
-    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
-#endif
-  }
+  maybe_warn_about_blocking(dpp);
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
 

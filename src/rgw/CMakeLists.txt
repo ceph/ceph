@@ -63,6 +63,7 @@ set(librgw_common_srcs
   rgw_acl_swift.cc
   rgw_aio.cc
   rgw_aio_throttle.cc
+  rgw_asio_thread.cc
   rgw_auth.cc
   rgw_auth_s3.cc
   rgw_arn.cc

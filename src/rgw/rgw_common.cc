@@ -175,8 +175,6 @@ rgw_http_errors rgw_http_iam_errors({
 using namespace std;
 using namespace ceph::crypto;
 
-thread_local bool is_asio_thread = false;
-
 rgw_err::
 rgw_err()
 {
