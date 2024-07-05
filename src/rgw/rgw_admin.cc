@@ -8825,9 +8825,9 @@ next:
     if (max_entries < 0) {
       max_entries = MAX_LC_LIST_ENTRIES;
     }
+    RGWLC* lc = driver->get_rgwlc();
     do {
-      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_lc_progress(marker, max_entries,
-						    bucket_lc_map, index);
+      int ret = lc->list_lc_progress(marker, max_entries, bucket_lc_map, index);
       if (ret < 0) {
         cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret)
 	     << std::endl;
