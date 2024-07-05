@@ -2383,6 +2383,17 @@ struct shard_stats_t {
   uint64_t repeat_read_num = 0;
   uint64_t pending_read_num = 0;
 
+  // transaction_type_t::TRIM_DIRTY~CLEANER_COLD
+  uint64_t pending_bg_num = 0;
+  uint64_t trim_alloc_num = 0;
+  uint64_t repeat_trim_alloc_num = 0;
+  uint64_t trim_dirty_num = 0;
+  uint64_t repeat_trim_dirty_num = 0;
+  uint64_t cleaner_main_num = 0;
+  uint64_t repeat_cleaner_main_num = 0;
+  uint64_t cleaner_cold_num = 0;
+  uint64_t repeat_cleaner_cold_num = 0;
+
   uint64_t flush_num = 0;
   uint64_t pending_flush_num = 0;
 };

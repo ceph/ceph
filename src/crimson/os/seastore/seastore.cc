@@ -2469,7 +2469,7 @@ void SeaStore::Shard::init_managers()
   shard_stats = {};
 
   transaction_manager = make_transaction_manager(
-      device, secondaries, is_test);
+      device, secondaries, shard_stats, is_test);
   collection_manager = std::make_unique<collection_manager::FlatCollectionManager>(
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
