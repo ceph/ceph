@@ -1554,21 +1554,30 @@ public:
   /** Get an empty entry */
   virtual std::unique_ptr<LCEntry> get_entry() = 0;
   /** Get an entry matching the given marker */
-  virtual int get_entry(const std::string& oid, const std::string& marker, std::unique_ptr<LCEntry>* entry) = 0;
+  virtual int get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                        const std::string& oid, const std::string& marker,
+                        std::unique_ptr<LCEntry>* entry) = 0;
   /** Get the entry following the given marker */
-  virtual int get_next_entry(const std::string& oid, const std::string& marker, std::unique_ptr<LCEntry>* entry) = 0;
+  virtual int get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const std::string& marker,
+                             std::unique_ptr<LCEntry>* entry) = 0;
   /** Store a modified entry in then backing store */
-  virtual int set_entry(const std::string& oid, LCEntry& entry) = 0;
+  virtual int set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                        const std::string& oid, LCEntry& entry) = 0;
   /** List all known entries */
-  virtual int list_entries(const std::string& oid, const std::string& marker,
+  virtual int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                           const std::string& oid, const std::string& marker,
 			   uint32_t max_entries,
 			   std::vector<std::unique_ptr<LCEntry>>& entries) = 0;
   /** Remove an entry from the backing store */
-  virtual int rm_entry(const std::string& oid, LCEntry& entry) = 0;
+  virtual int rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, LCEntry& entry) = 0;
   /** Get a head */
-  virtual int get_head(const std::string& oid, std::unique_ptr<LCHead>* head) = 0;
+  virtual int get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, std::unique_ptr<LCHead>* head) = 0;
   /** Store a modified head to the backing store */
-  virtual int put_head(const std::string& oid, LCHead& head) = 0;
+  virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, LCHead& head) = 0;
 
   /** Get a serializer for lifecycle */
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,

@@ -1330,51 +1330,45 @@ std::unique_ptr<Lifecycle::LCEntry> FilterLifecycle::get_entry()
   return std::make_unique<FilterLCEntry>(std::move(e));
 }
 
-int FilterLifecycle::get_entry(const std::string& oid, const std::string& marker,
+int FilterLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                               const std::string& oid, const std::string& marker,
 			       std::unique_ptr<LCEntry>* entry)
 {
   std::unique_ptr<LCEntry> ne;
-  int ret;
-
-  ret = next->get_entry(oid, marker, &ne);
+  int ret = next->get_entry(dpp, y, oid, marker, &ne);
   if (ret < 0)
     return ret;
 
-  LCEntry* e = new FilterLCEntry(std::move(ne));
-  entry->reset(e);
-
+  *entry = std::make_unique<FilterLCEntry>(std::move(ne));
   return 0;
 }
 
-int FilterLifecycle::get_next_entry(const std::string& oid, const std::string& marker,
+int FilterLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                                    const std::string& oid, const std::string& marker,
 				    std::unique_ptr<LCEntry>* entry)
 {
   std::unique_ptr<LCEntry> ne;
-  int ret;
-
-  ret = next->get_next_entry(oid, marker, &ne);
+  int ret = next->get_next_entry(dpp, y, oid, marker, &ne);
   if (ret < 0)
     return ret;
 
-  LCEntry* e = new FilterLCEntry(std::move(ne));
-  entry->reset(e);
-
+  *entry = std::make_unique<FilterLCEntry>(std::move(ne));
   return 0;
 }
 
-int FilterLifecycle::set_entry(const std::string& oid, LCEntry& entry)
+int FilterLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                               const std::string& oid, LCEntry& entry)
 {
-  return next->set_entry(oid, entry);
+  return next->set_entry(dpp, y, oid, entry);
 }
 
-int FilterLifecycle::list_entries(const std::string& oid, const std::string& marker,
+int FilterLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                                  const std::string& oid, const std::string& marker,
 				  uint32_t max_entries,
 				  std::vector<std::unique_ptr<LCEntry>>& entries)
 {
   std::vector<std::unique_ptr<LCEntry>> ne;
-  int ret;
-
-  ret = next->list_entries(oid, marker, max_entries, ne);
+  int ret = next->list_entries(dpp, y, oid, marker, max_entries, ne);
   if (ret < 0)
     return ret;
 
@@ -1385,29 +1379,28 @@ int FilterLifecycle::list_entries(const std::string& oid, const std::string& mar
   return 0;
 }
 
-int FilterLifecycle::rm_entry(const std::string& oid, LCEntry& entry)
+int FilterLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, LCEntry& entry)
 {
-  return next->rm_entry(oid, entry);
+  return next->rm_entry(dpp, y, oid, entry);
 }
 
-int FilterLifecycle::get_head(const std::string& oid, std::unique_ptr<LCHead>* head)
+int FilterLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, std::unique_ptr<LCHead>* head)
 {
   std::unique_ptr<LCHead> nh;
-  int ret;
-
-  ret = next->get_head(oid, &nh);
+  int ret = next->get_head(dpp, y, oid, &nh);
   if (ret < 0)
     return ret;
 
-  LCHead* h = new FilterLCHead(std::move(nh));
-  head->reset(h);
-
+  *head = std::make_unique<FilterLCHead>(std::move(nh));
   return 0;
 }
 
-int FilterLifecycle::put_head(const std::string& oid, LCHead& head)
+int FilterLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, LCHead& head)
 {
-  return next->put_head(oid, *(dynamic_cast<FilterLCHead&>(head).next.get()));
+  return next->put_head(dpp, y, oid, *(dynamic_cast<FilterLCHead&>(head).next.get()));
 }
 
 std::unique_ptr<LCSerializer> FilterLifecycle::get_serializer(
