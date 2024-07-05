@@ -2128,7 +2128,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   dump_errno(s);
   dump_header(s, "x-rgw-bucket-placement-target", 
     s->bucket->get_info().placement_rule.name);
-  end_header(s, this);
+  end_header(s, this, to_mime_type(s->format));
   dump_start(s);
 
   std::unique_ptr<rgw::sal::ZoneGroup> zonegroup;
