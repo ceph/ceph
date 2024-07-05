@@ -868,31 +868,30 @@ public:
   }
 };
 
-class RadosLifecycle : public StoreLifecycle {
+class RadosLifecycle : public Lifecycle {
   RadosStore* store;
 
 public:
   RadosLifecycle(RadosStore* _st) : store(_st) {}
 
-  using StoreLifecycle::get_entry;
   virtual int get_entry(const DoutPrefixProvider* dpp, optional_yield y,
                         const std::string& oid, const std::string& marker,
-                        std::unique_ptr<LCEntry>* entry) override;
+                        LCEntry& entry) override;
   virtual int get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& oid, const std::string& marker,
-                             std::unique_ptr<LCEntry>* entry) override;
+                             LCEntry& entry) override;
   virtual int set_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                        const std::string& oid, LCEntry& entry) override;
+                        const std::string& oid, const LCEntry& entry) override;
   virtual int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
                            const std::string& oid, const std::string& marker,
 			   uint32_t max_entries,
-			   std::vector<std::unique_ptr<LCEntry>>& entries) override;
+			   std::vector<LCEntry>& entries) override;
   virtual int rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                       const std::string& oid, LCEntry& entry) override;
+                       const std::string& oid, const LCEntry& entry) override;
   virtual int get_head(const DoutPrefixProvider* dpp, optional_yield y,
-                       const std::string& oid, std::unique_ptr<LCHead>* head) override;
-  virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
                        const std::string& oid, LCHead& head) override;
+  virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, const LCHead& head) override;
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
 						       const std::string& oid,
 						       const std::string& cookie) override;
