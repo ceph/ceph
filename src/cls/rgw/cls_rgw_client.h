@@ -609,19 +609,19 @@ int cls_rgw_gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& mark
 #endif
 
 /* lifecycle */
-// these overloads which call io_ctx.operate() should not be called in the rgw.
-// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
-#ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_rgw_lc_get_head(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_lc_obj_head& head);
-int cls_rgw_lc_put_head(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_lc_obj_head& head);
-int cls_rgw_lc_get_next_entry(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, cls_rgw_lc_entry& entry);
-int cls_rgw_lc_rm_entry(librados::IoCtx& io_ctx, const std::string& oid, const cls_rgw_lc_entry& entry);
-int cls_rgw_lc_set_entry(librados::IoCtx& io_ctx, const std::string& oid, const cls_rgw_lc_entry& entry);
-int cls_rgw_lc_get_entry(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, cls_rgw_lc_entry& entry);
-int cls_rgw_lc_list(librados::IoCtx& io_ctx, const std::string& oid,
-		    const std::string& marker, uint32_t max_entries,
-                    std::vector<cls_rgw_lc_entry>& entries);
-#endif
+void cls_rgw_lc_get_head(librados::ObjectReadOperation& op, bufferlist& bl);
+int cls_rgw_lc_get_head_decode(const bufferlist& bl, cls_rgw_lc_obj_head& head);
+void cls_rgw_lc_put_head(librados::ObjectWriteOperation& op, const cls_rgw_lc_obj_head& head);
+void cls_rgw_lc_get_next_entry(librados::ObjectReadOperation& op, const std::string& marker, bufferlist& bl);
+int cls_rgw_lc_get_next_entry_decode(const bufferlist& bl, cls_rgw_lc_entry& entry);
+void cls_rgw_lc_rm_entry(librados::ObjectWriteOperation& op, const cls_rgw_lc_entry& entry);
+void cls_rgw_lc_set_entry(librados::ObjectWriteOperation& op, const cls_rgw_lc_entry& entry);
+void cls_rgw_lc_get_entry(librados::ObjectReadOperation& op, const std::string& marker, bufferlist& bl);
+int cls_rgw_lc_get_entry_decode(const bufferlist& bl, cls_rgw_lc_entry& entry);
+void cls_rgw_lc_list(librados::ObjectReadOperation& op,
+                     const std::string& marker, uint32_t max_entries,
+                     bufferlist& bl);
+int cls_rgw_lc_list_decode(const bufferlist& bl, std::vector<cls_rgw_lc_entry>& entries);
 
 /* multipart */
 void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op, const std::string& part_key, const RGWUploadPartInfo& info);
