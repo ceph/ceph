@@ -598,7 +598,14 @@ JournalTrimmerImpl::trim_alloc()
 {
   LOG_PREFIX(JournalTrimmerImpl::trim_alloc);
   assert(background_callback->is_ready());
-  return repeat_eagain([this, FNAME] {
+
+  auto& shard_stats = extent_callback->get_shard_stats();
+  ++(shard_stats.trim_alloc_num);
+  ++(shard_stats.pending_bg_num);
+
+  return repeat_eagain([this, FNAME, &shard_stats] {
+    ++(shard_stats.repeat_trim_alloc_num);
+
     return extent_callback->with_transaction_intr(
       Transaction::src_t::TRIM_ALLOC,
       "trim_alloc",
@@ -622,8 +629,11 @@ JournalTrimmerImpl::trim_alloc()
         return seastar::now();
       });
     });
-  }).safe_then([this, FNAME] {
+  }).finally([this, FNAME, &shard_stats] {
     DEBUG("finish, alloc_tail={}", journal_alloc_tail);
+
+    assert(shard_stats.pending_bg_num);
+    --(shard_stats.pending_bg_num);
   });
 }
 
@@ -632,7 +642,14 @@ JournalTrimmerImpl::trim_dirty()
 {
   LOG_PREFIX(JournalTrimmerImpl::trim_dirty);
   assert(background_callback->is_ready());
-  return repeat_eagain([this, FNAME] {
+
+  auto& shard_stats = extent_callback->get_shard_stats();
+  ++(shard_stats.trim_dirty_num);
+  ++(shard_stats.pending_bg_num);
+
+  return repeat_eagain([this, FNAME, &shard_stats] {
+    ++(shard_stats.repeat_trim_dirty_num);
+
     return extent_callback->with_transaction_intr(
       Transaction::src_t::TRIM_DIRTY,
       "trim_dirty",
@@ -662,8 +679,11 @@ JournalTrimmerImpl::trim_dirty()
         return extent_callback->submit_transaction_direct(t);
       });
     });
-  }).safe_then([this, FNAME] {
+  }).finally([this, FNAME, &shard_stats] {
     DEBUG("finish, dirty_tail={}", journal_dirty_tail);
+
+    assert(shard_stats.pending_bg_num);
+    --(shard_stats.pending_bg_num);
   });
 }
 
@@ -1073,6 +1093,14 @@ SegmentCleaner::do_reclaim_space(
     std::size_t &reclaimed,
     std::size_t &runs)
 {
+  auto& shard_stats = extent_callback->get_shard_stats();
+  if (is_cold) {
+    ++(shard_stats.cleaner_cold_num);
+  } else {
+    ++(shard_stats.cleaner_main_num);
+  }
+  ++(shard_stats.pending_bg_num);
+
   // Extents satisfying any of the following requirements
   // are considered DEAD:
   // 1. can't find the corresponding mapping in both the
@@ -1082,13 +1110,17 @@ SegmentCleaner::do_reclaim_space(
   // 	tree doesn't match the extent's paddr
   // 3. the extent is physical and doesn't exist in the
   // 	lba tree, backref tree or backref cache;
-  return repeat_eagain([this, &backref_extents,
+  return repeat_eagain([this, &backref_extents, &shard_stats,
                         &pin_list, &reclaimed, &runs] {
     reclaimed = 0;
     runs++;
-    auto src = Transaction::src_t::CLEANER_MAIN;
+    transaction_type_t src;
     if (is_cold) {
       src = Transaction::src_t::CLEANER_COLD;
+      ++(shard_stats.repeat_cleaner_cold_num);
+    } else {
+      src = Transaction::src_t::CLEANER_MAIN;
+      ++(shard_stats.repeat_cleaner_main_num);
     }
     return extent_callback->with_transaction_intr(
       src,
@@ -1167,6 +1199,9 @@ SegmentCleaner::do_reclaim_space(
         return extent_callback->submit_transaction_direct(t);
       });
     });
+  }).finally([&shard_stats] {
+    assert(shard_stats.pending_bg_num);
+    --(shard_stats.pending_bg_num);
   });
 }
 
@@ -1202,6 +1237,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
     std::pair<std::vector<CachedExtentRef>, backref_pin_list_t>(),
     [this](auto &weak_read_ret) {
     return repeat_eagain([this, &weak_read_ret] {
+      // Note: not tracked by shard_stats_t intentionally.
       return extent_callback->with_transaction_intr(
 	  Transaction::src_t::READ,
 	  "retrieve_from_backref_tree",
