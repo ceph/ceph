@@ -115,7 +115,7 @@ int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider 
     return -EIO;
   }
 
-  int ret = lc->set_bucket_config(params.bucket,
+  int ret = lc->set_bucket_config(dpp, null_yield, params.bucket,
                                   params.bucket_attrs,
                                   &params.config);
   if (ret < 0) {
