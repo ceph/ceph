@@ -628,15 +628,15 @@ public:
 	      const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
 	      bool once);
   int advance_head(const std::string& lc_shard,
-		   rgw::sal::Lifecycle::LCHead& head,
-		   rgw::sal::Lifecycle::LCEntry& entry,
+		   rgw::sal::LCHead& head,
+		   const rgw::sal::LCEntry& entry,
 		   time_t start_date);
   int check_if_shard_done(const std::string& lc_shard,
- 			 rgw::sal::Lifecycle::LCHead& head,
+ 			 rgw::sal::LCHead& head,
        int worker_ix);
   int update_head(const std::string& lc_shard,
-			 rgw::sal::Lifecycle::LCHead& head,
-			 rgw::sal::Lifecycle::LCEntry& entry,
+			 rgw::sal::LCHead& head,
+			 rgw::sal::LCEntry& entry,
 			 time_t start_date, int worker_ix);
   int process(int index, int max_lock_secs, LCWorker* worker, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
@@ -644,12 +644,12 @@ public:
   bool expired_session(time_t started);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
-		       std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>&,
+		       std::vector<rgw::sal::LCEntry>&,
 		       int& index);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
-		     rgw::sal::Lifecycle::LCEntry& entry, int& result, LCWorker* worker);
+		     rgw::sal::LCEntry& entry, int& result, LCWorker* worker);
   bool going_down();
   void start_processor();
   void stop_processor();

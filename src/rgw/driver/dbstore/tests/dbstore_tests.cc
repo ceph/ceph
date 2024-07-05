@@ -1255,11 +1255,11 @@ TEST_F(DBStoreTest, LCHead) {
   std::string index1 = "bucket1";
   std::string index2 = "bucket2";
   time_t lc_time = ceph_clock_now();
-  std::unique_ptr<rgw::sal::Lifecycle::LCHead> head;
+  rgw::sal::LCHead head;
   std::string ents[] = {"entry1", "entry2", "entry3"};
-  rgw::sal::StoreLifecycle::StoreLCHead head1(lc_time, 0, ents[0]);
-  rgw::sal::StoreLifecycle::StoreLCHead head2(lc_time, 0, ents[1]);
-  rgw::sal::StoreLifecycle::StoreLCHead head3(lc_time, 0, ents[2]);
+  rgw::sal::LCHead head1(lc_time, 0, ents[0]);
+  rgw::sal::LCHead head2(lc_time, 0, ents[1]);
+  rgw::sal::LCHead head3(lc_time, 0, ents[2]);
 
   ret = db->put_head(index1, head1);
   ASSERT_EQ(ret, 0);
@@ -1268,18 +1268,18 @@ TEST_F(DBStoreTest, LCHead) {
 
   ret = db->get_head(index1, &head);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(head->get_marker(), "entry1");
+  ASSERT_EQ(head.marker, "entry1");
 
   ret = db->get_head(index2, &head);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(head->get_marker(), "entry2");
+  ASSERT_EQ(head.marker, "entry2");
 
   // update index1
   ret = db->put_head(index1, head3);
   ASSERT_EQ(ret, 0);
   ret = db->get_head(index1, &head);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(head->get_marker(), "entry3");
+  ASSERT_EQ(head.marker, "entry3");
 
 }
 TEST_F(DBStoreTest, LCEntry) {
@@ -1290,13 +1290,13 @@ TEST_F(DBStoreTest, LCEntry) {
   std::string index2 = "lcindex2";
   typedef enum {lc_uninitial = 1, lc_complete} status;
   std::string ents[] = {"bucket1", "bucket2", "bucket3", "bucket4"};
-  std::unique_ptr<rgw::sal::Lifecycle::LCEntry> entry;
-  rgw::sal::StoreLifecycle::StoreLCEntry entry1(ents[0], lc_time, lc_uninitial);
-  rgw::sal::StoreLifecycle::StoreLCEntry entry2(ents[1], lc_time, lc_uninitial);
-  rgw::sal::StoreLifecycle::StoreLCEntry entry3(ents[2], lc_time, lc_uninitial);
-  rgw::sal::StoreLifecycle::StoreLCEntry entry4(ents[3], lc_time, lc_uninitial);
+  rgw::sal::LCEntry entry;
+  rgw::sal::LCEntry entry1(ents[0], lc_time, lc_uninitial);
+  rgw::sal::LCEntry entry2(ents[1], lc_time, lc_uninitial);
+  rgw::sal::LCEntry entry3(ents[2], lc_time, lc_uninitial);
+  rgw::sal::LCEntry entry4(ents[3], lc_time, lc_uninitial);
 
-  vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>> lc_entries;
+  vector<rgw::sal::LCEntry> lc_entries;
 
   ret = db->set_entry(index1, entry1);
   ASSERT_EQ(ret, 0);
@@ -1308,25 +1308,25 @@ TEST_F(DBStoreTest, LCEntry) {
   ASSERT_EQ(ret, 0);
 
   // get entry index1, entry1
-  ret = db->get_entry(index1, ents[0], &entry); 
+  ret = db->get_entry(index1, ents[0], entry); 
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entry->get_status(), lc_uninitial);
-  ASSERT_EQ(entry->get_start_time(), lc_time);
+  ASSERT_EQ(entry.status, lc_uninitial);
+  ASSERT_EQ(entry.start_time, lc_time);
 
   // get next entry index1, entry2
-  ret = db->get_next_entry(index1, ents[1], &entry); 
+  ret = db->get_next_entry(index1, ents[1], entry); 
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entry->get_bucket(), ents[2]);
-  ASSERT_EQ(entry->get_status(), lc_uninitial);
-  ASSERT_EQ(entry->get_start_time(), lc_time);
+  ASSERT_EQ(entry.bucket, ents[2]);
+  ASSERT_EQ(entry.status, lc_uninitial);
+  ASSERT_EQ(entry.start_time, lc_time);
 
   // update entry4 to entry5
   entry4.status = lc_complete;
   ret = db->set_entry(index2, entry4);
   ASSERT_EQ(ret, 0);
-  ret = db->get_entry(index2, ents[3], &entry); 
+  ret = db->get_entry(index2, ents[3], entry); 
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entry->get_status(), lc_complete);
+  ASSERT_EQ(entry.status, lc_complete);
 
   // list entries
   ret = db->list_entries(index1, "", 5, lc_entries);

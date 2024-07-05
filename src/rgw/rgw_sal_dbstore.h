@@ -38,13 +38,12 @@ public:
   }
 };
 
-class DBLifecycle : public StoreLifecycle {
+class DBLifecycle : public Lifecycle {
   DBStore* store;
 
 public:
   DBLifecycle(DBStore* _st) : store(_st) {}
 
-  using StoreLifecycle::get_entry;
   virtual int get_entry(const DoutPrefixProvider* dpp, optional_yield y,
                         const std::string& oid, const std::string& marker,
                         std::unique_ptr<LCEntry>* entry) override;
