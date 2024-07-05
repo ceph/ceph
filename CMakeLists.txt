@@ -583,10 +583,13 @@ endif (WITH_RADOSGW)
 option(WITH_CEPHFS "CephFS is enabled" ON)
 
 if(NOT WIN32)
-# Please specify 3.[0-7] if you want to build with a certain version of python3.
+# Please specify 3.x if you want to build with a certain version of python3.
 set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
 find_package(Python3 ${WITH_PYTHON3} EXACT REQUIRED
   COMPONENTS Interpreter Development)
+if(Python3_VERSION VERSION_LESS 3.9)
+  message(FATAL_ERROR "${Python3_VERSION} is not supported, please use Python 3.9 and up")
+endif()
 
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
