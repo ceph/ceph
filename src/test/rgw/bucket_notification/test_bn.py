@@ -656,7 +656,7 @@ def test_ps_s3_topic_admin_on_master():
     assert_equal(topic_arn2,
                  'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_2')
     endpoint_address = 'http://127.0.0.1:9002'
-    endpoint_args = 'push-endpoint='+endpoint_address
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&persistent=true'
     topic_conf3 = PSTopicS3(conn, topic_name+'_3', zonegroup, endpoint_args=endpoint_args)
     topic_arn3 = topic_conf3.set_config()
     assert_equal(topic_arn3,
@@ -668,6 +668,24 @@ def test_ps_s3_topic_admin_on_master():
     assert_equal(parsed_result['arn'], topic_arn3)
     matches = [tenant, UID_PREFIX]
     assert_true( all([x in parsed_result['owner'] for x in matches]))
+    assert_equal(parsed_result['dest']['persistent_queue'],
+                 tenant + ":" + topic_name + '_3')
+
+    # recall CreateTopic and verify the owner and persistent_queue remain same.
+    topic_conf3 = PSTopicS3(conn, topic_name + '_3', zonegroup,
+                            endpoint_args=endpoint_args)
+    topic_arn3 = topic_conf3.set_config()
+    assert_equal(topic_arn3,
+                 'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_3')
+    # get topic 3 via commandline
+    result = admin(
+      ['topic', 'get', '--topic', topic_name + '_3', '--tenant', tenant],
+      get_config_cluster())
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['arn'], topic_arn3)
+    assert_true(all([x in parsed_result['owner'] for x in matches]))
+    assert_equal(parsed_result['dest']['persistent_queue'],
+                 tenant + ":" + topic_name + '_3')
 
     # delete topic 3
     _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant], get_config_cluster())
