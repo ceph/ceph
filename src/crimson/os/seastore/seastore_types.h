@@ -2367,6 +2367,26 @@ struct writer_stats_printer_t {
 };
 std::ostream& operator<<(std::ostream&, const writer_stats_printer_t&);
 
+struct shard_stats_t {
+  // transaction_type_t::MUTATE
+  uint64_t io_num = 0;
+  uint64_t repeat_io_num = 0;
+  uint64_t pending_io_num = 0;
+  uint64_t starting_io_num = 0;
+  uint64_t waiting_collock_io_num = 0;
+  uint64_t waiting_throttler_io_num = 0;
+  uint64_t processing_inlock_io_num = 0;
+  uint64_t processing_postlock_io_num = 0;
+
+  // transaction_type_t::READ
+  uint64_t read_num = 0;
+  uint64_t repeat_read_num = 0;
+  uint64_t pending_read_num = 0;
+
+  uint64_t flush_num = 0;
+  uint64_t pending_flush_num = 0;
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)

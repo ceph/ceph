@@ -361,7 +361,15 @@ SeaStore::Shard::mkfs_managers()
     init_managers();
     return transaction_manager->mount();
   }).safe_then([this] {
+
+    ++(shard_stats.io_num);
+    ++(shard_stats.pending_io_num);
+    // For TM::submit_transaction()
+    ++(shard_stats.processing_inlock_io_num);
+
     return repeat_eagain([this] {
+      ++(shard_stats.repeat_io_num);
+
       return transaction_manager->with_transaction_intr(
 	Transaction::src_t::MUTATE,
 	"mkfs_seastore",
@@ -381,7 +389,12 @@ SeaStore::Shard::mkfs_managers()
     crimson::ct_error::assert_all{
       "Invalid error in Shard::mkfs_managers"
     }
-  );
+  ).finally([this] {
+    assert(shard_stats.pending_io_num);
+    --(shard_stats.pending_io_num);
+    // XXX: it's wrong to assume no failure
+    --(shard_stats.processing_postlock_io_num);
+  });
 }
 
 seastar::future<> SeaStore::set_secondaries()
@@ -731,6 +744,9 @@ SeaStore::Shard::list_objects(CollectionRef ch,
                        const ghobject_t& end,
                        uint64_t limit) const
 {
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   ceph_assert(start <= end);
   using list_iertr = OnodeManager::list_onodes_iertr;
   using RetType = typename OnodeManager::list_onodes_bare_ret;
@@ -739,6 +755,8 @@ SeaStore::Shard::list_objects(CollectionRef ch,
     std::move(limit),
     [this, ch, start, end](auto& ret, auto& limit) {
     return repeat_eagain([this, ch, start, end, &limit, &ret] {
+      ++(shard_stats.repeat_read_num);
+
       return transaction_manager->with_transaction_intr(
         Transaction::src_t::READ,
         "list_objects",
@@ -817,6 +835,9 @@ SeaStore::Shard::list_objects(CollectionRef ch,
         "Invalid error in SeaStore::list_objects"
       }
     );
+  }).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
   });
 }
 
@@ -856,10 +877,15 @@ SeaStore::Shard::set_collection_opts(CollectionRef c,
 seastar::future<std::vector<coll_core_t>>
 SeaStore::Shard::list_collections()
 {
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   return seastar::do_with(
     std::vector<coll_core_t>(),
     [this](auto &ret) {
       return repeat_eagain([this, &ret] {
+        ++(shard_stats.repeat_read_num);
+
         return transaction_manager->with_transaction_intr(
           Transaction::src_t::READ,
           "list_collections",
@@ -885,7 +911,10 @@ SeaStore::Shard::list_collections()
     crimson::ct_error::assert_all{
       "Invalid error in SeaStore::list_collections"
     }
-  );
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
 }
 
 SeaStore::Shard::read_errorator::future<ceph::bufferlist>
@@ -898,6 +927,10 @@ SeaStore::Shard::read(
 {
   LOG_PREFIX(SeaStore::read);
   DEBUG("oid {} offset {} len {}", oid, offset, len);
+
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   return repeat_with_onode<ceph::bufferlist>(
     ch,
     oid,
@@ -923,7 +956,11 @@ SeaStore::Shard::read(
         },
         offset,
         corrected_len);
-    });
+    }
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
 }
 
 SeaStore::Shard::base_errorator::future<bool>
@@ -933,6 +970,10 @@ SeaStore::Shard::exists(
 {
   LOG_PREFIX(SeaStore::exists);
   DEBUG("oid {}", oid);
+
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   return repeat_with_onode<bool>(
     c,
     oid,
@@ -946,7 +987,10 @@ SeaStore::Shard::exists(
       return seastar::make_ready_future<bool>(false);
     }),
     crimson::ct_error::assert_all{"unexpected error"}
-  );
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
 }
 
 SeaStore::Shard::read_errorator::future<ceph::bufferlist>
@@ -987,6 +1031,10 @@ SeaStore::Shard::get_attr(
   auto c = static_cast<SeastoreCollection*>(ch.get());
   LOG_PREFIX(SeaStore::get_attr);
   DEBUG("{} {}", c->get_cid(), oid);
+
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   return repeat_with_onode<ceph::bufferlist>(
     c,
     oid,
@@ -1014,7 +1062,11 @@ SeaStore::Shard::get_attr(
   ).handle_error(
     crimson::ct_error::input_output_error::assert_failure{
       "EIO when getting attrs"},
-    crimson::ct_error::pass_further_all{});
+    crimson::ct_error::pass_further_all{}
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
 }
 
 SeaStore::Shard::get_attrs_ertr::future<SeaStore::Shard::attrs_t>
@@ -1025,6 +1077,10 @@ SeaStore::Shard::get_attrs(
   LOG_PREFIX(SeaStore::get_attrs);
   auto c = static_cast<SeastoreCollection*>(ch.get());
   DEBUG("{} {}", c->get_cid(), oid);
+
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   return repeat_with_onode<attrs_t>(
     c,
     oid,
@@ -1057,13 +1113,20 @@ SeaStore::Shard::get_attrs(
   ).handle_error(
     crimson::ct_error::input_output_error::assert_failure{
       "EIO when getting attrs"},
-    crimson::ct_error::pass_further_all{});
+    crimson::ct_error::pass_further_all{}
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
 }
 
 seastar::future<struct stat> SeaStore::Shard::stat(
   CollectionRef c,
   const ghobject_t& oid)
 {
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   LOG_PREFIX(SeaStore::stat);
   return repeat_with_onode<struct stat>(
     c,
@@ -1085,7 +1148,10 @@ seastar::future<struct stat> SeaStore::Shard::stat(
     crimson::ct_error::assert_all{
       "Invalid error in SeaStore::stat"
     }
-  );
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
 }
 
 SeaStore::Shard::get_attr_errorator::future<ceph::bufferlist>
@@ -1102,6 +1168,9 @@ SeaStore::Shard::omap_get_values(
   const ghobject_t &oid,
   const omap_keys_t &keys)
 {
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   auto c = static_cast<SeastoreCollection*>(ch.get());
   return repeat_with_onode<omap_values_t>(
     c,
@@ -1116,7 +1185,11 @@ SeaStore::Shard::omap_get_values(
 	t,
 	std::move(omap_root),
 	keys);
-    });
+    }
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
+  });
 }
 
 SeaStore::Shard::_omap_get_value_ret
@@ -1218,6 +1291,10 @@ SeaStore::Shard::omap_get_values(
   auto c = static_cast<SeastoreCollection*>(ch.get());
   LOG_PREFIX(SeaStore::omap_get_values);
   DEBUG("{} {}", c->get_cid(), oid);
+
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   using ret_bare_t = std::tuple<bool, SeaStore::Shard::omap_values_t>;
   return repeat_with_onode<ret_bare_t>(
     c,
@@ -1234,6 +1311,10 @@ SeaStore::Shard::omap_get_values(
 	OMapManager::omap_list_config_t()
 	  .with_inclusive(false, false)
 	  .without_max());
+    }
+  ).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
   });
 }
 
@@ -1266,6 +1347,10 @@ SeaStore::Shard::fiemap(
 {
   LOG_PREFIX(SeaStore::fiemap);
   DEBUG("oid: {}, off: {}, len: {} ", oid, off, len);
+
+  ++(shard_stats.read_num);
+  ++(shard_stats.pending_read_num);
+
   return repeat_with_onode<std::map<uint64_t, uint64_t>>(
     ch,
     oid,
@@ -1282,6 +1367,9 @@ SeaStore::Shard::fiemap(
       size - off:
       std::min(size - off, len);
     return _fiemap(t, onode, off, adjust_len);
+  }).finally([this] {
+    assert(shard_stats.pending_read_num);
+    --(shard_stats.pending_read_num);
   });
 }
 
@@ -1302,6 +1390,10 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
+  ++(shard_stats.io_num);
+  ++(shard_stats.pending_io_num);
+  ++(shard_stats.starting_io_num);
+
   // repeat_with_internal_context ensures ordering via collection lock
   return repeat_with_internal_context(
     _ch,
@@ -1348,12 +1440,21 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
           return transaction_manager->submit_transaction(*ctx.transaction);
         });
       });
-    });
+    }
+  ).finally([this] {
+    assert(shard_stats.pending_io_num);
+    --(shard_stats.pending_io_num);
+    // XXX: it's wrong to assume no failure
+    --(shard_stats.processing_postlock_io_num);
+  });
 }
 
 
 seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
 {
+  ++(shard_stats.flush_num);
+  ++(shard_stats.pending_flush_num);
+
   return seastar::do_with(
     get_dummy_ordering_handle(),
     [this, ch](auto &handle) {
@@ -1362,7 +1463,11 @@ seastar::future<> SeaStore::Shard::flush(CollectionRef ch)
       ).then([this, &handle] {
 	return transaction_manager->flush(handle);
       });
-    });
+    }
+  ).finally([this] {
+    assert(shard_stats.pending_flush_num);
+    --(shard_stats.pending_flush_num);
+  });
 }
 
 SeaStore::Shard::tm_ret
@@ -2295,10 +2400,18 @@ seastar::future<> SeaStore::Shard::write_meta(
 {
   LOG_PREFIX(SeaStore::write_meta);
   DEBUG("key: {}; value: {}", key, value);
+
+  ++(shard_stats.io_num);
+  ++(shard_stats.pending_io_num);
+  // For TM::submit_transaction()
+  ++(shard_stats.processing_inlock_io_num);
+
   return seastar::do_with(
       key, value,
       [this, FNAME](auto& key, auto& value) {
 	return repeat_eagain([this, FNAME, &key, &value] {
+	  ++(shard_stats.repeat_io_num);
+
 	  return transaction_manager->with_transaction_intr(
 	    Transaction::src_t::MUTATE,
             "write_meta",
@@ -2312,9 +2425,16 @@ seastar::future<> SeaStore::Shard::write_meta(
             });
           });
 	});
-      }).handle_error(
-	crimson::ct_error::assert_all{"Invalid error in SeaStore::write_meta"}
-      );
+      }
+  ).handle_error(
+    crimson::ct_error::assert_all{"Invalid error in SeaStore::write_meta"}
+  ).finally([this] {
+    assert(shard_stats.pending_io_num);
+    --(shard_stats.pending_io_num);
+    // XXX: it's wrong to assume no failure,
+    // but failure leads to fatal error
+    --(shard_stats.processing_postlock_io_num);
+  });
 }
 
 seastar::future<std::tuple<int, std::string>>
@@ -2346,6 +2466,7 @@ void SeaStore::Shard::init_managers()
   transaction_manager.reset();
   collection_manager.reset();
   onode_manager.reset();
+  shard_stats = {};
 
   transaction_manager = make_transaction_manager(
       device, secondaries, is_test);
