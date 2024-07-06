@@ -479,12 +479,29 @@ class MirrorJoinAuths(Mirror):
     def __init__(self, store: ConfigStore) -> None:
         super().__init__('join_auths', store)
 
+    def filter_object(self, obj: Simplified) -> Simplified:
+        """Filter join auth data for sqlite3 store."""
+        filtered = copy.deepcopy(obj)
+        if 'auth' in filtered:
+            filtered['auth'].pop('password', None)
+        return filtered
+
 
 class MirrorUsersAndGroups(Mirror):
     """Mirroring configuration for objects in the users_and_groups namespace."""
 
     def __init__(self, store: ConfigStore) -> None:
         super().__init__('users_and_groups', store)
+
+    def filter_object(self, obj: Simplified) -> Simplified:
+        """Filter join users and groups data for sqlite3 store."""
+        filtered = copy.deepcopy(obj)
+        for user in filtered.get('values', {}).get('users', []):
+            # retain the key, to have the capability of knowing it was part of
+            # this row, but remove the value from this object
+            if 'password' in user:
+                user['password'] = ''
+        return filtered
 
 
 def _tables(
