@@ -18,11 +18,19 @@ else:
     Cursor = Connection = Any
 
 import contextlib
+import copy
 import json
 import logging
 
 from .config_store import ObjectCachingEntry
-from .proto import ConfigEntry, EntryKey, FindParams, Protocol, Simplified
+from .proto import (
+    ConfigEntry,
+    ConfigStore,
+    EntryKey,
+    FindParams,
+    Protocol,
+    Simplified,
+)
 
 log = logging.getLogger(__name__)
 
@@ -383,6 +391,100 @@ class SqliteStore:
             else:
                 keyns, keyname = key
             self.set_object((keyns, keyname), obj)
+
+
+class Mirror:
+    """A mirror configuration for a SqliteMirroringStore namespace.
+    The mirror will store a copy of an object in a separate ConfigStore.
+    This copy may be modified by the filter methods and combined using
+    the `merge` method.
+    """
+
+    namespace: str
+    store: ConfigStore
+
+    def __init__(self, namespace: str, store: ConfigStore) -> None:
+        self.namespace = namespace
+        self.store = store
+
+    def filter_object(self, obj: Simplified) -> Simplified:
+        """Return a potentially modified object to be stored in the sqlite db store."""
+        return obj
+
+    def filter_mirror_object(self, obj: Simplified) -> Simplified:
+        """Return a potentially modified object to be stored in the mirror store."""
+        return obj
+
+    def merge(self, obj1: Simplified, obj2: Simplified) -> Simplified:
+        """Combine, if desired, the objects fetched from the sqlite db store
+        and the mirror store.
+        """
+        obj = copy.deepcopy(obj1)
+        obj.update(obj2)
+        return obj
+
+
+class SqliteMirroringStore(SqliteStore):
+    """A store based on the SqliteStore that supports mirroring objects in
+    specified namespaces from the database into a different store.
+
+    The purpose of the mirror is to store objects in the db for the speed and
+    efficiency of the db's search features while storing a copy of the object
+    in a different store that will have other properties.  The mirror classes
+    can configure how objects in each namespace are handled and which store
+    takes precedence when fetching and merging results.
+    """
+
+    def __init__(
+        self,
+        backend: DBAcessor,
+        tables: Iterable[Table],
+        mirrors: Iterable[Mirror],
+    ) -> None:
+        super().__init__(backend, tables)
+        self._mirrors: Dict[str, Mirror] = {m.namespace: m for m in mirrors}
+
+    def _mirror(self, key: EntryKey) -> Optional[Mirror]:
+        ns, _ = key
+        return self._mirrors.get(ns)
+
+    def set_object(self, key: EntryKey, obj: Simplified) -> None:
+        """Create or update a simplified object in the store."""
+        mirror = self._mirror(key)
+        if mirror is None:
+            log.debug("Mirroring set_object: no mirror for key %r", key)
+            super().set_object(key, obj)
+            return
+        log.debug("Mirroring set_object: mirror=%r", mirror)
+        obj_for_store = mirror.filter_object(obj)
+        obj_for_mirror = mirror.filter_mirror_object(obj)
+        mirror.store[key].set(obj_for_mirror)
+        super().set_object(key, obj_for_store)
+
+    def get_object(self, key: EntryKey) -> Simplified:
+        """Fetch a simplified object from the store."""
+        mirror = self._mirror(key)
+        if mirror is None:
+            log.debug("Mirroring get_object: no mirror for %r", key)
+            return super().get_object(key)
+        log.debug("Mirroring get_object: mirror=%r", mirror)
+        obj = super().get_object(key)
+        mirror_obj = mirror.store[key].get()
+        return mirror.merge(obj, mirror_obj)
+
+
+class MirrorJoinAuths(Mirror):
+    """Mirroring configuration for objects in the join_auths namespace."""
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__('join_auths', store)
+
+
+class MirrorUsersAndGroups(Mirror):
+    """Mirroring configuration for objects in the users_and_groups namespace."""
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__('users_and_groups', store)
 
 
 def _tables(
