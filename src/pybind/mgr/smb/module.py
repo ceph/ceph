@@ -84,14 +84,20 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         # Store conf is meant for devs, maybe testers to experiment with
         # certain backend options at run time. This is not meant to be
         # a formal or friendly interface.
+        name = 'default'
+        opts = {}
         if store_conf:
             parts = [v.strip() for v in store_conf.split(';')]
             assert parts
             name = parts[0]
             opts = dict(p.split('=', 1) for p in parts[1:])
-        else:
-            name = 'db'
-            opts = {}
+        if name == 'default':
+            log.info('Using default backend: sqlite3 with mirroring')
+            mc_store = mon_store.ModuleConfigStore(self)
+            db_store = sqlite_store.mgr_sqlite3_db_with_mirroring(
+                self, mc_store, opts
+            )
+            return db_store
         if name == 'mon':
             log.info('Using specified backend: module config internal store')
             return mon_store.ModuleConfigStore(self)
