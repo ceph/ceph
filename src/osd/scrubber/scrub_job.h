@@ -14,6 +14,7 @@
 #include "osd/osd_types.h"
 #include "osd/osd_types_fmt.h"
 #include "osd/scrubber_common.h"
+#include "scrub_queue_entry.h"
 
 /**
  * The ID used to name a candidate to scrub:
@@ -26,23 +27,6 @@ using ScrubTargetId = spg_t;
 namespace Scrub {
 
 enum class must_scrub_t { not_mandatory, mandatory };
-
-struct scrub_schedule_t {
-  utime_t scheduled_at{};
-  utime_t deadline{0, 0};
-  utime_t not_before{utime_t::max()};
-  // when compared - the 'not_before' is ignored, assuming
-  // we never compare jobs with different eligibility status.
-  std::partial_ordering operator<=>(const scrub_schedule_t& rhs) const
-  {
-    auto cmp1 = scheduled_at <=> rhs.scheduled_at;
-    if (cmp1 != 0) {
-      return cmp1;
-    }
-    return deadline <=> rhs.deadline;
-  };
-  bool operator==(const scrub_schedule_t& rhs) const = default;
-};
 
 struct sched_params_t {
   utime_t proposed_time{};
@@ -288,18 +272,6 @@ struct formatter<Scrub::sched_conf_t> {
 	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
 	cf.max_deep, cf.interval_randomize_ratio, cf.deep_randomize_ratio,
 	cf.mandatory_on_invalid);
-  }
-};
-
-template <>
-struct formatter<Scrub::scrub_schedule_t> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-  template <typename FormatContext>
-  auto format(const Scrub::scrub_schedule_t& sc, FormatContext& ctx) const
-  {
-    return fmt::format_to(
-	ctx.out(), "nb:{:s}(at:{:s},dl:{:s})", sc.not_before,
-        sc.scheduled_at, sc.deadline);
   }
 };
 }  // namespace fmt
