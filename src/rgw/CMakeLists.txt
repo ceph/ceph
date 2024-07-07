@@ -265,7 +265,8 @@ endif()
 
 list(APPEND librgw_common_srcs 
             rgw_redis_common.cc
-            rgw_redis_lock.cc)
+            rgw_redis_lock.cc
+            rgw_redis_queue.cc)
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 

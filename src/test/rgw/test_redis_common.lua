@@ -1,22 +1,4 @@
-#pragma once
-
-#include "rgw_redis_common.h"
-
-namespace rgw {
-namespace redis {
-
-using boost::redis::config;
-using boost::redis::connection;
-
-int loadLuaFunctions(boost::asio::io_context& io, connection* conn, config* cfg,
-                     optional_yield y) {
-  conn->async_run(*cfg, {}, boost::asio::detached);
-
-  boost::redis::request req;
-  boost::redis::response<std::string> resp;
-  boost::system::error_code ec;
-
-  std::string luaScript = R"(#!lua name=rgwlib
+#!lua name=rgwlib
 
 --- Linux Error codes
 local lerrorCodes = {
@@ -202,19 +184,3 @@ redis.register_function('commit', commit)
 redis.register_function('read', read)
 redis.register_function('locked_read', locked_read)
 redis.register_function('queue_status', queue_status)
-)";
-
-  req.push("FUNCTION", "LOAD", "REPLACE", luaScript);
-  rgw::redis::redis_exec(conn, ec, req, resp, y);
-
-  if (ec) {
-    std::cerr << "EC Message: " << ec.message() << std::endl;
-    return ec.value();
-  }
-  if (std::get<0>(resp).value() != "rgwlib") return -EINVAL;
-
-  return 0;
-}
-
-}  // namespace redis
-}  // namespace rgw
