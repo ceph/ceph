@@ -16,6 +16,7 @@ import cherrypy
 from .. import mgr
 from ..exceptions import ExpiredSignatureError, InvalidAlgorithmError, InvalidTokenError
 from .access_control import LocalAuthenticator, UserDoesNotExist
+from dashboard.services.orchestrator import OrchClient
 
 cherrypy.config.update({
     'response.headers.server': 'Ceph-Dashboard',
@@ -28,8 +29,9 @@ cherrypy.config.update({
 class JwtManager(object):
     JWT_TOKEN_BLOCKLIST_KEY = "jwt_token_block_list"
     JWT_TOKEN_TTL = 28800  # default 8 hours
-    JWT_ALGORITHM = 'HS256'
+    JWT_ALGORITHMS = ['HS256', 'RS256']
     _secret = None
+    _oauth2_token = False
 
     LOCAL_USER = threading.local()
 
@@ -56,7 +58,7 @@ class JwtManager(object):
 
     @classmethod
     def encode(cls, message, secret):
-        header = {"alg": cls.JWT_ALGORITHM, "typ": "JWT"}
+        header = {"alg": cls.JWT_ALGORITHMS[0], "typ": "JWT"}
         base64_header = cls.array_to_base64_string(header)
         base64_message = cls.array_to_base64_string(message)
         base64_secret = base64.urlsafe_b64encode(hmac.new(
@@ -73,23 +75,30 @@ class JwtManager(object):
         base64_message = split_message[1]
         base64_secret = split_message[2]
 
-        decoded_header = json.loads(base64.urlsafe_b64decode(base64_header))
+        # We add ==== as padding to ignore the requirement to have correct padding in
+        # the urlsafe_b64decode method.
+        decoded_header = json.loads(base64.urlsafe_b64decode(base64_header + "===="))
 
-        if decoded_header['alg'] != cls.JWT_ALGORITHM:
+        if not decoded_header['alg'] in cls.JWT_ALGORITHMS:
             raise InvalidAlgorithmError()
 
-        incoming_secret = base64.urlsafe_b64encode(hmac.new(
-            bytes(secret, 'UTF-8'),
-            msg=bytes(base64_header + "." + base64_message, 'UTF-8'),
-            digestmod=hashlib.sha256
-        ).digest()).decode('UTF-8').replace("=", "")
+        incoming_secret = ''
+        if decoded_header['alg'] == cls.JWT_ALGORITHMS[0]:
+            incoming_secret = base64.urlsafe_b64encode(hmac.new(
+                bytes(secret, 'UTF-8'),
+                msg=bytes(base64_header + "." + base64_message, 'UTF-8'),
+                digestmod=hashlib.sha256
+            ).digest()).decode('UTF-8').replace("=", "")
+        elif decoded_header['alg'] == cls.JWT_ALGORITHMS[1]:
+            incoming_secret = base64_secret #assume token has been verified from oauth2 side
+            #TODO: investigate potential security issues
 
         if base64_secret != incoming_secret:
             raise InvalidTokenError()
 
-        # We add ==== as padding to ignore the requirement to have correct padding in
-        # the urlsafe_b64decode method.
         decoded_message = json.loads(base64.urlsafe_b64decode(base64_message + "===="))
+        if decoded_header['alg'] == cls.JWT_ALGORITHMS[1]:
+            decoded_message['username'] = decoded_message['sub']
         now = int(time.time())
         if decoded_message['exp'] < now:
             raise ExpiredSignatureError()
@@ -123,6 +132,8 @@ class JwtManager(object):
     @classmethod
     def get_token_from_header(cls):
         auth_cookie_name = 'token'
+        if cls._oauth2_token:
+            return cherrypy.request.headers.get('X-Access-Token')
         try:
             # use cookie
             return cherrypy.request.cookie[auth_cookie_name].value
@@ -153,22 +164,23 @@ class JwtManager(object):
     def get_user(cls, token):
         try:
             dtoken = cls.decode_token(token)
-            if not cls.is_blocklisted(dtoken['jti']):
-                user = AuthManager.get_user(dtoken['username'])
-                if user.last_update <= dtoken['iat']:
-                    return user
-                cls.logger.debug(  # type: ignore
-                    "user info changed after token was issued, iat=%s last_update=%s",
-                    dtoken['iat'], user.last_update
-                )
-            else:
-                cls.logger.debug('Token is block-listed')  # type: ignore
+            # if not cls.is_blocklisted(dtoken['jti']): #TODO: look to implement jti in access_token
+            user = AuthManager.get_user(dtoken['username'])
+
+            if user.last_update <= dtoken['iat']:
+                return user
+            cls.logger.debug(  # type: ignore
+                "user info changed after token was issued, iat=%s last_update=%s",
+                dtoken['iat'], user.last_update
+            )
+            # else:
+                # cls.logger.debug('Token is block-listed')  # type: ignore
         except ExpiredSignatureError:
             cls.logger.debug("Token has expired")  # type: ignore
         except InvalidTokenError:
             cls.logger.debug("Failed to decode token")  # type: ignore
         except InvalidAlgorithmError:
-            cls.logger.debug("Only the HS256 algorithm is supported.")  # type: ignore
+            cls.logger.debug("Only the HS256 and RS256 algorithm are supported.")  # type: ignore
         except UserDoesNotExist:
             cls.logger.debug(  # type: ignore
                 "Invalid token: user %s does not exist", dtoken['username']
@@ -192,7 +204,8 @@ class JwtManager(object):
         for jti in to_delete:
             del bl_dict[jti]
 
-        bl_dict[token['jti']] = token['exp']
+        if 'jti' in token:
+            bl_dict[token['jti']] = token['exp']
         mgr.set_store(cls.JWT_TOKEN_BLOCKLIST_KEY, json.dumps(bl_dict))
 
     @classmethod
@@ -202,6 +215,7 @@ class JwtManager(object):
             blocklist_json = "{}"
         bl_dict = json.loads(blocklist_json)
         return jti in bl_dict
+
 
 
 class AuthManager(object):

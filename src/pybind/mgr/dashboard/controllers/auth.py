@@ -3,10 +3,14 @@
 import http.cookies
 import json
 import logging
+import base64
 import sys
 from typing import Optional
 
 import cherrypy
+
+from dashboard.services.access_control import READ_ONLY_ROLE, Role
+from dashboard.services.orchestrator import OrchClient
 
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
@@ -160,6 +164,9 @@ class Auth(RESTController, ControllerAuthMixin):
         token = JwtManager.get_token_from_header()
         JwtManager.blocklist_token(token)
         self._delete_token_cookie(token)
+        oauth2_cookie = cherrypy.request.cookie['_oauth2_proxy'] if '_oauth2_proxy' in cherrypy.request.cookie else None
+        if oauth2_cookie:
+            self._delete_cookie('_oauth2_proxy', oauth2_cookie.value)
         redirect_url = '#/login'
         if mgr.SSO_DB.protocol == 'saml2':
             redirect_url = 'auth/saml2/slo'
@@ -177,6 +184,14 @@ class Auth(RESTController, ControllerAuthMixin):
                  parameters={'token': (str, 'Authentication Token')},
                  responses={201: AUTH_CHECK_SCHEMA})
     def check(self, token):
+        JwtManager._oauth2_token = False
+
+        def default_return():
+           return {
+                    'login_url': self._get_login_url(),
+                    'cluster_status': ClusterModel.from_db().dict()['status']
+                }
+
         if token:
             user = JwtManager.get_user(token)
             if user:
@@ -186,7 +201,36 @@ class Auth(RESTController, ControllerAuthMixin):
                     'sso': mgr.SSO_DB.protocol == 'saml2',
                     'pwdUpdateRequired': user.pwd_update_required
                 }
-        return {
-            'login_url': self._get_login_url(),
-            'cluster_status': ClusterModel.from_db().dict()['status']
-        }
+        elif hasattr(cherrypy.request, 'cookie') and '_oauth2_proxy' in cherrypy.request.cookie and \
+          cherrypy.request.cookie['_oauth2_proxy'].value:
+            orch = OrchClient()
+            if not orch.services.list_daemons(daemon_type='mgmt-gateway'):
+                logger.info('mgmt-gateway is not configured, can not access Dashboard with oauth2 SSO')
+                return default_return()
+            access_token = cherrypy.request.headers.get('X-Access-Token')
+            if not access_token:
+                return default_return()
+            JwtManager._oauth2_token = True
+            token_payload = json.loads(base64.urlsafe_b64decode(access_token.split(".")[1] + "===="))
+            if not 'sub' in token_payload:
+                return default_return()
+            try:
+                user = AuthManager.get_user(token_payload['sub'])
+            except UserDoesNotExist:
+                user = mgr.ACCESS_CTRL_DB.create_user(token_payload['sub'], None, token_payload['name'], token_payload['email'])
+                if 'name' in token_payload: #change name to roles/groups
+                    user.set_roles([Role.map_to_system_roles(token_payload['name'])])
+                else: #if no role/group is provided set readonly as default
+                    user.set_roles([READ_ONLY_ROLE])
+                user.last_update=token_payload['iat'] #look to refresh token instead of modifying iat?
+                mgr.ACCESS_CTRL_DB.save()
+            if user:
+                url_prefix = 'https' if mgr.get_localized_module_option('ssl') else 'http'
+                self._set_token_cookie(url_prefix, access_token)
+                return {
+                    'username': user.username,
+                    'permissions': user.permissions_dict(),
+                    'sso': mgr.SSO_DB.protocol == 'saml2',
+                    'pwdUpdateRequired': user.pwd_update_required
+                }
+        return default_return()
