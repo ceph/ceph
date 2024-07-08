@@ -589,6 +589,7 @@ seastar::future<> SeaStore::report_stats()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
   shard_device_stats.resize(seastar::smp::count);
+  shard_io_stats.resize(seastar::smp::count);
   return shard_stores.invoke_on_all([this](const Shard &local_store) {
     bool report_detail = false;
     if (seastar::this_shard_id() == 0) {
@@ -597,6 +598,8 @@ seastar::future<> SeaStore::report_stats()
     }
     shard_device_stats[seastar::this_shard_id()] =
       local_store.get_device_stats(report_detail);
+    shard_io_stats[seastar::this_shard_id()] =
+      local_store.get_io_stats(report_detail);
   }).then([this] {
     LOG_PREFIX(SeaStore);
     auto now = seastar::lowres_clock::now();
@@ -607,27 +610,28 @@ seastar::future<> SeaStore::report_stats()
     std::chrono::duration<double> duration_d = now - last_tp;
     double seconds = duration_d.count();
     last_tp = now;
-    device_stats_t ts = {};
+
+    device_stats_t device_total = {};
     for (const auto &s : shard_device_stats) {
-      ts.add(s);
+      device_total.add(s);
     }
     constexpr const char* dfmt = "{:.2f}";
-    auto d_ts_num_io = static_cast<double>(ts.num_io);
+    auto device_total_num_io = static_cast<double>(device_total.num_io);
 
     std::ostringstream oss_iops;
-    auto iops = ts.num_io/seconds;
+    auto iops = device_total.num_io/seconds;
     oss_iops << "device IOPS: "
              << fmt::format(dfmt, iops)
              << " "
-             << fmt::format(dfmt, iops/shard_device_stats.size())
+             << fmt::format(dfmt, iops/seastar::smp::count)
              << "(";
 
     std::ostringstream oss_bd;
-    auto bd_mb = ts.total_bytes/seconds/(1<<20);
+    auto bd_mb = device_total.total_bytes/seconds/(1<<20);
     oss_bd << "device bandwidth(MiB): "
            << fmt::format(dfmt, bd_mb)
            << " "
-           << fmt::format(dfmt, bd_mb/shard_device_stats.size())
+           << fmt::format(dfmt, bd_mb/seastar::smp::count)
            << "(";
 
     for (const auto &s : shard_device_stats) {
@@ -639,8 +643,40 @@ seastar::future<> SeaStore::report_stats()
 
     INFO("{}", oss_iops.str());
     INFO("{}", oss_bd.str());
-    INFO("device IO depth per writer: {:.2f}", ts.total_depth/d_ts_num_io);
-    INFO("device bytes per write: {:.2f}", ts.total_bytes/d_ts_num_io);
+    INFO("device IO depth per writer: {:.2f}",
+         device_total.total_depth/device_total_num_io);
+    INFO("device bytes per write: {:.2f}",
+         device_total.total_bytes/device_total_num_io);
+
+    shard_stats_t io_total = {};
+    for (const auto &s : shard_io_stats) {
+      io_total.add(s);
+    }
+    INFO("trans IOPS: {:.2f},{:.2f},{:.2f},{:.2f} per-shard: {:.2f},{:.2f},{:.2f},{:.2f}",
+         io_total.io_num/seconds,
+         io_total.read_num/seconds,
+         io_total.get_bg_num()/seconds,
+         io_total.flush_num/seconds,
+         io_total.io_num/seconds/seastar::smp::count,
+         io_total.read_num/seconds/seastar::smp::count,
+         io_total.get_bg_num()/seconds/seastar::smp::count,
+         io_total.flush_num/seconds/seastar::smp::count);
+    auto calc_conflicts = [](uint64_t ios, uint64_t repeats) {
+      return (double)(repeats-ios)/ios;
+    };
+    INFO("trans conflicts: {:.2f},{:.2f},{:.2f}",
+         calc_conflicts(io_total.io_num, io_total.repeat_io_num),
+         calc_conflicts(io_total.read_num, io_total.repeat_read_num),
+         calc_conflicts(io_total.get_bg_num(), io_total.get_repeat_bg_num()));
+    INFO("trans outstanding: {},{},{},{} per-shard: {:.2f},{:.2f},{:.2f},{:.2f}",
+         io_total.pending_io_num,
+         io_total.pending_read_num,
+         io_total.pending_bg_num,
+         io_total.pending_flush_num,
+         (double)io_total.pending_io_num/seastar::smp::count,
+         (double)io_total.pending_read_num/seastar::smp::count,
+         (double)io_total.pending_bg_num/seastar::smp::count,
+         (double)io_total.pending_flush_num/seastar::smp::count);
     return seastar::now();
   });
 }
@@ -2479,6 +2515,60 @@ void SeaStore::Shard::init_managers()
 device_stats_t SeaStore::Shard::get_device_stats(bool report_detail) const
 {
   return transaction_manager->get_device_stats(report_detail);
+}
+
+shard_stats_t SeaStore::Shard::get_io_stats(bool report_detail) const
+{
+  auto now = seastar::lowres_clock::now();
+  if (last_tp == seastar::lowres_clock::time_point::min()) {
+    last_tp = now;
+    last_shard_stats = shard_stats;
+    return {};
+  }
+  std::chrono::duration<double> duration_d = now - last_tp;
+  double seconds = duration_d.count();
+  last_tp = now;
+
+  shard_stats_t ret = shard_stats;
+  ret.minus(last_shard_stats);
+  last_shard_stats = shard_stats;
+  if (report_detail) {
+    LOG_PREFIX(SeaStore::get_io_stats);
+    auto calc_conflicts = [](uint64_t ios, uint64_t repeats) {
+      return (double)(repeats-ios)/ios;
+    };
+    INFO("iops={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}),{:.2f} "
+         "conflicts={:.2f},{:.2f},{:.2f}({:.2f},{:.2f},{:.2f},{:.2f}) "
+         "outstanding={}({},{},{},{},{}),{},{},{}",
+         // iops
+         ret.io_num/seconds,
+         ret.read_num/seconds,
+         ret.get_bg_num()/seconds,
+         ret.trim_alloc_num/seconds,
+         ret.trim_dirty_num/seconds,
+         ret.cleaner_main_num/seconds,
+         ret.cleaner_cold_num/seconds,
+         ret.flush_num/seconds,
+         // conflicts
+         calc_conflicts(ret.io_num, ret.repeat_io_num),
+         calc_conflicts(ret.read_num, ret.repeat_read_num),
+         calc_conflicts(ret.get_bg_num(), ret.get_repeat_bg_num()),
+         calc_conflicts(ret.trim_alloc_num, ret.repeat_trim_alloc_num),
+         calc_conflicts(ret.trim_dirty_num, ret.repeat_trim_dirty_num),
+         calc_conflicts(ret.cleaner_main_num, ret.repeat_cleaner_main_num),
+         calc_conflicts(ret.cleaner_cold_num, ret.repeat_cleaner_cold_num),
+         // outstanding
+         ret.pending_io_num,
+         ret.starting_io_num,
+         ret.waiting_collock_io_num,
+         ret.waiting_throttler_io_num,
+         ret.processing_inlock_io_num,
+         ret.processing_postlock_io_num,
+         ret.pending_read_num,
+         ret.pending_bg_num,
+         ret.pending_flush_num);
+  }
+  return ret;
 }
 
 std::unique_ptr<SeaStore> make_seastore(

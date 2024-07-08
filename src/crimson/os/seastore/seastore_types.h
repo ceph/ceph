@@ -2396,6 +2396,65 @@ struct shard_stats_t {
 
   uint64_t flush_num = 0;
   uint64_t pending_flush_num = 0;
+
+  uint64_t get_bg_num() const {
+    return trim_alloc_num +
+           trim_dirty_num +
+           cleaner_main_num +
+           cleaner_cold_num;
+  }
+
+  uint64_t get_repeat_bg_num() const {
+    return repeat_trim_alloc_num +
+           repeat_trim_dirty_num +
+           repeat_cleaner_main_num +
+           repeat_cleaner_cold_num;
+  }
+
+  void add(const shard_stats_t &o) {
+    io_num += o.io_num;
+    repeat_io_num += o.repeat_io_num;
+    pending_io_num += o.pending_io_num;
+    starting_io_num += o.starting_io_num;
+    waiting_collock_io_num += o.waiting_collock_io_num;
+    waiting_throttler_io_num += o.waiting_throttler_io_num;
+    processing_inlock_io_num += o.processing_inlock_io_num;
+    processing_postlock_io_num += o.processing_postlock_io_num;
+
+    read_num += o.read_num;
+    repeat_read_num += o.repeat_read_num;
+    pending_read_num += o.pending_read_num;
+
+    pending_bg_num += o.pending_bg_num;
+    trim_alloc_num += o.trim_alloc_num;
+    repeat_trim_alloc_num += o.repeat_trim_alloc_num;
+    trim_dirty_num += o.trim_dirty_num;
+    repeat_trim_dirty_num += o.repeat_trim_dirty_num;
+    cleaner_main_num += o.cleaner_main_num;
+    repeat_cleaner_main_num += o.repeat_cleaner_main_num;
+    cleaner_cold_num += o.cleaner_cold_num;
+    repeat_cleaner_cold_num += o.repeat_cleaner_cold_num;
+
+    flush_num += o.flush_num;
+    pending_flush_num += o.pending_flush_num;
+  }
+
+  void minus(const shard_stats_t &o) {
+    // realtime(e.g. pending) stats are not related
+    io_num -= o.io_num;
+    repeat_io_num -= o.repeat_io_num;
+    read_num -= o.read_num;
+    repeat_read_num -= o.repeat_read_num;
+    trim_alloc_num -= o.trim_alloc_num;
+    repeat_trim_alloc_num -= o.repeat_trim_alloc_num;
+    trim_dirty_num -= o.trim_dirty_num;
+    repeat_trim_dirty_num -= o.repeat_trim_dirty_num;
+    cleaner_main_num -= o.cleaner_main_num;
+    repeat_cleaner_main_num -= o.repeat_cleaner_main_num;
+    cleaner_cold_num -= o.cleaner_cold_num;
+    repeat_cleaner_cold_num -= o.repeat_cleaner_cold_num;
+    flush_num -= o.flush_num;
+  }
 };
 
 }
