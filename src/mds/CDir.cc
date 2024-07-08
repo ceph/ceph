@@ -586,15 +586,11 @@ void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsi
   dout(12) << __func__ << " " << *dn << " remote " << rino << " referent inode " << *ref_in << dendl;
   ceph_assert(dn->get_linkage()->is_null());
 
-  // pin dentry?
-  if (ref_in->get_num_ref())
-    dn->get(CDentry::PIN_INODEPIN);
-
-  // TODO -  adjust auth pin count for referent inode like primary inode in link_inode_work?
-
   // If remote is set, remote is written to backend instead of CInode created.
   dn->get_linkage()->set_remote(rino, d_type);
   dn->get_linkage()->ref_inode = ref_in;
+
+  link_inode_work(dn, ref_in);
 
   if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
     mdcache->bottom_lru.lru_remove(dn);
@@ -641,7 +637,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
-  ceph_assert(dn->get_linkage()->get_inode() == in);
+  ceph_assert(dn->get_linkage()->get_inode() == in || dn->get_linkage()->get_ref_inode() == in);
   in->set_primary_parent(dn);
 
   // set inode version

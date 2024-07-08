@@ -388,6 +388,12 @@ public:
                             mempool::mds_co::string& alternate_name,
                             ceph::buffer::list::const_iterator& bl);
 
+  static void encode_referent(inodeno_t& ino, unsigned char d_type,
+                              std::string_view alternate_name,
+                              bufferlist &bl);
+  static void decode_referent(char icode, inodeno_t& ino, unsigned char& d_type,
+                              mempool::mds_co::string& alternate_name,
+                              ceph::buffer::list::const_iterator& bl);
   __u32 hash;
   snapid_t first, last;
   bool corrupt_first_loaded = false; /* for Postgres corruption detection */
