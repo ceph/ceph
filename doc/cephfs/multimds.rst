@@ -246,7 +246,7 @@ value to `-1`.
 Dynamic Subtree Partitioning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-CephFS has long had a dynamic metadata blanacer (sometimes called the "default
+CephFS has long had a dynamic metadata balancer (sometimes called the "default
 balancer") which can split or merge subtrees while placing them on "colder" MDS
 ranks. Moving the metadata around can improve overall file system throughput
 and cache size.
