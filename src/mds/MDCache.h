@@ -966,6 +966,7 @@ private:
 		    const filepath& path, int flags,
 		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr, CDir **pdir = nullptr);
 
+  int load_referent_inodes(CInode *in, MDSContextFactory& cf);
   int maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
 				    MDSCacheObject *p);
 
