@@ -11133,6 +11133,9 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     else if (in->is_mdsdir())
       in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
     dout(10) << __func__ << " added " << *in << dendl;
+    // TODO: This is the only place where remote check is used for a referent inode.
+    // This sender doesn't mark the linkage as referent. It marks it as remote. The
+    // linkage is made referent here.
     if (dn && dn->get_linkage()->is_remote()){
       dout(10) << __func__ << " setting referent inode " << *in << dendl;
       dn->dir->set_referent_inode(dn, in);
@@ -11342,7 +11345,7 @@ void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
   CDir *subtree = get_subtree_root(dn->get_dir());
   for (const auto &p : dn->get_replicas()) {
     // don't tell (rename) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(p.first)) {
+    if (mdr.get() && mdr->more()->witnessed.count(p.first) && !dn->get_linkage()->is_referent()) {
       dout(20) << __func__ << " witnesses already know, skip notifying replica for the dentry " << *dn << dendl;
       continue;
     }
@@ -11358,8 +11361,13 @@ void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
       dout(10) << __func__ << "  primary " << *dnl->get_inode() << dendl;
       encode_replica_inode(dnl->get_inode(), p.first, m->bl,
 		      mds->mdsmap->get_up_features());
-    } else if (dnl->is_remote() || dnl->is_referent()) {
+    } else if (dnl->is_remote()) {
       encode_remote_dentry_link(dnl, m->bl);
+    } else if (dnl->is_referent()) {
+      dout(10) << __func__ << "  referent remote " << *dnl->get_referent_inode() << dendl;
+      encode_remote_dentry_link(dnl, m->bl);
+      encode_replica_inode(dnl->get_referent_inode(), p.first, m->bl,
+		      mds->mdsmap->get_up_features());
     } else
       ceph_abort();   // aie, bad caller!
     mds->send_message_mds(m, p.first);
@@ -11388,13 +11396,16 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
   auto p = m->bl.cbegin();
   MDSContext::vec finished;
   if (dn) {
+    CInode *in = nullptr;
     if (m->get_is_primary()) {
       // primary link.
-      CInode *in = nullptr;
       decode_replica_inode(in, p, dn, finished);
     } else {
       // remote link, easy enough.
       decode_remote_dentry_link(dir, dn, p);
+      // decode referent inode and add it to linkage.
+      // TODO: This is the only place, were remote is treated as referent.
+      decode_replica_inode(in, p, dn, finished);
     }
   } else {
     ceph_abort();
