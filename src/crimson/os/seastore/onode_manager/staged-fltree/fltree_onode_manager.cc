@@ -151,6 +151,7 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
     auto val = OnodeRef(new FLTreeOnode(
 	default_data_reservation,
 	default_metadata_range,
+	hoid.hobj,
 	cursor.value()));
     return get_onode_iertr::make_ready_future<OnodeRef>(
       val
@@ -173,6 +174,7 @@ FLTreeOnodeManager::get_or_create_onode(
     auto onode = new FLTreeOnode(
 	default_data_reservation,
 	default_metadata_range,
+	hoid.hobj,
 	cursor.value());
     if (created) {
       DEBUGT("created onode for entry for {}", trans, hoid);
