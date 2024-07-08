@@ -7600,7 +7600,7 @@ void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *ta
   dout(20) << "_link_local_finish referent inodes - " << target_inode->get_referent_inodes() << dendl;
 
   MDRequestRef null_ref;
-  mdcache->send_dentry_link(dn, null_ref);
+  mdcache->send_dentry_link(dn, null_ref, false);
 
   if (adjust_realm) {
     int op = CEPH_SNAP_OP_SPLIT;
@@ -7820,7 +7820,7 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
 
   MDRequestRef null_ref;
   if (inc)
-    mdcache->send_dentry_link(dn, null_ref);
+    mdcache->send_dentry_link(dn, null_ref, false);
   else {
     if (straydn)
       mdcache->send_dentry_unlink(dn, straydn, mdr, ignore_rmdir_witness);
@@ -9470,12 +9470,23 @@ void Server::_rename_finish(const MDRequestRef& mdr, CDentry *srcdn, CDentry *de
   if (!mdr->more()->witnessed.empty())
     mdcache->logged_leader_update(mdr->reqid);
 
+  CDentry::linkage_t *srcdnl = srcdn->get_linkage();
+  CDentry::linkage_t *destdnl = destdn->get_linkage();
+  CInode *oldin = destdnl->get_inode();
+  bool ignore_rename_witness = true;
+
+  bool linkmerge = (srcdnl->get_inode() == oldin);
+
   // apply
   _rename_apply(mdr, srcdn, destdn, straydn);
 
-  mdcache->send_dentry_link(destdn, mdr);
+  // On a linkmerge, the rename witness should not be ignored.
+  // It should be notified to reflect the changes of the referent inodes list.
+  if (linkmerge)
+    ignore_rename_witness = false;
+  mdcache->send_dentry_link(destdn, mdr, ignore_rename_witness, linkmerge);
 
-  CDentry::linkage_t *destdnl = destdn->get_linkage();
+  // fetch dest inode again after rename_apply
   CInode *in = destdnl->get_inode();
   bool need_eval = mdr->more()->cap_imports.count(in);
 

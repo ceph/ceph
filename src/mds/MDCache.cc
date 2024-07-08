@@ -11354,14 +11354,15 @@ void MDCache::decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::cons
   DECODE_FINISH(p);
 }
 
-void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
+void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr, bool ignore_rename_witness, bool linkmerge)
 {
-  dout(7) << __func__ << " " << *dn << dendl;
+  dout(7) << __func__ << " " << *dn << " ignore_rename_witness= " << ignore_rename_witness << " linkmerge=" << linkmerge << dendl;
 
   CDir *subtree = get_subtree_root(dn->get_dir());
   for (const auto &p : dn->get_replicas()) {
     // don't tell (rename) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(p.first) && !dn->get_linkage()->is_referent()) {
+    // tell witnesses if it's a linkmerge or new hardlink creation
+    if (mdr.get() && mdr->more()->witnessed.count(p.first) && ignore_rename_witness) {
       dout(20) << __func__ << " witnesses already know, skip notifying replica for the dentry " << *dn << dendl;
       continue;
     }
@@ -11372,7 +11373,7 @@ void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
       continue;
     }
     CDentry::linkage_t *dnl = dn->get_linkage();
-    auto m = make_message<MDentryLink>(subtree->dirfrag(), dn->get_dir()->dirfrag(), dn->get_name(), dnl->is_primary());
+    auto m = make_message<MDentryLink>(subtree->dirfrag(), dn->get_dir()->dirfrag(), dn->get_name(), dnl->is_primary(), linkmerge);
     if (dnl->is_primary()) {
       dout(10) << __func__ << "  primary " << *dnl->get_inode() << dendl;
       encode_replica_inode(dnl->get_inode(), p.first, m->bl,
@@ -11405,7 +11406,8 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
       CDentry::linkage_t *dnl = dn->get_linkage();
 
       ceph_assert(!dn->is_auth());
-      ceph_assert(dnl->is_null());
+      if (!m->get_is_linkmerge())
+        ceph_assert(dnl->is_null());
     }
   }
 
@@ -11438,7 +11440,7 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
 
 void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr, bool ignore_rmdir_witness)
 {
-  dout(10) << __func__ << " " << *dn << dendl;
+  dout(10) << __func__ << " " << *dn << " ignore_rename_witness=" << ignore_rmdir_witness << dendl;
   // share unlink news with replicas
   set<mds_rank_t> replicas;
   dn->list_replicas(replicas);
@@ -11494,6 +11496,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 
       // open inode?
       if (dnl->is_primary()) {
+        dout(7) << __func__ << " primary " << *dn << dendl;
 	CInode *in = dnl->get_inode();
 	dn->dir->unlink_inode(dn);
 	ceph_assert(straydn);
@@ -11523,6 +11526,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	
 	straydn = NULL;
       } else if (dnl->is_referent()) {
+        dout(7) << __func__ << " referent " << *dn << dendl;
 	CInode *ref_in = dnl->get_referent_inode();
 	dn->dir->unlink_inode(dn);
 	ceph_assert(straydn);
