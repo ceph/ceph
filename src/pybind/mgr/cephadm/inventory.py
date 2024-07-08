@@ -48,6 +48,26 @@ class HostCacheStatus(enum.Enum):
     devices = 'devices'
 
 
+class OrchSecretNotFound(OrchestratorError):
+    def __init__(
+        self,
+        message: Optional[str] = '',
+        entity: Optional[str] = '',
+        service_name: Optional[str] = '',
+        hostname: Optional[str] = ''
+    ):
+        if not message:
+            message = f'No secret found for entity {entity}'
+            if service_name:
+                message += f' with service name {service_name}'
+            if hostname:
+                message += f' with hostname {hostname}'
+        super().__init__(message)
+        self.entity = entity
+        self.service_name = service_name
+        self.hostname = hostname
+
+
 class Inventory:
     """
     The inventory stores a HostSpec for all hosts persistently.
