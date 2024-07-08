@@ -3320,6 +3320,9 @@ class TestMgmtGateway:
                                                  location /grafana {
                                                      rewrite ^/grafana/(.*) /$1 break;
                                                      proxy_pass https://grafana_servers;
+                                                     # clear any Authorization header as Prometheus and Alertmanager are using basic-auth browser
+                                                     # will send this header if Grafana is running on the same node as one of those services
+                                                     proxy_set_header Authorization "";
                                                  }
 
                                                  location /prometheus {
