@@ -728,9 +728,11 @@ public:
           throw err;
         }
       });
-      const auto rc = ceph_pthread_setname(workers.back().native_handle(), 
-        (WORKER_THREAD_NAME+std::to_string(worker_id)).c_str());
-      ceph_assert(rc == 0);
+      const auto thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
+      if (const auto rc = ceph_pthread_setname(workers.back().native_handle(), thread_name.c_str()); rc != 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to set notification manager thread name to: " << thread_name
+          << ". error: " << rc << dendl;
+      }
     }
     ldpp_dout(this, 10) << "INfO: started notification manager with: " << worker_count << " workers" << dendl;
   }
