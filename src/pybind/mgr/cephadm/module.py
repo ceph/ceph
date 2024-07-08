@@ -87,6 +87,7 @@ from .inventory import (
     TunedProfileStore,
     NodeProxyCache,
     CertKeyStore,
+    OrchSecretNotFound,
 )
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
@@ -3148,12 +3149,7 @@ Then run the following:
     ) -> str:
         cert = self.cert_key_store.get_cert(entity, service_name or '', hostname or '')
         if not cert:
-            err_msg = f'No cert found for entity {entity}'
-            if service_name:
-                err_msg += f' with service name {service_name}'
-            if hostname:
-                err_msg += f' with hostname {hostname}'
-            raise OrchestratorError(err_msg)
+            raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return cert
 
     @handle_orch_error
@@ -3165,12 +3161,7 @@ Then run the following:
     ) -> str:
         key = self.cert_key_store.get_key(entity, service_name or '', hostname or '')
         if not key:
-            err_msg = f'No key found for entity {entity}'
-            if service_name:
-                err_msg += f' with service name {service_name}'
-            if hostname:
-                err_msg += f' with hostname {hostname}'
-            raise OrchestratorError(err_msg)
+            raise OrchSecretNotFound(entity=entity, service_name=service_name, hostname=hostname)
         return key
 
     @handle_orch_error
