@@ -275,6 +275,7 @@ class Module(MgrModule, CherryPyConfig):
                min=400, max=599),
         Option(name='redirect_resolve_ip_addr', type='bool', default=False),
         Option(name='cross_origin_url', type='str', default=''),
+        Option(name='sso_oauth2', type='bool', default=False),
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:

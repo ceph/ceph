@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import abc
 import base64
 import hashlib
 import hmac
@@ -9,13 +10,17 @@ import os
 import threading
 import time
 import uuid
-from typing import Optional
+from enum import Enum
+from typing import TYPE_CHECKING, Optional, Type, TypedDict
 
 import cherrypy
 
-from .. import mgr
-from ..exceptions import ExpiredSignatureError, InvalidAlgorithmError, InvalidTokenError
-from .access_control import LocalAuthenticator, UserDoesNotExist
+from ... import mgr
+from ...exceptions import ExpiredSignatureError, InvalidAlgorithmError, InvalidTokenError
+from ..access_control import LocalAuthenticator, UserDoesNotExist
+
+if TYPE_CHECKING:
+    from dashboard.services.sso import SsoDB
 
 cherrypy.config.update({
     'response.headers.server': 'Ceph-Dashboard',
@@ -23,6 +28,74 @@ cherrypy.config.update({
     'response.headers.x-content-type-options': 'nosniff',
     'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
 })
+
+
+class AuthType(str, Enum):
+    LOCAL = 'local'
+    SAML2 = 'saml2'
+    OAUTH2 = 'oauth2'
+
+
+class BaseAuth(abc.ABC):
+    LOGIN_URL: str
+    LOGOUT_URL: str
+    sso: bool
+
+    @staticmethod
+    def from_protocol(protocol: AuthType) -> Type["BaseAuth"]:
+        for subclass in BaseAuth.__subclasses__():
+            if subclass.__name__.lower() == protocol:
+                return subclass
+            for subsubclass in subclass.__subclasses__():
+                if subsubclass.__name__.lower() == protocol:
+                    return subsubclass
+        raise ValueError(f"Unknown auth backend: '{protocol}'")
+
+    @classmethod
+    def from_db(cls, db: Optional['SsoDB'] = None) -> Type["BaseAuth"]:
+        if db is None:
+            protocol = mgr.SSO_DB.protocol
+        else:
+            protocol = db.protocol
+        return cls.from_protocol(protocol)
+
+    class Config(TypedDict):  # pylint: disable=inherit-non-class
+        pass
+
+    @abc.abstractmethod
+    def to_dict(self) -> 'Config':
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def from_dict(cls, s_dict) -> 'BaseAuth':
+        pass
+
+    @classmethod
+    def get_auth_name(cls):
+        return cls.__name__.lower()
+
+
+class Local(BaseAuth):
+    LOGIN_URL = '#/login'
+    LOGOUT_URL = '#/login'
+    sso = False
+
+    @classmethod
+    def get_auth_name(cls):
+        return cls.__name__.lower()
+
+    def to_dict(self) -> 'BaseAuth.Config':
+        return BaseAuth.Config()
+
+    @classmethod
+    def from_dict(cls, s_dict: BaseAuth.Config) -> 'Local':
+        # pylint: disable=unused-argument
+        return cls()
+
+
+class SSOAuth(BaseAuth):
+    sso = True
 
 
 class JwtManager(object):
@@ -68,28 +141,31 @@ class JwtManager(object):
 
     @classmethod
     def decode(cls, message, secret):
+        oauth2_sso_protocol = mgr.SSO_DB.protocol == AuthType.OAUTH2
         split_message = message.split(".")
         base64_header = split_message[0]
         base64_message = split_message[1]
         base64_secret = split_message[2]
 
-        decoded_header = json.loads(base64.urlsafe_b64decode(base64_header))
+        decoded_header = decode_jwt_segment(base64_header)
 
-        if decoded_header['alg'] != cls.JWT_ALGORITHM:
+        if decoded_header['alg'] != cls.JWT_ALGORITHM and not oauth2_sso_protocol:
             raise InvalidAlgorithmError()
 
-        incoming_secret = base64.urlsafe_b64encode(hmac.new(
-            bytes(secret, 'UTF-8'),
-            msg=bytes(base64_header + "." + base64_message, 'UTF-8'),
-            digestmod=hashlib.sha256
-        ).digest()).decode('UTF-8').replace("=", "")
+        incoming_secret = ''
+        if decoded_header['alg'] == cls.JWT_ALGORITHM:
+            incoming_secret = base64.urlsafe_b64encode(hmac.new(
+                bytes(secret, 'UTF-8'),
+                msg=bytes(base64_header + "." + base64_message, 'UTF-8'),
+                digestmod=hashlib.sha256
+            ).digest()).decode('UTF-8').replace("=", "")
 
-        if base64_secret != incoming_secret:
+        if base64_secret != incoming_secret and not oauth2_sso_protocol:
             raise InvalidTokenError()
 
-        # We add ==== as padding to ignore the requirement to have correct padding in
-        # the urlsafe_b64decode method.
-        decoded_message = json.loads(base64.urlsafe_b64decode(base64_message + "===="))
+        decoded_message = decode_jwt_segment(base64_message)
+        if oauth2_sso_protocol:
+            decoded_message['username'] = decoded_message['sub']
         now = int(time.time())
         if decoded_message['exp'] < now:
             raise ExpiredSignatureError()
@@ -121,15 +197,20 @@ class JwtManager(object):
         return cls.decode(token, cls._secret)  # type: ignore
 
     @classmethod
-    def get_token_from_header(cls):
+    # pylint: disable=protected-access
+    def get_token(cls, request: cherrypy._ThreadLocalProxy):
+        if mgr.SSO_DB.protocol == AuthType.OAUTH2:
+            # Avoids circular import
+            from .oauth2 import OAuth2
+            return OAuth2.get_token(request)
         auth_cookie_name = 'token'
         try:
             # use cookie
-            return cherrypy.request.cookie[auth_cookie_name].value
+            return request.cookie[auth_cookie_name].value
         except KeyError:
             try:
                 # fall-back: use Authorization header
-                auth_header = cherrypy.request.headers.get('authorization')
+                auth_header = request.headers.get('authorization')
                 if auth_header is not None:
                     scheme, params = auth_header.split(' ', 1)
                     if scheme.lower() == 'bearer':
@@ -153,9 +234,9 @@ class JwtManager(object):
     def get_user(cls, token):
         try:
             dtoken = cls.decode_token(token)
-            if not cls.is_blocklisted(dtoken['jti']):
+            if 'jti' in dtoken and not cls.is_blocklisted(dtoken['jti']):
                 user = AuthManager.get_user(dtoken['username'])
-                if user.last_update <= dtoken['iat']:
+                if 'iat' in dtoken and user.last_update <= dtoken['iat']:
                     return user
                 cls.logger.debug(  # type: ignore
                     "user info changed after token was issued, iat=%s last_update=%s",
@@ -232,7 +313,7 @@ class AuthManagerTool(cherrypy.Tool):
 
     def _check_authentication(self):
         JwtManager.reset_user()
-        token = JwtManager.get_token_from_header()
+        token = JwtManager.get_token(cherrypy.request)
         if token:
             user = JwtManager.get_user(token)
             if user:
@@ -277,3 +358,9 @@ class AuthManagerTool(cherrypy.Tool):
         if not AuthManager.authorize(username, sec_scope, sec_perms):
             raise cherrypy.HTTPError(403, "You don't have permissions to "
                                           "access that resource")
+
+
+def decode_jwt_segment(encoded_segment: str):
+    # We add ==== as padding to ignore the requirement to have correct padding in
+    # the urlsafe_b64decode method.
+    return json.loads(base64.urlsafe_b64decode(encoded_segment + "===="))

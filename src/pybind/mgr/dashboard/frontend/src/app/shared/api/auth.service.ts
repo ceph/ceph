@@ -42,6 +42,9 @@ export class AuthService {
   logout(callback: Function = null) {
     return this.http.post('api/auth/logout', null).subscribe((resp: any) => {
       this.authStorageService.remove();
+      if (resp.protocol == 'oauth2') {
+        return window.location.replace(resp.redirect_url);
+      }
       const url = _.get(this.route.snapshot.queryParams, 'returnUrl', '/login');
       this.router.navigate([url], { skipLocationChange: true });
       if (callback) {

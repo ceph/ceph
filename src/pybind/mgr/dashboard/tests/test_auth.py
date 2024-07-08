@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import Mock, patch
 
+from dashboard.services.auth import AuthType
+
 from .. import mgr
 from ..controllers.auth import Auth
 from ..services.auth import JwtManager
@@ -10,6 +12,7 @@ mgr.get_module_option.return_value = JwtManager.JWT_TOKEN_TTL
 mgr.get_store.return_value = 'jwt_secret'
 mgr.ACCESS_CTRL_DB = Mock()
 mgr.ACCESS_CTRL_DB.get_attempt.return_value = 1
+mgr.SSO_DB.protocol = AuthType.LOCAL
 
 
 class JwtManagerTest(unittest.TestCase):
@@ -67,5 +70,6 @@ class AuthTest(ControllerTestCase):
         self._post('/api/auth/logout')
         self.assertStatus(200)
         self.assertJsonBody({
-            'redirect_url': '#/login'
+            'redirect_url': '#/login',
+            'protocol': 'local'
         })

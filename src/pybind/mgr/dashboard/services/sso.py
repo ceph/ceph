@@ -7,9 +7,15 @@ import logging
 import os
 import threading
 import warnings
+from typing import Dict
 from urllib import parse
 
+from mgr_module import CLIWriteCommand, HandleCommandResult
+
 from .. import mgr
+# Saml2 and OAuth2 needed to be recognized by .__subclasses__()
+# pylint: disable=unused-import
+from ..services.auth import AuthType, BaseAuth, OAuth2, Saml2  # noqa
 from ..tools import prepare_url_prefix
 
 logger = logging.getLogger('sso')
@@ -24,39 +30,22 @@ except ImportError:
     python_saml_imported = False
 
 
-class Saml2(object):
-    def __init__(self, onelogin_settings):
-        self.onelogin_settings = onelogin_settings
-
-    def get_username_attribute(self):
-        return self.onelogin_settings['sp']['attributeConsumingService']['requestedAttributes'][0][
-            'name']
-
-    def to_dict(self):
-        return {
-            'onelogin_settings': self.onelogin_settings
-        }
-
-    @classmethod
-    def from_dict(cls, s_dict):
-        return Saml2(s_dict['onelogin_settings'])
-
-
 class SsoDB(object):
     VERSION = 1
     SSODB_CONFIG_KEY = "ssodb_v"
 
-    def __init__(self, version, protocol, saml2):
+    def __init__(self, version, protocol: AuthType, config: BaseAuth):
         self.version = version
         self.protocol = protocol
-        self.saml2 = saml2
+        self.config = config
         self.lock = threading.RLock()
 
     def save(self):
         with self.lock:
             db = {
                 'protocol': self.protocol,
-                'saml2': self.saml2.to_dict(),
+                'saml2': self.config.to_dict(),
+                'oauth2': self.config.to_dict(),
                 'version': self.version
             }
             mgr.set_store(self.ssodb_config_key(), json.dumps(db))
@@ -79,18 +68,31 @@ class SsoDB(object):
         json_db = mgr.get_store(cls.ssodb_config_key(), None)
         if json_db is None:
             logger.debug("No DB v%s found, creating new...", cls.VERSION)
-            db = cls(cls.VERSION, '', Saml2({}))
+            db = cls(cls.VERSION, AuthType.LOCAL, Saml2({}))
             # check if we can update from a previous version database
             db.check_and_update_db()
             return db
 
-        dict_db = json.loads(json_db)  # type: dict
-        return cls(dict_db['version'], dict_db.get('protocol'),
-                   Saml2.from_dict(dict_db.get('saml2')))
+        dict_db = json.loads(json_db)  # type: Dict
+        protocol = dict_db.get('protocol')
+        # keep backward-compatibility
+        if protocol == '':
+            protocol = AuthType.LOCAL
+        protocol = AuthType(protocol)
+        config: BaseAuth = BaseAuth.from_protocol(protocol).from_dict(dict_db.get(protocol))
+        return cls(dict_db['version'], protocol, config)
 
 
 def load_sso_db():
     mgr.SSO_DB = SsoDB.load()  # type: ignore
+
+
+@CLIWriteCommand("dashboard sso enable oauth2")
+def enable_sso(_):
+    mgr.SSO_DB.protocol = AuthType.OAUTH2
+    mgr.SSO_DB.save()
+    mgr.set_module_option('sso_oauth2', True)
+    return HandleCommandResult(stdout='SSO is "enabled" with "OAuth2" protocol.')
 
 
 SSO_COMMANDS = [
@@ -148,27 +150,28 @@ def handle_sso_command(cmd):
         return -errno.EPERM, '', 'Required library not found: `python3-saml`'
 
     if cmd['prefix'] == 'dashboard sso disable':
-        mgr.SSO_DB.protocol = ''
+        mgr.SSO_DB.protocol = AuthType.LOCAL
         mgr.SSO_DB.save()
+        mgr.set_module_option('sso_oauth2', False)
         return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso enable saml2':
         configured = _is_sso_configured()
         if configured:
-            mgr.SSO_DB.protocol = 'saml2'
+            mgr.SSO_DB.protocol = AuthType.SAML2
             mgr.SSO_DB.save()
-            return 0, 'SSO is "enabled" with "SAML2" protocol.', ''
+            return 0, 'SSO is "enabled" with "saml2" protocol.', ''
         return -errno.EPERM, '', 'Single Sign-On is not configured: ' \
             'use `ceph dashboard sso setup saml2`'
 
     if cmd['prefix'] == 'dashboard sso status':
-        if mgr.SSO_DB.protocol == 'saml2':
-            return 0, 'SSO is "enabled" with "SAML2" protocol.', ''
+        if not mgr.SSO_DB.protocol == AuthType.LOCAL:
+            return 0, f'SSO is "enabled" with "{mgr.SSO_DB.protocol}" protocol.', ''
 
         return 0, 'SSO is "disabled".', ''
 
     if cmd['prefix'] == 'dashboard sso show saml2':
-        return 0, json.dumps(mgr.SSO_DB.saml2.to_dict()), ''
+        return 0, json.dumps(mgr.SSO_DB.config.to_dict()), ''
 
     if cmd['prefix'] == 'dashboard sso setup saml2':
         ret = _handle_saml_setup(cmd)
@@ -180,8 +183,8 @@ def handle_sso_command(cmd):
 def _is_sso_configured():
     configured = True
     try:
-        Saml2Settings(mgr.SSO_DB.saml2.onelogin_settings)
-    except Saml2Error:
+        Saml2Settings(mgr.SSO_DB.config.onelogin_settings)
+    except (AttributeError, Saml2Error):
         configured = False
     return configured
 
@@ -192,7 +195,7 @@ def _handle_saml_setup(cmd):
         ret = -errno.EINVAL, '', err
     else:
         _set_saml_settings(cmd, sp_x_509_cert, sp_private_key, has_sp_cert)
-        ret = 0, json.dumps(mgr.SSO_DB.saml2.onelogin_settings), ''
+        ret = 0, json.dumps(mgr.SSO_DB.config.onelogin_settings), ''
     return ret
 
 
@@ -274,8 +277,8 @@ def _set_saml_settings(cmd, sp_x_509_cert, sp_private_key, has_sp_cert):
         }
     }
     settings = Saml2Parser.merge_settings(settings, idp_settings)
-    mgr.SSO_DB.saml2.onelogin_settings = settings
-    mgr.SSO_DB.protocol = 'saml2'
+    mgr.SSO_DB.config.onelogin_settings = settings
+    mgr.SSO_DB.protocol = AuthType.SAML2
     mgr.SSO_DB.save()
 
 
