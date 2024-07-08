@@ -7761,6 +7761,7 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
 	   << *dn << " to " << *targeti << dendl;
 
   ceph_assert(g_conf()->mds_kill_link_at != 3);
+  bool ignore_rmdir_witness = true;
 
   if (!mdr->more()->witnessed.empty())
     mdcache->logged_leader_update(mdr->reqid);
@@ -7779,6 +7780,8 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
   } else {
     //TODO snaprealm code handling required for referent inode ? mostly no.
     // unlink main dentry
+    if (dn->get_linkage()->is_referent())
+      ignore_rmdir_witness = false;
     dn->get_dir()->unlink_inode(dn);
     dn->pop_projected_linkage();
     dn->mark_dirty(dn->get_projected_version(), mdr->ls);  // dirty old dentry
@@ -7798,9 +7801,9 @@ void Server::_link_remote_finish(const MDRequestRef& mdr, bool inc,
     mdcache->send_dentry_link(dn, null_ref);
   else {
     if (straydn)
-      mdcache->send_dentry_unlink(dn, straydn, mdr);
+      mdcache->send_dentry_unlink(dn, straydn, mdr, ignore_rmdir_witness);
     else
-      mdcache->send_dentry_unlink(dn, NULL, null_ref);
+      mdcache->send_dentry_unlink(dn, NULL, null_ref, ignore_rmdir_witness);
   }
   
   // bump target popularity
@@ -8474,13 +8477,16 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
 
   CInode *strayin = NULL;
   bool hadrealm = false;
+  bool ignore_rmdir_witness = true;
   if (straydn) {
     // if there is newly created snaprealm, need to split old snaprealm's
     // inodes_with_caps. So pop snaprealm before linkage changes.
     if (dn->get_linkage()->is_primary())
       strayin = dn->get_linkage()->get_inode();
-    else
+    else {
       strayin = dn->get_linkage()->get_referent_inode();
+      ignore_rmdir_witness = false;
+    }
     hadrealm = strayin->snaprealm ? true : false;
     strayin->early_pop_projected_snaprealm();
   }
@@ -8499,7 +8505,7 @@ void Server::_unlink_local_finish(const MDRequestRef& mdr,
 
   mdr->apply();
   
-  mdcache->send_dentry_unlink(dn, straydn, mdr);
+  mdcache->send_dentry_unlink(dn, straydn, mdr, ignore_rmdir_witness);
   
   if (straydn) {
     // update subtree map?

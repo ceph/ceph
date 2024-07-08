@@ -1034,7 +1034,7 @@ private:
   void encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl);
   void decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p);
   void send_dentry_link(CDentry *dn, const MDRequestRef& mdr);
-  void send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr, bool ignore_rmdir_witness=true);
 
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSContext *c) {
     uncommitted_fragments.at(dirfrag).waiters.push_back(c);
