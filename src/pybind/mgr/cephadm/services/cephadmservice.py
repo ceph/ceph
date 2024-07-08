@@ -288,7 +288,7 @@ class CephadmService(metaclass=ABCMeta):
         """
         return None
 
-    def ranked(self) -> bool:
+    def ranked(self, spec: ServiceSpec) -> bool:
         """
         If True, we will assign a stable rank (0, 1, ...) and monotonically increasing
         generation (0, 1, ...) to each daemon we create/deploy.
