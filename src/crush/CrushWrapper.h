@@ -1172,6 +1172,9 @@ public:
     crush_rule *n = crush_make_rule(len, type);
     ceph_assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
+    if (ruleno < 0) {
+      free(n);
+    }
     return ruleno;
   }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
