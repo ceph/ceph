@@ -34,11 +34,13 @@ case "$1" in
 
         # adjust file and directory permissions
 	for DIR in /var/lib/ceph/* ; do
-	    if ! dpkg-statoverride --list $DIR >/dev/null
+	    if ! dpkg-statoverride --list "${DIR}" >/dev/null
 	    then
-		chown $SERVER_USER:$SERVER_GROUP $DIR
+		chown "${SERVER_USER}:${SERVER_GROUP}" "${DIR}"
 	    fi
 	done
+
+	chown "${SERVER_USER}:${SERVER_GROUP}" -R /var/lib/ceph/crash/*;
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
