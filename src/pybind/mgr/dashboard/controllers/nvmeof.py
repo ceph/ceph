@@ -1,16 +1,27 @@
 # -*- coding: utf-8 -*-
-from typing import Optional
+import logging
+from typing import Any, Dict, Optional
 
+from .. import mgr
 from ..model import nvmeof as model
 from ..security import Scope
+from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
-from . import APIDoc, APIRouter, Endpoint, EndpointDoc, Param, ReadPermission, RESTController
+from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, Param, \
+    ReadPermission, RESTController, UIRouter
+
+logger = logging.getLogger(__name__)
+
+NVME_SCHEMA = {
+    "available": (bool, "Is NVMe/TCP available?"),
+    "message": (str, "Descriptions")
+}
 
 try:
     from ..services.nvmeof_client import NVMeoFClient, empty_response, \
         handle_nvmeof_error, map_collection, map_model
-except ImportError:
-    pass
+except ImportError as e:
+    logger.error("Failed to import NVMeoFClient and related components: %s", e)
 else:
     @APIRouter("/nvmeof/gateway", Scope.NVME_OF)
     @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
@@ -380,3 +391,24 @@ else:
             return NVMeoFClient().stub.list_connections(
                 NVMeoFClient.pb2.list_connections_req(subsystem=nqn)
             )
+
+
+@UIRouter('/nvmeof', Scope.NVME_OF)
+@APIDoc("NVMe/TCP Management API", "NVMe/TCP")
+class NVMeoFStatus(BaseController):
+    @Endpoint()
+    @ReadPermission
+    @EndpointDoc("Display NVMe/TCP service Status",
+                 responses={200: NVME_SCHEMA})
+    def status(self) -> dict:
+        status: Dict[str, Any] = {'available': True, 'message': None}
+        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+        if orch_backend == 'cephadm':
+            orch = OrchClient.instance()
+            orch_status = orch.status()
+            if not orch_status['available']:
+                return status
+            if not orch.services.list_daemons(daemon_type='nvmeof'):
+                status["available"] = False
+                status["message"] = 'Create an NVMe/TCP service to get started.'
+        return status
