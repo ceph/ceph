@@ -146,3 +146,75 @@ TEST_F(TestClient, LlreadvLlwritevLargeBuffersSync) {
   client->ll_release(fh);
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
 }
+
+TEST_F(TestClient, SyncIOLlreadvLlwritevSizeOutOfBound) {
+    /* sync/async i/o system calls can transfer at most INT_MAX 
+    (that is 2147483647 bytes which is ~2GiB) bytes. Therefore, 
+    test that sync'd read/write calls returned bytes do not
+    exceed this limit.*/
+
+    Inode *root = NULL;
+    root = client->get_root();
+    ASSERT_NE(root, (Inode *)NULL);
+
+    struct statvfs stbuf;
+    ASSERT_EQ(client->ll_statfs(root, &stbuf, myperm), 0);
+    size_t initial_available_space = stbuf.f_bfree * stbuf.f_bsize;
+    ASSERT_GT(initial_available_space, 0);
+
+    int mypid = getpid();
+    char fname[256];
+    sprintf(fname, "test_synciollreadvllwritevsizeoutofbound%u", mypid);
+    Inode *file = NULL;
+    Fh *fh = NULL;
+    struct ceph_statx stx;
+    ASSERT_EQ(0, client->ll_createx(root, fname, 0666,
+        O_RDWR | O_CREAT | O_TRUNC, &file, &fh, &stx, 0, 0, myperm));
+
+    int64_t bytes_written = 0, bytes_read = 0;
+    const size_t READ_WRITE_LIMIT = INT_MAX;
+
+    const size_t BUFSIZE = 1024 * 1024 * 1024;
+    auto out_buf_0 = std::make_unique<char[]>(BUFSIZE);
+    memset(out_buf_0.get(), 'a', BUFSIZE);
+    auto out_buf_1 = std::make_unique<char[]>(BUFSIZE);
+    memset(out_buf_1.get(), 'b', BUFSIZE);
+    auto out_buf_2 = std::make_unique<char[]>(BUFSIZE);
+    memset(out_buf_2.get(), 'c', BUFSIZE);
+  
+    struct iovec iov_out_over_limit[3] = {
+        {out_buf_0.get(), BUFSIZE},
+        {out_buf_1.get(), BUFSIZE},
+        {out_buf_2.get(), BUFSIZE}
+    };
+
+    auto in_buf_0 = std::make_unique<char[]>(BUFSIZE);
+    auto in_buf_1 = std::make_unique<char[]>(BUFSIZE);
+    auto in_buf_2 = std::make_unique<char[]>(BUFSIZE);
+
+    struct iovec iov_in_over_limit[3] = {
+      {in_buf_0.get(), BUFSIZE},
+      {in_buf_1.get(), BUFSIZE},
+      {in_buf_2.get(), BUFSIZE}
+    };
+
+    bytes_written = client->ll_writev(fh, iov_out_over_limit, 3, 0);
+    ASSERT_EQ(bytes_written, READ_WRITE_LIMIT);
+
+    // flush the buffers and wait for 10 secs since buffers are huge
+    ASSERT_EQ(client->sync_fs(), 0);
+    sleep(10);
+
+    // make sure the bytes_written corresponds with the available space
+    struct statvfs stbuf1;
+    ASSERT_EQ(client->ll_statfs(root, &stbuf1, myperm), 0);
+    size_t available_space_post_io = stbuf1.f_bfree * stbuf1.f_bsize;
+    ASSERT_EQ((initial_available_space - available_space_post_io - 1),
+              READ_WRITE_LIMIT);
+
+    bytes_read = client->ll_readv(fh, iov_in_over_limit, 3, 0);
+    ASSERT_EQ(bytes_read, READ_WRITE_LIMIT);
+
+    client->ll_release(fh);
+    ASSERT_EQ(client->ll_unlink(root, fname, myperm), 0);
+}
