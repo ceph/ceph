@@ -677,6 +677,18 @@ seastar::future<> SeaStore::report_stats()
          (double)io_total.pending_read_num/seastar::smp::count,
          (double)io_total.pending_bg_num/seastar::smp::count,
          (double)io_total.pending_flush_num/seastar::smp::count);
+
+    std::ostringstream oss_pending;
+    for (const auto &s : shard_io_stats) {
+      oss_pending << s.pending_io_num
+                 << "(" << s.starting_io_num
+                 << "," << s.waiting_collock_io_num
+                 << "," << s.waiting_throttler_io_num
+                 << "," << s.processing_inlock_io_num
+                 << "," << s.processing_postlock_io_num
+                 << ") ";
+    }
+    INFO("details: {}", oss_pending.str());
     return seastar::now();
   });
 }
