@@ -408,7 +408,7 @@ public:
   template <typename U>
   using interrupt_futurize_t =
     typename interruptor<InterruptCond>::template futurize_t<U>;
-  using core_type::get0;
+  using core_type::get;
   using core_type::core_type;
   using core_type::get_exception;
   using core_type::ignore_ready_future;
@@ -719,7 +719,7 @@ class [[nodiscard]] interruptible_future_detail<
 {
 public:
   using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
-  using core_type::unsafe_get0;
+  using core_type::unsafe_get;
   using errorator_type = typename core_type::errorator_type;
   using interrupt_errorator_type =
     interruptible_errorator<InterruptCond, errorator_type>;
@@ -1421,7 +1421,7 @@ public:
         ret = seastar::futurize_invoke(mapper, *begin++).then_wrapped_interruptible(
 	    [s = s.get(), ret = std::move(ret)] (auto f) mutable {
             try {
-                s->result = s->reduce(std::move(s->result), std::move(f.get0()));
+                s->result = s->reduce(std::move(s->result), std::move(f.get()));
                 return std::move(ret);
             } catch (...) {
                 return std::move(ret).then_wrapped_interruptible([ex = std::current_exception()] (auto f) {
