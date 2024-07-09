@@ -1253,7 +1253,7 @@ public:
     au_size = _au_size;
     store = new BlueStore(g_ceph_context, "", au_size);
     oc = BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL);
-    bc = BlueStore::BufferCacheShard::create(g_ceph_context, "lru", NULL);
+    bc = BlueStore::BufferCacheShard::create(store, "lru", NULL);
     coll = ceph::make_ref<BlueStore::Collection>(store, oc, bc, coll_t());
   }
   void SetUp() override {
@@ -1446,7 +1446,7 @@ class PunchHoleFixture : public BlueStoreFixture
     PExtentVector d_c = allocate_continue(al_end - al_hole_end);
 
     bool blob_remains = al_start != al_hole_begin || al_hole_end != al_end;
-    BlueStore::BlobRef b(new BlueStore::Blob);
+    BlueStore::BlobRef b(coll->new_blob());
     coll->open_shared_blob(0, b);
     blobs_created.insert(b);
     if (!blob_remains) {
@@ -1488,7 +1488,7 @@ class PunchHoleFixture : public BlueStoreFixture
         y = hole_range;
       }
       coll->make_blob_shared(rand(), b);
-      BlueStore::BlobRef cb = new BlueStore::Blob();
+      BlueStore::BlobRef cb = coll->new_blob();
       b->dup(*cb);
       ceph_assert(d_b.size() == 1);
       ceph_assert(d_b[0].length == hole_range);
@@ -1501,7 +1501,7 @@ class PunchHoleFixture : public BlueStoreFixture
       }
       append(disk_to_free, d_b_non_shared);
       if (x < y) {
-        cb->shared_blob->get_ref(d_b[0].offset + x, y - x);
+        cb->get_dirty_shared_blob()->get_ref(d_b[0].offset + x, y - x);
         statfs_to_free.allocated() += y - x;
       }
     } else {
@@ -1521,7 +1521,7 @@ class PunchHoleFixture : public BlueStoreFixture
       will_punch.offset + will_punch.length < blob_like.offset + blob_like.length;
     PExtentVector disk = allocate(al_size);
 
-    BlueStore::BlobRef b(new BlueStore::Blob);
+    BlueStore::BlobRef b(coll->new_blob());
     coll->open_shared_blob(0, b);
     blobs_created.insert(b);
     if (!blob_remains) {
@@ -1550,12 +1550,12 @@ class PunchHoleFixture : public BlueStoreFixture
     if (do_shared) {
       create_additional_ref = rand() % 2 == 0;
       coll->make_blob_shared(rand(), b);
-      BlueStore::BlobRef cb = new BlueStore::Blob();
+      BlueStore::BlobRef cb = coll->new_blob();
       b->dup(*cb);
       ceph_assert(disk.size() == 1);
       ceph_assert(disk[0].length == al_size);
       if (create_additional_ref) {
-        cb->shared_blob->get_ref(disk[0].offset, al_size);
+        cb->get_dirty_shared_blob()->get_ref(disk[0].offset, al_size);
       }
     }
     statfs_to_free.stored() -= will_punch.length;

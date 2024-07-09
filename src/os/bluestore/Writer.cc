@@ -393,8 +393,6 @@ inline void BlueStore::Writer::_blob_put_data_allocate(
   _get_disk_space(in_blob_end - in_blob_offset, blob_allocs);
   bblob.allocated(in_blob_offset, in_blob_end - in_blob_offset, blob_allocs);
   _schedule_io(blob_allocs, 0, disk_data);
-  bstore->_buffer_cache_write(txc, blob, in_blob_offset, disk_data,
-    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
   dout(25) << __func__ << " 0x" << std::hex << disk_data.length()
     << "@" << in_blob_offset << std::dec << " -> "
@@ -434,8 +432,6 @@ inline void BlueStore::Writer::_blob_put_data_subau_allocate(
   _get_disk_space(in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
   bblob.allocated(in_blob_alloc_offset, in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
   _schedule_io(blob_allocs, in_blob_offset - in_blob_alloc_offset, disk_data);
-  bstore->_buffer_cache_write(txc, blob, in_blob_offset, disk_data,
-    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   dout(25) << __func__ << " 0x" << std::hex << disk_data.length()
     << "@" << in_blob_offset << std::dec << " -> "
     << blob->print(pp_mode) << " no ref yet" << dendl;
@@ -481,8 +477,6 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
     << " alloc_offset=" << alloc_offset
     << " -> " << blob->print(pp_mode) << dendl;
   _schedule_io(blob_allocs, in_blob_offset - alloc_offset, disk_data);
-  bstore->_buffer_cache_write(txc, blob, in_blob_offset, disk_data,
-    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   return blob;
 }
 
@@ -517,8 +511,6 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   _schedule_io(blob_allocs, 0, disk_data); //have to do before move()
   bblob.allocated_full(blob_length, std::move(blob_allocs));
   bblob.mark_used(0, blob_length); //todo - optimize; this obviously clears it
-  bstore->_buffer_cache_write(txc, blob, 0, disk_data,
-    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   return blob;
 }
 
@@ -770,8 +762,6 @@ void BlueStore::Writer::_try_reuse_allocated_l(
     emap.extent_map.insert(*le);
 
     logical_offset += data_size;
-    bstore->_buffer_cache_write(txc, b, in_blob_offset, data_at_left,
-      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
     break;
   }
 }
@@ -845,8 +835,6 @@ void BlueStore::Writer::_try_reuse_allocated_r(
     emap.extent_map.insert(*le);
 
     end_offset -= data_size;
-    bstore->_buffer_cache_write(txc, b, in_blob_offset, data_at_right,
-      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
     break;
   }
 }
@@ -1329,6 +1317,15 @@ void BlueStore::Writer::do_write(
     released, pruned_blobs, shared_changed, statfs_delta);
   dout(25) << "after punch_hole_2: " << std::endl << onode->print(pp_mode) << dendl;
 
+  // todo: if we align to disk block before splitting, we could do it in one go
+  uint32_t pos = location;
+  for (auto& b : bd) {
+    bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
+      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+    pos += b.disk_data.length();
+  }
+  ceph_assert(pos == data_end);
+
   uint32_t au_size = bstore->min_alloc_size;
   if (au_size != bstore->block_size) {
     _try_put_data_on_allocated(location, data_end, ref_end, bd, after_punch_it);
@@ -1388,13 +1385,7 @@ void BlueStore::Writer::_collect_released_allocated()
 void BlueStore::Writer::debug_iterate_buffers(
   std::function<void(uint32_t offset, const bufferlist& data)> data_callback)
 {
-  for (auto& e : onode->extent_map.extent_map) {
-    auto b = e.blob->dirty_bc()._data_lower_bound(e.blob_offset);
-    uint32_t in_blob_offset = e.blob_offset;
-    ceph_assert(b->second.offset <= in_blob_offset);
-    ceph_assert(in_blob_offset + e.length <= b->second.offset + b->second.data.length());
-    bufferlist data;
-    data.substr_of(b->second.data, in_blob_offset - b->second.offset, e.length);
-    data_callback(e.logical_offset, data);
+  for (const auto& b : onode->bc.buffer_map) {
+    data_callback(b.offset, b.data);
   }
 }
