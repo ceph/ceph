@@ -44,8 +44,6 @@ using ::testing::SetArgPointee;
 using ::testing::StrEq;
 using ::testing::WithArg;
 
-static const std::string TEST_COOKIE("auto 123");
-
 class TestMockExclusiveLockPreAcquireRequest : public TestMockFixture {
 public:
   typedef PreAcquireRequest<MockTestImageCtx> MockPreAcquireRequest;
