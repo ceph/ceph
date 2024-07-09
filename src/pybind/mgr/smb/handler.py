@@ -369,7 +369,11 @@ class ClusterConfigHandler:
             results.append(err)
         except Exception as err:
             log.exception("error updating resource")
-            result = ErrorResult(resource, msg=str(err))
+            msg = str(err)
+            if not msg:
+                # handle the case where the exception has no text
+                msg = f"error updating resource: {type(err)} (see logs for details)"
+            result = ErrorResult(resource, msg=msg)
             results.append(result)
         if results.success:
             log.debug(
