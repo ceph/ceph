@@ -3085,6 +3085,7 @@ public:
   std::string get_device_path(unsigned id);
 
   int dump_bluefs_sizes(std::ostream& out);
+  void trim_free_space(const std::string& type, std::ostream& outss);
 
 public:
   int statfs(struct store_statfs_t *buf,

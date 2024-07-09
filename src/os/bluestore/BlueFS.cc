@@ -4778,6 +4778,37 @@ size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
   }
   return total;
 }
+
+void BlueFS::trim_free_space(const string& type, std::ostream& outss)
+{
+  unsigned bdev_id;
+  if(type == "bdev-wal") {
+    bdev_id = BDEV_WAL;
+  } else if (type == "bdev-db") {
+    bdev_id = BDEV_DB;
+  } else {
+    derr << __func__ << " unknown bdev type " << type << dendl;
+    return;
+  }
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    ceph_assert(len > 0);
+    interval_set<uint64_t> to_discard;
+    to_discard.union_insert(off, len);
+    bdev[bdev_id]->try_discard(to_discard, false);
+  };
+  if (!bdev[bdev_id]) {
+    outss << "device " << type << " is not configured";
+    return;
+  }
+  if (alloc[bdev_id] && !is_shared_alloc(bdev_id)) {
+    if (!bdev[bdev_id]->is_discard_supported()) {
+      outss << "device " << type << " does not support trim";
+      return;
+    }
+    alloc[bdev_id]->foreach(iterated_allocation);
+    outss << "device " << type << " trim done";
+  }
+}
 // ===============================================
 // OriginalVolumeSelector
 

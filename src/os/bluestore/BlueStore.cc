@@ -8639,6 +8639,26 @@ int BlueStore::dump_bluefs_sizes(ostream& out)
   return r;
 }
 
+void BlueStore::trim_free_space(const string& type, std::ostream& outss)
+{
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    ceph_assert(len > 0);
+    interval_set<uint64_t> to_discard;
+    to_discard.union_insert(off, len);
+    bdev->try_discard(to_discard, false);
+  };
+  if (type == "bdev-block") {
+    if (!bdev->is_discard_supported()) {
+      outss << "device " << type << " does not support trim";
+      return;
+    }
+    shared_alloc.a->foreach(iterated_allocation);
+    outss << "device " << type << " trim done";
+  } else {
+    bluefs->trim_free_space(type, outss);
+  }
+}
+
 void BlueStore::set_cache_shards(unsigned num)
 {
   dout(10) << __func__ << " " << num << dendl;
