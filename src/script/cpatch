@@ -123,7 +123,7 @@ if [ $py -eq 1 ] || [ $all -eq 1 ]; then
 	echo "py"
 	# Exclude node_modules because it's the huge sources in
 	# dashboard/frontend
-	exclude="--exclude=node_modules"
+	exclude="--exclude=node_modules --exclude=.tox --exclude=.angular"
     fi
     tar $exclude --exclude=tests --exclude-backups -cf $TMP/mgr_plugins.tar *
     popd > /dev/null
@@ -132,9 +132,10 @@ if [ $py -eq 1 ] || [ $all -eq 1 ]; then
     pushd ../src/python-common > /dev/null
     find ./ -name "*.pyc" -exec rm -f {} \;
     # Exclude node_modules because it's the huge sources in dashboard/frontend
-    tar --exclude=node_modules --exclude=tests --exclude-backups -cf $TMP/python_common.tar *
+    tar --exclude=node_modules --exclude=tests --exclude=.tox --exclude-backups -cf $TMP/python_common.tar *
     popd > /dev/null
-    dockerfile+=$'ADD python_common.tar /usr/lib/python3.8/site-packages\n'
+    dockerfile+=$'ADD python_common.tar tmp_python_common\n'
+    dockerfile+=$'RUN for i in tmp_python_common/*; do find /usr/lib/python*/site-packages -type d -name $(basename $i) -exec cp -frpv $i/* \'{}\' \;; done && rm -rf tmp_python_common\n'
 
     pushd lib/cython_modules/lib.3
     CYTHONLIBS="*.cpython-3*.so"
@@ -142,95 +143,88 @@ if [ $py -eq 1 ] || [ $all -eq 1 ]; then
     for f in $CYTHONLIBS; do cp $f $TMP/cythonlib ; done
     [ $strip -eq 1 ] && strip $TMP/cythonlib/*
     popd > /dev/null
-    dockerfile+=$'ADD cythonlib /usr/lib64/python3.8/site-packages\n'
+    dockerfile+=$'ADD cythonlib tmp_python_common\n'
+    dockerfile+=$'RUN for i in tmp_python_common/*; do find /usr/lib/python*/site-packages -type d -name $(basename $i) -exec cp -frpv $i/* \'{}\' \;; done && rm -rf tmp_python_common\n'
 
     # cephadm
     pushd ../src/cephadm > /dev/null
-    build.sh $TMP/cephadm
+    ./build.sh $TMP/cephadm
     dockerfile+=$'ADD cephadm /usr/sbin/cephadm\n'
     popd > /dev/null
 fi
 
+# Create some temporary directories.  The binaries or libraries to patch are placed in these as the cli options are processed.
+# At the end the base container is searched for files in these directories and the original files are replaced.
+mkdir -p $TMP/bin
+mkdir -p $TMP/lib
+
 if [ $core -eq 1 ] || [ $all -eq 1 ]; then
     # binaries are annoying because the ceph version is embedded all over
     # the place, so we have to include everything but the kitchen sink.
-    echo "core"
-
     BINS="ceph-mgr ceph-mon ceph-osd rados"
-    mkdir -p $TMP/bin
-    for f in $BINS; do cp bin/$f $TMP/bin ; done
-    [ $strip -eq 1 ] && strip $TMP/bin/*
-    dockerfile+=$'ADD bin /usr/bin\n'
+    if [ $core -eq 1 ]; then
+        echo "core"
+        for f in $BINS; do cp bin/$f $TMP/bin ; done
+    else
+        # copy ALL locally built binaries (apart from test programs) over those that already exist in the image.
+        echo "all"
+        find bin -type f \! \( -name "ceph_test*" -o -name "test_*" -o -name "unittest_*" \) -exec cp {} $TMP/bin \; 
+        # Need to strip all binaries that are copied (except those in the core BINS list) otherwise the container will be huge
+        # Some of the files in the bins directory are actually scripts so ignore errors when strip fails for these files.
+        find $TMP/bin -type f $(printf "! -name %s " $BINS) -exec strip {} \; || true
+    fi
+    [ $strip -eq 1 ] && for f in $BINS; do strip $TMP/bin/$f; done
 
-    # We need ceph-common to support the binaries
-    # We need librados/rbd to support mgr modules
-    # that import the python bindings
-    LIBS="libceph-common.so.2 libceph-common.so librados.so.2 librados.so librados.so.2.0.0"
-    mkdir -p $TMP/lib
-    for f in $LIBS; do cp lib/$f $TMP/lib ; done
+    # Copy all locally built libraries over those that already exist in the image
+    cp -d lib/*.so lib/*.so.* $TMP/lib
     [ $strip -eq 1 ] && strip $TMP/lib/*
-    dockerfile+=$'ADD lib /usr/lib64\n'
-
-    ECLIBS="libec_*.so*"
-    mkdir -p $TMP/eclib
-    for f in lib/$ECLIBS; do cp $f $TMP/eclib ; done
-    [ $strip -eq 1 ] && strip $TMP/eclib/*
-    dockerfile+=$'ADD eclib /usr/lib64/ceph/erasure-code\n'
-
-    CLSLIBS="libcls_*.so*"
-    mkdir -p $TMP/clslib
-    for f in lib/$CLSLIBS; do cp $f $TMP/clslib ; done
-    [ $strip -eq 1 ] && strip $TMP/clslib/*
-    dockerfile+=$'ADD clslib /usr/lib64/rados-classes\n'
-
-    # by default locally built binaries assume /usr/local
-    dockerfile+=$'RUN rm -rf /usr/local/lib64 ; ln -s /usr/lib64 /usr/local ; ln -s /usr/share/ceph /usr/local/share\n'
 fi
 
 if [ $rgw -eq 1 ] || [ $all -eq 1 ]; then
     echo "rgw"
     RGW="radosgw radosgw-admin"
-    mkdir -p $TMP/rgw
-    for f in $RGW; do cp bin/$f $TMP/rgw ; done
-    [ $strip -eq 1 ] && strip $TMP/rgw/*
-    dockerfile+=$'ADD rgw /usr/bin\n'
+    for f in $RGW; do cp bin/$f $TMP/bin ; done
+    [ $strip -eq 1 ] && for f in $RGW; do strip $TMP/bin/$f; done
 
-    RGWLIBS="libradosgw.so*"
-    mkdir -p $TMP/rgwlib
-    for f in lib/$RGWLIBS; do cp $f $TMP/rgwlib ; done
-    [ $strip -eq 1 ] && strip $TMP/rgwlib/*
-    dockerfile+=$'ADD rgwlib /usr/lib64\n'
+    RGWLIBS="librados.so.* libceph-common.so.*"
+    for f in $RGWLIBS; do cp lib/$f $TMP/lib ; done
+    [ $strip -eq 1 ] && for f in $RGWLIBS; do strip $TMP/lib/$f; done
 fi
 
 if [ $cephfs -eq 1 ] || [ $all -eq 1 ]; then
     echo "cephfs"
     FS="ceph-mds"
-    mkdir -p $TMP/fs
-    for f in $FS; do cp bin/$f $TMP/fs ; done
-    [ $strip -eq 1 ] && strip $TMP/fs/*
-    dockerfile+=$'ADD fs /usr/bin\n'
+    for f in $FS; do cp bin/$f $TMP/bin ; done
+    [ $strip -eq 1 ] && for f in $FS; do strip $TMP/bin/$f; done
 
     FSLIBS="libcephfs.so*"
-    mkdir -p $TMP/fslib
     for f in lib/$FSLIBS; do cp $f $TMP/fslib ; done
-    [ $strip -eq 1 ] && strip $TMP/fslib/*
-    dockerfile+=$'ADD fslib /usr/lib64\n'
+    [ $strip -eq 1 ] && for f in $FSLIBS; do strip $TMP/lib/$f; done
 fi
 
 if [ $rbd -eq 1 ] || [ $all -eq 1 ]; then
     echo "rbd"
     RBD="rbd rbd-mirror"
-    mkdir -p $TMP/rbd
-    for f in $RBD; do cp bin/$f $TMP/rbd ; done
-    [ $strip -eq 1 ] && strip $TMP/rbd/*
-    dockerfile+=$'ADD rbd /usr/bin\n'
+    for f in $RBD; do cp bin/$f $TMP/bin ; done
+    [ $strip -eq 1 ] && for f in $RBD; do strip $TMP/bin/$f; done
 
     RBDLIBS="librbd.so*"
-    mkdir -p $TMP/rbdlib
-    for f in lib/$RBDLIBS; do cp $f $TMP/rbdlib ; done
-    [ $strip -eq 1 ] && strip $TMP/rbdlib/*
-    dockerfile+=$'ADD rbdlib /usr/lib64\n'
+    for f in lib/$RBDLIBS; do cp $f $TMP/lib ; done
+    [ $strip -eq 1 ] && for f in $RBDLIBS; do strip $TMP/lib/$f; done
 fi
+
+# For every binary file that was copied to the $TMP/bin directory by the steps above, search for the existing file in the container and replace it.
+dockerfile+=$'ADD bin /tmpbin\n'
+dockerfile+=$'RUN for i in tmpbin/*; do find /usr/bin /usr/sbin -name $(basename $i) -exec mv -f $i \'{}\' \;; echo $(basename $i); done && rm -rf tmpbin\n'
+
+# For every library file that was copied to the $TMP/lib directory by the steps above, search for the existing file in the container and replace it.
+dockerfile+=$'ADD lib /tmplib\n'
+dockerfile+=$'RUN for i in tmplib/*; do find /usr/lib64 -name $(basename $i) -exec mv -f $i \'{}\' \;; echo $(basename $i); done && rm -rf tmplib\n'
+
+# by default locally built binaries assume /usr/local
+dockerfile+=$'RUN rm -rf /usr/local/lib64 ; ln -sf /usr/lib64 /usr/local ; ln -sf /usr/share/ceph /usr/local/share\n'
+# locally built binaries assume libceph-common.so.2 is in /usr/lib64 - create link to library that was just copied
+dockerfile+=$'RUN ln -sf /usr/lib64/ceph/libceph-common.so.2 /usr/lib64/libceph-common.so.2\n'
 
 echo "build"
 pushd $TMP > /dev/null
