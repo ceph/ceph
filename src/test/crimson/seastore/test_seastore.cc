@@ -83,7 +83,7 @@ struct seastore_test_t :
   }
 
   void do_transaction(CTransaction &&t) {
-    return sharded_seastore->do_transaction(
+    return (void)sharded_seastore->do_transaction(
       coll,
       std::move(t)).get();
   }
@@ -91,7 +91,7 @@ struct seastore_test_t :
   void set_meta(
     const std::string& key,
     const std::string& value) {
-    return seastore->write_meta(key, value).get();
+    return (void)seastore->write_meta(key, value).get();
   }
 
   std::tuple<int, std::string> get_meta(
