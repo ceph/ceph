@@ -209,31 +209,6 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
     out << " " << *p.blob.shared_blob;
   }
   out << ")";
-  // here printing Buffers
-  if (p.mode & (P::BUF | P::SBUF)) {
-    std::lock_guard l(p.blob.collection->cache->lock);
-    if (p.mode & P::SBUF) {
-      // summary buf mode, only print what is mapped what options are, one liner
-      out << " bufs(";
-      bool space = false;
-      for (auto& i : p.blob.get_bc().buffer_map) {
-        if (space) out << " ";
-        out << "0x" << std::hex << i.first << "~" << i.second.length << std::dec
-          << BlueStore::Buffer::get_state_name_short(i.second.state);
-        if (i.second.flags) {
-          out << "," << BlueStore::Buffer::get_flag_name(i.second.flags);
-        }
-        space = true;
-      }
-      out << ")";
-    } else {
-      for (auto& i : p.blob.get_bc().buffer_map) {
-        out << std::endl << "  0x" << std::hex << i.first
-          << "~" << i.second.length << std::dec
-          << " " << i.second;
-      }
-    }
-  }
   return out;
 }
 
@@ -274,6 +249,31 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
   }
   for (const auto& i : visited) {
     out << std::endl << i->print(mode);
+  }
+  // here printing Buffers
+  if (p.mode & (P::BUF | P::SBUF)) {
+    std::lock_guard l(o.c->cache->lock);
+    if (p.mode & P::SBUF) {
+      // summary buf mode, only print what is mapped what options are, one liner
+      out << " bufs(";
+      bool space = false;
+      for (auto& i : o.bc.buffer_map) {
+        if (space) out << " ";
+        out << "0x" << std::hex << i.offset << "~" << i.length << std::dec
+          << BlueStore::Buffer::get_state_name_short(i.state);
+        if (i.flags) {
+          out << "," << BlueStore::Buffer::get_flag_name(i.flags);
+        }
+        space = true;
+      }
+      out << ")";
+    } else {
+      for (auto& i : o.bc.buffer_map) {
+        out << std::endl << "  0x" << std::hex << i.offset
+          << "~" << i.length << std::dec
+          << " " << i;
+      }
+    }
   }
   if (mode & P::ATTRS) {
     for (const auto& p : o.onode.attrs) {
