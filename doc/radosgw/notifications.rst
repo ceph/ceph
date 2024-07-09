@@ -164,6 +164,7 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
    [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
    [&Attributes.entry.15.key=Policy&Attributes.entry.15.value=<policy-JSON-string>]
+   [&Attributes.entry.18.key=kafka-brokers&Attributes.entry.18.value=<kafka-broker-list>]
 
 Request parameters:
 
@@ -239,6 +240,8 @@ Request parameters:
   - "none": Messages are considered "delivered" if sent to the broker.
   - "broker": Messages are considered "delivered" if acked by the broker. (This
     is the default.)
+
+ - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
 
 .. note::
 
