@@ -1477,7 +1477,7 @@ bool SegmentCleaner::check_usage()
         }
       }
     });
-  }).unsafe_get0();
+  }).unsafe_get();
   return space_tracker->equals(*tracker);
 }
 
@@ -1782,7 +1782,7 @@ bool RBMCleaner::check_usage()
 	}
       }
     });
-  }).unsafe_get0();
+  }).unsafe_get();
   return equals(tracker);
 }
 
