@@ -8831,6 +8831,152 @@ TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, DeferredAndClone) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t alloc_size = 4096;
+  size_t prefer_deferred_size = 65536;
+ 
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
+  
+  StartDeferred(alloc_size);
+  SetVal(g_conf(), "bluestore_prefer_deferred_size",
+    stringify(prefer_deferred_size).c_str());
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+  hoid.hobj.pool = -1;
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  hoid2.hobj.pool = -1;
+  C_SaferCond c1;
+
+  ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(3, 'z'));
+    t.write(cid, hoid, 0, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    cerr << "Clone range object" << std::endl;
+    ObjectStore::Transaction t;
+    t.clone_range(cid, hoid, hoid2, 0, 3, 0);
+    t.register_on_commit(&c1);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+ }
+ c1.wait();
+ {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid2, 0, 3, bl);
+    ASSERT_EQ(r, 3);
+    expected.append(string(3, 'z'));
+    ASSERT_TRUE(bl_eq(bl, expected));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, DeferredAndClone2) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t alloc_size = 4096;
+  size_t prefer_deferred_size = 32768;
+ 
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(1 << 30).c_str());
+  
+  StartDeferred(alloc_size);
+  SetVal(g_conf(), "bluestore_prefer_deferred_size",
+    stringify(prefer_deferred_size).c_str());
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+
+  ghobject_t hoid(hobject_t("test", "", CEPH_NOSNAP, 0, -1, ""));
+  hoid.hobj.pool = -1;
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  hoid2.hobj.pool = -1;
+  C_SaferCond c1, c2;
+
+  ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    bufferlist bl;
+    bl.append(std::string(0x10000, 'h'));
+    t.write(cid, hoid, 0, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    t.register_on_commit(&c1);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  c1.wait();
+
+  {
+    cerr << "Overwrite some and clone range object" << std::endl;
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append(std::string(0x400, 'z'));
+    t.write(cid, hoid, 0, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    t.clone_range(cid, hoid, hoid2, 0, 0x10000, 0);
+    t.register_on_commit(&c2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+ }
+ c2.wait();
+ {
+    bufferlist bl, expected;
+    r = store->read(ch, hoid2, 0, 0x1000, bl);
+    ASSERT_EQ(r, 0x1000);
+    expected.append(string(0x400, 'z'));
+    expected.append(string(0xc00, 'h'));
+    ASSERT_TRUE(bl_eq(bl, expected));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
 
   if (string(GetParam()) != "bluestore")
@@ -11205,6 +11351,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val_or_die("bluefs_check_volume_selector_on_umount", "true");
 
   g_ceph_context->_conf.set_val_or_die("bdev_debug_aio", "true");
+  g_ceph_context->_conf.set_val_or_die("log_max_recent", "10000");
 
   // specify device size
   g_ceph_context->_conf.set_val_or_die("bluestore_block_size",
