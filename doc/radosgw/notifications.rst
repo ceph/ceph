@@ -164,6 +164,9 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
    [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
    [&Attributes.entry.15.key=Policy&Attributes.entry.15.value=<policy-JSON-string>]
+   [&Attributes.entry.16.key=user-name&Attributes.entry.16.value=<user-name-string>]
+   [&Attributes.entry.17.key=password&Attributes.entry.17.value=<password-string>]
+   [&Attributes.entry.18.key=kafka-brokers&Attributes.entry.18.value=<kafka-broker-list>]
 
 Request parameters:
 
@@ -239,6 +242,8 @@ Request parameters:
   - "none": Messages are considered "delivered" if sent to the broker.
   - "broker": Messages are considered "delivered" if acked by the broker. (This
     is the default.)
+
+ - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
 
 .. note::
 
@@ -455,6 +460,62 @@ The response has the following format:
 - If the endpoint URL contains user/password information in any part of the
   topic, the request must be made over HTTPS. The "topic list" request will
   otherwise be rejected.
+
+Set Topic Attributes
+````````````````````
+
+::
+
+   POST
+
+   Action=SetTopicAttributes
+   &TopicArn=<topic-arn>&AttributeName=<attribute-name>&AttributeValue=<attribute-value>
+
+This allows to set/modify existing attributes on the specified topic.
+
+.. note::
+
+  - The AttributeName passed will either be updated or created (if not exist) with AttributeValue passed.
+  - Any unsupported AttributeName passed will result in error 400.
+
+The response has the following format:
+
+::
+
+    <SetTopicAttributesResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+        <ResponseMetadata>
+            <RequestId></RequestId>
+        </ResponseMetadata>
+    </SetTopicAttributesResponse>
+
+Valid AttributeName that can be passed:
+
+  - push-endpoint: This is the URI of an endpoint to send push notifications to.
+  - OpaqueData: Opaque data is set in the topic configuration and added to all
+    notifications that are triggered by the topic.
+  - persistent: This indicates whether notifications to this endpoint are
+    persistent (=asynchronous) or not persistent. (This is "false" by default.)
+  - time_to_live: This will limit the time (in seconds) to retain the notifications.
+  - max_retries: This will limit the max retries before expiring notifications.
+  - retry_sleep_duration: This will control the frequency of retrying the notifications.
+  - Policy: This will control who can access the topic other than owner of the topic.
+  - verify-ssl: This indicates whether the server certificates must be validated by
+    the client. This is "true" by default.
+  - ``use-ssl``: If this is set to "true", a secure connection is used to
+    connect to the broker. This is "false" by default.
+  - cloudevents: This indicates whether the HTTP header should contain
+    attributes according to the `S3 CloudEvents Spec`_. 
+  - amqp-exchange: The exchanges must exist and must be able to route messages
+    based on topics.
+  - amqp-ack-level: No end2end acknowledgement is required. Messages may persist in the
+    broker before being delivered to their final destinations. 
+  - ``ca-location``: If this is provided and a secure connection is used, the
+    specified CA will be used instead of the default CA to authenticate the
+    broker. 
+  - mechanism: may be provided together with user/password (default: ``PLAIN``).
+  - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
+    broker before being delivered to their final destinations. 
+  - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
 
 Notifications
 ~~~~~~~~~~~~~
