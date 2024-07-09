@@ -266,7 +266,7 @@ public:
 
   void handle_peer_link_prep(const MDRequestRef& mdr);
   void _logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
-  void _commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti);
+  void _commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti, inodeno_t referent_ino);
   void _committed_peer(const MDRequestRef& mdr);  // use for rename, too
   void handle_peer_link_prep_ack(const MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
   void do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequestRef& mdr);

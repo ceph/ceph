@@ -9195,6 +9195,8 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 	open_foreign_mdsdir(ancestor.dirino, new C_MDC_OpenInoTraverseDir(this, ino, m, i == 0));
 	return 1;
       }
+      dout(20) << "open_ino_traverse_dir parent dir inode not found in cache " << ino
+               << " current ancestor=" << ancestor << " i=" << i << "continue with next ancestor" <<  dendl;
       continue;
     }
 
