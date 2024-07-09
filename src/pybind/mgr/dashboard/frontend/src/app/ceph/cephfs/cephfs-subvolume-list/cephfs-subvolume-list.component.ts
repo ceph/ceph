@@ -18,7 +18,6 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { CephfsSubvolumeFormComponent } from '../cephfs-subvolume-form/cephfs-subvolume-form.component';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -89,12 +88,11 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
   constructor(
     private cephfsSubVolumeService: CephfsSubvolumeService,
     private actionLabels: ActionLabelsI18n,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService,
-    private healthService: HealthService,
-    private cdsModalService: ModalCdsService
+    private healthService: HealthService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -241,8 +239,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         subVolumeGroupName: this.activeGroupName,
         pools: this.pools,
         isEdit: edit
-      },
-      { size: 'lg' }
+      }
     );
   }
 
@@ -252,7 +249,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     });
     this.errorMessage = '';
     this.selectedName = this.selection.first().name;
-    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(CriticalConfirmationModalComponent, {
       actionDescription: 'Remove',
       itemNames: [this.selectedName],
       itemDescription: 'Subvolume',
@@ -270,7 +267,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
             )
           })
           .subscribe({
-            complete: () => this.cdsModalService.dismissAll(),
+            complete: () => this.modalService.dismissAll(),
             error: (error) => {
               this.modalRef.componentInstance.stopLoadingSpinner();
               this.errorMessage = error.error.detail;

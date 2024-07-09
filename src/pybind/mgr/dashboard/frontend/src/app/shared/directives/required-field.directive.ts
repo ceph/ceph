@@ -8,6 +8,7 @@ export class RequiredFieldDirective implements AfterViewInit {
   constructor(private elementRef: ElementRef, private renderer: Renderer2) {}
 
   ngAfterViewInit() {
+    if (!this.label) return;
     const labelElement = this.elementRef.nativeElement.querySelector('.cds--label');
 
     if (labelElement) {

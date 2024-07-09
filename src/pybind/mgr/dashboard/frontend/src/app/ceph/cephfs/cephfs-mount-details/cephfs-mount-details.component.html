@@ -1,9 +1,14 @@
-<cd-modal (hide)="cancel()">
-  <ng-container class="modal-title">
-    <span i18n>Attach commands</span>
-  </ng-container>
-  <ng-container class="modal-content">
-    <div class="modal-body">
+<cds-modal size="md"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+      Attach commands
+    </h3>
+  </cds-modal-header>
+
+    <div class="cds--modal-content">
       <h5 class="fw-bold"
           i18n>
         Using Mount command
@@ -25,14 +30,8 @@
       <cd-code-block textWrap="true"
                      [codes]="[nfs]"></cd-code-block>
     </div>
-    <div class="modal-footer">
-      <cd-submit-button (submitAction)="cancel()"
-                        i18n>
-        Close
-      </cd-submit-button>
-    </div>
-  </ng-container>
-</cd-modal>
-
-
-
+    <cd-form-button-panel [modalForm]="true"
+                          [showSubmit]="false"
+                          (backAction)="cancel()"
+                          i18n></cd-form-button-panel>
+</cds-modal>

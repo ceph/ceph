@@ -1585,7 +1585,7 @@ class InventoryHost(object):
         self.name = name  # unique within cluster.  For example a hostname.
         self.addr = addr or name
         self.devices = devices
-        self.labels = labels
+        self.labels = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'nfs', 'iscsi', 'cephadm', 'rbd-mirror', 'cephfs-mirror', 'ingress', 'crash', 'container', 'agent', 'node-exporter', 'prometheus', 'alertmanager', 'grafana', 'loki', 'promtail', 'node-exporter', 'ceph-exporter', 'snmp-gateway', 'elasticsearch', 'jaeger-agent', 'jaeger-collector', 'jaeger-query', 'smb']
 
     def to_json(self) -> dict:
         return {

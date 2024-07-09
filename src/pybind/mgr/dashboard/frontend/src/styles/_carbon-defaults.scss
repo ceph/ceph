@@ -198,6 +198,7 @@ Modals
 /******************************************
 Date picker
 ******************************************/
-.flatpickr-calendar.open {
+.flatpickr-calendar.open,
+.cds--multi-select {
   background-color: colors.$gray-10;
 }

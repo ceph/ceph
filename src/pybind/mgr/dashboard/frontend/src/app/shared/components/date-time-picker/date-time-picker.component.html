@@ -1,14 +1,14 @@
 <div cdsCol
      class="form-item">
   <div cdsRow>
-<cds-date-picker label="Protection expires at"
+<cds-date-picker [label]="name"
                  i18n-label
                  placeholder="NOT PROTECTED"
                  formControlname="expiresAt"
                  dateFormat="Y/m/d"
                  [value]="date"
-                 (valueChange)="onModelChange($event)">
-</cds-date-picker>
+                 (valueChange)="onModelChange($event)"
+                 [helperText]="helperText"></cds-date-picker>
 <cds-timepicker (valueChange)="onModelChange($event)"
                 [(ngModel)]="time"
                 label="Select a time"
