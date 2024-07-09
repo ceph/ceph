@@ -566,8 +566,6 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full_compressed(
   //todo: we are setting blob's logical length twice
   bblob.allocated_full(object_length, std::move(blob_allocs));
   //no unused in compressed //bblob.mark_used(0, disk_length);
-  bstore->_buffer_cache_write(txc, blob, 0, object_data,
-    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   statfs_delta.compressed_allocated() += disk_length;
   statfs_delta.compressed_original() += object_length;
   statfs_delta.compressed() += compressed_length;
@@ -1396,9 +1394,15 @@ void BlueStore::Writer::do_write_with_blobs(
   // todo: if we align to disk block before splitting, we could do it in one go
   uint32_t pos = location;
   for (auto& b : bd) {
-    bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
-      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    pos += b.disk_data.length();
+    if (b.is_compressed()) {
+      bstore->_buffer_cache_write(this->txc, onode, pos, b.object_data,
+        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+      pos += b.object_data.length();
+    } else {
+      bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
+        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+      pos += b.disk_data.length();
+    }
   }
   ceph_assert(pos == data_end);
 
