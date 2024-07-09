@@ -1323,6 +1323,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def open_db(self) -> Optional[sqlite3.Connection]:
         if not self.pool_exists(self.MGR_POOL_NAME):
             if not self.have_enough_osds():
+                self.log.warning('not enough osds to create mgr pool')
                 return None
             self.create_mgr_pool()
         uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph"
