@@ -2,12 +2,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapshots-form.component';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ToastrModule } from 'ngx-toastr';
 import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
+import { InputModule, ModalModule } from 'carbon-components-angular';
 
 describe('CephfsSubvolumeSnapshotsFormComponent', () => {
   let component: CephfsSubvolumeSnapshotsFormComponent;
@@ -15,13 +15,14 @@ describe('CephfsSubvolumeSnapshotsFormComponent', () => {
 
   configureTestBed({
     declarations: [CephfsSubvolumeSnapshotsFormComponent],
-    providers: [NgbActiveModal],
     imports: [
       SharedModule,
       ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
-      RouterTestingModule
+      RouterTestingModule,
+      ModalModule,
+      InputModule
     ]
   });
 

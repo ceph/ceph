@@ -8,7 +8,6 @@ import {
   TreeNode,
   TREE_ACTIONS
 } from '@circlon/angular-tree-component';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import moment from 'moment';
 
@@ -34,7 +33,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
 class QuotaSetting {
@@ -66,7 +65,6 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   @Input()
   id: number;
 
-  private modalRef: NgbModalRef;
   private dirs: CephfsDir[];
   private nodeIds: { [path: string]: CephfsDir };
   private requestedPaths: string[];
@@ -108,7 +106,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private cephfsService: CephfsService,
     private cdDatePipe: CdDatePipe,
     private actionLabels: ActionLabelsI18n,
@@ -537,14 +535,14 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           : $localize`which isn't used because of the inheritance of ${quotaValue}`
         : $localize`in order to have no quota on the directory`;
 
-    this.modalRef = this.modalService.show(ConfirmationModalComponent, {
+    this.modalService.show(ConfirmationModalComponent, {
       titleText: this.getModalQuotaTitle(this.actionLabels.UNSET, path),
       buttonText: this.actionLabels.UNSET,
       description: $localize`${this.actionLabels.UNSET} ${this.getQuotaValueFromPathMsg(
         dirValue,
         path
       )} ${conclusion}.`,
-      onSubmit: () => this.updateQuota({ [key]: 0 }, () => this.modalRef.close())
+      onSubmit: () => this.updateQuota({ [key]: 0 }, () => this.modalService.dismissAll())
     });
   }
 
@@ -691,7 +689,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
   }
 
   deleteSnapshotModal() {
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`CephFs Snapshot`,
       itemNames: this.snapshot.selection.selected.map((snapshot: CephfsSnapshot) => snapshot.name),
       submitAction: () => this.deleteSnapshot()
@@ -709,7 +707,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         );
       });
     });
-    this.modalRef.close();
+    this.modalService.dismissAll();
     this.forceDirRefresh();
   }
 

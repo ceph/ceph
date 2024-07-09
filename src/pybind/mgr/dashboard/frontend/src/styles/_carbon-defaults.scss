@@ -123,8 +123,10 @@ Modals
 }
 
 /******************************************
-Date picker
+Dashboard page
 ******************************************/
-.flatpickr-calendar.open {
-  background-color: colors.$gray-10;
+// keeping this on 12px for now until we have responsive design
+// based on carbon
+cd-dashboard {
+  font-size: 12px;
 }

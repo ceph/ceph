@@ -38,6 +38,7 @@
                         formControlName="confirmation"
                         autofocus
                         [required]="true"
+                        modal-primary-focus
                         i18n>Yes, I am sure.</cds-checkbox>
         </div>
       </div>
@@ -49,6 +50,7 @@
                         [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"
                         [modalForm]="true"
                         [submitBtnType]="actionDescription === 'delete' || 'remove' ? 'danger' : 'primary'"></cd-form-button-panel>
+
 </cds-modal>
 
 <ng-template #deletionHeading>

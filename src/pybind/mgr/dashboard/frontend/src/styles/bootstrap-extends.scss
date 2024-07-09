@@ -109,13 +109,6 @@ cd-about {
   }
 }
 
-legend {
-  @extend .pb-1;
-  @extend .mt-4;
-  @extend .mb-4;
-  @extend .border-bottom;
-}
-
 // All '.fa' icons will have fixed width
 .fa {
   @extend .fa-fw;

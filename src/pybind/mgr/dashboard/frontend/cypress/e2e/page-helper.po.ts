@@ -311,6 +311,7 @@ export abstract class PageHelper {
       .parent('[cdstablerow]')
       .find('[cdstabledata] [data-testid="table-action-btn"]')
       .click({ force: true });
+    cy.wait(waitTime);
     cy.get(`button.${action}`).click({ force: true });
   }
 

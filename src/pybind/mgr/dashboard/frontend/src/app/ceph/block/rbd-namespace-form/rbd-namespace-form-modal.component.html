@@ -23,10 +23,11 @@
                   formControlName="pool"
                   name="pool"
                   id="pool"
-                  [invalid]="namespaceForm.controls['pool'].invalid && (namespaceForm.controls['pool'].dirty || namespaceForm.controls['pool'].touched)"
+                  [invalid]="namespaceForm.controls['pool'].invalid && (namespaceForm.controls['pool'].dirty)"
                   [invalidText]="poolError"
                   *ngIf="poolPermission.read"
                   cdRequiredField="Pool"
+                  modal-primary-focus
                   i18n>
 
         <option *ngIf="pools === null"
@@ -49,7 +50,7 @@
     <div class="form-item">
       <cds-text-label label="Name"
                       for="namespace"
-                      [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty || namespaceForm.controls['namespace'].touched)"
+                      [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty)"
                       [invalidText]="namespaceError"
                       cdRequiredField="Namespace"
                       i18n>Namespace
@@ -59,7 +60,7 @@
                id="namespace"
                name="namespace"
                formControlName="namespace"
-               [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty || namespaceForm.controls['namespace'].touched)"
+               [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty)"
                autofocus>
       </cds-text-label>
       <ng-template #namespaceError>

@@ -1,3 +1,5 @@
+import { BaseModal } from 'carbon-components-angular';
+
 export enum LoadingStatus {
   Loading,
   Ready,
@@ -5,7 +7,11 @@ export enum LoadingStatus {
   None
 }
 
-export class CdForm {
+export class CdForm extends BaseModal {
+  constructor() {
+    super();
+  }
+
   loading = LoadingStatus.Loading;
 
   loadingStart() {
