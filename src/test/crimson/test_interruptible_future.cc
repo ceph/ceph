@@ -67,7 +67,7 @@ TEST_F(seastar_test_suite_t, basic)
 	  return seastar::now();
 	  })
 	);
-      }, [](std::exception_ptr) {}, false).get0();
+      }, [](std::exception_ptr) {}, false).get();
 
     interruptor::with_interruption(
       [] {
@@ -79,7 +79,7 @@ TEST_F(seastar_test_suite_t, basic)
       }, [](std::exception_ptr) {
 	ceph_assert(!interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	return seastar::now();
-      }, true).get0();
+      }, true).get();
 
 
   });
@@ -177,7 +177,7 @@ TEST_F(seastar_test_suite_t, loops)
 	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
 	  return seastar::now();
 	});
-      }, [](std::exception_ptr) {}, false).get0();
+      }, [](std::exception_ptr) {}, false).get();
   });
 }
 
@@ -208,7 +208,7 @@ TEST_F(seastar_test_suite_t, errorated)
 	return base_iertr::now();
       }
     );
-    ret.unsafe_get0();
+    ret.unsafe_get();
   });
 }
 
@@ -221,7 +221,7 @@ TEST_F(seastar_test_suite_t, errorated_value)
 	  1
 	);
       });
-    EXPECT_EQ(ret.unsafe_get0(), 1);
+    EXPECT_EQ(ret.unsafe_get(), 1);
   });
 }
 
@@ -236,7 +236,7 @@ TEST_F(seastar_test_suite_t, expand_errorated_value)
 	  return base2_iertr::make_ready_future<>();
 	});
       });
-    ret.unsafe_get0();
+    ret.unsafe_get();
   });
 }
 
@@ -260,7 +260,7 @@ TEST_F(seastar_test_suite_t, interruptible_async)
       ceph_assert(interruptible::interrupt_cond<
 	TestInterruptCondition>.ref_count == 1);
       return fut;
-    }, [](std::exception_ptr) {}, false).get0();
+    }, [](std::exception_ptr) {}, false).get();
   });
 }
 
@@ -278,7 +278,7 @@ TEST_F(seastar_test_suite_t, DISABLED_nested_interruptors)
         });
       }
     );
-    ret.unsafe_get0();
+    ret.unsafe_get();
   });
 }
 
@@ -298,7 +298,7 @@ TEST_F(seastar_test_suite_t, handle_error)
 	  return base_iertr::now();
 	});
       });
-    ret.unsafe_get0();
+    ret.unsafe_get();
   });
 }
 #endif

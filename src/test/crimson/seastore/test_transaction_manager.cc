@@ -400,7 +400,7 @@ struct transaction_manager_test_t :
     char contents) {
     auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
-    }).unsafe_get0();
+    }).unsafe_get();
     assert(extents.size() == 1);
     auto extent = extents.front();
     extent_len_t allocated_len = 0;
@@ -419,7 +419,7 @@ struct transaction_manager_test_t :
     char contents) {
     auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
-    }).unsafe_get0();
+    }).unsafe_get();
     size_t length = 0;
     std::vector<TestBlockRef> exts;
     for (auto &extent : extents) {
@@ -503,7 +503,7 @@ struct transaction_manager_test_t :
 
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_pin<TestBlock>(trans, std::move(pin));
-    }).unsafe_get0();
+    }).unsafe_get();
     EXPECT_EQ(addr, ext->get_laddr());
     return ext;
   }
@@ -517,7 +517,7 @@ struct transaction_manager_test_t :
 
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_extent<TestBlock>(trans, addr, len);
-    }).unsafe_get0();
+    }).unsafe_get();
     EXPECT_EQ(addr, ext->get_laddr());
     return ext;
   }
@@ -540,7 +540,7 @@ struct transaction_manager_test_t :
       crimson::ct_error::assert_all{
 	"get_extent got invalid error"
       }
-    ).get0();
+    ).get();
     if (ext) {
       EXPECT_EQ(addr, ext->get_laddr());
     }
@@ -567,7 +567,7 @@ struct transaction_manager_test_t :
       crimson::ct_error::assert_all{
 	"get_extent got invalid error"
       }
-    ).get0();
+    ).get();
     if (ext) {
       EXPECT_EQ(addr, ext->get_laddr());
     }
@@ -593,7 +593,7 @@ struct transaction_manager_test_t :
       crimson::ct_error::assert_all{
 	"read_pin got invalid error"
       }
-    ).get0();
+    ).get();
     if (ext) {
       if (indirect) {
 	EXPECT_EQ(im_addr, ext->get_laddr());
@@ -640,7 +640,7 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.contains(offset, t.mapping_delta));
     auto pin = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->get_pin(trans, offset);
-    }).unsafe_get0();
+    }).unsafe_get();
     EXPECT_EQ(offset, pin->get_key());
     return pin;
   }
@@ -651,7 +651,7 @@ struct transaction_manager_test_t :
     const LBAMapping &mapping) {
     auto pin = with_trans_intr(*(t.t), [&](auto &trans) {
       return tm->clone_pin(trans, offset, mapping);
-    }).unsafe_get0();
+    }).unsafe_get();
     EXPECT_EQ(offset, pin->get_key());
     EXPECT_EQ(mapping.get_key(), pin->get_intermediate_key());
     EXPECT_EQ(mapping.get_key(), pin->get_intermediate_base());
@@ -676,7 +676,7 @@ struct transaction_manager_test_t :
       crimson::ct_error::assert_all{
 	"get_extent got invalid error"
       }
-    ).get0();
+    ).get();
     if (pin) {
       EXPECT_EQ(offset, pin->get_key());
     }
@@ -689,7 +689,7 @@ struct transaction_manager_test_t :
 
     auto refcnt = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->inc_ref(trans, offset);
-    }).unsafe_get0();
+    }).unsafe_get();
     auto check_refcnt = test_mappings.inc_ref(offset, t.mapping_delta);
     EXPECT_EQ(refcnt, check_refcnt);
   }
@@ -700,7 +700,7 @@ struct transaction_manager_test_t :
 
     auto refcnt = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->remove(trans, offset);
-    }).unsafe_get0();
+    }).unsafe_get();
     auto check_refcnt = test_mappings.dec_ref(offset, t.mapping_delta);
     EXPECT_EQ(refcnt, check_refcnt);
     if (refcnt == 0)
@@ -729,12 +729,12 @@ struct transaction_manager_test_t :
 	    EXPECT_EQ(l, iter->first);
 	    ++iter;
 	  });
-      }).unsafe_get0();
+      }).unsafe_get();
     (void)with_trans_intr(
       *t.t,
       [=, this](auto &t) {
 	return lba_manager->check_child_trackers(t);
-      }).unsafe_get0();
+      }).unsafe_get();
   }
 
   bool try_submit_transaction(test_transaction_t t) {
@@ -755,7 +755,7 @@ struct transaction_manager_test_t :
     ).then([this](auto ret) {
       return epm->run_background_work_until_halt(
       ).then([ret] { return ret; });
-    }).get0();
+    }).get();
 
     if (success) {
       test_mappings.consume(t.mapping_delta, write_seq);
@@ -850,7 +850,7 @@ struct transaction_manager_test_t :
 	    });
 	  });
 	});
-      }).unsafe_get0();
+      }).unsafe_get();
     });
   }
 
@@ -902,7 +902,7 @@ struct transaction_manager_test_t :
               failures += !success;
             }
           });
-        }).get0();
+        }).get();
       replay();
       logger().info("random_writes_concurrent: checking");
       check();
@@ -1126,7 +1126,7 @@ struct transaction_manager_test_t :
     }).handle_error(crimson::ct_error::eagain::handle([] {
       LBAMappingRef t = nullptr;
       return t;
-    }), crimson::ct_error::pass_further_all{}).unsafe_get0();
+    }), crimson::ct_error::pass_further_all{}).unsafe_get();
     if (t.t->is_conflicted()) {
       return nullptr;
     }
@@ -1294,7 +1294,7 @@ struct transaction_manager_test_t :
     }).handle_error(crimson::ct_error::eagain::handle([] {
       return std::make_tuple<LBAMappingRef, TestBlockRef, LBAMappingRef>(
         nullptr, nullptr, nullptr);
-    }), crimson::ct_error::pass_further_all{}).unsafe_get0();
+    }), crimson::ct_error::pass_further_all{}).unsafe_get();
     if (t.t->is_conflicted()) {
       return std::make_tuple<LBAMappingRef, TestBlockRef, LBAMappingRef>(
         nullptr, nullptr, nullptr);
@@ -1603,7 +1603,7 @@ struct transaction_manager_test_t :
 	  });
 	}).handle_exception([](std::exception_ptr e) {
 	  logger().info("{}", e);
-	}).get0();
+	}).get();
       logger().info("test_remap_pin_concurrent: "
         "early_exit {} conflicted {} success {}",
         early_exit, conflicted, success);
@@ -1719,7 +1719,7 @@ struct transaction_manager_test_t :
 	  });
 	}).handle_exception([](std::exception_ptr e) {
 	  logger().info("{}", e);
-	}).get0();
+	}).get();
       logger().info("test_overwrite_pin_concurrent: "
         "early_exit {} conflicted {} success {}",
         early_exit, conflicted, success);
@@ -2203,7 +2203,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       pin->maybe_fix_pos();
       auto v = pin->get_logical_extent(*t.t);
       assert(v.has_child());
-      auto extent2 = v.get_child_fut().unsafe_get0();
+      auto extent2 = v.get_child_fut().unsafe_get();
       assert(extent.get() == extent2.get());
       submit_transaction(std::move(t));
     }

@@ -1107,8 +1107,8 @@ static seastar::future<> run(
           "ms_crc_data", crc_enabled ? "true" : "false");
     })
   ).then([=](auto&& ret) {
-    auto server = std::move(std::get<0>(ret).get0());
-    auto client = std::move(std::get<1>(ret).get0());
+    auto server = std::move(std::get<0>(ret).get());
+    auto client = std::move(std::get<1>(ret).get());
     // reserve core 0 for potentially better performance
     if (mode == perf_mode_t::both) {
       logger().info("\nperf settings:\n  smp={}\n  {}\n  {}\n",
