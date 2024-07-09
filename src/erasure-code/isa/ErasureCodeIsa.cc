@@ -18,7 +18,6 @@
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
-#include "xor_op.h"
 #include "include/ceph_assert.h"
 using namespace std;
 using namespace ceph;
@@ -26,6 +25,7 @@ using namespace ceph;
 // -----------------------------------------------------------------------------
 extern "C" {
 #include "isa-l/include/erasure_code.h"
+#include "isa-l/include/raid.h"
 }
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
@@ -121,10 +121,9 @@ ErasureCodeIsaDefault::isa_encode(char **data,
                                   char **coding,
                                   int blocksize)
 {
-
   if (m == 1)
     // single parity stripe
-    region_xor((unsigned char**) data, (unsigned char*) coding[0], k, blocksize);
+    xor_gen(k+m, blocksize, (void**) data);
   else
     ec_encode_data(blocksize, k, m, encode_tbls,
                    (unsigned char**) data, (unsigned char**) coding);
@@ -157,61 +156,81 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   int nerrs = 0;
   int i, r, s;
 
+  unsigned char *recover_source[k];
+  unsigned char *recover_target[m];
+  unsigned char *recover_buf[k+1];
+
   // count the errors
   for (int l = 0; erasures[l] != -1; l++) {
     nerrs++;
   }
 
-  unsigned char *recover_source[k];
-  unsigned char *recover_target[m];
+  if (nerrs > m)
+    return -1;
 
-  memset(recover_source, 0, sizeof (recover_source));
-  memset(recover_target, 0, sizeof (recover_target));
-
-  // ---------------------------------------------
-  // Assign source and target buffers
-  // ---------------------------------------------
-  for (i = 0, s = 0, r = 0; ((r < k) || (s < nerrs)) && (i < (k + m)); i++) {
-    if (!erasure_contains(erasures, i)) {
-      if (r < k) {
+  // -----------------------------------
+  // Assign source and target buffers.
+  // -----------------------------------
+  if ((m == 1) || 
+      ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
+    // We need a single buffer to use the xor_gen() optimisation.
+    // The last index must point to the erasure, and index that contained
+    // the erasure must point to the parity.
+    memset(recover_buf, 0, sizeof (recover_buf));
+    bool parity_set = false;
+    for (i = 0; i < (k + 1); i++) {
+      if (erasure_contains(erasures, i)) {
+          if (i < k) {
+            recover_buf[i] = (unsigned char*) coding[0];
+            recover_buf[k] = (unsigned char*) data[i];
+            parity_set = true;
+          } else {
+            recover_buf[i] = (unsigned char*) coding[0];
+          }
+      } else {
         if (i < k) {
-          recover_source[r] = (unsigned char*) data[i];
+          recover_buf[i] = (unsigned char*) data[i];
         } else {
-          recover_source[r] = (unsigned char*) coding[i - k];
+          if (!parity_set) {
+            recover_buf[i] = (unsigned char*) coding[0];
+          }
         }
-        r++;
       }
-    } else {
-      if (s < m) {
-        if (i < k) {
-          recover_target[s] = (unsigned char*) data[i];
-        } else {
-          recover_target[s] = (unsigned char*) coding[i - k];
+    }
+  }
+  else {
+    // We need source and target buffers to use ec_encode_data().
+    // The erasure must be moved to the target buffer.
+    memset(recover_source, 0, sizeof (recover_source));
+    memset(recover_target, 0, sizeof (recover_target));
+    for (i = 0, s = 0, r = 0; ((r < k) || (s < nerrs)) && (i < (k + m)); i++) {
+      if (!erasure_contains(erasures, i)) {
+        if (r < k) {
+          if (i < k) {
+            recover_source[r] = (unsigned char*) data[i];
+          } else {
+            recover_source[r] = (unsigned char*) coding[i - k];
+          }
+          r++;
         }
-        s++;
+      } else {
+        if (s < m) {
+          if (i < k) {
+            recover_target[s] = (unsigned char*) data[i];
+          } else {
+            recover_target[s] = (unsigned char*) coding[i - k];
+          }
+          s++;
+        }
       }
     }
   }
 
-  if (m == 1) {
+  if ((m == 1) || 
+      ((matrixtype == kVandermonde) && (nerrs == 1) && (erasures[0] < (k + 1)))) {
     // single parity decoding
-    ceph_assert(1 == nerrs);
-    dout(20) << "isa_decode: reconstruct using region xor [" <<
-      erasures[0] << "]" << dendl;
-    region_xor(recover_source, recover_target[0], k, blocksize);
-    return 0;
-  }
-
-
-  if ((matrixtype == kVandermonde) &&
-      (nerrs == 1) &&
-      (erasures[0] < (k + 1))) {
-    // use xor decoding if a data chunk is missing or the first coding chunk
-    dout(20) << "isa_decode: reconstruct using region xor [" <<
-      erasures[0] << "]" << dendl;
-    ceph_assert(1 == s);
-    ceph_assert(k == r);
-    region_xor(recover_source, recover_target[0], k, blocksize);
+    dout(20) << "isa_decode: reconstruct using xor_gen [" << erasures[0] << "]" << dendl;
+    xor_gen(k+1, blocksize, (void **) recover_buf);
     return 0;
   }
 
@@ -220,9 +239,6 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   unsigned char *p_tbls = decode_tbls;
 
   int decode_index[k];
-
-  if (nerrs > m)
-    return -1;
 
   std::string erasure_signature; // describes a matrix configuration for caching
 
