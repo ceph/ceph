@@ -1,118 +1,128 @@
-<div class="cd-col-form"
+<div cdsCol
+     [columnNumbers]="{md: 4}"
      *ngIf="orchStatus$ | async as orchStatus">
-  <form #frm="ngForm"
-        #formDir="ngForm"
-        [formGroup]="form"
-        novalidate>
-    <div class="card">
+  <ng-container *cdFormLoading="loading">
+    <form #frm="ngForm"
+          #formDir="ngForm"
+          [formGroup]="form"
+          novalidate>
       <div i18n="form title|Example: Create Volume@@formTitle"
-           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+           class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
-      <ng-container *ngIf="!orchStatus.available">
+      <div class="form-item">
+        <ng-container *ngIf="!orchStatus.available">
+          <cd-alert-panel type="info"
+                          spacingClass="mb-2"
+                          i18n
+                          *ngIf="!editing">Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
+        </ng-container>
+
         <cd-alert-panel type="info"
-                        class="m-3"
-                        spacingClass="mt-3"
+                        spacingClass="mb-2"
                         i18n
-                        *ngIf="!editing">Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
-      </ng-container>
-
-      <cd-alert-panel type="info"
-                      class="m-3"
-                      spacingClass="mt-3"
-                      i18n
-                      *ngIf="editing && disableRename">
-        <p>The File System can only be renamed if it is shutdown and `refuse_client_session` is set to true.
-           Follow the steps below in the command line and refresh the page:</p>
-        <cd-code-block [codes]="[fsFailCmd]"></cd-code-block>
-        <cd-code-block [codes]="[fsSetCmd]"></cd-code-block>
-      </cd-alert-panel>
-
-      <div class="card-body">
+                        *ngIf="editing && disableRename">
+          <p>The File System can only be renamed if it is shutdown and `refuse_client_session` is set to true.
+            Follow the steps below in the command line and refresh the page:</p>
+          <cd-code-block [codes]="[fsFailCmd]"></cd-code-block>
+          <cd-code-block [codes]="[fsSetCmd]"></cd-code-block>
+        </cd-alert-panel>
+      </div>
         <!-- Name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="name"
-                 i18n>Name</label>
-          <div class="cd-col-form-input">
-            <input id="name"
-                   name="name"
-                   type="text"
-                   class="form-control"
+        <div class="form-item">
+          <cds-text-label for="name"
+                          cdRequiredField="Name"
+                          [invalid]="!form.controls.name.valid && form.controls.name.dirty"
+                          [invalidText]="nameError"
+                          i18n>Name
+            <input cdsText
                    placeholder="Name..."
                    i18n-placeholder
+                   id="name"
+                   name="name"
                    formControlName="name"
+                   [invalid]="!form.controls.name.valid && form.controls.name.dirty"
                    autofocus>
+          </cds-text-label>
+          <ng-template #nameError>
             <span class="invalid-feedback"
                   *ngIf="form.showError('name', formDir, 'required')"
                   i18n>This field is required!</span>
             <span *ngIf="form.showError('name', formDir, 'pattern')"
                   class="invalid-feedback"
                   i18n>File System name should start with a letter or dot (.) and can only contain letters, numbers, '.', '-' or '_'</span>
-          </div>
+          </ng-template>
         </div>
 
         <ng-container *ngIf="orchStatus.available">
           <!-- Placement -->
-          <div class="form-group row"
+          <div class="form-item"
                *ngIf="!editing">
-            <label class="cd-col-form-label"
-                   for="placement"
-                   i18n>Placement</label>
-            <div class="cd-col-form-input">
-              <select id="placement"
-                      class="form-select"
-                      formControlName="placement">
-                <option i18n
-                        value="hosts">Hosts</option>
-                <option i18n
-                        value="label">Label</option>
-              </select>
-            </div>
+            <cds-select label="Placement"
+                        for="placement"
+                        formControlName="placement"
+                        name="placement"
+                        id="placement"
+                        i18n>
+              <option value="hosts">Hosts</option>
+              <option value="label">Labels</option>
+            </cds-select>
           </div>
 
+          <ng-container *ngIf="hostsAndLabels$ | async as data">
           <!-- Label -->
           <div *ngIf="form.controls.placement.value === 'label' && !editing"
-               class="form-group row">
-            <label i18n
-                   class="cd-col-form-label"
-                   for="label">Label</label>
-            <div class="cd-col-form-input">
-              <input id="label"
-                     class="form-control"
-                     type="text"
-                     formControlName="label"
-                     [ngbTypeahead]="searchLabels"
-                     (focus)="labelFocus.next($any($event).target.value)"
-                     (click)="labelClick.next($any($event).target.value)">
+               class="form-item">
+            <cds-combo-box type="multi"
+                           selectionFeedback="top-after-reopen"
+                           label="Label"
+                           for="label"
+                           name="label"
+                           formControlName="label"
+                           id="label"
+                           placeholder="Select labels..."
+                           [appendInline]="true"
+                           [items]="data.labels"
+                           i18n-placeholder
+                           (selected)="multiSelector($event, 'label')"
+                           [invalid]="form.controls.label.invalid && (form.controls.label.dirty)"
+                           [invalidText]="labelError"
+                           cdRequiredField="Label"
+                           i18n>
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
+            <ng-template #labelError>
               <span class="invalid-feedback"
                     *ngIf="form.showError('label', frm, 'required')"
                     i18n>This field is required.</span>
-            </div>
+            </ng-template>
           </div>
 
           <!-- Hosts -->
           <div *ngIf="form.controls.placement.value === 'hosts' && !editing"
-               class="form-group row">
-            <label class="cd-col-form-label"
-                   for="hosts"
-                   i18n>Hosts</label>
-            <div class="cd-col-form-input">
-              <cd-select-badges id="hosts"
-                                [data]="form.controls.hosts.value"
-                                [options]="hosts.options"
-                                [messages]="hosts.messages">
-              </cd-select-badges>
-            </div>
+               class="form-item">
+            <cds-combo-box type="multi"
+                           selectionFeedback="top-after-reopen"
+                           label="Hosts"
+                           for="hosts"
+                           name="hosts"
+                           formControlName="hosts"
+                           id="hosts"
+                           placeholder="Select hosts..."
+                           i18n-placeholder
+                           [appendInline]="true"
+                           [items]="data.hosts"
+                           (selected)="multiSelector($event, 'hosts')"
+                           i18n>
+              <cds-dropdown-list></cds-dropdown-list>
+            </cds-combo-box>
           </div>
         </ng-container>
-      </div>
-      <div class="card-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="form"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                              [disabled]="editing ? disableRename: false"
-                              wrappingClass="text-right"></cd-form-button-panel>
-      </div>
-    </div>
-  </form>
+      </ng-container>
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="formDir"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                            [disabled]="editing ? disableRename: false"
+                            wrappingClass="text-right"></cd-form-button-panel>
+    </form>
+  </ng-container>
 </div>

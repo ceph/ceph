@@ -107,6 +107,7 @@ export class ServicesPageHelper extends PageHelper {
             : cy.get('#count').clear().type(String(count));
           break;
       }
+      cy.wait(1000);
       if (serviceType === 'snmp-gateway') {
         cy.get('cd-submit-button').dblclick();
       } else {

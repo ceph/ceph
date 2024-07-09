@@ -19,7 +19,7 @@
                         for="snapshotName"
                         i18n
                         cdRequiredField="Name"
-                        [invalid]="snapshotForm.controls['snapshotName'].invalid && (snapshotForm.controls['snapshotName'].dirty || snapshotForm.controls['snapshotName'].touched)"
+                        [invalid]="snapshotForm.controls['snapshotName'].invalid && (snapshotForm.controls['snapshotName'].dirty)"
                         [invalidText]="snapshotError">
           <input cdsText
                  type="text"
@@ -28,7 +28,7 @@
                  name="snapshotName"
                  formControlName="snapshotName"
                  [attr.disabled]="((mirroring === 'snapshot') ? true : null) && (snapshotForm.getValue('mirrorImageSnapshot') === true) ? true: null"
-                 [invalid]="snapshotForm.controls['snapshotName'].invalid && (snapshotForm.controls['snapshotName'].dirty || snapshotForm.controls['snapshotName'].touched)"
+                 [invalid]="snapshotForm.controls['snapshotName'].invalid && (snapshotForm.controls['snapshotName'].dirty)"
                  autofocus>
           <span *ngIf="((mirroring === 'snapshot') ? true : null) && (snapshotForm.getValue('mirrorImageSnapshot') === true) ? true: null">
             Snapshot mode is enabled on image <b>{{ imageName }}</b>: snapshot names are auto generated</span>

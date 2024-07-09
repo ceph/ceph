@@ -1,98 +1,93 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cds-modal size="lg"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content"
-                *cdFormLoading="loading">
+  <ng-container *cdFormLoading="loading">
     <form name="snapshotForm"
           #formDir="ngForm"
           [formGroup]="snapshotForm"
           novalidate>
-      <div class="modal-body">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="snapshotName"
-                 i18n>Name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
+      <div cdsModalContent>
+        <div class="form-item">
+          <cds-text-label label="Name"
+                          for="snapshotName"
+                          cdRequiredField="Name"
+                          [invalid]="snapshotForm.controls.snapshotName.invalid && (snapshotForm.controls.snapshotName.dirty)"
+                          [invalidText]="snapshotNameError"
+                          i18n>
+            <input cdsText
                    type="text"
                    placeholder="Snapshot name..."
                    id="snapshotName"
                    name="snapshotName"
                    formControlName="snapshotName"
-                   autofocus>
+                   [invalid]="snapshotForm.controls.snapshotName.invalid && (snapshotForm.controls.snapshotName.dirty)"
+                   autofocus
+                   modal-primary-focus>
+          </cds-text-label>
+          <ng-template #snapshotNameError>
             <span class="invalid-feedback"
                   *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
                   i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="snapshotForm.showError('snapshotName', formDir, 'notUnique')"
                   i18n>The snapshot already exists.</span>
-          </div>
+          </ng-template>
         </div>
 
         <!-- Volume name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="volumeName"
-                 i18n>Volume name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
+        <div class="form-item">
+          <cds-text-label label="Volume name"
+                          for="volumeName"
+                          i18n>Volume name
+            <input cdsText
+                   type="text"
                    id="volumeName"
                    name="volumeName"
                    formControlName="volumeName">
-          </div>
+          </cds-text-label>
         </div>
 
         <!--Subvolume Group name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="subvolumeGroupName"
-                 i18n>Subvolume group
-          </label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="subvolumeGroupName"
-                    name="subvolumeGroupName"
-                    formControlName="subvolumeGroupName"
-                    #selection
-                    (change)="onSelectionChange(selection.value)"
-                    *ngIf="subVolumeGroups">
-              <ng-container *ngFor="let subvolumegroup of subVolumeGroups">
-                <option *ngIf="subvolumegroup == ''"
-                        value="">_nogroup</option>
-                <option [value]="subvolumegroup"
-                        *ngIf="subvolumegroup !== ''">{{ subvolumegroup }}</option>
-              </ng-container>
-            </select>
-          </div>
+        <div class="form-item">
+          <cds-select label="Subvolume group"
+                      for="subvolumeGroupName"
+                      formControlName="subvolumeGroupName"
+                      name="subvolumeGroupName"
+                      id="subvolumeGroupName"
+                      *ngIf="subVolumeGroups">
+            <ng-container *ngFor="let subvolumegroup of subVolumeGroups">
+              <option *ngIf="subvolumegroup == ''"
+                      value="">Default</option>
+              <option [value]="subvolumegroup"
+                      *ngIf="subvolumegroup !== ''">{{ subvolumegroup }}</option>
+            </ng-container>
+          </cds-select>
         </div>
 
         <!--Subvolume name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="subVolumeName"
-                 i18n>Subvolume
-          </label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="subVolumeName"
-                    name="subVolumeName"
-                    formControlName="subVolumeName"
-                    #selection
-                    (change)="resetValidators(selection.value)"
-                    *ngIf="subVolumes$ | async as subVolumes">
-              <option *ngFor="let subVolume of subVolumes"
-                      [value]="subVolume.name">{{ subVolume.name }}</option>
-            </select>
-          </div>
+        <div class="form-item"
+             *ngIf="subVolumes$ | async as subVolumes">
+          <cds-select label="Subvolume"
+                      id="subVolumeName"
+                      name="subVolumeName"
+                      formControlName="subVolumeName"
+                      (registerOnChange)="resetValidators(selection.value)">
+            <option *ngFor="let subVolume of subVolumes"
+                    [value]="subVolume.name">{{ subVolume.name }}</option>
+          </cds-select>
         </div>
       </div>
 
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="snapshotForm"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-      </div>
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="snapshotForm"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                            [modalForm]="true"></cd-form-button-panel>
+
     </form>
   </ng-container>
-</cd-modal>
+</cds-modal>

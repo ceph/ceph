@@ -1,6 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { OperatorFunction, Observable, of } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap, catchError } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
@@ -10,6 +9,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 const DEBOUNCE_TIMER = 300;
@@ -20,8 +20,6 @@ const DEBOUNCE_TIMER = 300;
   styleUrls: ['./cephfs-auth-modal.component.scss']
 })
 export class CephfsAuthModalComponent extends CdForm implements OnInit {
-  fsName: string;
-  id: number;
   subvolumeGroup: string;
   subvolume: string;
   isDefaultSubvolumeGroup = false;
@@ -31,12 +29,38 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit {
   resource: string;
   icons = Icons;
 
+  clientPermissions = [
+    {
+      name: 'read',
+      description: $localize`Read permission is the minimum givable access`
+    },
+    {
+      name: 'write',
+      description: $localize`Permission to set layouts or quotas, write access needed`
+    },
+    {
+      name: 'quota',
+      description: $localize`Permission to set layouts or quotas, write access needed`
+    },
+    {
+      name: 'snapshot',
+      description: $localize`Permission to create or delete snapshots, write access needed`
+    },
+    {
+      name: 'rootSquash',
+      description: $localize`Safety measure to prevent scenarios such as accidental sudo rm -rf /path`
+    }
+  ];
+
   constructor(
-    public activeModal: NgbActiveModal,
     private actionLabels: ActionLabelsI18n,
     public directoryStore: DirectoryStoreService,
     private cephfsService: CephfsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private modalService: ModalCdsService,
+
+    @Optional() @Inject('fsName') public fsName: string,
+    @Optional() @Inject('id') public id: number
   ) {
     super();
     this.action = this.actionLabels.UPDATE;
@@ -90,10 +114,6 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit {
       )
     );
 
-  closeModal() {
-    this.activeModal.close();
-  }
-
   onSubmit() {
     const clientId: number = this.form.getValue('userId');
     const caps: string[] = [this.form.getValue('directory'), this.transformPermissions()];
@@ -108,7 +128,7 @@ export class CephfsAuthModalComponent extends CdForm implements OnInit {
       .subscribe({
         error: () => this.form.setErrors({ cdSubmitButton: true }),
         complete: () => {
-          this.activeModal.close();
+          this.modalService.dismissAll();
         }
       });
   }

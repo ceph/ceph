@@ -1,179 +1,165 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
-    <ng-container class="modal-content"
-                  *cdFormLoading="loading">
-    <form name="snapScheduleForm"
-          #formDir="ngForm"
-          [formGroup]="snapScheduleForm"
-          novalidate>
-      <div class="modal-body">
+<cds-modal size="lg"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+    {{ action | titlecase }} {{ resource | upperFirst }}
+    </h3>
+  </cds-modal-header>
+
+  <ng-container *cdFormLoading="loading">
+    <div cdsModalContent>
+      <form name="snapScheduleForm"
+            #formDir="ngForm"
+            [formGroup]="snapScheduleForm"
+            novalidate>
         <!-- Directory -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="directory"
-                 i18n>Directory
-          </label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-            <input id="typeahead-http"
-                   i18n
+        <div class="form-item">
+          <cds-text-label for="directory"
+                          i18n
+                          cdRequiredField="Directory"
+                          [invalid]="snapScheduleForm.controls.directory.invalid && (snapScheduleForm.controls.directory.dirty)"
+                          [invalidText]="directoryError"
+                          [skeleton]="directoryStore.isLoading"
+                          modal-primary-focus>
+            <ng-container *ngIf="!directoryStore.isLoading">Directory (required)</ng-container>
+            <input cdsText
                    type="text"
-                   class="form-control"
-                   disabled="directoryStore.isLoading"
                    formControlName="directory"
+                   name="directory"
                    [ngbTypeahead]="search"
-                   [placeholder]="directoryStore.isLoading ? 'Loading directories' : 'Directory search'" />
-            <div *ngIf="directoryStore.isLoading">
-              <i [ngClass]="[icons.spinner, icons.spin, 'mt-2', 'me-2']"></i>
-            </div>
-          </div>
+                   [invalid]="snapScheduleForm.controls.directory.invalid && (snapScheduleForm.controls.directory.dirty)"
+                   [placeholder]="directoryStore.isLoading ? '' : 'Directory path'"
+                   [skeleton]="directoryStore.isLoading"/>
+          </cds-text-label>
+          <ng-template #directoryError>
             <span class="invalid-feedback"
                   *ngIf="snapScheduleForm.showError('directory', formDir, 'required')"
                   i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="snapScheduleForm.showError('directory', formDir, 'notUnique')"
                   i18n>A snapshot schedule for this path already exists.</span>
-          </div>
+          </ng-template>
         </div>
 
         <!--Start date -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="startDate"
-                 i18n>Start date
-          </label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-              <input class="form-control"
-                     placeholder="yyyy-mm-dd"
-                     name="startDate"
-                     id="startDate"
-                     formControlName="startDate"
-                     [minDate]="minDate"
-                     ngbDatepicker
-                     #d="ngbDatepicker"
-                     (click)="d.open()">
-              <button type="button"
-                      class="btn btn-light"
-                      (click)="d.toggle()"
-                      title="Open">
-                <i [ngClass]="icons.calendar"></i>
-              </button>
-            </div>
-            <span class="invalid-feedback"
-                  *ngIf="snapScheduleForm.showError('startDate', formDir, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
-        <!-- Start time -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="startTime"
-                 i18n>Start time
-            <cd-helper>The time zone is assumed to be UTC.</cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <ngb-timepicker [spinners]="false"
-                            [seconds]="false"
-                            [meridian]="true"
-                            formControlName="startTime"
-                            id="startTime"
-                            name="startTime"></ngb-timepicker>
-            <span class="invalid-feedback"
-                  *ngIf="snapScheduleForm.showError('startTime', formDir, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
+        <cd-date-time-picker
+          name="Start Date"
+          helperText="The time zone is assumed to be UTC"
+          [control]="snapScheduleForm.get('startDate')"
+          [disabled]="isEdit"></cd-date-time-picker>
+          <span class="invalid-feedback"
+                *ngIf="snapScheduleForm.showError('startDate', formDir, 'required')"
+                i18n>This field is required.</span>
+
         <!-- Repeat interval -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="repeatInterval"
-                 i18n>Schedule
-          </label>
-          <div class="cd-col-form-input">
-            <div class="input-group">
-              <input class="form-control"
-                     type="number"
-                     min="1"
-                     id="repeatInterval"
-                     name="repeatInterval"
-                     formControlName="repeatInterval">
-              <select [ngClass]="['form-select', 'me-5']"
-                      id="repeatFrequency"
-                      name="repeatFrequency"
-                      formControlName="repeatFrequency"
-                      *ngIf="repeatFrequencies">
-                <option *ngFor="let freq of repeatFrequencies"
-                        [value]="freq[1]"
-                        i18n>{{ freq[0] }}</option>
-              </select>
-            </div>
-            <span class="invalid-feedback"
-                  *ngIf="snapScheduleForm.showError('repeatFrequency', formDir, 'notUnique')"
-                  i18n>This schedule already exists for the selected directory.</span>
-            <span class="invalid-feedback"
-                  *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'min')"
-                  i18n>Choose a value greater than 0.</span>
+        <div class="form-item form-item-append"
+             cdsRow>
+          <div cdsCol>
+            <cds-number [id]="'repeatInterval'"
+                        [name]="'repeatInterval'"
+                        [formControlName]="'repeatInterval'"
+                        [label]="'Schedule'"
+                        [min]="1"
+                        [invalid]="!snapScheduleForm.controls.repeatInterval.valid && (snapScheduleForm.controls.repeatInterval.dirty)"
+                        [invalidText]="repeatIntervalError"
+                        cdRequiredField="Schedule"></cds-number>
+          </div>
+          <div cdsCol>
+            <cds-select id="repeatFrequency"
+                        name="repeatFrequency"
+                        formControlName="repeatFrequency"
+                        label="Frequency"
+                        [invalid]="!snapScheduleForm.controls.repeatFrequency.valid && (snapScheduleForm.controls.repeatFrequency.dirty)"
+                        [invalidText]="repeatFrequencyError"
+                        *ngIf="repeatFrequencies">
+              <option *ngFor="let freq of repeatFrequencies"
+                      [value]="freq[1]">{{ freq[0] }}
+              </option>
+            </cds-select>
+            <ng-template #repeatFrequencyError>
+              <span class="invalid-feedback"
+                    *ngIf="snapScheduleForm.showError('repeatFrequency', formDir, 'notUnique')"
+                    i18n>This schedule already exists for the selected directory.</span>
+            </ng-template>
+            <ng-template #repeatIntervalError>
+              <span class="invalid-feedback"
+                    *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'min')"
+                    i18n>Choose a value greater than 0.</span>
+            </ng-template>
           </div>
         </div>
+
         <!-- Retention policies -->
         <ng-container formArrayName="retentionPolicies"
                       *ngFor="let retentionPolicy of retentionPolicies.controls; index as i">
           <ng-container [formGroupName]="i">
-            <div class="form-group row">
-              <label [ngClass]="{'cd-col-form-label': true, 'visible': i == 0, 'invisible': i > 0}"
-                    for="retentionInterval"
-                    i18n>Retention policy
-              </label>
-              <div class="cd-col-form-input">
-                <div class="input-group">
-                  <input class="form-control"
-                         type="number"
-                         min="1"
-                         id="retentionInterval"
-                         name="retentionInterval"
-                         formControlName="retentionInterval">
-                  <select class="form-select"
-                          id="retentionFrequency"
-                          name="retentionFrequency"
-                          formControlName="retentionFrequency"
-                          *ngIf="retentionFrequencies">
-                    <option *ngFor="let freq of retentionFrequencies"
-                            [value]="freq[1]"
-                            i18n>{{ freq[0] }}</option>
-                  </select>
-                  <button class="btn btn-light"
-                          type="button"
-                          (click)="removeRetentionPolicy(i)">
-                    <i [ngClass]="[icons.trash]"></i>
-                  </button>
-                </div>
-                <span class="invalid-feedback"
-                      *ngIf="snapScheduleForm.controls['retentionPolicies'].controls[i].invalid"
-                      i18n>This retention policy already exists for the selected directory.</span>
+            <div cdsRow
+                 class="form-item form-item-append">
+              <div cdsCol
+                   [columnNumbers]="{lg: 8}">
+                <cds-number [id]="'retentionInterval' + i"
+                            [name]="'retentionInterval' + i"
+                            [formControlName]="'retentionInterval'"
+                            [label]="'Retention policy'"
+                            [min]="1"
+                            [invalid]="snapScheduleForm.controls['retentionPolicies'].controls[i].invalid && snapScheduleForm.controls['retentionPolicies'].dirty"
+                            [invalidText]="retentionPolicyError"></cds-number>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 7}">
+                <cds-select id="retentionFrequency"
+                            name="retentionFrequency"
+                            formControlName="retentionFrequency"
+                            label="Frequency"
+                            *ngIf="retentionFrequencies">
+                  <option *ngFor="let freq of retentionFrequencies"
+                          [value]="freq[1]">{{ freq[0] }}</option>
+
+                </cds-select>
+              </div>
+              <div cdsCol
+                   [columnNumbers]="{lg: 1}"
+                   class="item-action-btn">
+                <cds-icon-button kind="tertiary"
+                                 size="sm"
+                                 (click)="removeRetentionPolicy(i)">
+                  <svg cdsIcon="trash-can"
+                       size="32"
+                       class="cds--btn__icon"></svg>
+                </cds-icon-button>
               </div>
             </div>
+            <ng-template #retentionPolicyError>
+              <span class="invalid-feedback"
+                    *ngIf="snapScheduleForm.controls['retentionPolicies'].controls[i].invalid"
+                    i18n>This retention policy already exists for the selected directory.</span>
+            </ng-template>
           </ng-container>
         </ng-container>
-        <div class="d-flex flex-row align-content-center justify-content-end">
-          <button class="btn btn-light"
+
+        <div class="form-item">
+          <button cdsButton="tertiary"
                   type="button"
-                  (click)="addRetentionPolicy()">
-            <i [ngClass]="[icons.add, 'me-2']"></i>
-            <span i18n>Add retention policy</span>
+                  (click)="addRetentionPolicy()"
+                  i18n>
+            Add retention policy
+            <svg cdsIcon="add"
+                 size="32"
+                 class="cds--btn__icon"
+                 icon></svg>
           </button>
         </div>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="snapScheduleForm"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-      </div>
-    </form>
+      </form>
+    </div>
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="snapScheduleForm"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [modalForm]="true"></cd-form-button-panel>
   </ng-container>
-</cd-modal>
+</cds-modal>

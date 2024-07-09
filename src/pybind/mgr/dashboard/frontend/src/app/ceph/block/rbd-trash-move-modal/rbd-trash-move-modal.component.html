@@ -26,11 +26,14 @@
                       id="setExpiry"
                       name="setExpiry"
                       (checkedChange)="toggleExpiration()"
+                      modal-primary-focus
                       i18n>Set expiration date</cds-checkbox>
       </div>
       <div class="form-item"
            *ngIf="setExpirationDate">
-        <cd-date-time-picker [control]="moveForm.get('expiresAt')"></cd-date-time-picker>
+        <cd-date-time-picker [control]="moveForm.get('expiresAt')"
+                             name="Protection expires at"
+                             i18n-name></cd-date-time-picker>
 
         <span class="invalid-feedback"
               *ngIf="moveForm.showError('expiresAt', formDir, 'format')"

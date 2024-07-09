@@ -1,6 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -21,11 +20,6 @@ import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-read
   styleUrls: ['./cephfs-subvolumegroup-form.component.scss']
 })
 export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit {
-  fsName: string;
-  subvolumegroupName: string;
-  pools: Pool[];
-  isEdit: boolean = false;
-
   subvolumegroupForm: CdFormGroup;
 
   action: string;
@@ -43,13 +37,17 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
   scopes: string[] = ['owner', 'group', 'others'];
 
   constructor(
-    public activeModal: NgbActiveModal,
     private actionLabels: ActionLabelsI18n,
     private taskWrapper: TaskWrapperService,
     private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService,
     private formatter: FormatterService,
     private dimlessBinary: DimlessBinaryPipe,
-    private octalToHumanReadable: OctalToHumanReadablePipe
+    private octalToHumanReadable: OctalToHumanReadablePipe,
+
+    @Optional() @Inject('fsName') public fsName: string,
+    @Optional() @Inject('subvolumegroupName') public subvolumegroupName: string,
+    @Optional() @Inject('pools') public pools: Pool[],
+    @Optional() @Inject('isEdit') public isEdit = false
   ) {
     super();
     this.resource = $localize`subvolume group`;
@@ -166,7 +164,7 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
             this.subvolumegroupForm.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.activeModal.close();
+            this.closeModal();
           }
         });
     } else {
@@ -190,7 +188,7 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
             this.subvolumegroupForm.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.activeModal.close();
+            this.closeModal();
           }
         });
     }

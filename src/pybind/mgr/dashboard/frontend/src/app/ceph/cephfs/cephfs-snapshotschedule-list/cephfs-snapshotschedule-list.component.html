@@ -4,14 +4,10 @@
   spacingClass="mb-3"
   i18n
   class="align-items-center"
+  actionName="Enable"
+  (action)="enableSnapshotSchedule()"
 >
   In order to access the snapshot scheduler feature, the snap_scheduler module must be enabled
-  <button
-    class="btn btn-light mx-2"
-    type="button"
-    (click)="enableSnapshotSchedule()">
-    Enable
-  </button>
 </cd-alert-panel>
 
 <ng-template

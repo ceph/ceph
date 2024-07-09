@@ -8,11 +8,6 @@ import {
 } from '@angular/core/testing';
 
 import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-form.component';
-import {
-  NgbActiveModal,
-  NgbDatepickerModule,
-  NgbTimepickerModule
-} from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -20,6 +15,14 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { of } from 'rxjs';
+import {
+  ModalService,
+  ModalModule,
+  InputModule,
+  SelectModule,
+  NumberModule
+} from 'carbon-components-angular';
+import { NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 describe('CephfsSnapshotscheduleFormComponent', () => {
   let component: CephfsSnapshotscheduleFormComponent;
@@ -28,15 +31,18 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
 
   configureTestBed({
     declarations: [CephfsSnapshotscheduleFormComponent],
-    providers: [NgbActiveModal],
+    providers: [ModalService, { provide: 'fsName', useValue: 'test_fs' }],
     imports: [
       SharedModule,
       ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
       RouterTestingModule,
-      NgbDatepickerModule,
-      NgbTimepickerModule
+      NgbTypeaheadModule,
+      ModalModule,
+      InputModule,
+      SelectModule,
+      NumberModule
     ]
   });
 
@@ -55,7 +61,7 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
 
   it('should have a form open in modal', () => {
     const nativeEl = fixture.debugElement.nativeElement;
-    expect(nativeEl.querySelector('cd-modal')).not.toBe(null);
+    expect(nativeEl.querySelector('cds-modal')).not.toBe(null);
   });
 
   it('should submit the form', fakeAsync(() => {
@@ -66,16 +72,7 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     ).and.returnValue(of(false));
     const input = {
       directory: '/test',
-      startDate: {
-        year: 2023,
-        month: 11,
-        day: 14
-      },
-      startTime: {
-        hour: 0,
-        minute: 6,
-        second: 22
-      },
+      startDate: '2023-11-14 00:06:22',
       repeatInterval: 4,
       repeatFrequency: 'h'
     };

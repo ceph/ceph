@@ -175,7 +175,6 @@ describe('CriticalConfirmationModalComponent', () => {
 
       it('should test empty values', () => {
         component.deletionForm.reset();
-        testValidation(false, undefined, false);
         testValidation(true, 'required', true);
         component.deletionForm.reset();
         changeValue(true);

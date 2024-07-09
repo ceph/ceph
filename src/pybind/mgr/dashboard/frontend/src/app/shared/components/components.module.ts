@@ -30,7 +30,11 @@ import {
   CheckboxModule,
   DatePickerModule,
   TimePickerModule,
-  TimePickerSelectModule
+  TimePickerSelectModule,
+  NumberModule,
+  DropdownModule,
+  SelectModule,
+  ComboBoxModule
 } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -107,10 +111,14 @@ import InfoIcon from '@carbon/icons/es/information/16';
     LoadingModule,
     ModalModule,
     InputModule,
+    NumberModule,
     CheckboxModule,
     DatePickerModule,
     TimePickerModule,
-    TimePickerSelectModule
+    TimePickerSelectModule,
+    DropdownModule,
+    SelectModule,
+    ComboBoxModule
   ],
   declarations: [
     SparklineComponent,
