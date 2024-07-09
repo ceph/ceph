@@ -19574,20 +19574,20 @@ void BlueStore::ExtentDecoderPartial::_consume_new_blob(bool spanning,
     }
   } else {
     auto it = sb_info.find(sbid);
-    if (it == sb_info.end()) {
-      derr << __func__ << " shared blob not found:" << sbid
-           << dendl;
-    }
-    auto &sbi = *it;
-    auto pool_id = oid.hobj.get_logical_pool();
-    if (sbi.pool_id == sb_info_t::INVALID_POOL_ID) {
-      sbi.pool_id = pool_id;
-      size_t alloc_delta = sbi.allocated_chunks << min_alloc_size_order;
-      per_pool_statfs->allocated() += alloc_delta;
-      if (compressed) {
-        per_pool_statfs->compressed_allocated() += alloc_delta;
-        ++stats.compressed_blob_count;
+    if (it != sb_info.end()) {
+      auto &sbi = *it;
+      auto pool_id = oid.hobj.get_logical_pool();
+      if (sbi.pool_id == sb_info_t::INVALID_POOL_ID) {
+        sbi.pool_id = pool_id;
+        size_t alloc_delta = sbi.allocated_chunks << min_alloc_size_order;
+        per_pool_statfs->allocated() += alloc_delta;
+        if (compressed) {
+          per_pool_statfs->compressed_allocated() += alloc_delta;
+          ++stats.compressed_blob_count;
+        }
       }
+    } else {
+      derr << __func__ << " shared blob not found:" << sbid << dendl;
     }
     if (compressed) {
       per_pool_statfs->compressed() +=
