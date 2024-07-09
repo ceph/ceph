@@ -43,7 +43,7 @@ std::string json_format_pubsub_event(const EventType& event) {
   f.flush(ss);
   return ss.str();
 }
-  
+
 bool get_bool(const RGWHTTPArgs& args, const std::string& name, bool default_value) {
   bool value;
   bool exists;
@@ -71,8 +71,8 @@ private:
   static const ack_level_t ACK_LEVEL_NON_ERROR = 1;
 
 public:
-  RGWPubSubHTTPEndpoint(const std::string& _endpoint, const RGWHTTPArgs& args, CephContext* _cct) : 
-    cct(_cct), endpoint(_endpoint), verify_ssl(get_bool(args, "verify-ssl", true)), cloudevents(get_bool(args, "cloudevents", false)) 
+  RGWPubSubHTTPEndpoint(const std::string& _endpoint, const RGWHTTPArgs& args, CephContext* _cct) :
+    cct(_cct), endpoint(_endpoint), verify_ssl(get_bool(args, "verify-ssl", true)), cloudevents(get_bool(args, "cloudevents", false))
   {
     bool exists;
     const auto& str_ack_level = args.get("http-ack-level", &exists);
@@ -104,7 +104,7 @@ public:
       // using "Binary Content Mode"
       request.append_header("ce-specversion", "1.0");
       request.append_header("ce-type", "com.amazonaws." + event.eventName);
-      request.append_header("ce-time", to_iso_8601(event.eventTime)); 
+      request.append_header("ce-time", to_iso_8601(event.eventTime));
       // default output of iso8601 is also RFC3339 compatible
       request.append_header("ce-id", event.x_amz_request_id + "." + event.x_amz_id_2);
       request.append_header("ce-source", event.eventSource + "." + event.awsRegion + "." + event.bucket_name);
@@ -237,12 +237,12 @@ private:
     }
     throw configuration_error("AMQP: invalid amqp-ack-level: " + str_ack_level);
   }
-  
+
 public:
   RGWPubSubAMQPEndpoint(const std::string& _endpoint,
       const std::string& _topic,
-      const RGWHTTPArgs& args) : 
-        endpoint(_endpoint), 
+      const RGWHTTPArgs& args) :
+        endpoint(_endpoint),
         topic(_topic),
         exchange(get_exchange(args)),
         ack_level(get_ack_level(args)) {
@@ -257,7 +257,7 @@ public:
     } else {
       // TODO: currently broker and routable are the same - this will require different flags but the same mechanism
       auto w = std::make_unique<Waiter>();
-      const auto rc = amqp::publish_with_confirm(conn_id, 
+      const auto rc = amqp::publish_with_confirm(conn_id,
         topic,
         json_format_pubsub_event(event),
         [wp = w.get()](int r) { wp->finish(r);}
@@ -294,6 +294,7 @@ private:
   const std::string topic;
   const ack_level_t ack_level;
   kafka::connection_id_t conn_id;
+  const std::string brokers;
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
     bool exists;
@@ -308,17 +309,27 @@ private:
     throw configuration_error("Kafka: invalid kafka-ack-level: " + str_ack_level);
   }
 
+  const std::string& get_brokers(const RGWHTTPArgs& args) {
+    bool exists;
+    const auto& str_brokers = args.get("kafka-brokers", &exists);
+    if (!exists) {
+      return nullptr;
+    }
+    return str_brokers
+  }
+
 public:
   RGWPubSubKafkaEndpoint(const std::string& _endpoint,
       const std::string& _topic,
-      const RGWHTTPArgs& args) : 
+      const RGWHTTPArgs& args) :
         topic(_topic),
-        ack_level(get_ack_level(args)) {
+        ack_level(get_ack_level(args))
+        brokers(get_brokers(args)) {
    if (!kafka::connect(
            conn_id, _endpoint, get_bool(args, "use-ssl", false),
            get_bool(args, "verify-ssl", true), args.get_optional("ca-location"),
            args.get_optional("mechanism"), args.get_optional("user-name"),
-           args.get_optional("password"))) {
+           args.get_optional("password"), brokers)) {
      throw configuration_error("Kafka: failed to create connection to: " +
                                _endpoint);
    }
@@ -358,7 +369,7 @@ static const std::string NO_SCHEMA("");
 
 const std::string& get_schema(const std::string& endpoint) {
   if (endpoint.empty()) {
-    return NO_SCHEMA; 
+    return NO_SCHEMA;
   }
   const auto pos = endpoint.find(':');
   if (pos == std::string::npos) {
@@ -379,8 +390,8 @@ const std::string& get_schema(const std::string& endpoint) {
   return UNKNOWN_SCHEMA;
 }
 
-RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint, 
-    const std::string& topic, 
+RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
+    const std::string& topic,
     const RGWHTTPArgs& args,
     CephContext* cct) {
   const auto& schema = get_schema(endpoint);
@@ -457,4 +468,3 @@ void RGWPubSubEndpoint::shutdown_all() {
 #endif
   shutdown_http_manager();
 }
-
