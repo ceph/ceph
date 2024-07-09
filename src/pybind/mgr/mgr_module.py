@@ -191,6 +191,13 @@ class MgrDBNotReady(RuntimeError):
     pass
 
 
+class MgrDBNotAllowed(MgrDBNotReady):
+    """A more specific subclass of MgrDBNotReady raised when mgr_pool option
+    disabled.
+    """
+    pass
+
+
 class OSDMap(ceph_module.BasePyOSDMap):
     def get_epoch(self) -> int:
         return self._get_epoch()
@@ -1357,7 +1364,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return self._db
         db_allowed = self.get_ceph_option("mgr_pool")
         if not db_allowed:
-            raise MgrDBNotReady()
+            raise MgrDBNotAllowed()
         self._db = self.open_db()
         if self._db is None:
             raise MgrDBNotReady()
