@@ -167,6 +167,7 @@ from cephadmlib import templating
 from cephadmlib.daemons.ceph import get_ceph_mounts_for_type, ceph_daemons
 from cephadmlib.daemons import (
     Ceph,
+    CephExporter,
     CephIscsi,
     CephNvmeof,
     CustomContainer,
@@ -866,6 +867,10 @@ def create_daemon_dirs(
     elif daemon_type == NodeProxy.daemon_type:
         node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
         node_proxy.create_daemon_dirs(data_dir, uid, gid)
+
+    elif daemon_type == CephExporter.daemon_type:
+        ceph_exporter = CephExporter.init(ctx, fsid, ident.daemon_id)
+        ceph_exporter.create_daemon_dirs(data_dir, uid, gid)
 
     else:
         daemon = daemon_form_create(ctx, ident)

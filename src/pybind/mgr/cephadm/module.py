@@ -2992,7 +2992,8 @@ Then run the following:
             # this daemon type doesn't need deps mgmt
             pass
 
-        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana']:
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana',
+                           'ceph-exporter']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
 
         return sorted(deps)

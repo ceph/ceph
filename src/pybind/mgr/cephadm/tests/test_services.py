@@ -6,7 +6,7 @@ from mgr_util import build_url
 
 import pytest
 
-from unittest.mock import MagicMock, call, patch, ANY
+from unittest.mock import Mock, MagicMock, call, patch, ANY
 
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
@@ -692,6 +692,50 @@ class TestMonitoring:
                     }),
                     use_current_daemon_image=False,
                 )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("socket.getfqdn")
+    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
+    @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
+    @patch('cephadm.cert_mgr.CertMgr.generate_cert', lambda instance, fqdn, ip: ('mycert', 'mykey'))
+    @patch('cephadm.services.cephadmservice.CephExporterService.get_keyring_with_caps', Mock(return_value='[client.ceph-exporter.test]\nkey = fake-secret\n'))
+    def test_ceph_exporter_config_security_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        fqdn = 'host1.test'
+        _get_fqdn.return_value = fqdn
+
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.secure_monitoring_stack = True
+            with with_service(cephadm_module, CephExporterSpec()):
+                _run_cephadm.assert_called_with('test', 'ceph-exporter.test',
+                                                ['_orch', 'deploy'], [],
+                                                stdin=json.dumps({
+                                                    "fsid": "fsid",
+                                                    "name": "ceph-exporter.test",
+                                                    "image": "",
+                                                    "deploy_arguments": [],
+                                                    "params": {},
+                                                    "meta": {
+                                                        "service_name": "ceph-exporter",
+                                                        "ports": [],
+                                                        "ip": None,
+                                                        "deployed_by": [],
+                                                        "rank": None,
+                                                        "rank_generation": None,
+                                                        "extra_container_args": None,
+                                                        "extra_entrypoint_args": None
+                                                    },
+                                                    "config_blobs": {
+                                                        "config": "",
+                                                        "keyring": "[client.ceph-exporter.test]\nkey = fake-secret\n",
+                                                        "prio-limit": "5",
+                                                        "stats-period": "5",
+                                                        "https_enabled": True,
+                                                        "files": {
+                                                            "ceph-exporter.crt": "mycert",
+                                                            "ceph-exporter.key": "mykey"}}}),
+                                                use_current_daemon_image=False)
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')

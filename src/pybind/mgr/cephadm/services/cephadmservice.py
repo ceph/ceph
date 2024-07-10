@@ -1263,7 +1263,7 @@ class CephExporterService(CephService):
                                               'mon', 'allow r',
                                               'mgr', 'allow r',
                                               'osd', 'allow r'])
-        exporter_config = {}
+        exporter_config: Dict[str, Any] = {}
         if spec.sock_dir:
             exporter_config.update({'sock-dir': spec.sock_dir})
         if spec.port:
@@ -1296,6 +1296,7 @@ class CephExporterService(CephService):
         node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
         return self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
+
 
 class CephfsMirrorService(CephService):
     TYPE = 'cephfs-mirror'
