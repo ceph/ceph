@@ -101,7 +101,14 @@ def check_orchestrator(func: FuncT) -> FuncT:
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
-    MODULE_OPTIONS: List[Option] = []
+    MODULE_OPTIONS: List[Option] = [
+        Option(
+            'secondary_zone_period_retry_limit',
+            type='int',
+            default=5,
+            desc='RGW module period update retry limit for secondary site'
+        ),
+    ]
 
     # These are "native" Ceph options that this module cares about.
     NATIVE_OPTIONS: List[Option] = []
@@ -114,6 +121,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         # ensure config options members are initialized; see config_notify()
         self.config_notify()
+
+        if TYPE_CHECKING:
+            self.secondary_zone_period_retry_limit = 5
 
         with self.lock:
             self.inited = True
@@ -312,7 +322,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         try:
             created_zones = self.rgw_zone_create(zone_name, realm_token, port, placement,
-                                                 start_radosgw, zone_endpoints, inbuf)
+                                                 start_radosgw, zone_endpoints, self.secondary_zone_period_retry_limit, inbuf)
             return HandleCommandResult(retval=0, stdout=f"Zones {', '.join(created_zones)} created successfully")
         except RGWAMException as e:
             return HandleCommandResult(retval=e.retcode, stderr=f'Failed to create zone: {str(e)}')
@@ -324,6 +334,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         placement: Optional[Union[str, Dict[str, Any]]] = None,
                         start_radosgw: Optional[bool] = True,
                         zone_endpoints: Optional[str] = None,
+                        secondary_zone_period_retry_limit: Optional[int] = None,
                         inbuf: Optional[str] = None) -> List[str]:
 
         if inbuf:
@@ -350,7 +361,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             created_zones = []
             for rgw_spec in rgw_specs:
-                RGWAM(self.env).zone_create(rgw_spec, start_radosgw)
+                RGWAM(self.env).zone_create(rgw_spec, start_radosgw, secondary_zone_period_retry_limit)
                 if rgw_spec.rgw_zone is not None:
                     created_zones.append(rgw_spec.rgw_zone)
                     return created_zones
