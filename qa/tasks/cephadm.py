@@ -1808,13 +1808,6 @@ def conf_epoch(ctx, config):
 def create_rbd_pool(ctx, config):
     if config.get('create_rbd_pool', False):
       cluster_name = config['cluster']
-      log.info('Waiting for OSDs to come up')
-      teuthology.wait_until_osds_up(
-          ctx,
-          cluster=ctx.cluster,
-          remote=ctx.ceph[cluster_name].bootstrap_remote,
-          ceph_cluster=cluster_name,
-      )
       log.info('Creating RBD pool')
       _shell(ctx, cluster_name, ctx.ceph[cluster_name].bootstrap_remote,
           args=['sudo', 'ceph', '--cluster', cluster_name,
