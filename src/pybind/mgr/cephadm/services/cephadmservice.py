@@ -1281,11 +1281,23 @@ class CephExporterService(CephService):
             exporter_config.update({'prio-limit': f'{spec.prio_limit}'})
         if spec.stats_period:
             exporter_config.update({'stats-period': f'{spec.stats_period}'})
-
+        if self.mgr.secure_monitoring_stack:
+            exporter_config.update({'https_enabled': True})
+            crt, key = self.get_certificates(daemon_spec)
+            exporter_config['files'] = {
+                'ceph-exporter.crt': crt,
+                'ceph-exporter.key': key
+            }
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
+        daemon_spec.deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
         return daemon_spec
+
+    def get_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
+        return self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
 
 
 class CephfsMirrorService(CephService):
