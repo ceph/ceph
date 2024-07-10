@@ -1363,7 +1363,7 @@ double PG::next_deepscrub_interval() const
 
 void PG::on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready)
 {
-  if (is_active() && is_primary()) {
+  if (is_active() && is_primary() && !is_scrub_queued_or_active()) {
     dout(10) << fmt::format(
 		    "{}: active/primary. delay_ready={:c}", __func__,
 		    (delay_ready == Scrub::delay_ready_t::delay_ready) ? 't'
@@ -1372,7 +1372,10 @@ void PG::on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready)
     ceph_assert(m_scrubber);
     m_scrubber->update_scrub_job(delay_ready);
   } else {
-    dout(10) << fmt::format("{}: inactive or non-primary", __func__) << dendl;
+    dout(10) << fmt::format(
+		    "{}: inactive, non-primary - or already scrubbing",
+		    __func__)
+	     << dendl;
   }
 }
 

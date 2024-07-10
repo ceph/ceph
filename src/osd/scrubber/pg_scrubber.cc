@@ -2093,6 +2093,15 @@ void PgScrubber::on_digest_updates()
  */
 void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 {
+  if (!m_scrub_job->is_registered()) {
+    dout(10) << fmt::format(
+                    "{}: PG not registered for scrubbing on this OSD. Won't "
+                    "requeue!",
+                    __func__)
+             << dendl;
+    return;
+  }
+
   // assuming we can still depend on the 'scrubbing' flag being set;
   // Also on Queued&Active.
 
@@ -2113,7 +2122,6 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 
   m_scrub_job->merge_and_delay(
       m_active_target->schedule, issue, m_planned_scrub, ceph_clock_now());
-  ceph_assert(m_scrub_job->is_registered());
   ceph_assert(!m_scrub_job->target_queued);
   m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
   m_scrub_job->target_queued = true;
@@ -2122,9 +2130,16 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 
 void PgScrubber::requeue_penalized(Scrub::delay_cause_t cause)
 {
+  if (!m_scrub_job->is_registered()) {
+    dout(10) << fmt::format(
+		    "{}: PG not registered for scrubbing on this OSD. Won't "
+		    "requeue!",
+		    __func__)
+	     << dendl;
+    return;
+  }
   /// \todo fix the 5s' to use a cause-specific delay parameter
   m_scrub_job->delay_on_failure(5s, cause, ceph_clock_now());
-  ceph_assert(m_scrub_job->is_registered());
   ceph_assert(!m_scrub_job->target_queued);
   m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
   m_scrub_job->target_queued = true;
@@ -2148,9 +2163,19 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 
   m_active_target = std::move(candidate);
 
+  if (!is_primary() || !m_pg->is_active()) {
+    // the PG is not expected to be 'registered' in this state. And we should
+    // not attempt to queue it.
+    dout(10) << __func__ << ": cannot scrub (not an active primary)"
+	     << dendl;
+    return schedule_result_t::target_specific_failure;
+  }
+
   // for all other failures - we must reinstate our entry in the Scrub Queue
-  if (!is_primary() || !m_pg->is_active() || !m_pg->is_clean()) {
-    dout(10) << __func__ << ": cannot scrub (not a clean and active primary)"
+  if (!m_pg->is_clean()) {
+    dout(10) << fmt::format(
+		    "{}: cannot scrub (not clean). Registered?{:c}", __func__,
+		    m_scrub_job->is_registered() ? 'Y' : 'n')
 	     << dendl;
     requeue_penalized(Scrub::delay_cause_t::pg_state);
     return schedule_result_t::target_specific_failure;
