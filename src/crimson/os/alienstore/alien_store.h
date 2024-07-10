@@ -150,5 +150,6 @@ private:
    *    are released before unmounting and stopping the store.
    */
   std::unordered_map<coll_t, CollectionRef> coll_map;
+  CollectionRef get_alien_coll_ref(ObjectStore::CollectionHandle c);
 };
 }
