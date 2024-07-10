@@ -20,7 +20,6 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 export class NvmeofSubsystemsFormComponent implements OnInit {
   permission: Permission;
   subsystemForm: CdFormGroup;
-
   action: string;
   resource: string;
   pageURL: string;
@@ -59,7 +58,7 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
         validators: [
           this.customNQNValidator,
           Validators.required,
-          Validators.pattern(this.NQN_REGEX),
+          this.customNQNValidator,
           CdValidators.custom(
             'maxLength',
             (nqnInput: string) => new TextEncoder().encode(nqnInput).length > 223
@@ -78,7 +77,8 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   onSubmit() {
     const component = this;
     const nqn: string = this.subsystemForm.getValue('nqn');
-    let max_namespaces: number = Number(this.subsystemForm.getValue('max_namespaces'));
+    const max_namespaces: number = Number(this.subsystemForm.getValue('max_namespaces'));
+    let taskUrl = `nvmeof/subsystem/${URLVerbs.CREATE}`;
 
     const request = {
       nqn,
@@ -89,9 +89,6 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     if (!max_namespaces) {
       delete request.max_namespaces;
     }
-
-    let taskUrl = `nvmeof/subsystem/${URLVerbs.CREATE}`;
-
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {
