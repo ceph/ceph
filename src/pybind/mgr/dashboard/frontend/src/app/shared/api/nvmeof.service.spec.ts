@@ -55,12 +55,4 @@ describe('NvmeofService', () => {
     );
     expect(req.request.method).toBe('GET');
   });
-
-  it('should call updateInitiators', () => {
-    service.updateInitiators('nqn.2001-07.com.ceph:1721041732363', '*').subscribe();
-    const req = httpTesting.expectOne(
-      'api/nvmeof/subsystem/nqn.2001-07.com.ceph:1721041732363/host/*'
-    );
-    expect(req.request.method).toBe('PUT');
-  });
 });

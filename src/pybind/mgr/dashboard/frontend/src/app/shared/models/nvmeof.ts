@@ -20,6 +20,10 @@ export interface NvmeofSubsystem {
   max_namespaces: number;
 }
 
+export interface NvmeofSubsystemInitiator {
+  nqn: string;
+}
+
 export interface NvmeofListener {
   host_name: string;
   trtype: string;
@@ -27,10 +31,6 @@ export interface NvmeofListener {
   adrfam: number; // 0: IPv4, 1: IPv6
   trsvcid: number; // 4420
   id?: number; // for table
-}
-
-export interface NvmeofSubsystemHost {
-  nqn: string;
 }
 
 export interface NvmeofSubsystemNamespace {

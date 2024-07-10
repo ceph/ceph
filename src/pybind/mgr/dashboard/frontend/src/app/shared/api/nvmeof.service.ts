@@ -21,7 +21,12 @@ export interface NamespaceEditRequest {
   rbd_image_size: number;
 }
 
-const BASE_URL = 'api/nvmeof';
+export interface InitiatorRequest {
+  host_nqn: string;
+}
+
+const API_PATH = 'api/nvmeof';
+const UI_API_PATH = 'ui-api/nvmeof';
 
 @Injectable({
   providedIn: 'root'
@@ -31,24 +36,24 @@ export class NvmeofService {
 
   // Gateways
   listGateways() {
-    return this.http.get(`${BASE_URL}/gateway`);
+    return this.http.get(`${API_PATH}/gateway`);
   }
 
   // Subsystems
   listSubsystems() {
-    return this.http.get(`${BASE_URL}/subsystem`);
+    return this.http.get(`${API_PATH}/subsystem`);
   }
 
   getSubsystem(subsystemNQN: string) {
-    return this.http.get(`${BASE_URL}/subsystem/${subsystemNQN}`);
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}`);
   }
 
   createSubsystem(request: { nqn: string; max_namespaces?: number; enable_ha: boolean }) {
-    return this.http.post(`${BASE_URL}/subsystem`, request, { observe: 'response' });
+    return this.http.post(`${API_PATH}/subsystem`, request, { observe: 'response' });
   }
 
   deleteSubsystem(subsystemNQN: string) {
-    return this.http.delete(`${BASE_URL}/subsystem/${subsystemNQN}`, {
+    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}`, {
       observe: 'response'
     });
   }
@@ -65,33 +70,35 @@ export class NvmeofService {
 
   // Initiators
   getInitiators(subsystemNQN: string) {
-    return this.http.get(`${BASE_URL}/subsystem/${subsystemNQN}/host`);
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host`);
   }
 
-  updateInitiators(subsystemNQN: string, hostNQN: string) {
-    return this.http.put(
-      `${BASE_URL}/subsystem/${subsystemNQN}/host/${hostNQN}`,
-      {},
-      {
-        observe: 'response'
-      }
-    );
+  addInitiators(subsystemNQN: string, request: InitiatorRequest) {
+    return this.http.post(`${UI_API_PATH}/subsystem/${subsystemNQN}/host`, request, {
+      observe: 'response'
+    });
+  }
+
+  removeInitiators(subsystemNQN: string, request: InitiatorRequest) {
+    return this.http.delete(`${UI_API_PATH}/subsystem/${subsystemNQN}/host/${request.host_nqn}`, {
+      observe: 'response'
+    });
   }
 
   // Listeners
   listListeners(subsystemNQN: string) {
-    return this.http.get(`${BASE_URL}/subsystem/${subsystemNQN}/listener`);
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/listener`);
   }
 
   createListener(subsystemNQN: string, request: ListenerRequest) {
-    return this.http.post(`${BASE_URL}/subsystem/${subsystemNQN}/listener`, request, {
+    return this.http.post(`${API_PATH}/subsystem/${subsystemNQN}/listener`, request, {
       observe: 'response'
     });
   }
 
   deleteListener(subsystemNQN: string, hostName: string, traddr: string, trsvcid: string) {
     return this.http.delete(
-      `${BASE_URL}/subsystem/${subsystemNQN}/listener/${hostName}/${traddr}`,
+      `${API_PATH}/subsystem/${subsystemNQN}/listener/${hostName}/${traddr}`,
       {
         observe: 'response',
         params: {
@@ -103,27 +110,27 @@ export class NvmeofService {
 
   // Namespaces
   listNamespaces(subsystemNQN: string) {
-    return this.http.get(`${BASE_URL}/subsystem/${subsystemNQN}/namespace`);
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace`);
   }
 
   getNamespace(subsystemNQN: string, nsid: string) {
-    return this.http.get(`${BASE_URL}/subsystem/${subsystemNQN}/namespace/${nsid}`);
+    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`);
   }
 
   createNamespace(subsystemNQN: string, request: NamespaceCreateRequest) {
-    return this.http.post(`${BASE_URL}/subsystem/${subsystemNQN}/namespace`, request, {
+    return this.http.post(`${API_PATH}/subsystem/${subsystemNQN}/namespace`, request, {
       observe: 'response'
     });
   }
 
   updateNamespace(subsystemNQN: string, nsid: string, request: NamespaceEditRequest) {
-    return this.http.patch(`${BASE_URL}/subsystem/${subsystemNQN}/namespace/${nsid}`, request, {
+    return this.http.patch(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`, request, {
       observe: 'response'
     });
   }
 
   deleteNamespace(subsystemNQN: string, nsid: string) {
-    return this.http.delete(`${BASE_URL}/subsystem/${subsystemNQN}/namespace/${nsid}`, {
+    return this.http.delete(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`, {
       observe: 'response'
     });
   }
