@@ -233,12 +233,9 @@ seastar::future<CollectionRef> AlienStore::create_new_collection(const coll_t& c
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this, cid] {
-    return store->create_new_collection(cid);
-  }).then([this, cid] (ObjectStore::CollectionHandle c) {
-    return seastar::make_ready_future<CollectionRef>(
-      get_alien_coll_ref(std::move(c)));
+    ObjectStore::CollectionHandle c = store->create_new_collection(cid);
+    return get_alien_coll_ref(std::move(c));
   });
-
 }
 
 seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
@@ -246,13 +243,12 @@ seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this, cid] {
-    return store->open_collection(cid);
-  }).then([this] (ObjectStore::CollectionHandle c) {
+    ObjectStore::CollectionHandle c = store->open_collection(cid);
     if (!c) {
-      return seastar::make_ready_future<CollectionRef>();
+      return CollectionRef{};
+    } else {
+      return get_alien_coll_ref(std::move(c));
     }
-    return seastar::make_ready_future<CollectionRef>(
-      get_alien_coll_ref(std::move(c)));
   });
 }
 
