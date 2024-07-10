@@ -131,6 +131,7 @@ seastar::future<> AlienStore::stop()
     for (auto [cid, ch]: coll_map) {
       static_cast<AlienCollection*>(ch.get())->collection.reset();
     }
+    coll_map.clear();
     store.reset();
     cct.reset();
     g_ceph_context = nullptr;
