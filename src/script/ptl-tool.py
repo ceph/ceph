@@ -23,14 +23,14 @@
 #
 # Important files in your $HOME:
 #
-#  ~/.redmine_key -- Your redmine API key from right side of: https://tracker.ceph.com/my/account
+#  ~/.redmine_key -- Your redmine API access key from right side of: https://tracker.ceph.com/my/account
 #
-#  ~/.github.key -- Your github API key: https://github.com/settings/tokens
+#  ~/.github_token -- Your github Personal access token: https://github.com/settings/tokens
 #
 # Some important environment variables:
 #
 #  - PTL_TOOL_GITHUB_USER (your github username)
-#  - PTL_TOOL_GITHUB_API_KEY (your github api key, or what is stored in ~/.github.key)
+#  - PTL_TOOL_GITHUB_TOKEN (your github Personal access token, or what is stored in ~/.github_token)
 #  - PTL_TOOL_REDMINE_USER (your redmine username)
 #  - PTL_TOOL_REDMINE_API_KEY (your redmine api key, or what is stored in ~/redmine_key)
 #  - PTL_TOOL_USER (your desired username embedded in test branch names)
@@ -170,13 +170,13 @@ CI_REPO = os.getenv("PTL_TOOL_CI_REPO", "ceph-ci")
 CI_REMOTE_URL = os.getenv("PTL_TOOL_CI_REMOTE_URL", f"git@github.com:{BASE_PROJECT}/{CI_REPO}.git")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
 GITHUB_USER = os.getenv("PTL_TOOL_GITHUB_USER", os.getenv("PTL_TOOL_USER", getuser()))
-GITHUB_API_KEY = None
+GITHUB_TOKEN = None
 try:
-    with open(expanduser("~/.github.key")) as f:
-        GITHUB_API_KEY = f.read().strip()
+    with open(expanduser("~/.github_token")) as f:
+        GITHUB_TOKEN = f.read().strip()
 except FileNotFoundError:
     pass
-GITHUB_API_KEY = os.getenv("PTL_TOOL_GITHUB_API_KEY", GITHUB_API_KEY)
+GITHUB_TOKEN = os.getenv("PTL_TOOL_GITHUB_TOKEN", GITHUB_TOKEN)
 INDICATIONS = [
     re.compile("(Reviewed-by: .+ <[\w@.-]+>)", re.IGNORECASE),
     re.compile("(Acked-by: .+ <[\w@.-]+>)", re.IGNORECASE),
@@ -230,7 +230,7 @@ BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
 TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
 
 def gitauth():
-    return (GITHUB_USER, GITHUB_API_KEY)
+    return (GITHUB_USER, GITHUB_TOKEN)
 
 def get(session, url, params=None, paging=True):
     if params is None:
