@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import time
+import uuid
 import xml.etree.ElementTree as ET  # noqa: N814
 from enum import Enum
 from subprocess import SubprocessError
@@ -1070,6 +1071,22 @@ class SyncFlowTypes(Enum):
 
 
 class RgwMultisite:
+    def __init__(self):
+        self.progress_id = str(uuid.uuid4())
+        self.progress_title = ''
+        self.progress_done = 0
+        self.progress_total = 5  # Total number of major steps
+
+    def update_progress(self, step_title):
+        self.progress_title = 'Multisite-Setup' + ' ' + step_title
+        progress = self.progress_done / self.progress_total
+        mgr.remote(
+            'progress', 'update', self.progress_id,
+            ev_msg=self.progress_title,
+            ev_progress=progress,
+            add_to_ceph_s=True,
+        )
+
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
                              zonegroup_endpoints: str, zone_endpoints: str, access_key: str,
                              secret_key: str):
@@ -1158,17 +1175,17 @@ class RgwMultisite:
                                     zonegroup_endpoints: str, zone_name: str,
                                     zone_endpoints: str, username: str,
                                     cluster_fsid: Optional[str] = None):
+        if cluster_fsid:
+            self.progress_total = 7  # Additional steps for handling cluster_fsid
 
-        # Set up multisite replication for Ceph RGW.
         logger.info("Starting multisite replication setup")
         orch = OrchClient.instance()
 
         def get_updated_endpoints(endpoints):
-            # Update endpoint URLs by replacing hostnames with IP addresses.
             logger.debug("Updating endpoints: %s", endpoints)
             try:
-                hostname_to_ip = {host['hostname']: host['addr'] for host in (h.to_json() for h in orch.hosts.list())}  # noqa E501  # pylint: disable=line-too-long
-                updated_endpoints = [self.replace_hostname(endpoint, hostname_to_ip) for endpoint in endpoints.split(',')]  # noqa E501  # pylint: disable=line-too-long
+                hostname_to_ip = {host['hostname']: host['addr'] for host in (h.to_json() for h in orch.hosts.list())}
+                updated_endpoints = [self.replace_hostname(endpoint, hostname_to_ip) for endpoint in endpoints.split(',')]
                 logger.debug("Updated endpoints: %s", updated_endpoints)
                 return updated_endpoints
             except Exception as e:
@@ -1177,54 +1194,82 @@ class RgwMultisite:
 
         zonegroup_ip_url = ','.join(get_updated_endpoints(zonegroup_endpoints))
         zone_ip_url = ','.join(get_updated_endpoints(zone_endpoints))
+
         try:
-            # Create the realm and zonegroup
+            # Create the realm
             logger.info("Creating realm: %s", realm_name)
+            self.update_progress(f"Creating realm: {realm_name}, zonegroup: \
+                                 {zonegroup_name} and zone: {zone_name}")
             self.create_realm(realm_name=realm_name, default=True)
+
+            # Create the zonegroup
             logger.info("Creating zonegroup: %s", zonegroup_name)
             self.create_zonegroup(realm_name=realm_name, zonegroup_name=zonegroup_name,
                                   default=True, master=True, endpoints=zonegroup_ip_url)
         except Exception as e:
             logger.error("Failed to create realm or zonegroup: %s", e)
             raise
+
         try:
-            # Create the zone and system user, then modify the zone with user credentials
+            # Create the zone
             logger.info("Creating zone: %s", zone_name)
             if self.create_zone(zone_name=zone_name, zonegroup_name=zonegroup_name,
                                 default=True, master=True, endpoints=zone_ip_url,
                                 access_key=None, secret_key=None):
+                self.progress_done += 1
+
+                # Create the system user
                 logger.info("Creating system user: %s", username)
+                self.update_progress(f"Creating system user: {username}")
                 user_details = self.create_system_user(username, zone_name)
+                self.progress_done += 1
                 if user_details:
                     keys = user_details['keys'][0]
+
+                    # Modify the zone with user credentials
                     logger.info("Modifying zone with user credentials: %s", username)
+                    self.update_progress(f"Modifying zone {zone_name} with system keys")
                     self.modify_zone(zone_name=zone_name, zonegroup_name=zonegroup_name,
                                      default='true', master='true', endpoints=zone_ip_url,
                                      access_key=keys['access_key'],
                                      secret_key=keys['secret_key'])
+                    self.progress_done += 1
         except Exception as e:
             logger.error("Failed to create zone or system user: %s", e)
             raise
+
         try:
             # Restart RGW daemons and set credentials
             logger.info("Restarting RGW daemons and setting credentials")
+            self.update_progress("Restarting RGW daemons and setting credentials")
             rgw_service_manager = RgwServiceManager()
             rgw_service_manager.restart_rgw_daemons_and_set_credentials()
+            self.progress_done += 1
         except Exception as e:
             logger.error("Failed to restart RGW daemons: %s", e)
             raise
+
         try:
-            # Get realm tokens and import to another cluster if specified
+            # Fetch realm tokens
             logger.info("Getting realm tokens")
+            self.update_progress("Fetching realm token to import in the selected cluster")
             realm_token_info = CephService.get_realm_tokens()
+            self.progress_done += 1
+
+            if self.progress_done == self.progress_total:
+                mgr.remote('progress', 'complete', self.progress_id)
 
             if cluster_fsid and realm_token_info:
+                # Import realm token to the selected cluster
                 logger.info("Importing realm token to cluster: %s", cluster_fsid)
+                self.update_progress(f"Importing realm token to the selected cluster: {cluster_fsid}")
                 self.import_realm_token_to_cluster(cluster_fsid, realm_name,
                                                    realm_token_info, username)
+                self.progress_done += 1
         except Exception as e:
             logger.error("Failed to get realm tokens or import to cluster: %s", e)
             raise
+
         logger.info("Multisite replication setup completed")
         return realm_token_info
 
@@ -1237,8 +1282,10 @@ class RgwMultisite:
                     break
             else:
                 raise ValueError(f"Realm {realm_name} not found in realm tokens")
-            multi_cluster_config_str = str(mgr.get_module_option_ex('dashboard', 'MULTICLUSTER_CONFIG'))  # noqa E501  # pylint: disable=line-too-long
+
+            multi_cluster_config_str = str(mgr.get_module_option_ex('dashboard', 'MULTICLUSTER_CONFIG'))
             multi_cluster_config = ast.literal_eval(multi_cluster_config_str)
+
             for fsid, clusters in multi_cluster_config['config'].items():
                 if fsid == cluster_fsid:
                     for cluster_info in clusters:
@@ -1250,6 +1297,7 @@ class RgwMultisite:
                     break
             else:
                 raise ValueError(f"Cluster fsid {cluster_fsid} not found in multi-cluster config")
+
             if cluster_token:
                 placement_spec: Dict[str, Dict] = {"placement": {}}
                 payload = {
@@ -1265,12 +1313,14 @@ class RgwMultisite:
                 path = 'api/rgw/realm/import_realm_token'
                 try:
                     multi_cluster_instance = MultiCluster()
-                    # pylint: disable=protected-access
                     response = multi_cluster_instance._proxy(method='POST', base_url=cluster_url,
                                                              path=path, payload=payload,
                                                              token=cluster_token)
                     logger.info("Successfully imported realm token to cluster: %s", cluster_fsid)
+                    # Checking replicated system user in the selected cluster
+                    self.update_progress(f"Checking replicated system user: {username} in the selected cluster")
                     self.check_user_in_second_cluster(cluster_url, cluster_token, username)
+                    self.progress_done += 1
                     return response
                 except requests.RequestException as e:
                     logger.error("Could not reach %s: %s", cluster_url, e)
@@ -1291,26 +1341,25 @@ class RgwMultisite:
         start_time = time.time()
         while not user_found:
             if time.time() - start_time > 120:  # Timeout after 2 minutes
-                logger.error("Timeout reached while waiting for user %s to appear \
-                             in the second cluster", username)
+                logger.error("Timeout reached while waiting for user %s to appear in the second cluster", username)
                 raise DashboardException(code='user_replication_timeout',
-                                         msg="Timeout reached while waiting for \
-                                         user %s to appear in the second cluster." % username)
+                                         msg="Timeout reached while waiting for user %s to appear in the second cluster." % username)
             try:
                 multi_cluster_instance = MultiCluster()
-                # pylint: disable=protected-access
                 user_content = multi_cluster_instance._proxy(method='GET', base_url=cluster_url,
                                                              path=path, token=cluster_token)
                 logger.info("User content in the second cluster: %s", user_content)
                 for user in user_content:
                     if user['user_id'] == username:
                         user_found = True
+                        self.update_progress("Restarting RGW daemons and setting credentials in the selected cluster")
                         logger.info("User %s found in the second cluster", username)
-                        # pylint: disable=protected-access
-                        restart_daemons_content = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,  # noqa E501  # pylint: disable=line-too-long
-                                                                                path='ui-api/rgw/multisite/setup-rgw-credentials',  # noqa E501  # pylint: disable=line-too-long
-                                                                                token=cluster_token)  # noqa E501  # pylint: disable=line-too-long
-                        logger.info("Restarted RGW daemons in the second cluster: %s", restart_daemons_content)  # noqa E501  # pylint: disable=line-too-long
+                        # Restart RGW daemons in the second cluster
+                        restart_daemons_content = multi_cluster_instance._proxy(method='PUT', base_url=cluster_url,
+                                                                                path='ui-api/rgw/multisite/setup-rgw-credentials',
+                                                                                token=cluster_token)
+                        logger.info("Restarted RGW daemons in the second cluster: %s", restart_daemons_content)
+                        mgr.remote('progress', 'complete', self.progress_id)
                         break
             except requests.RequestException as e:
                 logger.error("Error checking user in the second cluster: %s", e)
