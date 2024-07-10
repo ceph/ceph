@@ -7262,6 +7262,7 @@ TEST_P(DeferredReplayTest, DeferredReplay) {
   //
   SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "true");
   g_conf().apply_changes(nullptr);
+  ch.reset(nullptr);
   store->umount();
   SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "false");
   g_conf().apply_changes(nullptr);
@@ -7346,6 +7347,7 @@ TEST_P(DeferredReplayTest, DeferredReplayInReadOnly) {
   //
   SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "true");
   g_conf().apply_changes(nullptr);
+  ch.reset(nullptr);
   store->umount();
   SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "false");
   g_conf().apply_changes(nullptr);
