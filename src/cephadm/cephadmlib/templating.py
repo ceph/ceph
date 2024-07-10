@@ -76,15 +76,42 @@ class _PackageLoader(jinja2.PackageLoader):
     zipimporter function.
     """
 
+    def __init__(self, pkg: str, dir: str) -> None:
+        super().__init__(pkg, dir)
+        # see the comment in the get_source function below about
+        # the _loader attribute. This _original_package_name
+        # attribute is being set up for dealing with the same
+        # old jinja2 version that comment references.
+        self._original_package_name = pkg
+
     def get_source(
         self, environment: jinja2.Environment, template: str
     ) -> Tuple[str, str, Optional[Callable[[], bool]]]:
+        if not hasattr(self, '_loader'):
+            # This if-block is intended to only be run when we are using an old
+            # enough version of jinja2 that there is no `_loader` attribute
+            # on the jinja2.PackageLoader class. Specifically the one within
+            # the current rhel 9 RPM for jinja2. In versions that old
+            # there is instead a "provider" attribute pointing to an
+            # IResourceProvider object that seems to itself have a loader
+            # that we can use. See the changes in
+            # https://github.com/pallets/jinja/pull/1082 to get a feel for
+            # the before and after we're expecting from the PackageLoader.
+            # Becuase of this special case, mypy will complain about
+            # accessing the provider attribute when run with newer versions
+            # of Jinja2 that no longer have the attribute. As we generally expect
+            # to be running unit tests on versions where this is true, this additional
+            # assertion is needed to make mypy happy
+            assert hasattr(self, 'provider')
+            self._loader = self.provider.loader
         if isinstance(self._loader, zipimport.zipimporter):
             return self._get_archive_source(template)
         return super().get_source(environment, template)
 
     def _get_archive_source(self, template: str) -> Tuple[str, str, None]:
         assert isinstance(self._loader, zipimport.zipimporter)
+        if not hasattr(self, 'package_name'):
+            self.package_name = self._original_package_name
         arelpath = posixpath.join(
             self.package_name, self.package_path, template
         )
