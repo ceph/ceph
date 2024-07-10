@@ -25,6 +25,20 @@ options:
   default: 9926
   services:
   - ceph-exporter
+- name: exporter_cert_file
+  type: str
+  level: advanced
+  desc: Certificate file for TLS.
+  default:
+  services:
+  - ceph-exporter
+- name: exporter_key_file
+  type: str
+  level: advanced
+  desc: Key certificate file for TLS.
+  default:
+  services:
+  - ceph-exporter
 - name: exporter_prio_limit
   type: int
   level: advanced
