@@ -1,0 +1,89 @@
+<div class="d-flex flex-column justify-content-center align-items-center bold"
+     *ngIf="upgradeStatus$ | async as upgradeStatus">
+  <ng-container *ngIf="upgradeStatus.in_progress && !upgradeStatus.is_paused; else upgradePaused">
+    <h3 class="text-center"
+        i18n>
+    <i [ngClass]="[icons.large, icons.spin, icons.spinner]"></i>
+  </h3>
+
+  <h3 class="text-center mt-2">
+    {{ executingTask?.description }}
+  </h3>
+
+  <h5 class="text-center mt-3"
+      i18n>{{ upgradeStatus.which }}</h5>
+  </ng-container>
+
+  <div class="w-50 row h-100 d-flex justify-content-center align-items-center mt-4">
+    <div class="text-center w-75">
+      <ng-container *ngIf="upgradeStatus.services_complete.length > 0">
+        Finished upgrading:
+        <span class="text-success">
+          {{ upgradeStatus.services_complete }}
+        </span>
+      </ng-container>
+      <div class="mt-2">
+        <ngb-progressbar type="info"
+                         [value]="executingTask?.progress"
+                         [striped]="true"
+                         [animated]="!upgradeStatus.is_paused"></ngb-progressbar>
+      </div>
+
+    <p class="card-text text-muted">
+      <span class="float-end">
+        {{ executingTask?.progress || 0 }} %
+      </span>
+    </p>
+    </div>
+    <h4 class="text-center m-2"
+        i18n>{{ upgradeStatus.progress}}</h4>
+
+    <h5 *ngIf="upgradeStatus.in_progress"
+        class="text-center mt-2"
+        i18n>
+    {{ upgradeStatus.message }}
+    </h5>
+
+    <div class="text-center mt-3">
+      <button class="btn btn-light"
+              aria-label="Go back"
+              routerLink="/upgrade"
+              i18n>Back</button>
+      <button *ngIf="upgradeStatus.in_progress && !upgradeStatus.is_paused"
+              (click)="pauseUpgrade()"
+              class="btn btn-light m-2"
+              aria-label="Pause Upgrade"
+              i18n>Pause</button>
+      <button *ngIf="upgradeStatus.in_progress && upgradeStatus.is_paused"
+              (click)="resumeUpgrade()"
+              class="btn btn-light m-2"
+              aria-label="Resume Upgrade"
+              i18n>Resume</button>
+      <button *ngIf="upgradeStatus.in_progress"
+              (click)="stopUpgradeModal()"
+              class="btn btn-danger"
+              aria-label="Stop Upgrade"
+              i18n>Stop</button>
+    </div>
+  </div>
+</div>
+
+<legend class="cd-header"
+        i18n>Cluster logs</legend>
+  <cd-logs [showAuditLogs]="false"
+           [showDaemonLogs]="false"
+           [showNavLinks]="false"
+           [showFilterTools]="false"
+           [showDownloadCopyButton]="false"
+           defaultTab="cluster-logs"
+           [scrollable]="true"></cd-logs>
+
+<ng-template #upgradePaused>
+  <h3 class="text-center mt-3">
+    <i [ngClass]="[icons.large, icons.spinner]"></i>
+  </h3>
+
+  <h3 class="text-center mt-3 mb-4">
+    {{ executingTask?.description }}
+  </h3>
+</ng-template>
