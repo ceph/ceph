@@ -148,6 +148,8 @@ private:
    *    instance to the alien thread pool to be released.
    * 2. OSD shutdown needs to *guarantee* that all outstanding CollectionRefs
    *    are released before unmounting and stopping the store.
+   *
+   * coll_map is accessed exclusively from alien threadpool threads.
    */
   std::unordered_map<coll_t, CollectionRef> coll_map;
   CollectionRef get_alien_coll_ref(ObjectStore::CollectionHandle c);
