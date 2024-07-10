@@ -758,7 +758,7 @@ def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
                 cluster,
                 msg="cluster in use by shares",
                 status={
-                    'clusters': [
+                    'shares': [
                         shid
                         for cid, shid in share_ids
                         if cid == cluster.cluster_id
