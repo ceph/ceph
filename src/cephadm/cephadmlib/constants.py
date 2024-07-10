@@ -19,6 +19,7 @@ DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_SMB_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
+DEFAULT_NGINX_IMAGE = 'quay.io/ceph/nginx:1.26.1'
 DEFAULT_REGISTRY = 'docker.io'  # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
@@ -49,3 +50,5 @@ DEFAULT_RETRY = 15
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 QUIET_LOG_LEVEL = 9  # DEBUG is 10, so using 9 to be lower level than DEBUG
 NO_DEPRECATED = False
+UID_NOBODY = 65534
+GID_NOGROUP = 65534
