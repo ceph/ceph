@@ -509,6 +509,11 @@ public:
 
       ss << fs->mds_map.get_fs_name();
 
+      if (!is_down && fs->mds_map.get_max_mds() > 0) {
+        ss << " is already online";
+        return 0;
+      }
+
       fsmap.modify_filesystem(
           fs->fscid,
           [is_down](std::shared_ptr<Filesystem> fs)
