@@ -18246,6 +18246,7 @@ void BlueStore::_shutdown_cache()
     }
     ceph_assert(p.second->onode_space.empty());
     ceph_assert(p.second->shared_blob_set.empty());
+    ceph_assert(p.second->get_nref() == 1);
   }
   coll_map.clear();
   for (auto i : onode_cache_shards) {
