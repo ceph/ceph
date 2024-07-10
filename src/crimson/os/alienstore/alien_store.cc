@@ -128,10 +128,13 @@ seastar::future<> AlienStore::stop()
     return seastar::now();
   }
   return tp->submit([this] {
-    for (auto [cid, ch]: coll_map) {
-      static_cast<AlienCollection*>(ch.get())->collection.reset();
+    {
+      std::lock_guard l(coll_map_lock);
+      for (auto [cid, ch]: coll_map) {
+	static_cast<AlienCollection*>(ch.get())->collection.reset();
+      }
+      coll_map.clear();
     }
-    coll_map.clear();
     store.reset();
     cct.reset();
     g_ceph_context = nullptr;
@@ -633,6 +636,7 @@ AlienStore::read_errorator::future<std::map<uint64_t, uint64_t>> AlienStore::fie
 }
 
 CollectionRef AlienStore::get_alien_coll_ref(ObjectStore::CollectionHandle c) {
+  std::lock_guard l(coll_map_lock);
   CollectionRef ch;
   auto cp = coll_map.find(c->cid);
   if (cp == coll_map.end()) {
