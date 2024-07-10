@@ -1234,6 +1234,11 @@ options:
   level: advanced
   default: false
   with_legacy: true
+- name: osd_ec_partial_reads
+  type: bool
+  level: advanced
+  default: true
+  with_legacy: true
 - name: osd_recovery_delay_start
   type: float
   level: advanced

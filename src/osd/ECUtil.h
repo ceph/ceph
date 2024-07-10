@@ -42,6 +42,9 @@ public:
   uint64_t get_chunk_size() const {
     return chunk_size;
   }
+  uint64_t get_data_chunk_count() const {
+    return get_stripe_width() / get_chunk_size();
+  }
   uint64_t logical_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;
   }
@@ -60,16 +63,26 @@ public:
     ceph_assert(offset % stripe_width == 0);
     return (offset / stripe_width) * chunk_size;
   }
+  uint64_t chunk_aligned_logical_offset_to_chunk_offset(uint64_t offset) const {
+    [[maybe_unused]] const auto residue_in_stripe = offset % stripe_width;
+    ceph_assert(residue_in_stripe % chunk_size == 0);
+    ceph_assert(stripe_width % chunk_size == 0);
+    // this rounds down
+    return (offset / stripe_width) * chunk_size;
+  }
+  uint64_t chunk_aligned_logical_size_to_chunk_size(uint64_t len) const {
+    [[maybe_unused]] const auto residue_in_stripe = len % stripe_width;
+    ceph_assert(residue_in_stripe % chunk_size == 0);
+    ceph_assert(stripe_width % chunk_size == 0);
+    // this rounds up
+    return ((len + stripe_width - 1) / stripe_width) * chunk_size;
+  }
   uint64_t aligned_chunk_offset_to_logical_offset(uint64_t offset) const {
     ceph_assert(offset % chunk_size == 0);
     return (offset / chunk_size) * stripe_width;
   }
-  std::pair<uint64_t, uint64_t> aligned_offset_len_to_chunk(
-    std::pair<uint64_t, uint64_t> in) const {
-    return std::make_pair(
-      aligned_logical_offset_to_chunk_offset(in.first),
-      aligned_logical_offset_to_chunk_offset(in.second));
-  }
+  std::pair<uint64_t, uint64_t> chunk_aligned_offset_len_to_chunk(
+    std::pair<uint64_t, uint64_t> in) const;
   std::pair<uint64_t, uint64_t> offset_len_to_stripe_bounds(
     std::pair<uint64_t, uint64_t> in) const {
     uint64_t off = logical_to_prev_stripe_offset(in.first);
@@ -77,11 +90,38 @@ public:
       (in.first - off) + in.second);
     return std::make_pair(off, len);
   }
+  std::pair<uint64_t, uint64_t> offset_len_to_chunk_bounds(
+    std::pair<uint64_t, uint64_t> in) const {
+    uint64_t off = in.first - (in.first % chunk_size);
+    uint64_t tmp_len = (in.first - off) + in.second;
+    uint64_t len = ((tmp_len % chunk_size) ?
+      (tmp_len - (tmp_len % chunk_size) + chunk_size) :
+      tmp_len);
+    return std::make_pair(off, len);
+  }
+  std::pair<uint64_t, uint64_t> offset_length_to_data_chunk_indices(
+    uint64_t off, uint64_t len) const {
+    assert(chunk_size > 0);
+    const auto first_chunk_idx = (off / chunk_size);
+    const auto last_chunk_idx = (chunk_size - 1 + off + len) / chunk_size;
+    return {first_chunk_idx, last_chunk_idx};
+  }
+  bool offset_length_is_same_stripe(
+    uint64_t off, uint64_t len) const {
+    if (len == 0) {
+      return true;
+    }
+    assert(chunk_size > 0);
+    const auto first_stripe_idx = off / stripe_width;
+    const auto last_inc_stripe_idx = (off + len - 1) / stripe_width;
+    return first_stripe_idx == last_inc_stripe_idx;
+  }
 };
 
 int decode(
   const stripe_info_t &sinfo,
   ceph::ErasureCodeInterfaceRef &ec_impl,
+  const std::set<int> want_to_read,
   std::map<int, ceph::buffer::list> &to_decode,
   ceph::buffer::list *out);
 
