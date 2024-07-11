@@ -1030,7 +1030,7 @@ int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker,
 
 int RadosBucket::get_logging_object_name(std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) {
   rgw_pool data_pool;
-  const auto obj_name_oid = logging_object_name_oid(this, prefix);
+  const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
     ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
       "' when getting logging object name. ret = " << -EIO << dendl;
@@ -1057,7 +1057,7 @@ int RadosBucket::get_logging_object_name(std::string& obj_name, const std::strin
 
 int RadosBucket::set_logging_object_name(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) {
   rgw_pool data_pool;
-  const auto obj_name_oid = logging_object_name_oid(this, prefix);
+  const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
     ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
       "' when setting logging object name. ret = " << -EIO << dendl;

@@ -37,7 +37,7 @@ namespace {
 // GET /<bucket name>/?logging
 // reply is XML encoded
 class RGWGetBucketLoggingOp : public RGWOp {
-  rgw_bucket_logging configuration;
+  rgw::bucketlogging::configuration configuration;
 
 public:
   int verify_permission(optional_yield y) override {
@@ -148,7 +148,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       op_ret = -ERR_MALFORMED_XML;
       return;
     }
-    rgw_bucket_logging configuration;
+    rgw::bucketlogging::configuration configuration;
     try {
       RGWXMLDecoder::decode_xml("BucketLoggingStatus", configuration, &parser, true);
     } catch (RGWXMLDecoder::err& err) {

@@ -11,7 +11,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-bool rgw_bucket_logging::decode_xml(XMLObj* obj) {
+namespace rgw::bucketlogging {
+
+bool configuration::decode_xml(XMLObj* obj) {
   const auto throw_if_missing = true;
   enabled = false;
   XMLObjIter iter = obj->find("LoggingEnabled");
@@ -27,9 +29,9 @@ bool rgw_bucket_logging::decode_xml(XMLObj* obj) {
     std::string type;
     RGWXMLDecoder::decode_xml("RecordType", type, default_type, o);
     if (type == "Standard") {
-      record_type = BucketLoggingRecordType::Standard;
+      record_type = RecordType::Standard;
     } else if (type == "Short") {
-      record_type = BucketLoggingRecordType::Short;
+      record_type = RecordType::Short;
     } else {
       throw RGWXMLDecoder::err("invalid bucket logging record type: '" + type + "'");
     }
@@ -37,19 +39,19 @@ bool rgw_bucket_logging::decode_xml(XMLObj* obj) {
     if (iter = o->find("TargetObjectKeyFormat"); iter.get_next()) {
       XMLObj* const oo = iter.get_next();
       if (iter = oo->find("PartitionedPrefix"); iter.get_next()) {
-        obj_key_format = BucketLoggingKeyFormat::Partitioned;
+        obj_key_format = KeyFormat::Partitioned;
         XMLObj* const ooo = iter.get_next();
         default_type = "DeliveryTime";
         RGWXMLDecoder::decode_xml("PartitionDateSource", type, default_type, ooo);
         if (type == "DeliveryTime") {
-          date_source = BucketLoggingPartitionDateSource::DeliveryTime;
+          date_source = PartitionDateSource::DeliveryTime;
         } else if (type == "EventTime") {
-          date_source = BucketLoggingPartitionDateSource::EventTime;
+          date_source = PartitionDateSource::EventTime;
         } else {
           throw RGWXMLDecoder::err("invalid bucket logging partition date source: '" + type + "'");
         }
       } else if (iter = oo->find("SimplePrefix"); iter.get_next()) {
-          obj_key_format = BucketLoggingKeyFormat::Simple;
+          obj_key_format = KeyFormat::Simple;
       } else {
         throw RGWXMLDecoder::err("TargetObjectKeyFormat must contain a format tag");
       }
@@ -57,11 +59,11 @@ bool rgw_bucket_logging::decode_xml(XMLObj* obj) {
     default_type = "Write";
     RGWXMLDecoder::decode_xml("EventType", type, default_type, o);
     if (type == "Read") {
-      event_type = BucketLoggingEventType::Read;
+      event_type = EventType::Read;
     } else if (type == "Write") {
-      event_type = BucketLoggingEventType::Write;
+      event_type = EventType::Write;
     } else if (type == "ReadWrite") {
-      event_type = BucketLoggingEventType::ReadWrite;
+      event_type = EventType::ReadWrite;
     } else {
       throw RGWXMLDecoder::err("invalid bucket logging event type: '" + type + "'");
     }
@@ -70,7 +72,7 @@ bool rgw_bucket_logging::decode_xml(XMLObj* obj) {
   return true;
 }
 
-void rgw_bucket_logging::dump_xml(Formatter *f) const {
+void configuration::dump_xml(Formatter *f) const {
   if (!enabled) {
     return;
   }
@@ -79,41 +81,41 @@ void rgw_bucket_logging::dump_xml(Formatter *f) const {
   ::encode_xml("TargetPrefix", target_prefix, f);
   ::encode_xml("ObjectRollTime", obj_roll_time, f);
   switch (record_type) {
-    case BucketLoggingRecordType::Standard:
+    case RecordType::Standard:
       ::encode_xml("RecordType", "Standard", f);
       break;
-    case BucketLoggingRecordType::Short:
+    case RecordType::Short:
       ::encode_xml("RecordType", "Short", f);
       break;
   }
   ::encode_xml("RecordsBatchSize", records_batch_size, f);
   f->open_object_section("TargetObjectKeyFormat");
   switch (obj_key_format) {
-    case BucketLoggingKeyFormat::Partitioned:
+    case KeyFormat::Partitioned:
       f->open_object_section("PartitionedPrefix");
       switch (date_source) {
-        case BucketLoggingPartitionDateSource::DeliveryTime:
+        case PartitionDateSource::DeliveryTime:
           ::encode_xml("PartitionDateSource", "DeliveryTime", f);
           break;
-        case BucketLoggingPartitionDateSource::EventTime:
+        case PartitionDateSource::EventTime:
           ::encode_xml("PartitionDateSource", "EventTime", f);
           break;
       }
       f->close_section(); // PartitionedPrefix
       break;
-    case BucketLoggingKeyFormat::Simple:
+    case KeyFormat::Simple:
       f->open_object_section("SimplePrefix"); // empty section
       f->close_section();
       break;
   }
   switch (event_type) {
-    case BucketLoggingEventType::Read:
+    case EventType::Read:
       ::encode_xml("RecordType", "Read", f);
       break;
-    case BucketLoggingEventType::Write:
+    case EventType::Write:
       ::encode_xml("RecordType", "Write", f);
       break;
-    case BucketLoggingEventType::ReadWrite:
+    case EventType::ReadWrite:
       ::encode_xml("RecordType", "ReadWrite", f);
       break;
   }
@@ -121,7 +123,7 @@ void rgw_bucket_logging::dump_xml(Formatter *f) const {
   f->close_section(); // LoggingEnabled
 }
 
-void rgw_bucket_logging::dump(Formatter *f) const {
+void configuration::dump(Formatter *f) const {
   if (!enabled) {
     return;
   }
@@ -130,10 +132,10 @@ void rgw_bucket_logging::dump(Formatter *f) const {
   encode_json("targetPrefix", target_prefix, f);
   encode_json("objectRollTime", obj_roll_time, f);
   switch (record_type) {
-    case BucketLoggingRecordType::Standard:
+    case RecordType::Standard:
       encode_json("recordType", "Standard", f);
       break;
-    case BucketLoggingRecordType::Short:
+    case RecordType::Short:
       encode_json("recordType", "Short", f);
       break;
   }
@@ -141,20 +143,20 @@ void rgw_bucket_logging::dump(Formatter *f) const {
   {
     Formatter::ObjectSection s(*f, "targetObjectKeyFormat");
     switch (obj_key_format) {
-      case BucketLoggingKeyFormat::Partitioned:
+      case KeyFormat::Partitioned:
       {
         Formatter::ObjectSection s(*f, "partitionedPrefix");
         switch (date_source) {
-          case BucketLoggingPartitionDateSource::DeliveryTime:
+          case PartitionDateSource::DeliveryTime:
             encode_json("PartitionDateSource", "DeliveryTime", f);
             break;
-          case BucketLoggingPartitionDateSource::EventTime:
+          case PartitionDateSource::EventTime:
             encode_json("PartitionDateSource", "EventTime", f);
             break;
         }
       }
       break;
-      case BucketLoggingKeyFormat::Simple:
+      case KeyFormat::Simple:
       {
         Formatter::ObjectSection s(*f, "simplePrefix");
       }
@@ -162,19 +164,19 @@ void rgw_bucket_logging::dump(Formatter *f) const {
     }
   }
   switch (event_type) {
-    case BucketLoggingEventType::Read:
+    case EventType::Read:
       encode_json("RecordType", "Read", f);
       break;
-    case BucketLoggingEventType::Write:
+    case EventType::Write:
       encode_json("RecordType", "Write", f);
       break;
-    case BucketLoggingEventType::ReadWrite:
+    case EventType::ReadWrite:
       encode_json("RecordType", "ReadWrite", f);
       break;
   }
 }
 
-std::string rgw_bucket_logging::to_json_str() const {
+std::string configuration::to_json_str() const {
   JSONFormatter f;
   f.open_object_section("bucketLoggingStatus");
   dump(&f);
@@ -220,7 +222,7 @@ ceph::coarse_real_time time_from_name(const std::string& obj_name, const DoutPre
   return extracted_time;
 }
 
-int new_logging_object(const rgw_bucket_logging& configuration,
+int new_logging_object(const configuration& conf,
     const std::unique_ptr<rgw::sal::Bucket>& bucket,
     const std::string& rgw_id,
     std::string& obj_name,
@@ -233,19 +235,19 @@ int new_logging_object(const rgw_bucket_logging& configuration,
 
   const auto unique = unique_string<UniqueStringLength>();
 
-  switch (configuration.obj_key_format) {
-    case BucketLoggingKeyFormat::Simple:
+  switch (conf.obj_key_format) {
+    case KeyFormat::Simple:
       obj_name = fmt::format("{}{:%Y-%m-%d-%H-%M-%S}-{}",
-        configuration.target_prefix,
+        conf.target_prefix,
         t,
         unique);
       break;
-    case BucketLoggingKeyFormat::Partitioned:
+    case KeyFormat::Partitioned:
       {
         // TODO: use date_source
         const auto source_region = ""; // TODO
         obj_name = fmt::format("{}{}/{}/{}/{:%Y/%m/%d}/{:%Y-%m-%d-%H-%M-%S}-{}",
-          configuration.target_prefix,
+          conf.target_prefix,
           to_string(bucket->get_owner()),
           source_region,
           bucket->get_name(),
@@ -256,14 +258,14 @@ int new_logging_object(const rgw_bucket_logging& configuration,
       break;
   }
 
-  int ret = bucket->set_logging_object_name(obj_name, configuration.target_prefix, y, dpp);
+  int ret = bucket->set_logging_object_name(obj_name, conf.target_prefix, y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write name of logging object of bucket '" <<
-      configuration.target_bucket << "', ret = " << ret << dendl;
+      conf.target_bucket << "', ret = " << ret << dendl;
     return ret;
   }
   ldpp_dout(dpp, 20) << "INFO: wrote name of new logging object '" << obj_name <<  "' of bucket '" <<
-      configuration.target_bucket << "'" << dendl;
+      conf.target_bucket << "'" << dendl;
   return 0;
 }
 
@@ -309,29 +311,33 @@ S3 bucket short (ceph) log record
   - eTag
 };*/
 
-int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& op_name, const std::string& etag, const rgw_bucket_logging& configuration,
+int log_record(rgw::sal::Driver* driver, 
+    const req_state* s, 
+    const std::string& op_name, 
+    const std::string& etag, 
+    const configuration& conf,
   const DoutPrefixProvider *dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
-  auto ret = driver->load_bucket(dpp, rgw_bucket(s->bucket_tenant, configuration.target_bucket),
+  auto ret = driver->load_bucket(dpp, rgw_bucket(s->bucket_tenant, conf.target_bucket),
                                &target_bucket, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << configuration.target_bucket << "', ret = " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to get target logging bucket '" << conf.target_bucket << "', ret = " << ret << dendl;
     return ret;
   }
   std::string obj_name;
-  ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, y, dpp);
+  ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp);
   if (ret == 0) {
-    const auto time_to_commit = time_from_name(obj_name, dpp) + std::chrono::seconds(configuration.obj_roll_time);
+    const auto time_to_commit = time_from_name(obj_name, dpp) + std::chrono::seconds(conf.obj_roll_time);
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       const auto old_obj = obj_name;
       ldpp_dout(dpp, 20) << "INFO: logging object '" << old_obj << "' exceeded its time, will be committed to bucket '" <<
-        configuration.target_bucket << "'" << dendl;
-      if (ret = new_logging_object(configuration, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
+        conf.target_bucket << "'" << dendl;
+      if (ret = new_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
         return ret;
       }
       if (target_bucket->commit_logging_object(old_obj, y, dpp); ret < 0) {
         ldpp_dout(dpp, 5) << "WARNING: failed to commit logging object '" << old_obj << "' to bucket '" <<
-          configuration.target_bucket << "', ret = " << ret << dendl;
+          conf.target_bucket << "', ret = " << ret << dendl;
         // we still want to write the new records to the new object even if commit failed
       }
     } else {
@@ -339,13 +345,13 @@ int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& 
     }
   } else if (ret == -ENOENT) {
     // create the temporary log object for the first time
-    ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << configuration.target_bucket << "'" << dendl;
-    if (ret = new_logging_object(configuration, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
+    ldpp_dout(dpp, 20) << "INFO: first time logging for bucket '" << conf.target_bucket << "'" << dendl;
+    if (ret = new_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
       return ret;
     }
   } else {
     ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of bucket '" <<
-      configuration.target_bucket << "', ret = " << ret << dendl;
+      conf.target_bucket << "', ret = " << ret << dendl;
     return ret;
   }
 
@@ -353,10 +359,10 @@ int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& 
   const auto tt = ceph::coarse_real_time::clock::to_time_t(s->time);
   std::tm t{};
   localtime_r(&tt, &t);
-  switch (configuration.record_type) {
-    case BucketLoggingRecordType::Standard:
+  switch (conf.record_type) {
+    case RecordType::Standard:
       // TODO
-    case BucketLoggingRecordType::Short:
+    case RecordType::Short:
       record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} REST.{}.{} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
         dash_if_empty(s->bucket->get_name()),
@@ -378,8 +384,10 @@ int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& 
   return 0;
 }
 
-std::string logging_object_name_oid(const rgw::sal::Bucket* bucket, const std::string& prefix) {
+std::string object_name_oid(const rgw::sal::Bucket* bucket, const std::string& prefix) {
   // TODO: do i need bucket marker in the name?
   return fmt::format("logging.{}.bucket.{}/{}", bucket->get_tenant(), bucket->get_bucket_id(), prefix);
 }
+
+} // namespace rgw::bucketlogging
 

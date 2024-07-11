@@ -16,6 +16,8 @@ namespace ceph { class Formatter; }
 class DoutPrefixProvider;
 struct req_state;
 
+
+namespace rgw::bucketlogging {
 /* S3 bucket logging configuration
  * based on: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLogging.html
  * with ceph extensions
@@ -50,15 +52,15 @@ struct req_state;
 </BucketLoggingStatus>
 */
 
-enum class BucketLoggingKeyFormat {Partitioned, Simple};
-enum class BucketLoggingRecordType {Standard, Short};
-enum class BucketLoggingEventType {Read, Write, ReadWrite};
-enum class BucketLoggingPartitionDateSource {DeliveryTime, EventTime};
+enum class KeyFormat {Partitioned, Simple};
+enum class RecordType {Standard, Short};
+enum class EventType {Read, Write, ReadWrite};
+enum class PartitionDateSource {DeliveryTime, EventTime};
 
-struct rgw_bucket_logging {
+struct configuration {
   bool enabled = false;
   std::string target_bucket;
-  BucketLoggingKeyFormat obj_key_format = BucketLoggingKeyFormat::Simple;
+  KeyFormat obj_key_format = KeyFormat::Simple;
   // target object key formats:
   // Partitioned: [DestinationPrefix][SourceAccountId]/[SourceRegion]/[SourceBucket]/[YYYY]/[MM]/[DD]/[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
   // Simple: [DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
@@ -66,17 +68,17 @@ struct rgw_bucket_logging {
                              // useful when multiple bucket log to the same target 
                              // or when the target bucket is used for other things than logs
   uint32_t obj_roll_time; // time in seconds to move object to bucket and start another object
-  BucketLoggingRecordType record_type;
+  RecordType record_type;
   uint32_t records_batch_size = 0; // how many records to batch in memory before writing to the object
                                    // if set to zero, records are written syncronously to the object.
                                    // if obj_roll_time is reached, the batch of records will be written to the object
                                    // regardless of the number of records
-  BucketLoggingEventType event_type = BucketLoggingEventType::Write;
+  EventType event_type = EventType::Write;
   // which events to log:
   // Write: PUT, COPY, DELETE, lifecycle, Complete MPU
   // Read: GET
   // ReadWrite: all the above
-  BucketLoggingPartitionDateSource date_source = BucketLoggingPartitionDateSource::DeliveryTime;
+  PartitionDateSource date_source = PartitionDateSource::DeliveryTime;
   // EventTime: use only year, month, and day. The hour, minutes and seconds are set to 00 in the key
   // DeliveryTime: the time the log object was created
   bool decode_xml(XMLObj *obj);
@@ -102,20 +104,20 @@ struct rgw_bucket_logging {
     decode(target_bucket, bl);
     int type;
     decode(type, bl);
-    obj_key_format = static_cast<BucketLoggingKeyFormat>(type);
+    obj_key_format = static_cast<KeyFormat>(type);
     decode(target_prefix, bl);
     decode(obj_roll_time, bl);
     decode(type, bl);
-    record_type = static_cast<BucketLoggingRecordType>(type);
+    record_type = static_cast<RecordType>(type);
     decode(records_batch_size, bl);
     decode(type, bl);
-    event_type = static_cast<BucketLoggingEventType>(type);
+    event_type = static_cast<EventType>(type);
     decode(type, bl);
-    date_source = static_cast<BucketLoggingPartitionDateSource>(type);
+    date_source = static_cast<PartitionDateSource>(type);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(rgw_bucket_logging)
+WRITE_CLASS_ENCODER(configuration)
 
 constexpr unsigned MAX_BUCKET_LOGGING_BUFFER = 1000;
 
@@ -131,11 +133,12 @@ inline std::string to_string(const Records& records) {
 }
 
 // log a bucket logging record according to the configuration
-int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& op_name, const std::string& etag, const rgw_bucket_logging& configuration,
+int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& op_name, const std::string& etag, const configuration& conf,
     const DoutPrefixProvider *dpp, optional_yield y);
 
 // return the oid of the object holding the name of the temporary logging object
 // bucket - log bucket
 // prefix - logging prefix from configuration. should be used when multiple buckets log into the same log bucket
-std::string logging_object_name_oid(const rgw::sal::Bucket* bucket, const std::string& prefix);
+std::string object_name_oid(const rgw::sal::Bucket* bucket, const std::string& prefix);
+} // namespace rgw::bucketlogging
 
