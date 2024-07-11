@@ -11970,7 +11970,18 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   }
 }
 
-TEST_P(StoreTest, BasicReformattingTest) {
+TEST_P(StoreTestSpecificAUSize, BasicReformattingTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
   int r;
   coll_t cid;
   ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
@@ -12216,7 +12227,18 @@ TEST_P(StoreTest, BasicReformattingTest) {
   }
 }
 
-TEST_P(StoreTest, CompressedReformattingTest) {
+TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
   int r;
   coll_t cid;
 
@@ -12492,7 +12514,18 @@ TEST_P(StoreTest, CompressedReformattingTest) {
   }
 }
 
-TEST_P(StoreTest, LazyCompressionReformattingTest) {
+TEST_P(StoreTestSpecificAUSize, LazyCompressionReformattingTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
   int r;
   coll_t cid;
 
