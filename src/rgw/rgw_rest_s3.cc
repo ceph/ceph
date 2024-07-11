@@ -3672,6 +3672,12 @@ int RGWGetObjAttrs_ObjStore_S3::get_params(optional_yield y)
   auto& env = s->info.env;
   version_id = s->info.args.get("versionId");
 
+  range_str = s->info.env->get("HTTP_RANGE");
+  if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
+
   auto hdr = env->get_optional("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER");
   if (hdr) {
     expected_bucket_owner = *hdr;
