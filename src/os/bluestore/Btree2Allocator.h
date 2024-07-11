@@ -140,6 +140,7 @@ private:
       uint64_t, // end
       std::less<uint64_t>,
       pool_allocator<std::pair<uint64_t, uint64_t>>>;
+  using range_tree_iterator = range_tree_t::iterator;
   range_tree_t range_tree;    ///< main range tree
 
   //
@@ -287,16 +288,16 @@ private:
     range_size_tree_t* tree, uint64_t size);
 
   inline void _remove_from_tree(uint64_t start, uint64_t size);
-  inline void _remove_from_tree(range_tree_t::iterator rt_p,
+  inline range_tree_iterator _remove_from_tree(range_tree_iterator rt_p,
     uint64_t start, uint64_t end);
-  inline void _remove_from_tree(range_size_tree_t* rs_tree,
+  inline range_tree_iterator _remove_from_tree(range_size_tree_t* rs_tree,
     range_size_tree_t::iterator rs,
-    range_tree_t::iterator rt_p,
+    range_tree_iterator rt_p,
     uint64_t start, uint64_t end);
 
   inline void _try_insert_range(const range_seg_t& rs);
   inline bool __try_insert_range(const range_seg_t& rs,
-    range_tree_t::iterator* insert_pos);
+    range_tree_iterator* insert_pos);
 
   inline void _range_size_tree_add(const range_seg_t& r);
   inline void _range_size_tree_rm(const range_seg_t& rs);

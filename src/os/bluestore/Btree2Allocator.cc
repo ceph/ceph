@@ -298,21 +298,17 @@ void Btree2Allocator::_try_remove_from_tree(uint64_t start, uint64_t size,
     return;
   }
   do {
-    auto next_p = rt_p;
-    ++next_p;
-
     if (start < rt_p->first) {
       cb(start, rt_p->first - start, false);
       start = rt_p->first;
     }
     auto range_end = std::min(rt_p->second, end);
 
-    _remove_from_tree(rt_p, start, range_end);
+    rt_p = _remove_from_tree(rt_p, start, range_end);
 
     cb(start, range_end - start, true);
     start = range_end;
 
-    rt_p = next_p;
   } while (rt_p != range_tree.end() && rt_p->first < end && start < end);
   if (start < end) {
     cb(start, end - start, false);
@@ -461,8 +457,9 @@ void Btree2Allocator::_remove_from_tree(uint64_t start, uint64_t size)
   _remove_from_tree(rt_p, start, end);
 }
 
-void Btree2Allocator::_remove_from_tree(
-  Btree2Allocator::range_tree_t::iterator rt_p,
+Btree2Allocator::range_tree_iterator
+Btree2Allocator::_remove_from_tree(
+  Btree2Allocator::range_tree_iterator rt_p,
   uint64_t start,
   uint64_t end)
 {
@@ -472,13 +469,14 @@ void Btree2Allocator::_remove_from_tree(
   auto rs_p = rs_tree->find(rs);
   ceph_assert(rs_p != rs_tree->end());
 
-  _remove_from_tree(rs_tree, rs_p, rt_p, start, end);
+  return _remove_from_tree(rs_tree, rs_p, rt_p, start, end);
 }
 
-void Btree2Allocator::_remove_from_tree(
+Btree2Allocator::range_tree_iterator
+Btree2Allocator::_remove_from_tree(
   Btree2Allocator::range_size_tree_t* rs_tree,
   Btree2Allocator::range_size_tree_t::iterator rs_p,
-  Btree2Allocator::range_tree_t::iterator rt_p,
+  Btree2Allocator::range_tree_iterator rt_p,
   uint64_t start,
   uint64_t end)
 {
@@ -505,6 +503,7 @@ void Btree2Allocator::_remove_from_tree(
     rs.start = end;
     __try_insert_range(rs, &rt_p);
   }
+  return rt_p;
 }
 
 void Btree2Allocator::_try_insert_range(const range_seg_t& rs)
@@ -519,7 +518,7 @@ void Btree2Allocator::_try_insert_range(const range_seg_t& rs)
 
 bool Btree2Allocator::__try_insert_range(
   const Btree2Allocator::range_seg_t& rs,
-  Btree2Allocator::range_tree_t::iterator* rt_p_insert)
+  Btree2Allocator::range_tree_iterator* rt_p_insert)
 {
   ceph_assert(rs.end > rs.start);
   // Check if amount of range_seg_t entries isn't above the threshold,
