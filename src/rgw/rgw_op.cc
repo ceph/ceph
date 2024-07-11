@@ -986,6 +986,41 @@ void rgw_bucket_object_pre_exec(req_state *s)
   dump_bucket_from_state(s);
 }
 
+int do_bucket_logging(rgw::sal::Driver* driver,
+    req_state* s, 
+    RGWOp* op, 
+    BucketLoggingEventType type, 
+    const std::string& etag, 
+    optional_yield y) {
+  // check if bucket logging is needed
+  const auto& bucket_attrs = s->bucket->get_attrs();
+  if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
+    rgw_bucket_logging configuration;
+    try {
+      configuration.enabled = true;
+      decode(configuration, iter->second);  
+      ldpp_dout(op, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
+        "' configuration: " << configuration.to_json_str() << dendl;
+      if (configuration.event_type == type || 
+          configuration.event_type == BucketLoggingEventType::ReadWrite) {
+        if (auto ret = log_record(driver, s, op->name(), etag, configuration, op, y); ret < 0) { 
+          ldpp_dout(op, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
+            "'. ret=" << ret << dendl;
+          if (configuration.records_batch_size == 0) {
+            // don't reply with error if logging is async
+            return ret;
+          }
+        }
+      }
+    } catch (buffer::error& err) {
+      ldpp_dout(op, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
+        << "'. error: " << err.what() << dendl;
+      return  -EINVAL;
+    }
+  }
+  return 0;
+}
+
 int RGWGetObj::verify_permission(optional_yield y)
 {
   s->object->set_atomic();
@@ -2247,6 +2282,7 @@ void RGWGetObj::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_get_obj, 1);
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
+  std::string etag;
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -2275,6 +2311,13 @@ void RGWGetObj::execute(optional_yield y)
   multipart_parts_count = read_op->params.parts_count;
   if (op_ret < 0)
     goto done_err;
+
+  etag = attrs[RGW_ATTR_ETAG].to_str();
+  if (auto ret = do_bucket_logging(driver, s, this, BucketLoggingEventType::Read, etag, y); 
+      ret < 0) {
+    // don't reply with an error in case of failed GET logging
+    ldpp_dout(this, 5) << "WARNING: GET operation ignores bucket logging failure. error: " << ret << dendl;
+  }
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
@@ -4577,33 +4620,9 @@ void RGWPutObj::execute(optional_yield y)
     emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
   
-  // check if bucket logging is needed
-  const auto& bucket_attrs = s->bucket->get_attrs();
-  if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
-    rgw_bucket_logging configuration;
-    try {
-      configuration.enabled = true;
-      decode(configuration, iter->second);  
-      ldpp_dout(this, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
-        "' configuration: " << configuration.to_json_str() << dendl;
-      if (configuration.event_type == BucketLoggingEventType::Write || 
-          configuration.event_type == BucketLoggingEventType::ReadWrite) {
-        if (auto ret = log_record(driver, s, name(),  etag, configuration, this, y); ret < 0) { 
-          ldpp_dout(this, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
-            "'. ret=" << ret << dendl;
-          if (configuration.records_batch_size == 0) {
-            // don't reply with error if logging is async
-            op_ret = ret;
-            return;
-          }
-        }
-      }
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
-        << "'. error: " << err.what() << dendl;
-      op_ret = -EINVAL;
-      return;
-    }
+  op_ret = do_bucket_logging(driver, s, this, BucketLoggingEventType::Write, etag, y); 
+  if (op_ret  < 0) {
+    return;
   }
 
   // don't track the individual parts of multipart uploads. they replicate in
@@ -4623,7 +4642,6 @@ void RGWPutObj::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
-
 
   // send request to notification manager
   int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
@@ -5402,28 +5420,10 @@ void RGWDeleteObj::execute(optional_yield y)
     }
 
     if (op_ret == 0) {
-      // check if bucket logging is needed
-      const auto& bucket_attrs = s->bucket->get_attrs();
-      if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
-        rgw_bucket_logging configuration;
-        try {
-          configuration.enabled = true;
-          decode(configuration, iter->second);  
-          ldpp_dout(this, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
-            "' configuration: " << configuration.to_json_str() << dendl;
-          if (configuration.event_type == BucketLoggingEventType::Write || 
-              configuration.event_type == BucketLoggingEventType::ReadWrite) {
-            if (auto ret = log_record(driver, s, name(),  etag, configuration, this, y); ret < 0) { 
-              ldpp_dout(this, 1) << "ERROR: failed to perform logging for deletion from bucket '" << s->bucket->get_name() << 
-                "'. ret=" << ret << dendl;
-              // don't reply with an error in case of failed delete logging
-            }
-          }
-        } catch (buffer::error& err) {
-          ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
-            << "' when deleting from bucket. error: " << err.what() << dendl;
+      if (auto ret = do_bucket_logging(driver, s, this, BucketLoggingEventType::Write, etag, y); 
+        ret < 0) {
           // don't reply with an error in case of failed delete logging
-        }
+          ldpp_dout(this, 5) << "WARNING: DELETE operation ignores bucket logging failure: " << ret << dendl;
       }
     }
 
@@ -5771,34 +5771,10 @@ void RGWCopyObj::execute(optional_yield y)
     return;
   }
 
-  // check if bucket logging is needed
-  const auto& bucket_attrs = s->bucket->get_attrs();
-  if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
-    rgw_bucket_logging configuration;
-    try {
-      configuration.enabled = true;
-      decode(configuration, iter->second);  
-      ldpp_dout(this, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
-        "' configuration: " << configuration.to_json_str() << dendl;
-      if (configuration.event_type == BucketLoggingEventType::Write || 
-          configuration.event_type == BucketLoggingEventType::ReadWrite) {
-        if (auto ret = log_record(driver, s, name(),  etag, configuration, this, y); ret < 0) { 
-          ldpp_dout(this, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
-            "'. ret=" << ret << dendl;
-          if (configuration.records_batch_size == 0) {
-            // don't reply with error if logging is async
-            op_ret = ret;
-            return;
-          }
-        }
-      }
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
-        << "'. error: " << err.what() << dendl;
-      op_ret = -EINVAL;
-      // if parsing failed we don't know if logging is async or not
-      return;
-    }
+  etag = s->src_object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = do_bucket_logging(driver, s, this, BucketLoggingEventType::Write, etag, y); 
+  if (op_ret < 0) {
+    return;
   }
 
   op_ret = s->src_object->copy_object(s->owner,
@@ -6773,6 +6749,11 @@ void RGWCompleteMultipart::execute(optional_yield y)
 	    s->object.get(), nullptr, s,
 	    rgw::notify::ObjectCreatedCompleteMultipartUpload, y);
   op_ret = res->publish_reserve(this);
+  if (op_ret < 0) {
+    return;
+  }
+
+  op_ret = do_bucket_logging(driver, s, this, BucketLoggingEventType::Write, "", y); 
   if (op_ret < 0) {
     return;
   }
