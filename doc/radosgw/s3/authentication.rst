@@ -12,7 +12,7 @@ Requests are authenticated with AWS Signatures which are derived from the
 user's credentials (S3 access key and secret key).
 
 Most S3 clients and AWS SDKs will generate these signatures for you, given the
-necessary credentials. When issuing raw http requests, these signatures must be
+necessary credentials. When issuing raw HTTP requests, these signatures must be
 added manually.
 
 AWS Signature v4
