@@ -1897,12 +1897,16 @@ class RgwMultisite:
 
     def create_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
                          zones: Optional[List[str]] = None, bucket_name: str = '',
-                         source_zone: str = '', destination_zone: str = ''):
+                         source_zone: Optional[List[str]] = None,
+                         destination_zone: Optional[List[str]] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'create', '--group-id', group_id,
                                '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
 
         if SyncFlowTypes[flow_type].value == 'directional':
-            rgw_sync_policy_cmd += ['--source-zone', source_zone, '--dest-zone', destination_zone]
+            if source_zone is not None:
+                rgw_sync_policy_cmd += ['--source-zone', ','.join(source_zone)]
+            if destination_zone is not None:
+                rgw_sync_policy_cmd += ['--dest-zone', ','.join(destination_zone)]
         else:
             if zones:
                 rgw_sync_policy_cmd += ['--zones', ','.join(zones)]

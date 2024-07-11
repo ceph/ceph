@@ -178,7 +178,9 @@ class RgwMultisiteController(RESTController):
     @EndpointDoc("Create or update the sync flow")
     @CreatePermission
     def create_sync_flow(self, flow_id: str, flow_type: str, group_id: str,
-                         source_zone='', destination_zone='', zones: Optional[List[str]] = None,
+                         source_zone: Optional[List[str]] = None,
+                         destination_zone: Optional[List[str]] = None,
+                         zones: Optional[List[str]] = None,
                          bucket_name=''):
         multisite_instance = RgwMultisite()
         return multisite_instance.create_sync_flow(group_id, flow_id, flow_type, zones,

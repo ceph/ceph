@@ -328,6 +328,16 @@ export class TaskMessageService {
         }`;
       }
     ),
+    'rgw/multisite/sync-flow/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.flow_ids.length > 1
+            ? 'selected Flow Names'
+            : `Flow Name '${metadata.flow_ids[0]}'`
+        }`;
+      }
+    ),
     // iSCSI target tasks
     'iscsi/target/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.iscsiTarget(metadata)

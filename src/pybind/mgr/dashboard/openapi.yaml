@@ -10701,7 +10701,6 @@ paths:
                   default: ''
                   type: string
                 destination_zone:
-                  default: ''
                   type: string
                 flow_id:
                   type: string
@@ -10710,7 +10709,6 @@ paths:
                 group_id:
                   type: string
                 source_zone:
-                  default: ''
                   type: string
                 zones:
                   type: string

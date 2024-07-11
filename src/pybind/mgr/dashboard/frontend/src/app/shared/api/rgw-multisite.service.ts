@@ -71,4 +71,21 @@ export class RgwMultisiteService {
     }
     return this.http.delete(`${this.url}/sync-policy-group/${group_id}`, { params });
   }
+
+  createEditSyncFlow(payload: any) {
+    return this.http.put(`${this.url}/sync-flow`, payload);
+  }
+
+  removeSyncFlow(flow_id: string, flow_type: string, group_id: string, bucket_name?: string) {
+    let params = new HttpParams();
+    if (bucket_name) {
+      params = params.append('bucket_name', encodeURIComponent(bucket_name));
+    }
+    return this.http.delete(
+      `${this.url}/sync-flow/${encodeURIComponent(flow_id)}/${flow_type}/${encodeURIComponent(
+        group_id
+      )}`,
+      { params }
+    );
+  }
 }

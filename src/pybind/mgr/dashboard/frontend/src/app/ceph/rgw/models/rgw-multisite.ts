@@ -56,3 +56,8 @@ export enum RgwMultisiteSyncPolicyStatus {
   FORBIDDEN = 'forbidden',
   ALLOWED = 'allowed'
 }
+
+export enum FlowType {
+  directional = 'directional',
+  symmetrical = 'symmetrical'
+}

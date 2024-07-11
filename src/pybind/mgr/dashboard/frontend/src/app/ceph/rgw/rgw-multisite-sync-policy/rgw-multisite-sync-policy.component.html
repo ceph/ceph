@@ -2,7 +2,8 @@
   Multisite Sync Policy
   <cd-help-text>
     Multisite bucket-granularity sync policy provides fine grained control of data movement between
-    buckets in different zones.
+    buckets in different zones. Leveraging the bucket-granularity sync policy is possible for buckets to diverge,
+     and a bucket can pull data from other buckets (ones that don’t share its name or its ID) in different zone.
   </cd-help-text>
 </legend>
 <cd-table
@@ -12,14 +13,11 @@
   [columns]="columns"
   identifier="uniqueId"
   [forceIdentifier]="true"
-  columnMode="flex"
   selectionType="multiClick"
   [searchableObjects]="true"
-  [hasDetails]="false"
-  [serverSide]="false"
-  [count]="0"
-  [maxLimit]="25"
+  [hasDetails]="true"
   [toolHeader]="true"
+  (setExpandedRow)="setExpandedRow($event)"
   (fetchData)="getPolicyList($event)"
   (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
@@ -30,6 +28,11 @@
       [tableActions]="tableActions">
     </cd-table-actions>
   </div>
+  <cd-rgw-multisite-sync-policy-details
+    cdTableDetail
+    [expandedRow]="expandedRow"
+    [permission]="permission">
+  </cd-rgw-multisite-sync-policy-details>
 </cd-table>
 
 <ng-template #deleteTpl>
