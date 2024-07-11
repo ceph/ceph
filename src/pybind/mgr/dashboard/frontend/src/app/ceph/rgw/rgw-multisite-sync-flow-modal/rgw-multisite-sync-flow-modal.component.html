@@ -38,8 +38,7 @@
                 type="text"
                 i18n-placeholder
                 placeholder="Bucket Name..."
-                formControlName="bucket_name"
-                [readonly]="true"/>
+                formControlName="bucket_name"/>
               <span
                 class="invalid-feedback"
                 *ngIf="currentFormGroupContext.showError('bucket_name', frm, 'bucketNameNotAllowed')"

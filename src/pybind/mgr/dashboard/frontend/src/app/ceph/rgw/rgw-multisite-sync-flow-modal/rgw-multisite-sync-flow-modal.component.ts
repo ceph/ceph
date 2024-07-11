@@ -58,7 +58,7 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
       this.createDirectionalFlowForm();
       this.currentFormGroupContext = _.cloneDeep(this.syncPolicyDirectionalFlowForm);
     }
-
+    this.currentFormGroupContext.get('bucket_name').disable();
     if (this.editing) {
       this.currentFormGroupContext.patchValue({
         flow_id: this.flowSelectedRow.id,
@@ -161,19 +161,22 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
       this.currentFormGroupContext.setErrors({ cdSubmitButton: true });
       return;
     }
-    this.rgwMultisiteService.createEditSyncFlow(this.currentFormGroupContext.value).subscribe(
-      () => {
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`Created Sync Flow '${this.currentFormGroupContext.getValue('flow_id')}'`
-        );
-        this.activeModal.close('success');
-      },
-      () => {
-        // Reset the 'Submit' button.
-        this.currentFormGroupContext.setErrors({ cdSubmitButton: true });
-        this.activeModal.dismiss();
-      }
-    );
+    this.rgwMultisiteService
+      .createEditSyncFlow(this.currentFormGroupContext.getRawValue())
+      .subscribe(
+        () => {
+          const action = this.editing ? 'Modified' : 'Created';
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`${action} Sync Flow '${this.currentFormGroupContext.getValue('flow_id')}'`
+          );
+          this.activeModal.close('success');
+        },
+        () => {
+          // Reset the 'Submit' button.
+          this.currentFormGroupContext.setErrors({ cdSubmitButton: true });
+          this.activeModal.dismiss();
+        }
+      );
   }
 }

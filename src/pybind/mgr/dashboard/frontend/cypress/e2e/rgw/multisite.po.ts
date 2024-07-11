@@ -185,4 +185,108 @@ export class MultisitePageHelper extends PageHelper {
       .find('.datatable-body-cell-label')
       .should('contain', dest_zones[0]);
   }
+
+  @PageHelper.restrictTo(pages.index.url)
+  createPipe(pipe_id: string, source_zones: string[], dest_zones: string[]) {
+    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
+    this.getTab('Pipe').should('exist');
+    this.getTab('Pipe').click();
+    cy.request({
+      method: 'GET',
+      url: '/api/rgw/daemon',
+      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' }
+    });
+    cy.get('cd-rgw-multisite-sync-policy-details .table-actions button').first().click();
+    cy.get('cd-rgw-multisite-sync-pipe-modal').should('exist');
+
+    // Enter in pipe_id
+    cy.get('#pipe_id').type(pipe_id);
+    cy.wait(WAIT_TIMER);
+    // Select zone
+    cy.get('a[data-testid=select-menu-edit]').eq(0).click();
+    for (const zone of source_zones) {
+      cy.get('.popover-body div.select-menu-item-content').contains(zone).click();
+    }
+    cy.get('cd-rgw-multisite-sync-pipe-modal').click();
+    cy.get('a[data-testid=select-menu-edit]').eq(1).click();
+    for (const zone of dest_zones) {
+      cy.get('.popover-body input').type(`${zone}{enter}`);
+    }
+    cy.get('button.tc_submitButton').click();
+
+    cy.get('cd-rgw-multisite-sync-policy-details .datatable-body-cell-label').should(
+      'contain',
+      pipe_id
+    );
+
+    cy.get('cd-rgw-multisite-sync-policy-details')
+      .first()
+      .find('[aria-label=search]')
+      .first()
+      .clear({ force: true })
+      .type(pipe_id);
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  editPipe(pipe_id: string, zoneToAdd: string) {
+    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
+    this.getTab('Pipe').should('exist');
+    this.getTab('Pipe').click();
+    cy.request({
+      method: 'GET',
+      url: '/api/rgw/daemon',
+      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' }
+    });
+
+    cy.get('cd-rgw-multisite-sync-policy-details').within(() => {
+      cy.get('.datatable-body-cell-label').should('contain', pipe_id);
+      cy.get('[aria-label=search]').first().clear({ force: true }).type(pipe_id);
+      cy.get('input.cd-datatable-checkbox').first().check();
+      cy.get('.table-actions button').first().click();
+    });
+    cy.get('cd-rgw-multisite-sync-pipe-modal').should('exist');
+
+    cy.wait(WAIT_TIMER);
+    // Enter in pipe_id
+    cy.get('#pipe_id').should('contain.value', pipe_id);
+    // Select zone
+    cy.get('a[data-testid=select-menu-edit]').eq(1).click();
+
+    cy.get('.popover-body input').type(`${zoneToAdd}{enter}`);
+
+    cy.get('button.tc_submitButton').click();
+
+    this.getNestedTableCell('cd-rgw-multisite-sync-policy-details', 4, zoneToAdd, true);
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  deletePipe(pipe_id: string) {
+    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
+    this.getTab('Pipe').should('exist');
+    this.getTab('Pipe').click();
+    cy.get('cd-rgw-multisite-sync-policy-details').within(() => {
+      cy.get('.datatable-body-cell-label').should('contain', pipe_id);
+      cy.get('[aria-label=search]').first().clear({ force: true }).type(pipe_id);
+    });
+
+    const getRow = this.getTableCellWithContent.bind(this);
+    getRow('cd-rgw-multisite-sync-policy-details', pipe_id).click();
+
+    cy.get('cd-rgw-multisite-sync-policy-details').within(() => {
+      cy.get('.table-actions button.dropdown-toggle').first().click(); // open submenu
+      cy.get(`button.delete`).first().click();
+    });
+
+    cy.get('cd-modal .custom-control-label').click();
+    cy.get('[aria-label="Delete Pipe"]').click();
+    cy.get('cd-modal').should('not.exist');
+
+    cy.get('cd-rgw-multisite-sync-policy-details')
+      .first()
+      .within(() => {
+        cy.get('[aria-label=search]').first().clear({ force: true }).type(pipe_id);
+      });
+    // Waits for item to be removed from table
+    getRow(pipe_id).should('not.exist');
+  }
 }

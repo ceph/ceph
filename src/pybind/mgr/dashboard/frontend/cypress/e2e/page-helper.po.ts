@@ -308,31 +308,31 @@ export abstract class PageHelper {
   }
 
   getNestedTableCell(
-    tableSelector: string,
+    selector: string,
     columnIndex: number,
     exactContent: string,
     partialMatch = false
   ) {
     this.waitDataTableToLoad();
     this.clearTableSearchInput();
-    this.searchNestedTable(tableSelector, exactContent);
+    this.searchNestedTable(selector, exactContent);
     if (partialMatch) {
       return cy
-        .get(`${tableSelector} datatable-body-row datatable-body-cell:nth-child(${columnIndex})`)
+        .get(`${selector} datatable-body-row datatable-body-cell:nth-child(${columnIndex})`)
         .should('contain', exactContent);
     }
     return cy
-      .get(`${tableSelector}`)
+      .get(`${selector}`)
       .contains(
         `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
         new RegExp(`^${exactContent}$`)
       );
   }
 
-  searchNestedTable(tableSelector: string, text: string) {
+  searchNestedTable(selector: string, text: string) {
     this.waitDataTableToLoad();
 
     this.setPageSize('10');
-    cy.get(`${tableSelector} [aria-label=search]`).first().clear({ force: true }).type(text);
+    cy.get(`${selector} [aria-label=search]`).first().clear({ force: true }).type(text);
   }
 }
