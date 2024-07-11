@@ -93,6 +93,8 @@ static const actpair actpairs[] =
  { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration },
  { "s3:GetPublicAccessBlock", s3GetPublicAccessBlock },
  { "s3:GetObjectAcl", s3GetObjectAcl },
+ { "s3:GetObjectAttributes", s3GetObjectAttributes },
+ { "s3:GetObjectVersionAttributes", s3GetObjectVersionAttributes },
  { "s3:GetObject", s3GetObject },
  { "s3:GetObjectTorrent", s3GetObjectTorrent },
  { "s3:GetObjectVersionAcl", s3GetObjectVersionAcl },
