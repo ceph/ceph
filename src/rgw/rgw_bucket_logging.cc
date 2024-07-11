@@ -48,8 +48,6 @@ bool rgw_bucket_logging::decode_xml(XMLObj* obj) {
         } else {
           throw RGWXMLDecoder::err("invalid bucket logging partition date source: '" + type + "'");
         }
-      } else if (iter = oo->find("RGWPrefix"); iter.get_next()) {
-          obj_key_format = BucketLoggingKeyFormat::RGW;
       } else if (iter = oo->find("SimplePrefix"); iter.get_next()) {
           obj_key_format = BucketLoggingKeyFormat::Simple;
       } else {
@@ -103,10 +101,6 @@ void rgw_bucket_logging::dump_xml(Formatter *f) const {
       }
       f->close_section(); // PartitionedPrefix
       break;
-    case BucketLoggingKeyFormat::RGW:
-      f->open_object_section("RGWPrefix"); // empty section
-      f->close_section();
-      break;
     case BucketLoggingKeyFormat::Simple:
       f->open_object_section("SimplePrefix"); // empty section
       f->close_section();
@@ -158,11 +152,6 @@ void rgw_bucket_logging::dump(Formatter *f) const {
             encode_json("PartitionDateSource", "EventTime", f);
             break;
         }
-      }
-      break;
-      case BucketLoggingKeyFormat::RGW:
-      {
-        Formatter::ObjectSection s(*f, "rgwPrefix");
       }
       break;
       case BucketLoggingKeyFormat::Simple:
@@ -245,13 +234,6 @@ int new_logging_object(const rgw_bucket_logging& configuration,
   const auto unique = unique_string<UniqueStringLength>();
 
   switch (configuration.obj_key_format) {
-    case BucketLoggingKeyFormat::RGW:
-      obj_name = fmt::format("{}{}/{:%Y-%m-%d-%H-%M-%S}-{}",
-        configuration.target_prefix,
-        rgw_id,
-        t,
-        unique);
-      break;
     case BucketLoggingKeyFormat::Simple:
       obj_name = fmt::format("{}{:%Y-%m-%d-%H-%M-%S}-{}",
         configuration.target_prefix,

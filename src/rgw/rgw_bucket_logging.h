@@ -40,8 +40,6 @@ struct req_state;
          </PartitionedPrefix>
          <SimplePrefix>
          </SimplePrefix>
-         <RGWPrefix>                                    <!-- Ceph extension -->
-         </RGWPrefix>
       </TargetObjectKeyFormat>
       <TargetPrefix>string</TargetPrefix>
       <EventType>Read|Write|ReadWrite</EventType>       <!-- Ceph extension -->
@@ -52,7 +50,7 @@ struct req_state;
 </BucketLoggingStatus>
 */
 
-enum class BucketLoggingKeyFormat {Partitioned, RGW, Simple};
+enum class BucketLoggingKeyFormat {Partitioned, Simple};
 enum class BucketLoggingRecordType {Standard, Short};
 enum class BucketLoggingEventType {Read, Write, ReadWrite};
 enum class BucketLoggingPartitionDateSource {DeliveryTime, EventTime};
@@ -60,11 +58,10 @@ enum class BucketLoggingPartitionDateSource {DeliveryTime, EventTime};
 struct rgw_bucket_logging {
   bool enabled = false;
   std::string target_bucket;
-  BucketLoggingKeyFormat obj_key_format = BucketLoggingKeyFormat::RGW;
+  BucketLoggingKeyFormat obj_key_format = BucketLoggingKeyFormat::Simple;
   // target object key formats:
   // Partitioned: [DestinationPrefix][SourceAccountId]/[SourceRegion]/[SourceBucket]/[YYYY]/[MM]/[DD]/[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
   // Simple: [DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
-  // RGW: [DestinationPrefix]/RGWId]/[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
   std::string target_prefix; // a prefix for all log object keys. 
                              // useful when multiple bucket log to the same target 
                              // or when the target bucket is used for other things than logs

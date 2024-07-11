@@ -307,22 +307,10 @@
                     "shape":"PartitionedPrefix",
                     "documentation":"<p>Partitioned S3 key for log objects.</p>",
                     "locationName":"PartitionedPrefix"
-                },
-                "RGWPrefix":{
-                    "shape":"RGWPrefix",
-                    "documentation":"<p>Prefixed by RGW for s3 key for log objects.</p>",
-                    "locationName":"RGW"
                 }
             },
-            "documentation":"<p>Key format for log objects. Only one format, PartitionedPrefix, RGWPrefix or SimplePrefix, is allowed.</p>"
+            "documentation":"<p>Key format for log objects. Only one format, PartitionedPrefix or SimplePrefix, is allowed.</p>"
         },
-        "RGWPrefix":{
-            "type":"structure",
-            "members":{
-            },
-            "documentation":"<p>To use RGW prefix format for S3 keys for log objects, set RGW to an empty object.</p> <p> <code>[DestinationPrefix][RGW ID]/[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]</code> </p>",
-            "locationName":"RGWPrefix"
-         },
         "ObjectRollTime":{"type":"integer"},
         "RecordsBatchSize":{"type":"integer"},
         "RecordType":{
