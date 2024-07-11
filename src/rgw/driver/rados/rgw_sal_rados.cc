@@ -2335,25 +2335,24 @@ int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 
   RGWObjectCtx& obj_ctx = get_ctx();
   RGWBucketInfo& bucket_info = get_bucket()->get_info();
-
   Object::Part obj_part{};
+
   for (; part_iter != manifest->obj_end(dpp); ++part_iter) {
 
-    /* we're only interested in the first object in each logical part */
+    /* we're interested the part checksum, stored in the first object in each
+     * logical part;  we need to sum the byte counts from the remaining
+     * objects to return a correct part size */
     auto cur_part_id = part_iter.get_cur_part_id();
-    if (cur_part_id == obj_part.part_number) {
-      continue;
-    }
 
     /* get_part_obj_state alters the passed manifest** to point to a part
      * manifest, which we don't want to leak out here */
     RGWObjManifest* obj_m = manifest;
     RGWObjState* astate;
     bool part_prefetch = false;
+
     ret = RGWRados::get_part_obj_state(dpp, y, store->getRados(), bucket_info, &obj_ctx,
 				       obj_m, cur_part_id, &parts_count,
 				       part_prefetch, &astate, &obj_m);
-
     if (ret < 0) {
       ldpp_dout_fmt(dpp, 4,
 		    "{} get_part_obj_state() failed ret={}",
@@ -2361,26 +2360,37 @@ int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
       break;
     }
 
-    obj_part.part_number = part_iter.get_cur_part_id();
-    obj_part.part_size = astate->accounted_size;
+    if (cur_part_id != obj_part.part_number) {
+      /* "head" of a new logical part */
 
-    if (auto iter = astate->attrset.find(RGW_ATTR_CKSUM);
-	iter != astate->attrset.end()) {
-          try {
-	    rgw::cksum::Cksum part_cksum;
-	    auto ck_iter = iter->second.cbegin();
-	    part_cksum.decode(ck_iter);
-	    obj_part.cksum = std::move(part_cksum);
-	  } catch (buffer::error& err) {
-	    ldpp_dout_fmt(dpp, 4,
-			  "WARN: {} could not decode stored cksum, "
-			  "caught buffer::error",
-			  __func__);
-	  }
+      /* send the prior part callback, if applicable */
+      if (obj_part.part_number != 0) {
+	each_func(obj_part);
+	*next_marker = ++marker;
+      }
+
+      /* update for the new logical part */
+      obj_part.part_number = part_iter.get_cur_part_id();
+      obj_part.part_size = astate->accounted_size;
+
+      if (auto iter = astate->attrset.find(RGW_ATTR_CKSUM);
+	  iter != astate->attrset.end()) {
+	try {
+	  rgw::cksum::Cksum part_cksum;
+	  auto ck_iter = iter->second.cbegin();
+	  part_cksum.decode(ck_iter);
+	  obj_part.cksum = std::move(part_cksum);
+	} catch (buffer::error& err) {
+	  ldpp_dout_fmt(dpp, 4,
+			"WARN: {} could not decode stored cksum, "
+			"caught buffer::error",
+			__func__);
+	}
+      }
+    } else {
+      /* "tail" object */
+      obj_part.part_size += astate->accounted_size;
     }
-
-    each_func(obj_part);
-    *next_marker = ++marker;
   } /* each part */
   
   return ret;
