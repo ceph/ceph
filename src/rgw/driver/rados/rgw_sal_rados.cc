@@ -1033,7 +1033,7 @@ int RadosBucket::get_logging_object_name(std::string& obj_name, const std::strin
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
     ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
-      "' when getting logging object name. ret = " << -EIO << dendl;
+      "' when getting logging object name" << dendl;
     return -EIO;
   }
   bufferlist bl;
@@ -1060,7 +1060,7 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name, const std:
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
     ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
-      "' when setting logging object name. ret = " << -EIO << dendl;
+      "' when setting logging object name"  << dendl;
     return -EIO;
   }
   bufferlist bl;
@@ -1094,7 +1094,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
 
   if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
     ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
-      "' when comitting logging object. ret = " << -EIO << dendl;
+      "' when comitting logging object"  << dendl;
     return -EIO;
   }
 
@@ -1174,46 +1174,33 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
 }
 
 int RadosBucket::write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp) {
+  const auto temp_obj_name = to_temp_object_name(this, obj_name);
   rgw_pool data_pool;
-  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name}, &data_pool)) {
+  rgw_obj obj{get_key(), obj_name};
+  if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
+      "' when writing logging object" << dendl;
     return -EIO;
   }
-  // TODO: habdle objv tracker failures: add -EBUSY retry loop
-  const auto temp_obj_name = to_temp_object_name(this, obj_name);
-  bufferlist bl;
-  RGWObjVersionTracker objv_tracker;
-  if (const auto ret = rgw_get_system_obj(store->svc()->sysobj,
-                               data_pool,
-                               temp_obj_name,
-                               bl,
-                               &objv_tracker,
-                               nullptr,
-                               y,
-                               dpp,
-                               nullptr,
-                               nullptr); ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 1) << "failed to read logging object '" << temp_obj_name << 
-      "' during write. ret = " << ret << dendl;
-    return ret;
+  librados::IoCtx io_ctx;
+  if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
+    return -EIO;
   }
-  // add the record to the temporary object
+  bufferlist bl;
+  bl.append(record);
+  bl.append("\n");
+  // append the record to the temporary object
   // if this is the first record, the object will be created
-  bl.append(record+"\n");
-  if (const auto ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
-                               data_pool,
-                               temp_obj_name,
-                               bl,
-                               false, // not exclusive - object may exist
-                               &objv_tracker,
-                               ceph::real_time::clock::now(),
-                               y,
-                               nullptr); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to write logging object '" << temp_obj_name << 
+  librados::ObjectWriteOperation op;
+  op.append(bl);
+  if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, &op, y); ret < 0) {
+    ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name << 
       "'. ret = " << ret << dendl;
     return ret;
   }
   ldpp_dout(dpp, 1) << "wrote " << record.length() << " bytes to logging object '" << 
-    temp_obj_name << "' with new size of " << bl.length() << " bytes" << dendl;
+    temp_obj_name << "'" << dendl;
   return 0;
 }
 
