@@ -3711,20 +3711,6 @@ int RGWGetObjAttrs_ObjStore_S3::get_params(optional_yield y)
 
 void RGWGetObjAttrs_ObjStore_S3::send_response()
 {
-  if (op_ret)
-    set_req_state_err(s, op_ret);
-  dump_errno(s);
-
-  if (op_ret == 0) {
-    // x-amz-delete-marker: DeleteMarker // not sure we can plausibly do this?
-    dump_last_modified(s, lastmod);
-    dump_header_if_nonempty(s, "x-amz-version-id", version_id);
-    // x-amz-request-charged: RequestCharged
-  }
-
-  end_header(s, this, to_mime_type(s->format));
-  dump_start(s);
-
   if (op_ret == 0) {
     s->formatter->open_object_section("GetObjectAttributes");
     if (requested_attributes & as_flag(ReqAttributes::Etag)) {
@@ -3777,14 +3763,14 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
         s->formatter->open_object_section("ObjectParts");
 
 	bool truncated = false;
-	int marker = 0;
+	int lp_marker = 0;
 	int next_marker;
 
 	using namespace rgw::sal;
 
 	int ret =
 	  s->object->list_parts(
-            this, s->cct, max_parts, marker,
+            this, s->cct, max_parts, lp_marker,
 	    &next_marker, &truncated,
 	    [&](const Object::Part& part) -> int {
 	      s->formatter->open_object_section("Part");
@@ -3806,7 +3792,7 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
 	s->formatter->dump_bool("IsTruncated", truncated);
 	s->formatter->dump_int("MaxParts", max_parts);
 	s->formatter->dump_int("NextPartNumberMarker", next_marker);
-	s->formatter->dump_int("PartNumberMarker", marker);
+	s->formatter->dump_int("PartNumberMarker", lp_marker);
 	s->formatter->close_section();
       } /* multipart_parts_count positive */
     } /* ObjectParts */
@@ -3825,6 +3811,20 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
     }
     s->formatter->close_section();
   } /* op_ret == 0 */
+
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+
+  if (op_ret == 0) {
+    // x-amz-delete-marker: DeleteMarker // not sure we can plausibly do this?
+    dump_last_modified(s, lastmod);
+    dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+    // x-amz-request-charged: RequestCharged
+  }
+
+  end_header(s, this, to_mime_type(s->format));
+  dump_start(s);
 
   rgw_flush_formatter_and_reset(s, s->formatter);
 } /* RGWGetObjAttrs_ObjStore_S3::send_response */
