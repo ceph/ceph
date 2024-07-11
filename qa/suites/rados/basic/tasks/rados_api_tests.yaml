@@ -11,6 +11,7 @@ overrides:
     - \(POOL_APP_NOT_ENABLED\)
     - \(PG_AVAILABILITY\)
     - \(PG_DEGRADED\)
+    - CEPHADM_STRAY_DAEMON
     conf:
       client:
         debug ms: 1

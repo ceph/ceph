@@ -50,6 +50,7 @@ TEST_F(LibRadosMiscPP, LongNamePP) {
 }
 
 TEST_F(LibRadosMiscPP, LongLocatorPP) {
+  SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("content");
   int maxlen = g_conf()->osd_max_object_name_len;

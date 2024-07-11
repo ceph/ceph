@@ -47,12 +47,17 @@ public:
 
   bool is_failed() {
     std::scoped_lock locker(m_lock);
-    return m_init_failed ||
-           m_instance_watcher->is_failed() ||
-           m_mirror_watcher->is_failed();
+    bool failed = m_init_failed;
+    if (m_instance_watcher) {
+      failed |= m_instance_watcher->is_failed();
+    }
+    if (m_mirror_watcher) {
+      failed |= m_mirror_watcher->is_failed();
+    }
+    return failed;
   }
 
-  utime_t get_failed_ts() {
+  monotime get_failed_ts() {
     std::scoped_lock locker(m_lock);
     if (m_instance_watcher) {
       return m_instance_watcher->get_failed_ts();
@@ -61,7 +66,7 @@ public:
       return m_mirror_watcher->get_failed_ts();
     }
 
-    return utime_t();
+    return clock::now();
   }
 
   bool is_blocklisted() {
@@ -69,7 +74,7 @@ public:
     return is_blocklisted(locker);
   }
 
-  utime_t get_blocklisted_ts() {
+  monotime get_blocklisted_ts() {
     std::scoped_lock locker(m_lock);
     if (m_instance_watcher) {
       return m_instance_watcher->get_blocklisted_ts();
@@ -78,7 +83,7 @@ public:
       return m_mirror_watcher->get_blocklisted_ts();
     }
 
-    return utime_t();
+    return clock::now();
   }
 
   Peers get_peers() {

@@ -418,6 +418,10 @@ public:
     : core_type(std::move(base))
   {}
 
+  void set_coroutine(seastar::task& coroutine) noexcept {
+    core_type::set_coroutine(coroutine);
+  }
+
   using value_type = typename seastar::future<T>::value_type;
   using tuple_type = typename seastar::future<T>::tuple_type;
 
@@ -688,6 +692,12 @@ struct interruptible_errorator {
 	Errorator::template make_ready_future<ValueT>(
 	  std::forward<A>(value)...));
   }
+
+  template <template <typename> typename FutureType, typename ValueT>
+  static future<ValueT> make_interruptible(FutureType<ValueT> &&fut) {
+    return std::move(fut);
+  }
+
   static interruptible_future_detail<
     InterruptCond,
     typename Errorator::template future<>> now() {
@@ -709,6 +719,7 @@ class [[nodiscard]] interruptible_future_detail<
 {
 public:
   using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
+  using core_type::unsafe_get0;
   using errorator_type = typename core_type::errorator_type;
   using interrupt_errorator_type =
     interruptible_errorator<InterruptCond, errorator_type>;
@@ -771,6 +782,10 @@ public:
     : core_type(::seastar::futurize<core_type>::make_exception_future(std::move(ep))) {
   }
 
+  void set_coroutine(seastar::task& coroutine) noexcept {
+    core_type::set_coroutine(coroutine);
+  }
+
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
 	   std::enable_if_t<!interruptible, int> = 0>
   [[gnu::always_inline]]
@@ -786,6 +801,9 @@ public:
     return safe_then_interruptible(std::forward<Args>(args)...);
   }
 
+  auto discard_result() noexcept {
+    return si_then([](auto &&) {});
+  }
 
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
 	   typename U = T, std::enable_if_t<!std::is_void_v<U> && interruptible, int> = 0>
@@ -803,13 +821,17 @@ public:
       }, [func=std::move(errfunc),
 	  interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
 	  (auto&& err) mutable -> decltype(auto) {
-	  constexpr bool return_void = std::is_void_v<
+	  static_assert(!std::is_void_v<
 	    std::invoke_result_t<ErrorVisitorT,
-	      std::decay_t<decltype(err)>>>;
+	      std::decay_t<decltype(err)>>>);
+	  constexpr bool is_assert = std::is_same_v<
+	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
+	      std::decay_t<decltype(err)>>>,
+	    ::crimson::no_touch_error_marker>;
 	  constexpr bool return_err = ::crimson::is_error_v<
 	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
 	      std::decay_t<decltype(err)>>>>;
-	  if constexpr (return_err || return_void) {
+	  if constexpr (return_err || is_assert) {
 	    return non_futurized_call_with_interruption(
 		      interrupt_condition,
 		      std::move(func),
@@ -839,13 +861,17 @@ public:
       }, [func=std::move(errfunc),
 	  interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
 	  (auto&& err) mutable -> decltype(auto) {
-	  constexpr bool return_void = std::is_void_v<
+	  static_assert(!std::is_void_v<
 	    std::invoke_result_t<ErrorVisitorT,
-	      std::decay_t<decltype(err)>>>;
+	      std::decay_t<decltype(err)>>>);
+	  constexpr bool is_assert = std::is_same_v<
+	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
+	      std::decay_t<decltype(err)>>>,
+	    ::crimson::no_touch_error_marker>;
 	  constexpr bool return_err = ::crimson::is_error_v<
 	    std::decay_t<std::invoke_result_t<ErrorVisitorT,
 	      std::decay_t<decltype(err)>>>>;
-	  if constexpr (return_err || return_void) {
+	  if constexpr (return_err || is_assert) {
 	    return non_futurized_call_with_interruption(
 		      interrupt_condition,
 		      std::move(func),
@@ -967,13 +993,17 @@ public:
 	[errfunc=std::move(errfunc),
 	 interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
 	(auto&& err) mutable -> decltype(auto) {
-	  constexpr bool return_void = std::is_void_v<
+	  static_assert(!std::is_void_v<
 	    std::invoke_result_t<ErrorFunc,
-	      std::decay_t<decltype(err)>>>;
+	      std::decay_t<decltype(err)>>>);
+	  constexpr bool is_assert = std::is_same_v<
+	    std::decay_t<std::invoke_result_t<ErrorFunc,
+	      std::decay_t<decltype(err)>>>,
+	    ::crimson::no_touch_error_marker>;
 	  constexpr bool return_err = ::crimson::is_error_v<
 	    std::decay_t<std::invoke_result_t<ErrorFunc,
 	      std::decay_t<decltype(err)>>>>;
-	  if constexpr (return_err || return_void) {
+	  if constexpr (return_err || is_assert) {
 	    return non_futurized_call_with_interruption(
 		      interrupt_condition,
 		      std::move(errfunc),
@@ -1086,6 +1116,9 @@ struct interruptor
 public:
   using condition = InterruptCond;
 
+  template <typename T>
+  using future = interruptible_future<InterruptCond, T>;
+
   static const void *get_interrupt_cond() {
     return (const void*)interrupt_cond<InterruptCond>.interrupt_cond.get();
   }
@@ -1195,6 +1228,17 @@ public:
 		  interrupt_condition,
 		  std::forward<Func>(func));
 	    };
+  }
+
+  template <typename Lock, typename Func>
+  [[gnu::always_inline]]
+  static auto with_lock(Lock& lock, Func&& func) {
+    return seastar::with_lock(
+      lock,
+      [func=std::move(func),
+       interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
+      return call_with_interruption(interrupt_condition, func);
+    });
   }
 
   template <typename Iterator,

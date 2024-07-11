@@ -589,6 +589,10 @@ struct spg_t {
     return ghobject_t::make_pgmeta(pgid.pool(), pgid.ps(), shard);
   }
 
+  ghobject_t make_snapmapper_oid() const {
+    return ghobject_t::make_snapmapper(pgid.pool(), pgid.ps(), shard);
+  }
+
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(1, 1, bl);
     encode(pgid, bl);

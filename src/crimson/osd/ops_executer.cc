@@ -466,9 +466,8 @@ auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   if (!osd_op_params) {
     osd_op_params.emplace();
-    fill_op_params_bump_pg_version();
+    fill_op_params(m);
   }
-  user_modify = (m == modified_by::user);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
@@ -490,6 +489,11 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
   const ObjectState& os,
   const SnapSet& ss)
 {
+  if (msg->get_snapid() != CEPH_SNAPDIR) {
+    logger().debug("LIST_SNAPS with incorrect context");
+    return crimson::ct_error::invarg::make();
+  }
+
   obj_list_snap_response_t resp;
   resp.clones.reserve(ss.clones.size() + 1);
   for (auto &clone: ss.clones) {
@@ -802,7 +806,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   }
 }
 
-void OpsExecuter::fill_op_params_bump_pg_version()
+void OpsExecuter::fill_op_params(OpsExecuter::modified_by m)
 {
   osd_op_params->req_id = msg->get_reqid();
   osd_op_params->mtime = msg->get_mtime();
@@ -810,6 +814,7 @@ void OpsExecuter::fill_op_params_bump_pg_version()
   osd_op_params->pg_trim_to = pg->get_pg_trim_to();
   osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
   osd_op_params->last_complete = pg->get_info().last_complete;
+  osd_op_params->user_modify = (m == modified_by::user);
 }
 
 std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
@@ -829,7 +834,6 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
     osd_op_params->req_id,
     osd_op_params->mtime,
     op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
-  osd_op_params->at_version.version++;
   if (op_info.allows_returnvec()) {
     // also the per-op values are recorded in the pg log
     log_entries.back().set_op_returns(ops);
@@ -931,7 +935,9 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     return std::vector<snapid_t>{std::begin(snapc.snaps), last};
   }();
 
-  auto clone_obc = prepare_clone(coid);
+  auto clone_obc = prepare_clone(coid, osd_op_params->at_version);
+  osd_op_params->at_version.version++;
+
   // make clone
   backend.clone(clone_obc->obs.oi, initial_obs, clone_obc->obs, txn);
 
@@ -961,27 +967,35 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     pg_log_entry_t::CLONE,
     coid,
     clone_obc->obs.oi.version,
-    initial_obs.oi.version,
-    initial_obs.oi.user_version,
+    clone_obc->obs.oi.prior_version,
+    clone_obc->obs.oi.user_version,
     osd_reqid_t(),
-    initial_obs.oi.mtime, // will be replaced in `apply_to()`
+    clone_obc->obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
-  osd_op_params->at_version.version++;
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
 
-  // update most recent clone_overlap and usage stats
-  assert(cloning_ctx->new_snapset.clones.size() > 0);
-  // In classic, we check for evicted clones before
-  // adjusting the clone_overlap.
-  // This check is redundant here since `clone_obc`
-  // was just created (See prepare_clone()).
-  interval_set<uint64_t> &newest_overlap =
-    cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
-  osd_op_params->modified_ranges.intersection_of(newest_overlap);
-  delta_stats.num_bytes += osd_op_params->modified_ranges.size();
-  newest_overlap.subtract(osd_op_params->modified_ranges);
   return cloning_ctx;
+}
+
+void OpsExecuter::update_clone_overlap() {
+  interval_set<uint64_t> *newest_overlap;
+  if (cloning_ctx) {
+    newest_overlap =
+      &cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
+  } else if (op_info.may_write() 
+    && obc->obs.exists 
+    && !obc->ssc->snapset.clones.empty()) {
+    newest_overlap =
+      &obc->ssc->snapset.clone_overlap.rbegin()->second;
+  } else {
+    return;
+  }
+
+  assert(osd_op_params);
+  osd_op_params->modified_ranges.intersection_of(*newest_overlap);
+  newest_overlap->subtract(osd_op_params->modified_ranges);
+  delta_stats.num_bytes += osd_op_params->modified_ranges.size();
 }
 
 void OpsExecuter::CloningContext::apply_to(
@@ -1002,6 +1016,7 @@ OpsExecuter::flush_clone_metadata(
 {
   assert(!txn.empty());
   auto maybe_snap_mapped = interruptor::now();
+  update_clone_overlap();
   if (cloning_ctx) {
     std::move(*cloning_ctx).apply_to(log_entries, *obc);
     const auto& coid = log_entries.front().soid;
@@ -1029,12 +1044,13 @@ OpsExecuter::flush_clone_metadata(
 }
 
 ObjectContextRef OpsExecuter::prepare_clone(
-  const hobject_t& coid)
+  const hobject_t& coid,
+  eversion_t version)
 {
   ceph_assert(pg->is_primary());
   ObjectState clone_obs{coid};
   clone_obs.exists = true;
-  clone_obs.oi.version = osd_op_params->at_version;
+  clone_obs.oi.version = version;
   clone_obs.oi.prior_version = obc->obs.oi.version;
   clone_obs.oi.copy_user_bits(obc->obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
@@ -1049,9 +1065,7 @@ ObjectContextRef OpsExecuter::prepare_clone(
 
 void OpsExecuter::apply_stats()
 {
-  pg->get_peering_state().apply_op_stats(get_target(), delta_stats);
-  pg->scrubber.handle_op_stats(get_target(), delta_stats);
-  pg->publish_stats_to_osd();
+  pg->apply_stats(get_target(), delta_stats);
 }
 
 OpsExecuter::OpsExecuter(Ref<PG> pg,
@@ -1454,7 +1468,7 @@ static PG::interruptible_future<> do_pgls_filtered(
 PgOpsExecuter::interruptible_future<>
 PgOpsExecuter::execute_op(OSDOp& osd_op)
 {
-  logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));
+  logger().debug("handling op {}", ceph_osd_op_name(osd_op.op.op));
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_PGLS:
     return do_pgls(pg, nspace, osd_op);

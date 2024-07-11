@@ -14,6 +14,7 @@
 #include "crimson/net/Errors.h"
 #include "crimson/net/Fwd.h"
 #include "crimson/net/Socket.h"
+#include "test/crimson/ctest_utils.h"
 
 using crimson::common::local_conf;
 
@@ -98,11 +99,10 @@ future<> test_bind_same(bool is_fixed_cpu) {
           return pss2->shutdown_destroy();
         });
       });
-    }, listen_ertr::all_same_way(
+    }, listen_ertr::assert_all_func(
         [saddr](const std::error_code& e) {
       logger().error("test_bind_same(): there is another instance running at {}",
                      saddr);
-      ceph_abort();
     })).then([pss1] {
       return pss1->shutdown_destroy();
     }).handle_exception([](auto eptr) {
@@ -128,11 +128,10 @@ future<> test_accept(bool is_fixed_cpu) {
           ).finally([cleanup = std::move(socket)] {});
         });
       });
-    }, listen_ertr::all_same_way(
+    }, listen_ertr::assert_all_func(
         [saddr](const std::error_code& e) {
       logger().error("test_accept(): there is another instance running at {}",
                      saddr);
-      ceph_abort();
     })).then([saddr] {
       return seastar::when_all(
         socket_connect(saddr).then([](auto socket) {
@@ -183,10 +182,10 @@ class SocketFactory {
         psf->pss = pss;
         return pss->listen(saddr
         ).safe_then([] {
-        }, listen_ertr::all_same_way([saddr](const std::error_code& e) {
+        }, listen_ertr::assert_all_func(
+	  [saddr](const std::error_code& e) {
           logger().error("dispatch_sockets(): there is another instance running at {}",
                          saddr);
-          ceph_abort();
         }));
       });
     }).then([psf, saddr] {
@@ -450,8 +449,11 @@ future<> test_unexpected_down(bool is_fixed_cpu) {
       return Connection::dispatch_rw_bounded(cs, 128, true
         ).handle_exception_type([](const std::system_error& e) {
         logger().error("test_unexpected_down(): client get error {}", e);
+        // union of errors from both read and write
+        // also see dispatch_write_unbounded() and dispatch_read_unbounded()
         ceph_assert(e.code() == error::read_eof ||
-		    e.code() == std::errc::connection_reset);
+		    e.code() == std::errc::connection_reset ||
+                    e.code() == std::errc::broken_pipe);
       });
     },
     [](auto ss) { return Connection::dispatch_rw_unbounded(ss); }
@@ -552,7 +554,7 @@ seastar::future<int> do_test(seastar::app_template& app)
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [&app] {
     return do_test(app);
   });

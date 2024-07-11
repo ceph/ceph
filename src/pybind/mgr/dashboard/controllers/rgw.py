@@ -14,11 +14,12 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
-from ..services.rgw_client import NoRgwDaemonsException, RgwClient, RgwMultisite
+from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, RgwClient, RgwMultisite
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
-    CRUDCollectionMethod, CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, \
-    RESTController, UIRouter, UpdatePermission, allow_empty_body
+    CRUDCollectionMethod, CRUDEndpoint, DeletePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission, \
+    allow_empty_body
 from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, \
     TableAction, Validator, VerticalContainer
 from ._version import APIVersion
@@ -114,14 +115,97 @@ class RgwMultisiteStatus(RESTController):
 
 @APIRouter('rgw/multisite', Scope.RGW)
 @APIDoc("RGW Multisite Management API", "RgwMultisite")
-class RgwMultisiteSyncStatus(RESTController):
-    @RESTController.Collection(method='GET', path='/sync_status')
+class RgwMultisiteController(RESTController):
+    @Endpoint(path='/sync_status')
+    @EndpointDoc("Get the sync status")
+    @ReadPermission
     @allow_empty_body
     # pylint: disable=W0102,W0613
     def get_sync_status(self):
         multisite_instance = RgwMultisite()
         result = multisite_instance.get_multisite_sync_status()
         return result
+
+    @Endpoint(path='/sync-policy')
+    @EndpointDoc("Get the sync policy")
+    @ReadPermission
+    def get_sync_policy(self, bucket_name='', zonegroup_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.get_sync_policy(bucket_name, zonegroup_name)
+
+    @Endpoint(path='/sync-policy-group')
+    @EndpointDoc("Get the sync policy group")
+    @ReadPermission
+    def get_sync_policy_group(self, group_id: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.get_sync_policy_group(group_id, bucket_name)
+
+    @Endpoint(method='POST', path='/sync-policy-group')
+    @EndpointDoc("Create the sync policy group")
+    @CreatePermission
+    def create_sync_policy_group(self, group_id: str, status: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.create_sync_policy_group(group_id, status, bucket_name)
+
+    @Endpoint(method='PUT', path='/sync-policy-group')
+    @EndpointDoc("Update the sync policy group")
+    @UpdatePermission
+    def update_sync_policy_group(self, group_id: str, status: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.update_sync_policy_group(group_id, status, bucket_name)
+
+    @Endpoint(method='DELETE', path='/sync-policy-group')
+    @EndpointDoc("Remove the sync policy group")
+    @DeletePermission
+    def remove_sync_policy_group(self, group_id: str, bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.remove_sync_policy_group(group_id, bucket_name)
+
+    @Endpoint(method='PUT', path='/sync-flow')
+    @EndpointDoc("Create or update the sync flow")
+    @CreatePermission
+    def create_sync_flow(self, flow_id: str, flow_type: str, group_id: str,
+                         source_zone='', destination_zone='', zones: Optional[List[str]] = None,
+                         bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.create_sync_flow(group_id, flow_id, flow_type, zones,
+                                                   bucket_name, source_zone, destination_zone)
+
+    @Endpoint(method='DELETE', path='/sync-flow')
+    @EndpointDoc("Remove the sync flow")
+    @DeletePermission
+    def remove_sync_flow(self, flow_id: str, flow_type: str, group_id: str,
+                         source_zone='', destination_zone='', zones: Optional[List[str]] = None,
+                         bucket_name=''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.remove_sync_flow(group_id, flow_id, flow_type, source_zone,
+                                                   destination_zone, zones, bucket_name)
+
+    @Endpoint(method='PUT', path='/sync-pipe')
+    @EndpointDoc("Create or update the sync pipe")
+    @CreatePermission
+    def create_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_zones: Optional[List[str]] = None,
+                         destination_zones: Optional[List[str]] = None,
+                         destination_buckets: Optional[List[str]] = None,
+                         bucket_name: str = ''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.create_sync_pipe(group_id, pipe_id, source_zones,
+                                                   destination_zones, destination_buckets,
+                                                   bucket_name)
+
+    @Endpoint(method='DELETE', path='/sync-pipe')
+    @EndpointDoc("Remove the sync pipe")
+    @DeletePermission
+    def remove_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_zones: Optional[List[str]] = None,
+                         destination_zones: Optional[List[str]] = None,
+                         destination_buckets: Optional[List[str]] = None,
+                         bucket_name: str = ''):
+        multisite_instance = RgwMultisite()
+        return multisite_instance.remove_sync_pipe(group_id, pipe_id, source_zones,
+                                                   destination_zones, destination_buckets,
+                                                   bucket_name)
 
 
 @APIRouter('/rgw/daemon', Scope.RGW)
@@ -158,6 +242,7 @@ class RgwDaemon(RESTController):
                     'server_hostname': hostname,
                     'realm_name': metadata['realm_name'],
                     'zonegroup_name': metadata['zonegroup_name'],
+                    'zonegroup_id': metadata['zonegroup_id'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id'],
                     'port': int(port) if port else None
@@ -223,6 +308,8 @@ class RgwSite(RgwRESTController):
             return RgwClient.admin_instance(daemon_name=daemon_name).get_realms()
         if query == 'default-realm':
             return RgwClient.admin_instance(daemon_name=daemon_name).get_default_realm()
+        if query == 'default-zonegroup':
+            return RgwMultisite().get_all_zonegroups_info()['default_zonegroup']
 
         # @TODO: for multisite: by default, retrieve cluster topology/map.
         raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
@@ -292,8 +379,8 @@ class RgwBucket(RgwRESTController):
                                              retention_period_days,
                                              retention_period_years)
 
-    def _get_policy(self, bucket: str):
-        rgw_client = RgwClient.admin_instance()
+    def _get_policy(self, bucket: str, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_bucket_policy(bucket)
 
     def _set_policy(self, bucket_name: str, policy: str, daemon_name, owner):
@@ -311,6 +398,25 @@ class RgwBucket(RgwRESTController):
     def _set_acl(self, bucket_name: str, acl: str, owner, daemon_name):
         rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.set_acl(bucket_name, acl)
+
+    def _set_replication(self, bucket_name: str, replication: bool, owner, daemon_name):
+        multisite = RgwMultisite()
+        # return immediately if the multisite is not configured
+        if not multisite.get_multisite_status():
+            return None
+
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        zonegroup_name = RgwClient.admin_instance(daemon_name=daemon_name).get_default_zonegroup()
+
+        policy_exists = multisite.policy_group_exists(_SYNC_GROUP_ID, zonegroup_name)
+        if replication and not policy_exists:
+            multisite.create_dashboard_admin_sync_group(zonegroup_name=zonegroup_name)
+
+        return rgw_client.set_bucket_replication(bucket_name, replication)
+
+    def _get_replication(self, bucket_name: str, owner, daemon_name):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.get_bucket_replication(bucket_name)
 
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
@@ -364,8 +470,9 @@ class RgwBucket(RgwRESTController):
         result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
-        result['bucket_policy'] = self._get_policy(bucket_name)
+        result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, result['owner'])
         result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
+        result['replication'] = self._get_replication(bucket_name, result['owner'], daemon_name)
 
         # Append the locking configuration.
         locking = self._get_locking(result['owner'], daemon_name, bucket_name)
@@ -379,9 +486,11 @@ class RgwBucket(RgwRESTController):
                lock_retention_period_days=None,
                lock_retention_period_years=None, encryption_state='false',
                encryption_type=None, key_id=None, tags=None,
-               bucket_policy=None, canned_acl=None, daemon_name=None):
+               bucket_policy=None, canned_acl=None, replication='false',
+               daemon_name=None):
         lock_enabled = str_to_bool(lock_enabled)
         encryption_state = str_to_bool(encryption_state)
+        replication = str_to_bool(replication)
         try:
             rgw_client = RgwClient.instance(uid, daemon_name)
             result = rgw_client.create_bucket(bucket, zonegroup,
@@ -404,6 +513,8 @@ class RgwBucket(RgwRESTController):
             if canned_acl:
                 self._set_acl(bucket, canned_acl, uid, daemon_name)
 
+            if replication:
+                self._set_replication(bucket, replication, uid, daemon_name)
             return result
         except RequestException as e:  # pragma: no cover - handling is too obvious
             raise DashboardException(e, http_status_code=500, component='rgw')
@@ -414,8 +525,10 @@ class RgwBucket(RgwRESTController):
             mfa_delete=None, mfa_token_serial=None, mfa_token_pin=None,
             lock_mode=None, lock_retention_period_days=None,
             lock_retention_period_years=None, tags=None, bucket_policy=None,
-            canned_acl=None, daemon_name=None):
+            canned_acl=None, replication=None, daemon_name=None):
         encryption_state = str_to_bool(encryption_state)
+        if replication is not None:
+            replication = str_to_bool(replication)
         # When linking a non-tenant-user owned bucket to a tenanted user, we
         # need to prefix bucket name with '/'. e.g. photos -> /photos
         if '$' in uid and '/' not in bucket:
@@ -460,6 +573,8 @@ class RgwBucket(RgwRESTController):
             self._set_policy(bucket_name, bucket_policy, daemon_name, uid)
         if canned_acl:
             self._set_acl(bucket_name, canned_acl, uid, daemon_name)
+        if replication is not None:
+            self._set_replication(bucket_name, replication, uid, daemon_name)
         return self._append_bid(result)
 
     def delete(self, bucket, purge_objects='true', daemon_name=None):

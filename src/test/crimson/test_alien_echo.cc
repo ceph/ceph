@@ -8,6 +8,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
+#include "test/crimson/ctest_utils.h"
 
 #include <seastar/core/alien.hh>
 #include <seastar/core/app-template.hh>
@@ -178,9 +179,8 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       return server.msgr->bind(entity_addrvec_t{addr}
       ).safe_then([&server] {
         return server.msgr->start({&server.dispatcher});
-      }, crimson::net::Messenger::bind_ertr::all_same_way([](auto& e) {
-        ceph_abort_msg("bind failed");
-      })).then([&dispatcher=server.dispatcher, count] {
+      }, crimson::net::Messenger::bind_ertr::assert_all{"bind failed"}
+      ).then([&dispatcher=server.dispatcher, count] {
         return dispatcher.on_reply.wait([&dispatcher, count] {
           return dispatcher.count >= count;
         });
@@ -266,7 +266,7 @@ int main(int argc, char** argv)
   }
 
   auto count = vm["count"].as<unsigned>();
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   SeastarContext sc;
   auto job = sc.with_seastar([&] {
     auto fut = seastar::alien::submit_to(app.alien(), 0, [addr, role, count] {

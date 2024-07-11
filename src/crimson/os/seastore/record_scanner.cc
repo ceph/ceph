@@ -98,10 +98,8 @@ RecordScanner::scan_valid_records(
 	  return seastar::stop_iteration::no;
 	}
       });
-    }).safe_then([retref=std::move(retref)]() mutable -> scan_valid_records_ret {
-      return scan_valid_records_ret(
-	scan_valid_records_ertr::ready_future_marker{},
-	std::move(*retref));
+    }).safe_then([retref=std::move(retref)] {
+      return scan_valid_records_ertr::make_ready_future();
     });
 }
 
@@ -122,7 +120,7 @@ RecordScanner::read_validate_record_metadata(
   }
   TRACE("reading record group header block {}~4096", start);
   return read(start, block_size
-  ).safe_then([=](bufferptr bptr) mutable
+  ).safe_then([this, FNAME, nonce, block_size, &cursor](bufferptr bptr)
               -> read_validate_record_metadata_ret {
     bufferlist bl;
     bl.append(bptr);

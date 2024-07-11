@@ -78,6 +78,7 @@ recover dynamically.
       .. toctree::
          :maxdepth: 2
 
+         Beginner's Guide <beginners-guide>
          Hardware Recommendations <hardware-recommendations>
          OS Recommendations <os-recommendations>
 
@@ -95,3 +96,4 @@ recover dynamically.
 
          get-involved
          documenting-ceph
+

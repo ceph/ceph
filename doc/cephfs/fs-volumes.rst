@@ -20,11 +20,11 @@ abstractions:
   subvolumes. Used to effect policies (e.g., :doc:`/cephfs/file-layouts`)
   across a set of subvolumes
 
-Some possible use-cases for the export abstractions:
+Possible use-cases for the export abstractions:
 
 * FS subvolumes used as Manila shares or CSI volumes
 
-* FS subvolume groups used as Manila share groups
+* FS-subvolume groups used as Manila share groups
 
 Requirements
 ------------
@@ -46,9 +46,9 @@ Create a volume by running the following command:
 
    ceph fs volume create <vol_name> [placement]
 
-This creates a CephFS file system and its data and metadata pools. It can also
-deploy MDS daemons for the filesystem using a ceph-mgr orchestrator module (for
-example Rook). See :doc:`/mgr/orchestrator`.
+This creates a CephFS file system and its data and metadata pools. This command
+can also deploy MDS daemons for the filesystem using a Ceph Manager orchestrator
+module (for example Rook). See :doc:`/mgr/orchestrator`.
 
 ``<vol_name>`` is the volume name (an arbitrary string). ``[placement]`` is an
 optional string that specifies the :ref:`orchestrator-cli-placement-spec` for
@@ -64,13 +64,13 @@ To remove a volume, run the following command:
 
    ceph fs volume rm <vol_name> [--yes-i-really-mean-it]
 
-This removes a file system and its data and metadata pools. It also tries to
-remove MDS daemons using the enabled ceph-mgr orchestrator module.
+This command removes a file system and its data and metadata pools. It also
+tries to remove MDS daemons using the enabled Ceph Manager orchestrator module.
 
-.. note:: After volume deletion, it is recommended to restart `ceph-mgr`
-   if a new file system is created on the same cluster and subvolume interface
-   is being used. Please see https://tracker.ceph.com/issues/49605#note-5
-   for more details.
+.. note:: After volume deletion, we recommend restarting `ceph-mgr` if a new
+   file system is created on the same cluster and the subvolume interface is
+   being used. See https://tracker.ceph.com/issues/49605#note-5 for more
+   details.
 
 List volumes by running the following command:
 
@@ -86,17 +86,17 @@ Rename a volume by running the following command:
 
 Renaming a volume can be an expensive operation that requires the following:
 
-- Renaming the orchestrator-managed MDS service to match the <new_vol_name>.
-  This involves launching a MDS service with ``<new_vol_name>`` and bringing
-  down the MDS service with ``<vol_name>``.
-- Renaming the file system matching ``<vol_name>`` to ``<new_vol_name>``.
-- Changing the application tags on the data and metadata pools of the file system
-  to ``<new_vol_name>``.
+- Renaming the orchestrator-managed MDS service to match the
+  ``<new_vol_name>``.  This involves launching a MDS service with
+  ``<new_vol_name>`` and bringing down the MDS service with ``<vol_name>``.
+- Renaming the file system from ``<vol_name>`` to ``<new_vol_name>``.
+- Changing the application tags on the data and metadata pools of the file
+  system to ``<new_vol_name>``.
 - Renaming the metadata and data pools of the file system.
 
 The CephX IDs that are authorized for ``<vol_name>`` must be reauthorized for
-``<new_vol_name>``. Any ongoing operations of the clients using these IDs may
-be disrupted. Ensure that mirroring is disabled on the volume.
+``<new_vol_name>``. Any ongoing operations of the clients that are using these
+IDs may be disrupted. Ensure that mirroring is disabled on the volume.
 
 To fetch the information of a CephFS volume, run the following command:
 
@@ -104,7 +104,8 @@ To fetch the information of a CephFS volume, run the following command:
 
    ceph fs volume info vol_name [--human_readable]
 
-The ``--human_readable`` flag shows used and available pool capacities in KB/MB/GB.
+The ``--human_readable`` flag shows used and available pool capacities in
+KB/MB/GB.
 
 The output format is JSON and contains fields as follows:
 
@@ -159,7 +160,7 @@ Create a subvolume group by running the following command:
 
 The command succeeds even if the subvolume group already exists.
 
-When creating a subvolume group you can specify its data pool layout (see
+When you create a subvolume group, you can specify its data pool layout (see
 :doc:`/cephfs/file-layouts`), uid, gid, file mode in octal numerals, and
 size in bytes. The size of the subvolume group is specified by setting
 a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
@@ -173,11 +174,11 @@ Remove a subvolume group by running a command of the following form:
    ceph fs subvolumegroup rm <vol_name> <group_name> [--force]
 
 The removal of a subvolume group fails if the subvolume group is not empty or
-is non-existent. The ``--force`` flag allows the non-existent "subvolume group remove
-command" to succeed.
+is non-existent. The ``--force`` flag allows the command to succeed when its
+argument is a non-existent subvolume group.
 
-
-Fetch the absolute path of a subvolume group by running a command of the following form:
+Fetch the absolute path of a subvolume group by running a command of the
+following form:
 
 .. prompt:: bash #
 
@@ -192,7 +193,8 @@ List subvolume groups by running a command of the following form:
 .. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
           snapshots can still be listed and deleted)
 
-Fetch the metadata of a subvolume group by running a command of the following form:
+Fetch the metadata of a subvolume group by running a command of the following
+form:
 
 .. prompt:: bash #
 
@@ -200,9 +202,13 @@ Fetch the metadata of a subvolume group by running a command of the following fo
 
 The output format is JSON and contains fields as follows:
 
-* ``atime``: access time of the subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
-* ``mtime``: modification time of the subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
-* ``ctime``: change time of the subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* ``atime``: access time of the subvolume group path in the format ``YYYY-MM-DD
+  HH:MM:SS``
+* ``mtime``: time of the most recent modification of the subvolume group path
+  in the format
+  ``YYYY-MM-DD HH:MM:SS``
+* ``ctime``: time of the most recent change of the subvolume group path in the
+  format ``YYYY-MM-DD HH:MM:SS``
 * ``uid``: uid of the subvolume group path
 * ``gid``: gid of the subvolume group path
 * ``mode``: mode of the subvolume group path
@@ -213,7 +219,8 @@ The output format is JSON and contains fields as follows:
 * ``created_at``: creation time of the subvolume group in the format "YYYY-MM-DD HH:MM:SS"
 * ``data_pool``: data pool to which the subvolume group belongs
 
-Check the presence of any subvolume group by running a command of the following form:
+Check for the presence of a given subvolume group by running a command of the
+following form:
 
 .. prompt:: bash #
 
@@ -221,13 +228,13 @@ Check the presence of any subvolume group by running a command of the following 
 
 The ``exist`` command outputs:
 
-* "subvolumegroup exists": if any subvolumegroup is present
-* "no subvolumegroup exists": if no subvolumegroup is present
+* ``subvolumegroup exists``: if any subvolumegroup is present
+* ``no subvolumegroup exists``: if no subvolumegroup is present
 
 .. note:: This command checks for the presence of custom groups and not
-   presence of the default one. To validate the emptiness of the volume, a
-   subvolumegroup existence check alone is not sufficient. Subvolume existence
-   also needs to be checked as there might be subvolumes in the default group.
+   presence of the default one. A subvolumegroup-existence check alone is not
+   sufficient to validate the emptiness of the volume. Subvolume existence must
+   also be checked, as there might be subvolumes in the default group.
 
 Resize a subvolume group by running a command of the following form:
 
@@ -235,21 +242,22 @@ Resize a subvolume group by running a command of the following form:
 
    ceph fs subvolumegroup resize <vol_name> <group_name> <new_size> [--no_shrink]
 
-The command resizes the subvolume group quota, using the size specified by
+This command resizes the subvolume group quota, using the size specified by
 ``new_size``.  The ``--no_shrink`` flag prevents the subvolume group from
 shrinking below the current used size.
 
 The subvolume group may be resized to an infinite size by passing ``inf`` or
 ``infinite`` as the ``new_size``.
 
-Remove a snapshot of a subvolume group by running a command of the following form:
+Remove a snapshot of a subvolume group by running a command of the following
+form:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup snapshot rm <vol_name> <group_name> <snap_name> [--force]
 
-Supplying the ``--force`` flag allows the command to succeed when it would otherwise
-fail due to the nonexistence of the snapshot.
+Supplying the ``--force`` flag allows the command to succeed when it would
+otherwise fail due to the nonexistence of the snapshot.
 
 List snapshots of a subvolume group by running a command of the following form:
 
@@ -261,7 +269,10 @@ List snapshots of a subvolume group by running a command of the following form:
 FS Subvolumes
 -------------
 
-Create a subvolume using:
+Creating a subvolume
+~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to create a subvolume:
 
 .. prompt:: bash #
 
@@ -270,131 +281,184 @@ Create a subvolume using:
 
 The command succeeds even if the subvolume already exists.
 
-When creating a subvolume you can specify its subvolume group, data pool layout,
-uid, gid, file mode in octal numerals, and size in bytes. The size of the subvolume is
-specified by setting a quota on it (see :doc:`/cephfs/quota`). The subvolume can be
-created in a separate RADOS namespace by specifying --namespace-isolated option. By
-default a subvolume is created within the default subvolume group, and with an octal file
-mode '755', uid of its subvolume group, gid of its subvolume group, data pool layout of
-its parent directory and no size limit.
+When creating a subvolume, you can specify its subvolume group, data pool
+layout, uid, gid, file mode in octal numerals, and size in bytes. The size of
+the subvolume is specified by setting a quota on it (see :doc:`/cephfs/quota`).
+The subvolume can be created in a separate RADOS namespace by specifying the
+``--namespace-isolated`` option. By default, a subvolume is created within the
+default subvolume group with an octal file mode of ``755``, a uid of its
+subvolume group, a gid of its subvolume group, a data pool layout of its parent
+directory, and no size limit.
 
-Remove a subvolume using:
+Removing a subvolume
+~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to remove a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume rm <vol_name> <subvol_name> [--group_name <subvol_group_name>] [--force] [--retain-snapshots]
 
-The command removes the subvolume and its contents. It does this in two steps.
-First, it moves the subvolume to a trash folder, and then asynchronously purges
-its contents.
+This command removes the subvolume and its contents. This is done in two steps.
+First, the subvolume is moved to a trash folder. Second, the contents of that
+trash folder are purged asynchronously.
 
-The removal of a subvolume fails if it has snapshots, or is non-existent.
-'--force' flag allows the non-existent subvolume remove command to succeed.
+Subvolume removal fails if the subvolume has snapshots or is non-existent.  The
+``--force`` flag allows the "non-existent subvolume remove" command to succeed.
 
-A subvolume can be removed retaining existing snapshots of the subvolume using the
-'--retain-snapshots' option. If snapshots are retained, the subvolume is considered
-empty for all operations not involving the retained snapshots.
+To remove a subvolume while retaining snapshots of the subvolume, use the
+``--retain-snapshots`` flag. If snapshots associated with a given subvolume are
+retained, then the subvolume is considered empty for all operations that do not
+involve the retained snapshots.
 
-.. note:: Snapshot retained subvolumes can be recreated using 'ceph fs subvolume create'
+.. note:: Snapshot-retained subvolumes can be recreated using ``ceph fs
+   subvolume create``.
 
-.. note:: Retained snapshots can be used as a clone source to recreate the subvolume, or clone to a newer subvolume.
+.. note:: Retained snapshots can be used as clone sources for recreating the
+   subvolume or for cloning to a newer subvolume.
 
-Resize a subvolume using:
+Resizing a subvolume
+~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to resize a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume resize <vol_name> <subvol_name> <new_size> [--group_name <subvol_group_name>] [--no_shrink]
 
-The command resizes the subvolume quota using the size specified by ``new_size``.
-The ``--no_shrink`` flag prevents the subvolume from shrinking below the current used size of the subvolume.
+This command resizes the subvolume quota, using the size specified by
+``new_size``.  The ``--no_shrink`` flag prevents the subvolume from shrinking
+below the current "used size" of the subvolume.
 
-The subvolume can be resized to an unlimited (but sparse) logical size by passing ``inf`` or ``infinite`` as ``new_size``.
+The subvolume can be resized to an unlimited (but sparse) logical size by
+passing ``inf`` or ``infinite`` as ``<new_size>``.
 
-Authorize cephx auth IDs, the read/read-write access to fs subvolumes:
+Authorizing CephX auth IDs
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to authorize CephX auth IDs. This provides
+the read/read-write access to file system subvolumes:
 
 .. prompt:: bash #
 
    ceph fs subvolume authorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>] [--access_level=<access_level>]
 
-The ``access_level`` takes ``r`` or ``rw`` as value.
+The ``<access_level>`` option takes either ``r`` or ``rw`` as a value.
 
-Deauthorize cephx auth IDs, the read/read-write access to fs subvolumes:
+De-authorizing CephX auth IDs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to deauthorize CephX auth IDs. This removes
+the read/read-write access to file system subvolumes:
 
 .. prompt:: bash #
 
    ceph fs subvolume deauthorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
 
-List cephx auth IDs authorized to access fs subvolume:
+Listing CephX auth IDs
+~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to list CephX auth IDs authorized to access
+the file system subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume authorized_list <vol_name> <sub_name> [--group_name=<group_name>]
 
-Evict fs clients based on auth ID and subvolume mounted:
+Evicting File System Clients (Auth ID)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to evict file system clients based on the
+auth ID and the subvolume mounted:
 
 .. prompt:: bash #
 
    ceph fs subvolume evict <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
 
-Fetch the absolute path of a subvolume using:
+Fetching the Absolute Path of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to fetch the absolute path of a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the information of a subvolume using:
+Fetching a Subvolume's Information
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to fetch a subvolume's information:
 
 .. prompt:: bash #
 
    ceph fs subvolume info <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-The output format is JSON and contains fields as follows.
+The output format is JSON and contains the following fields.
 
-* ``atime``: access time of the subvolume path in the format "YYYY-MM-DD HH:MM:SS"
-* ``mtime``: modification time of the subvolume path in the format "YYYY-MM-DD HH:MM:SS"
-* ``ctime``: change time of the subvolume path in the format "YYYY-MM-DD HH:MM:SS"
+* ``atime``: access time of the subvolume path in the format ``YYYY-MM-DD
+  HH:MM:SS``
+* ``mtime``: modification time of the subvolume path in the format ``YYYY-MM-DD
+  HH:MM:SS``
+* ``ctime``: change time of the subvolume path in the format ``YYYY-MM-DD
+  HH:MM:SS``
 * ``uid``: uid of the subvolume path
 * ``gid``: gid of the subvolume path
 * ``mode``: mode of the subvolume path
 * ``mon_addrs``: list of monitor addresses
-* ``bytes_pcent``: quota used in percentage if quota is set, else displays ``undefined``
-* ``bytes_quota``: quota size in bytes if quota is set, else displays ``infinite``
+* ``bytes_pcent``: quota used in percentage if quota is set; else displays
+  ``undefined``
+* ``bytes_quota``: quota size in bytes if quota is set; else displays
+  ``infinite``
 * ``bytes_used``: current used size of the subvolume in bytes
-* ``created_at``: creation time of the subvolume in the format "YYYY-MM-DD HH:MM:SS"
+* ``created_at``: creation time of the subvolume in the format ``YYYY-MM-DD
+  HH:MM:SS``
 * ``data_pool``: data pool to which the subvolume belongs
 * ``path``: absolute path of a subvolume
-* ``type``: subvolume type indicating whether it's clone or subvolume
+* ``type``: subvolume type, indicating whether it is ``clone`` or ``subvolume``
 * ``pool_namespace``: RADOS namespace of the subvolume
 * ``features``: features supported by the subvolume
 * ``state``: current state of the subvolume
 
-If a subvolume has been removed retaining its snapshots, the output contains only fields as follows.
+If a subvolume has been removed but its snapshots have been retained, the
+output contains only the following fields.
 
-* ``type``: subvolume type indicating whether it's clone or subvolume
+* ``type``: subvolume type indicating whether it is ``clone`` or ``subvolume``
 * ``features``: features supported by the subvolume
 * ``state``: current state of the subvolume
 
-A subvolume's ``features`` are based on the internal version of the subvolume and are
-a subset of the following:
+A subvolume's ``features`` are based on the internal version of the subvolume
+and are a subset of the following:
 
-* ``snapshot-clone``: supports cloning using a subvolumes snapshot as the source
-* ``snapshot-autoprotect``: supports automatically protecting snapshots, that are active clone sources, from deletion
-* ``snapshot-retention``: supports removing subvolume contents, retaining any existing snapshots
+* ``snapshot-clone``: supports cloning using a subvolume's snapshot as the
+  source
+* ``snapshot-autoprotect``: supports automatically protecting snapshots from
+  deletion if they are active clone sources 
+* ``snapshot-retention``: supports removing subvolume contents, retaining any
+  existing snapshots
 
-A subvolume's ``state`` is based on the current state of the subvolume and contains one of the following values.
+A subvolume's ``state`` is based on the current state of the subvolume and
+contains one of the following values.
 
 * ``complete``: subvolume is ready for all operations
 * ``snapshot-retained``: subvolume is removed but its snapshots are retained
 
-List subvolumes using:
+Listing Subvolumes
+~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to list subvolumes:
 
 .. prompt:: bash #
 
    ceph fs subvolume ls <vol_name> [--group_name <subvol_group_name>]
 
-.. note:: subvolumes that are removed but have snapshots retained, are also listed.
+.. note:: Subvolumes that have been removed but have snapshots retained, are
+   also listed.
 
-Check the presence of any subvolume using:
+Checking for the Presence of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to check for the presence of a given
+subvolume:
 
 .. prompt:: bash #
 
@@ -402,10 +466,14 @@ Check the presence of any subvolume using:
 
 These are the possible results of the ``exist`` command:
 
-* ``subvolume exists``: if any subvolume of given group_name is present
-* ``no subvolume exists``: if no subvolume of given group_name is present
+* ``subvolume exists``: if any subvolume of given ``group_name`` is present
+* ``no subvolume exists``: if no subvolume of given ``group_name`` is present
 
-Set custom metadata on the subvolume as a key-value pair using:
+Setting Custom Metadata On a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to set custom metadata on the subvolume as
+a key-value pair:
 
 .. prompt:: bash #
 
@@ -413,67 +481,100 @@ Set custom metadata on the subvolume as a key-value pair using:
 
 .. note:: If the key_name already exists then the old value will get replaced by the new value.
 
-.. note:: key_name and value should be a string of ASCII characters (as specified in python's string.printable). key_name is case-insensitive and always stored in lower case.
+.. note:: ``key_name`` and ``value`` should be a string of ASCII characters (as
+   specified in Python's ``string.printable``). ``key_name`` is
+   case-insensitive and always stored in lower case.
 
-.. note:: Custom metadata on a subvolume is not preserved when snapshotting the subvolume, and hence, is also not preserved when cloning the subvolume snapshot.
+.. note:: Custom metadata on a subvolume is not preserved when snapshotting the
+   subvolume, and is therefore also not preserved when cloning the subvolume
+   snapshot.
 
-Get custom metadata set on the subvolume using the metadata key:
+Getting The Custom Metadata Set of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to get the custom metadata set on the
+subvolume using the metadata key:
 
 .. prompt:: bash #
 
    ceph fs subvolume metadata get <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>]
 
-List custom metadata (key-value pairs) set on the subvolume using:
+Listing The Custom Metadata Set of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to list custom metadata (key-value pairs)
+set on the subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume metadata ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Remove custom metadata set on the subvolume using the metadata key:
+Removing a Custom Metadata Set from a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to remove custom metadata set on the
+subvolume using the metadata key:
 
 .. prompt:: bash #
 
    ceph fs subvolume metadata rm <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>] [--force]
 
-Using the ``--force`` flag allows the command to succeed that would otherwise
-fail if the metadata key did not exist.
+Using the ``--force`` flag allows the command to succeed when it would
+otherwise fail (if the metadata key did not exist).
 
-Create a snapshot of a subvolume using:
+Creating a Snapshot of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to create a snapshot of a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot create <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
-Remove a snapshot of a subvolume using:
+
+Removing a Snapshot of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to remove a snapshot of a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot rm <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>] [--force]
 
-Using the ``--force`` flag allows the command to succeed that would otherwise
-fail if the snapshot did not exist.
+Using the ``--force`` flag allows the command to succeed when it would
+otherwise fail (if the snapshot did not exist).
 
 .. note:: if the last snapshot within a snapshot retained subvolume is removed, the subvolume is also removed
 
-List snapshots of a subvolume using:
+Listing the Snapshots of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following from to list the snapshots of a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
 
-Fetch the information of a snapshot using:
+Fetching a Snapshot's Information
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to fetch a snapshot's information:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot info <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
-The output format is JSON and contains fields as follows.
+The output format is JSON and contains the following fields.
 
-* ``created_at``: creation time of the snapshot in the format "YYYY-MM-DD HH:MM:SS:ffffff"
+* ``created_at``: creation time of the snapshot in the format ``YYYY-MM-DD
+  HH:MM:SS:ffffff``
 * ``data_pool``: data pool to which the snapshot belongs
-* ``has_pending_clones``: ``yes`` if snapshot clone is in progress, otherwise ``no``
-* ``pending_clones``: list of in-progress or pending clones and their target group if any exist, otherwise this field is not shown
-* ``orphan_clones_count``: count of orphan clones if the snapshot has orphan clones, otherwise this field is not shown
+* ``has_pending_clones``: ``yes`` if snapshot clone is in progress, otherwise
+  ``no``
+* ``pending_clones``: list of in-progress or pending clones and their target
+  groups if any exist; otherwise this field is not shown
+* ``orphan_clones_count``: count of orphan clones if the snapshot has orphan
+  clones, otherwise this field is not shown
 
 Sample output when snapshot clones are in progress or pending:
 
@@ -516,50 +617,74 @@ Sample output when no snapshot clone is in progress or pending:
         "has_pending_clones": "no"
     }
 
-Set custom key-value metadata on the snapshot by running:
+Setting Custom Key-Value Pair Metadata on a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to set custom key-value metadata on the
+snapshot:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot metadata set <vol_name> <subvol_name> <snap_name> <key_name> <value> [--group_name <subvol_group_name>]
 
-.. note:: If the key_name already exists then the old value will get replaced by the new value.
+.. note:: If the ``key_name`` already exists then the old value will get replaced
+   by the new value.
 
-.. note:: The key_name and value should be a strings of ASCII characters (as specified in Python's ``string.printable``). The key_name is case-insensitive and always stored in lowercase.
+.. note:: The ``key_name`` and value should be a strings of ASCII characters
+   (as specified in Python's ``string.printable``). The ``key_name`` is
+   case-insensitive and always stored in lowercase.
 
-.. note:: Custom metadata on a snapshot is not preserved when snapshotting the subvolume, and hence is also not preserved when cloning the subvolume snapshot.
+.. note:: Custom metadata on a snapshot is not preserved when snapshotting the
+   subvolume, and is therefore not preserved when cloning the subvolume
+   snapshot.
 
-Get custom metadata set on the snapshot using the metadata key:
+Getting Custom Metadata That Has Been Set on a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to get custom metadata that has been set on
+the snapshot using the metadata key:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot metadata get <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>]
 
-List custom metadata (key-value pairs) set on the snapshot using:
+Listing Custom Metadata that has been Set on a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following from to list custom metadata (key-value pairs)
+set on the snapshot:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot metadata ls <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
-Remove custom metadata set on the snapshot using the metadata key:
+Removing Custom Metadata from a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use a command of the following form to remove custom metadata set on the
+snapshot using the metadata key:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot metadata rm <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>] [--force]
 
-Using the ``--force`` flag allows the command to succeed that would otherwise
-fail if the metadata key did not exist.
+Using the ``--force`` flag allows the command to succeed when it would otherwise
+fail (if the metadata key did not exist).
 
 Cloning Snapshots
 -----------------
 
-Subvolumes can be created by cloning subvolume snapshots. Cloning is an asynchronous operation that copies
-data from a snapshot to a subvolume. Due to this bulk copying, cloning is inefficient for very large
-data sets.
+Subvolumes can be created by cloning subvolume snapshots. Cloning is an
+asynchronous operation that copies data from a snapshot to a subvolume. Because
+cloning is an operation that involves bulk copying, it is slow for
+very large data sets.
 
-.. note:: Removing a snapshot (source subvolume) would fail if there are pending or in progress clone operations.
+.. note:: Removing a snapshot (source subvolume) fails when there are
+   pending or in-progress clone operations.
 
-Protecting snapshots prior to cloning was a prerequisite in the Nautilus release, and the commands to protect/unprotect
-snapshots were introduced for this purpose. This prerequisite, and hence the commands to protect/unprotect, is being
+Protecting snapshots prior to cloning was a prerequisite in the Nautilus
+release. Commands that made possible the protection and unprotection of
+snapshots were introduced for this purpose. This prerequisite is being
 deprecated and may be removed from a future release.
 
 The commands being deprecated are:
@@ -573,7 +698,7 @@ The commands being deprecated are:
 
 .. note:: Use the ``subvolume info`` command to fetch subvolume metadata regarding supported ``features`` to help decide if protect/unprotect of snapshots is required, based on the availability of the ``snapshot-autoprotect`` feature.
 
-To initiate a clone operation use:
+Run a command of the following form to initiate a clone operation:
 
 .. prompt:: bash #
 
@@ -581,25 +706,30 @@ To initiate a clone operation use:
 
 .. note:: ``subvolume snapshot clone`` command depends upon the above mentioned config option ``snapshot_clone_no_wait``
 
-If a snapshot (source subvolume) is a part of non-default group, the group name needs to be specified:
+Run a command of the following form when a snapshot (source subvolume) is a
+part of non-default group. Note that the group name needs to be specified:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --group_name <subvol_group_name>
 
-Cloned subvolumes can be a part of a different group than the source snapshot (by default, cloned subvolumes are created in default group). To clone to a particular group use:
+Cloned subvolumes can be a part of a different group than the source snapshot
+(by default, cloned subvolumes are created in default group). Run a command of
+the following form to clone to a particular group use:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --target_group_name <subvol_group_name>
 
-Similar to specifying a pool layout when creating a subvolume, pool layout can be specified when creating a cloned subvolume. To create a cloned subvolume with a specific pool layout use:
+Pool layout can be specified when creating a cloned subvolume in a way that is
+similar to specifying a pool layout when creating a subvolume. Run a command of
+the following form to create a cloned subvolume with a specific pool layout:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
 
-To check the status of a clone operation use:
+Run a command of the following form to check the status of a clone operation:
 
 .. prompt:: bash #
 
@@ -665,11 +795,14 @@ Here is an example of a ``failed`` clone:
         }
     }
 
-(NOTE: since ``subvol1`` is in the default group, the ``source`` object's  ``clone status`` does not include the group name)
+.. note::  Because ``subvol1`` is in the default group, the ``source`` object's
+   ``clone status`` does not include the group name)
 
-.. note:: Cloned subvolumes are accessible only after the clone operation has successfully completed.
+.. note:: Cloned subvolumes are accessible only after the clone operation has
+   successfully completed.
 
-After a successful clone operation, ``clone status`` will look like the below:
+After a successful clone operation, ``clone status`` will look like the
+following:
 
 .. prompt:: bash #
 
@@ -685,23 +818,28 @@ After a successful clone operation, ``clone status`` will look like the below:
 
 If a clone operation is unsuccessful, the ``state`` value will be  ``failed``.
 
-To retry a failed clone operation, the incomplete clone must be deleted and the clone operation must be issued again.
-To delete a partial clone use:
+To retry a failed clone operation, the incomplete clone must be deleted and the
+clone operation must be issued again.
+
+Run a command of the following form to delete a partial clone:
 
 .. prompt:: bash #
 
    ceph fs subvolume rm <vol_name> <clone_name> [--group_name <group_name>] --force
 
-.. note:: Cloning synchronizes only directories, regular files and symbolic links. Inode timestamps (access and
-          modification times) are synchronized up to seconds granularity.
+.. note:: Cloning synchronizes only directories, regular files and symbolic
+   links. inode timestamps (access and modification times) are synchronized up
+   to a second's granularity.
 
-An ``in-progress`` or a ``pending`` clone operation may be canceled. To cancel a clone operation use the ``clone cancel`` command:
+An ``in-progress`` or a ``pending`` clone operation may be canceled. To cancel
+a clone operation use the ``clone cancel`` command:
 
 .. prompt:: bash #
 
    ceph fs clone cancel <vol_name> <clone_name> [--group_name <group_name>]
 
-On successful cancellation, the cloned subvolume is moved to the ``canceled`` state:
+On successful cancellation, the cloned subvolume is moved to the ``canceled``
+state:
 
 .. prompt:: bash #
 
@@ -722,7 +860,8 @@ On successful cancellation, the cloned subvolume is moved to the ``canceled`` st
         }
     }
 
-.. note:: The canceled cloned may be deleted by supplying the ``--force`` option to the `fs subvolume rm` command.
+.. note:: Delete the canceled cloned by supplying the ``--force`` option to the
+   ``fs subvolume rm`` command.
 
 Configurables
 ~~~~~~~~~~~~~
@@ -733,17 +872,20 @@ Configure the maximum number of concurrent clone operations. The default is 4:
 
    ceph config set mgr mgr/volumes/max_concurrent_clones <value>
 
-Configure the snapshot_clone_no_wait option :
+Configure the ``snapshot_clone_no_wait`` option:
 
-The ``snapshot_clone_no_wait`` config option is used to reject clone creation requests when cloner threads 
-(which can be configured using above option i.e. ``max_concurrent_clones``) are not available.
-It is enabled by default i.e. the value set is True, whereas it can be configured by using below command.
+The ``snapshot_clone_no_wait`` config option is used to reject clone-creation
+requests when cloner threads (which can be configured using the above options,
+for example, ``max_concurrent_clones``) are not available. It is enabled by
+default. This means that the value is set to ``True``, but it can be configured
+by using the following command:
 
 .. prompt:: bash #
 
    ceph config set mgr mgr/volumes/snapshot_clone_no_wait <bool>
 
-The current value of ``snapshot_clone_no_wait`` can be fetched by using below command.
+The current value of ``snapshot_clone_no_wait`` can be fetched by running the
+following command.
 
 .. prompt:: bash #
     
@@ -760,62 +902,73 @@ to policies. This can distribute load across MDS ranks in predictable and
 stable ways.  Review :ref:`cephfs-pinning` and :ref:`cephfs-ephemeral-pinning`
 for details on how pinning works.
 
-Pinning is configured by:
+Run a command of the following form to configure pinning for subvolume groups:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup pin <vol_name> <group_name> <pin_type> <pin_setting>
 
-or for subvolumes:
+Run a command of the following form to configure pinning for subvolumes:
 
 .. prompt:: bash #
 
    ceph fs subvolume pin <vol_name> <group_name> <pin_type> <pin_setting>
 
-Typically you will want to set subvolume group pins. The ``pin_type`` may be
-one of ``export``, ``distributed``, or ``random``. The ``pin_setting``
-corresponds to the extended attributed "value" as in the pinning documentation
-referenced above.
+Under most circumstances, you will want to set subvolume group pins. The
+``pin_type`` may be ``export``, ``distributed``, or ``random``. The
+``pin_setting`` corresponds to the extended attributed "value" as in the
+pinning documentation referenced above.
 
-So, for example, setting a distributed pinning strategy on a subvolume group:
+Here is an example of setting a distributed pinning strategy on a subvolume
+group:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup pin cephfilesystem-a csi distributed 1
 
-Will enable distributed subtree partitioning policy for the "csi" subvolume
-group.  This will cause every subvolume within the group to be automatically
+This enables distributed subtree partitioning policy for the "csi" subvolume
+group. This will cause every subvolume within the group to be automatically
 pinned to one of the available ranks on the file system.
 
 Subvolume quiesce
 -----------------
 
-It may be needed to pause IO to a set of subvolumes of a given volume (file system).
-A good example of such case is a consistent snapshot spanning multiple subvolumes.
-The task arises often in an orchestrated environment such as Kubernetes, where a single deployed application
-can work with many mounted subvolumes across several hosts. When a snapshot of such a system is needed,
-the application may not find the result consistent unless the snapshots were taken
-during an active write pause.
+.. note:: The information in this section applies only to Squid and later
+   releases of Ceph.
 
-The `volumes` plugin provides a tool to initiate and await such a pause across a set of subvolumes:
+CephFS snapshots do not provide strong-consistency guarantees in cases involving writes
+performed by multiple clients, which makes consistent backups and disaster recovery a serious
+challenge for distributed applications. Even in a case where an application uses
+file system flushes to synchronize checkpoints across its distributed components, there is
+no guarantee that all acknowledged writes will be part of a given snapshot.
+
+The subvolume quiesce feature has been developed to provide enterprise-level consistency guarantees
+for multi-client applications that work with one or more subvolumes. The feature makes it possible to pause IO
+to a set of subvolumes of a given volume (file system). Enforcing such a pause across all clients makes
+it possible to guarantee that any persistent checkpoints reached by the application before the pause
+will be recoverable from the snapshots made during the pause.
+
+The `volumes` plugin provides a CLI to initiate and await the pause for a set of subvolumes.
+This pause is called a `quiesce`, which is also used as the command name:
 
 .. prompt:: bash $ auto
 
   $ ceph fs quiesce <vol_name> --set-id myset1 <[group_name/]sub_name...> --await
   # perform actions while the IO pause is active, like taking snapshots
   $ ceph fs quiesce <vol_name> --set-id myset1 --release --await
-  # if successful, all members of the set were confirmed as still in pause and released from such
+  # if successful, all members of the set were confirmed as still paused and released
 
-The ``quiesce`` functionality is itself based on a lower level QuiesceDb service provided by the MDS
+The ``fs quiesce`` functionality is based on a lower level ``quiesce db`` service provided by the MDS
 daemons, which operates at a file system path granularity. 
 The `volumes` plugin merely maps the subvolume names to their corresponding paths on the given file system
-and then issues the appropriate quiesce command to the MDS. You can learn more about the feature in the developer guides.
+and then issues the corresponding ``quiesce db`` command to the MDS. You can learn more about the low-level service
+in the developer guides.
 
 Operations
 ~~~~~~~~~~
 
-The IO pause (referred to as `quiesce`) is requested for a group of one or more subvolumes (i.e. paths in a filesystem).
-The group is referred to as "quiesce set", and every quiesce set must have a unique string id to interact with.
+The quiesce can be requested for a set of one or more subvolumes (i.e. paths in a filesystem).
+This set is referred to as `quiesce set`. Every quiesce set is identified by a unique `set id`.
 A quiesce set can be manipulated in the following ways:
 
 * **include** one or more subvolumes - quiesce set members
@@ -1010,15 +1163,41 @@ Note that the commands above are all non-blocking. If we want to wait for the qu
 to reach the `QUIESCED` state, we should await it at some point. ``--await`` can be given
 along with other arguments to let the system know our intention.
 
-Technically, there are two types of await: `quiesce await` and `release await`. The former
-is the default, and the latter can only be achieved with ``--release`` present in the argument list.
-To avoid confision, it is not permitted to issue a `quiesce await` when the set is already `RELEASING`
-or `RELEASED`. Trying to ``--release`` a set that is not `QUIESCED` is an ``EPERM`` error as well, regardless
-of whether await is requested alongside. However, it's not an error to `release await` 
-an already released set, or to `quiesce await` a `QUIESCED` one.
+There are two types of await: `quiesce await` and `release await`. The former is the default,
+and the latter can only be achieved with ``--release`` present in the argument list.
+To avoid confision, it is not permitted to issue a `quiesce await` when the set is not `QUIESCING`.
+Trying to ``--release`` a set that is not `QUIESCED` is an ``EPERM`` error as well, regardless
+of whether await is requested alongside. However, it's not an error to `release await`
+an already released set, or to `quiesce await` a `QUIESCED` one - those are successful no-ops.
 
-When awaiting, one may also specify a maximum duration that they would like this await request to block for,
-not affecting the two intrinsic timeouts discussed above. If the target awaited state isn't reached
+Since a set is awaited after the application of the ``--await``-augmented command, the await operation
+may mask a successful result with its own error. A good example is trying to cancel-await a set:
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce fs1 --set-id set1 --cancel --await
+  {
+      // ...
+      "sets": {
+          "set1": {
+              // ...
+              "state": {
+                  "name": "CANCELED",
+                  "age": 0
+              },
+              // ...
+          }
+      }
+  }
+  Error EPERM: 
+
+Although ``--cancel`` will succeed syncrhonously for a set in an active state, awaiting a canceled
+set is not permitted, hence this call will result in an ``EPERM``. This is deliberately different from 
+returning a ``EINVAL`` error, denoting an error on the user's side, to simplify the system's behavior
+when ``--await`` is requested. As a result, it's also a simpler model for the user to work with.
+
+When awaiting, one may specify a maximum duration that they would like this await request to block for,
+orthogonally to the two intrinsic set timeouts discussed above. If the target awaited state isn't reached
 within the specified duration, then ``EINPROGRESS`` is returned. For that, one should use the argument
 ``--await-for=<seconds>``. One could think of ``--await`` as equivalent to ``--await-for=Infinity``.
 While it doesn't make sense to specify both arguments, it is not considered an error. If

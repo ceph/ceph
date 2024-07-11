@@ -66,16 +66,26 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
 }
 
 void RecoveryBackend::WaitForObjectRecovery::stop() {
-  readable.set_exception(
+  if (readable) {
+    readable->set_exception(
       crimson::common::system_shutdown_exception());
-  recovered.set_exception(
+    readable.reset();
+  }
+  if (recovered) {
+    recovered->set_exception(
       crimson::common::system_shutdown_exception());
-  pulled.set_exception(
+    recovered.reset();
+  }
+  if (pulled) {
+    pulled->set_exception(
       crimson::common::system_shutdown_exception());
+    pulled.reset();
+  }
   for (auto& [pg_shard, pr] : pushes) {
     pr.set_exception(
-	crimson::common::system_shutdown_exception());
+      crimson::common::system_shutdown_exception());
   }
+  pushes.clear();
 }
 
 void RecoveryBackend::handle_backfill_finish(
@@ -162,10 +172,7 @@ RecoveryBackend::handle_backfill_remove(
 {
   logger().debug("{} m.ls={}", __func__, m.ls);
   assert(m.get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
-  if (pg.can_discard_replica_op(m)) {
-    logger().debug("{}: discarding {}", __func__, m);
-    return seastar::now();
-  }
+
   ObjectStore::Transaction t;
   for ([[maybe_unused]] const auto& [soid, ver] : m.ls) {
     // TODO: the reserved space management. PG::try_reserve_recovery_space().

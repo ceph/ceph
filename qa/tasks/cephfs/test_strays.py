@@ -712,7 +712,7 @@ touch pin/placeholder
         self._force_migrate("pin")
 
         # Hold the dir open so it cannot be purged
-        p = self.mount_a.open_dir_background("pin/to-be-unlinked")
+        self.mount_a.open_dir_background("pin/to-be-unlinked")
 
         # Unlink the dentry
         self.mount_a.run_shell(["rmdir", "pin/to-be-unlinked"])
@@ -735,8 +735,6 @@ touch pin/placeholder
         # Now the stray should be migrated to rank 0
         # self.assertEqual(self.get_mdc_stat("strays_created", mds_id=rank_0_id), 1)
         # https://github.com/ceph/ceph/pull/44335#issuecomment-1125940158
-
-        self.mount_a.kill_background(p)
 
     def assert_backtrace(self, ino, expected_path):
         """

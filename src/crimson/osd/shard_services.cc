@@ -183,7 +183,7 @@ seastar::future<> OSDSingletonState::osdmap_subscribe(
   version_t epoch, bool force_request)
 {
   LOG_PREFIX(OSDSingletonState::osdmap_subscribe);
-  INFO("epoch {}");
+  INFO("epoch {}", epoch);
   if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
       force_request) {
     return monc.renew_subs();
@@ -610,15 +610,23 @@ seastar::future<Ref<PG>> ShardServices::make_pg(
 
 seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
   std::unique_ptr<PGCreateInfo> info) {
-  LOG_PREFIX(OSDSingletonState::trim_maps);
   return seastar::do_with(
     std::move(info),
-    [FNAME, this](auto &info)
+    [this](auto &info)
     -> seastar::future<Ref<PG>> {
       return get_map(info->epoch).then(
-	[&info, FNAME, this](cached_map_t startmap)
+	[&info, this](cached_map_t startmap)
 	-> seastar::future<std::tuple<Ref<PG>, cached_map_t>> {
+	  LOG_PREFIX(ShardServices::handle_pg_create_info);
 	  const spg_t &pgid = info->pgid;
+	  if (!get_map()->is_up_acting_osd_shard(pgid, local_state.whoami)
+	      || !startmap->is_up_acting_osd_shard(pgid, local_state.whoami)) {
+	    DEBUG("ignore pgid {}, doesn't exist anymore, discarding");
+	    local_state.pg_map.pg_creation_canceled(pgid);
+	    return seastar::make_ready_future<
+	      std::tuple<Ref<PG>, OSDMapService::cached_map_t>
+	      >(std::make_tuple(Ref<PG>(), startmap));
+	  }
 	  if (info->by_mon) {
 	    int64_t pool_id = pgid.pgid.pool();
 	    const pg_pool_t *pool = get_map()->get_pg_pool(pool_id);
@@ -671,17 +679,17 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    pg_shard_t(local_state.whoami, info->pgid.shard),
 	    acting);
 
-	  PeeringCtx rctx;
+	  std::unique_ptr<PeeringCtx> rctx = std::make_unique<PeeringCtx>();
 	  create_pg_collection(
-	    rctx.transaction,
+	    rctx->transaction,
 	    info->pgid,
 	    info->pgid.get_split_bits(pp->get_pg_num()));
 	  init_pg_ondisk(
-	    rctx.transaction,
+	    rctx->transaction,
 	    info->pgid,
 	    pp);
 
-	  pg->init(
+	  return pg->init(
 	    role,
 	    up,
 	    up_primary,
@@ -689,12 +697,13 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    acting_primary,
 	    info->history,
 	    info->past_intervals,
-	    rctx.transaction);
-
-	  return start_operation<PGAdvanceMap>(
-	    pg, *this, get_map()->get_epoch(), std::move(rctx), true
-	  ).second.then([pg=pg] {
-	    return seastar::make_ready_future<Ref<PG>>(pg);
+	    rctx->transaction
+	  ).then([this, pg=pg, rctx=std::move(rctx)] {
+	    return start_operation<PGAdvanceMap>(
+	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true
+	    ).second.then([pg=pg] {
+	      return seastar::make_ready_future<Ref<PG>>(pg);
+	    });
 	  });
 	});
     });
@@ -708,9 +717,9 @@ ShardServices::get_or_create_pg(
   std::unique_ptr<PGCreateInfo> info)
 {
   if (info) {
-    auto [fut, creating] = local_state.pg_map.wait_for_pg(
+    auto [fut, existed] = local_state.pg_map.wait_for_pg(
       std::move(trigger), pgid);
-    if (!creating) {
+    if (!existed) {
       local_state.pg_map.set_creating(pgid);
       (void)handle_pg_create_info(
 	std::move(info));
@@ -808,8 +817,8 @@ seastar::future<MURef<MOSDMap>> OSDSingletonState::build_incremental_map_msg(
                           crimson::make_message<MOSDMap>(
                             monc.get_fsid(),
                             osdmap->get_encoding_features()),
-                          [this, &first, FNAME, last](unsigned int map_message_max,
-                                                      auto& m) {
+                          [this, &first, FNAME, last](auto &map_message_max,
+                                                      auto &m) {
     m->cluster_osdmap_trim_lower_bound = superblock.cluster_osdmap_trim_lower_bound;
     m->newest_map = superblock.get_newest_map();
     auto maybe_handle_mapgap = seastar::now();

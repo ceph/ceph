@@ -308,11 +308,11 @@ endif()
 option(WITH_BLUEFS "libbluefs library" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_QATLIB "Enable QAT with qatlib" ON
-  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+  "CMAKE_SYSTEM_PROCESSOR MATCHES amd64|x86_64|AMD64" OFF)
 option(WITH_SYSTEM_QATLIB "Use system packages for qatlib" OFF)
 option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
 CMAKE_DEPENDENT_OPTION(WITH_QATZIP "Enable QATzip" ON
-  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+  "CMAKE_SYSTEM_PROCESSOR MATCHES amd64|x86_64|AMD64" OFF)
 option(WITH_SYSTEM_QATZIP "Use system packages for QATzip" OFF)
 
 if(WITH_QATDRV)
@@ -608,7 +608,7 @@ option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 set(UNIT_TESTS_BUILT ${WITH_TESTS})
-set(CEPH_TEST_TIMEOUT 3600 CACHE STRING 
+set(CEPH_TEST_TIMEOUT 7200 CACHE STRING
   "Maximum time before a CTest gets killed" )
 
 # fio

@@ -245,6 +245,13 @@ PoolReplayer<I>::~PoolReplayer()
 {
   shut_down();
 
+  // pool replayer instances are generally (unless the peer gets
+  // updated) preserved across errors to reduce ping-ponging of callout
+  // error notifications, so this can't be done in shut_down()
+  if (m_callout_id != service_daemon::CALLOUT_ID_NONE) {
+    m_service_daemon->remove_callout(m_local_pool_id, m_callout_id);
+  }
+
   ceph_assert(m_asok_hook == nullptr);
 }
 

@@ -1356,10 +1356,8 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_notification_thread) {
-    ret = rgw::notify::init(cct, driver, *svc.site, dpp);
-    if (ret < 0 ) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to initialize notification manager" << dendl;
-      return ret;
+    if (!rgw::notify::init(dpp, driver, *svc.site)) {
+      ldpp_dout(dpp, 0) << "ERROR: failed to initialize notification manager" << dendl;
     }
 
     using namespace rgw;
@@ -6636,12 +6634,15 @@ static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   }
   // navigate to the requested part in the manifest
   RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
-  if (end.get_cur_part_id() == 0) { // not multipart
+  const int last_part_id = end.get_cur_part_id();
+  if (last_part_id == 0) { // not multipart
     ldpp_dout(dpp, 20) << "object does not have a multipart manifest" << dendl;
     return -ERR_INVALID_PART;
   }
   if (parts_count) {
-    *parts_count = end.get_cur_part_id() - 1;
+    // when a multipart upload only contains a single part, the last part id
+    // is off by one. don't let parts_count go to 0
+    *parts_count = std::max(1, last_part_id - 1);
   }
   ldpp_dout(dpp, 20) << "seeking to part #" << part_num
       << " in the object manifest" << dendl;
@@ -6701,7 +6702,7 @@ static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
   do {
     ++iter;
     gen.create_next(iter.get_ofs() - part_offset);
-  } while (iter.get_cur_part_id() == part_num);
+  } while (iter != end && iter.get_cur_part_id() == part_num);
 
   // update the object size
   sm->state.size = part_manifest.get_obj_size();

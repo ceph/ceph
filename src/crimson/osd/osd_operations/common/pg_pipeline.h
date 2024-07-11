@@ -19,10 +19,13 @@ protected:
   } wait_for_active;
   struct RecoverMissing : OrderedExclusivePhaseT<RecoverMissing> {
     static constexpr auto type_name = "CommonPGPipeline::recover_missing";
-  } recover_missing, recover_missing2;
+  } recover_missing;
   struct GetOBC : OrderedExclusivePhaseT<GetOBC> {
     static constexpr auto type_name = "CommonPGPipeline::get_obc";
   } get_obc;
+  struct LockOBC : OrderedConcurrentPhaseT<LockOBC> {
+    static constexpr auto type_name = "CommonPGPipeline::lock_obc";
+  } lock_obc;
   struct Process : OrderedExclusivePhaseT<Process> {
     static constexpr auto type_name = "CommonPGPipeline::process";
   } process;

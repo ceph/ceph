@@ -8,46 +8,32 @@ user. RGW supports canned ACLs.
 
 Authentication
 --------------
-Authenticating a request requires including an access key and a Hash-based 
-Message Authentication Code (HMAC) in the request before it is sent to the 
-RGW server. RGW uses an S3-compatible authentication approach. 
+Requests are authenticated with AWS Signatures which are derived from the
+user's credentials (S3 access key and secret key).
 
-::
+Most S3 clients and AWS SDKs will generate these signatures for you, given the
+necessary credentials. When issuing raw http requests, these signatures must be
+added manually.
 
-	HTTP/1.1
-	PUT /buckets/bucket/object.mpeg
-	Host: cname.domain.com
-	Date: Mon, 2 Jan 2012 00:01:01 +0000
-	Content-Encoding: mpeg	
-	Content-Length: 9999999
+AWS Signature v4
+^^^^^^^^^^^^^^^^
 
-	Authorization: AWS {access-key}:{hash-of-header-and-secret}
+Please refer to the official documentation in `Authenticating Requests (AWS Signature Version 4)`_.
 
-In the foregoing example, replace ``{access-key}`` with the value for your access 
-key ID followed by a colon (``:``). Replace ``{hash-of-header-and-secret}`` with 
-a hash of the header string and the secret corresponding to the access key ID.
+The following values of the `x-amz-content-sha256` request header are supported:
 
-To generate the hash of the header string and secret, you must:
+* Actual payload checksum value
+* `UNSIGNED-PAYLOAD`
+* `STREAMING-UNSIGNED-PAYLOAD-TRAILER`
+* `STREAMING-AWS4-HMAC-SHA256-PAYLOAD`
+* `STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER`
 
-#. Get the value of the header string.
-#. Normalize the request header string into canonical form. 
-#. Generate an HMAC using a SHA-1 hashing algorithm.
-   See `RFC 2104`_ and `HMAC`_ for details.
-#. Encode the ``hmac`` result as base-64.
+AWS Signature v2
+^^^^^^^^^^^^^^^^
 
-To normalize the header into canonical form: 
+Please refer to the official documentation in `Authenticating Requests (AWS Signature Version 2)`_.
 
-#. Get all fields beginning with ``x-amz-``.
-#. Ensure that the fields are all lowercase.
-#. Sort the fields lexicographically. 
-#. Combine multiple instances of the same field name into a 
-   single field and separate the field values with a comma.
-#. Replace white space and line breaks in field values with a single space.
-#. Remove white space before and after colons.
-#. Append a new line after each field.
-#. Merge the fields back into the header.
-
-Replace the ``{hash-of-header-and-secret}`` with the base-64 encoded HMAC string.
+.. note:: While v2 signatures have been deprecated in AWS, RGW continues to support them.
 
 Authentication against OpenStack Keystone
 -----------------------------------------
@@ -231,5 +217,5 @@ play. This is one of the many reasons that you should use S3 bucket
 policies rather than S3 ACLs when possible.
 
 
-.. _RFC 2104: http://www.ietf.org/rfc/rfc2104.txt
-.. _HMAC: https://en.wikipedia.org/wiki/HMAC
+.. _Authenticating Requests (AWS Signature Version 4): https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-authenticating-requests.html
+.. _Authenticating requests (AWS signature version 2): https://docs.aws.amazon.com/AmazonS3/latest/userguide/auth-request-sig-v2.html

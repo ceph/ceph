@@ -523,6 +523,7 @@ int main(int argc, char **argv)
   bool enable_dedup = false;
   string chunk_algo = "";
   string chunk_size = "";
+  size_t max_attr_len = 20000;
 
 
   for (int i = 1; i < argc; ++i) {
@@ -554,6 +555,8 @@ int main(int argc, char **argv)
       pool_snaps = true;
     else if (strcmp(argv[i], "--write-fadvise-dontneed") == 0)
       write_fadvise_dontneed = true;
+    else if (strcmp(argv[i], "--max-attr-len") == 0)
+      max_attr_len = atoi(argv[++i]);
     else if (strcmp(argv[i], "--ec-pool") == 0) {
       if (!op_weights.empty()) {
 	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
@@ -700,6 +703,7 @@ int main(int argc, char **argv)
     enable_dedup,
     chunk_algo,
     chunk_size,
+    max_attr_len,
     id);
 
   TestOpStat stats;

@@ -402,6 +402,13 @@ public:
     return local_state.store;
   }
 
+  struct shard_stats_t {
+    double reactor_utilization;
+  };
+  shard_stats_t report_stats() {
+    return {get_reactor_utilization()};
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);

@@ -199,19 +199,17 @@ seastar::future<> OSD::mkfs(
   LOG_PREFIX(OSD::mkfs);
   return store.start().then([&store, FNAME, osd_uuid] {
     return store.mkfs(osd_uuid).handle_error(
-      crimson::stateful_ec::handle([FNAME] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
         ERROR("error creating empty object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([&store, FNAME] {
     return store.mount().handle_error(
-      crimson::stateful_ec::handle([FNAME](const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME](const auto& ec) {
         ERROR("error mounting object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([&store] {
     return open_or_create_meta_coll(store);
@@ -363,7 +361,12 @@ seastar::future<> OSD::start()
 {
   LOG_PREFIX(OSD::start);
   INFO("seastar::smp::count {}", seastar::smp::count);
-
+  if (auto cpu_cores =
+        local_conf().get_val<std::string>("crimson_seastar_cpu_cores");
+      cpu_cores.empty()) {
+    clog->warn() << "for optimal performance please set "
+                    "crimson_seastar_cpu_cores";
+  }
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   return store.start().then([this] {
@@ -391,13 +394,37 @@ seastar::future<> OSD::start()
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
     return store.mount().handle_error(
-      crimson::stateful_ec::handle([FNAME] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
         ERROR("error mounting object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
-  }).then([this] {
+  }).then([this, FNAME] {
+    auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
+    if (stats_seconds > 0) {
+      shard_stats.resize(seastar::smp::count);
+      stats_timer.set_callback([this, FNAME] {
+        gate.dispatch_in_background("stats_osd", *this, [this, FNAME] {
+          return shard_services.invoke_on_all(
+            [this](auto &local_service) {
+            auto stats = local_service.report_stats();
+            shard_stats[seastar::this_shard_id()] = stats;
+          }).then([this, FNAME] {
+            std::ostringstream oss;
+            for (const auto &stats : shard_stats) {
+              oss << int(stats.reactor_utilization);
+              oss << ",";
+            }
+            INFO("reactor_utilizations: {}", oss.str());
+          });
+        });
+        gate.dispatch_in_background("stats_store", *this, [this] {
+          return store.report_stats();
+        });
+      });
+      stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
+    }
+
     return open_meta_coll();
   }).then([this] {
     return pg_shard_manager.get_meta_coll().load_superblock(
@@ -450,18 +477,16 @@ seastar::future<> OSD::start()
       cluster_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER))
         .safe_then([this, dispatchers]() mutable {
 	  return cluster_msgr->start(dispatchers);
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [FNAME] (const std::error_code& e) {
           ERROR("cluster messenger bind(): {}", e);
-          ceph_abort();
         })),
       public_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC))
         .safe_then([this, dispatchers]() mutable {
 	  return public_msgr->start(dispatchers);
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [FNAME] (const std::error_code& e) {
           ERROR("public messenger bind(): {}", e);
-          ceph_abort();
         })));
   }).then_unpack([this] {
     return seastar::when_all_succeed(monc->start(),
@@ -934,13 +959,36 @@ seastar::future<MessageURef> OSD::get_stats()
   ).then([this, m=std::move(m)](auto &&stats) mutable {
     min_last_epoch_clean = osdmap->get_epoch();
     min_last_epoch_clean_pgs.clear();
+    std::set<int64_t> pool_set;
     for (auto [pgid, stat] : stats) {
       min_last_epoch_clean = std::min(min_last_epoch_clean,
                                       stat.get_effective_last_epoch_clean());
       min_last_epoch_clean_pgs.push_back(pgid);
+      int64_t pool_id = pgid.pool();
+      pool_set.emplace(pool_id);
     }
     m->pg_stat = std::move(stats);
-    return seastar::make_ready_future<MessageURef>(std::move(m));
+    return std::make_pair(pool_set, std::move(m));
+  }).then([this] (auto message) mutable {
+    std::map<int64_t, store_statfs_t> pool_stat;
+    auto pool_set = message.first;
+    auto m = std::move(message.second);
+    return seastar::do_with(std::move(m), 
+                            pool_stat, 
+                            pool_set, [this] (auto &&msg, 
+                                             auto &pool_stat,
+                                             auto &pool_set) {
+      return seastar::do_for_each(pool_set, [this, &pool_stat]
+      (auto& pool_id) {
+        return store.pool_statfs(pool_id).then([pool_id, &pool_stat](
+        store_statfs_t st) mutable {
+          pool_stat[pool_id] = st;
+        });
+      }).then([&pool_stat, msg=std::move(msg)] () mutable {
+        msg->pool_stat = std::move(pool_stat);
+        return seastar::make_ready_future<MessageURef>(std::move(msg));
+      });
+    });
   });
 }
 
@@ -1268,7 +1316,6 @@ seastar::future<> OSD::handle_scrub_message(
   crimson::net::ConnectionRef conn,
   Ref<MOSDFastDispatchOp> m)
 {
-  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   return pg_shard_manager.start_pg_operation<
     crimson::osd::ScrubMessage
     >(m, conn, m->get_min_epoch(), m->get_spg()).second;
@@ -1321,6 +1368,7 @@ seastar::future<> OSD::restart()
 {
   beacon_timer.cancel();
   tick_timer.cancel();
+  stats_timer.cancel();
   return pg_shard_manager.set_up_epoch(
     0
   ).then([this] {

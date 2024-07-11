@@ -360,13 +360,23 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "trim cache and optionally request client to release all caps and flush the journal");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("lock path"
+                                     " name=path,type=CephString,req=true"
+                                     " name=locks,type=CephString,n=N,req=false"
+                                     " name=ap_dont_block,type=CephBool,req=false"
+                                     " name=ap_freeze,type=CephBool,req=false"
+                                     " name=await,type=CephBool,req=false"
+                                     " name=lifetime,type=CephFloat,req=false"
+				     ,asok_hook
+				     ,"lock a path");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("cache status",
                                      asok_hook,
                                      "show cache status");
   ceph_assert(r == 0);
   r = admin_socket->register_command("quiesce path"
                                      " name=path,type=CephString,req=true"
-                                     " name=wait,type=CephBool,req=false"
+                                     " name=await,type=CephBool,req=false"
 				     ,asok_hook
 				     ,"quiesce a subtree");
   ceph_assert(r == 0);
@@ -564,8 +574,10 @@ int MDSDaemon::init()
   dout(10) << sizeof(Capability) << "\tCapability" << dendl;
   dout(10) << sizeof(xlist<void*>::item) << "\txlist<>::item" << dendl;
 
-  messenger->add_dispatcher_tail(&beacon);
-  messenger->add_dispatcher_tail(this);
+  // Ensure beacons are processed ahead of most other dispatchers.
+  messenger->add_dispatcher_head(&beacon, Dispatcher::PRIORITY_HIGH);
+  // order last as MDSDaemon::ms_dispatch2 first acquires the mds_lock
+  messenger->add_dispatcher_head(this, Dispatcher::PRIORITY_LOW);
 
   // init monc
   monc->set_messenger(messenger);
@@ -970,6 +982,7 @@ void MDSDaemon::respawn()
 
 bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 {
+  dout(25) << __func__ << ": processing " << m << dendl;
   std::lock_guard l(mds_lock);
   if (stopping) {
     return false;

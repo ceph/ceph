@@ -5,6 +5,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
+#include "test/crimson/ctest_utils.h"
 
 using Config = crimson::common::ConfigProxy;
 using MonClient = crimson::mon::Client;
@@ -63,7 +64,7 @@ static seastar::future<> test_monc()
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [&] {
     return test_monc().then([] {
       std::cout << "All tests succeeded" << std::endl;

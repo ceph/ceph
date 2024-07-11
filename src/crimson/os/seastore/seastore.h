@@ -3,14 +3,15 @@
 
 #pragma once
 
-#include <string>
-#include <unordered_map>
 #include <map>
+#include <optional>
+#include <string>
 #include <typeinfo>
+#include <unordered_map>
 #include <vector>
 
-#include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/metrics_types.hh>
 
 #include "include/uuid.h"
@@ -116,6 +117,10 @@ public:
       interval_set<uint64_t>& m,
       uint32_t op_flags = 0) final;
 
+    base_errorator::future<bool> exists(
+      CollectionRef c,
+      const ghobject_t& oid) final;
+
     get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
@@ -154,6 +159,8 @@ public:
 
     seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
     seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
+    seastar::future<> set_collection_opts(CollectionRef c,
+                                        const pool_opts_t& opts) final;
 
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
@@ -196,6 +203,8 @@ public:
     seastar::future<> mkfs_managers();
 
     void init_managers();
+
+    device_stats_t get_device_stats(bool report_detail) const;
 
   private:
     struct internal_context_t {
@@ -249,9 +258,9 @@ public:
 	    ctx.reset_preserve_handle(*transaction_manager);
 	    return std::invoke(f, ctx);
 	  }).handle_error(
-	    crimson::ct_error::eagain::pass_further{},
 	    crimson::ct_error::all_same_way([&ctx](auto e) {
 	      on_error(ctx.ext_transaction);
+	      return seastar::now();
 	    })
 	  );
 	}).then([this, op_type, &ctx] {
@@ -343,6 +352,10 @@ public:
       std::vector<OnodeRef> &d_onodes,
       ceph::os::Transaction::iterator &i);
 
+    tm_ret _remove_omaps(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      omap_root_t &&omap_root);
     tm_ret _remove(
       internal_context_t &ctx,
       OnodeRef &onode);
@@ -355,7 +368,21 @@ public:
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
+    enum class omap_type_t : uint8_t {
+      XATTR = 0,
+      OMAP,
+      NUM_TYPES
+    };
+    tm_ret _clone_omaps(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      OnodeRef &d_onode,
+      const omap_type_t otype);
     tm_ret _clone(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      OnodeRef &d_onode);
+    tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
@@ -412,7 +439,7 @@ public:
       const coll_t& cid);
     using omap_set_kvs_ret = tm_iertr::future<omap_root_t>;
     omap_set_kvs_ret _omap_set_kvs(
-      OnodeRef &onode,
+      const OnodeRef &onode,
       const omap_root_le_t& omap_root,
       Transaction& t,
       std::map<std::string, ceph::bufferlist>&& kvs);
@@ -469,6 +496,9 @@ public:
 
   mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   seastar::future<store_statfs_t> stat() const final;
+  seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
+
+  seastar::future<> report_stats() final;
 
   uuid_d get_fsid() const final {
     ceph_assert(seastar::this_shard_id() == primary_core);
@@ -522,6 +552,10 @@ private:
   DeviceRef device;
   std::vector<DeviceRef> secondaries;
   seastar::sharded<SeaStore::Shard> shard_stores;
+
+  mutable seastar::lowres_clock::time_point last_tp =
+    seastar::lowres_clock::time_point::min();
+  mutable std::vector<device_stats_t> shard_device_stats;
 };
 
 std::unique_ptr<SeaStore> make_seastore(

@@ -14,9 +14,9 @@ struct WritePipeline {
   struct ReserveProjectedUsage : OrderedExclusivePhaseT<ReserveProjectedUsage> {
     constexpr static auto type_name = "WritePipeline::reserve_projected_usage";
   } reserve_projected_usage;
-  struct OolWrites : UnorderedStageT<OolWrites> {
-    constexpr static auto type_name = "UnorderedStage::ool_writes_stage";
-  } ool_writes;
+  struct OolWritesAndLBAUpdates : UnorderedStageT<OolWritesAndLBAUpdates> {
+    constexpr static auto type_name = "UnorderedStage::ool_writes_and_update_lba_stage";
+  } ool_writes_and_lba_updates;
   struct Prepare : OrderedExclusivePhaseT<Prepare> {
     constexpr static auto type_name = "WritePipeline::prepare_phase";
   } prepare;
@@ -29,7 +29,7 @@ struct WritePipeline {
 
   using  BlockingEvents = std::tuple<
     ReserveProjectedUsage::BlockingEvent,
-    OolWrites::BlockingEvent,
+    OolWritesAndLBAUpdates::BlockingEvent,
     Prepare::BlockingEvent,
     DeviceSubmission::BlockingEvent,
     Finalize::BlockingEvent
@@ -70,7 +70,7 @@ struct OperationProxy {
   OperationProxy(OperationRef op) : op(std::move(op)) {}
 
   virtual seastar::future<> enter(WritePipeline::ReserveProjectedUsage&) = 0;
-  virtual seastar::future<> enter(WritePipeline::OolWrites&) = 0;
+  virtual seastar::future<> enter(WritePipeline::OolWritesAndLBAUpdates&) = 0;
   virtual seastar::future<> enter(WritePipeline::Prepare&) = 0;
   virtual seastar::future<> enter(WritePipeline::DeviceSubmission&) = 0;
   virtual seastar::future<> enter(WritePipeline::Finalize&) = 0;
@@ -95,7 +95,7 @@ struct OperationProxyT : OperationProxy {
   seastar::future<> enter(WritePipeline::ReserveProjectedUsage& s) final {
     return that()->enter_stage(s);
   }
-  seastar::future<> enter(WritePipeline::OolWrites& s) final {
+  seastar::future<> enter(WritePipeline::OolWritesAndLBAUpdates& s) final {
     return that()->enter_stage(s);
   }
   seastar::future<> enter(WritePipeline::Prepare& s) final {

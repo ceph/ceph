@@ -368,10 +368,10 @@ int CDentry::get_num_dir_auth_pins() const
   return auth_pins;
 }
 
-bool CDentry::can_auth_pin(int *err_ret, bool bypassfreezing) const
+bool CDentry::can_auth_pin(int *err_ret) const
 {
   ceph_assert(dir);
-  return dir->can_auth_pin(err_ret, bypassfreezing);
+  return dir->can_auth_pin(err_ret);
 }
 
 void CDentry::auth_pin(void *by)

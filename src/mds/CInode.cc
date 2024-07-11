@@ -2143,7 +2143,7 @@ void CInode::decode_lock_iflock(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ipolicy(bufferlist& bl)
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   if (is_dir()) {
     encode(get_inode()->version, bl);
     encode(get_inode()->ctime, bl);
@@ -2152,6 +2152,8 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
     encode(get_inode()->export_pin, bl);
     encode(get_inode()->flags, bl);
     encode(get_inode()->export_ephemeral_random_pin, bl);
+  } else {
+    encode(get_inode()->flags, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2160,7 +2162,7 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
   auto _inode = allocate_inode(*get_inode());
-  DECODE_START(1, p);
+  DECODE_START(3, p);
   if (is_dir()) {
     decode(_inode->version, p);
     utime_t tm;
@@ -2173,6 +2175,10 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
     if (struct_v >= 2) {
       decode(_inode->flags, p);
       decode(_inode->export_ephemeral_random_pin, p);
+    }
+  } else {
+    if (struct_v >= 3) {
+      decode(_inode->flags, p);
     }
   }
   DECODE_FINISH(p);
@@ -2963,18 +2969,11 @@ void CInode::clear_ambiguous_auth()
 }
 
 // auth_pins
-bool CInode::can_auth_pin(int *err_ret, bool bypassfreezing) const {
+bool CInode::can_auth_pin(int *err_ret) const {
   int err;
   if (!is_auth()) {
     err = ERR_NOT_AUTH;
-  } else if (is_freezing_inode()) {
-    if (bypassfreezing) {
-      dout(20) << "allowing authpin with freezing" << dendl;
-      err = 0;
-    } else {
-      err = ERR_EXPORTING_INODE;
-    }
-  } else if (is_frozen_inode() || is_frozen_auth_pin()) {
+  } else if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin()) {
     err = ERR_EXPORTING_INODE;
   } else {
     if (parent)
@@ -5596,6 +5595,25 @@ void CInode::get_subtree_dirfrags(std::vector<CDir*>& v) const
     if (dir->is_subtree_root())
       v.push_back(dir);
   }
+}
+
+bool CInode::is_quiesced() const { 
+  if (!quiescelock.is_xlocked()) {
+    return false;
+  }
+  // check that it's the quiesce op that's holding the lock
+  auto mut = quiescelock.get_xlock_by();
+  ceph_assert(mut); /* that would be weird */
+  auto* mdr = dynamic_cast<MDRequestImpl*>(mut.get());
+  ceph_assert(mdr); /* also would be weird */
+  return mdr->internal_op == CEPH_MDS_OP_QUIESCE_INODE;
+}
+
+bool CInode::will_block_for_quiesce(const MDRequestRef& mdr) {
+  if (mdr && mdr->is_wrlocked(&quiescelock)) {
+    return false;
+  }
+  return !quiescelock.can_wrlock();
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CInode, co_inode, mds_co);

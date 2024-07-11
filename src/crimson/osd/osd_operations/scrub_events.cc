@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/common/log.h"
+#include "crimson/common/coroutine.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "messages/MOSDRepScrubMap.h"
@@ -88,24 +89,17 @@ ScrubFindRange::ifut<> ScrubFindRange::run(PG &pg)
 {
   LOG_PREFIX(ScrubFindRange::run);
   using crimson::common::local_conf;
-  return interruptor::make_interruptible(
-    pg.shard_services.get_store().list_objects(
-      pg.get_collection_ref(),
-      ghobject_t(begin, ghobject_t::NO_GEN, pg.get_pgid().shard),
-      ghobject_t::get_max(),
-      local_conf().get_val<int64_t>("osd_scrub_chunk_max")
-    )
-  ).then_interruptible([FNAME, this, &pg](auto ret) {
-    auto &[_, next] = ret;
+  auto [_, next] = co_await pg.backend->list_objects(
+    begin,
+    local_conf().get_val<int64_t>("osd_scrub_chunk_max"));
 
-    // We rely on seeing an entire set of snapshots in a single chunk
-    auto end = next.hobj.get_max_object_boundary();
+  // We rely on seeing an entire set of snapshots in a single chunk
+  auto end = next.get_max_object_boundary();
 
-    DEBUGDPP("got next.hobj: {}, returning begin, end: {}, {}",
-	     pg, next.hobj, begin, end);
-    pg.scrubber.machine.process_event(
-      scrub::ScrubContext::request_range_complete_t{begin, end});
-  });
+  DEBUGDPP("got next: {}, returning begin, end: {}, {}",
+	   pg, next, begin, end);
+  pg.scrubber.machine.process_event(
+    scrub::ScrubContext::request_range_complete_t{begin, end});
 }
 
 template class ScrubAsyncOpT<ScrubFindRange>;
@@ -151,50 +145,36 @@ ScrubScan::ifut<> ScrubScan::run(PG &pg)
   ret.valid_through = pg.get_info().last_update;
 
   DEBUGDPP("begin: {}, end: {}", pg, begin, end);
-  return interruptor::make_interruptible(
-    pg.shard_services.get_store().list_objects(
-      pg.get_collection_ref(),
-      ghobject_t(begin, ghobject_t::NO_GEN, pg.get_pgid().shard),
-      ghobject_t(end, ghobject_t::NO_GEN, pg.get_pgid().shard),
-      std::numeric_limits<uint64_t>::max())
-  ).then_interruptible([FNAME, this, &pg](auto &&result) {
-    DEBUGDPP("listed {} objects", pg, std::get<0>(result).size());
-    return seastar::do_with(
-      std::move(std::get<0>(result)),
-      [this, &pg](auto &objects) {
-	return interruptor::do_for_each(
-	  objects,
-	  [this, &pg](auto &obj) {
-	    if (obj.is_pgmeta() || obj.hobj.is_temp()) {
-	      return interruptor::now();
-	    } else {
-	      return scan_object(pg, obj);
-	    }
-	  });
-      });
-  }).then_interruptible([FNAME, this, &pg] {
-    if (local) {
-      DEBUGDPP("complete, submitting local event", pg);
-      pg.scrubber.handle_event(
-	scrub::ScrubContext::scan_range_complete_t(
-	  pg.get_pg_whoami(),
-	  std::move(ret)));
-      return seastar::now();
-    } else {
-      DEBUGDPP("complete, sending response to primary", pg);
-      auto m = crimson::make_message<MOSDRepScrubMap>(
-	spg_t(pg.get_pgid().pgid, pg.get_primary().shard),
-	pg.get_osdmap_epoch(),
-	pg.get_pg_whoami());
-      encode(ret, m->get_data());
-      pg.scrubber.handle_event(
-	scrub::ScrubContext::generate_and_submit_chunk_result_complete_t{});
-      return pg.shard_services.send_to_osd(
+  auto [objects, _] = co_await pg.backend->list_objects(begin, end);
+
+  DEBUGDPP("listed {} objects", pg, objects);
+  for (const auto &object: objects) {
+    co_await scan_object(
+      pg,
+      ghobject_t(object, ghobject_t::NO_GEN, pg.get_pgid().shard));
+  }
+
+  if (local) {
+    DEBUGDPP("complete, submitting local event", pg);
+    pg.scrubber.handle_event(
+      scrub::ScrubContext::scan_range_complete_t(
+	pg.get_pg_whoami(),
+	std::move(ret)));
+  } else {
+    DEBUGDPP("complete, sending response to primary", pg);
+    auto m = crimson::make_message<MOSDRepScrubMap>(
+      spg_t(pg.get_pgid().pgid, pg.get_primary().shard),
+      pg.get_osdmap_epoch(),
+      pg.get_pg_whoami());
+    encode(ret, m->get_data());
+    pg.scrubber.handle_event(
+      scrub::ScrubContext::generate_and_submit_chunk_result_complete_t{});
+    co_await interruptor::make_interruptible(
+      pg.shard_services.send_to_osd(
 	pg.get_primary().osd,
 	std::move(m),
-	pg.get_osdmap_epoch());
-    }
-  });
+	pg.get_osdmap_epoch()));
+  }
 }
 
 ScrubScan::ifut<> ScrubScan::scan_object(
@@ -228,6 +208,7 @@ ScrubScan::ifut<> ScrubScan::scan_object(
     ct_error::all_same_way([FNAME, &pg, &obj, &entry](auto e) {
       DEBUGDPP("obj: {} stat error", pg, obj);
       entry.stat_error = true;
+      return seastar::now();
     })
   ).then_interruptible([FNAME, this, &pg, &obj] {
     if (deep) {
@@ -258,9 +239,10 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
   DEBUGDPP("obj: {}", pg, obj);
   using crimson::common::local_conf;
   auto &entry = ret.objects[obj.hobj];
+  auto progress_ref = std::make_unique<obj_scrub_progress_t>();
+  auto &progress = *progress_ref;
   return interruptor::repeat(
-    [FNAME, this, progress = obj_scrub_progress_t(),
-     &obj, &entry, &pg]() mutable
+    [FNAME, this, &progress, &obj, &entry, &pg]()
     -> interruptible_future<seastar::stop_iteration> {
       if (progress.offset) {
 	DEBUGDPP("op: {}, obj: {}, progress: {} scanning data",
@@ -272,7 +254,10 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	  obj,
 	  *(progress.offset),
 	  stride
-	).safe_then([stride, &progress, &entry](auto bl) {
+	).safe_then([this, FNAME, stride, &obj, &progress, &entry, &pg](auto bl) {
+	  size_t offset = *progress.offset;
+	  DEBUGDPP("op: {}, obj: {}, progress: {} got offset {}",
+		   pg, *this, obj, progress, offset);
 	  progress.data_hash << bl;
 	  if (bl.length() < stride) {
 	    progress.offset = std::nullopt;
@@ -286,6 +271,7 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	  ct_error::all_same_way([&progress, &entry](auto e) {
 	    entry.read_error = true;
 	    progress.offset = std::nullopt;
+	    return seastar::now();
 	  })
 	).then([] {
 	  return interruptor::make_interruptible(
@@ -301,9 +287,10 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	).safe_then([&progress](auto bl) {
 	  progress.omap_hash << bl;
 	}).handle_error(
-	  ct_error::enodata::handle([] {}),
+	  ct_error::enodata::handle([] { return seastar::now(); }),
 	  ct_error::all_same_way([&entry](auto e) {
 	    entry.read_error = true;
+	    return seastar::now();
 	  })
 	).then([&progress] {
 	  progress.header_done = true;
@@ -360,6 +347,7 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 		     pg, *this, obj, progress, e);
 	    progress.keys_done = true;
 	    entry.read_error = true;
+	    return seastar::now();
 	  })
 	).then([] {
 	  return interruptor::make_interruptible(
@@ -373,7 +361,7 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	  seastar::make_ready_future<seastar::stop_iteration>(
 	    seastar::stop_iteration::yes));
       }
-    });
+    }).finally([progress_ref=std::move(progress_ref)] {});
 }
 
 template class ScrubAsyncOpT<ScrubScan>;

@@ -82,41 +82,44 @@ bool QuiesceAgent::db_update(QuiesceMap& map)
   // ack with the known state stored in `map`
   set_pending_roots(map.db_version, std::move(new_roots));
 
-  // always send a synchronous ack
-  return true;
+  // to avoid ack races with the agent_thread,
+  // never send a synchronous ack
+  return false;
 }
 
 void* QuiesceAgent::agent_thread_main() {
-  working.clear();
-  std::unique_lock lock(agent_mutex);
+  std::unique_lock agent_lock(agent_mutex);
 
-  while(!stop_agent_thread) {
+  while (!stop_agent_thread) {
+    TrackedRootsVersion old;
+
     if (pending.armed) {
-      working.roots.swap(pending.roots);
-      working.db_version = pending.db_version;
-    } else {
-      // copy current roots
-      working.roots = current.roots;
-      working.db_version = current.db_version;
+      std::swap(old, current);
+      current.roots.swap(pending.roots);
+      current.db_version = pending.db_version;
     }
 
     dout(20)
-        << "current = " << current.db_version
-        << ", working = " << working.db_version
-        << ", pending = " << pending.db_version << dendl;
+        << "old = " << old.db_version
+        << ", current = " << current.db_version
+        << dendl;
 
-    current.armed = false;
-    working.armed = true;
-
-    // it's safe to clear the pending roots under lock because it shouldn't
+    // it's safe to clear the pending roots under agent_lock because it shouldn't
     // ever hold a last shared ptr to quiesced tracked roots, causing their destructors to run cancel.
     pending.clear();
-    lock.unlock();
+    current.armed = true;
+    upkeep_needed = false;
 
-    QuiesceMap ack(working.db_version);
+    // for somebody waiting for the internal state to progress
+    agent_cond.notify_all();
+    agent_lock.unlock();
+
+    _agent_thread_will_work();
+
+    QuiesceMap ack(current.db_version);
   
     // upkeep what we believe is the current state.
-    for (auto& [root, info] : working.roots) {
+    for (auto& [root, info] : current.roots) {
 
       info->lock();
       bool should_quiesce = info->should_quiesce();
@@ -141,7 +144,7 @@ void* QuiesceAgent::agent_thread_main() {
             info->unlock();
 
             // TODO: capturing QuiesceAgent& `this` is potentially dangerous
-            //       the assumption is that since the root pointer is weak
+            //       the assumption is that since the tracked root pointer is weak
             //       it will have been deleted by the QuiesceAgent shutdown sequence
             set_upkeep_needed();
           }
@@ -165,16 +168,10 @@ void* QuiesceAgent::agent_thread_main() {
       }
     }
 
-    lock.lock();
+    _agent_thread_did_work();
 
-    bool new_version = current.db_version < working.db_version;
-    current.roots.swap(working.roots);
-    current.db_version = working.db_version;
-
-    lock.unlock();
-
-    // clear the old roots and send the ack outside of the lock
-    working.roots.clear();
+    // send the ack and clear the old roots outside of the lock
+    bool new_version = current.db_version != old.db_version;
     if (new_version || !ack.roots.empty()) {
       dout(20) << "asyncrhonous ack for " << (new_version ? "a new" : "the current") << " version: " << ack << dendl;
       int rc = quiesce_control.agent_ack(std::move(ack));
@@ -182,20 +179,19 @@ void* QuiesceAgent::agent_thread_main() {
         dout(3) << "got error: " << rc << " trying to send " << ack << dendl;
       }
     }
+    old.clear();
     ack.clear();
 
-    lock.lock();
+    agent_lock.lock();
 
-    // notify that we're done working on this version and all acks (if any) were sent
-    working.clear();
-
+    current.armed = false;
     // a new pending version could be set while we weren't locked
     // if that's the case just go for another pass
     // otherwise, wait for updates
-    if (!pending.armed && !current.armed && !stop_agent_thread) {
+    while (!pending.armed && !current.armed && !upkeep_needed && !stop_agent_thread) {
       // for somebody waiting for the thread to idle
       agent_cond.notify_all();
-      agent_cond.wait(lock);
+      agent_cond.wait(agent_lock);
     }
   }
   agent_cond.notify_all();
@@ -206,13 +202,11 @@ void QuiesceAgent::set_pending_roots(QuiesceDbVersion version, TrackedRoots&& ne
 {
   std::unique_lock l(agent_mutex);
 
-  auto actual_version = std::max(current.db_version, working.db_version);
-  bool rollback = actual_version > version;
-  
+  bool rollback = current.db_version > version;
+
   if (rollback) {
     dout(5) << "version rollback to " << version 
-      << ". current = " << current.db_version 
-      << ", working = " << working.db_version 
+      << ". current = " << current.db_version
       << ", pending = " << pending.db_version << dendl;
   }
 
@@ -230,10 +224,9 @@ void QuiesceAgent::set_upkeep_needed()
 
   dout(20)
       << "current = " << current.db_version
-      << ", working = " << working.db_version
       << ", pending = " << pending.db_version << dendl;
 
-  current.armed = true;
+  upkeep_needed = true;
   agent_cond.notify_all();
 }
 

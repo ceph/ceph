@@ -22,7 +22,6 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 
 @Component({
@@ -69,6 +68,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   telemetryEnabled: boolean;
   telemetryURL = 'https://telemetry-public.ceph.com/';
   origin = window.location.origin;
+  private subs = new Subscription();
 
   constructor(
     private summaryService: SummaryService,
@@ -78,7 +78,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
     public prometheusService: PrometheusService,
-    private mgrModuleService: MgrModuleService,
     private refreshIntervalService: RefreshIntervalService,
     public prometheusAlertService: PrometheusAlertService
   ) {
@@ -108,6 +107,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   ngOnDestroy() {
     this.interval.unsubscribe();
     this.prometheusService.unsubscribe();
+    this.subs?.unsubscribe();
   }
 
   getHealth() {
@@ -127,11 +127,13 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.orchestratorService.getName().subscribe((data: string) => {
       this.detailsCardData.orchestrator = data;
     });
-    this.summaryService.subscribe((summary) => {
-      const version = summary.version.replace('ceph version ', '').split(' ');
-      this.detailsCardData.cephVersion =
-        version[0] + ' ' + version.slice(2, version.length).join(' ');
-    });
+    this.subs.add(
+      this.summaryService.subscribe((summary) => {
+        const version = summary.version.replace('ceph version ', '').split(' ');
+        this.detailsCardData.cephVersion =
+          version[0] + ' ' + version.slice(2, version.length).join(' ');
+      })
+    );
   }
 
   getCapacityCardData() {
@@ -155,8 +157,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   private getTelemetryReport() {
-    this.mgrModuleService.getConfig('telemetry').subscribe((resp: any) => {
-      this.telemetryEnabled = resp?.enabled;
+    this.healthService.getTelemetryStatus().subscribe((enabled: boolean) => {
+      this.telemetryEnabled = enabled;
     });
   }
 

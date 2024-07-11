@@ -29,6 +29,7 @@
 #include <seastar/core/with_timeout.hh>
 
 #include "test_messenger.h"
+#include "test/crimson/ctest_utils.h"
 
 using namespace std::chrono_literals;
 namespace bpo = boost::program_options;
@@ -152,11 +153,10 @@ static seastar::future<> test_echo(unsigned rounds,
         msgr->set_auth_server(&dummy_auth);
         return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
           return msgr->start({this});
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [addr] (const std::error_code& e) {
           logger().error("test_echo(): "
                          "there is another instance running at {}", addr);
-          ceph_abort();
         }));
       }
       seastar::future<> shutdown() {
@@ -421,11 +421,10 @@ seastar::future<> test_preemptive_shutdown() {
         msgr->set_auth_server(&dummy_auth);
         return msgr->bind(entity_addrvec_t{addr}).safe_then([this] {
           return msgr->start({this});
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [addr] (const std::error_code& e) {
           logger().error("test_preemptive_shutdown(): "
                          "there is another instance running at {}", addr);
-          ceph_abort();
         }));
       }
       entity_addr_t get_addr() const {
@@ -1043,10 +1042,10 @@ class FailoverSuite : public Dispatcher {
     test_msgr->set_interceptor(&interceptor);
     return test_msgr->bind(entity_addrvec_t{test_addr}).safe_then([this] {
       return test_msgr->start({this});
-    }, Messenger::bind_ertr::all_same_way([test_addr] (const std::error_code& e) {
+    }, Messenger::bind_ertr::assert_all_func(
+      [test_addr] (const std::error_code& e) {
       logger().error("FailoverSuite: "
                      "there is another instance running at {}", test_addr);
-      ceph_abort();
     }));
   }
 
@@ -1606,10 +1605,10 @@ class FailoverSuitePeer : public Dispatcher {
     peer_msgr->set_auth_server(&dummy_auth);
     return peer_msgr->bind(entity_addrvec_t{test_peer_addr}).safe_then([this] {
       return peer_msgr->start({this});
-    }, Messenger::bind_ertr::all_same_way([test_peer_addr] (const std::error_code& e) {
+    }, Messenger::bind_ertr::assert_all_func(
+      [test_peer_addr] (const std::error_code& e) {
       logger().error("FailoverSuitePeer: "
                      "there is another instance running at {}", test_peer_addr);
-      ceph_abort();
     }));
   }
 
@@ -1810,10 +1809,10 @@ class FailoverTestPeer : public Dispatcher {
     cmd_msgr->set_auth_server(&dummy_auth);
     return cmd_msgr->bind(entity_addrvec_t{cmd_peer_addr}).safe_then([this] {
       return cmd_msgr->start({this});
-    }, Messenger::bind_ertr::all_same_way([cmd_peer_addr] (const std::error_code& e) {
+    }, Messenger::bind_ertr::assert_all_func(
+      [cmd_peer_addr] (const std::error_code& e) {
       logger().error("FailoverTestPeer: "
                      "there is another instance running at {}", cmd_peer_addr);
-      ceph_abort();
     }));
   }
 
@@ -3845,7 +3844,7 @@ seastar::future<int> do_test(seastar::app_template& app)
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   app.add_options()
     ("verbose,v", bpo::value<bool>()->default_value(false),
      "chatty if true")

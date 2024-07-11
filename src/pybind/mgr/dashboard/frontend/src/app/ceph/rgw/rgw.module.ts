@@ -8,6 +8,8 @@ import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
+import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -45,13 +47,15 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
+import { NfsListComponent } from '../nfs/nfs-list/nfs-list.component';
+import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
 
 @NgModule({
   imports: [
     CommonModule,
     SharedModule,
     FormsModule,
-    ReactiveFormsModule,
+    ReactiveFormsModule.withConfig({ callSetDisabledState: 'whenDisabledForLegacyCode' }),
     PerformanceCounterModule,
     NgbNavModule,
     RouterModule,
@@ -194,6 +198,33 @@ const routes: Routes = [
     path: 'multisite',
     data: { breadcrumbs: 'Multi-site' },
     children: [{ path: '', component: RgwMultisiteDetailsComponent }]
+  },
+  {
+    path: 'nfs',
+    canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'nfs-ganesha',
+        redirectTo: 'error',
+        section: 'nfs-ganesha',
+        section_info: 'NFS GANESHA',
+        header: 'NFS-Ganesha is not configured'
+      },
+      breadcrumbs: 'NFS'
+    },
+    children: [
+      { path: '', component: NfsListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   }
 ];
 

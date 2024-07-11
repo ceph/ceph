@@ -15,14 +15,10 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/sharded.hh>
 
-#if __cplusplus > 201703L
-#include <semaphore>
-namespace crimson {
-  using std::counting_semaphore;
-}
-#else
+// std::counting_semaphore is buggy in libstdc++-11
+// (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=104928),
+// so we switch back to the homebrew version for now.
 #include "semaphore.h"
-#endif
 
 namespace crimson::os {
 

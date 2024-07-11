@@ -36,6 +36,7 @@ public:
     const Shard& operator=(const Shard& o) = delete;
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
+    using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
     using read_errorator = crimson::errorator<crimson::ct_error::enoent,
 					      crimson::ct_error::input_output_error>;
     virtual read_errorator::future<ceph::bufferlist> read(
@@ -50,6 +51,10 @@ public:
       const ghobject_t& oid,
       interval_set<uint64_t>& m,
       uint32_t op_flags = 0) = 0;
+
+    virtual base_errorator::future<bool> exists(
+      CollectionRef c,
+      const ghobject_t& oid) = 0;
 
     using get_attr_errorator = crimson::errorator<
       crimson::ct_error::enoent,
@@ -96,6 +101,9 @@ public:
     virtual seastar::future<CollectionRef> create_new_collection(const coll_t& cid) = 0;
 
     virtual seastar::future<CollectionRef> open_collection(const coll_t& cid) = 0;
+
+    virtual seastar::future<> set_collection_opts(CollectionRef c,
+                                        const pool_opts_t& opts) = 0;
 
   protected:
     virtual seastar::future<> do_transaction_no_callbacks(
@@ -175,6 +183,10 @@ public:
   virtual mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) = 0;
 
   virtual seastar::future<store_statfs_t> stat() const = 0;
+
+  virtual seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const = 0;
+
+  virtual seastar::future<> report_stats() { return seastar::now(); }
 
   virtual uuid_d get_fsid() const  = 0;
 

@@ -219,7 +219,7 @@ SegmentedJournal::scan_last_segment(
       cursor,
       nonce,
       std::numeric_limits<std::size_t>::max(),
-      handler).discard_result();
+      handler);
   });
 }
 
@@ -312,7 +312,7 @@ SegmentedJournal::replay_segment(
 	cursor,
 	header.segment_nonce,
 	std::numeric_limits<size_t>::max(),
-	dhandler).safe_then([](auto){}
+	dhandler
       ).handle_error(
 	replay_ertr::pass_further{},
 	crimson::ct_error::assert_all{

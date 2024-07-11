@@ -137,7 +137,7 @@ LogicalCachedExtent::~LogicalCachedExtent() {
   }
 }
 
-void LogicalCachedExtent::on_replace_prior(Transaction &t) {
+void LogicalCachedExtent::on_replace_prior() {
   assert(is_mutation_pending());
   take_prior_parent_tracker();
   assert(get_parent_node());

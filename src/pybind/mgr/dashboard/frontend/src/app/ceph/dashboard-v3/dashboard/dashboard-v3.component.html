@@ -17,7 +17,10 @@
           <dt>Orchestrator</dt>
           <dd i18n>{{ detailsCardData.orchestrator || 'Orchestrator is not available' }}</dd>
           <dt>Ceph version</dt>
-          <dd>{{ detailsCardData.cephVersion }}</dd>
+          <dd>
+            {{ detailsCardData.cephVersion }}
+            <cd-upgradable></cd-upgradable>
+          </dd>
           <dt>Cluster API</dt>
           <dd>
             <a routerLink="/api-docs"

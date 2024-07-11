@@ -10,15 +10,21 @@
  *
  */
 #include "common/Cond.h"
+#include "common/debug.h"
 #include "mds/QuiesceAgent.h"
 #include "gtest/gtest.h"
 #include <algorithm>
 #include <functional>
+#include <future>
 #include <queue>
 #include <ranges>
 #include <system_error>
 #include <thread>
-#include <future>
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds_quiesce
+#undef dout_prefix
+#define dout_prefix *_dout << "== test == "
 
 class QuiesceAgentTest : public testing::Test {
   using RequestHandle = QuiesceInterface::RequestHandle;
@@ -50,7 +56,7 @@ class QuiesceAgentTest : public testing::Test {
       QuiesceDbVersion get_latest_version()
       {
         std::lock_guard l(agent_mutex);
-        return std::max({current.db_version, working.db_version, pending.db_version});
+        return std::max(current.db_version, pending.db_version);
       }
       TrackedRoots& mutable_tracked_roots() {
         return current.roots;
@@ -60,8 +66,34 @@ class QuiesceAgentTest : public testing::Test {
         std::unique_lock l(agent_mutex);
         return await_idle_locked(l);
       }
+
+      using TRV = TrackedRootsVersion;
+      std::optional<std::function<void(TRV& pending, TRV& current)>> before_work;
+
+      void _agent_thread_will_work() {
+        auto f = before_work;
+        if (f) {
+          (*f)(pending, current);
+        }
+      }
+
+      bool wait_for_agent_in_set_roots = false;
+      void set_pending_roots(QuiesceDbVersion db_version, TrackedRoots&& new_roots) override {
+        // just like the original version,
+        // but allows to simulate a case when the context
+        // switches to the agent thread and processes the new version
+        // before the calling has the chance to continue
+
+        QuiesceAgent::set_pending_roots(db_version, std::move(new_roots));
+
+        while(wait_for_agent_in_set_roots && db_version != await_idle()) {
+          dout(3) << __func__ << ": awaiting agent on version " << db_version << dendl;
+        }
+      }
+
+      ControlInterface& get_control_interface() { return quiesce_control; }
     };
-    QuiesceMap latest_ack;
+    QuiesceMap async_ack;
     std::unordered_map<QuiesceRoot, QuiescingRoot> quiesce_requests;
     ceph_tid_t last_tid;
     std::mutex mutex;
@@ -98,19 +130,12 @@ class QuiesceAgentTest : public testing::Test {
         auto [it, inserted] = quiesce_requests.try_emplace(r, req_id, c);
 
         if (!inserted) {
-          // we must update the request id so that old one can't cancel this request.
-          it->second.first = req_id;
-          if (it->second.second) {
-            it->second.second->complete(-EINTR);
-            it->second.second = c;
-          } else {
-            // if we have no context, it means we've completed it
-            // since we weren't inserted, we must have successfully quiesced
-            c->complete(0);
-          }
+          // it's a conflict that MDCache doesn't deal with
+          c->complete(-EINPROGRESS);
+          return req_id;
+        } else {
+          return it->second.first;
         }
-
-        return it->second.first;
       };
       
       ci.cancel_request = [this](RequestHandle h) {
@@ -131,7 +156,7 @@ class QuiesceAgentTest : public testing::Test {
 
       ci.agent_ack = [this](QuiesceMap const& update) {
         std::lock_guard l(mutex);
-        latest_ack = update;
+        async_ack = update;
         return 0;
       };
 
@@ -148,8 +173,9 @@ class QuiesceAgentTest : public testing::Test {
 
     using R = QuiesceMap::Roots::value_type;
     using RootInitList = std::initializer_list<R>;
+    enum struct WaitForAgent { IfAsync, No };
 
-    std::optional<QuiesceMap> update(QuiesceDbVersion v, RootInitList roots)
+    std::optional<QuiesceMap> update(QuiesceDbVersion v, RootInitList roots, WaitForAgent wait = WaitForAgent::IfAsync)
     {
       QuiesceMap map(v, QuiesceMap::Roots { roots });
 
@@ -157,24 +183,29 @@ class QuiesceAgentTest : public testing::Test {
         return map;
       }
 
-      return std::nullopt;
+      if (WaitForAgent::No == wait) {
+        return std::nullopt;
+      } else {
+        assert(await_idle_v(v.set_version));
+        return async_ack;
+      }
     }
 
-    std::optional<QuiesceMap> update(QuiesceSetVersion v, RootInitList roots)
+    std::optional<QuiesceMap> update(QuiesceSetVersion v, RootInitList roots, WaitForAgent wait = WaitForAgent::IfAsync)
     {
-      return update(QuiesceDbVersion { 1, v }, roots);
+      return update(QuiesceDbVersion { 1, v }, roots, wait);
     }
 
-    std::optional<QuiesceMap> update(RootInitList roots)
+    std::optional<QuiesceMap> update(RootInitList roots, WaitForAgent wait = WaitForAgent::IfAsync)
     {
-      return update(agent->get_latest_version() + 1, roots);
+      return update({1, agent->get_latest_version().set_version + 1}, roots, wait);
     }
 
     template <class _Rep = std::chrono::seconds::rep, class _Period = std::chrono::seconds::period, typename D = std::chrono::duration<_Rep, _Period>>
-    bool await_idle_v(QuiesceDbVersion version, D timeout = std::chrono::duration_cast<D>(std::chrono::seconds(10)))
+    bool await_idle_v(QuiesceSetVersion v, D timeout = std::chrono::duration_cast<D>(std::chrono::seconds(10)))
     {
-      return timed_run(timeout, [this, version] {
-        while (version > agent->await_idle()) { };
+      return timed_run(timeout, [this, v] {
+        while (QuiesceDbVersion {1, v} > agent->await_idle()) { };
       });
     }
 
@@ -241,16 +272,19 @@ TEST_F(QuiesceAgentTest, DbUpdates) {
   
     // manipulate root0 and root1 as if they were quiesced and root2 as if it was released
     auto& root0 = *roots.at("root0");
-    root0.quiesce_result = 0;
-    EXPECT_EQ(QS_QUIESCED, root0.get_actual_state());
+    complete_quiesce("root0", 0);
 
     auto& root1 = *roots.at("root1");
-    root1.quiesce_result = 0;
-    EXPECT_EQ(QS_QUIESCED, root1.get_actual_state());
+    complete_quiesce("root1", 0);
 
     auto& root2 = *roots.at("root2");
-    root2.quiesce_result = 0;
-    root2.cancel_result = 0;
+    complete_quiesce("root2", 0);
+    root2.cancel_result = root2.cancel(*root2.quiesce_request);
+
+    EXPECT_TRUE(await_idle());
+
+    EXPECT_EQ(QS_QUIESCED, root0.get_actual_state());
+    EXPECT_EQ(QS_QUIESCED, root1.get_actual_state());
     EXPECT_EQ(QS_RELEASED, root2.get_actual_state());
   }
 
@@ -329,22 +363,22 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
 
   EXPECT_TRUE(await_idle());
   // we should have seen an ack sent
-  EXPECT_EQ(1, latest_ack.db_version);
-  EXPECT_EQ(1, latest_ack.roots.size());
-  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
+  EXPECT_EQ(1, async_ack.db_version);
+  EXPECT_EQ(1, async_ack.roots.size());
+  EXPECT_EQ(QS_QUIESCED, async_ack.roots.at("root1").state);
 
-  latest_ack.clear();
+  async_ack.clear();
 
   // complete the other root with failure
   EXPECT_TRUE(complete_quiesce("root2", -1));
 
   EXPECT_TRUE(await_idle());
-  EXPECT_EQ(1, latest_ack.db_version);
-  ASSERT_EQ(2, latest_ack.roots.size());
-  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
-  EXPECT_EQ(QS_FAILED, latest_ack.roots.at("root2").state);
+  EXPECT_EQ(1, async_ack.db_version);
+  ASSERT_EQ(2, async_ack.roots.size());
+  EXPECT_EQ(QS_QUIESCED, async_ack.roots.at("root1").state);
+  EXPECT_EQ(QS_FAILED, async_ack.roots.at("root2").state);
 
-  latest_ack.clear();
+  async_ack.clear();
 
   // complete the third root with success
   // complete one root with success
@@ -353,11 +387,11 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
   EXPECT_TRUE(await_idle());
 
   // we should see the two quiesced roots in the ack,
-  EXPECT_EQ(1, latest_ack.db_version);
-  ASSERT_EQ(3, latest_ack.roots.size());
-  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
-  EXPECT_EQ(QS_FAILED, latest_ack.roots.at("root2").state);
-  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root3").state);
+  EXPECT_EQ(1, async_ack.db_version);
+  ASSERT_EQ(3, async_ack.roots.size());
+  EXPECT_EQ(QS_QUIESCED, async_ack.roots.at("root1").state);
+  EXPECT_EQ(QS_FAILED, async_ack.roots.at("root2").state);
+  EXPECT_EQ(QS_QUIESCED, async_ack.roots.at("root3").state);
 
   {
     auto ack = update(2, {
@@ -371,7 +405,7 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
     // root2 is still quiescing, no updates for it
     // root3 is released asyncrhonously so for now it should be QUIESCED
     ASSERT_EQ(2, ack->roots.size());
-    EXPECT_EQ(QS_FAILED, latest_ack.roots.at("root2").state);
+    EXPECT_EQ(QS_FAILED, async_ack.roots.at("root2").state);
     EXPECT_EQ(QS_QUIESCED, ack->roots.at("root3").state);
   }
 
@@ -457,50 +491,50 @@ TEST_F(QuiesceAgentTest, DuplicateQuiesceRequest) {
   EXPECT_TRUE(quiesce_requests.contains("root1"));
   EXPECT_TRUE(quiesce_requests.contains("root2"));
 
-  latest_ack.clear();
+  async_ack.clear();
   // now, bring the roots back
   {
     auto ack = update(3, { 
       { "root1", QS_QUIESCING },
       { "root2", QS_QUIESCING },
       { "root3", QS_QUIESCING },
-    });
+    }, WaitForAgent::No);
 
-    ASSERT_TRUE(ack.has_value());
-    EXPECT_EQ(3, ack->db_version);
-    // even though root1 is already quiesced,
-    // we should not know about it synchronously
-    EXPECT_EQ(0, ack->roots.size());
+    // no sync update
+    EXPECT_FALSE(ack.has_value());
   }
 
   EXPECT_TRUE(await_idle());
 
-  // now we should have seen the ack with root2 quiesced
-  EXPECT_EQ(3, latest_ack.db_version);
-  EXPECT_EQ(1, latest_ack.roots.size());
-  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
+  // root1 and root2 are still registered internally
+  // so it should result in a failure to quiesce them again
+  EXPECT_EQ(3, async_ack.db_version);
+  EXPECT_EQ(2, async_ack.roots.size());
+  EXPECT_EQ(QS_FAILED, async_ack.roots.at("root1").state);
+  EXPECT_EQ(QS_FAILED, async_ack.roots.at("root2").state);
 
   // the actual state of the pinned objects shouldn't have changed
   EXPECT_EQ(QS_QUIESCED, pinned1->get_actual_state());
-  EXPECT_EQ(QS_FAILED, pinned2->get_actual_state());
+  EXPECT_EQ(QS_QUIESCING, pinned2->get_actual_state());
 
   EXPECT_EQ(0, *pinned1->quiesce_result);
-  EXPECT_EQ(-EINTR, *pinned2->quiesce_result);
+  EXPECT_FALSE(pinned2->quiesce_result.has_value());
 
-  // releasing the pinned objects will attempt to cancel, but that shouldn't interfere with the current state
+  // releasing the pinned objects should cancel and remove from internal requests
   pinned1.reset();
   pinned2.reset();
 
-  EXPECT_TRUE(quiesce_requests.contains("root1"));
-  EXPECT_TRUE(quiesce_requests.contains("root2"));
+  EXPECT_FALSE(quiesce_requests.contains("root1"));
+  EXPECT_FALSE(quiesce_requests.contains("root2"));
 
-  EXPECT_TRUE(complete_quiesce("root2"));
+  EXPECT_TRUE(complete_quiesce("root3"));
 
   EXPECT_TRUE(await_idle());
-  EXPECT_EQ(3, latest_ack.db_version);
-  EXPECT_EQ(2, latest_ack.roots.size());
-  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
-  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root2").state);
+  EXPECT_EQ(3, async_ack.db_version);
+  EXPECT_EQ(3, async_ack.roots.size());
+  EXPECT_EQ(QS_FAILED, async_ack.roots.at("root1").state);
+  EXPECT_EQ(QS_FAILED, async_ack.roots.at("root2").state);
+  EXPECT_EQ(QS_QUIESCED, async_ack.roots.at("root3").state);
 }
 
 TEST_F(QuiesceAgentTest, TimeoutBeforeComplete)
@@ -542,4 +576,76 @@ TEST_F(QuiesceAgentTest, TimeoutBeforeComplete)
     auto tracked = agent->tracked_roots();
     EXPECT_EQ(0, tracked.size());
   }
+}
+
+
+TEST_F(QuiesceAgentTest, RapidDbUpdates)
+{
+  // This validates that the same new root that happens to be reported
+  // more than once before we have chance to process it is not submitted
+  // multiple times
+
+  // set a handler that will post v2 whlie we're working on v1
+  agent->before_work = [this](TestQuiesceAgent::TRV& p, TestQuiesceAgent::TRV& c) {
+    if (c.db_version.set_version != 1) {
+      return;
+    }
+    agent->before_work.reset();
+    auto ack = update(2, {
+                             { "root1", QS_QUIESCING },
+                             { "root2", QS_QUIESCING },
+                         }, WaitForAgent::No);
+
+    EXPECT_FALSE(ack.has_value());
+  };
+
+  {
+    auto ack = update(1, {
+                             { "root1", QS_QUIESCING },
+                         }, WaitForAgent::No);
+
+    EXPECT_FALSE(ack.has_value());
+  }
+
+  EXPECT_TRUE(await_idle_v(2));
+
+  // nothing should be in the ack
+  // if we incorrectly submit root1 twice
+  // then it should be repored here as FAILED
+  EXPECT_EQ(2, async_ack.db_version);
+  EXPECT_EQ(0, async_ack.roots.size());
+
+  {
+    auto tracked = agent->tracked_roots();
+    EXPECT_EQ(2, tracked.size());
+  }
+}
+
+TEST_F(QuiesceAgentTest, RapidAsyncAck)
+{
+  // This validates that if the agent thread manages to
+  // process a db update and generate a QUIESCED ack
+  // before the updating thread gets the CPU to progress,
+  // then the outdated synchronous ack is not sent
+
+  agent->wait_for_agent_in_set_roots = true;
+
+  // make the agent complete the request synchronosuly with the submit
+  auto && old_submit = agent->get_control_interface().submit_request;
+  agent->get_control_interface().submit_request = [this, old_submit = std::move(old_submit)](QuiesceRoot root, Context* ctx) {
+    auto result = old_submit(root, ctx);
+    dout(10) << "quiescing the root `" << root << "` in submit" << dendl;
+    complete_quiesce(root, 0);
+    return result;
+  };
+
+  auto ack = update(1, {
+                            { "root1", QS_QUIESCING },
+                        });
+
+  auto && latest_ack = ack.value_or(async_ack);
+
+  EXPECT_EQ(1, latest_ack.db_version);
+  ASSERT_EQ(1, latest_ack.roots.size());
+  EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
 }

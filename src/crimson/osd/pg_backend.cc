@@ -17,6 +17,7 @@
 #include "common/Checksummer.h"
 #include "common/Clock.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/tmap_helpers.h"
 #include "crimson/os/futurized_collection.h"
@@ -162,15 +163,10 @@ PGBackend::mutate_object(
 {
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (obc->obs.exists) {
-#if 0
-    obc->obs.oi.version = ctx->at_version;
-    obc->obs.oi.prior_version = ctx->obs->oi.version;
-#endif
-
     obc->obs.oi.prior_version = obc->obs.oi.version;
     obc->obs.oi.version = osd_op_p.at_version;
-    if (osd_op_p.user_at_version > obc->obs.oi.user_version)
-      obc->obs.oi.user_version = osd_op_p.user_at_version;
+    if (osd_op_p.user_modify)
+      obc->obs.oi.user_version = osd_op_p.at_version.version;
     obc->obs.oi.last_reqid = osd_op_p.req_id;
     obc->obs.oi.mtime = osd_op_p.mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
@@ -240,13 +236,19 @@ PGBackend::read(const ObjectState& os, OSDOp& osd_op,
       (op.extent.truncate_size < size)) {
     size = op.extent.truncate_size;
   }
-  if (offset >= size) {
-    // read size was trimmed to zero and it is expected to do nothing,
-    return read_errorator::now();
-  }
   if (!length) {
     // read the whole object if length is 0
     length = size;
+  }
+  if (offset >= size) {
+    // read size was trimmed to zero and it is expected to do nothing,
+    return read_errorator::now();
+  } else if (offset + length > size) {
+    length = size - op.extent.offset;
+    if (!length) {
+      // this is the second trimmed_read case
+      return read_errorator::now();
+    }
   }
   return _read(oi.soid, offset, length, op.flags).safe_then_interruptible_tuple(
     [&delta_stats, &oi, &osd_op](auto&& bl) -> read_errorator::future<> {
@@ -340,8 +342,6 @@ namespace {
     auto init_value_p = init_value_bl.cbegin();
     try {
       decode(init_value, init_value_p);
-      // chop off the consumed part
-      init_value_bl.splice(0, init_value_p.get_off());
     } catch (const ceph::buffer::end_of_buffer&) {
       logger().warn("{}: init value not provided", __func__);
       return crimson::ct_error::invarg::make();
@@ -595,11 +595,11 @@ void PGBackend::update_size_and_usage(object_stat_sum_t& delta_stats,
   if (write_full) {
     if (oi.size) {
       ch.insert(0, oi.size);
-    } else if (length) {
-      ch.insert(offset, length);
     }
-    modified.union_of(ch);
+  } else if (length) {
+    ch.insert(offset, length);
   }
+  modified.union_of(ch);
   if (write_full ||
       (offset + length > oi.size && length)) {
     uint64_t new_size = offset + length;
@@ -992,8 +992,6 @@ PGBackend::create_iertr::future<> PGBackend::create(
     }
   }
   maybe_create_new_object(os, txn, delta_stats);
-  txn.create(coll->get_cid(),
-             ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   return seastar::now();
 }
 
@@ -1080,33 +1078,33 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
 }
 
 PGBackend::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>>
-PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
+PGBackend::list_objects(
+  const hobject_t& start, const hobject_t &end, uint64_t limit) const
 {
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
-  return interruptor::make_interruptible(store->list_objects(coll,
-					 gstart,
-					 ghobject_t::get_max(),
-					 limit))
-    .then_interruptible([](auto ret) {
-      auto& [gobjects, next] = ret;
-      std::vector<hobject_t> objects;
-      boost::copy(gobjects |
-        boost::adaptors::filtered([](const ghobject_t& o) {
-          if (o.is_pgmeta()) {
-            return false;
-          } else if (o.hobj.is_temp()) {
-            return false;
-          } else {
-            return o.is_no_gen();
-          }
-        }) |
-        boost::adaptors::transformed([](const ghobject_t& o) {
-          return o.hobj;
-        }),
-        std::back_inserter(objects));
-      return seastar::make_ready_future<std::tuple<std::vector<hobject_t>, hobject_t>>(
-        std::make_tuple(objects, next.hobj));
-    });
+  auto gend = end.is_max() ? ghobject_t::get_max() : ghobject_t{end, 0, shard};
+  auto [gobjects, next] = co_await interruptor::make_interruptible(
+    store->list_objects(coll, gstart, gend, limit));
+
+  std::vector<hobject_t> objects;
+  boost::copy(
+    gobjects |
+    boost::adaptors::filtered([](const ghobject_t& o) {
+      if (o.is_pgmeta()) {
+	return false;
+      } else if (o.hobj.is_temp()) {
+	return false;
+      } else if (o.is_internal_pg_local()) {
+	return false;
+      } else {
+	return o.is_no_gen();
+      }
+    }) |
+    boost::adaptors::transformed([](const ghobject_t& o) {
+      return o.hobj;
+    }),
+    std::back_inserter(objects));
+  co_return std::make_tuple(objects, next.hobj);
 }
 
 PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(

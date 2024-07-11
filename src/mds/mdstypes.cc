@@ -7,6 +7,10 @@
 #include "common/Formatter.h"
 #include "common/StackStringStream.h"
 
+#include <iostream>
+#include <sstream>
+#include <string>
+
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 
 using std::list;
@@ -444,7 +448,7 @@ feature_bitset_t::feature_bitset_t(unsigned long value)
   }
 }
 
-feature_bitset_t::feature_bitset_t(const vector<size_t>& array)
+void feature_bitset_t::init_array(const vector<size_t>& array)
 {
   if (!array.empty()) {
     size_t n = array.back();
@@ -461,6 +465,26 @@ feature_bitset_t::feature_bitset_t(const vector<size_t>& array)
       _vec[bit / bits_per_block] |= (block_type)1 << (bit % bits_per_block);
     }
   }
+}
+
+feature_bitset_t::feature_bitset_t(std::string_view str)
+{
+  std::stringstream ss;
+  std::vector<size_t> v;
+  std::string atom;
+
+  ss << str;
+  while (std::getline(ss, atom, ',')) {
+    v.push_back(std::stoul(atom));
+  }
+  std::sort(v.begin(), v.end());
+
+  init_array(v);
+}
+
+feature_bitset_t::feature_bitset_t(const vector<size_t>& array)
+{
+  init_array(array);
 }
 
 feature_bitset_t& feature_bitset_t::operator-=(const feature_bitset_t& other)

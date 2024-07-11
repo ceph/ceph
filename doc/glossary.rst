@@ -326,6 +326,14 @@
                 <https://ceph.io/assets/pdfs/CawthonKeyValueStore.pdf>`_ (17
                 pages).
 
+        OpenStack Swift
+                In the context of Ceph, OpenStack Swift is one of the two APIs
+                supported by the Ceph Object Store. The other API supported by
+                the Ceph Object Store is S3.
+
+                See `the OpenStack Storage API overview page
+                <https://docs.openstack.org/swift/latest/api/object_api_v1_overview.html>`_.
+
 	OSD
                 Probably :term:`Ceph OSD`, but not necessarily. Sometimes
                 (especially in older correspondence, and especially in
@@ -452,6 +460,14 @@
                 provides a gateway to both the Amazon S3 RESTful API and the
                 OpenStack Swift API. 
 
+        S3
+                In the context of Ceph, S3 is one of the two APIs supported by
+                the Ceph Object Store. The other API supported by the Ceph
+                Object Store is OpenStack Swift.
+
+                See `the Amazon S3 overview page
+                <https://aws.amazon.com/s3/>`_.
+
         scrubs
 
                 The processes by which Ceph ensures data integrity. During the
@@ -487,6 +503,9 @@
                 A systemd ``type`` where a command is defined in ``ExecStart``
                 which will exit upon completion (it is not intended to
                 daemonize)
+
+        Swift
+                See :term:`OpenStack Swift`.
 
 	Teuthology
 		The collection of software that performs scripted tests on Ceph.

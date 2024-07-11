@@ -58,7 +58,7 @@ bool QuiesceDbManager::db_thread_has_work() const
       || pending_acks.size() > 0
       || pending_requests.size() > 0
       || pending_db_updates.size() > 0
-      || (agent_callback.has_value() && agent_callback->if_newer < db_version())
+      || (agent_callback.has_value() && agent_callback->if_newer < db.version())
       || (cluster_membership.has_value() && cluster_membership->epoch != membership.epoch);
 }
 
@@ -105,15 +105,26 @@ void* QuiesceDbManager::quiesce_db_thread_main()
       ls.unlock();
 
       if (membership.is_leader()) {
-        if (leader_bootstrap(std::move(db_updates), next_event_at_age)) {
+        const QuiesceTimeInterval bootstrap_delay = leader_bootstrap(std::move(db_updates));
+        if (bootstrap_delay == QuiesceTimeInterval::zero()){
           // we're good to process things
           next_event_at_age = leader_upkeep(std::move(acks), std::move(requests));
         } else {
-          // not yet there. Put the requests back onto the queue
+          // not yet there. Put the acks and requests back onto the queue and wait for updates
           ls.lock();
           while (!requests.empty()) {
             pending_requests.emplace_front(std::move(requests.back()));
             requests.pop_back();
+          }
+          while (!acks.empty()) {
+            pending_acks.emplace_front(std::move(acks.back()));
+            acks.pop_back();
+          }
+          if (pending_db_updates.empty()) {
+            dout(5) << "bootstrap: waiting for new peers with pending acks: " << pending_acks.size()
+              << " requests: " << pending_requests.size()
+              << ". Wait timeout: " << bootstrap_delay << dendl;
+            submit_condition.wait_for(ls, bootstrap_delay);
           }
           continue;
         }
@@ -129,16 +140,16 @@ void* QuiesceDbManager::quiesce_db_thread_main()
     complete_requests();
 
     // by default, only send ack if the version has changed
-    bool send_ack = last_acked != db_version();
-    QuiesceMap quiesce_map(db_version());
+    bool send_ack = last_acked != db.version();
+    QuiesceMap quiesce_map(db.version());
     {
       std::lock_guard lc(agent_mutex);
       if (agent_callback) {
-        if (agent_callback->if_newer < db_version()) {
-          dout(20) << "notifying agent with db version " << db_version() << dendl;
+        if (agent_callback->if_newer < db.version()) {
+          dout(20) << "notifying agent with db version " << db.version() << dendl;
           calculate_quiesce_map(quiesce_map);
           send_ack = agent_callback->notify(quiesce_map);
-          agent_callback->if_newer = db_version();
+          agent_callback->if_newer = db.version();
         } else {
           send_ack = false;
         }
@@ -251,6 +262,8 @@ QuiesceDbManager::membership_upkeep()
     for (auto peer : cluster_membership->members) {
       peers.try_emplace(peer);
     }
+    // update the db epoch
+    db.epoch = cluster_membership->epoch;
   } else {
     peers.clear();
     // abort awaits with EINPROGRESS
@@ -291,14 +304,8 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
 
   QuiesceDbListing &update = db_updates.back().db;
 
-  if (update.db_version.epoch != membership.epoch) {
-    dout(10) << "ignoring db update from another epoch: " << update.db_version << " != " << db_version() << dendl;
-    return QuiesceTimeInterval::max();
-  }
-
   if (update.db_version.set_version == 0) {
-    // this is a call from a leader
-    // to upload our local db version
+    // this is a call from the leader to upload our local db version
     update.sets = db.sets;
     update.db_version.set_version = db.set_version;
     update.db_age = db.get_age();
@@ -311,6 +318,7 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
     dout(10) << "significant db_time_zero change to " << time_zero << " from " << db.time_zero << dendl;
   }
   db.time_zero = time_zero;
+  db.epoch = update.db_version.epoch;
 
   if (db.set_version > update.db_version.set_version) {
     dout(3) << "got an older version of DB from the leader: " << update.db_version.set_version << " < " << db.set_version << dendl;
@@ -327,8 +335,11 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
   return QuiesceTimeInterval::max();
 }
 
-bool QuiesceDbManager::leader_bootstrap(decltype(pending_db_updates)&& db_updates, QuiesceTimeInterval &next_event_at_age)
+QuiesceTimeInterval QuiesceDbManager::leader_bootstrap(decltype(pending_db_updates)&& db_updates)
 {
+  const QuiesceTimeInterval PEER_DISCOVERY_INTERVAL = std::chrono::seconds(1);
+  QuiesceTimeInterval bootstrap_delay = PEER_DISCOVERY_INTERVAL;
+
   // check that we've heard from all peers in this epoch
   std::unordered_set<QuiesceInterface::PeerId> unknown_peers;
   for (auto&& [peer, info] : peers) {
@@ -348,7 +359,7 @@ bool QuiesceDbManager::leader_bootstrap(decltype(pending_db_updates)&& db_update
       if (db.set_version < update.db_version.set_version) {
         dout(3) << "preferring version from peer " 
           << from << " (" << update.db_version 
-          << ") over mine (" << db_version() << ")" 
+          << ") over mine (" << db.version() << ")" 
           << " and incrementing it to collect acks" << dendl;
         db.time_zero = QuiesceClock::now() - update.db_age;
         db.set_version = update.db_version.set_version + 1;
@@ -361,24 +372,33 @@ bool QuiesceDbManager::leader_bootstrap(decltype(pending_db_updates)&& db_update
     db_updates.pop();
   }
 
+  QuiesceTimePoint const now = QuiesceClock::now();
   for (auto & peer: unknown_peers) {
     PeerInfo & info = peers[peer];
 
-    QuiesceTimePoint next_discovery = info.last_seen + std::chrono::seconds(1);
-    if (info.last_seen == QuiesceClock::zero() || next_discovery < QuiesceClock::now()) {
+    QuiesceTimePoint next_discovery = info.last_activity + PEER_DISCOVERY_INTERVAL;
+    if (next_discovery < now) {
       // send a discovery request to unknown peers
       dout(5) << " sending a discovery request to " << peer << dendl;
       membership.send_listing_to(peer, QuiesceDbListing(membership.epoch));
-      info.last_seen = QuiesceClock::now();
-      next_discovery = info.last_seen + std::chrono::seconds(1);
+      info.last_activity = now;
+      next_discovery = info.last_activity + PEER_DISCOVERY_INTERVAL;
     }
-    QuiesceTimeInterval next_discovery_at_age = next_discovery - db.time_zero;
-
-    next_event_at_age = std::min(next_event_at_age, next_discovery_at_age);
+    // next_discovery is >= now
+    if (bootstrap_delay > next_discovery - now) {
+      bootstrap_delay = (next_discovery - now);
+    }
   }
 
-  // true if all peers are known
-  return unknown_peers.empty();
+  bool all_peers_known = unknown_peers.empty();
+  
+  if (!all_peers_known) {
+    dout(10) << "unknown peers: " << unknown_peers << dendl;
+  }
+
+  // add some margin to hit the discovery interval for the earliest discovery.
+  const QuiesceTimeInterval a_little_more = std::chrono::milliseconds(100);
+  return all_peers_known ? QuiesceTimeInterval::zero() : (bootstrap_delay + a_little_more);
 }
 
 QuiesceTimeInterval QuiesceDbManager::leader_upkeep(decltype(pending_acks)&& acks, decltype(pending_requests)&& requests)
@@ -387,7 +407,7 @@ QuiesceTimeInterval QuiesceDbManager::leader_upkeep(decltype(pending_acks)&& ack
   while (!acks.empty()) {
     auto& [from, diff_map] = acks.front();
     leader_record_ack(from, std::move(diff_map));
-    acks.pop();
+    acks.pop_front();
   }
 
   // process requests
@@ -412,7 +432,7 @@ void QuiesceDbManager::complete_requests() {
     r.clear();
     if (membership.leader == membership.me) {
       r.db_age = db.get_age();
-      r.db_version = db_version();
+      r.db_version = db.version();
 
       if (req->request.set_id) {
         Db::Sets::const_iterator it = db.sets.find(*req->request.set_id);
@@ -425,7 +445,9 @@ void QuiesceDbManager::complete_requests() {
         }
       }
     }
+
     // non-zero result codes are all errors
+    dout(10) << "completing " << req->request << " with rc: " << -res << dendl;
     req->complete(-res);
   }
   done_requests.clear();
@@ -436,19 +458,25 @@ void QuiesceDbManager::leader_record_ack(QuiesceInterface::PeerId from, QuiesceM
   auto it = peers.find(from);
 
   if (it == peers.end()) {
+    dout(5) << "unknown peer " << from << dendl;
     // ignore updates from unknown peers
     return;
   }
 
   auto & info = it->second;
 
-  if (diff_map.db_version > db_version()) {
-    dout(3) << "ignoring unknown version ack by rank " << from << " (" << diff_map.db_version << " > " << db_version() << ")" << dendl;
-    dout(5) << "will send the peer a full DB" << dendl;
-    info.diff_map.clear();
+  if (diff_map.db_version > db.version()) {
+    dout(15) << "future version ack by peer " << from << " (" << diff_map.db_version << " > " << db.version() << ")" << dendl;
+    if (diff_map.db_version.epoch > db.version().epoch && diff_map.db_version.set_version <= db.version().set_version) {
+      dout(15) << "my epoch is behind, ignoring this until my membership is updated" << dendl;
+    } else {
+      dout(5) << "will send the peer a full DB" << dendl;
+      info.clear();
+    }
   } else {
+    dout(20) << "ack " << diff_map << " from peer " << from << dendl;
     info.diff_map = std::move(diff_map);
-    info.last_seen = QuiesceClock::now();
+    info.last_activity = QuiesceClock::now();
   }
 }
 
@@ -561,6 +589,8 @@ int QuiesceDbManager::leader_process_request(RequestContext* req_ctx)
     return EINVAL;
   }
 
+  dout(20) << request << dendl;
+
   const auto db_age = db.get_age();
 
   if (request.is_cancel_all()) {
@@ -623,12 +653,13 @@ int QuiesceDbManager::leader_process_request(RequestContext* req_ctx)
     }
 
     if (request.await) {
+      // quiesce-await is only allowed for sets that are quiescing or quiesced.
       // this check may have a false negative for a quiesced set
       // that will be released in another request in the same batch
       // in that case, this await will be enqueued but then found and completed
       // with the same error in `leader_upkeep_awaits`
-      if ((set.is_releasing() || set.is_released()) && !request.is_release()) {
-        dout(2) << dset("can't quiesce-await a set that was released (") << set.rstate.state << ")" << dendl;
+      if (set.rstate.state > QS_QUIESCED && !request.is_release()) {
+        dout(2) << dset("can't quiesce-await a set in the state: ") << set.rstate.state << dendl;
         return EPERM;
       }
 
@@ -807,10 +838,32 @@ int QuiesceDbManager::leader_update_set(Db::Sets::value_type& set_it, const Quie
 
 QuiesceTimeInterval QuiesceDbManager::leader_upkeep_db()
 {
-  std::map<QuiesceInterface::PeerId, std::deque<std::reference_wrapper<Db::Sets::value_type>>> peer_updates;
-
   QuiesceTimeInterval next_event_at_age = QuiesceTimeInterval::max();
   QuiesceSetVersion max_set_version = db.set_version;
+
+  struct PeerUpdate {
+    QuiesceInterface::PeerId peer;
+    PeerInfo& info;
+    std::deque<std::reference_wrapper<Db::Sets::value_type>> set_refs;
+    PeerUpdate(QuiesceInterface::PeerId peer, PeerInfo& info)
+        : peer(peer)
+        , info(info)
+    {}
+
+    QuiesceSetVersion known_set_version() const
+    {
+      return info.diff_map.db_version.set_version;
+    }
+  };
+
+  // populate peer_updates with peers except me
+  std::vector<PeerUpdate> peer_updates;
+  for (auto& [peer, info]: peers) {
+    // no need to replicate to myself
+    if (peer != membership.me) {
+      peer_updates.emplace_back(peer, info);
+    }
+  }
 
   for(auto & set_it: db.sets) {
     auto & [set_id, set] = set_it;
@@ -819,14 +872,10 @@ QuiesceTimeInterval QuiesceDbManager::leader_upkeep_db()
     max_set_version = std::max(max_set_version, set.version);
     next_event_at_age = std::min(next_event_at_age, next_set_event_at_age);
 
-    for(auto const & [peer, info]: peers) {
+    for(auto & peer_update: peer_updates) {
       // update remote peers if their version is lower than this set's
-      // don't update myself
-      if (peer == membership.me) {
-        continue;
-      }
-      if (info.diff_map.db_version.set_version < set.version) {
-        peer_updates[peer].emplace_back(set_it);
+      if (peer_update.known_set_version() < set.version) {
+        peer_update.set_refs.emplace_back(set_it);
       }
     }
   }
@@ -834,21 +883,34 @@ QuiesceTimeInterval QuiesceDbManager::leader_upkeep_db()
   db.set_version = max_set_version;
 
   // update the peers
-  for (auto &[peer, sets]: peer_updates) {
-    QuiesceDbListing update;
-    update.db_age = db.get_age();
-    update.db_version = db_version();
-    std::ranges::copy(sets, std::inserter(update.sets, update.sets.end()));
+  const auto now = QuiesceClock::now();
+  static const QuiesceTimeInterval PEER_REPEATED_UPDATE_INTERVAL = std::chrono::seconds(1);
+  for (auto const & peer_update: peer_updates) {
+    if (peer_update.info.last_sent_version == db.version()) {
+      if (now < (peer_update.info.last_activity + PEER_REPEATED_UPDATE_INTERVAL)) {
+        // don't spam the peer with the same version
+        continue;
+      }
+      dout(5) << "repeated update of the peer " << peer_update.peer << " with version " << db.version() << dendl;
+    }
 
-    dout(20) << "updating peer " << peer << " with " << sets.size() 
+    QuiesceDbListing listing;
+    listing.db_age = db.get_age();
+    listing.db_version = db.version();
+    std::ranges::copy(peer_update.set_refs, std::inserter(listing.sets, listing.sets.end()));
+
+    dout(20) << "updating peer " << peer_update.peer << " with " << peer_update.set_refs.size() 
       << " sets modified in db version range (" 
-      << peers[peer].diff_map.db_version << ".." << db.set_version << "]" << dendl;
+      << peer_update.known_set_version() << ".." << db.set_version << "]" << dendl;
 
-    auto rc = membership.send_listing_to(peer, std::move(update));
+    auto rc = membership.send_listing_to(peer_update.peer, std::move(listing));
     if (rc != 0) {
       dout(1) << "ERROR (" << rc << ") trying to replicate db version " 
-        << db.set_version << " with " << sets.size() 
-        << " sets to the peer " << peer << dendl;
+        << db.set_version << " with " << peer_update.set_refs.size() 
+        << " sets to the peer " << peer_update.peer << dendl;
+    } else {
+      peer_update.info.last_activity = now;
+      peer_update.info.last_sent_version = db.version();
     }
   }
 
@@ -873,13 +935,10 @@ size_t QuiesceDbManager::check_peer_reports(const QuiesceSetId& set_id, const Qu
   max_reported_state = QS__INVALID;
 
   size_t up_to_date_peers = 0;
+  std::multimap<QuiesceState, std::pair<QuiesceInterface::PeerId, QuiesceDbVersion>> reporting_peers;
 
   for (auto& [peer, info] : peers) {
-    // we consider the last bit of information we had from a given peer
-    // however, we want to skip peers which haven't been bootstrapped yet
-    if (info.diff_map.db_version.set_version == 0) {
-      continue;
-    }
+    // we consider the last bit of information we had from the peer
     auto dit = info.diff_map.roots.find(root);
     QuiesceState reported_state = set.get_requested_member_state();
 
@@ -898,14 +957,27 @@ size_t QuiesceDbManager::check_peer_reports(const QuiesceSetId& set_id, const Qu
       up_to_date_peers++;
     }
 
-    min_reported_state = std::min(min_reported_state, reported_state);
-    max_reported_state = std::max(max_reported_state, reported_state);
+    // we keep track of reported states only if the peer actually said something
+    // even if for an older version
+    if (info.diff_map.db_version.set_version > 0) {
+      reporting_peers.insert({ reported_state, { peer, info.diff_map.db_version } });
+      min_reported_state = std::min(min_reported_state, reported_state);
+      max_reported_state = std::max(max_reported_state, reported_state);
+    }
   }
 
   if (min_reported_state == QS__MAX) {
+    // this means that we had 0 eligible peer reports
     min_reported_state = set.get_requested_member_state();
     max_reported_state = set.get_requested_member_state();
   }
+
+  dout(20) << dsetroot("")
+           << "up_to_date_peers: " << up_to_date_peers
+           << " min_reported_state: " << min_reported_state
+           << " max_reported_state: " << max_reported_state
+           << " peer_acks: " << reporting_peers
+           << dendl;
 
   return up_to_date_peers;
 }
@@ -1041,21 +1113,22 @@ QuiesceTimeInterval QuiesceDbManager::leader_upkeep_awaits()
   for (auto it = awaits.begin(); it != awaits.end();) {
     auto & [set_id, actx] = *it;
     Db::Sets::const_iterator set_it = db.sets.find(set_id);
+    QuiesceState set_state = QS__INVALID;
 
     int rc = db.get_age() >= actx.expire_at_age ? EINPROGRESS : EBUSY;
 
     if (set_it == db.sets.cend()) {
       rc = ENOENT;
     } else {
-      auto const & set = set_it->second;
-
-      switch(set.rstate.state) {
+      auto const& set = set_it->second;
+      set_state = set.rstate.state;
+      switch(set_state) {
         case QS_CANCELED:
           rc = ECANCELED;
           break;
         case QS_EXPIRED:
         case QS_TIMEDOUT:
-          rc = ETIMEDOUT; 
+          rc = ETIMEDOUT;
           break;
         case QS_QUIESCED:
           rc = 0; // fallthrough
@@ -1082,7 +1155,6 @@ QuiesceTimeInterval QuiesceDbManager::leader_upkeep_awaits()
     }
 
     if (rc != EBUSY) {
-      dout(10) << "completing an await for the set '" << set_id << "' with rc: " << rc << dendl;
       done_requests[actx.req_ctx] = rc;
       it = awaits.erase(it);
     } else {
@@ -1118,7 +1190,7 @@ static QuiesceTimeInterval get_root_ttl(const QuiesceSet & set, const QuiesceSet
 void QuiesceDbManager::calculate_quiesce_map(QuiesceMap &map)
 {
   map.roots.clear();
-  map.db_version = db_version();
+  map.db_version = db.version();
   auto db_age = db.get_age();
 
   for(auto & [set_id, set]: db.sets) {

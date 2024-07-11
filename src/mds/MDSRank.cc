@@ -58,6 +58,7 @@ using std::set;
 using std::string;
 using std::vector;
 using TOPNSPC::common::cmd_getval;
+using TOPNSPC::common::cmd_getval_or;
 
 class C_Flush_Journal : public MDSInternalContext {
 public:
@@ -610,7 +611,7 @@ MDSRank::~MDSRank()
 void MDSRankDispatcher::init()
 {
   objecter->init();
-  messenger->add_dispatcher_head(objecter);
+  messenger->add_dispatcher_tail(objecter); // the default priority
 
   objecter->start();
 
@@ -795,7 +796,7 @@ void MDSRankDispatcher::tick()
       uint64_t pq_total = 0;
       size_t pq_in_flight = 0;
       if (!purge_queue.drain(&pq_progress, &pq_total, &pq_in_flight)) {
-        dout(7) << "shutdown_pass=true, but still waiting for purge queue"
+        dout(5) << "shutdown_pass=true, but still waiting for purge queue"
                 << dendl;
         // This takes unbounded time, so we must indicate progress
         // to the administrator: we do it in a slightly imperfect way
@@ -805,13 +806,13 @@ void MDSRankDispatcher::tick()
           << std::dec << pq_progress << "/" << pq_total << " " << pq_in_flight
           << " files purging" << ")";
       } else {
-        dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to "
+        dout(5) << "shutdown_pass=true, finished w/ shutdown, moving to "
                    "down:stopped" << dendl;
         stopping_done();
       }
     }
     else {
-      dout(7) << "shutdown_pass=false" << dendl;
+      dout(5) << "shutdown_pass=false" << dendl;
     }
   }
 
@@ -1216,7 +1217,6 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
     return true;
   }
 
-  dout(10) << "invalid message type: " << std::hex << type << std::dec << dendl;
   return false;
 }
 
@@ -2137,7 +2137,7 @@ void MDSRank::active_start()
 
   dout(10) << __func__ << ": initializing metrics handler" << dendl;
   metrics_handler.init();
-  messenger->add_dispatcher_tail(&metrics_handler);
+  messenger->add_dispatcher_tail(&metrics_handler, Dispatcher::PRIORITY_HIGH);
 
   // metric aggregation is solely done by rank 0
   if (is_rank0()) {
@@ -2657,6 +2657,28 @@ void MDSRankDispatcher::handle_asok_command(
   CachedStackStringStream css;
   bufferlist outbl;
   dout(10) << __func__ << ": " << command << dendl;
+
+  struct AsyncResponse : Context {
+    Formatter* f;
+    decltype(on_finish) do_respond;
+    std::basic_ostringstream<char> css;
+
+    AsyncResponse(Formatter* f, decltype(on_finish)&& respond_action)
+      : f(f), do_respond(std::forward<decltype(on_finish)>(respond_action)) {}
+
+    void finish(int rc) override {
+      f->open_object_section("result");
+      if (!css.view().empty()) {
+        f->dump_string("message", css.view());
+      }
+      f->dump_int("return_code", rc);
+      f->close_section();
+
+      bufferlist outbl;
+      do_respond(rc, {}, outbl);
+    }
+  };
+
   if (command == "dump_ops_in_flight") {
     if (!op_tracker.dump_ops_in_flight(f)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
@@ -2889,20 +2911,13 @@ void MDSRankDispatcher::handle_asok_command(
       goto out;
     }
 
+    auto respond = new AsyncResponse(f, std::move(on_finish));
     finisher->queue(
       new LambdaContext(
-	[this, on_finish, f](int r) {
-	  command_scrub_abort(
-	    f,
-	    new LambdaContext(
-	      [on_finish, f](int r) {
-		bufferlist outbl;
-		f->open_object_section("result");
-		f->dump_int("return_code", r);
-		f->close_section();
-		on_finish(r, {}, outbl);
-	      }));
-	}));
+        [this, respond](int r) {
+          std::lock_guard l(mds_lock);
+          scrubstack->scrub_abort(respond);
+        }));
     return;
   } else if (command == "scrub pause") {
     if (whoami != 0) {
@@ -2911,20 +2926,13 @@ void MDSRankDispatcher::handle_asok_command(
       goto out;
     }
 
+    auto respond = new AsyncResponse(f, std::move(on_finish));
     finisher->queue(
       new LambdaContext(
-	[this, on_finish, f](int r) {
-	  command_scrub_pause(
-	    f,
-	    new LambdaContext(
-	      [on_finish, f](int r) {
-		bufferlist outbl;
-		f->open_object_section("result");
-		f->dump_int("return_code", r);
-		f->close_section();
-		on_finish(r, {}, outbl);
-	      }));
-	}));
+        [this, respond](int r) {
+          std::lock_guard l(mds_lock);
+          scrubstack->scrub_pause(respond);
+        }));
     return;
   } else if (command == "scrub resume") {
     if (whoami != 0) {
@@ -2949,9 +2957,17 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "flush_path") {
     string path;
     cmd_getval(cmdmap, "path", path);
-    command_flush_path(f, path);
+
+    std::lock_guard l(mds_lock);
+    mdcache->flush_dentry(path, new AsyncResponse(f, std::move(on_finish)));
+    return;
   } else if (command == "flush journal") {
-    command_flush_journal(f);
+    auto respond = new AsyncResponse(f, std::move(on_finish));
+    C_Flush_Journal* flush_journal = new C_Flush_Journal(mdcache, mdlog, this, &respond->css, respond);
+
+    std::lock_guard locker(mds_lock);
+    flush_journal->send();
+    return;
   } else if (command == "get subtrees") {
     command_get_subtrees(f);
   } else if (command == "export dir") {
@@ -3002,7 +3018,11 @@ void MDSRankDispatcher::handle_asok_command(
     std::lock_guard l(mds_lock);
     mdcache->cache_status(f);
   } else if (command == "quiesce path") {
-    r = command_quiesce_path(f, cmdmap, *css);
+    command_quiesce_path(f, cmdmap, std::move(on_finish));
+    return;
+  } else if (command == "lock path") {
+    command_lock_path(f, cmdmap, std::move(on_finish));
+    return;
   } else if (command == "dump tree") {
     command_dump_tree(cmdmap, *css, f);
   } else if (command == "dump loads") {
@@ -3169,16 +3189,6 @@ void MDSRank::command_tag_path(Formatter *f,
   scond.wait();
 }
 
-void MDSRank::command_scrub_abort(Formatter *f, Context *on_finish) {
-  std::lock_guard l(mds_lock);
-  scrubstack->scrub_abort(on_finish);
-}
-
-void MDSRank::command_scrub_pause(Formatter *f, Context *on_finish) {
-  std::lock_guard l(mds_lock);
-  scrubstack->scrub_pause(on_finish);
-}
-
 void MDSRank::command_scrub_resume(Formatter *f) {
   std::lock_guard l(mds_lock);
   int r = scrubstack->scrub_resume();
@@ -3191,39 +3201,6 @@ void MDSRank::command_scrub_resume(Formatter *f) {
 void MDSRank::command_scrub_status(Formatter *f) {
   std::lock_guard l(mds_lock);
   scrubstack->scrub_status(f);
-}
-
-void MDSRank::command_flush_path(Formatter *f, std::string_view path)
-{
-  C_SaferCond scond;
-  {
-    std::lock_guard l(mds_lock);
-    mdcache->flush_dentry(path, &scond);
-  }
-  int r = scond.wait();
-  f->open_object_section("results");
-  f->dump_int("return_code", r);
-  f->close_section(); // results
-}
-
-// synchronous wrapper around "journal flush" asynchronous context
-// execution.
-void MDSRank::command_flush_journal(Formatter *f) {
-  ceph_assert(f != NULL);
-
-  C_SaferCond cond;
-  CachedStackStringStream css;
-  {
-    std::lock_guard locker(mds_lock);
-    C_Flush_Journal *flush_journal = new C_Flush_Journal(mdcache, mdlog, this, css.get(), &cond);
-    flush_journal->send();
-  }
-  int r = cond.wait();
-
-  f->open_object_section("result");
-  f->dump_string("message", css->strv());
-  f->dump_int("return_code", r);
-  f->close_section();
 }
 
 void MDSRank::command_get_subtrees(Formatter *f)
@@ -3487,51 +3464,103 @@ void MDSRank::command_openfiles_ls(Formatter *f)
 
 class C_MDS_QuiescePathCommand : public MDCache::C_MDS_QuiescePath {
 public:
-  C_MDS_QuiescePathCommand(MDCache* cache, Context* fin) : C_MDS_QuiescePath(cache), finisher(fin) {}
+  C_MDS_QuiescePathCommand(MDCache* cache) : C_MDS_QuiescePath(cache) {}
   void finish(int rc) override {
-    if (finisher) {
-      finisher->complete(rc);
-      finisher = nullptr;
+    if (auto fin = std::move(finish_once)) {
+      fin(rc, *this);
     }
   }
-private:
-  Context* finisher = nullptr;
+  std::function<void(int, C_MDS_QuiescePathCommand const&)> finish_once;
 };
 
-int MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::ostream& ss)
+void MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
 {
   std::string path;
-  {
-    bool got = cmd_getval(cmdmap, "path", path);
-    if (!got) {
-      ss << "missing path";
-      return -CEPHFS_EINVAL;
-    }
+  if (!cmd_getval(cmdmap, "path", path)) {
+    bufferlist bl;
+    on_finish(-EINVAL, "missing path", bl);
+    return;
   }
 
-  bool wait = false;
-  cmd_getval(cmdmap, "wait", wait);
+  bool await = cmd_getval_or<bool>(cmdmap, "await", false);
 
   C_SaferCond cond;
-  auto* finisher = new C_MDS_QuiescePathCommand(mdcache, wait ? &cond : nullptr);
-  auto qs = finisher->qs;
-  MDRequestRef mdr;
-  f->open_object_section("quiesce");
+  auto* quiesce_ctx = new C_MDS_QuiescePathCommand(mdcache);
+
+  quiesce_ctx->finish_once = [f, respond = std::move(on_finish)](int cephrc, C_MDS_QuiescePathCommand const& cmd) {
+    f->open_object_section("response");
+    f->dump_object("op", *cmd.mdr);
+    f->dump_object("state", *cmd.qs);
+    f->close_section();
+
+    bufferlist bl;
+    // need to do this manually, because the default asok
+    // on_finish handler doesn't flush the formatter for rc < 0
+    f->flush(bl);
+    auto rc = cephrc < 0 ? -ceph_to_hostos_errno(-cephrc) : cephrc;
+    respond(rc, "", bl);
+  };
+
+  std::lock_guard l(mds_lock);
+
+  auto mdr = mdcache->quiesce_path(filepath(path), quiesce_ctx, f);
+
+  // This is a little ugly, apologies.
+  // We should still be under the mds lock for this test to be valid.
+  // MDCache will delete the quiesce_ctx if it manages to complete syncrhonously,
+  // so we are testing the `mdr->internal_op_finish` to see if that has happend
+  if (!await && mdr && mdr->internal_op_finish) {
+    ceph_assert(mdr->internal_op_finish == quiesce_ctx);
+    quiesce_ctx->finish(mdr->result.value_or(0));
+  }
+}
+
+void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
+{
+  std::string path;
+
+  if (!cmd_getval(cmdmap, "path", path)) {
+    bufferlist bl;
+    on_finish(-EINVAL, "missing path", bl);
+    return;
+  }
+
+  MDCache::LockPathConfig config;
+
+  cmd_getval(cmdmap, "locks", config.locks);
+  config.ap_dont_block = cmd_getval_or<bool>(cmdmap, "ap_dont_block", false);
+  config.ap_freeze = cmd_getval_or<bool>(cmdmap, "ap_freeze", false);
+  config.fpath = filepath(path);
+  if (double lifetime; cmd_getval(cmdmap, "lifetime", lifetime)) {
+    using std::chrono::duration_cast;
+    config.lifetime = duration_cast<MDCache::LockPathConfig::Lifetime>(std::chrono::duration<double>(lifetime));
+  }
+  bool await = cmd_getval_or<bool>(cmdmap, "await", false);
+
+  auto respond = [f, on_finish=std::move(on_finish)](MDRequestRef const& req) {
+    f->open_object_section("response");
+    req->dump_with_mds_lock(f);
+    f->close_section();
+
+    bufferlist bl;
+    // need to do this manually, because the default asock
+    // on_finish handler doesn't flush the formatter for rc < 0
+    f->flush(bl);
+    auto cephrc = req->result.value_or(0); // SUCCESS makes more sense for this API than EINPROGRESS
+    auto rc = cephrc < 0 ? -ceph_to_hostos_errno(-cephrc) : cephrc;
+    on_finish(rc, "", bl);
+  };
+
   {
     std::lock_guard l(mds_lock);
-    mdr = mdcache->quiesce_path(filepath(path), finisher, f);
-    if (!wait) {
-      f->dump_object("op", *mdr);
+    if (await) {
+      mdcache->lock_path(std::move(config), std::move(respond));
+    } else {
+      auto mdr = mdcache->lock_path(std::move(config));
+      // respond at once
+      respond(mdr);
     }
   }
-  if (wait) {
-    cond.wait();
-    std::lock_guard l(mds_lock);
-    f->dump_object("op", *mdr);
-  }
-  f->dump_object("state", *qs);
-  f->close_section();
-  return 0;
 }
 
 void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss)

@@ -392,6 +392,12 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
+  if (auto str = cct->_conf->client_debug_inject_features; !str.empty()) {
+    myfeatures = feature_bitset_t(str);
+  } else {
+    myfeatures = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
+  }
+
   lru.lru_set_midpoint(cct->_conf->client_cache_mid);
 
   // file handles
@@ -1692,7 +1698,6 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
-    req->resend_mds = -1;
     ldout(cct, 10) << __func__ << " resend_mds specified as mds." << mds << dendl;
     goto out;
   }
@@ -2048,6 +2053,7 @@ int Client::make_request(MetaRequest *request,
 
     // wait for signal
     ldout(cct, 20) << "awaiting reply|forward|kick on " << &caller_cond << dendl;
+    request->resend_mds = -1; /* reset for retries */
     request->kick = false;
     std::unique_lock l{client_lock, std::adopt_lock};
     caller_cond.wait(l, [request] {
@@ -2354,7 +2360,7 @@ MetaSessionRef Client::_open_mds_session(mds_rank_t mds)
 
   auto m = make_message<MClientSession>(CEPH_SESSION_REQUEST_OPEN);
   m->metadata = metadata;
-  m->supported_features = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
+  m->supported_features = myfeatures;
   m->metric_spec = feature_bitset_t(CEPHFS_METRIC_FEATURES_ALL);
   session->con->send_message2(std::move(m));
   return session;

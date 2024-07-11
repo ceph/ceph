@@ -485,12 +485,13 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct,
 
 void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer, size_t length)
 {
-
-  ceph_assert(buffer && length == total_intended_len);
+  ceph_assert(length == total_intended_len);
 
   map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
   if (p == partial.rend())
     return;
+
+  ceph_assert(buffer);
 
   uint64_t curr = length;
   uint64_t end = p->first + p->second.second;

@@ -1,10 +1,15 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { ApiClient } from './api-client';
-import { map } from 'rxjs/operators';
+import { map, shareReplay, tap } from 'rxjs/operators';
 import { SummaryService } from '../services/summary.service';
 import { UpgradeInfoInterface, UpgradeStatusInterface } from '../models/upgrade.interface';
 import { Observable } from 'rxjs';
+import { UpgradeStartModalComponent } from '~/app/ceph/cluster/upgrade/upgrade-form/upgrade-start-modal.component';
+import { ModalService } from '../services/modal.service';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+
+const CACHE_SIZE = 1;
 
 @Injectable({
   providedIn: 'root'
@@ -25,7 +30,14 @@ export class UpgradeService extends ApiClient {
     'nfs'
   ];
 
-  constructor(private http: HttpClient, private summaryService: SummaryService) {
+  _listData$: Observable<UpgradeInfoInterface>;
+  _upgradableVersions: string[];
+
+  constructor(
+    private http: HttpClient,
+    private summaryService: SummaryService,
+    private modalService: ModalService
+  ) {
     super();
   }
 
@@ -74,5 +86,23 @@ export class UpgradeService extends ApiClient {
 
   status(): Observable<UpgradeStatusInterface> {
     return this.http.get<UpgradeStatusInterface>(`${this.baseURL}/status`);
+  }
+
+  listCached(): Observable<UpgradeInfoInterface> {
+    if (!this._listData$) {
+      this._listData$ = this.list().pipe(
+        tap(
+          (upgradeInfo: UpgradeInfoInterface) => (this._upgradableVersions = upgradeInfo.versions)
+        ),
+        shareReplay(CACHE_SIZE)
+      );
+    }
+    return this._listData$;
+  }
+
+  startUpgradeModal(): NgbModalRef {
+    return this.modalService.show(UpgradeStartModalComponent, {
+      versions: this._upgradableVersions
+    });
   }
 }

@@ -1936,6 +1936,8 @@ private:
   uint64_t nr_write_request = 0;
 
   std::vector<MDSCapAuth> cap_auths;
+
+  feature_bitset_t myfeatures;
 };
 
 /**

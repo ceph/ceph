@@ -107,6 +107,7 @@ void publish_commit_completion(rados_completion_t completion, void *arg) {
 };
 
 class Manager : public DoutPrefixProvider {
+  bool shutdown = false;
   const size_t max_queue_size;
   const uint32_t queues_update_period_ms;
   const uint32_t queues_update_retry_ms;
@@ -273,7 +274,7 @@ private:
           cct);
       ldpp_dout(this, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
         " for entry: " << entry.marker << dendl;
-      const auto ret = push_endpoint->send_to_completion_async(cct, event_entry.event, optional_yield(io_context, yield));
+      const auto ret = push_endpoint->send(event_entry.event, optional_yield(io_context, yield));
       if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " failed. error: " << ret << " (will retry)" << dendl;
@@ -293,7 +294,7 @@ private:
 
   // clean stale reservation from queue
   void cleanup_queue(const std::string& queue_name, spawn::yield_context yield) {
-    while (true) {
+    while (!shutdown) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
       const auto now = ceph::coarse_real_time::clock::now();
       const auto stale_time = now - std::chrono::seconds(stale_reservations_period_s);
@@ -325,6 +326,27 @@ private:
       boost::system::error_code ec;
 	    timer.async_wait(yield[ec]);
     }
+    ldpp_dout(this, 5) << "INFO: manager stopped. done cleanup for queue: " << queue_name << dendl;
+  }
+
+  // unlock (lose ownership) queue
+  int unlock_queue(const std::string& queue_name, spawn::yield_context yield) {
+    librados::ObjectWriteOperation op;
+    op.assert_exists();
+    rados::cls::lock::unlock(&op, queue_name+"_lock", lock_cookie);
+    auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
+    const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+    if (ret == -ENOENT) {
+      ldpp_dout(this, 10) << "INFO: queue: " << queue_name
+        << ". was removed. nothing to unlock" << dendl;
+      return 0;
+    }
+    if (ret == -EBUSY) {
+      ldpp_dout(this, 10) << "INFO: queue: " << queue_name
+        << ". already owned by another RGW. no need to unlock" << dendl;
+      return 0;
+    }
+    return ret;
   }
 
   // processing of a specific queue
@@ -340,7 +362,7 @@ private:
 
     CountersManager queue_counters_container(queue_name, this->get_cct());
 
-    while (true) {
+    while (!shutdown) {
       // if queue was empty the last time, sleep for idle timeout
       if (is_idle) {
         Timer timer(io_context);
@@ -422,7 +444,7 @@ private:
             if (result == EntryProcessingResult::Successful || result == EntryProcessingResult::Expired
                 || result == EntryProcessingResult::Migrating) {
               ldpp_dout(this, 20) << "INFO: processing of entry: " << entry.marker
-                << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name
+                << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name << " "
                 << entryProcessingResultString[static_cast<unsigned int>(result)] << dendl;
               remove_entries = true;
               needs_migration_vector[entry_idx - 1] = (result == EntryProcessingResult::Migrating);
@@ -560,6 +582,7 @@ private:
         queue_counters_container.set(l_rgw_persistent_topic_size, entries_size);
       }
     }
+    ldpp_dout(this, 5) << "INFO: manager stopped. done processing for queue: " << queue_name << dendl;
   }
 
   // lits of owned queues
@@ -570,6 +593,7 @@ private:
   void process_queues(spawn::yield_context yield) {
     auto has_error = false;
     owned_queues_t owned_queues;
+    size_t processed_queue_count = 0;
 
     // add randomness to the duration between queue checking
     // to make sure that different daemons are not synced
@@ -581,7 +605,8 @@ private:
 
     std::vector<std::string> queue_gc;
     std::mutex queue_gc_lock;
-    while (true) {
+    auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
+    while (!shutdown) {
       Timer timer(io_context);
       const auto duration = (has_error ? 
         std::chrono::milliseconds(queues_update_retry_ms) : std::chrono::milliseconds(queues_update_period_ms)) + 
@@ -612,7 +637,7 @@ private:
               failover_time,
               LOCK_FLAG_MAY_RENEW);
 
-        ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, optional_yield(io_context, yield));
+        ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " owned (locked) by another daemon" << dendl;
@@ -634,12 +659,21 @@ private:
         if (owned_queues.insert(queue_name).second) {
           ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " now owned (locked) by this daemon" << dendl;
           // start processing this queue
-          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name](spawn::yield_context yield) {
+          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name, &processed_queue_count](spawn::yield_context yield) {
+            ++processed_queue_count;
             process_queue(queue_name, yield);
             // if queue processing ended, it means that the queue was removed or not owned anymore
+            const auto ret = unlock_queue(queue_name, yield);
+            if (ret < 0) {
+              ldpp_dout(this, 5) << "WARNING: failed to unlock queue: " << queue_name << " with error: " <<
+                ret << " (ownership would still move if not renewed)" << dendl;
+            } else {
+              ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " not locked (ownership can move)" << dendl;
+            }
             // mark it for deletion
             std::lock_guard lock_guard(queue_gc_lock);
             queue_gc.push_back(queue_name);
+            --processed_queue_count;
             ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " marked for removal" << dendl;
           }, make_stack_allocator());
         } else {
@@ -652,19 +686,55 @@ private:
         std::for_each(queue_gc.begin(), queue_gc.end(), [this, &owned_queues](const std::string& queue_name) {
           topics_persistency_tracker.erase(queue_name);
           owned_queues.erase(queue_name);
-          ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " removed" << dendl;
+          ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " was removed" << dendl;
         });
         queue_gc.clear();
       }
     }
+    Timer timer(io_context);
+    while (processed_queue_count > 0) {
+      ldpp_dout(this, 5) << "INFO: manager stopped. " << processed_queue_count << " queues are still being processed" << dendl;
+      timer.expires_from_now(std::chrono::milliseconds(queues_update_retry_ms));
+      boost::system::error_code ec;
+      timer.async_wait(yield[ec]);
+    }
+    ldpp_dout(this, 5) << "INFO: manager stopped. done processing all queues" << dendl;
   }
 
 public:
 
   ~Manager() {
+  }
+
+  void stop() {
+    shutdown = true;
     work_guard.reset();
-    io_context.stop();
     std::for_each(workers.begin(), workers.end(), [] (auto& worker) { worker.join(); });
+  }
+
+  void init() {
+    spawn::spawn(io_context, [this](spawn::yield_context yield) {
+          process_queues(yield);
+        }, make_stack_allocator());
+
+    // start the worker threads to do the actual queue processing
+    const std::string WORKER_THREAD_NAME = "notif-worker";
+    for (auto worker_id = 0U; worker_id < worker_count; ++worker_id) {
+      workers.emplace_back([this]() {
+        try {
+          io_context.run(); 
+        } catch (const std::exception& err) {
+          ldpp_dout(this, 1) << "ERROR: notification worker failed with error: " << err.what() << dendl;
+          throw err;
+        }
+      });
+      const auto thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
+      if (const auto rc = ceph_pthread_setname(workers.back().native_handle(), thread_name.c_str()); rc != 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to set notification manager thread name to: " << thread_name
+          << ". error: " << rc << dendl;
+      }
+    }
+    ldpp_dout(this, 10) << "INfO: started notification manager with: " << worker_count << " workers" << dendl;
   }
 
   // ctor: start all threads
@@ -686,28 +756,7 @@ public:
     reservations_cleanup_period_s(_reservations_cleanup_period_s),
     site(site),
     rados_store(*store)
-    {
-      spawn::spawn(io_context, [this](spawn::yield_context yield) {
-            process_queues(yield);
-          }, make_stack_allocator());
-
-      // start the worker threads to do the actual queue processing
-      const std::string WORKER_THREAD_NAME = "notif-worker";
-      for (auto worker_id = 0U; worker_id < worker_count; ++worker_id) {
-        workers.emplace_back([this]() {
-          try {
-            io_context.run(); 
-          } catch (const std::exception& err) {
-            ldpp_dout(this, 10) << "Notification worker failed with error: " << err.what() << dendl;
-            throw(err);
-          }
-        });
-        const auto rc = ceph_pthread_setname(workers.back().native_handle(), 
-          (WORKER_THREAD_NAME+std::to_string(worker_id)).c_str());
-        ceph_assert(rc == 0);
-      }
-      ldpp_dout(this, 10) << "Started notification manager with: " << worker_count << " workers" << dendl;
-    }
+    {}
 
   int add_persistent_topic(const std::string& topic_queue, optional_yield y) {
     if (topic_queue == Q_LIST_OBJECT_NAME) {
@@ -743,10 +792,7 @@ public:
   }
 };
 
-// singleton manager
-// note that the manager itself is not a singleton, and multiple instances may co-exist
-// TODO make the pointer atomic in allocation and deallocation to avoid race conditions
-static Manager* s_manager = nullptr;
+std::unique_ptr<Manager> s_manager;
 
 constexpr size_t MAX_QUEUE_SIZE = 128*1000*1000; // 128MB
 constexpr uint32_t Q_LIST_UPDATE_MSEC = 1000*30;     // check queue list every 30seconds
@@ -757,24 +803,31 @@ constexpr uint32_t WORKER_COUNT = 1;                 // 1 worker thread
 constexpr uint32_t STALE_RESERVATIONS_PERIOD_S = 120;   // cleanup reservations that are more than 2 minutes old
 constexpr uint32_t RESERVATIONS_CLEANUP_PERIOD_S = 30; // reservation cleanup every 30 seconds
 
-bool init(CephContext* cct, rgw::sal::RadosStore* store,
-          const SiteConfig& site, const DoutPrefixProvider *dpp) {
+bool init(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
+          const SiteConfig& site) {
   if (s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to init notification manager: already exists" << dendl;
+    return false;
+  }
+  if (!RGWPubSubEndpoint::init_all(dpp->get_cct())) {
     return false;
   }
   // TODO: take conf from CephContext
-  s_manager = new Manager(cct, MAX_QUEUE_SIZE, 
+  s_manager = std::make_unique<Manager>(dpp->get_cct(), MAX_QUEUE_SIZE, 
       Q_LIST_UPDATE_MSEC, Q_LIST_RETRY_MSEC, 
       IDLE_TIMEOUT_USEC, FAILOVER_TIME_MSEC, 
       STALE_RESERVATIONS_PERIOD_S, RESERVATIONS_CLEANUP_PERIOD_S,
       WORKER_COUNT,
       store, site);
+  s_manager->init();
   return true;
 }
 
 void shutdown() {
-  delete s_manager;
-  s_manager = nullptr;
+  if (!s_manager) return;
+  RGWPubSubEndpoint::shutdown_all();
+  s_manager->stop();
+  s_manager.reset();
 }
 
 int add_persistent_topic(const std::string& topic_name, optional_yield y) {
@@ -814,7 +867,7 @@ int remove_persistent_topic(const std::string& topic_queue, optional_yield y) {
   if (!s_manager) {
     return -EAGAIN;
   }
-  return remove_persistent_topic(s_manager, s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_queue, y);
+  return remove_persistent_topic(s_manager.get(), s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_queue, y);
 }
 
 rgw::sal::Object* get_object_with_attributes(
@@ -1035,7 +1088,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           // either the topic is deleted but the corresponding notification
           // still exist or in v2 mode the notification could have synced first
           // but topic is not synced yet.
-          return 0;
+          continue;
         }
         ldpp_dout(res.dpp, 1)
             << "WARN: Using the stored topic from bucket notification struct."
@@ -1175,8 +1228,7 @@ int publish_commit(rgw::sal::Object* obj,
 	  dpp->get_cct());
         ldpp_dout(res.dpp, 20) << "INFO: push endpoint created: "
 			       << topic.cfg.dest.push_endpoint << dendl;
-        const auto ret = push_endpoint->send_to_completion_async(
-	  dpp->get_cct(), event_entry.event, res.yield);
+        const auto ret = push_endpoint->send(event_entry.event, res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1)
               << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint

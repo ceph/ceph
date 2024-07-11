@@ -58,6 +58,7 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
+// TODO: this method can probably be removed in the future
 Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
@@ -102,6 +103,33 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   t.add_to_read_set(ext);
   t.add_to_retired_set(ext);
   return retire_extent_iertr::now();
+}
+
+void Cache::retire_absent_extent_addr(
+  Transaction &t, paddr_t addr, extent_len_t length)
+{
+  CachedExtentRef ext;
+#ifndef NDEBUG
+  auto result = t.get_extent(addr, &ext);
+  assert(result != Transaction::get_extent_ret::PRESENT
+    && result != Transaction::get_extent_ret::RETIRED);
+  assert(!query_cache(addr, nullptr));
+#endif
+  LOG_PREFIX(Cache::retire_absent_extent_addr);
+  // add a new placeholder to Cache
+  ext = CachedExtent::make_cached_extent_ref<
+    RetiredExtentPlaceholder>(length);
+  ext->init(CachedExtent::extent_state_t::CLEAN,
+	    addr,
+	    PLACEMENT_HINT_NULL,
+	    NULL_GENERATION,
+	    TRANS_ID_NULL);
+  DEBUGT("retire {}~{} as placeholder, add extent -- {}",
+	 t, addr, length, *ext);
+  const auto t_src = t.get_src();
+  add_extent(ext, &t_src);
+  t.add_to_read_set(ext);
+  t.add_to_retired_set(ext);
 }
 
 void Cache::dump_contents()
@@ -801,7 +829,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next);
   }
 
-  next->on_replace_prior(t);
+  next->on_replace_prior();
   invalidate_extent(t, *prev);
 }
 
@@ -1015,13 +1043,15 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   switch (type) {
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
-      auto extents = alloc_new_data_extents<ObjectDataBlock>(t, length, hint, gen);
+      auto extents = alloc_new_data_extents<
+	ObjectDataBlock>(t, length, hint, gen);
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
   case extent_types_t::TEST_BLOCK:
     {
-      auto extents = alloc_new_data_extents<TestBlock>(t, length, hint, gen);
+      auto extents = alloc_new_data_extents<
+	TestBlock>(t, length, hint, gen);
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
@@ -1043,7 +1073,7 @@ CachedExtentRef Cache::duplicate_for_write(
   if (i->is_exist_clean()) {
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
-    i->last_committed_crc = i->get_crc32c();
+    i->last_committed_crc = i->calc_crc32c();
     // deepcopy the buffer of exist clean extent beacuse it shares
     // buffer with original clean extent.
     auto bp = i->get_bptr();
@@ -1081,7 +1111,8 @@ record_t Cache::prepare_record(
   const journal_seq_t &journal_dirty_tail)
 {
   LOG_PREFIX(Cache::prepare_record);
-  SUBTRACET(seastore_t, "enter", t);
+  SUBTRACET(seastore_t, "enter, journal_head={}, dirty_tail={}",
+            t, journal_head, journal_dirty_tail);
 
   auto trans_src = t.get_src();
   assert(!t.is_weak());
@@ -1155,7 +1186,7 @@ record_t Cache::prepare_record(
     i->prepare_commit();
 
     assert(i->get_version() > 0);
-    auto final_crc = i->get_crc32c();
+    auto final_crc = i->calc_crc32c();
     if (i->get_type() == extent_types_t::ROOT) {
       SUBTRACET(seastore_t, "writing out root delta {}B -- {}",
                 t, delta_length, *i);
@@ -1520,7 +1551,7 @@ void Cache::complete_commit(
             t, final_block_start, start_seq);
 
   std::vector<backref_entry_ref> backref_list;
-  t.for_each_fresh_block([&](const CachedExtentRef &i) {
+  t.for_each_finalized_fresh_block([&](const CachedExtentRef &i) {
     if (!i->is_valid()) {
       return;
     }
@@ -1530,11 +1561,12 @@ void Cache::complete_commit(
       is_inline = true;
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
-    i->last_committed_crc = i->get_crc32c();
+    assert(i->get_last_committed_crc() == i->calc_crc32c());
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
+    i->prior_instance.reset();
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     const auto t_src = t.get_src();
@@ -1850,7 +1882,7 @@ Cache::replay_delta(
     };
     auto extent_fut = (delta.pversion == 0 ?
       // replay is not included by the cache hit metrics
-      _get_extent_by_type(
+      do_get_caching_extent_by_type(
         delta.type,
         delta.paddr,
         delta.laddr,
@@ -2012,7 +2044,8 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   }
 }
 
-Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
+Cache::get_extent_ertr::future<CachedExtentRef>
+Cache::do_get_caching_extent_by_type(
   extent_types_t type,
   paddr_t offset,
   laddr_t laddr,
@@ -2034,55 +2067,55 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
       ceph_assert(0 == "ROOT is never directly read");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::BACKREF_INTERNAL:
-      return get_extent<backref::BackrefInternalNode>(
+      return do_get_caching_extent<backref::BackrefInternalNode>(
 	offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::BACKREF_LEAF:
-      return get_extent<backref::BackrefLeafNode>(
+      return do_get_caching_extent<backref::BackrefLeafNode>(
 	offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_INTERNAL:
-      return get_extent<lba_manager::btree::LBAInternalNode>(
+      return do_get_caching_extent<lba_manager::btree::LBAInternalNode>(
 	offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::LADDR_LEAF:
-      return get_extent<lba_manager::btree::LBALeafNode>(
+      return do_get_caching_extent<lba_manager::btree::LBALeafNode>(
 	offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_INNER:
-      return get_extent<omap_manager::OMapInnerNode>(
+      return do_get_caching_extent<omap_manager::OMapInnerNode>(
           offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OMAP_LEAF:
-      return get_extent<omap_manager::OMapLeafNode>(
+      return do_get_caching_extent<omap_manager::OMapLeafNode>(
           offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::COLL_BLOCK:
-      return get_extent<collection_manager::CollectionNode>(
+      return do_get_caching_extent<collection_manager::CollectionNode>(
           offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
         return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::ONODE_BLOCK_STAGED:
-      return get_extent<onode::SeastoreNodeExtent>(
+      return do_get_caching_extent<onode::SeastoreNodeExtent>(
           offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::OBJECT_DATA_BLOCK:
-      return get_extent<ObjectDataBlock>(
+      return do_get_caching_extent<ObjectDataBlock>(
           offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
@@ -2091,13 +2124,13 @@ Cache::get_extent_ertr::future<CachedExtentRef> Cache::_get_extent_by_type(
       ceph_assert(0 == "impossible");
       return get_extent_ertr::make_ready_future<CachedExtentRef>();
     case extent_types_t::TEST_BLOCK:
-      return get_extent<TestBlock>(
+      return do_get_caching_extent<TestBlock>(
           offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);
       });
     case extent_types_t::TEST_BLOCK_PHYSICAL:
-      return get_extent<TestBlockPhysical>(
+      return do_get_caching_extent<TestBlockPhysical>(
           offset, length, p_metric_key, std::move(extent_init_func), std::move(on_cache)
       ).safe_then([](auto extent) {
 	return CachedExtentRef(extent.detach(), false /* add_ref */);

@@ -47,6 +47,7 @@ enum mds_metric_t {
   MDS_HEALTH_SLOW_METADATA_IO,
   MDS_HEALTH_CLIENTS_LAGGY,
   MDS_HEALTH_CLIENTS_LAGGY_MANY,
+  MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH,
   MDS_HEALTH_DUMMY, // not a real health warning, for testing
 };
 
@@ -67,6 +68,7 @@ inline const char *mds_metric_name(mds_metric_t m)
   case MDS_HEALTH_SLOW_METADATA_IO: return "MDS_SLOW_METADATA_IO";
   case MDS_HEALTH_CLIENTS_LAGGY: return "MDS_CLIENTS_LAGGY";
   case MDS_HEALTH_CLIENTS_LAGGY_MANY: return "MDS_CLIENTS_LAGGY_MANY";
+  case MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH: return "MDS_CLIENTS_BROKEN_ROOTSQUASH";
   case MDS_HEALTH_DUMMY: return "MDS_DUMMY";
   default:
     return "???";
@@ -103,6 +105,8 @@ inline const char *mds_metric_summary(mds_metric_t m)
     return "%num% MDSs report slow metadata IOs";
   case MDS_HEALTH_CLIENTS_LAGGY:
     return "%num% client(s) laggy due to laggy OSDs";  
+  case MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH:
+    return "%num% MDS report clients with broken root_squash implementation";
   default:
     return "???";
   }

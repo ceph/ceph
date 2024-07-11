@@ -64,110 +64,105 @@ SnapTrimEvent::snap_trim_event_ret_t
 SnapTrimEvent::start()
 {
   ShardServices &shard_services = pg->get_shard_services();
-  return interruptor::with_interruption([&shard_services, this] {
+  return enter_stage<interruptor>(
+    client_pp().wait_for_active
+  ).then_interruptible([this] {
+    return with_blocking_event<PGActivationBlocker::BlockingEvent,
+			       interruptor>([this] (auto&& trigger) {
+      return pg->wait_for_active_blocker.wait(std::move(trigger));
+    });
+  }).then_interruptible([this] {
     return enter_stage<interruptor>(
-      client_pp().wait_for_active
-    ).then_interruptible([this] {
-      return with_blocking_event<PGActivationBlocker::BlockingEvent,
-                                 interruptor>([this] (auto&& trigger) {
-        return pg->wait_for_active_blocker.wait(std::move(trigger));
-      });
-    }).then_interruptible([this] {
-      return enter_stage<interruptor>(
-        client_pp().recover_missing);
-    }).then_interruptible([] {
-      //return do_recover_missing(pg, get_target_oid());
-      return seastar::now();
-    }).then_interruptible([this] {
-      return enter_stage<interruptor>(
-        client_pp().get_obc);
-    }).then_interruptible([this] {
-      return pg->background_process_lock.lock_with_op(*this);
-    }).then_interruptible([this] {
-      return enter_stage<interruptor>(
-        client_pp().process);
-    }).then_interruptible([&shard_services, this] {
-      return interruptor::async([this] {
-        std::vector<hobject_t> to_trim;
-        using crimson::common::local_conf;
-        const auto max =
-          local_conf().get_val<uint64_t>("osd_pg_max_concurrent_snap_trims");
-        // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
-        // the ENOENT below and erase snapid.
-        int r = snap_mapper.get_next_objects_to_trim(
-          snapid,
-          max,
-          &to_trim);
-        if (r == -ENOENT) {
-          to_trim.clear(); // paranoia
-          return to_trim;
-        } else if (r != 0) {
-          logger().error("{}: get_next_objects_to_trim returned {}",
-                         *this, cpp_strerror(r));
-          ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
-        } else {
-          assert(!to_trim.empty());
-        }
-        logger().debug("{}: async almost done line {}", *this, __LINE__);
+      client_pp().recover_missing);
+  }).then_interruptible([] {
+    //return do_recover_missing(pg, get_target_oid());
+    return seastar::now();
+  }).then_interruptible([this] {
+    return enter_stage<interruptor>(
+      client_pp().get_obc);
+  }).then_interruptible([this] {
+    return pg->background_process_lock.lock_with_op(*this);
+  }).then_interruptible([this] {
+    return enter_stage<interruptor>(
+      client_pp().process);
+  }).then_interruptible([&shard_services, this] {
+    return interruptor::async([this] {
+      std::vector<hobject_t> to_trim;
+      using crimson::common::local_conf;
+      const auto max =
+	local_conf().get_val<uint64_t>("osd_pg_max_concurrent_snap_trims");
+      // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
+      // the ENOENT below and erase snapid.
+      int r = snap_mapper.get_next_objects_to_trim(
+	snapid,
+        max,
+        &to_trim);
+      if (r == -ENOENT) {
+        to_trim.clear(); // paranoia
         return to_trim;
-      }).then_interruptible([&shard_services, this] (const auto& to_trim) {
-        if (to_trim.empty()) {
-          // the legit ENOENT -> done
-          logger().debug("{}: to_trim is empty! Stopping iteration", *this);
-	  pg->background_process_lock.unlock();
-          return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
-        }
-        return [&shard_services, this](const auto &to_trim) {
-	  for (const auto& object : to_trim) {
-	    logger().debug("{}: trimming {}", *this, object);
-	    subop_blocker.emplace_back(
-	      shard_services.start_operation_may_interrupt<
-	      interruptor, SnapTrimObjSubEvent>(
-	        pg,
-	        object,
-	        snapid));
-	  }
+      } else if (r != 0) {
+        logger().error("{}: get_next_objects_to_trim returned {}",
+                       *this, cpp_strerror(r));
+        ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
+      } else {
+        assert(!to_trim.empty());
+      }
+      logger().debug("{}: async almost done line {}", *this, __LINE__);
+      return to_trim;
+    }).then_interruptible([&shard_services, this] (const auto& to_trim) {
+      if (to_trim.empty()) {
+	// the legit ENOENT -> done
+	logger().debug("{}: to_trim is empty! Stopping iteration", *this);
+	pg->background_process_lock.unlock();
+	return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::yes);
+      }
+      return [&shard_services, this](const auto &to_trim) {
+	for (const auto& object : to_trim) {
+	  logger().debug("{}: trimming {}", *this, object);
+	  subop_blocker.emplace_back(
+	    shard_services.start_operation_may_interrupt<
+	    interruptor, SnapTrimObjSubEvent>(
+	      pg,
+	      object,
+	      snapid));
+	}
+	return interruptor::now();
+      }(to_trim).then_interruptible([this] {
+	return enter_stage<interruptor>(wait_subop);
+      }).then_interruptible([this] {
+	logger().debug("{}: awaiting completion", *this);
+	return subop_blocker.interruptible_wait_completion();
+      }).finally([this] {
+	pg->background_process_lock.unlock();
+      }).si_then([this] {
+	if (!needs_pause) {
 	  return interruptor::now();
-	}(to_trim).then_interruptible([this] {
-	  return enter_stage<interruptor>(wait_subop);
-	}).then_interruptible([this] {
-          logger().debug("{}: awaiting completion", *this);
-          return subop_blocker.interruptible_wait_completion();
-        }).finally([this] {
-	  pg->background_process_lock.unlock();
-	}).si_then([this] {
-          if (!needs_pause) {
-            return interruptor::now();
-          }
-          // let's know operators we're waiting
-          return enter_stage<interruptor>(
-            wait_trim_timer
-          ).then_interruptible([this] {
-            using crimson::common::local_conf;
-            const auto time_to_sleep =
-              local_conf().template get_val<double>("osd_snap_trim_sleep");
-            logger().debug("{}: time_to_sleep {}", *this, time_to_sleep);
-            // TODO: this logic should be more sophisticated and distinguish
-            // between SSDs, HDDs and the hybrid case
-            return seastar::sleep(
-              std::chrono::milliseconds(std::lround(time_to_sleep * 1000)));
-          });
-        }).si_then([this] {
-          logger().debug("{}: all completed", *this);
-          return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::no);
-        });
-      }).si_then([this](auto stop) {
-        return handle.complete().then([stop] {
-          return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(stop);
-        });
+	}
+	// let's know operators we're waiting
+	return enter_stage<interruptor>(
+	  wait_trim_timer
+	).then_interruptible([this] {
+	  using crimson::common::local_conf;
+	  const auto time_to_sleep =
+	    local_conf().template get_val<double>("osd_snap_trim_sleep");
+	  logger().debug("{}: time_to_sleep {}", *this, time_to_sleep);
+	  // TODO: this logic should be more sophisticated and distinguish
+	  // between SSDs, HDDs and the hybrid case
+	  return seastar::sleep(
+	    std::chrono::milliseconds(std::lround(time_to_sleep * 1000)));
+	});
+      }).si_then([this] {
+	logger().debug("{}: all completed", *this);
+	return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
+	  seastar::stop_iteration::no);
+      });
+    }).si_then([this](auto stop) {
+      return handle.complete().then([stop] {
+	return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(stop);
       });
     });
-  }, [this](std::exception_ptr eptr) -> snap_trim_event_ret_t {
-    logger().debug("{}: interrupted {}", *this, eptr);
-    return crimson::ct_error::eagain::make();
-  }, pg).finally([this] {
+  }).finally([this] {
     // This SnapTrimEvent op lifetime is maintained within
     // PerShardState::start_operation() implementation.
     logger().debug("{}: exit", *this);
@@ -390,7 +385,6 @@ SnapTrimObjSubEvent::remove_or_update(
   }
 
   return seastar::do_with(ceph::os::Transaction{}, [=, this](auto &txn) {
-    int64_t num_objects_before_trim = delta_stats.num_objects;
     osd_op_p.at_version = pg->get_next_version();
     auto ret = remove_or_update_iertr::now();
     if (new_snaps.empty()) {
@@ -405,8 +399,7 @@ SnapTrimObjSubEvent::remove_or_update(
       ret = adjust_snaps(obc, head_obc, new_snaps, txn);
     }
     return std::move(ret).si_then(
-      [&txn, obc, num_objects_before_trim,
-      head_obc=std::move(head_obc), this]() mutable {
+      [&txn, obc, head_obc=std::move(head_obc), this]() mutable {
       // save head snapset
       logger().debug("{}: {} new snapset {} on {}",
 		     *this, coid, head_obc->ssc->snapset, head_obc->obs.oi);
@@ -416,11 +409,14 @@ SnapTrimObjSubEvent::remove_or_update(
 	update_head(obc, head_obc, txn);
       }
       // Stats reporting - Set number of objects trimmed
-      if (num_objects_before_trim > delta_stats.num_objects) {
-	//int64_t num_objects_trimmed =
-	//  num_objects_before_trim - delta_stats.num_objects;
-	//add_objects_trimmed_count(num_objects_trimmed);
+      if (delta_stats.num_objects < 0) {
+        int64_t num_objects_trimmed = std::abs(delta_stats.num_objects);
+        pg->get_peering_state().update_stats_wo_resched(
+          [num_objects_trimmed](auto &history, auto &stats) {
+          stats.objects_trimmed += num_objects_trimmed;
+        });
       }
+      pg->apply_stats(coid, delta_stats);
     }).si_then(
       [&txn] () mutable {
       return std::move(txn);
@@ -450,8 +446,8 @@ SnapTrimObjSubEvent::start()
   }).then_interruptible([this] {
     logger().debug("{}: getting obc for {}", *this, coid);
     // end of commonality
-    // with_clone_obc_direct lock both clone's and head's obcs
-    return pg->obc_loader.with_clone_obc_direct<RWState::RWWRITE>(
+    // lock both clone's and head's obcs
+    return pg->obc_loader.with_obc<RWState::RWWRITE>(
       coid,
       [this](auto head_obc, auto clone_obc) {
       logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
@@ -478,7 +474,8 @@ SnapTrimObjSubEvent::start()
           });
         });
       });
-    }).si_then([this] {
+    },
+    false).si_then([this] {
       logger().debug("{}: completed", *this);
       return handle.complete();
     }).handle_error_interruptible(

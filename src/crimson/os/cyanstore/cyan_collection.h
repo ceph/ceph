@@ -36,6 +36,8 @@ struct Collection final : public FuturizedCollection {
   std::map<std::string,bufferptr> xattr;
   bool exists = true;
 
+  pool_opts_t pool_opts;
+
   Collection(const coll_t& c);
   ~Collection() final;
 

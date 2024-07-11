@@ -68,6 +68,13 @@ export class ServicesPageHelper extends PageHelper {
           unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
           break;
 
+        case 'smb':
+          cy.get('#service_id').type('testsmb');
+          unmanaged ? cy.get('label[for=unmanaged]').click() : cy.get('#count').type(String(count));
+          cy.get('#cluster_id').type('cluster_foo');
+          cy.get('#config_uri').type('rados://.smb/foo/scc.toml');
+          break;
+
         case 'snmp-gateway':
           this.selectOption('snmp_version', snmpVersion);
           cy.get('#snmp_destination').type('192.168.0.1:8443');

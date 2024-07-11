@@ -26,8 +26,8 @@ namespace rgw::notify {
 // initialize the notification manager
 // notification manager is dequeuing the 2-phase-commit queues
 // and send the notifications to the endpoints
-bool init(CephContext* cct, rgw::sal::RadosStore* store,
-          const rgw::SiteConfig& site, const DoutPrefixProvider *dpp);
+bool init(const DoutPrefixProvider* dpp, rgw::sal::RadosStore* store,
+          const rgw::SiteConfig& site);
 
 // shutdown the notification manager
 void shutdown();

@@ -15,9 +15,6 @@
                  for="cluster_id">
             <span class="required"
                   i18n>Cluster</span>
-            <cd-helper>
-              <p i18n>This is the ID of an NFS Service.</p>
-            </cd-helper>
           </label>
           <div class="cd-col-form-input">
             <select class="form-select"
@@ -36,6 +33,9 @@
               <option *ngFor="let cluster of allClusters"
                       [value]="cluster.cluster_id">{{ cluster.cluster_id }}</option>
             </select>
+            <cd-help-text>
+              <p i18n>This is the ID of an NFS Service.</p>
+            </cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('cluster_id', formDir, 'required') || allClusters?.length === 0"
                   i18n>This field is required.
@@ -46,42 +46,9 @@
 
         <!-- FSAL -->
         <div formGroupName="fsal">
-          <!-- Name -->
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="name"
-                   i18n>Storage Backend</label>
-            <div class="cd-col-form-input">
-              <select class="form-select"
-                      formControlName="name"
-                      name="name"
-                      id="name"
-                      (change)="fsalChangeHandler()">
-                <option *ngIf="allFsals === null"
-                        value=""
-                        i18n>Loading...</option>
-                <option *ngIf="allFsals !== null && allFsals.length === 0"
-                        value=""
-                        i18n>-- No data pools available --</option>
-                <option *ngIf="allFsals !== null && allFsals.length > 0"
-                        value=""
-                        i18n>-- Select the storage backend --</option>
-                <option *ngFor="let fsal of allFsals"
-                        [value]="fsal.value"
-                        [disabled]="fsal.disabled">{{ fsal.descr }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="nfsForm.showError('name', formDir, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="fsalAvailabilityError"
-                    i18n>{{ fsalAvailabilityError }}</span>
-            </div>
-          </div>
-
           <!-- CephFS Volume -->
           <div class="form-group row"
-               *ngIf="nfsForm.getValue('name') === 'CEPH'">
+               *ngIf="storageBackend === 'CEPH'">
             <label class="cd-col-form-label required"
                    for="fs_name"
                    i18n>Volume</label>
@@ -112,7 +79,7 @@
 
         <!-- Security Label -->
         <div class="form-group row"
-             *ngIf="nfsForm.getValue('name') === 'CEPH'">
+             *ngIf="storageBackend === 'CEPH'">
           <label class="cd-col-form-label"
                  [ngClass]="{'required': nfsForm.getValue('security_label')}"
                  for="security_label"
@@ -147,14 +114,11 @@
 
         <!-- Path -->
         <div class="form-group row"
-             *ngIf="nfsForm.getValue('name') === 'CEPH'">
+             *ngIf="storageBackend === 'CEPH'">
           <label class="cd-col-form-label"
                  for="path">
             <span class="required"
                   i18n>CephFS Path</span>
-            <cd-helper>
-              <p i18n>A path in a CephFS file system.</p>
-            </cd-helper>
           </label>
           <div class="cd-col-form-input">
             <input type="text"
@@ -166,6 +130,9 @@
                    [ngbTypeahead]="pathDataSource"
                    (selectItem)="pathChangeHandler()"
                    (blur)="pathChangeHandler()">
+            <cd-help-text>
+            <p i18n>A path in a CephFS file system.</p>
+          </cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'required')"
                   i18n>This field is required.</span>
@@ -181,7 +148,7 @@
 
         <!-- Bucket -->
         <div class="form-group row"
-             *ngIf="nfsForm.getValue('name') === 'RGW'">
+             *ngIf="storageBackend === 'RGW'">
           <label class="cd-col-form-label"
                  for="path">
             <span class="required"
@@ -216,39 +183,50 @@
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"
+                     formControlName="protocolNfsv3"
+                     name="protocolNfsv3"
+                     id="protocolNfsv3">
+              <label for="protocolNfsv3"
+                     class="custom-control-label"
+                     i18n>NFSv3</label>
+            </div>
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
                      formControlName="protocolNfsv4"
                      name="protocolNfsv4"
-                     id="protocolNfsv4"
-                     disabled>
-              <label i18n
+                     id="protocolNfsv4">
+              <label for="protocolNfsv4"
                      class="custom-control-label"
-                     for="protocolNfsv4">NFSv4</label>
+                     i18n>NFSv4</label>
             </div>
             <span class="invalid-feedback"
-                  *ngIf="nfsForm.showError('protocolNfsv4', formDir, 'required')"
+                  *ngIf="nfsForm.showError('protocolNfsv3', formDir, 'required') ||
+                  nfsForm.showError('protocolNfsv4', formDir, 'required')"
                   i18n>This field is required.</span>
+            <hr>
           </div>
         </div>
 
         <!-- Pseudo -->
         <div class="form-group row"
-             *ngIf="nfsForm.getValue('protocolNfsv4')">
+             *ngIf="nfsForm.getValue('protocolNfsv4') || nfsForm.getValue('protocolNfsv3')">
           <label class="cd-col-form-label"
                  for="pseudo">
             <span class="required"
                   i18n>Pseudo</span>
-            <cd-helper>
-              <p i18n>The position that this <strong>NFS v4</strong> export occupies
-                in the <strong>Pseudo FS</strong> (it must be unique).</p>
-              <p i18n>By using different Pseudo options, the same Path may be exported multiple times.</p>
-            </cd-helper>
           </label>
           <div class="cd-col-form-input">
             <input type="text"
                    class="form-control"
                    name="pseudo"
                    id="pseudo"
-                   formControlName="pseudo">
+                   formControlName="pseudo"
+                   minlength="2">
+            <cd-help-text>
+              <span i18n>The position this export occupies in the Pseudo FS. It must be unique.</span><br/>
+              <span i18n>By using different Pseudo options, the same Path may be exported multiple times.</span>
+            </cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'required')"
                   i18n>This field is required.</span>
@@ -258,6 +236,9 @@
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'pattern')"
                   i18n>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &, ( or ).</span>
+            <span class="invalid-feedback"
+                  *ngIf="nfsForm.showError('pseudo', formDir, 'minlength') && nfsForm.getValue('pseudo') === '/'"
+                  i18n>Pseudo path should be an absolute path and it cannot be just '/'</span>
           </div>
         </div>
 
@@ -286,7 +267,7 @@
               {{ getAccessTypeHelp(nfsForm.getValue('access_type')) }}
             </span>
             <span class="form-text text-warning"
-                  *ngIf="nfsForm.getValue('access_type') === 'RW' && nfsForm.getValue('name') === 'RGW'"
+                  *ngIf="nfsForm.getValue('access_type') === 'RW' && storageBackend === 'RGW'"
                   i18n>The Object Gateway NFS backend has a number of
               limitations which will seriously affect applications writing to
               the share. Please consult the <cd-doc section="rgw-nfs"></cd-doc>
@@ -302,7 +283,6 @@
           <label class="cd-col-form-label"
                  for="squash">
             <span i18n>Squash</span>
-            <ng-container *ngTemplateOutlet="squashHelper"></ng-container>
           </label>
           <div class="cd-col-form-input">
             <select class="form-select"
@@ -319,6 +299,20 @@
                       [value]="squash">{{ squash }}</option>
 
             </select>
+            <cd-help-text>
+              <span *ngIf="nfsForm.getValue('squash') === 'root_squash'"
+                    i18n>Maps the root user on the NFS client to an anonymous user/group with limited privileges. This prevents a root client user from having total control over the NFS export.</span>
+
+              <span *ngIf="nfsForm.getValue('squash') === 'root_id_squash'"
+                    i18n>Maps the root user on the NFS client to an anonymous user/group with limited privileges, preventing root access but retaining non-root group privileges.</span>
+
+              <span *ngIf="nfsForm.getValue('squash') === 'all_squash'"
+                    i18n>Maps all users on the NFS client to an anonymous user/group with limited privileges, ensuring that no user has special privileges on the NFS export.</span>
+
+              <span *ngIf="nfsForm.getValue('squash') === 'no_root_squash'"
+                    i18n>Allows the root user on the NFS client to retain full root privileges on the NFS server, which may pose security risks.</span>
+
+            </cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('squash', formDir,'required')"
                   i18n>This field is required.</span>
@@ -363,35 +357,18 @@
         <cd-nfs-form-client [form]="nfsForm"
                             [clients]="clients"
                             #nfsClients>
-          <ng-template #squashHelper>
-            <cd-helper>
-              <ul class="squash-helper">
-                <li>
-                  <span class="squash-helper-item-value">no_root_squash: </span>
-                  <span i18n>No user id squashing is performed.</span>
-                </li>
-                <li>
-                  <span class="squash-helper-item-value">root_id_squash: </span>
-                  <span i18n>uid 0 and gid 0 are squashed to the Anonymous_Uid and Anonymous_Gid gid 0 in alt_groups lists is also squashed.</span>
-                </li>
-                <li>
-                  <span class="squash-helper-item-value">root_squash: </span>
-                  <span i18n>uid 0 and gid of any value are squashed to the Anonymous_Uid and Anonymous_Gid alt_groups lists is discarded.</span>
-                </li>
-                <li>
-                  <span class="squash-helper-item-value">all_squash: </span>
-                  <span i18n>All users are squashed.</span>
-                </li>
-              </ul>
-            </cd-helper>
-          </ng-template>
         </cd-nfs-form-client>
 
+        <!-- Errors -->
+        <cd-alert-panel type="error"
+                        *ngIf="!!storageBackendError">
+          {{storageBackendError}}
+        </cd-alert-panel>
       </div>
-
       <div class="card-footer">
         <cd-form-button-panel (submitActionEvent)="submitAction()"
                               [form]="nfsForm"
+                              [disabled]="!!storageBackendError"
                               [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
                               wrappingClass="text-right"></cd-form-button-panel>
       </div>

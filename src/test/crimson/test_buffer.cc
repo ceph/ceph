@@ -3,6 +3,7 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/reactor.hh>
 #include "include/buffer.h"
+#include "test/crimson/ctest_utils.h"
 
 // allocate a foreign buffer on each cpu, collect them all into a bufferlist,
 // and destruct it on this cpu
@@ -36,7 +37,7 @@ seastar::future<> test_foreign_bufferlist()
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [] {
     return seastar::now().then(
       &test_foreign_bufferlist

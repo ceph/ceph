@@ -41,7 +41,7 @@ dec_ref_ret dec_ref(omap_context_t oc, T&& addr) {
     crimson::ct_error::assert_all{
       "Invalid error in OMapInnerNode helper dec_ref"
     }
-  ).si_then([](auto &&e) {});
+  ).discard_result();
 }
 
 /**
@@ -653,6 +653,7 @@ OMapLeafNode::list(
 
   for (; iter != liter && result.size() < config.max_result_size; iter++) {
     result.emplace(std::make_pair(iter->get_key(), iter->get_val()));
+    DEBUGT("found key {}", oc.t, iter->get_key());
   }
 
   complete = (iter == liter);

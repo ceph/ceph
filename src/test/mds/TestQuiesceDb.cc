@@ -77,9 +77,6 @@ class QuiesceDbTest: public testing::Test {
       Db& internal_db() {
         return db;
       }
-      QuiesceClusterMembership& internal_membership() {
-        return membership;
-      }
       decltype(pending_requests)& internal_pending_requests() {
         return pending_requests;
       }
@@ -88,6 +85,11 @@ class QuiesceDbTest: public testing::Test {
       }
       decltype(peers)& internal_peers() {
         return peers;
+      }
+      epoch_t bump_epoch() {
+        std::lock_guard l(submit_mutex);
+        submit_condition.notify_all();
+        return ++cluster_membership->epoch;
       }
     };
 
@@ -560,7 +562,7 @@ TEST_F(QuiesceDbTest, QuiesceRequestValidation)
       return !testing::Test::HasFailure();
   };
 
-  const auto ops = std::array { QuiesceDbRequest::RootsOp::INCLUDE_OR_QUERY, QuiesceDbRequest::RootsOp::EXCLUDE_OR_RELEASE, QuiesceDbRequest::RootsOp::RESET_OR_CANCEL, QuiesceDbRequest::RootsOp::__INVALID };
+  const auto ops = std::array { QuiesceDbRequest::RootsOp::INCLUDE_OR_QUERY, QuiesceDbRequest::RootsOp::EXCLUDE_OR_CANCEL, QuiesceDbRequest::RootsOp::RESET_OR_RELEASE, QuiesceDbRequest::RootsOp::__INVALID };
   const auto strings = nullopt_and_default<std::string>();
   const auto versions = nullopt_and_default<QuiesceSetVersion>();
   const auto intervals = nullopt_and_default<QuiesceTimeInterval>();
@@ -764,7 +766,7 @@ TEST_F(QuiesceDbTest, SetModification)
 
   // cancel with no set_id should cancel all active sets
   ASSERT_EQ(OK(), run_request([](auto& r) {
-    r.control.roots_op = QuiesceDbRequest::RootsOp::RESET_OR_CANCEL;
+    r.cancel();
   }));
 
   ASSERT_TRUE(db(mds_gid_t(1)).sets.at("set1").members.at("file:/root4").excluded);
@@ -827,7 +829,7 @@ TEST_F(QuiesceDbTest, Timeouts) {
 
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set2";
-    r.release_roots();
+    r.release();
   }));
 
   ASSERT_EQ(QuiesceState::QS_RELEASING, last_request->response.sets.at("set2").rstate.state);
@@ -937,7 +939,7 @@ TEST_F(QuiesceDbTest, InterruptedQuiesceAwait)
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
     r.expiration = sec(100);
-    r.timeout = sec(10);
+    r.timeout = sec(100);
     r.roots.emplace("root1");
   }));
 
@@ -982,7 +984,7 @@ TEST_F(QuiesceDbTest, InterruptedQuiesceAwait)
   EXPECT_EQ(ERR(ETIMEDOUT), await2.wait_result());
 
   // shouldn't have taken much longer than the timeout configured on the set
-  auto epsilon = sec(0.01);
+  auto epsilon = sec(0.05);
   ASSERT_LE(QuiesceClock::now() - then - epsilon, last_request->response.sets.at("set2").timeout);
 
   // let's cancel set 1 while awaiting it a few times
@@ -1004,19 +1006,18 @@ TEST_F(QuiesceDbTest, InterruptedQuiesceAwait)
 
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
-    r.reset_roots({});
+    r.cancel();
   }));
 
   EXPECT_EQ(ERR(ECANCELED), await3.wait_result());
   EXPECT_EQ(ERR(ECANCELED), await4.wait_result());
 
-  // awaiting a set in a terminal state should immediately
-  // complete with the corresponding error
-  ASSERT_EQ(ERR(ECANCELED), run_request([](auto& r) {
+  // awaiting a set in a terminal state should be illegal
+  EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set1";
     r.await = sec(100);
   }));
-  ASSERT_EQ(ERR(ETIMEDOUT), run_request([](auto& r) {
+  EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set2";
     r.await = sec(100);
   }));
@@ -1068,7 +1069,7 @@ TEST_F(QuiesceDbTest, RepeatedQuiesceAwait) {
   for (int i = 0; i < 2; i++) {
     ASSERT_EQ(ERR(EINPROGRESS), run_request([=](auto& r) {
       r.set_id = "set1";
-      r.release_roots();
+      r.release();
       r.await = (expiration*2)/5;
     }));
   }
@@ -1076,20 +1077,20 @@ TEST_F(QuiesceDbTest, RepeatedQuiesceAwait) {
   // NB: the ETIMEDOUT is the await result, while the set itself should be EXPIRED
   EXPECT_EQ(ERR(ETIMEDOUT), run_request([=](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
     r.await = expiration;
   }));
 
   EXPECT_EQ(QS_EXPIRED, last_request->response.sets.at("set1").rstate.state);
 
-  EXPECT_EQ(ERR(ETIMEDOUT), run_request([](auto& r) {
+  EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set1";
     r.await = sec(0.1);
   }));
 
   EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
   }));
 
 }
@@ -1114,7 +1115,7 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
   for (auto&& set_id : { "set1", "set2" }) {
     ASSERT_EQ(ERR(EPERM), run_request([set_id](auto& r) {
       r.set_id = set_id;
-      r.release_roots();
+      r.release();
       r.await = sec(1);
     })) << "bad release-await " << set_id;
   }
@@ -1133,13 +1134,13 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
 
   auto & release_await1 = start_request([](auto &r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
     r.await = sec(100);
   });
 
   auto& release_await2 = start_request([](auto& r) {
     r.set_id = "set2";
-    r.release_roots();
+    r.release();
     r.await = sec(100);
   });
 
@@ -1154,7 +1155,7 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
   // we can request release again without any version bump
   EXPECT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
   }));
 
   EXPECT_EQ(releasing_v1, last_request->response.sets.at("set1").version );
@@ -1162,7 +1163,7 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
   // we can release-await with a short await timeout
   EXPECT_EQ(ERR(EINPROGRESS), run_request([](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
     r.await = sec(0.1);
   }));
 
@@ -1196,7 +1197,7 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
   // await again
   auto& release_await22 = start_request([](auto& r) {
     r.set_id = "set2";
-    r.release_roots();
+    r.release();
     r.await = sec(100);
   });
 
@@ -1234,18 +1235,18 @@ TEST_F(QuiesceDbTest, ReleaseAwait)
   // it should be OK to request release or release-await on a RELEASED set
   EXPECT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
   }));
 
   EXPECT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
     r.await = sec(0.1);
   }));
 
   // it's invalid to send a release without a set id
   EXPECT_EQ(ERR(EINVAL), run_request([](auto& r) {
-    r.release_roots();
+    r.release();
   }));
 }
 
@@ -1452,7 +1453,7 @@ TEST_F(QuiesceDbTest, MultiRankRelease)
   // release roots
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
   }));
 
   EXPECT_EQ(QS_RELEASING, last_request->response.sets.at("set1").rstate.state);
@@ -1462,7 +1463,7 @@ TEST_F(QuiesceDbTest, MultiRankRelease)
   auto &async_release = start_request([](auto& r) {
     r.set_id = "set2";
     r.await = sec(100);
-    r.release_roots();
+    r.release();
   });
 
   EXPECT_EQ(NA(), async_release.check_result());
@@ -1470,7 +1471,7 @@ TEST_F(QuiesceDbTest, MultiRankRelease)
   // shouldn't hurt to run release twice for set 1
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
-    r.release_roots();
+    r.release();
   }));
 
   EXPECT_EQ(releasing_v, last_request->response.sets.at("set1").version);
@@ -1521,7 +1522,7 @@ TEST_F(QuiesceDbTest, MultiRankRelease)
     ASSERT_EQ(OK(), run_request([set_id](auto& r) {
       r.set_id = set_id;
       r.await = sec(100);
-      r.release_roots();
+      r.release();
     }));
     ASSERT_EQ(ERR(EPERM), run_request([set_id](auto& r) {
       r.set_id = set_id;
@@ -1618,4 +1619,44 @@ TEST_F(QuiesceDbTest, MultiRankRecovery)
   ASSERT_EQ(2, last_request->response.sets.size());
   EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set1").rstate.state);
   EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set2").rstate.state);
+}
+
+/* ========================================= */
+TEST_F(QuiesceDbTest, AckDuringEpochMismatch)
+{
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1), mds_gid_t(2) }));
+  managers.at(mds_gid_t(1))->reset_agent_callback(QUIESCING_AGENT_CB);
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.timeout = sec(60);
+    r.expiration = sec(60);
+    r.include_roots({ "root1" });
+  }));
+
+  // we are quiescing because manager 2 hasn't yet acknowledged the new state
+  EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set1").rstate.state);
+
+  // imagine that a new epoch has started on the peer before it did for the leader
+  managers.at(mds_gid_t(2))->bump_epoch();
+
+  // do the acking while our epoch is higher
+  {
+    // wait for the agent to ack root1 as failed
+    auto did_ack = add_ack_hook([](auto gid, auto const& ack) {
+      return gid == mds_gid_t(2) && ack.roots.contains("file:/root1") && ack.roots.at("file:/root1").state == QS_QUIESCED;
+    });
+
+    // allow acks
+    managers.at(mds_gid_t(2))->reset_agent_callback(QUIESCING_AGENT_CB);
+
+    EXPECT_EQ(std::future_status::ready, did_ack.wait_for(std::chrono::milliseconds(100)));
+  }
+
+  // now, bump the epoch on the leader and make sure it quiesces the set
+  managers.at(mds_gid_t(1))->bump_epoch();
+  EXPECT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.await = sec(10);
+  }));
 }

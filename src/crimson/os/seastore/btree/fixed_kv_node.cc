@@ -6,7 +6,11 @@
 namespace crimson::os::seastore {
 
 bool is_valid_child_ptr(ChildableCachedExtent* child) {
-  return child != nullptr && child != RESERVATION_PTR;
+  return child != nullptr && child != get_reserved_ptr();
+}
+
+bool is_reserved_ptr(ChildableCachedExtent* child) {
+  return child == get_reserved_ptr();
 }
 
 } // namespace crimson::os::seastore

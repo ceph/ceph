@@ -132,9 +132,6 @@ private:
     }
   };
 
-  using clock = ceph::coarse_mono_clock;
-  using time = ceph::coarse_mono_time;
-
   // stats sent to service daemon
   struct ServiceDaemonStats {
     uint64_t failed_dir_count = 0;
@@ -143,14 +140,14 @@ private:
 
   struct SnapSyncStat {
     uint64_t nr_failures = 0; // number of consecutive failures
-    boost::optional<time> last_failed; // lat failed timestamp
+    boost::optional<monotime> last_failed; // lat failed timestamp
     bool failed = false; // hit upper cap for consecutive failures
     boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
     boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
     uint64_t synced_snap_count = 0;
     uint64_t deleted_snap_count = 0;
     uint64_t renamed_snap_count = 0;
-    time last_synced = clock::zero();
+    monotime last_synced = clock::zero();
     boost::optional<double> last_sync_duration;
   };
 
@@ -279,7 +276,7 @@ private:
   int try_lock_directory(const std::string &dir_root, SnapshotReplayerThread *replayer,
                          DirRegistry *registry);
   void unlock_directory(const std::string &dir_root, const DirRegistry &registry);
-  void sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
+  int sync_snaps(const std::string &dir_root, std::unique_lock<ceph::mutex> &locker);
 
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,

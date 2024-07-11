@@ -120,9 +120,9 @@ os._exit = os_exit_noop   # type: ignore
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
-DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.2.1'
-DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
-DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
+DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.2.5'
+DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:3.0.0'
+DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:3.0.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:9.4.12'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
@@ -729,6 +729,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.offline_watcher = OfflineHostWatcher(self)
         self.offline_watcher.start()
+
+        # Maps daemon names to timestamps (creation/removal time) for recently created or
+        # removed daemons. Daemons are added to the dict upon creation or removal and cleared
+        # as part of the handling of stray daemons
+        self.recently_altered_daemons: Dict[str, datetime.datetime] = {}
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
@@ -2259,8 +2264,9 @@ Then run the following:
             if service_name is not None and service_name != nm:
                 continue
 
-            if spec.service_type not in ['osd', 'node-proxy']:
-                size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
+            if spec.service_type == 'osd':
+                # osd counting is special
+                size = 0
             elif spec.service_type == 'node-proxy':
                 # we only deploy node-proxy daemons on hosts we have oob info for
                 # Let's make the expected daemon count `orch ls` displays reflect that
@@ -2268,8 +2274,7 @@ Then run the following:
                 oob_info_hosts = [h for h in schedulable_hosts if h.hostname in self.node_proxy_cache.oob.keys()]
                 size = spec.placement.get_target_count(oob_info_hosts)
             else:
-                # osd counting is special
-                size = 0
+                size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
 
             sm[nm] = orchestrator.ServiceDescription(
                 spec=spec,
@@ -3009,7 +3014,7 @@ Then run the following:
             )
             daemons.append(sd)
 
-        @ forall_hosts
+        @forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = self.cephadm_services[daemon_type].prepare_create(*args)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
@@ -3086,6 +3091,14 @@ Then run the following:
         for daemon in daemons:
             self.daemon_action(action='redeploy', daemon_name=daemon.daemon_name)
         return 'prometheus multi-cluster targets updated'
+
+    @handle_orch_error
+    def set_custom_prometheus_alerts(self, alerts_file: str) -> str:
+        self.set_store('services/prometheus/alerting/custom_alerts.yml', alerts_file)
+        # need to reconfig prometheus daemon(s) to pick up new alerts file
+        for prometheus_daemon in self.cache.get_daemons_by_type('prometheus'):
+            self._schedule_daemon_action(prometheus_daemon.name(), 'reconfig')
+        return 'Updated alerts file and scheduled reconfig of prometheus daemon(s)'
 
     @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
@@ -3328,7 +3341,7 @@ Then run the following:
                         (f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {max(5, host_count)}.'))
             elif spec.service_type != 'osd':
                 if spec.placement.count > (max_count * host_count):
-                    raise OrchestratorError((f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {host_count*max_count} ({host_count}x{max_count}).'
+                    raise OrchestratorError((f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {host_count * max_count} ({host_count}x{max_count}).'
                                              + ' This limit can be adjusted by changing the mgr/cephadm/max_count_per_host config option'))
 
         if spec.placement.count_per_host is not None and spec.placement.count_per_host > max_count and spec.service_type != 'osd':

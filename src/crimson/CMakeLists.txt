@@ -24,6 +24,7 @@ set(crimson_common_srcs
   common/throttle.cc
   common/tmap_helpers.cc
   common/tri_mutex.cc
+  common/buffer_seastar.cc
   crush/CrushLocation.cc)
 
 # the specialized version of ceph-common, where
@@ -35,7 +36,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
   ${PROJECT_SOURCE_DIR}/src/common/buffer.cc
-  ${PROJECT_SOURCE_DIR}/src/common/buffer_seastar.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc

@@ -232,6 +232,12 @@ int RbdMappingDispatcher::create(Config& cfg)
     return -EEXIST;
   }
 
+  if (stop_requested) {
+    derr << "service stop requested, refusing to create new mapping."
+         << dendl;
+    return -ESHUTDOWN;
+  }
+
   auto rbd_mapping = std::make_shared<RbdMapping>(
     cfg, client_cache,
     std::bind(
@@ -281,4 +287,130 @@ void RbdMappingDispatcher::disconnect_cbk(std::string devpath, int ret)
     std::unique_lock l{map_mutex};
     mappings.erase(devpath);
   }
+}
+
+int RbdMappingDispatcher::stop(
+  bool hard_disconnect,
+  int soft_disconnect_timeout,
+  int worker_count)
+{
+  stop_requested = true;
+
+  // Although not generally recommended, soft_disconnect_timeout can be 0,
+  // which means infinite timeout.
+  ceph_assert(soft_disconnect_timeout >= 0);
+  ceph_assert(worker_count > 0);
+
+  std::atomic<int> err = 0;
+
+  boost::asio::thread_pool pool(worker_count);
+  LARGE_INTEGER start_t, counter_freq;
+  QueryPerformanceFrequency(&counter_freq);
+  QueryPerformanceCounter(&start_t);
+
+  // We're initiating the disk removal through libwnbd, which uses PNP
+  // to notify the storage stack that the disk is going to be removed
+  // and waits for pending operations to complete.
+  //
+  // Once ready, the WNBD driver notifies rbd-wnbd that the disk has been
+  // disconnected.
+  auto mapped_devpaths = get_mapped_devpaths();
+  for (const auto& devpath: mapped_devpaths) {
+    boost::asio::post(pool,
+      [devpath, start_t, counter_freq, soft_disconnect_timeout,
+       hard_disconnect, &err]()
+      {
+        LARGE_INTEGER curr_t, elapsed_ms;
+        QueryPerformanceCounter(&curr_t);
+        elapsed_ms.QuadPart = curr_t.QuadPart - start_t.QuadPart;
+        elapsed_ms.QuadPart *= 1000;
+        elapsed_ms.QuadPart /= counter_freq.QuadPart;
+
+        int64_t time_left_ms = std::max(
+          (int64_t)0,
+          soft_disconnect_timeout * 1000 - elapsed_ms.QuadPart);
+
+        dout(1) << "Removing mapping: " << devpath
+                << ". Timeout: " << time_left_ms
+                << "ms. Hard disconnect: " << hard_disconnect
+                << dendl;
+
+        WNBD_REMOVE_OPTIONS remove_options = {0};
+        remove_options.Flags.HardRemove = hard_disconnect || !time_left_ms;
+        remove_options.Flags.HardRemoveFallback = true;
+        remove_options.SoftRemoveTimeoutMs = time_left_ms;
+        remove_options.SoftRemoveRetryIntervalMs = SOFT_REMOVE_RETRY_INTERVAL * 1000;
+
+        // This is asynchronous, it may take a few seconds for the disk to be
+        // removed. We'll perform the wait outside the loop to speed up the
+        // process.
+        int r = WnbdRemoveEx(devpath.c_str(), &remove_options);
+        if (r && r != ERROR_FILE_NOT_FOUND) {
+          err = -EINVAL;
+          derr << "Could not initiate mapping removal: " << devpath
+               << ". Error: " << win32_strerror(r) << dendl;
+        } else {
+          dout(1) << "Successfully initiated mapping removal: " << devpath << dendl;
+        }
+      });
+  }
+  pool.join();
+
+  if (err) {
+    derr << "Could not initiate removal of all mappings. Error: " << err << dendl;
+    return err;
+  }
+
+  // Wait for the cleanup to complete on the rbd-wnbd service side.
+  return wait_for_mappings_removal(10000);
+}
+
+std::vector<std::string> RbdMappingDispatcher::get_mapped_devpaths() {
+  std::vector<std::string> out;
+  std::unique_lock l{map_mutex};
+
+  for (auto it = mappings.begin(); it != mappings.end(); it++) {
+    out.push_back(it->first);
+  }
+
+  return out;
+}
+
+int RbdMappingDispatcher::get_mappings_count() {
+  std::unique_lock l{map_mutex};
+  return mappings.size();
+}
+
+int RbdMappingDispatcher::wait_for_mappings_removal(int timeout_ms) {
+  LARGE_INTEGER start_t, counter_freq;
+  QueryPerformanceFrequency(&counter_freq);
+  QueryPerformanceCounter(&start_t);
+
+  int time_left_ms = timeout_ms;
+  int mappings_count = get_mappings_count();
+
+  while (mappings_count && time_left_ms > 0) {
+    dout(1) << "Waiting for " << mappings_count << " mapping(s) to be removed. "
+            << "Time left: " << time_left_ms << "ms." << dendl;
+    Sleep(2000);
+
+    LARGE_INTEGER curr_t, elapsed_ms;
+    QueryPerformanceCounter(&curr_t);
+    elapsed_ms.QuadPart = curr_t.QuadPart - start_t.QuadPart;
+    elapsed_ms.QuadPart *= 1000;
+    elapsed_ms.QuadPart /= counter_freq.QuadPart;
+
+    time_left_ms = timeout_ms - elapsed_ms.QuadPart;
+    mappings_count = get_mappings_count();
+  }
+
+  if (mappings_count) {
+    derr << "Timed out waiting for disk mappings to be removed. "
+         << "Remaining mapping(s): " << mappings_count << dendl;
+    return -ETIMEDOUT;
+  } else {
+    dout(1) << "Successfully removed all mappings." << dendl;
+  }
+
+  return 0;
 }

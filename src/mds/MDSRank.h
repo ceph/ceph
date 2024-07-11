@@ -504,13 +504,9 @@ class MDSRank {
     void command_tag_path(Formatter *f, std::string_view path,
                           std::string_view tag);
     // scrub control commands
-    void command_scrub_abort(Formatter *f, Context *on_finish);
-    void command_scrub_pause(Formatter *f, Context *on_finish);
     void command_scrub_resume(Formatter *f);
     void command_scrub_status(Formatter *f);
 
-    void command_flush_path(Formatter *f, std::string_view path);
-    void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
     void command_export_dir(Formatter *f,
         std::string_view path, mds_rank_t dest);
@@ -530,7 +526,8 @@ class MDSRank {
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
-    int command_quiesce_path(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+    void command_quiesce_path(Formatter *f, const cmdmap_t &cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
+    void command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);

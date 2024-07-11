@@ -782,7 +782,7 @@ class TestGetLVs(object):
 
 class TestGetSinglePV(object):
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_pvs')
+    @patch('ceph_volume.api.lvm.get_pvs')
     def test_get_single_pv_multiple_matches_raises_runtimeerror(self, m_get_pvs):
         fake_pvs = []
         fake_pvs.append(api.PVolume(pv_name='/dev/sda', pv_tags={}))
@@ -794,14 +794,14 @@ class TestGetSinglePV(object):
             api.get_single_pv()
         assert "matched more than 1 PV present on this host." in str(e.value)
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_pvs')
+    @patch('ceph_volume.api.lvm.get_pvs')
     def test_get_single_pv_no_match_returns_none(self, m_get_pvs):
         m_get_pvs.return_value = []
 
         pv = api.get_single_pv()
         assert pv == None
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_pvs')
+    @patch('ceph_volume.api.lvm.get_pvs')
     def test_get_single_pv_one_match(self, m_get_pvs):
         fake_pvs = []
         fake_pvs.append(api.PVolume(pv_name='/dev/sda', pv_tags={}))
@@ -815,7 +815,7 @@ class TestGetSinglePV(object):
 
 class TestGetSingleVG(object):
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_vgs')
+    @patch('ceph_volume.api.lvm.get_vgs')
     def test_get_single_vg_multiple_matches_raises_runtimeerror(self, m_get_vgs):
         fake_vgs = []
         fake_vgs.append(api.VolumeGroup(vg_name='vg1'))
@@ -827,14 +827,14 @@ class TestGetSingleVG(object):
             api.get_single_vg()
         assert "matched more than 1 VG present on this host." in str(e.value)
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_vgs')
+    @patch('ceph_volume.api.lvm.get_vgs')
     def test_get_single_vg_no_match_returns_none(self, m_get_vgs):
         m_get_vgs.return_value = []
 
         vg = api.get_single_vg()
         assert vg == None
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_vgs')
+    @patch('ceph_volume.api.lvm.get_vgs')
     def test_get_single_vg_one_match(self, m_get_vgs):
         fake_vgs = []
         fake_vgs.append(api.VolumeGroup(vg_name='vg1'))
@@ -847,7 +847,7 @@ class TestGetSingleVG(object):
 
 class TestGetSingleLV(object):
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_lvs')
+    @patch('ceph_volume.api.lvm.get_lvs')
     def test_get_single_lv_multiple_matches_raises_runtimeerror(self, m_get_lvs):
         fake_lvs = []
         fake_lvs.append(api.Volume(lv_name='lv1',
@@ -866,14 +866,14 @@ class TestGetSingleLV(object):
             api.get_single_lv()
         assert "matched more than 1 LV present on this host" in str(e.value)
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_lvs')
+    @patch('ceph_volume.api.lvm.get_lvs')
     def test_get_single_lv_no_match_returns_none(self, m_get_lvs):
         m_get_lvs.return_value = []
 
         lv = api.get_single_lv()
         assert lv == None
 
-    @patch('ceph_volume.devices.lvm.prepare.api.get_lvs')
+    @patch('ceph_volume.api.lvm.get_lvs')
     def test_get_single_lv_one_match(self, m_get_lvs):
         fake_lvs = []
         fake_lvs.append(api.Volume(lv_name='lv1', lv_path='/dev/vg1/lv1', vg_name='vg1', lv_tags='', lv_uuid='fake-uuid'))

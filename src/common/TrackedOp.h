@@ -204,13 +204,15 @@ public:
   }
   ~OpTracker();
 
-  template <typename T, typename U>
-  typename T::Ref create_request(U params)
+  // NB: P is ref-like, i.e. `params` should be dereferenced for members
+  template <typename R, typename P>
+  typename R::Ref create_request(P params)
   {
-    constexpr bool has_is_continuous = requires(U u) {
-      { u->is_continuous() } -> std::same_as<bool>;
+    constexpr bool enable_mark_continuous = requires(typename R::Ref r, P p) {
+      { p->is_continuous() } -> std::same_as<bool>;
+      r->mark_continuous();
     };
-    typename T::Ref retval(new T(params, this));
+    typename R::Ref retval(new R(params, this));
     retval->tracking_start();
     if (is_tracking()) {
       retval->mark_event("header_read", params->get_recv_stamp());
@@ -218,12 +220,11 @@ public:
       retval->mark_event("all_read", params->get_recv_complete_stamp());
       retval->mark_event("dispatched", params->get_dispatch_stamp());
     }
-    if constexpr (has_is_continuous) {
+    if constexpr (enable_mark_continuous) {
       if (params->is_continuous()) {
         retval->mark_continuous();
       }
     }
-
     return retval;
   }
 };

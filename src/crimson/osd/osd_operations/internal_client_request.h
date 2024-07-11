@@ -56,6 +56,7 @@ public:
     PGActivationBlocker::BlockingEvent,
     CommonPGPipeline::RecoverMissing::BlockingEvent,
     CommonPGPipeline::GetOBC::BlockingEvent,
+    CommonPGPipeline::LockOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
     CompletionEvent
   > tracking_events;

@@ -68,6 +68,7 @@ CORO_TEST_F(NeoRadosMisc, LongName, NeoRadosTest) {
 }
 
 CORO_TEST_F(NeoRadosMisc, LongLocator, NeoRadosTest) {
+  SKIP_IF_CRIMSON();
   const auto maxlen = rados().cct()->_conf->osd_max_object_name_len;
   const auto bl = to_buffer_list("content"sv);
   {
