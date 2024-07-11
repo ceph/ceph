@@ -12670,7 +12670,22 @@ TEST_P(StoreTestSpecificAUSize, OverwriteDeferredV2Test) {
   doOverwriteDeferredTest(store.get(), true);
 }
 
-TEST_P(StoreTest, BasicReformattingTest) {
+TEST_P(StoreTestSpecificAUSize, BasicReformattingTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  // enforce hdd-optimized allocation strategy to increase resulting
+  // space fragmentation as new allocations tend to occupy new extents
+  // in this mode.
+  SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
   int r;
   coll_t cid;
   ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
@@ -12860,6 +12875,7 @@ TEST_P(StoreTest, BasicReformattingTest) {
     bufferlist bl;
     int r = store->read(ch, obj, 0, len, bl,
       CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_SCRUB);
+
     ASSERT_EQ(r, (int)len);
     ASSERT_TRUE(bl_eq(expected_bl, bl));
     ASSERT_EQ(3, logger->get(l_bluestore_reformat_defragment_attempted));
@@ -12916,7 +12932,22 @@ TEST_P(StoreTest, BasicReformattingTest) {
   }
 }
 
-TEST_P(StoreTest, CompressedReformattingTest) {
+TEST_P(StoreTestSpecificAUSize, CompressedReformattingTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  // enforce hdd-optimized allocation strategy to increase resulting
+  // space fragmentation as new allocations tend to occupy new extents
+  // in this mode.
+  SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
   int r;
   coll_t cid;
 
@@ -13192,7 +13223,23 @@ TEST_P(StoreTest, CompressedReformattingTest) {
   }
 }
 
-TEST_P(StoreTest, LazyCompressionReformattingTest) {
+TEST_P(StoreTestSpecificAUSize, LazyCompressionReformattingTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // enforce 'ssd' settings to avoid deferred writes
+  // which result in cached data blocks and hence
+  // prevents from reformatting
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  // enforce hdd-optimized allocation strategy to increase resulting
+  // space fragmentation as new allocations tend to occupy new extents
+  // in this mode.
+  SetVal(g_conf(), "bluestore_allocator_lookup_policy", "hdd_optimized");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(0x1000);
+
   int r;
   coll_t cid;
 
