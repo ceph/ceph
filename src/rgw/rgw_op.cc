@@ -2271,14 +2271,15 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
 
   /* STAT ops don't need data, and do no i/o */
-  if ((get_type() == RGW_OP_STAT_OBJ) ||
-      (get_type() == RGW_OP_GET_OBJ_ATTRS)) {
+  if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
+
   if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
     op_ret = 0;
     goto done_err;
   }
+
   /* start gettorrent */
   if (get_torrent) {
     attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
