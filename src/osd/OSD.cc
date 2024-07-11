@@ -7962,13 +7962,13 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-void OSD::trim_maps(epoch_t oldest)
+bool OSD::trim_maps(epoch_t oldest)
 {
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
   dout(20) <<  __func__ << ": min=" << min << " oldest_map="
            << superblock.get_oldest_map() << dendl;
   if (min <= superblock.get_oldest_map())
-    return;
+    return false;
 
   // Trim from the superblock's oldest_map up to `min`.
   // Break if we have exceeded the txn target size.
@@ -7989,6 +7989,7 @@ void OSD::trim_maps(epoch_t oldest)
   // we should not trim past service.map_cache.cached_key_lower_bound() 
   // as there may still be PGs with those map epochs recorded.
   ceph_assert(min <= service.map_cache.cached_key_lower_bound());
+  return true;
 }
 
 std::optional<epoch_t> OSD::get_epoch_from_osdmap_object(const ghobject_t& osdmap) {
