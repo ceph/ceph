@@ -4419,7 +4419,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TRACE);
-  src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_TIMESTAMP);
   src_attrs.erase(RGW_ATTR_OBJ_REPLICATION_STATUS);
 
   set_copy_attrs(src_attrs, attrs, attrs_mod);
