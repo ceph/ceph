@@ -3180,6 +3180,43 @@ will start to track new ops received afterwards.";
      goto out;
     }
     dout(20) << fmt::format("Trimmed {} osdmaps", ret) << dendl;
+    bool force_unsafe_trim = false;
+    cmd_getval(cmdmap, "force_unsafe_trim", force_unsafe_trim);
+    if (force_unsafe_trim) {
+      std::string map_epoch_str;
+      if (!cmd_getval(cmdmap, "map_epoch", map_epoch_str)) {
+	ss << "no osdmap epoch specified";
+	ret = -EINVAL;
+	goto out;
+      }
+      epoch_t map_epoch;
+      try {
+	map_epoch = std::stoul(map_epoch_str);
+      } catch (std::invalid_argument const& ex) {
+	ss << "invalid map epoch: " << ex.what();
+	ret = -EINVAL;
+	goto out;
+      } catch (std::out_of_range const& ex) {
+	ss << "map epoch out of range: " << ex.what();
+	ret = -ERANGE;
+	goto out;
+      }
+      if (map_epoch > min_last_epoch_clean.load()) {
+	ss << "map epoch " << map_epoch
+	   << " larger than min_last_epoch_clean "
+	   << min_last_epoch_clean;
+	ret = -EINVAL;
+	goto out;
+      }
+      dout(20) << fmt::format("force unsafe trim to {}", map_epoch) << dendl;
+      while (map_epoch > superblock.get_oldest_map()) {
+	lock_guard l(osd_lock); // release osd_lock after each trim,
+				// so that other threads may proceed
+	if (!trim_maps(map_epoch)) {
+	  goto out;
+	}
+      }
+    }
   }
 
   else if (prefix == "cache drop") {
@@ -4407,10 +4444,15 @@ void OSD::final_init()
     "reset pg recovery statistics");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "trim stale osdmaps",
+    "trim stale osdmaps " \
+    "name=map_epoch,type=CephString,req=false " \
+    "name=force_unsafe_trim,type=CephBool,req=false",
     asok_hook,
     "cleanup any existing osdmap from the store "
-    "in the range of 0 up to the superblock's oldest_map.");
+    "in the range of 0 up to the superblock's oldest_map. "
+    "--force-unsafe-trim force trim osdmaps ealier than the specified epoch, "
+    "this is dangerous, make sure that all pools for which the OSD stores "
+    "data are clean");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "cache drop",
