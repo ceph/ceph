@@ -1,0 +1,210 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: rbd_mirror_journal_commit_age
+  type: float
+  level: advanced
+  desc: commit time interval, seconds
+  default: 5
+  services:
+  - rbd-mirror
+- name: rbd_mirror_journal_poll_age
+  type: float
+  level: advanced
+  desc: maximum age (in seconds) between successive journal polls
+  default: 5
+  services:
+  - rbd-mirror
+- name: rbd_mirror_sync_point_update_age
+  type: float
+  level: advanced
+  desc: number of seconds between each update of the image sync point object number
+  default: 30
+  services:
+  - rbd-mirror
+- name: rbd_mirror_concurrent_image_syncs
+  type: uint
+  level: advanced
+  desc: maximum number of image syncs in parallel
+  default: 5
+  services:
+  - rbd-mirror
+- name: rbd_mirror_pool_replayers_refresh_interval
+  type: uint
+  level: advanced
+  desc: interval to refresh peers in rbd-mirror daemon
+  default: 30
+  services:
+  - rbd-mirror
+- name: rbd_mirror_concurrent_image_deletions
+  type: uint
+  level: advanced
+  desc: maximum number of image deletions in parallel
+  default: 1
+  services:
+  - rbd-mirror
+  min: 1
+- name: rbd_mirror_delete_retry_interval
+  type: float
+  level: advanced
+  desc: interval to check and retry the failed deletion requests
+  default: 30
+  services:
+  - rbd-mirror
+- name: rbd_mirror_image_state_check_interval
+  type: uint
+  level: advanced
+  desc: interval to get images from pool watcher and set sources in replayer
+  default: 30
+  services:
+  - rbd-mirror
+  min: 1
+- name: rbd_mirror_leader_heartbeat_interval
+  type: uint
+  level: advanced
+  desc: interval (in seconds) between mirror leader heartbeats
+  default: 5
+  services:
+  - rbd-mirror
+  min: 1
+- name: rbd_mirror_leader_max_missed_heartbeats
+  type: uint
+  level: advanced
+  desc: number of missed heartbeats for non-lock owner to attempt to acquire lock
+  default: 2
+  services:
+  - rbd-mirror
+- name: rbd_mirror_leader_max_acquire_attempts_before_break
+  type: uint
+  level: advanced
+  desc: number of failed attempts to acquire lock after missing heartbeats before
+    breaking lock
+  default: 3
+  services:
+  - rbd-mirror
+- name: rbd_mirror_image_policy_type
+  type: str
+  level: advanced
+  desc: active/active policy type for mapping images to instances
+  default: simple
+  services:
+  - rbd-mirror
+  enum_values:
+  - none
+  - simple
+- name: rbd_mirror_image_policy_migration_throttle
+  type: uint
+  level: advanced
+  desc: number of seconds after which an image can be reshuffled (migrated) again
+  default: 300
+  services:
+  - rbd-mirror
+- name: rbd_mirror_image_policy_update_throttle_interval
+  type: float
+  level: advanced
+  desc: interval (in seconds) to throttle images for mirror daemon peer updates
+  default: 1
+  services:
+  - rbd-mirror
+  min: 1
+- name: rbd_mirror_image_policy_rebalance_timeout
+  type: float
+  level: advanced
+  desc: number of seconds policy should be idle before triggering reshuffle (rebalance)
+    of images
+  default: 0
+  services:
+  - rbd-mirror
+- name: rbd_mirror_perf_stats_prio
+  type: int
+  level: advanced
+  desc: Priority level for mirror daemon replication perf counters
+  long_desc: The daemon will send perf counter data to the manager daemon if the priority
+    is not lower than mgr_stats_threshold.
+  default: 5
+  services:
+  - rbd-mirror
+  min: 0
+  max: 11
+- name: rbd_mirror_image_perf_stats_prio
+  type: int
+  level: advanced
+  desc: Priority level for mirror daemon per-image replication perf counters
+  long_desc: The daemon will send per-image perf counter data to the manager daemon
+    if the priority is not lower than mgr_stats_threshold.
+  default: 5
+  services:
+  - rbd-mirror
+  min: 0
+  max: 11
+- name: rbd_mirror_memory_autotune
+  type: bool
+  level: dev
+  desc: Automatically tune the ratio of caches while respecting min values.
+  default: true
+  services:
+  - rbd-mirror
+  see_also:
+  - rbd_mirror_memory_target
+- name: rbd_mirror_memory_target
+  type: size
+  level: basic
+  desc: When tcmalloc and cache autotuning is enabled, try to keep this many bytes
+    mapped in memory.
+  default: 4_G
+  services:
+  - rbd-mirror
+  see_also:
+  - rbd_mirror_memory_autotune
+- name: rbd_mirror_memory_base
+  type: size
+  level: dev
+  desc: When tcmalloc and cache autotuning is enabled, estimate the minimum amount
+    of memory in bytes the rbd-mirror daemon will need.
+  default: 768_M
+  services:
+  - rbd-mirror
+  see_also:
+  - rbd_mirror_memory_autotune
+- name: rbd_mirror_memory_expected_fragmentation
+  type: float
+  level: dev
+  desc: When tcmalloc and cache autotuning is enabled, estimate the percent of memory
+    fragmentation.
+  default: 0.15
+  services:
+  - rbd-mirror
+  see_also:
+  - rbd_mirror_memory_autotune
+  min: 0
+  max: 1
+- name: rbd_mirror_memory_cache_min
+  type: size
+  level: dev
+  desc: When tcmalloc and cache autotuning is enabled, set the minimum amount of memory
+    used for cache.
+  default: 128_M
+  services:
+  - rbd-mirror
+  see_also:
+  - rbd_mirror_memory_autotune
+- name: rbd_mirror_memory_cache_resize_interval
+  type: float
+  level: dev
+  desc: When tcmalloc and cache autotuning is enabled, wait this many seconds between
+    resizing caches.
+  default: 5
+  services:
+  - rbd-mirror
+  see_also:
+  - rbd_mirror_memory_autotune
+- name: rbd_mirror_memory_cache_autotune_interval
+  type: float
+  level: dev
+  desc: The number of seconds to wait between rebalances when cache autotune is enabled.
+  default: 30
+  services:
+  - rbd-mirror
+  see_also:
+  - rbd_mirror_memory_autotune

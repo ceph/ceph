@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/simple_big.sh
+

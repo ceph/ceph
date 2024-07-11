@@ -1,0 +1,47 @@
+roles:
+- [mon.a, mgr.y, osd.0, osd.4, osd.8, osd.12]
+- [mon.b, osd.1, osd.5, osd.9, osd.13]
+- [mon.c, osd.2, osd.6, osd.10, osd.14]
+- [mgr.x, osd.3, osd.7, osd.11, osd.15, client.0]
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 400000
+    max_seconds: 600
+    max_in_flight: 64
+    objects: 1024
+    size: 16384
+    ec_pool: true
+    write_append_excl: false
+    erasure_code_crush:
+      name: jerasure86crush
+      id: 86
+      type: erasure
+      min_size: 3
+      max_size: 6
+      steps: [
+        'set_chooseleaf_tries 5',
+        'set_choose_tries 100',
+        'take default class hdd',
+        'choose indep 4 type host',
+        'choose indep 4 type osd',
+        'emit'
+      ]
+    erasure_code_profile:
+      name: jerasure86profile
+      plugin: jerasure
+      k: 8
+      m: 6
+      technique: reed_sol_van
+      crush-failure-domain: osd
+    op_weights:
+      read: 100
+      write: 0
+      append: 100
+      delete: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50
+      copy_from: 50
+      setattr: 25
+      rmattr: 25
