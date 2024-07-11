@@ -29,7 +29,7 @@
           [maxLimit]="25"
           [toolHeader]="true"
           (updateSelection)="updateSelection($event, flowType.symmetrical)"
-          (fetchData)="loadFlowData($event)">
+          (fetchData)="loadData($event)">
           <div class="table-actions btn-toolbar">
             <cd-table-actions
               [permission]="permission"
@@ -59,7 +59,7 @@
           [maxLimit]="25"
           [toolHeader]="true"
           (updateSelection)="updateSelection($event, flowType.directional)"
-          (fetchData)="loadFlowData($event)">
+          (fetchData)="loadData($event)">
           <div class="table-actions btn-toolbar">
             <cd-table-actions
               [permission]="permission"
@@ -70,14 +70,48 @@
           </div>
         </cd-table>
         <cd-alert-panel
+          *ngIf="dirFlowSelection.hasSelection"
           type="info"
-          *ngIf="dirFlowSelection.hasSelection">
-          'Edit' and 'Delete' functionalities for Directional flow are disabled for now due to some internal dependency. They will be enabled once the issue is resolved.
+          title="Directional Flow 'edit' & 'delete' actions disabled"
+          i18n-title
+          i18n>
+          Due to some internal dependencies these actions are disabled, it will get enabled once the issue gets resolved.
         </cd-alert-panel>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="pipe">
+      <a ngbNavLink
+         i18n>Pipe</a>
+      <ng-template ngbNavContent>
+        <legend i18n>
+          Pipe
+          <cd-help-text>
+            A pipe defines the actual buckets that can use these data flows, and the properties that are associated with it.
+          </cd-help-text>
+        </legend>
+        <cd-table
+        #table
+        [data]="pipeData"
+        [columns]="pipeCols"
+        selectionType="multiClick"
+        [searchableObjects]="true"
+        [hasDetails]="false"
+        [serverSide]="false"
+        [toolHeader]="true"
+        (updateSelection)="pipeSelection = $event"
+        (fetchData)="loadData($event)">
+        <div class="table-actions btn-toolbar">
+          <cd-table-actions
+            [permission]="permission"
+            [selection]="pipeSelection"
+            class="btn-group"
+            [tableActions]="pipeTableActions">
+          </cd-table-actions>
+        </div>
+        </cd-table>
+      </ng-template>
+    </ng-container>
   </nav>
-
   <div [ngbNavOutlet]="nav"></div>
 </ng-container>
 

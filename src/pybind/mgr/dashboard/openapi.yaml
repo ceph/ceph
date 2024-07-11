@@ -10816,13 +10816,17 @@ paths:
                 bucket_name:
                   default: ''
                   type: string
-                destination_buckets:
+                destination_bucket:
+                  default: ''
                   type: string
                 destination_zones:
                   type: string
                 group_id:
                   type: string
                 pipe_id:
+                  type: string
+                source_bucket:
+                  default: ''
                   type: string
                 source_zones:
                   type: string
@@ -10878,9 +10882,9 @@ paths:
         name: destination_zones
         schema:
           type: string
-      - allowEmptyValue: true
+      - default: ''
         in: query
-        name: destination_buckets
+        name: destination_bucket
         schema:
           type: string
       - default: ''

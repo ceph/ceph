@@ -332,9 +332,15 @@ export class TaskMessageService {
       this.commonOperations.delete,
       (metadata) => {
         return $localize`${
-          metadata.flow_ids.length > 1
-            ? 'selected Flow Names'
-            : `Flow Name '${metadata.flow_ids[0]}'`
+          metadata.flow_ids.length > 1 ? 'selected Flow' : `Flow '${metadata.flow_ids[0]}'`
+        }`;
+      }
+    ),
+    'rgw/multisite/sync-pipe/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.pipe_ids.length > 1 ? 'selected pipe' : `Pipe '${metadata.pipe_ids[0]}'`
         }`;
       }
     ),

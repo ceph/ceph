@@ -15,6 +15,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { RgwMultisiteSyncFlowModalComponent } from '../rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { FlowType } from '../models/rgw-multisite';
+import { RgwMultisiteSyncPipeModalComponent } from '../rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 
 @Component({
   selector: 'cd-rgw-multisite-sync-policy-details',
@@ -36,12 +37,16 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
   modalRef: NgbModalRef;
   symmetricalFlowData: any = [];
   directionalFlowData: any = [];
+  pipeData: any = [];
   symmetricalFlowCols: CdTableColumn[];
   directionalFlowCols: CdTableColumn[];
+  pipeCols: CdTableColumn[];
   symFlowTableActions: CdTableAction[];
   dirFlowTableActions: CdTableAction[];
+  pipeTableActions: CdTableAction[];
   symFlowSelection = new CdTableSelection();
   dirFlowSelection = new CdTableSelection();
+  pipeSelection = new CdTableSelection();
 
   constructor(
     private actionLabels: ActionLabelsI18n,
@@ -70,6 +75,33 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       {
         name: 'Destination Zone',
         prop: 'dest_zone',
+        flexGrow: 1
+      }
+    ];
+    this.pipeCols = [
+      {
+        name: 'Name',
+        prop: 'id',
+        flexGrow: 1
+      },
+      {
+        name: 'Source Zone',
+        prop: 'source.zones',
+        flexGrow: 1
+      },
+      {
+        name: 'Destination Zone',
+        prop: 'dest.zones',
+        flexGrow: 1
+      },
+      {
+        name: 'Source Bucket',
+        prop: 'source.bucket',
+        flexGrow: 1
+      },
+      {
+        name: 'Destination Bucket',
+        prop: 'dest.bucket',
         flexGrow: 1
       }
     ];
@@ -118,17 +150,39 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.dirFlowTableActions = [dirAddAction, dirEditAction, dirDeleteAction];
+    const pipeAddAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      name: this.actionLabels.CREATE,
+      click: () => this.openPipeModal(),
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+    const pipeEditAction: CdTableAction = {
+      permission: 'update',
+      icon: Icons.edit,
+      name: this.actionLabels.EDIT,
+      click: () => this.openPipeModal(true)
+    };
+    const pipeDeleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      disable: () => !this.pipeSelection.hasSelection,
+      name: this.actionLabels.DELETE,
+      click: () => this.deletePipe(),
+      canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
+    };
+    this.pipeTableActions = [pipeAddAction, pipeEditAction, pipeDeleteAction];
   }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes.expandedRow.currentValue && changes.expandedRow.currentValue.groupName) {
       this.symmetricalFlowData = [];
       this.directionalFlowData = [];
-      this.loadFlowData();
+      this.loadData();
     }
   }
 
-  loadFlowData(context?: any) {
+  loadData(context?: any) {
     if (this.expandedRow) {
       this.rgwMultisiteService
         .getSyncPolicyGroup(this.expandedRow.groupName, this.expandedRow.bucket)
@@ -136,6 +190,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
           (policy: any) => {
             this.symmetricalFlowData = policy.data_flow[FlowType.symmetrical] || [];
             this.directionalFlowData = policy.data_flow[FlowType.directional] || [];
+            this.pipeData = policy.pipes || [];
           },
           () => {
             if (context) {
@@ -173,7 +228,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
     try {
       const res = await this.modalRef.result;
       if (res === 'success') {
-        this.loadFlowData();
+        this.loadData();
       }
     } catch (err) {}
   }
@@ -200,6 +255,69 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
                   return this.rgwMultisiteService.removeSyncFlow(
                     flow.id,
                     flowType,
+                    this.expandedRow.groupName,
+                    this.expandedRow.bucket
+                  );
+                })
+              )
+            })
+            .subscribe({
+              error: (error: any) => {
+                // Forward the error to the observer.
+                observer.error(error);
+                // Reload the data table content because some deletions might
+                // have been executed successfully in the meanwhile.
+                this.table.refreshBtn();
+              },
+              complete: () => {
+                // Notify the observer that we are done.
+                observer.complete();
+                // Reload the data table content.
+                this.table.refreshBtn();
+              }
+            });
+        });
+      }
+    });
+  }
+
+  async openPipeModal(edit = false) {
+    const action = edit ? 'edit' : 'create';
+    const initialState = {
+      groupExpandedRow: this.expandedRow,
+      pipeSelectedRow: this.pipeSelection.first(),
+      action: action
+    };
+
+    this.modalRef = this.modalService.show(RgwMultisiteSyncPipeModalComponent, initialState, {
+      size: 'lg'
+    });
+
+    try {
+      const res = await this.modalRef.result;
+      if (res === 'success') {
+        this.loadData();
+      }
+    } catch (err) {}
+  }
+
+  deletePipe() {
+    const pipeIds = this.pipeSelection.selected.map((pipe: any) => pipe.id);
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: this.pipeSelection.hasSingleSelection ? $localize`Pipe` : $localize`Pipes`,
+      itemNames: pipeIds,
+      bodyTemplate: this.deleteTpl,
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('rgw/multisite/sync-pipe/delete', {
+                pipe_ids: pipeIds
+              }),
+              call: observableForkJoin(
+                this.pipeSelection.selected.map((pipe: any) => {
+                  return this.rgwMultisiteService.removeSyncPipe(
+                    pipe.id,
                     this.expandedRow.groupName,
                     this.expandedRow.bucket
                   );

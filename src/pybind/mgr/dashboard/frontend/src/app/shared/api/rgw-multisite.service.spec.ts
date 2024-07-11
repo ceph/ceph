@@ -169,4 +169,43 @@ describe('RgwMultisiteService', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
   });
+
+  it('should create Sync Pipe', () => {
+    const payload = {
+      pipe_id: 'test',
+      bucket_name: 'test',
+      source_zones: ['zone1-zg1-realm1'],
+      destination_zones: ['zone1-zg2-realm2'],
+      group_id: 'sync-grp'
+    };
+    service.createEditSyncPipe(payload).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-pipe');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(payload);
+    req.flush(null);
+  });
+
+  it('should edit Symmetrical Sync flow', () => {
+    const payload = {
+      pipe_id: 'test',
+      bucket_name: 'test',
+      source_zones: ['zone1-zg1-realm1'],
+      destination_zones: ['zone1-zg2-realm2', 'zone2-zg1-realm1'],
+      group_id: 'sync-grp'
+    };
+    service.createEditSyncFlow(payload).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-flow');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(payload);
+    req.flush(null);
+  });
+
+  it('should remove Sync Pipe', () => {
+    service.removeSyncPipe('test', 'sync-grp', 'new-bucket').subscribe();
+    const req = httpTesting.expectOne(
+      `api/rgw/multisite/sync-pipe/sync-grp/test?bucket_name=new-bucket`
+    );
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
+  });
 });
