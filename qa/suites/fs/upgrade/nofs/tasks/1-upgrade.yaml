@@ -1,0 +1,44 @@
+overrides:
+  ceph:
+    log-ignorelist:
+    - scrub mismatch
+    - ScrubResult
+    - wrongly marked
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(SLOW_OPS\)
+    - overall HEALTH_
+    - \(MON_MSGR2_NOT_ENABLED\)
+    - slow request
+    conf:
+      global:
+        bluestore warn on legacy statfs: false
+        bluestore warn on no per pool omap: false
+      mon:
+        mon warn on osd down out interval zero: false
+
+tasks:
+- print: "*** upgrading, no cephfs present"
+- exec:
+    mon.a:
+    - ceph fs dump
+- install.upgrade:
+    mon.a:
+- print: "**** done install.upgrade"
+- ceph.restart:
+    daemons: [mon.*, mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: false
+- ceph.healthy:
+- ceph.restart:
+    daemons: [osd.*]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- exec:
+    mon.a:
+    - ceph versions
+    - ceph osd dump -f json-pretty
+    - ceph fs dump
+    - ceph osd require-osd-release squid
+    - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
+- ceph.healthy:
+- print: "**** done ceph.restart"
