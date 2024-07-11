@@ -2329,7 +2329,7 @@ int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
       ldpp_dout_fmt(dpp, 5,
 		    "{} failed to find part #{} in the object manifest",
 		    __func__, marker);
-      return 0;
+      return ERR_INVALID_PART;
     }
   }
 
