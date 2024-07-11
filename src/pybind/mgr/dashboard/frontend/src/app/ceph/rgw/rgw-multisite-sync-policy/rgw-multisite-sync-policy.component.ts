@@ -2,6 +2,7 @@ import { TitleCasePipe } from '@angular/common';
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -26,7 +27,7 @@ const BASE_URL = 'rgw/multisite/sync-policy';
   styleUrls: ['./rgw-multisite-sync-policy.component.scss'],
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
-export class RgwMultisiteSyncPolicyComponent implements OnInit {
+export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   @ViewChild('deleteTpl', { static: true })
@@ -46,7 +47,9 @@ export class RgwMultisiteSyncPolicyComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService
-  ) {}
+  ) {
+    super();
+  }
 
   ngOnInit(): void {
     this.permission = this.authStorageService.getPermissions().rgw;

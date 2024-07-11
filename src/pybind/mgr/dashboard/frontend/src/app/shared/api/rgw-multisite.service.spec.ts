@@ -89,4 +89,84 @@ describe('RgwMultisiteService', () => {
     expect(req.request.method).toBe('GET');
     req.flush(mockSyncPolicyData[1]);
   });
+
+  it('should create Symmetrical Sync flow', () => {
+    const payload = {
+      group_id: 'test',
+      bucket_name: 'test',
+      flow_type: 'symmetrical',
+      flow_id: 'new-flow',
+      zones: ['zone1-zg1-realm1']
+    };
+    service.createEditSyncFlow(payload).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-flow');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(payload);
+    req.flush(null);
+  });
+
+  it('should create Directional Sync flow', () => {
+    const payload = {
+      group_id: 'test',
+      bucket_name: 'test',
+      flow_type: 'directional',
+      flow_id: 'new-flow',
+      source_zone: ['zone1-zg1-realm1'],
+      destination_zone: ['zone1-zg2-realm2']
+    };
+    service.createEditSyncFlow(payload).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-flow');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(payload);
+    req.flush(null);
+  });
+
+  it('should edit Symmetrical Sync flow', () => {
+    const payload = {
+      group_id: 'test',
+      bucket_name: 'test',
+      flow_type: 'symmetrical',
+      flow_id: 'new-flow',
+      zones: ['zone1-zg1-realm1', 'zone2-zg1-realm1']
+    };
+    service.createEditSyncFlow(payload).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-flow');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(payload);
+    req.flush(null);
+  });
+
+  it('should edit Directional Sync flow', () => {
+    const payload = {
+      group_id: 'test',
+      bucket_name: 'test',
+      flow_type: 'directional',
+      flow_id: 'new-flow',
+      source_zone: ['zone1-zg1-realm1'],
+      destination_zone: ['zone1-zg2-realm2', 'zone2-zg2-realm2']
+    };
+    service.createEditSyncFlow(payload).subscribe();
+    const req = httpTesting.expectOne('api/rgw/multisite/sync-flow');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(payload);
+    req.flush(null);
+  });
+
+  it('should remove Symmetrical Sync flow', () => {
+    service.removeSyncFlow('test', 'symmetrical', 'test', 'new-bucket').subscribe();
+    const req = httpTesting.expectOne(
+      `api/rgw/multisite/sync-flow/test/symmetrical/test?bucket_name=new-bucket`
+    );
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
+  });
+
+  it('should remove Directional Sync flow', () => {
+    service.removeSyncFlow('test', 'directional', 'test', 'new-bucket').subscribe();
+    const req = httpTesting.expectOne(
+      `api/rgw/multisite/sync-flow/test/directional/test?bucket_name=new-bucket`
+    );
+    expect(req.request.method).toBe('DELETE');
+    req.flush(null);
+  });
 });
