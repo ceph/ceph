@@ -809,15 +809,37 @@ class PgScrubber : public ScrubPgIF,
   Scrub::sched_conf_t populate_config_params() const;
 
   /**
-   * determine the time when the next scrub should be scheduled
+   * use the 'planned scrub' flags to determine the urgency attribute
+   * of the 'deep target' part of the ScrubJob object.
    *
-   * based on the planned scrub's flags, time of last scrub, and
-   * the pool's scrub configuration. This is only an initial "proposal",
-   * and will be further adjusted based on the scheduling parameters.
+   * Returns 'true' if a high-priority 'urgency' level was set by this
+   * call (note: not if it was already set).
+   *
+   * Note: in the previous implementation, if the shallow scrub had
+   * high priority, and it was time for the periodic deep scrub, a
+   * high priority deep scrub was initiated. This behavior is not
+   * replicated here.
    */
-  Scrub::sched_params_t determine_initial_schedule(
+  bool flags_to_deep_priority(
       const Scrub::sched_conf_t& app_conf,
-      utime_t scrub_clock_now) const;
+      utime_t scrub_clock_now);
+
+  /**
+   * use the 'planned scrub' flags to determine the urgency attribute
+   * of the 'shallow target' part of the ScrubJob object.
+   */
+  void flags_to_shallow_priority(
+      const Scrub::sched_conf_t& app_conf,
+      utime_t scrub_clock_now);
+
+  /**
+   * recompute the two ScrubJob targets, taking into account not
+   * only the up-to-date 'last' stamps, but also the 'planned scrub'
+   * flags.
+   */
+  void update_targets(
+      const requested_scrub_t& planned,
+      utime_t scrub_clock_now);
 
   /// should we perform deep scrub?
   bool is_time_for_deep(

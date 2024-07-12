@@ -605,10 +605,9 @@ struct ScrubPgIF {
   virtual bool reserve_local() = 0;
 
   /**
-   * Recalculate the required scrub time.
+   * Recalculate scrub (both deep & shallow) schedules
    *
-   * This function assumes that the queue registration status is up-to-date,
-   * i.e. the OSD "knows our name" if-f we are the Primary.
+   * Dequeues the scrub job, and re-queues it with the new schedule.
    */
   virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
 

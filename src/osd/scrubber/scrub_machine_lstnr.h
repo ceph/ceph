@@ -162,7 +162,11 @@ struct ScrubMachineListener {
   /// the part that actually finalizes a scrub
   virtual void scrub_finish() = 0;
 
-  /// notify the scrubber about a scrub failure
+  /**
+   * The scrub session was aborted. We must restore the scheduling object
+   * that triggered the scrub back to the queue - but we may have to update
+   * it with changes requested (e.g. by an operator command).
+   */
   virtual void on_mid_scrub_abort(Scrub::delay_cause_t cause) = 0;
 
   /**
