@@ -37,15 +37,6 @@ if(HAVE_LIBXFS)
     fs/XFS.cc)
 endif()
 
-if(HAVE_LIBZFS)
-  add_library(os_zfs_objs OBJECT
-    filestore/ZFSFileStoreBackend.cc
-    fs/ZFS.cc)
-  target_include_directories(os_zfs_objs SYSTEM PRIVATE
-    ${ZFS_INCLUDE_DIRS})
-  list(APPEND libos_srcs $<TARGET_OBJECTS:os_zfs_objs>)
-endif()
-
 add_library(os STATIC ${libos_srcs})
 target_link_libraries(os
   legacy-option-headers
@@ -64,10 +55,6 @@ endif(WITH_BLUEFS)
 
 if(WITH_FUSE)
   target_link_libraries(os FUSE::FUSE)
-endif()
-
-if(HAVE_LIBZFS)
-  target_link_libraries(os ${ZFS_LIBRARIES})
 endif()
 
 if(WITH_LTTNG)
