@@ -22,6 +22,7 @@
 #include "osd/SnapMapper.h"
 
 #include "crimson/common/interruptible_future.h"
+#include "crimson/common/log.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/backfill_state.h"
@@ -181,10 +182,16 @@ public:
   void send_cluster_message(
     int osd, MessageURef m,
     epoch_t epoch, bool share_map_update=false) final {
+    LOG_PREFIX(PG::send_cluster_message);
+    SUBDEBUGDPP(
+      osd, "message {} to {} share_map_update {}",
+      *this, *m, osd, share_map_update);
     (void)shard_services.send_to_osd(osd, std::move(m), epoch);
   }
 
   void send_pg_created(pg_t pgid) final {
+    LOG_PREFIX(PG::send_pg_created);
+    SUBDEBUGDPP(osd, "pgid {}", *this, pgid);
     (void)shard_services.send_pg_created(pgid);
   }
 
@@ -204,6 +211,8 @@ public:
 
   template <typename T>
   void start_peering_event_operation(T &&evt, float delay = 0) {
+    LOG_PREFIX(PG::start_peering_event_operations);
+    SUBDEBUGDPP(osd, "event {} delay {}", *this, evt.get_desc(), delay);
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       pg_whoami,
@@ -224,6 +233,10 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
+    LOG_PREFIX(PG::request_local_background_io_reservation);
+    SUBDEBUGDPP(
+      osd, "priority {} on_grant {} on_preempt {}",
+      *this, on_grant->get_desc(), on_preempt->get_desc());
     // TODO -- we probably want to add a mechanism for blocking on this
     // after handling the peering event
     std::ignore = shard_services.local_request_reservation(
@@ -240,6 +253,8 @@ public:
 
   void update_local_background_io_priority(
     unsigned priority) final {
+    LOG_PREFIX(PG::update_local_background_io_priority);
+    SUBDEBUGDPP(osd, "priority {}", *this, priority);
     // TODO -- we probably want to add a mechanism for blocking on this
     // after handling the peering event
     std::ignore = shard_services.local_update_priority(
@@ -248,6 +263,8 @@ public:
   }
 
   void cancel_local_background_io_reservation() final {
+    LOG_PREFIX(PG::cancel_local_background_io_reservation);
+    SUBDEBUGDPP(osd, "", *this);
     // TODO -- we probably want to add a mechanism for blocking on this
     // after handling the peering event
     std::ignore = shard_services.local_cancel_reservation(
@@ -258,6 +275,10 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
+    LOG_PREFIX(PG::request_remote_recovery_reservation);
+    SUBDEBUGDPP(
+      osd, "priority {} on_grant {} on_preempt {}",
+      *this, on_grant->get_desc(), on_preempt->get_desc());
     // TODO -- we probably want to add a mechanism for blocking on this
     // after handling the peering event
     std::ignore = shard_services.remote_request_reservation(
@@ -273,6 +294,8 @@ public:
   }
 
   void cancel_remote_recovery_reservation() final {
+    LOG_PREFIX(PG::cancel_remote_recovery_reservation);
+    SUBDEBUGDPP(osd, "", *this);
     // TODO -- we probably want to add a mechanism for blocking on this
     // after handling the peering event
     std::ignore =  shard_services.remote_cancel_reservation(
@@ -282,6 +305,8 @@ public:
   void schedule_event_on_commit(
     ceph::os::Transaction &t,
     PGPeeringEventRef on_commit) final {
+    LOG_PREFIX(PG::schedule_event_on_commit);
+    SUBDEBUGDPP(osd, "on_commit {}", *this, on_commit->get_desc());
     t.register_on_commit(
       make_lambda_context(
 	[this, on_commit=std::move(on_commit)](int) {
@@ -299,11 +324,15 @@ public:
     // Not needed yet
   }
   void queue_want_pg_temp(const std::vector<int> &wanted) final {
+    LOG_PREFIX(PG::queue_want_pg_temp);
+    SUBDEBUGDPP(osd, "wanted {}", *this, wanted);
     // TODO -- we probably want to add a mechanism for blocking on this
     // after handling the peering event
     std::ignore = shard_services.queue_want_pg_temp(pgid.pgid, wanted);
   }
   void clear_want_pg_temp() final {
+    LOG_PREFIX(PG::clear_want_pg_temp);
+    SUBDEBUGDPP(osd, "", *this);
     // TODO -- we probably want to add a mechanism for blocking on this
     // after handling the peering event
     std::ignore = shard_services.remove_want_pg_temp(pgid.pgid);
