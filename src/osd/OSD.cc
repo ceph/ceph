@@ -3174,7 +3174,7 @@ will start to track new ops received afterwards.";
     // the superblock's oldest_map. The superblock won't
     // be updated. Only the stored stale (no longer referenced)
     // osdmaps are removed.
-    int ret = trim_stale_maps();
+    ret = trim_stale_maps();
     if (ret < 0) {
      ss << " Error trimming stale osdmaps: " << cpp_strerror(ret);
      goto out;
