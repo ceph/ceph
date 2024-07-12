@@ -14,6 +14,7 @@ export class BackButtonComponent implements OnInit {
   @Input() disabled = false;
   @Input() modalForm = false;
   @Input() showSubmit = false;
+  @Input() isWizardModal = false;
 
   hasModalOutlet = false;
 
@@ -30,9 +31,12 @@ export class BackButtonComponent implements OnInit {
 
   back() {
     if (!this.disabled) {
-      if (this.backAction.observers.length === 0 || this.hasModalOutlet) {
+      if (this.backAction.observers.length === 0 || (this.hasModalOutlet && !this.isWizardModal)) {
         this.location.back();
-      } else {
+      } else if (
+        this.backAction.observers.length > 0 ||
+        (this.hasModalOutlet && this.isWizardModal)
+      ) {
         this.backAction.emit();
       }
     }

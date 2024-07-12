@@ -95,19 +95,25 @@ class Auth(RESTController, ControllerAuthMixin):
                 try:
                     if fsid in multicluster_config['config']:
                         existing_entries = multicluster_config['config'][fsid]
-                        if not any((entry['user'] == username or entry['cluster_alias'] == 'local-cluster') for entry in existing_entries):  # noqa E501 #pylint: disable=line-too-long
+                        for entry in existing_entries:
+                            if entry['user'] == username or entry['cluster_alias'] == 'local-cluster':  # noqa E501 #pylint: disable=line-too-long
+                                entry['token'] = token  # Update token
+                                break
+                        else:
                             existing_entries.append({
                                 "name": fsid,
                                 "url": origin,
                                 "cluster_alias": "local-cluster",
-                                "user": username
+                                "user": username,
+                                "token": token
                             })
                     else:
                         multicluster_config['config'][fsid] = [{
                             "name": fsid,
                             "url": origin,
                             "cluster_alias": "local-cluster",
-                            "user": username
+                            "user": username,
+                            "token": token
                         }]
 
                 except KeyError:
@@ -121,7 +127,8 @@ class Auth(RESTController, ControllerAuthMixin):
                                     "name": fsid,
                                     "url": origin,
                                     "cluster_alias": "local-cluster",
-                                    "user": username
+                                    "user": username,
+                                    "token": token
                                 }
                             ]
                         }

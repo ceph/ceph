@@ -431,18 +431,16 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     defaultZonegroupId: string,
     defaultZoneId: string
   ): any {
-    const defaultRealm = this.realms.find((x: { id: string }) => x.id === defaultRealmId);
-    const defaultZonegroup = this.zonegroups.find(
+    const defaultRealm = this.realms?.find((x: { id: string }) => x.id === defaultRealmId);
+    const defaultZonegroup = this.zonegroups?.find(
       (x: { id: string }) => x.id === defaultZonegroupId
     );
-    const defaultZone = this.zones.find((x: { id: string }) => x.id === defaultZoneId);
-    const defaultRealmName = defaultRealm !== undefined ? defaultRealm.name : null;
-    const defaultZonegroupName = defaultZonegroup !== undefined ? defaultZonegroup.name : null;
-    const defaultZoneName = defaultZone !== undefined ? defaultZone.name : null;
+    const defaultZone = this.zones?.find((x: { id: string }) => x.id === defaultZoneId);
+
     return {
-      defaultRealmName: defaultRealmName,
-      defaultZonegroupName: defaultZonegroupName,
-      defaultZoneName: defaultZoneName
+      defaultRealmName: defaultRealm?.name,
+      defaultZonegroupName: defaultZonegroup?.name,
+      defaultZoneName: defaultZone?.name
     };
   }
 

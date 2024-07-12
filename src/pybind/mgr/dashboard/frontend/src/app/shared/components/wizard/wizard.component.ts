@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
 
 import * as _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
@@ -11,7 +11,7 @@ import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
   templateUrl: './wizard.component.html',
   styleUrls: ['./wizard.component.scss']
 })
-export class WizardComponent implements OnInit, OnDestroy {
+export class WizardComponent implements OnInit, OnDestroy, OnChanges {
   @Input()
   stepsTitle: string[];
 
@@ -22,6 +22,16 @@ export class WizardComponent implements OnInit, OnDestroy {
   constructor(private stepsService: WizardStepsService) {}
 
   ngOnInit(): void {
+    this.initializeSteps();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes.stepsTitle && !changes.stepsTitle.isFirstChange()) {
+      this.initializeSteps();
+    }
+  }
+
+  private initializeSteps(): void {
     this.stepsService.setTotalSteps(this.stepsTitle.length);
     this.steps = this.stepsService.getSteps();
     this.currentStepSub = this.stepsService.getCurrentStep().subscribe((step: WizardStepModel) => {

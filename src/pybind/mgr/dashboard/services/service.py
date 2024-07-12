@@ -90,6 +90,19 @@ def wait_for_daemon_to_start(orch, service_name):
 
 
 class RgwServiceManager:
+    def find_available_port(self, starting_port=80):
+        orch = OrchClient.instance()
+        daemons = [d.to_dict() for d in orch.services.list_daemons(daemon_type='rgw')]
+        used_ports = set()
+        for daemon in daemons:
+            ports = daemon.get('ports', [])
+            if ports:
+                used_ports.update(ports)
+        port = starting_port
+        while port in used_ports:
+            port += 1
+        return port
+
     def restart_rgw_daemons_and_set_credentials(self):
         # Restart RGW daemons and set credentials.
         logger.info("Restarting RGW daemons and setting credentials")

@@ -6,6 +6,7 @@ import { RouterModule, Routes } from '@angular/router';
 import {
   NgbNavModule,
   NgbPopoverModule,
+  NgbProgressbar,
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
@@ -63,10 +64,12 @@ import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-pol
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
+import { CephSharedModule } from '../shared/ceph-shared.module';
 
 @NgModule({
   imports: [
     CommonModule,
+    CephSharedModule,
     SharedModule,
     FormsModule,
     ReactiveFormsModule.withConfig({ callSetDisabledState: 'whenDisabledForLegacyCode' }),
@@ -79,7 +82,8 @@ import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-ta
     TreeModule,
     DataTableModule,
     DashboardV3Module,
-    NgbTypeaheadModule
+    NgbTypeaheadModule,
+    NgbProgressbar
   ],
   exports: [
     RgwDaemonListComponent,

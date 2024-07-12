@@ -79,7 +79,9 @@ export class RgwMultisiteService {
     zoneName: string,
     zoneEndpoints: string,
     username: string,
-    cluster?: string
+    cluster?: string,
+    replicationZoneName? : string,
+    clusterDetailsArray?: any
   ) {
     let params = new HttpParams()
       .set('realm_name', realmName)
@@ -91,6 +93,14 @@ export class RgwMultisiteService {
 
     if (cluster) {
       params = params.set('cluster_fsid', cluster);
+    }
+
+    if (clusterDetailsArray) {
+      params = params.set('cluster_details', JSON.stringify(clusterDetailsArray));
+    }
+
+    if (replicationZoneName) {
+      params = params.set('replication_zone_name', replicationZoneName);
     }
 
     return this.http.post(`${this.uiUrl}/multisite-replications`, null, { params: params });

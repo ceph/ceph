@@ -1,4 +1,5 @@
 import { Component, OnInit } from '@angular/core';
+import { Location } from '@angular/common';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription, forkJoin } from 'rxjs';
@@ -18,6 +19,12 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { Router } from '@angular/router';
 import { map, switchMap } from 'rxjs/operators';
+import { SummaryService } from '~/app/shared/services/summary.service';
+import { ExecutingTask } from '~/app/shared/models/executing-task';
+import {
+  STEP_TITLES_MULTI_CLUSTER_CONFIGURED,
+  STEP_TITLES_SINGLE_CLUSTER
+} from '~/app/shared/enum/multisite-wizard-steps.enum';
 
 @Component({
   selector: 'cd-rgw-multisite-wizard',
@@ -29,7 +36,7 @@ export class RgwMultisiteWizardComponent implements OnInit {
   currentStep: WizardStepModel;
   currentStepSub: Subscription;
   permissions: Permissions;
-  stepTitles = ['Create Realm & Zonegroup', 'Create Zone', 'Select Cluster'];
+  stepTitles = STEP_TITLES_MULTI_CLUSTER_CONFIGURED;
   stepsToSkip: { [steps: string]: boolean } = {};
   daemons: RgwDaemon[] = [];
   selectedCluster = '';
@@ -41,6 +48,8 @@ export class RgwMultisiteWizardComponent implements OnInit {
   pageURL: string;
   icons = Icons;
   rgwEndpoints: { value: any[]; options: any[]; messages: any };
+  executingTask: ExecutingTask;
+  setupCompleted = false;
 
   constructor(
     private wizardStepsService: WizardStepsService,
@@ -50,7 +59,9 @@ export class RgwMultisiteWizardComponent implements OnInit {
     private multiClusterService: MultiClusterService,
     private rgwMultisiteService: RgwMultisiteService,
     public notificationService: NotificationService,
-    private router: Router
+    private router: Router,
+    private summaryService: SummaryService,
+    private location: Location
   ) {
     this.pageURL = 'rgw/multisite/configuration';
     this.currentStepSub = this.wizardStepsService
@@ -102,13 +113,20 @@ export class RgwMultisiteWizardComponent implements OnInit {
     this.multiClusterService.getCluster().subscribe((clusters) => {
       this.clusterDetailsArray = Object.values(clusters['config'])
         .flat()
-        .filter((cluster) => cluster['cluster_alias'] !== 'local-cluster');
+        .filter((cluster) => cluster['url'] !== clusters['current_url']);
       this.isMultiClusterConfigured = this.clusterDetailsArray.length > 0;
       if (!this.isMultiClusterConfigured) {
-        this.stepTitles = ['Create Realm & Zonegroup', 'Create Zone', 'Export Multi-site token'];
+        this.stepTitles = STEP_TITLES_SINGLE_CLUSTER;
       } else {
         this.selectedCluster = this.clusterDetailsArray[0]['name'];
       }
+      this.wizardStepsService.setTotalSteps(this.stepTitles.length);
+    });
+
+    this.summaryService.subscribe((summary) => {
+      this.executingTask = summary.executing_tasks.filter((tasks) =>
+        tasks.name.includes('progress/Multisite-Setup')
+      )[0];
     });
   }
 
@@ -132,7 +150,10 @@ export class RgwMultisiteWizardComponent implements OnInit {
       }),
       cluster: new UntypedFormControl(null, {
         validators: [Validators.required]
-      })
+      }),
+      replicationZoneName: new UntypedFormControl('new_replicated_zone', {
+        validators: [Validators.required]
+      }), 
     });
 
     if (!this.isMultiClusterConfigured) {
@@ -141,12 +162,18 @@ export class RgwMultisiteWizardComponent implements OnInit {
   }
 
   showSubmitButtonLabel() {
-    if (this.isMultiClusterConfigured) {
-      return !this.wizardStepsService.isLastStep()
-        ? this.actionLabels.NEXT
-        : $localize`Configure Multi-site`;
+    if (this.wizardStepsService.isLastStep()) {
+      if (!this.setupCompleted) {
+        if (this.isMultiClusterConfigured) {
+          return $localize`Configure Multi-Site`;
+        } else {
+          return $localize`Export Multi-Site token`;
+        }
+      } else {
+        return $localize`Close`;
+      }
     } else {
-      return !this.wizardStepsService.isLastStep() ? this.actionLabels.NEXT : $localize`Close`;
+      return $localize`Next`;
     }
   }
 
@@ -158,51 +185,50 @@ export class RgwMultisiteWizardComponent implements OnInit {
 
   onNextStep() {
     if (!this.wizardStepsService.isLastStep()) {
-      this.wizardStepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
-        this.currentStep = step;
-      });
-      if (this.currentStep.stepIndex === 2 && !this.isMultiClusterConfigured) {
-        this.onSubmit();
-      } else {
-        this.wizardStepsService.moveToNextStep();
-      }
+      this.wizardStepsService.moveToNextStep();
     } else {
-      this.onSubmit();
+      if (this.setupCompleted) {
+        this.refreshMultisitePage();
+      } else {
+        this.onSubmit();
+      }
     }
+    this.wizardStepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
+      this.currentStep = step;
+      if (this.currentStep.stepIndex === 3 && this.isMultiClusterConfigured) {
+        this.stepsToSkip['Select Cluster'] = false;
+      }
+    });
   }
 
   onSubmit() {
     this.loading = true;
-    const values = this.multisiteSetupForm.value;
+    const values = this.multisiteSetupForm.getRawValue();
     const realmName = values['realmName'];
     const zonegroupName = values['zonegroupName'];
     const zonegroupEndpoints = this.rgwEndpoints.value.join(',');
     const zoneName = values['zoneName'];
     const zoneEndpoints = this.rgwEndpoints.value.join(',');
     const username = values['username'];
-    if (!this.isMultiClusterConfigured) {
-      if (this.wizardStepsService.isLastStep()) {
-        this.activeModal.close();
-        this.refreshMultisitePage();
-      } else {
-        this.rgwMultisiteService
-          .setUpMultisiteReplication(
-            realmName,
-            zonegroupName,
-            zonegroupEndpoints,
-            zoneName,
-            zoneEndpoints,
-            username
-          )
-          .subscribe((data: object[]) => {
-            this.loading = false;
-            this.realms = data;
-            this.wizardStepsService.moveToNextStep();
-            this.showSuccessNotification();
-          });
-      }
+    if (!this.isMultiClusterConfigured || this.stepsToSkip['Select Cluster']) {
+      this.rgwMultisiteService
+        .setUpMultisiteReplication(
+          realmName,
+          zonegroupName,
+          zonegroupEndpoints,
+          zoneName,
+          zoneEndpoints,
+          username
+        )
+        .subscribe((data: object[]) => {
+          this.setupCompleted = true;
+          this.loading = false;
+          this.realms = data;
+          this.showSuccessNotification();
+        });
     } else {
       const cluster = values['cluster'];
+      const replicationZoneName = values['replicationZoneName'];
       this.rgwMultisiteService
         .setUpMultisiteReplication(
           realmName,
@@ -211,13 +237,15 @@ export class RgwMultisiteWizardComponent implements OnInit {
           zoneName,
           zoneEndpoints,
           username,
-          cluster
+          cluster,
+          replicationZoneName,
+          this.clusterDetailsArray
         )
         .subscribe(
           () => {
+            this.setupCompleted = true;
+            this.loading = false;
             this.showSuccessNotification();
-            this.activeModal.close();
-            this.refreshMultisitePage();
           },
           () => {
             this.multisiteSetupForm.setErrors({ cdSubmitButton: true });
@@ -237,7 +265,7 @@ export class RgwMultisiteWizardComponent implements OnInit {
     const currentRoute = this.router.url.split('?')[0];
     const navigateTo = currentRoute.includes('multisite') ? '/pool' : '/';
     this.router.navigateByUrl(navigateTo, { skipLocationChange: true }).then(() => {
-      this.router.navigate([currentRoute]);
+      this.router.navigate(['/' + this.pageURL]);
     });
   }
 
@@ -245,7 +273,7 @@ export class RgwMultisiteWizardComponent implements OnInit {
     if (!this.wizardStepsService.isFirstStep()) {
       this.wizardStepsService.moveToPreviousStep();
     } else {
-      this.activeModal.close();
+      this.location.back();
     }
   }
 
