@@ -12,16 +12,8 @@
                   #formDir="ngForm"
                   novalidate>
               <ng-container [ngSwitch]="currentStep?.stepIndex">
-                <cd-alert-panel *ngIf="loading"
-                                spacingClass="mb-3"
-                                type="info">
-                  <span i18n>Please note that this process can take some time. During this period, do not click the back button or close the wizard. Thank you for your patience.</span>
-                </cd-alert-panel>
                 <div *ngSwitchCase="'1'"
                      class="ms-5">
-                  <h4 class="title"
-                      i18n>Create Realm & Zonegroup</h4>
-                  <br>
                   <div class="modal-body">
                     <div class="form-group row">
                       <label class="cd-col-form-label required"
@@ -86,8 +78,6 @@
                 </div>
                 <div *ngSwitchCase="'2'"
                      class="ms-5">
-                  <h4 class="title"
-                      i18n>Create Zone</h4>
                   <div class="form-group row">
                     <label class="cd-col-form-label required"
                            for="zonegroupName"
@@ -157,9 +147,7 @@
                 </div>
                 <div class="ms-5"
                      *ngSwitchCase="'3'">
-                  <div *ngIf="isMultiClusterConfigured; else exportTokenTemplate">
-                    <h4 class="title"
-                        i18n>Select Cluster</h4>
+                  <div *ngIf="isMultiClusterConfigured; else nonMultiClusterTemplate">
                     <div class="form-group row">
                       <label class="cd-col-form-label required"
                              for="cluster"
@@ -185,47 +173,15 @@
                       </div>
                     </div>
                   </div>
-                  <ng-template #exportTokenTemplate>
-                    <h4 class="title"
-                        i18n>Export Token</h4>
-                    <div *ngFor="let realminfo of realms">
-                      <div class="form-group row">
-                        <label class="cd-col-form-label"
-                               for="realmName"
-                               i18n>Realm Name</label>
-                        <div class="cd-col-form-input">
-                          <input id="realmName"
-                                 name="realmName"
-                                 type="text"
-                                 [value]="realminfo.realm"
-                                 readonly>
-                          <cd-help-text>
-                            <span i18n>Name of the realm that will be involved in replication.</span>
-                          </cd-help-text>
-                        </div>
-                      </div>
-                      <div class="form-group row">
-                        <label class="cd-col-form-label"
-                               for="token"
-                               i18n>Token</label>
-                        <div class="cd-col-form-input">
-                          <input id="realmToken"
-                                 name="realmToken"
-                                 type="text"
-                                 [value]="realminfo.token"
-                                 class="me-2 mb-4"
-                                 readonly>
-                          <cd-copy-2-clipboard-button [source]="realminfo.token"
-                                                      [byId]="false">
-                          </cd-copy-2-clipboard-button>
-                          <cd-help-text>
-                            <span i18n>This field displays the token needed to import the multisite configuration into a secondary cluster. Copy this token securely and use it on the secondary cluster to replicate the current multisite setup. Ensure that the token is handled securely to prevent unauthorized access.</span>
-                          </cd-help-text>
-                        </div>
-                      </div>
-                      <hr *ngIf="realms.length > 1">
-                    </div>
-                  </ng-template>
+                </div>
+                <div *ngSwitchCase="'4'" class="ms-5">
+                  <div *ngIf="isMultiClusterConfigured">
+                    <ng-container *ngIf="!loading; else loadingTemplate">
+                      <ng-container *ngIf="!setupCompleted; else progressCompleteTemplate">
+                        <ng-container *ngTemplateOutlet="reviewTemplate"></ng-container>
+                      </ng-container>
+                    </ng-container>
+                  </div>
                 </div>
               </ng-container>
             </form>
@@ -251,3 +207,132 @@
     </ng-container>
   </cd-modal>
 </div>
+
+<ng-template #nonMultiClusterTemplate>
+  <ng-container *ngIf="!loading; else loadingTemplate">
+    <ng-container *ngIf="!setupCompleted else exportTokenTemplate">
+      <ng-container *ngTemplateOutlet="reviewTemplate"></ng-container>
+    </ng-container>
+  </ng-container>
+</ng-template>
+
+<ng-template #loadingTemplate>
+  <ng-container *ngTemplateOutlet="progressTemplate"></ng-container>
+</ng-template>
+
+<ng-template #progressCompleteTemplate>
+  <div *ngIf="isMultiClusterConfigured; else exportTokenTemplate">
+    <div class="text-center text-success">
+      Multi-site replication setup is complete.
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #progressTemplate>
+  <div class="form-group row">
+    <label class="cd-col-form-label" for="progress" i18n>Progress</label>
+    <div class="cd-col-form-input">
+      <ngb-progressbar type="info" [value]="executingTask?.progress" [striped]="true"></ngb-progressbar>
+      <p class="card-text text-muted">
+        <span class="float-end">
+          {{ executingTask?.progress || 0 }} %
+        </span>
+      </p>
+      <h5 class="text-center mt-2" i18n>{{ executingTask?.name?.replace('progress/', '') }}</h5>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #exportTokenTemplate>
+  <div *ngFor="let realminfo of realms">
+    <div class="form-group row">
+      <label class="cd-col-form-label"
+             for="realmName"
+             i18n>Realm Name</label>
+      <div class="cd-col-form-input">
+        <input id="realmName"
+               name="realmName"
+               type="text"
+               [value]="realminfo.realm"
+               readonly>
+        <cd-help-text>
+          <span i18n>Name of the realm that will be involved in replication.</span>
+        </cd-help-text>
+      </div>
+    </div>
+    <div class="form-group row">
+      <label class="cd-col-form-label"
+             for="token"
+             i18n>Token</label>
+      <div class="cd-col-form-input">
+        <input id="realmToken"
+               name="realmToken"
+               type="text"
+               [value]="realminfo.token"
+               class="me-2 mb-4"
+               readonly>
+        <cd-copy-2-clipboard-button [source]="realminfo.token"
+                                    [byId]="false">
+        </cd-copy-2-clipboard-button>
+        <cd-help-text>
+          <span i18n>This field displays the token needed to import the multisite configuration into a secondary cluster. Copy this token securely and use it on the secondary cluster to replicate the current multisite setup. Ensure that the token is handled securely to prevent unauthorized access.</span>
+        </cd-help-text>
+      </div>
+    </div>
+    <hr *ngIf="realms.length > 1">
+  </div>
+</ng-template>
+
+<ng-template #reviewTemplate>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Realm Name:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ multisiteSetupForm.get('realmName').value }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zonegroup Name:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ multisiteSetupForm.get('zonegroupName').value }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zonegroup Endpoints:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ rgwEndpoints.value.join(', ') }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zone Name:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ multisiteSetupForm.get('zoneName').value }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Zone Endpoints:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ rgwEndpoints.value.join(', ') }}</b>
+    </div>
+  </div>
+  <div class="form-group row">
+    <label class="cd-col-form-label"
+           i18n>Username:</label>
+    <div class="cd-col-form-input mt-2 text-muted">
+      <b>{{ multisiteSetupForm.get('username').value }}</b>
+    </div>
+  </div>
+  <div *ngIf="isMultiClusterConfigured">
+    <div class="form-group row">
+      <label class="cd-col-form-label"
+             i18n>Selected Cluster:</label>
+      <div class="cd-col-form-input mt-2 text-muted">
+        <b>{{ selectedCluster }}</b>
+      </div>
+    </div>
+  </div>
+</ng-template>

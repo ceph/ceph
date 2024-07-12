@@ -14,7 +14,8 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
-from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, RgwClient, RgwMultisite
+from ..services.rgw_client import _SYNC_GROUP_ID, NoRgwDaemonsException, \
+    RgwClient, RgwMultisite, RgwMultisiteAutomation
 from ..services.service import RgwServiceManager
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -119,7 +120,7 @@ class RgwMultisiteStatus(RESTController):
     def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
                                     zonegroup_endpoints=None, zone_name=None, zone_endpoints=None,
                                     username=None, cluster_fsid=None):
-        multisite_instance = RgwMultisite()
+        multisite_instance = RgwMultisiteAutomation()
         result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
                                                                 zonegroup_endpoints, zone_name,
                                                                 zone_endpoints, username,
