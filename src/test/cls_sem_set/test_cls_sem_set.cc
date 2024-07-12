@@ -86,10 +86,9 @@ CORO_TEST_F(cls_sem_set, inc_dec_overflow, NeoRadosTest)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
-  const auto max = sem_set::max_keys;
 
   std::unordered_set<std::string> strings;
-  for (auto i = 0u; i < 2 * max; ++i) {
+  for (auto i = 0u; i < 2 * sem_set::max_keys; ++i) {
     strings.insert(fmt::format("key{}", i));
   }
 
@@ -223,4 +222,40 @@ CORO_TEST_F(cls_sem_set, list_large, NeoRadosTest)
     EXPECT_TRUE(ref.contains(key));
   }
   EXPECT_EQ(ref.size(), res_v.size());
+}
+
+// Increment some semaphores, wait, increment some more, decrement
+// them all with a time.
+CORO_TEST_F(cls_sem_set, inc_dec_time, NeoRadosTest)
+{
+  std::string_view oid = "obj";
+  co_await create_obj(oid);
+
+  const auto lose = "lose"s;
+  const auto remain = "remain"s;
+
+  co_await execute(oid, WriteOp{}.exec(sem_set::increment(lose)));
+  co_await execute(oid, WriteOp{}.exec(sem_set::increment(lose)));
+  co_await execute(oid, WriteOp{}.exec(sem_set::increment(remain)));
+  co_await execute(oid, WriteOp{}.exec(sem_set::increment(remain)));
+
+  co_await execute(oid, WriteOp{}.exec(sem_set::decrement(lose)));
+
+  co_await wait_for(1s);
+  co_await execute(oid, WriteOp{}.exec(sem_set::decrement(remain)));
+
+  std::unordered_set<std::string> keys{lose, remain};
+  co_await execute(oid,
+		   WriteOp{}.exec(sem_set::decrement(std::move(keys), 100ms)));
+
+  std::unordered_map<std::string, std::uint64_t> res;
+  std::string cursor;
+  co_await execute(oid, ReadOp{}.exec(sem_set::list(sem_set::max_keys, {},
+						    &res, &cursor)));
+
+  EXPECT_TRUE(cursor.empty());
+  EXPECT_EQ(1u, res.size());
+  EXPECT_EQ(remain, res.begin()->first);
+
+  co_return;
 }

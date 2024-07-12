@@ -32,6 +32,7 @@
 #include "cls/sem_set/ops.h"
 
 namespace neorados::cls::sem_set {
+using namespace std::literals;
 
 /// \brief The maximum number of keys per op
 ///
@@ -124,14 +125,16 @@ template<std::input_iterator I>
 /// on a key.
 ///
 /// \param key Key to decrement
+/// \param grace Don't decrement anything decremented more recently.
 ///
 /// \return The ClsWriteOp to be passed to WriteOp::exec
-[[nodiscard]] inline auto decrement(std::string key)
+[[nodiscard]] inline auto
+decrement(std::string key, ceph::timespan grace = 0ns)
 {
   namespace ss = ::cls::sem_set;
   namespace buffer = ::ceph::buffer;
   buffer::list in;
-  ss::decrement call{std::move(key)};
+  ss::decrement call{std::move(key), grace};
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
     op.exec(ss::CLASS, ss::DECREMENT, in);
@@ -144,14 +147,16 @@ template<std::input_iterator I>
 /// on a set of keys.
 ///
 /// \param keys Keys to decrement
+/// \param grace Don't decrement anything decremented more recently.
 ///
 /// \return The ClsWriteOp to be passed to WriteOp::exec
-[[nodiscard]] inline auto decrement(std::initializer_list<std::string> keys)
+[[nodiscard]] inline auto
+decrement(std::initializer_list<std::string> keys, ceph::timespan grace = 0ns)
 {
   namespace ss = ::cls::sem_set;
   namespace buffer = ::ceph::buffer;
   buffer::list in;
-  ss::decrement call{keys};
+  ss::decrement call{keys, grace};
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
     op.exec(ss::CLASS, ss::DECREMENT, in);
@@ -164,14 +169,16 @@ template<std::input_iterator I>
 /// on a set of keys.
 ///
 /// \param keys Keys to decrement
+/// \param grace Don't decrement anything decremented more recently.
 ///
 /// \return The ClsWriteOp to be passed to WriteOp::exec
-[[nodiscard]] inline auto decrement(std::unordered_set<std::string> keys)
+[[nodiscard]] inline auto
+decrement(std::unordered_set<std::string> keys, ceph::timespan grace = 0ns)
 {
   namespace ss = ::cls::sem_set;
   namespace buffer = ::ceph::buffer;
   buffer::list in;
-  ss::decrement call{std::move(keys)};
+  ss::decrement call{std::move(keys), grace};
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
     op.exec(ss::CLASS, ss::DECREMENT, in);
@@ -184,16 +191,18 @@ template<std::input_iterator I>
 /// on a set of keys.
 ///
 /// \param keys Keys to decrement
+/// \param grace Don't decrement anything decremented more recently.
 ///
 /// \return The ClsWriteOp to be passed to WriteOp::exec
-template<std::input_iterator I>
-[[nodiscard]] inline auto decrement(I begin, I end)
+template <std::input_iterator I>
+[[nodiscard]] inline auto
+decrement(I begin, I end, ceph::timespan grace = 0ns)
   requires std::is_convertible_v<typename I::value_type, std::string>
 {
   namespace ss = ::cls::sem_set;
   namespace buffer = ::ceph::buffer;
   buffer::list in;
-  ss::decrement call{begin, end};
+  ss::decrement call{begin, end, grace};
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
     op.exec(ss::CLASS, ss::DECREMENT, in);

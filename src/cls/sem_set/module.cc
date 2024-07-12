@@ -28,6 +28,7 @@ inline constexpr auto PREFIX = "CLS_SEM_SET_"sv;
 
 struct sem_val {
   uint64_t value = 0;
+  ceph::real_time last_decrement = ceph::real_time::min();
 
   sem_val() = default;
 
@@ -36,17 +37,15 @@ struct sem_val {
   void encode(buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(value, bl);
+    encode(last_decrement, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(value, bl);
+    decode(last_decrement, bl);
     DECODE_FINISH(bl);
-  }
-
-  operator uint64_t() {
-    return value;
   }
 };
 WRITE_CLASS_ENCODER(sem_val);
@@ -125,6 +124,7 @@ int decrement(cls_method_context_t hctx, buffer::list *in, buffer::list *out)
     return -E2BIG;
   }
 
+  auto now = ceph::real_clock::now();
   for (const auto& key_ : op.keys) try {
       buffer::list valbl;
       auto key = std::string(PREFIX) + key_;
@@ -137,8 +137,15 @@ int decrement(cls_method_context_t hctx, buffer::list *in, buffer::list *out)
       sem_val val;
       auto bi = valbl.cbegin();
       decode(val, bi);
+      // Don't decrement if we're within the grace period (or there's
+      // screwy time stuff)
+      if ((now < val.last_decrement) ||
+	  (now - val.last_decrement < op.grace)) {
+	continue;
+      }
       if (val.value > 1) {
 	--(val.value);
+	val.last_decrement = now;
         valbl.clear();
         encode(val, valbl);
         r = cls_cxx_map_set_val(hctx, key, &valbl);

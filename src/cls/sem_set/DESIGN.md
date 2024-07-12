@@ -77,20 +77,21 @@ after a write, the data log entry might never be made.
     - For each bucketshard, look up the given key in omap. If it
       exists, set the value to one more than is currently
       there. Otherwise create it with a value of 1.
-        + decrement([bucketshard, ...]) -> {}:
+* decrement([bucketshard, ...], grace) -> {}:
     - For each bucketshard, look it up in omap. If it does not exist
-      or the value is 0, error. Otherwise write decremented value.
+      or the value is 0, error. If the last decrement was within the
+	  'grace' timespan, skip it. Otherwise write decremented value.
     - Should it actually error or do we want saturating arithmetic at
       0? Given that the recovery design proposed below allows values
       to remain spuriously non-decremented but tries to rule out
       spurious decrements, we likely want to have the system scream
       bloody murder if we underflow.
-        + list(cursor?) -> ([(entry, count), ...], cursor):
+* list(cursor?) -> ([(entry, count), ...], cursor):
     - Return entries starting from cursor. Skip any with a semaphore of 0.
-        + compress(cursor?) -> cursor?:
-            - Go through and delete all entries with a 0 count.
-            - Return cursor if we can't fit more calls the operation
-              and need another go-round
+* compress(cursor?) -> cursor?:
+    - Go through and delete all entries with a 0 count.
+    - Return cursor if we can't fit more calls the operation
+	  and need another go-round
 
 ## Analysis ##
 

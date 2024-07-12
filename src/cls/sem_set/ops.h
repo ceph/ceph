@@ -13,28 +13,28 @@
 #include "include/encoding.h"
 
 namespace cls::sem_set {
+using namespace std::literals;
 
 inline constexpr auto max_keys = 1'000u;
 
 namespace buffer = ceph::buffer;
 
-/// Input to increment and decrement operations
-struct incdec {
+struct increment {
   std::unordered_set<std::string> keys;
 
-  incdec() = default;
+  increment() = default;
 
-  incdec(std::string s)
+  increment(std::string s)
     : keys({std::move(s)}) {}
 
-  incdec(std::initializer_list<std::string> l)
+  increment(std::initializer_list<std::string> l)
     : keys(l) {}
 
-  incdec(std::unordered_set<std::string> s)
+  increment(std::unordered_set<std::string> s)
     : keys(std::move(s)) {}
 
   template<std::input_iterator I>
-  incdec(I begin, I end)
+  increment(I begin, I end)
     requires std::is_convertible_v<typename I::value_type, std::string>
     : keys(begin, end) {}
 
@@ -50,10 +50,43 @@ struct incdec {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(incdec);
+WRITE_CLASS_ENCODER(increment);
 
-using increment = incdec;
-using decrement = incdec;
+struct decrement {
+  std::unordered_set<std::string> keys;
+  ceph::timespan grace;
+
+  decrement() = default;
+
+  decrement(std::string s, ceph::timespan grace = 0ns)
+    : keys({std::move(s)}), grace(grace) {}
+
+  decrement(std::initializer_list<std::string> l, ceph::timespan grace = 0ns)
+    : keys(l), grace(grace) {}
+
+  decrement(std::unordered_set<std::string> s, ceph::timespan grace = 0ns)
+    : keys(std::move(s)), grace(grace) {}
+
+  template<std::input_iterator I>
+  decrement(I begin, I end, ceph::timespan grace = 0ns)
+    requires std::is_convertible_v<typename I::value_type, std::string>
+    : keys(begin, end), grace(grace) {}
+
+  void encode(buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(keys, bl);
+    encode(grace, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(keys, bl);
+    decode(grace, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(decrement);
 
 struct list_op {
   std::uint64_t count;
