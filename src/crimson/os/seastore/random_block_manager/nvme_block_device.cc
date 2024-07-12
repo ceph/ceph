@@ -306,7 +306,11 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
 
 nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
   nvme_io_command_t& io_cmd) {
-  return device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd);
+  return device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd
+  ).handle_exception([](auto e)->nvme_command_ertr::future<int> {
+    logger().error("pass_through_io: ioctl failed {}", e);
+    return crimson::ct_error::input_output_error::make();
+  });
 }
 
 nvme_command_ertr::future<> NVMeBlockDevice::try_enable_end_to_end_protection() {
