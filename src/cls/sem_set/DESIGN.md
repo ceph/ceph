@@ -57,7 +57,9 @@ after a write, the data log entry might never be made.
        respond with bs1 in their `cur_cycle`, bs1 will be decremented
        thrice)
 	6. For each entry in the unordered map, decrement on the semaphore
-       object only if the object's count is greater than 0.
+       object only if the object's count is greater than 0. Send a
+       grace period corresponding to the length of time since fetch
+       times a fudge factor.
     7. If the `notify` operation errors, don't decrement anything.
 * Have some task call `compress` on a regular basis (Daily? Hourly?),
   to keep seldom used or deleted bucket shards from slowing down
