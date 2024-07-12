@@ -1455,7 +1455,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
 
   const RGWBucketInfo& bucket_info = bucket->get_info();
 
-  const auto& index = bucket->get_info().get_current_index();
+  const auto& index = bucket_info.get_current_index();
   if (is_layout_indexless(index)) {
     cerr << "error, indexless buckets do not maintain stats; bucket=" <<
       bucket->get_name() << std::endl;
@@ -1480,25 +1480,26 @@ static int bucket_stats(rgw::sal::Driver* driver,
 			 bucket->versioned()
 			 ? (bucket->versioning_enabled() ? "enabled" : "suspended")
 			 : "off");
-  formatter->dump_string("zonegroup", bucket->get_info().zonegroup);
-  formatter->dump_string("placement_rule", bucket->get_info().placement_rule.to_str());
+  formatter->dump_string("zonegroup", bucket_info.zonegroup);
+  formatter->dump_string("placement_rule", bucket_info.placement_rule.to_str());
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());
   formatter->dump_string("marker", bucket->get_marker());
-  formatter->dump_stream("index_type") << bucket->get_info().layout.current_index.layout.type;
-  formatter->dump_int("index_generation", bucket->get_info().layout.current_index.gen);
+  formatter->dump_stream("index_type") << bucket_info.layout.current_index.layout.type;
+  formatter->dump_int("index_generation", bucket_info.layout.current_index.gen);
   formatter->dump_int("num_shards",
-		      bucket->get_info().layout.current_index.layout.normal.num_shards);
+		      bucket_info.layout.current_index.layout.normal.num_shards);
+  formatter->dump_string("reshard_status", to_string(bucket_info.reshard_status));
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
-  ::encode_json("owner", bucket->get_info().owner, formatter);
+  ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
-  encode_json("bucket_quota", bucket->get_info().quota, formatter);
+  encode_json("bucket_quota", bucket_info.quota, formatter);
 
   // bucket tags
   auto iter = bucket->get_attrs().find(RGW_ATTR_TAGS);
