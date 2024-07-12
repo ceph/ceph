@@ -6029,13 +6029,29 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
 {
-  if (!bdev || !bdev->supported_bdev_label()) {
+  BlockDevice* local_bdev = bdev;
+  auto close_bdev = make_scope_guard([&] {
+    if (!bdev && local_bdev) {
+      local_bdev->close();
+      delete local_bdev;
+    }
+  });
+  if (!local_bdev) {
+    string p = path + "/block";
+    local_bdev = BlockDevice::create(cct, p, nullptr, nullptr, nullptr, nullptr);
+    int r = local_bdev->open(p);
+    if (r < 0) {
+      delete local_bdev;
+      local_bdev = nullptr;
+    }
+  }
+  if (!local_bdev || !local_bdev->supported_bdev_label()) {
     // skip bdev label section if not supported
     return ObjectStore::read_meta(key, value);
   }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
-    _read_multi_bdev_label(cct, bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
+    _read_multi_bdev_label(cct, local_bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
       &bdev_label_multi, &bdev_label_epoch);
   }
   if (!bdev_label_valid_locations.empty()) {
