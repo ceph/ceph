@@ -76,16 +76,22 @@ std::unique_ptr<ScrubJob> ScrubQueue::pop_ready_pg(
     utime_t time_now)
 {
   std::unique_lock lck{jobs_lock};
-
   const auto eligible_filtr = [time_now, rst = restrictions](
 				  const std::unique_ptr<ScrubJob>& jb) -> bool {
-    // look for jobs that have their n.b. in the past, and are not
-    // blocked by restrictions
-    return jb->get_sched_time() <= time_now &&
-	   (jb->high_priority ||
-	    (!rst.high_priority_only &&
-	     (!rst.only_deadlined || (!jb->schedule.deadline.is_zero() &&
-				      jb->schedule.deadline <= time_now))));
+    // look for jobs that at least one of their pair of targets has a ripe n.b.
+    // and is not blocked by restrictions
+    const auto eligible_target = [time_now,
+				  rst](const Scrub::SchedTarget& t) -> bool {
+      return t.is_ripe(time_now) &&
+	     (t.is_high_priority() ||
+	      (!rst.high_priority_only &&
+	       (!rst.only_deadlined ||
+		(!t.sched_info_ref().schedule.deadline.is_zero() &&
+		 t.sched_info_ref().schedule.deadline <= time_now))));
+    };
+
+    return eligible_target(jb->shallow_target) ||
+	   eligible_target(jb->deep_target);
   };
 
   auto not_ripes =
@@ -108,19 +114,6 @@ std::unique_ptr<ScrubJob> ScrubQueue::pop_ready_pg(
   to_scrub.erase(top);
   return top_job;
 }
-
-
-namespace {
-struct cmp_time_n_priority_t {
-  bool operator()(const Scrub::ScrubJob& lhs, const Scrub::ScrubJob& rhs)
-      const
-  {
-    return lhs.is_high_priority() > rhs.is_high_priority() ||
-	   (lhs.is_high_priority() == rhs.is_high_priority() &&
-	    lhs.schedule.scheduled_at < rhs.schedule.scheduled_at);
-  }
-};
-}  // namespace
 
 
 /**

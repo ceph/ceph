@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 
-#include <atomic>
 #include <chrono>
 #include <compare>
 #include <iostream>
@@ -10,19 +9,12 @@
 #include <vector>
 
 #include "common/ceph_atomic.h"
+#include "common/fmt_common.h"
 #include "include/utime_fmt.h"
 #include "osd/osd_types.h"
 #include "osd/osd_types_fmt.h"
 #include "osd/scrubber_common.h"
 #include "scrub_queue_entry.h"
-
-/**
- * The ID used to name a candidate to scrub:
- * - in this version: a PG is identified by its spg_t
- * - in the (near) future: a PG + a scrub type (shallow/deep)
- */
-using ScrubTargetId = spg_t;
-
 
 namespace Scrub {
 
@@ -86,20 +78,67 @@ struct sched_conf_t {
 };
 
 
+/**
+ * a wrapper around a Scrub::SchedEntry, adding some state flags
+ * to be used only by the Scrubber. Note that the SchedEntry itself is known to
+ * multiple objects (and must be kept small in size).
+*/
+struct SchedTarget {
+  constexpr explicit SchedTarget(spg_t pg_id, scrub_level_t scrub_level)
+      : sched_info{pg_id, scrub_level}
+  {}
+
+  /// our ID and scheduling parameters
+  SchedEntry sched_info;
+
+  /**
+   * is this target (meaning - a copy of this specific combination of
+   * PG and scrub type) currently in the queue?
+   */
+  bool queued{false};
+
+  // some helper functions
+
+  /// resets to the after-construction state
+  void reset();
+
+  /// set the urgency to the max of the current and the provided urgency
+  void up_urgency_to(urgency_t u);
+
+  /// access that part of the SchedTarget that is queued in the scrub queue
+  const SchedEntry& queued_element() const { return sched_info; }
+
+  bool is_deep() const { return sched_info.level == scrub_level_t::deep; }
+
+  bool is_shallow() const { return sched_info.level == scrub_level_t::shallow; }
+
+  scrub_level_t level() const { return sched_info.level; }
+
+  urgency_t urgency() const { return sched_info.urgency; }
+
+  bool was_delayed() const { return sched_info.last_issue != delay_cause_t::none; }
+
+  /// provides r/w access to the scheduling sub-object
+  SchedEntry& sched_info_ref() { return sched_info; }
+};
+
+
+
 class ScrubJob {
  public:
-  /**
-   * a time scheduled for scrub, and a deadline: The scrub could be delayed
-   * if system load is too high (but not if after the deadline),or if trying
-   * to scrub out of scrub hours.
-   */
-  scrub_schedule_t schedule;
-
   /// pg to be scrubbed
   spg_t pgid;
 
   /// the OSD id (for the log)
   int whoami;
+
+  /*
+   * the schedule for the next scrub at the specific level. Also - the
+   * urgency and characteristics of the scrub (e.g. - high priority,
+   * must-repair, ...)
+   */
+  SchedTarget shallow_target;
+  SchedTarget deep_target;
 
   /**
    * Set whenever the PG scrubs are managed by the OSD (i.e. - from becoming
@@ -107,36 +146,51 @@ class ScrubJob {
    */
   bool registered{false};
 
-  /**
-   * there is a scrub target for this PG in the queue.
-   * \attn: temporary. Will be replaced with a pair of flags in the
-   * two level-specific scheduling targets.
-   */
-  bool target_queued{false};
-
   /// how the last attempt to scrub this PG ended
   delay_cause_t last_issue{delay_cause_t::none};
 
   /**
-    * the scrubber is waiting for locked objects to be unlocked.
-    * Set after a grace period has passed.
-    */
+   * the scrubber is waiting for locked objects to be unlocked.
+   * Set after a grace period has passed.
+   */
   bool blocked{false};
   utime_t blocked_since{};
 
   CephContext* cct;
 
-  bool high_priority{false};
-
   ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
 
-  utime_t get_sched_time() const { return schedule.not_before; }
+  /**
+   * returns a possible reference to the earliest target that is eligible. If
+   * both the shallow and the deep targets have their n.b. in the future,
+   * nullopt is returned.
+   */
+  std::optional<std::reference_wrapper<SchedTarget>> earliest_eligible(
+      utime_t scrub_clock_now);
+  std::optional<std::reference_wrapper<const SchedTarget>> earliest_eligible(
+      utime_t scrub_clock_now) const;
+
+  /**
+   * the target with the earliest 'not-before' time (i.e. - assuming
+   * both targets are in the future).
+   * \attn: might return the wrong answer if both targets are eligible.
+   * If a need arises, a version that accepts the current time as a parameter
+   * should be added. Then - a correct determination can be made for
+   * all cases.
+   */
+  const SchedTarget& earliest_target() const;
+  SchedTarget& earliest_target();
+
+  /// the not-before of our earliest target (either shallow or deep)
+  utime_t get_sched_time() const;
 
   std::string_view state_desc() const
   {
-    return registered ? (target_queued ? "queued" : "registered")
+    return registered ? (is_queued() ? "queued" : "registered")
 		      : "not-registered";
   }
+
+  SchedTarget& get_target(scrub_level_t s_or_d);
 
   /**
    * Given a proposed time for the next scrub, and the relevant
@@ -151,34 +205,29 @@ class ScrubJob {
    *   on the configuration; the deadline is set further out (if configured)
    *   and the n.b. is reset to the target.
    */
-  void adjust_schedule(
-    const Scrub::sched_params_t& suggested,
-    const Scrub::sched_conf_t& aconf,
+  void adjust_shallow_schedule(
+    utime_t last_scrub,
+    const Scrub::sched_conf_t& app_conf,
     utime_t scrub_clock_now,
-    Scrub::delay_ready_t modify_ready_targets);
+    delay_ready_t modify_ready_targets);
+
+  void adjust_deep_schedule(
+    utime_t last_deep,
+    const Scrub::sched_conf_t& app_conf,
+    utime_t scrub_clock_now,
+    delay_ready_t modify_ready_targets);
 
   /**
-   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
+   * For the level specified, set the 'not-before' time to 'now+delay',
+   * so that this scrub target
    * would not be retried before 'delay' seconds have passed.
+   * The 'last_issue' is updated to the cause of the delay.
+   * \returns a reference to the target that was modified.
    */
-  void delay_on_failure(
+  [[maybe_unused]] SchedTarget& delay_on_failure(
+      scrub_level_t level,
       std::chrono::seconds delay,
       delay_cause_t delay_cause,
-      utime_t scrub_clock_now);
-
-  /**
-   *  Recalculating any possible updates to the scrub schedule, following an
-   *  aborted scrub attempt.
-   *  Usually - we can use the same schedule that triggered the aborted scrub.
-   *  But we must take into account scenarios where "something" caused the
-   *  parameters prepared for the *next* scrub to show higher urgency or
-   *  priority. "Something" - as in an operator command requiring immediate
-   *  scrubbing, or a change in the pool/cluster configuration.
-   */
-  void merge_and_delay(
-      const scrub_schedule_t& aborted_schedule,
-      Scrub::delay_cause_t issue,
-      requested_scrub_t updated_flags,
       utime_t scrub_clock_now);
 
  /**
@@ -199,11 +248,12 @@ class ScrubJob {
 
   bool is_registered() const { return registered; }
 
-  /**
-   * is this a high priority scrub job?
-   * High priority - (usually) a scrub that was initiated by the operator
-   */
-  bool is_high_priority() const { return high_priority; }
+  /// are any of our two SchedTargets queued in the scrub queue?
+  bool is_queued() const;
+
+  /// mark both targets as queued / not queued
+  void clear_both_targets_queued();
+  void set_both_targets_queued();
 
   /**
    * a text description of the "scheduling intentions" of this PG:
@@ -220,12 +270,71 @@ class ScrubJob {
   // SchedTarget(s).
   std::partial_ordering operator<=>(const ScrubJob& rhs) const
   {
-    return schedule <=> rhs.schedule;
+    return cmp_entries(
+      ceph_clock_now(), shallow_target.queued_element(),
+      deep_target.queued_element());
   };
+
+
+ /*
+ * Restrictions and limitations that apply to each urgency level:
+ * -------------------------------------------------------------
+ * Some types of scrubs are exempt from some or all of the preconditions and
+ * limitations that apply to regular scrubs. The following table
+ * details the specific set of exemptions per 'urgency' level:
+ * (note: regular scrubs that are overdue are also allowed a specific
+ * set of exemptions. Those will be covered elsewhere).
+ *
+ * The relevant limitations are:
+ * - reservation: the scrub must reserve replicas;
+ * - dow/time: the scrub must adhere to the allowed days-of-week/hours;
+ * - ext-sleep: if initiated during allowed hours, the scrub is penalized
+ *   if continued into the forbidden times, by having a longer sleep time;
+ *   (note that this is only applicable to the wq scheduler).
+ * - load: the scrub must not be initiated if the OSD is under heavy CPU load;
+ * - noscrub: the scrub is aborted if the 'noscrub' flag (or the
+ *  'nodeep-scrub' flag for deep scrubs) is set;
+ * - randomization: the scrub's target time is extended by a random
+ *   duration. This only applies to periodic scrubs.
+ * - configuration changes: the target time may be modified following
+ *   a change in the configuration. This only applies to periodic scrubs.
+ * - max-scrubs: the scrub must not be initiated if the OSD is already
+ *   scrubbing too many PGs (the 'osd_max_scrubs' limit).
+ * - backoff: the scrub must not be initiated this tick if a dice roll
+ *   failed.
+ * - recovery: the scrub must not be initiated if the OSD is currently
+ *   recovering PGs.
+ *
+ * The following table summarizes the limitations in effect per urgency level:
+ *
+ *  +------------+------------+--------------+----------+-------------+
+ *  | limitation | must-scrub | after-repair | operator | must-repair |
+ *  +------------+------------+--------------+----------+-------------+
+ *  | reservation|    yes!    |      no      |     no   |      no     |
+ *  | dow/time   |    yes     |     yes      |     no   |      no     |
+ *  | ext-sleep  |    no?     |      no      |     no   |      no     |
+ *  | load       |    yes     |      no      |     no   |      no     |
+ *  | noscrub    |    yes     |      no?     |     no   |      no     |
+ *  | max-scrubs |    yes     |      yes?    |     no   |      no     |
+ *  | backoff    |    yes     |      no      |     no   |      no     |
+ *  +------------+------------+--------------+----------+-------------+
+ */
+
+  // a set of helper functions for determining, for each urgency level, what
+  // restrictions and limitations apply to that level.
+
+  static bool observes_noscrub_flags(urgency_t urgency);
+
+  static bool observes_allowed_hours(urgency_t urgency);
+
+  static bool observes_load_limit(urgency_t urgency);
+
+  static bool requires_reservation(urgency_t urgency);
+
+  static bool requires_randomization(urgency_t urgency);
+
+  static bool observes_max_concurrency(urgency_t urgency);
 };
-
-using ScrubQContainer = std::vector<std::unique_ptr<ScrubJob>>;
-
 }  // namespace Scrub
 
 namespace std {
@@ -247,6 +356,18 @@ struct formatter<Scrub::sched_params_t> {
 };
 
 template <>
+struct formatter<Scrub::SchedTarget> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const Scrub::SchedTarget& st, FormatContext& ctx) const
+  {
+     return fmt::format_to(
+ 	ctx.out(), "{},q:{:c},issue:{}", st.sched_info,
+ 	st.queued ? '+' : '-', st.sched_info.last_issue);
+  }
+};
+
+template <>
 struct formatter<Scrub::ScrubJob> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
@@ -254,9 +375,8 @@ struct formatter<Scrub::ScrubJob> {
   auto format(const Scrub::ScrubJob& sjob, FormatContext& ctx) const
   {
     return fmt::format_to(
-	ctx.out(), "pg[{}]:nb:{:s} / trg:{:s} / dl:{:s} <{}>",
-	sjob.pgid, sjob.schedule.not_before, sjob.schedule.scheduled_at,
-	sjob.schedule.deadline, sjob.state_desc());
+	ctx.out(), "pg[{}]:sh:{}/dp:{}<{}>",
+	sjob.pgid, sjob.shallow_target, sjob.deep_target, sjob.state_desc());
   }
 };
 
