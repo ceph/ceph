@@ -60,6 +60,7 @@ public:
     void on_restart() override;
     void update_from_paxos(bool *need_bootstrap) override;
 
+    version_t get_trim_to() const override;
 
     bool preprocess_query(MonOpRequestRef op) override;
     bool prepare_update(MonOpRequestRef op) override;
