@@ -266,6 +266,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
 
 template <typename I>
 std::pair<uint64_t, uint64_t> DiffIterate<I>::calc_object_diff_range() {
+  ceph_assert(m_length > 0);
   uint64_t period = m_image_ctx.get_stripe_period();
   uint64_t first_period_off = round_down_to(m_offset, period);
   uint64_t last_period_off = round_down_to(m_offset + m_length - 1, period);
@@ -311,12 +312,12 @@ int DiffIterate<I>::execute() {
   if (from_snap_id == CEPH_NOSNAP) {
     return -ENOENT;
   }
-  if (from_snap_id == end_snap_id) {
+  if (from_snap_id > end_snap_id) {
+    return -EINVAL;
+  }
+  if (from_snap_id == end_snap_id || m_length == 0) {
     // no diff.
     return 0;
-  }
-  if (from_snap_id >= end_snap_id) {
-    return -EINVAL;
   }
 
   int r;
