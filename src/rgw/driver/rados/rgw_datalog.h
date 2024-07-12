@@ -367,6 +367,7 @@ class RGWDataChangesLog {
     std::make_shared<asio::cancellation_signal>();
   std::shared_ptr<asio::cancellation_signal> recovery_signal =
     std::make_shared<asio::cancellation_signal>();
+  ceph::mono_time last_recovery = ceph::mono_clock::zero();
 
   const int num_shards;
   std::string get_prefix() { return "data_log"; }
@@ -524,6 +525,7 @@ public:
 		      bc::flat_map<std::string, uint64_t>& semcount);
   asio::awaitable<void>
   decrement_sems(int index,
+		 ceph::mono_time fetch_time,
 		 bc::flat_map<std::string, uint64_t>&& semcount);
   asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
   asio::awaitable<void> recover(const DoutPrefixProvider* dpp,
