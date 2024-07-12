@@ -79,6 +79,7 @@ import { CardGroupComponent } from './card-group/card-group.component';
 import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
 import { UpgradableComponent } from './upgradable/upgradable.component';
+import { ProgressComponent } from './progress/progress.component';
 
 // Icons
 import InfoIcon from '@carbon/icons/es/information/16';
@@ -161,7 +162,8 @@ import InfoIcon from '@carbon/icons/es/information/16';
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
-    UpgradableComponent
+    UpgradableComponent,
+    ProgressComponent
   ],
   providers: [],
   exports: [
@@ -199,7 +201,8 @@ import InfoIcon from '@carbon/icons/es/information/16';
     CardGroupComponent,
     HelpTextComponent,
     FormAdvancedFieldsetComponent,
-    UpgradableComponent
+    UpgradableComponent,
+    ProgressComponent
   ]
 })
 export class ComponentsModule {
