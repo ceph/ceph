@@ -18,8 +18,11 @@ export class ConfigurationPageHelper extends PageHelper {
     this.selectSecretEngine(secret_engine);
     cy.get('#secret_engine').should('have.class', 'ng-valid');
     cy.get('#address').type(address);
+    cy.get('#address').should('have.value', address);
     cy.get('#address').should('have.class', 'ng-valid');
     cy.contains('button', 'Submit').click();
+    cy.wait(500);
+    cy.get('cd-table').should('exist');
     this.getFirstTableCell('SSE_KMS').should('exist');
   }
 
