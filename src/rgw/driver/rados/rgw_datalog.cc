@@ -1,12 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <boost/asio/bind_cancellation_slot.hpp>
 #include <exception>
 #include <ranges>
 #include <utility>
 #include <vector>
 
+#include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/system/system_error.hpp>
@@ -1646,6 +1646,7 @@ RGWDataChangesLog::gather_working_sets(
 asio::awaitable<void>
 RGWDataChangesLog::decrement_sems(
   int index,
+  ceph::mono_time fetch_time,
   std::unordered_map<std::string, uint64_t>&& semcount)
 {
   namespace sem_set = neorados::cls::sem_set;
@@ -1656,9 +1657,10 @@ RGWDataChangesLog::decrement_sems(
       batch.insert(iter->first);
       semcount.erase(std::move(iter));
     }
+    auto grace = ((ceph::mono_clock::now() - fetch_time) * 4) / 3;
     co_await rados->execute(
       get_sem_set_oid(index), loc, neorados::WriteOp{}.exec(
-	sem_set::decrement(std::move(batch))),
+	sem_set::decrement(std::move(batch), grace)),
       asio::use_awaitable);
   }
 }
@@ -1670,6 +1672,7 @@ RGWDataChangesLog::recover_shard(const DoutPrefixProvider* dpp, int index)
   do {
     std::unordered_map<std::string, uint64_t> semcount;
 
+    auto fetch_time = ceph::mono_clock::now();
     // Gather entries in the shard
     std::tie(semcount, cursor) = co_await read_sems(index, std::move(cursor));
     // If we have none, no point doing the rest
@@ -1697,7 +1700,7 @@ RGWDataChangesLog::recover_shard(const DoutPrefixProvider* dpp, int index)
 			<< "failed, skipping decrement" << dendl;
       continue;
     }
-    co_await decrement_sems(index, std::move(semcount));
+    co_await decrement_sems(index, fetch_time, std::move(semcount));
   } while (!cursor.empty());
   co_return;
 }
