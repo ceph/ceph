@@ -41,10 +41,11 @@ config_file = /etc/ceph/ceph.conf
 id = {{ rados_id }}
 
 [mtls]
-server_key = {{ spec.server_key }}
-client_key = {{ spec.client_key }}
-server_cert = {{ spec.server_cert }}
-client_cert = {{ spec.client_cert }}
+server_key = /server.key
+client_key = /client.key
+server_cert = /server.cert
+client_cert = /client.cert
+root_ca_cert = /root.ca.cert
 
 [spdk]
 tgt_path = {{ spec.tgt_path }}
