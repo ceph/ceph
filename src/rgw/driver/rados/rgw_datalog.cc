@@ -1446,6 +1446,11 @@ asio::awaitable<void> RGWDataChangesLog::renew_run(decltype(renew_signal)) {
 	++run;
       }
 
+      if (ceph::mono_clock::now() - last_recovery < 6h)  {
+	co_await recover(&dp, recovery_signal);
+      };
+
+
       int interval = cct->_conf->rgw_data_log_window * 3 / 4;
       renew_timer->expires_after(std::chrono::seconds(interval));
       co_await renew_timer->async_wait(asio::use_awaitable);
@@ -1656,6 +1661,7 @@ RGWDataChangesLog::gather_working_sets(
 asio::awaitable<void>
 RGWDataChangesLog::decrement_sems(
   int index,
+  ceph::mono_time fetch_time,
   bc::flat_map<std::string, uint64_t>&& semcount)
 {
   namespace sem_set = neorados::cls::sem_set;
@@ -1666,9 +1672,10 @@ RGWDataChangesLog::decrement_sems(
       batch.insert(iter->first);
       semcount.erase(std::move(iter));
     }
+    auto grace = ((ceph::mono_clock::now() - fetch_time) * 4) / 3;
     co_await rados->execute(
       get_sem_set_oid(index), loc, neorados::WriteOp{}.exec(
-	sem_set::decrement(std::move(batch))),
+	sem_set::decrement(std::move(batch), grace)),
       asio::use_awaitable);
   }
 }
@@ -1680,6 +1687,7 @@ RGWDataChangesLog::recover_shard(const DoutPrefixProvider* dpp, int index)
   do {
     bc::flat_map<std::string, uint64_t> semcount;
 
+    auto fetch_time = ceph::mono_clock::now();
     // Gather entries in the shard
     std::tie(semcount, cursor) = co_await read_sems(index, std::move(cursor));
     // If we have none, no point doing the rest
@@ -1707,7 +1715,7 @@ RGWDataChangesLog::recover_shard(const DoutPrefixProvider* dpp, int index)
 			<< "failed, skipping decrement" << dendl;
       continue;
     }
-    co_await decrement_sems(index, std::move(semcount));
+    co_await decrement_sems(index, fetch_time, std::move(semcount));
   } while (!cursor.empty());
   co_return;
 }
@@ -1727,6 +1735,10 @@ asio::awaitable<void> RGWDataChangesLog::recover(const DoutPrefixProvider* dpp,
       co_await group.wait();
     }(dpp),
     asio::use_awaitable);
+
+  std::unique_lock l(lock);
+  last_recovery = ceph::mono_clock::now();
+  l.unlock();
 }
 
 void RGWDataChangesLogInfo::dump(Formatter *f) const
