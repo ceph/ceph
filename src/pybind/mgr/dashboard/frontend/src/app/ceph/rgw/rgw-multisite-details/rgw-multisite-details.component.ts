@@ -413,12 +413,16 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     this.zoneIds = [];
     this.evaluateMigrateAndReplicationActions();
     this.rgwDaemonService.list().subscribe((data: any) => {
-      const realmName = data.map((item: { [x: string]: any }) => item['realm_name']);
+      const hasEmptyRealmName = data.some(
+        (item: { [x: string]: any }) =>
+          item['realm_name'] === '' &&
+          !data.some((i: { [x: string]: any }) => i['id'] === item['id'] && i['realm_name'] !== '')
+      );
       if (
-        this.defaultRealmId != '' &&
-        this.defaultZonegroupId != '' &&
-        this.defaultZoneId != '' &&
-        realmName.includes('')
+        this.defaultRealmId !== '' &&
+        this.defaultZonegroupId !== '' &&
+        this.defaultZoneId !== '' &&
+        hasEmptyRealmName
       ) {
         this.restartGatewayMessage = true;
       }
@@ -431,18 +435,16 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     defaultZonegroupId: string,
     defaultZoneId: string
   ): any {
-    const defaultRealm = this.realms.find((x: { id: string }) => x.id === defaultRealmId);
-    const defaultZonegroup = this.zonegroups.find(
+    const defaultRealm = this.realms?.find((x: { id: string }) => x.id === defaultRealmId);
+    const defaultZonegroup = this.zonegroups?.find(
       (x: { id: string }) => x.id === defaultZonegroupId
     );
-    const defaultZone = this.zones.find((x: { id: string }) => x.id === defaultZoneId);
-    const defaultRealmName = defaultRealm !== undefined ? defaultRealm.name : null;
-    const defaultZonegroupName = defaultZonegroup !== undefined ? defaultZonegroup.name : null;
-    const defaultZoneName = defaultZone !== undefined ? defaultZone.name : null;
+    const defaultZone = this.zones?.find((x: { id: string }) => x.id === defaultZoneId);
+
     return {
-      defaultRealmName: defaultRealmName,
-      defaultZonegroupName: defaultZonegroupName,
-      defaultZoneName: defaultZoneName
+      defaultRealmName: defaultRealm?.name,
+      defaultZonegroupName: defaultZonegroup?.name,
+      defaultZoneName: defaultZone?.name
     };
   }
 

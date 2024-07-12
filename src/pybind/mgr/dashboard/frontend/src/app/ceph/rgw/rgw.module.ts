@@ -6,6 +6,7 @@ import { RouterModule, Routes } from '@angular/router';
 import {
   NgbNavModule,
   NgbPopoverModule,
+  NgbProgressbar,
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
@@ -71,10 +72,12 @@ import {
   ModalModule,
   ProgressIndicatorModule
 } from 'carbon-components-angular';
+import { CephSharedModule } from '../shared/ceph-shared.module';
 
 @NgModule({
   imports: [
     CommonModule,
+    CephSharedModule,
     SharedModule,
     FormsModule,
     ReactiveFormsModule.withConfig({ callSetDisabledState: 'whenDisabledForLegacyCode' }),
@@ -93,7 +96,8 @@ import {
     ProgressIndicatorModule,
     ButtonModule,
     LoadingModule,
-    IconModule
+    IconModule,
+    NgbProgressbar
   ],
   exports: [
     RgwDaemonListComponent,
