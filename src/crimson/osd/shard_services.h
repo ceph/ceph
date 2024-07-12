@@ -15,6 +15,7 @@
 #include "crimson/common/shared_lru.h"
 #include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
+#include "crimson/common/log.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_meta.h"
@@ -540,26 +541,48 @@ public:
   FORWARD(pg_created, pg_created, local_state.pg_map)
 
   FORWARD_TO_OSD_SINGLETON_TARGET(
-    local_update_priority,
-    local_reserver.update_priority)
-  FORWARD_TO_OSD_SINGLETON_TARGET(
-    local_cancel_reservation,
-    local_reserver.cancel_reservation)
+    snap_dump_reservations,
+    snap_reserver.dump)
+
+  auto local_update_priority(spg_t pgid, unsigned newprio) {
+    LOG_PREFIX(ShardServices::local_update_priority);
+    SUBDEBUG(osd, "sending to singleton pgid {} newprio {}", pgid, newprio);
+    return with_singleton([FNAME, pgid, newprio](auto &singleton) {
+      SUBDEBUG(osd, "on singleton pgid {} newprio {}", pgid, newprio);
+      return singleton.local_reserver.update_priority(pgid, newprio);
+    });
+  }
+  auto local_cancel_reservation(spg_t pgid) {
+    LOG_PREFIX(ShardServices::local_cancel_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {}", pgid);
+    return with_singleton([FNAME, pgid](auto &singleton) {
+      SUBDEBUG(osd, "on singleton pgid {}", pgid);
+      return singleton.local_reserver.cancel_reservation(pgid);
+    });
+  }
   FORWARD_TO_OSD_SINGLETON_TARGET(
     local_dump_reservations,
     local_reserver.dump)
-  FORWARD_TO_OSD_SINGLETON_TARGET(
-    remote_cancel_reservation,
-    remote_reserver.cancel_reservation)
+
+  auto remote_update_priority(spg_t pgid, unsigned newprio) {
+    LOG_PREFIX(ShardServices::remote_update_priority);
+    SUBDEBUG(osd, "sending to singleton pgid {} newprio {}", pgid, newprio);
+    return with_singleton([FNAME, pgid, newprio](auto &singleton) {
+      SUBDEBUG(osd, "on singleton pgid {} newprio {}", pgid, newprio);
+      return singleton.remote_reserver.update_priority(pgid, newprio);
+    });
+  }
+  auto remote_cancel_reservation(spg_t pgid) {
+    LOG_PREFIX(ShardServices::remote_cancel_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {}", pgid);
+    return with_singleton([FNAME, pgid](auto &singleton) {
+      SUBDEBUG(osd, "on singleton pgid {}", pgid);
+      return singleton.remote_reserver.cancel_reservation(pgid);
+    });
+  }
   FORWARD_TO_OSD_SINGLETON_TARGET(
     remote_dump_reservations,
     remote_reserver.dump)
-  FORWARD_TO_OSD_SINGLETON_TARGET(
-    snap_cancel_reservation,
-    snap_reserver.cancel_reservation)
-  FORWARD_TO_OSD_SINGLETON_TARGET(
-    snap_dump_reservations,
-    snap_reserver.dump)
 
   Context *invoke_context_on_core(core_id_t core, Context *c) {
     if (!c) return nullptr;
@@ -576,9 +599,13 @@ public:
     Context *on_reserved,
     unsigned prio,
     Context *on_preempt) {
+    LOG_PREFIX(ShardServices::local_request_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {} prio {}", item, prio);
     return with_singleton(
-      [item, prio](OSDSingletonState &singleton,
-		   Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
+      [FNAME, item, prio](
+	OSDSingletonState &singleton,
+	Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
+	SUBDEBUG(osd, "on singleton pgid {} prio {}", item, prio);
 	return singleton.local_reserver.request_reservation(
 	  item,
 	  wrapped_on_reserved,
@@ -593,9 +620,13 @@ public:
     Context *on_reserved,
     unsigned prio,
     Context *on_preempt) {
+    LOG_PREFIX(ShardServices::remote_request_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {} prio {}", item, prio);
     return with_singleton(
-      [item, prio](OSDSingletonState &singleton,
-		   Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
+      [FNAME, item, prio](
+	OSDSingletonState &singleton,
+	Context *wrapped_on_reserved, Context *wrapped_on_preempt) {
+	SUBDEBUG(osd, "on singleton pgid {} prio {}", item, prio);
 	return singleton.remote_reserver.request_reservation(
 	  item,
 	  wrapped_on_reserved,
