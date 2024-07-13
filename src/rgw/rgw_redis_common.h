@@ -14,6 +14,33 @@ namespace redis {
 
 using boost::redis::config;
 using boost::redis::connection;
+using RedisResponseMap =
+    boost::redis::response<std::map<std::string, std::string>>;
+
+// struct ReadResponse {
+//   int errorCode;
+//   std::string errorMessage;
+
+//   ReadResponse(RedisResponseMap resp) {
+//     errorCode = std::stoi(std::get<0>(resp).value()["errorCode"]);
+//     errorMessage = std::get<0>(resp).value()["errorMessage"];
+//   }
+// };
+
+struct RedisResponse {
+  int errorCode;
+  std::string errorMessage;
+  std::string data;
+
+  RedisResponse(int ec, std::string msg)
+      : errorCode(ec), errorMessage(msg), data("") {}
+
+  RedisResponse(RedisResponseMap resp) {
+    errorCode = std::stoi(std::get<0>(resp).value()["errorCode"]);
+    errorMessage = std::get<0>(resp).value()["errorMessage"];
+    data = std::get<0>(resp).value()["data"];
+  }
+};
 
 struct initiate_exec {
   connection* conn;
@@ -52,18 +79,22 @@ void redis_exec(connection* conn, boost::system::error_code& ec,
   }
 }
 
-template <typename T>
-int doRedisFunc(connection* conn, boost::redis::request& req,
-                boost::redis::response<T>& resp, optional_yield y) {
-  boost::system::error_code ec;
-  redis_exec(conn, ec, req, resp, y);
+// template <typename T>
+// int doRedisFunc(connection* conn, boost::redis::request& req,
+//                 boost::redis::response<T>& resp, optional_yield y) {
+//   boost::system::error_code ec;
+//   redis_exec(conn, ec, req, resp, y);
 
-  if (ec) {
-    std::cerr << "EC Message: " << ec.message() << std::endl;
-    return ec.value();
-  }
-  return std::get<0>(resp).value();
-}
+//   if (ec) {
+//     std::cerr << "EC Message: " << ec.message() << std::endl;
+//     return -ec.value();
+//   }
+//   return std::get<0>(resp).value();
+// }
+
+RedisResponse doRedisFunc(connection* conn, boost::redis::request& req,
+                          RedisResponseMap& resp, std::string func_name,
+                          optional_yield y);
 
 int loadLuaFunctions(boost::asio::io_context& io, connection* conn, config* cfg,
                      optional_yield y);

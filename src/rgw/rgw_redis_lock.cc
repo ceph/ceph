@@ -11,29 +11,29 @@ int initLock(boost::asio::io_context& io, connection* conn, config* cfg,
 int lock(connection* conn, const std::string name, const std::string cookie,
          const int duration, optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   std::string expiration_time = std::to_string(duration);
   req.push("FCALL", "lock", 1, name, cookie, expiration_time);
-  return rgw::redis::doRedisFunc(conn, req, resp, y);
+  return rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
 }
 
 int unlock(connection* conn, const std::string& name, const std::string& cookie,
            optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "unlock", 1, name, cookie);
-  return rgw::redis::doRedisFunc(conn, req, resp, y);
+  return rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
 }
 
 int assert_locked(connection* conn, const std::string& name,
                   const std::string& cookie, optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "assert_lock", 1, name, cookie);
-  return rgw::redis::doRedisFunc(conn, req, resp, y);
+  return rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
 }
 
 }  // namespace redislock

@@ -30,5 +30,25 @@ int loadLuaFunctions(boost::asio::io_context& io, connection* conn, config* cfg,
   return 0;
 }
 
+RedisResponse doRedisFunc(connection* conn, boost::redis::request& req,
+                          RedisResponseMap& resp, std::string func_name,
+                          optional_yield y) {
+  try {
+    boost::system::error_code ec;
+    rgw::redis::redis_exec(conn, ec, req, resp, y);
+    if (ec) {
+      std::cerr << "RGW RedisLock:: " << func_name
+                << "(): ERROR: " << ec.message() << std::endl;
+      return RedisResponse(-ec.value(), ec.message());
+    }
+    return RedisResponse(resp);
+
+  } catch (const std::exception& e) {
+    std::cerr << "RGW RedisLock:: " << func_name
+              << "(): Exception: " << e.what() << std::endl;
+    return RedisResponse(-EINVAL, e.what());
+  }
+}
+
 }  // namespace redis
 }  // namespace rgw
