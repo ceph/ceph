@@ -143,7 +143,6 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_version_client
   cls_user_client
   librados
-  global
   ${BLKID_LIBRARIES}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
@@ -164,7 +163,6 @@ target_link_libraries(ceph_test_rgw_obj
   cls_version_client
   cls_user_client
   librados
-  global
   ceph-common
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
@@ -188,7 +186,6 @@ target_link_libraries(unittest_rgw_crypto
   cls_version_client
   cls_user_client
   librados
-  global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -224,7 +221,6 @@ target_link_libraries(unittest_rgw_iam_policy
   cls_version_client
   cls_user_client
   librados
-  global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -332,7 +328,7 @@ target_link_libraries(radosgw-cr-test ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
-  global ${LIB_RESOLV}
+  ${LIB_RESOLV}
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   GTest::GTest)
