@@ -86,6 +86,11 @@ private:
   uint16_t pp_mode = 0; //pretty print mode
   uint16_t debug_level_to_pp_mode(CephContext* cct);
 
+  inline void _crop_allocs_to_io(
+    PExtentVector& disk_extents,
+    uint32_t crop_front,
+    uint32_t crop_back);
+
   inline exmp_it _find_mutable_blob_left(
     exmp_it it,
     uint32_t search_begin, // only interested in blobs that are
@@ -107,8 +112,7 @@ private:
     uint32_t chunk_size);
 
   inline void _schedule_io(
-    const PExtentVector& disk_allocs,
-    uint32_t initial_offset,
+    const PExtentVector& disk_extents,
     bufferlist data);
 
   //Take `length` space from `this.disk_allocs` and put it to `dst`.
