@@ -294,6 +294,21 @@ void BlueStore::Writer::_get_disk_space(
   }
 }
 
+inline void BlueStore::Writer::_crop_allocs_to_io(
+  PExtentVector& disk_extents,
+  uint32_t crop_front,
+  uint32_t crop_back)
+{
+  if (crop_front > 0) {
+    ceph_assert(disk_extents.front().length > crop_front);
+    disk_extents.front().offset += crop_front;
+    disk_extents.front().length -= crop_front;
+  }
+  if (crop_back > 0) {
+    ceph_assert(disk_extents.back().length > crop_back);
+    disk_extents.back().length -= crop_back;
+  }
+}
 
 /*
 1. _blob_put_data (tool)
@@ -392,7 +407,7 @@ inline void BlueStore::Writer::_blob_put_data_allocate(
   PExtentVector blob_allocs;
   _get_disk_space(in_blob_end - in_blob_offset, blob_allocs);
   bblob.allocated(in_blob_offset, in_blob_end - in_blob_offset, blob_allocs);
-  _schedule_io(blob_allocs, 0, disk_data);
+  _schedule_io(blob_allocs, disk_data);
 
   dout(25) << __func__ << " 0x" << std::hex << disk_data.length()
     << "@" << in_blob_offset << std::dec << " -> "
@@ -431,7 +446,10 @@ inline void BlueStore::Writer::_blob_put_data_subau_allocate(
   PExtentVector blob_allocs;
   _get_disk_space(in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
   bblob.allocated(in_blob_alloc_offset, in_blob_alloc_end - in_blob_alloc_offset, blob_allocs);
-  _schedule_io(blob_allocs, in_blob_offset - in_blob_alloc_offset, disk_data);
+  PExtentVector& disk_extents = blob_allocs;
+  _crop_allocs_to_io(disk_extents, in_blob_offset - in_blob_alloc_offset,
+    in_blob_alloc_end - in_blob_offset - disk_data.length());
+  _schedule_io(disk_extents, disk_data);
   dout(25) << __func__ << " 0x" << std::hex << disk_data.length()
     << "@" << in_blob_offset << std::dec << " -> "
     << blob->print(pp_mode) << " no ref yet" << dendl;
@@ -476,7 +494,10 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
     << "~" << disk_data.length()
     << " alloc_offset=" << alloc_offset
     << " -> " << blob->print(pp_mode) << dendl;
-  _schedule_io(blob_allocs, in_blob_offset - alloc_offset, disk_data);
+  PExtentVector& disk_extents = blob_allocs;
+  _crop_allocs_to_io(disk_extents, in_blob_offset - alloc_offset,
+    blob_length - in_blob_offset - disk_data.length());
+  _schedule_io(disk_extents, disk_data);
   return blob;
 }
 
@@ -508,7 +529,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   blob->dirty_blob_use_tracker().init_and_ref(blob_length, tracked_unit);
   PExtentVector blob_allocs;
   _get_disk_space(blob_length, blob_allocs);
-  _schedule_io(blob_allocs, 0, disk_data); //have to do before move()
+  _schedule_io(blob_allocs, disk_data); //have to do before move()
   bblob.allocated_full(blob_length, std::move(blob_allocs));
   bblob.mark_used(0, blob_length); //todo - optimize; this obviously clears it
   return blob;
@@ -626,42 +647,34 @@ inline void BlueStore::Writer::_schedule_io_masked(
  * Depends on \ref Writer::do_deferred to select direct or deferred action.
  * If \ref Writer::test_write_divertor bypass is set it overrides default path.
  *
- * disk_allocs    - Target disk allocation units.
- * initial_offset - Offset withing first AU; used when sub-au write is ongoing.
+ * disk_extents   - Target disk blocks
  * data           - Data.
  */
 inline void BlueStore::Writer::_schedule_io(
-  const PExtentVector& disk_allocs,
-  uint32_t initial_offset,
+  const PExtentVector& disk_extents,
   bufferlist data)
 {
   if (test_write_divertor == nullptr) {
     if (do_deferred) {
       bluestore_deferred_op_t *op = bstore->_get_deferred_op(txc, data.length());
       op->op = bluestore_deferred_op_t::OP_WRITE;
-      op->extents = disk_allocs;
+      op->extents = disk_extents;
       op->data = data;
       bstore->logger->inc(l_bluestore_issued_deferred_writes);
       bstore->logger->inc(l_bluestore_issued_deferred_write_bytes, data.length());
     } else {
-      for (const auto& loc : disk_allocs) {
-        ceph_assert(initial_offset <= loc.length);
+      for (const auto& loc : disk_extents) {
         bufferlist data_chunk;
-        uint32_t data_to_write = std::min(data.length(), loc.length - initial_offset);
-        data.splice(0, data_to_write, &data_chunk);
-        bstore->bdev->aio_write(loc.offset + initial_offset, data_chunk, &txc->ioc, false);
-        initial_offset = 0;
+        data.splice(0, loc.length, &data_chunk);
+        bstore->bdev->aio_write(loc.offset, data_chunk, &txc->ioc, false);
       }
       ceph_assert(data.length() == 0);
     }
   } else {
-    for (const auto& loc: disk_allocs) {
-      ceph_assert(initial_offset <= loc.length);
+    for (const auto& loc: disk_extents) {
       bufferlist data_chunk;
-      uint32_t data_to_write = std::min(data.length(), loc.length - initial_offset);
-      data.splice(0, data_to_write, &data_chunk);
-      test_write_divertor->write(loc.offset + initial_offset, data_chunk, do_deferred);
-      initial_offset = 0;
+      data.splice(0, loc.length, &data_chunk);
+      test_write_divertor->write(loc.offset, data_chunk, do_deferred);
     }
     ceph_assert(data.length() == 0);
   }
