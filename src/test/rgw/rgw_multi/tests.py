@@ -1921,6 +1921,36 @@ def test_role_delete_sync():
                       zone.iam_conn.get_role, RoleName=role_name)
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
+def test_object_acl():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+
+    # upload a dummy object and wait for sync.
+    k = new_key(primary, bucket, 'dummy')
+    k.set_contents_from_string('foo')
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+    #check object on secondary before setacl
+    bucket2 = get_bucket(secondary, bucket.name)
+    before_set_acl = bucket2.get_acl(k)
+    assert(len(before_set_acl.acl.grants) == 1)
+
+    #set object acl on primary and wait for sync.
+    bucket.set_canned_acl('public-read', key_name=k)
+    log.debug('set acl=%s', bucket.name)
+    zonegroup_data_checkpoint(zonegroup_conns)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    #check object secondary after setacl
+    bucket2 = get_bucket(secondary, bucket.name)
+    after_set_acl = bucket2.get_acl(k)
+    assert(len(after_set_acl.acl.grants) == 2) # read grant added on AllUsers
 
 @attr('data_sync_init')
 def test_bucket_full_sync_after_data_sync_init():
