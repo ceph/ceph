@@ -104,8 +104,9 @@ local function reserve(keys, args)
     local name = "reserve:" .. keys[1]
     local item_size = tonumber(args[1])
 
-    local value = generateString(item_size)
-
+    local randomString = generateString(item_size)
+    --- generate a json of the format {"timestamp": <current time>, "data": <value>}
+    local value = '{"timestamp":' .. redis.call("TIME")[0] .. ',"data":"' .. randomString .. '"}'
     if not redis.call('LPUSH', name, value) then
         return -lerrorCodes.ENOMEM
     end
@@ -158,7 +159,7 @@ local function queue_status(keys, args)
     local reserve_name = "reserve:" .. keys[1]
     local queue_length = redis.call('LLEN', name)
     local reserve_length = redis.call('LLEN', reserve_name)
-    return queue_length, reserve_length
+    return {queue_length, reserve_length}
 end
 
 --- Option one
@@ -177,6 +178,16 @@ local function locked_read(keys, args)
     return lock_status, ""
 end
 
+--- Stale queue cleanup
+--- @param keys table A single element list - queue name
+--- @param args table A single element - timeout
+--- @return number 0 if the cleanup is successful
+local function cleanup(keys, args)
+    local name = "reserve:" .. keys[1]
+    local timeout = args[1]
+    return 0
+end
+
 --- Register the functions.
 redis.register_function('reserve', reserve)
 redis.register_function('unreserve', unreserve)
@@ -184,3 +195,4 @@ redis.register_function('commit', commit)
 redis.register_function('read', read)
 redis.register_function('locked_read', locked_read)
 redis.register_function('queue_status', queue_status)
+redis.register_function('cleanup', cleanup)

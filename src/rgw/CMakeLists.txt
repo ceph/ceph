@@ -254,6 +254,19 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
+file(READ rgw_redis_scripts.lua RGW_REDIS_LUA_FUNCTIONS)
+
+## FIX ME: Permission error in cmake when trying to write to LUA_INCLUDE_DIR
+# configure_file(
+#   rgw_redis_scripts.h.in
+#   ${LUA_INCLUDE_DIR}/rgw_redis_script.h
+#   @ONLY) 
+
+configure_file(
+  rgw_redis_scripts.h.in
+  ${CMAKE_SOURCE_DIR}/src/rgw/rgw_redis_scripts.h
+  @ONLY)
+
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_common_srcs
         rgw_redis_driver.cc

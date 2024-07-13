@@ -25,7 +25,8 @@ int reserve(connection* conn, const std::string name, optional_yield y) {
   boost::redis::request req;
   boost::redis::response<int> resp;
 
-  req.push("FCALL", "reserve", 1, name);
+  int reserveSize = 120;
+  req.push("FCALL", "reserve", 1, name, reserveSize);
   return rgw::redis::doRedisFunc(conn, req, resp, y);
 }
 

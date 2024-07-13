@@ -1,0 +1,5 @@
+#pragma once
+
+#include <string>
+
+const std::string RGW_LUA_SCRIPT = R"(@RGW_REDIS_LUA_FUNCTIONS@)";
