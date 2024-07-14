@@ -8,68 +8,83 @@ int initQueue(boost::asio::io_context& io, connection* conn, config* cfg,
   return rgw::redis::loadLuaFunctions(io, conn, cfg, y);
 }
 
-int queueStatus(connection* conn, const std::string& name, int& res,
-                optional_yield y) {
+// FIXME: Perhaps return the queue length in calls to reserve, commit, abort
+// etc and do not use this function explicitly?
+int queueStatus(connection* conn, const std::string& name,
+                std::tuple<int, int>& res, optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  boost::redis::response<int, int> resp;
+  boost::system::error_code ec;
 
-  req.push("FCALL", "queue_status", 1, name);
-  int ret = rgw::redis::doRedisFunc(conn, req, resp, y);
-  if (ret == 0) {
-    res = std::get<0>(resp).value();
+  try {
+    req.push("LLEN", "reserve:" + name);
+    req.push("LLEN", "queue:" + name);
+
+    rgw::redis::redis_exec(conn, ec, req, resp, y);
+    if (ec) {
+      std::cerr << "RGW RedisLock:: " << __func__
+                << "(): ERROR: " << ec.message() << std::endl;
+      return -ec.value();
+    }
+    res = std::make_tuple(std::get<0>(resp).value(), std::get<1>(resp).value());
+    return 0;
+
+  } catch (const std::exception& e) {
+    std::cerr << "RGW RedisLock:: " << __func__ << "(): Exception: " << e.what()
+              << std::endl;
+    return -EINVAL;
   }
-  return ret;
 }
 
 int reserve(connection* conn, const std::string name, optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   int reserveSize = 120;
   req.push("FCALL", "reserve", 1, name, reserveSize);
-  return rgw::redis::doRedisFunc(conn, req, resp, y);
+  return rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
 }
 
 int commit(connection* conn, const std::string& name, const std::string& data,
            optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "commit", 1, name, data);
-  return rgw::redis::doRedisFunc(conn, req, resp, y);
+  return rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
 }
 
 int abort(connection* conn, const std::string& name, optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "abort", 1, name);
-  return rgw::redis::doRedisFunc(conn, req, resp, y);
+  return rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
 }
 
 int read(connection* conn, const std::string& name, int& res,
          optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "read", 1, name);
-  int ret = rgw::redis::doRedisFunc(conn, req, resp, y);
-  if (ret == 0) {
-    res = std::get<0>(resp).value();
-  }
+  int ret = rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
+  // if (ret == 0) {
+  //   res = std::get<0>(resp).value();
+  // }
   return ret;
 }
 
 int locked_read(connection* conn, const std::string& name, int& res,
                 std::string& lock_cookie, optional_yield y) {
   boost::redis::request req;
-  boost::redis::response<int> resp;
+  rgw::redis::RedisResponseMap resp;
 
   req.push("FCALL", "locked_read", 1, name, lock_cookie);
-  int ret = rgw::redis::doRedisFunc(conn, req, resp, y);
-  if (ret == 0) {
-    res = std::get<0>(resp).value();
-  }
+  int ret = rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
+  // if (ret == 0) {
+  //   res = std::get<0>(resp).value();
+  // }
   return ret;
 }
 

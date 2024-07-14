@@ -71,8 +71,6 @@ TEST_F(RGWRedisLockTest, Unlock) {
   boost::asio::spawn(
       io,
       [this](boost::asio::yield_context yield) {
-        boost::system::error_code ec;
-
         const std::string name = "lock:unlock";
         const std::string cookie = "mycookie";
         int duration = 12000;

@@ -124,7 +124,8 @@ local function reserve(keys, args)
 
     local randomString = generateString(item_size)
     --- generate a json of the format {"timestamp": <current time>, "data": <value>}
-    local value = '{"timestamp":' .. redis.call("TIME")[0] .. ',"data":"' .. randomString .. '"}'
+    local time = redis.call("TIME")[0]
+    local value = '{"timestamp":' .. redis.call("TIME")[1] .. ',"data":"' .. randomString .. '"}'
     if not redis.call('LPUSH', name, value) then
         return formatResponse(-lerrorCodes.ENOMEM, "Not enough memory", "")
     end
@@ -157,6 +158,11 @@ local function commit(keys, args)
         return formatResponse(-lerrorCodes.ENOMEM, "Not enough memory", "")
     end
     return formatResponse(0, "", "")
+end
+
+--- Abort the message reservation
+local function abort(keys, args)
+    return unreserve(keys)
 end
 
 --- Read a message from the queue
@@ -212,8 +218,8 @@ end
 
 --- Register the functions.
 redis.register_function('reserve', reserve)
-redis.register_function('unreserve', unreserve)
 redis.register_function('commit', commit)
+redis.register_function('abort', abort)
 redis.register_function('read', read)
 redis.register_function('locked_read', locked_read)
 redis.register_function('queue_status', queue_status)

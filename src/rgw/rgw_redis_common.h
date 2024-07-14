@@ -67,10 +67,10 @@ auto async_exec(connection* conn, const boost::redis::request& req,
       initiate_exec{conn}, token, req, resp);
 }
 
-template <typename T>
+template <typename T, typename... Ts>
 void redis_exec(connection* conn, boost::system::error_code& ec,
-                boost::redis::request& req, boost::redis::response<T>& resp,
-                optional_yield y) {
+                boost::redis::request& req,
+                boost::redis::response<T, Ts...>& resp, optional_yield y) {
   if (y) {
     auto yield = y.get_yield_context();
     async_exec(conn, req, resp, yield[ec]);
@@ -78,19 +78,6 @@ void redis_exec(connection* conn, boost::system::error_code& ec,
     async_exec(conn, req, resp, ceph::async::use_blocked[ec]);
   }
 }
-
-// template <typename T>
-// int doRedisFunc(connection* conn, boost::redis::request& req,
-//                 boost::redis::response<T>& resp, optional_yield y) {
-//   boost::system::error_code ec;
-//   redis_exec(conn, ec, req, resp, y);
-
-//   if (ec) {
-//     std::cerr << "EC Message: " << ec.message() << std::endl;
-//     return -ec.value();
-//   }
-//   return std::get<0>(resp).value();
-// }
 
 RedisResponse doRedisFunc(connection* conn, boost::redis::request& req,
                           RedisResponseMap& resp, std::string func_name,

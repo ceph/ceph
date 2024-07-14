@@ -31,42 +31,110 @@ class RGWRedisQueueTest : public ::testing::Test {
   }
 
   void TearDown() {
-    // Remove the two queues
-    // boost::asio::spawn(
-    //     io,
-    //     [this](boost::asio::yield_context yield) {
-    //       boost::redis::request req;
-    //       boost::redis::response<int> resp;
-
-    //       std::string name = "test_queue";
-    //       req.push("DEL", "reserve:" + name);
-    //       rgw::redis::doRedisFunc(conn, req, resp, yield);
-
-    //       req.clear();
-    //       //   resp.clear();
-
-    //       req.push("DEL", "reserve:" + name);
-    //       rgw::redis::doRedisFunc(conn, req, resp, yield);
-    //     },
-    //     [this](std::exception_ptr eptr) {
-    //       if (eptr) std::rethrow_exception(eptr);
-    //       io.stop();
-    //     });
     delete conn;
     delete cfg;
   }
 };
 
 TEST_F(RGWRedisQueueTest, Reserve) {
+  io.restart();
   boost::asio::spawn(
       io,
       [this](boost::asio::yield_context yield) {
-        int res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        int res;
+        std::tuple<int, int> status;
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
+
+        int initial_reserve = std::get<0>(status);
+        int initial_queue = std::get<1>(status);
+
+        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
+        ASSERT_EQ(std::get<1>(status), initial_queue);
       },
       [this](std::exception_ptr eptr) {
+        conn->cancel();
         if (eptr) std::rethrow_exception(eptr);
-        io.stop();
+      });
+  io.run();
+}
+
+TEST_F(RGWRedisQueueTest, Commit) {
+  io.restart();
+  boost::asio::spawn(
+      io,
+      [this](boost::asio::yield_context yield) {
+        int res;
+        std::tuple<int, int> status;
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+
+        int initial_reserve = std::get<0>(status);
+        int initial_queue = std::get<1>(status);
+
+        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
+        ASSERT_EQ(std::get<1>(status), initial_queue);
+
+        res = rgw::redisqueue::commit(conn, "test_queue", "test_data", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve);
+        ASSERT_EQ(std::get<1>(status), initial_queue + 1);
+      },
+      [this](std::exception_ptr eptr) {
+        conn->cancel();
+        if (eptr) std::rethrow_exception(eptr);
+      });
+  io.run();
+}
+
+TEST_F(RGWRedisQueueTest, Abort) {
+  io.restart();
+  boost::asio::spawn(
+      io,
+      [this](boost::asio::yield_context yield) {
+        int res;
+        std::tuple<int, int> status;
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+
+        int initial_reserve = std::get<0>(status);
+        int initial_queue = std::get<1>(status);
+
+        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
+        ASSERT_EQ(std::get<1>(status), initial_queue);
+
+        res = rgw::redisqueue::abort(conn, "test_queue", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve);
+        ASSERT_EQ(std::get<1>(status), initial_queue);
+      },
+      [this](std::exception_ptr eptr) {
+        conn->cancel();
+        if (eptr) std::rethrow_exception(eptr);
       });
   io.run();
 }
