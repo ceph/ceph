@@ -39,7 +39,7 @@ ninja
 
 - [x] Unlock: `FCALL unlock 1 <lock_name>`
 
-- [ ] Assert Lock: `FCALL assert_lock 1 <lock_name> <cookie>`
+- [x] Assert Lock: `FCALL assert_lock 1 <lock_name> <cookie>`
 
 
 
@@ -57,7 +57,9 @@ ninja
 
 - [x] Abort: `FCALL abort 1 <queue_name>`
 
-- [ ] Read: TODO
+- [x] Read: `FCALL read 1 <queue_name>`
+
+- [x] Locked Read: `FCALL locked_read 1 <queue_name> <cookie>`
 
 - [ ] Locked Read: TODO
 
@@ -68,3 +70,6 @@ ninja
     - Reserve Queue: `LLEN reserve:<queue_name>`
     - Commit Queue: `LLEN queue:<queue_name>` 
 
+
+## Miscellaneous Todos
+- Use ldpp for logging

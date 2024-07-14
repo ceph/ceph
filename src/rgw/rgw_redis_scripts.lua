@@ -171,19 +171,6 @@ local function read(keys)
     return formatResponse(0, "", value)
 end
 
---- Get the length of the queue and reserve queue
---- @param keys table A single element list - queue name
---- @param args table Empty
---- @return pair of number (queue length) and number (reserve length)
-local function queue_status(keys, args)
-    local name = "queue:" .. keys[1]
-    local reserve_name = "reserve:" .. keys[1]
-    local queue_length = redis.call('LLEN', name)
-    local reserve_length = redis.call('LLEN', reserve_name)
-    local value = {queue_length, reserve_length}
-    return formatResponse(0, "", value)
-end
-
 --- Option one
 --- Have a separate read if lock is held
 --- @param keys table A single element list - queue name
@@ -193,13 +180,17 @@ local function locked_read(keys, args)
     local name = "queue:" .. keys[1]
     local cookie = args[1]
 
-    local lock_status = assert_lock(keys, args)
+    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_args = {cookie}
+
+    local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
     if lock_status.map.errorCode == 0 then
         local value = redis.call('LRANGE', name, -1, -1)[1]
         return formatResponse(0, "", value)
     end
     return lock_status
 end
+
 
 --- Stale queue cleanup
 --- TODO: Implement the cleanup function
@@ -218,5 +209,4 @@ redis.register_function('commit', commit)
 redis.register_function('abort', abort)
 redis.register_function('read', read)
 redis.register_function('locked_read', locked_read)
-redis.register_function('queue_status', queue_status)
 redis.register_function('cleanup', cleanup)

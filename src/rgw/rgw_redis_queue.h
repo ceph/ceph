@@ -21,7 +21,11 @@ int commit(connection* conn, const std::string& name, const std::string& data,
 
 int abort(connection* conn, const std::string& name, optional_yield y);
 
-int read(connection* conn, const std::string& name, int& res, optional_yield y);
+int read(connection* conn, const std::string& name, std::string& res,
+         optional_yield y);
+
+int locked_read(connection* conn, const std::string& name,
+                std::string& lock_cookie, std::string& res, optional_yield y);
 
 int locked_read(connection* conn, const std::string& name, int& res,
                 std::string& lock_cookie, optional_yield y);

@@ -152,7 +152,7 @@ TEST_F(RGWRedisLockTest, Timeout) {
             rgw::redislock::lock(conn, name, cookie, duration, yield);
         ASSERT_EQ(return_code, 0);
 
-        boost::asio::steady_timer timer(io, std::chrono::seconds(1));
+        boost::asio::steady_timer timer(io, std::chrono::milliseconds(500));
         timer.async_wait(yield);
 
         return_code = rgw::redislock::assert_locked(conn, name, cookie, yield);
