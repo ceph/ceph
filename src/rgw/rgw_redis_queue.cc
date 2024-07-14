@@ -100,11 +100,13 @@ int locked_read(connection* conn, const std::string& name,
   return ret.errorCode;
 }
 
-  int ret = rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
-  // if (ret == 0) {
-  //   res = std::get<0>(resp).value();
-  // }
-  return ret;
+int ack_read(connection* conn, const std::string& name,
+             const std::string& lock_cookie, optional_yield y) {
+  boost::redis::request req;
+  rgw::redis::RedisResponseMap resp;
+
+  req.push("FCALL", "ack_read", 1, name, lock_cookie);
+  return rgw::redis::doRedisFunc(conn, req, resp, __func__, y).errorCode;
 }
 
 }  // namespace redisqueue

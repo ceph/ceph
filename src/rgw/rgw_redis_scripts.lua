@@ -191,6 +191,24 @@ local function locked_read(keys, args)
     return lock_status
 end
 
+--- Acknowledge the Read
+--- @param keys table A single element list - queue name
+--- @param args table A single element list - cookie
+--- @return number 0 if the message is acknowledged
+local function ack_read(keys, args)
+    local name = "queue:" .. keys[1]
+    local cookie = args[1]
+
+    local assert_lock_keys = {"lock:" .. keys[1]}
+    local assert_lock_args = {cookie}
+
+    local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
+    if lock_status.map.errorCode == 0 then
+        redis.call('RPOP', name)
+        return formatResponse(0, "", "")
+    end
+    return lock_status
+end
 
 --- Stale queue cleanup
 --- TODO: Implement the cleanup function
@@ -210,3 +228,4 @@ redis.register_function('abort', abort)
 redis.register_function('read', read)
 redis.register_function('locked_read', locked_read)
 redis.register_function('cleanup', cleanup)
+redis.register_function('ack_read', ack_read)

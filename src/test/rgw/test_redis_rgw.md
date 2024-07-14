@@ -61,7 +61,7 @@ ninja
 
 - [x] Locked Read: `FCALL locked_read 1 <queue_name> <cookie>`
 
-- [ ] Locked Read: TODO
+- [x] Acknowledge Read: `FCALL ack_read 1 <queue_name> <cookie>`
 
 - [ ] Stale Cleanup: TODO
 
