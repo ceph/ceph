@@ -72,8 +72,8 @@ void OpenSourceImageRequest<I>::open_source() {
   int r = source_spec_builder.parse_source_spec(source_spec,
                                                 &source_spec_object);
   if (r < 0) {
-    lderr(m_cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
-                 << dendl;
+    lderr(m_cct) << "failed to parse migration source-spec: "
+                 << cpp_strerror(r) << dendl;
     (*m_src_image_ctx)->state->close();
     finish(r);
     return;
