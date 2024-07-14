@@ -74,7 +74,7 @@ struct FileStream<I>::ReadRequest {
     auto offset = lseek64(file_stream->m_file_no, byte_extent.first, SEEK_SET);
     if (offset == -1) {
       r = -errno;
-      lderr(cct) << "failed to seek file stream: " << cpp_strerror(r) << dendl;
+      lderr(cct) << "failed to seek file: " << cpp_strerror(r) << dendl;
       finish(r);
       return;
     }
@@ -149,7 +149,7 @@ void FileStream<I>::open(Context* on_finish) {
   m_file_no = ::open(file_path.c_str(), O_RDONLY);
   if (m_file_no < 0) {
     int r = -errno;
-    lderr(m_cct) << "failed to open file stream '" << file_path << "': "
+    lderr(m_cct) << "failed to open file '" << file_path << "': "
                  << cpp_strerror(r) << dendl;
     on_finish->complete(r);
     return;

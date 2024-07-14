@@ -96,7 +96,7 @@ int SourceSpecBuilder<I>::build_snapshot(
     snapshot->reset(RawSnapshot<I>::create(m_image_ctx, source_spec_object,
                                            this, index));
   } else {
-    lderr(cct) << "unknown or unsupported format type '" << type << "'"
+    lderr(cct) << "unknown or unsupported snapshot type '" << type << "'"
                << dendl;
     return -ENOSYS;
   }
