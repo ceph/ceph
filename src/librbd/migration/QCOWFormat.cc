@@ -844,8 +844,8 @@ void QCOWFormat<I>::open(Context* on_finish) {
 
   int r = m_source_spec_builder->build_stream(m_json_object, &m_stream);
   if (r < 0) {
-    lderr(cct) << "failed to build migration stream handler" << cpp_strerror(r)
-               << dendl;
+    lderr(cct) << "failed to build migration stream handler: "
+               << cpp_strerror(r) << dendl;
     on_finish->complete(r);
     return;
   }
