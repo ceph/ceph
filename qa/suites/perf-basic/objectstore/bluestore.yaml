@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    fs: xfs
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
+    conf:
+      osd:
+        osd objectstore: bluestore
+        bluestore block size: 96636764160
+  ceph-deploy:
+    fs: xfs
+    bluestore: yes
+    conf:
+      osd:
+        osd objectstore: bluestore
+        bluestore block size: 96636764160
+

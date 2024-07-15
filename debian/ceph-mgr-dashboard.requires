@@ -1,0 +1,11 @@
+bcrypt
+CherryPy
+more-itertools
+PyJWT
+pyopenssl
+requests
+Routes
+pkg-resources
+prettytable
+pyyaml
+ceph-common
