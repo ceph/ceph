@@ -77,3 +77,9 @@ class LoginAccess(_StrEnum):
         if self == self.READ_WRITE_SHORT:
             return LoginAccess(self.READ_WRITE)
         return self
+
+
+class SMBClustering(_StrEnum):
+    DEFAULT = 'default'
+    ALWAYS = 'always'
+    NEVER = 'never'
