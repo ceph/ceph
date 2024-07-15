@@ -1661,6 +1661,7 @@ def test_bucket_reshard_index_log_trim():
     test_bilog = bilog_list(zone.zone, test_bucket.name)
     assert(len(test_bilog) > 0)
 
+@attr('fails_with_rgw')
 @attr('bucket_reshard')
 def test_bucket_reshard_incremental():
     zonegroup = realm.master_zonegroup()
@@ -1691,6 +1692,7 @@ def test_bucket_reshard_incremental():
         k.set_contents_from_string('foo')
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+@attr('fails_with_rgw')
 @attr('bucket_reshard')
 def test_bucket_reshard_full():
     zonegroup = realm.master_zonegroup()
@@ -2022,8 +2024,6 @@ def test_object_acl():
     after_set_acl = bucket2.get_acl(k)
     assert(len(after_set_acl.acl.grants) == 2) # read grant added on AllUsers
 
-
-@attr('fails_with_rgw')
 @attr('data_sync_init')
 def test_bucket_full_sync_after_data_sync_init():
     zonegroup = realm.master_zonegroup()
@@ -2096,7 +2096,6 @@ def test_resharded_bucket_full_sync_after_data_sync_init():
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
     zonegroup_data_checkpoint(zonegroup_conns)
 
-@attr('fails_with_rgw')
 @attr('data_sync_init')
 def test_bucket_incremental_sync_after_data_sync_init():
     zonegroup = realm.master_zonegroup()
@@ -2377,7 +2376,6 @@ def check_objects_not_exist(bucket, obj_arr):
     for objname in obj_arr:
         check_object_not_exists(bucket, objname)
 
-@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_policy_config_zonegroup():
     """
@@ -2694,7 +2692,6 @@ def test_sync_flow_directional_zonegroup_select():
     remove_sync_policy_group(c1, "sync-group")
     return
 
-@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_single_bucket():
     """
@@ -2807,7 +2804,6 @@ def test_sync_single_bucket():
     remove_sync_policy_group(c1, "sync-group")
     return
 
-@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_different_buckets():
     """
@@ -3079,7 +3075,6 @@ def test_sync_multiple_buckets_to_single():
     remove_sync_policy_group(c1, "sync-group")
     return
 
-@attr('fails_with_rgw')
 @attr('sync_policy')
 def test_sync_single_bucket_to_multiple():
     """
