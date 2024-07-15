@@ -472,6 +472,9 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
     ceph_assert(!session->reclaiming_from);
     session->reclaiming_from = target;
     reply->set_addrs(entity_addrvec_t(target->info.inst.addr));
+  } else {
+    derr << ": could not find session by uuid:" << m->get_uuid() << dendl;
+    mds->sessionmap.dump();
   }
 
   if (flags & CEPH_RECLAIM_RESET) {
