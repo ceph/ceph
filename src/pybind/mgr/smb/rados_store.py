@@ -273,3 +273,19 @@ def _init_pool(mgr: 'MgrModule', pool: str) -> None:
             'app': 'smb',
         }
     )
+
+
+def parse_uri(uri: str) -> Tuple[str, str, str]:
+    """Parse a rados-like uri into pool, namespace, and object values.
+    Namespace may be an empty string.
+    """
+    if uri.startswith('rados://'):
+        parts = uri.removeprefix('rados://').split('/')
+        if len(parts) == 3:
+            return tuple(parts)  # type: ignore
+        if len(parts) == 2:
+            return parts[0], '', parts[1]
+        raise ValueError('invalid rados uri: {uri!r}')
+    elif uri.startswith('rados:'):
+        raise ValueError('not a supported rados uri: {uri!r}')
+    raise ValueError('not a rados uri: {uri!r}')
