@@ -3528,6 +3528,8 @@ def list_daemons(
                                 version = CephIscsi.get_version(ctx, container_id)
                             if daemon_type == CephNvmeof.daemon_type:
                                 version = CephNvmeof.get_version(ctx, container_id)
+                            if daemon_type == SMB.daemon_type:
+                                version = SMB.get_version(ctx, container_id)
                             elif not version:
                                 if daemon_type in ceph_daemons():
                                     out, err, code = call(ctx,
