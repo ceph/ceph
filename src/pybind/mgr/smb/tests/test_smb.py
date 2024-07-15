@@ -737,3 +737,58 @@ def test_show_invalid_input(tmodule):
     _example_cfg_1(tmodule)
     with pytest.raises(smb.cli.InvalidInputValue):
         tmodule.show(['ceph.smb.export'])
+
+
+def test_show_cluster_without_shares(tmodule):
+    # this cluster will have no shares associated with it
+    tmodule._internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'active-directory',
+                'intent': 'present',
+                'domain_settings': {
+                    'realm': 'dom1.example.com',
+                    'join_sources': [
+                        {
+                            'source_type': 'resource',
+                            'ref': 'foo',
+                        }
+                    ],
+                },
+            },
+            'join_auths.foo': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
+                },
+            },
+        }
+    )
+
+    res, body, status = tmodule.show.command(['ceph.smb.cluster.foo'])
+    assert res == 0
+    assert (
+        body.strip()
+        == """
+{
+  "resource_type": "ceph.smb.cluster",
+  "cluster_id": "foo",
+  "auth_mode": "active-directory",
+  "intent": "present",
+  "domain_settings": {
+    "realm": "dom1.example.com",
+    "join_sources": [
+      {
+        "source_type": "resource",
+        "ref": "foo"
+      }
+    ]
+  }
+}
+    """.strip()
+    )

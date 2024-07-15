@@ -411,7 +411,7 @@ class ClusterConfigHandler:
             for cluster_id in self.cluster_ids():
                 if (resources.Cluster, cluster_id) in matcher:
                     out.append(self._cluster_entry(cluster_id).get_cluster())
-                for share_id in cluster_shares[cluster_id]:
+                for share_id in cluster_shares.get(cluster_id, []):
                     if (resources.Share, cluster_id, share_id) in matcher:
                         out.append(
                             self._share_entry(
