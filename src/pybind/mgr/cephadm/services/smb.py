@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Iterator, List, Tuple, cast
+from typing import Any, Dict, List, Tuple, cast, Optional
 
 from ceph.deployment.service_spec import ServiceSpec, SMBSpec
 
@@ -20,7 +20,22 @@ class SMBService(CephService):
 
     def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
-        logger.warning('config is a no-op')
+        smb_spec = cast(SMBSpec, spec)
+        self._configure_cluster_meta(smb_spec)
+
+    def ranked(self, spec: ServiceSpec) -> bool:
+        smb_spec = cast(SMBSpec, spec)
+        return 'clustered' in smb_spec.features
+
+    def fence_old_ranks(
+        self,
+        spec: ServiceSpec,
+        rank_map: Dict[int, Dict[int, Optional[str]]],
+        num_ranks: int,
+    ) -> None:
+        logger.warning(
+            'fence_old_ranks: Unsupported %r %r', rank_map, num_ranks
+        )
 
     def prepare_create(
         self, daemon_spec: CephadmDaemonDeploySpec
@@ -51,6 +66,10 @@ class SMBService(CephService):
             config_blobs['user_sources'] = smb_spec.user_sources
         if smb_spec.custom_dns:
             config_blobs['custom_dns'] = smb_spec.custom_dns
+        if smb_spec.cluster_meta_uri:
+            config_blobs['cluster_meta_uri'] = smb_spec.cluster_meta_uri
+        if smb_spec.cluster_lock_uri:
+            config_blobs['cluster_lock_uri'] = smb_spec.cluster_lock_uri
         ceph_users = smb_spec.include_ceph_users or []
         config_blobs.update(
             self._ceph_config_and_keyring_for(
@@ -58,6 +77,7 @@ class SMBService(CephService):
             )
         )
         logger.debug('smb generate_config: %r', config_blobs)
+        self._configure_cluster_meta(smb_spec, daemon_spec)
         return config_blobs, []
 
     def config_dashboard(
@@ -141,3 +161,63 @@ class SMBService(CephService):
             'keyring': keyring,
             'config_auth_entity': entity,
         }
+
+    def _configure_cluster_meta(
+        self,
+        smb_spec: SMBSpec,
+        daemon_spec: Optional[CephadmDaemonDeploySpec] = None,
+    ) -> None:
+        if 'clustered' not in smb_spec.features:
+            logger.debug(
+                'smb clustering disabled: %s: lacks feature flag',
+                smb_spec.service_name(),
+            )
+            return
+        uri = smb_spec.cluster_meta_uri
+        if not uri:
+            logger.error(
+                'smb spec (%s) with clustering missing uri value',
+                smb_spec.service_name(),
+            )
+            return
+
+        logger.info('configuring smb/ctdb cluster metadata')
+        name = smb_spec.service_name()
+        rank_map = self.mgr.spec_store[name].rank_map or {}
+        daemons = self.mgr.cache.get_daemons_by_service(name)
+        logger.debug(
+            'smb cluster meta: name=%r rank_map=%r daemons=%r daemon_spec=%r',
+            name,
+            rank_map,
+            daemons,
+            daemon_spec,
+        )
+
+        from smb import clustermeta
+
+        smb_dmap: clustermeta.DaemonMap = {}
+        for dd in daemons:
+            assert dd.daemon_type and dd.daemon_id
+            assert dd.hostname
+            host_ip = dd.ip or self.mgr.inventory.get_addr(dd.hostname)
+            smb_dmap[dd.name()] = {
+                'daemon_type': dd.daemon_type,
+                'daemon_id': dd.daemon_id,
+                'hostname': dd.hostname,
+                'host_ip': host_ip,
+                # specific ctdb_ip? (someday?)
+            }
+        if daemon_spec:
+            host_ip = daemon_spec.ip or self.mgr.inventory.get_addr(
+                daemon_spec.host
+            )
+            smb_dmap[daemon_spec.name()] = {
+                'daemon_type': daemon_spec.daemon_type,
+                'daemon_id': daemon_spec.daemon_id,
+                'hostname': daemon_spec.host,
+                'host_ip': host_ip,
+                # specific ctdb_ip? (someday?)
+            }
+        logger.debug("smb daemon map: %r", smb_dmap)
+        with clustermeta.rados_object(self.mgr, uri) as cmeta:
+            cmeta.sync_ranks(rank_map, smb_dmap)
