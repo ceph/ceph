@@ -97,7 +97,6 @@ void AioCompletion::complete() {
     }
   }
 
-  state = AIO_STATE_CALLBACK;
   if (complete_cb) {
     if (external_callback) {
       complete_external_callback();
@@ -238,7 +237,7 @@ void AioCompletion::complete_request(ssize_t r)
 
 bool AioCompletion::is_complete() {
   tracepoint(librbd, aio_is_complete_enter, this);
-  bool done = (this->state != AIO_STATE_PENDING);
+  bool done = (this->state == AIO_STATE_COMPLETE);
   tracepoint(librbd, aio_is_complete_exit, done);
   return done;
 }
@@ -263,12 +262,12 @@ void AioCompletion::complete_external_callback() {
 }
 
 void AioCompletion::mark_complete_and_notify() {
+  state = AIO_STATE_COMPLETE;
+
   if (ictx != nullptr && event_notify && ictx->event_socket.is_valid()) {
     ictx->event_socket_completions.push(this);
     ictx->event_socket.notify();
   }
-
-  state = AIO_STATE_COMPLETE;
 
   {
     std::unique_lock<std::mutex> locker(lock);

@@ -40,7 +40,6 @@ namespace io {
 struct AioCompletion {
   typedef enum {
     AIO_STATE_PENDING = 0,
-    AIO_STATE_CALLBACK,
     AIO_STATE_COMPLETE,
   } aio_state_t;
 
