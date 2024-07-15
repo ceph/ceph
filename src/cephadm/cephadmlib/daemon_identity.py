@@ -117,7 +117,7 @@ class DaemonSubIdentity(DaemonIdentity):
     ) -> None:
         super().__init__(fsid, daemon_type, daemon_id)
         self._subcomponent = subcomponent
-        if not re.match('^[a-zA-Z0-9]{1,15}$', self._subcomponent):
+        if not re.match('^[a-zA-Z0-9]{1,32}$', self._subcomponent):
             raise ValueError(
                 f'invalid subcomponent; invalid characters: {subcomponent!r}'
             )
