@@ -1245,7 +1245,7 @@ void BlueStore::Writer::_split_data(
     if (p > end_offset - lof) p = end_offset - lof;
     bufferlist tmp;
     data.splice(0, p, &tmp);
-    bd.emplace_back(p, 0, tmp, tmp);
+    bd.emplace_back(blob_data_t{p, 0, tmp, tmp});
     lof += p;
   }
 }
