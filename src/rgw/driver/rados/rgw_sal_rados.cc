@@ -1161,18 +1161,24 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
 
   RGWObjectCtx obj_ctx(store);
   obj_ctx.set_atomic(head_obj);
+  const auto& bucket_info = get_info();
   RGWRados::Object rgw_head_obj(store->getRados(),
-      get_info(),
+      bucket_info,
       obj_ctx,
       head_obj);
-  // TODO: should we call set_versioning_disabled() ?
+  // disable versioning on the logging object
+  rgw_head_obj.set_versioning_disabled(true);
   RGWRados::Object::Write head_obj_wop(&rgw_head_obj);
   head_obj_wop.meta.manifest = &manifest;
-  // TODO: get_owner() is empty
-  head_obj_wop.meta.bucket_owner = get_owner();
+  head_obj_wop.meta.bucket_owner = bucket_info.owner;
   head_obj_wop.meta.flags = PUT_OBJ_CREATE;
   head_obj_wop.meta.mtime = &mtime;
   // TODO: head_obj_wop.meta.ptag
+  // TODO: missing display name
+  // the owner of the logging object is the bucket owner
+  // not the user that wrote the log that triggered the commit
+  const ACLOwner owner(bucket_info.owner, "");
+  head_obj_wop.meta.owner = owner;
   const std::string etag = calculate_etag(bl_data);
   bufferlist bl_etag;
   bl_etag.append(etag);
