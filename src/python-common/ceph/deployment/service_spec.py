@@ -1224,6 +1224,7 @@ class RGWSpec(ServiceSpec):
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
                  rgw_bucket_counters_cache_size: Optional[int] = None,
+                 disable_multisite_sync_traffic: Optional[bool] = None,
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1273,6 +1274,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_bucket_counters_cache = rgw_bucket_counters_cache
         #: Used to set number of entries in each cache of bucket counters
         self.rgw_bucket_counters_cache_size = rgw_bucket_counters_cache_size
+        #: Used to make RGW not do multisite replication so it can dedicate to IO
+        self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]
