@@ -6883,7 +6883,7 @@ int BlueStore::_create_alloc()
   return 0;
 }
 
-int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
+int BlueStore::_init_alloc()
 {
   int r = _create_alloc();
   if (r < 0) {
@@ -6944,7 +6944,7 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
   return 0;
 }
 
-void BlueStore::_post_init_alloc(const std::map<uint64_t, uint64_t>& zone_adjustments)
+void BlueStore::_post_init_alloc()
 {
   int r = 0;
   if (fm->is_null_manager()) {
@@ -7367,10 +7367,6 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
     }
   }
 
-  // SMR devices may require a freelist adjustment, but that can only happen after
-  // the db is read-write. we'll stash pending changes here.
-  std::map<uint64_t, uint64_t> zone_adjustments;
-
   int r = _open_path();
   if (r < 0)
     return r;
@@ -7408,7 +7404,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_db;
 
-  r = _init_alloc(&zone_adjustments);
+  r = _init_alloc();
   if (r < 0)
     goto out_fm;
 
@@ -7425,7 +7421,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   }
 
   if (!read_only) {
-    _post_init_alloc(zone_adjustments);
+    _post_init_alloc();
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
