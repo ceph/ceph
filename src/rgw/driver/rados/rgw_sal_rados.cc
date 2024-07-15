@@ -1032,7 +1032,7 @@ int RadosBucket::get_logging_object_name(std::string& obj_name, const std::strin
   rgw_pool data_pool;
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
       "' when getting logging object name" << dendl;
     return -EIO;
   }
@@ -1059,12 +1059,12 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name, const std:
   rgw_pool data_pool;
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
       "' when setting logging object name"  << dendl;
     return -EIO;
   }
   bufferlist bl;
-  bl.append(obj_name); 
+  bl.append(obj_name);
   const int ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
                                data_pool,
                                obj_name_oid,
@@ -1082,9 +1082,20 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name, const std:
 }
 
 std::string to_temp_object_name(const rgw::sal::Bucket* bucket, const std::string& obj_name) {
-  return fmt::format("{}__shadow_{}0", 
+  return fmt::format("{}__shadow_{}0",
       bucket->get_bucket_id(),
       obj_name);
+}
+
+// calculate hex etag of bufferlist
+std::string calculate_etag(bufferlist& bl) {
+  MD5 hash;
+  hash.Update(reinterpret_cast<const unsigned char*>(bl.c_str()), bl.length());
+  unsigned char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  hash.Final(etag);
+  char hex_etag[CEPH_CRYPTO_MD5_DIGESTSIZE*2+1];
+  buf_to_hex(etag, CEPH_CRYPTO_MD5_DIGESTSIZE, hex_etag);
+  return std::string(hex_etag);
 }
 
 int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) {
@@ -1093,7 +1104,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   const auto placement_rule = get_placement_rule();
 
   if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
       "' when comitting logging object"  << dendl;
     return -EIO;
   }
@@ -1101,22 +1112,24 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
   std::map<string, bufferlist> obj_attrs;
   ceph::real_time mtime;
-  uint64_t size;
-  if (const auto ret = rgw_stat_system_obj(dpp,
-                        store->svc()->sysobj,
-                        data_pool,
-                        temp_obj_name,
-                        nullptr,
-                        &mtime,
-                        &size,
-                        y,
-                        &obj_attrs); ret < 0) {
+  bufferlist bl_data;
+  if (const auto ret = rgw_get_system_obj(store->svc()->sysobj,
+                     data_pool,
+                     temp_obj_name,
+                     bl_data,
+                     nullptr,
+                     &mtime,
+                     y,
+                     dpp,
+                     &obj_attrs,
+                     nullptr); ret < 0) {
     ldpp_dout(dpp, 1) << "faild to read logging data when comitting to object '" << temp_obj_name
       << ". error: " << ret << dendl;
     return ret;
   }
 
 
+  uint64_t size = bl_data.length();
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
   RGWObjManifest manifest;
   manifest.set_prefix(obj_name);
@@ -1127,18 +1140,18 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
                                 nullptr, // no special placment for tail
                                 get_key(),
                                 head_obj); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to create manifest when comitting logging object. error: " << 
+    ldpp_dout(dpp, 1) << "failed to create manifest when comitting logging object. error: " <<
       ret << dendl;
     return ret;
   }
 
   if (const auto ret = manifest_gen.create_next(size); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to add object to manifest when comitting logging object. error: " << 
+    ldpp_dout(dpp, 1) << "failed to add object to manifest when comitting logging object. error: " <<
       ret << dendl;
     return ret;
   }
-  
-  if (const auto expected_temp_obj = manifest_gen.get_cur_obj(store->getRados()); 
+
+  if (const auto expected_temp_obj = manifest_gen.get_cur_obj(store->getRados());
       temp_obj_name != expected_temp_obj.oid) {
     // TODO: cleanup temporary object, commit would never succeed
     ldpp_dout(dpp, 1) << "temporary logging object name mismatch: '" <<
@@ -1160,15 +1173,19 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   head_obj_wop.meta.flags = PUT_OBJ_CREATE;
   head_obj_wop.meta.mtime = &mtime;
   // TODO: head_obj_wop.meta.ptag
+  const std::string etag = calculate_etag(bl_data);
+  bufferlist bl_etag;
+  bl_etag.append(etag);
+  obj_attrs.emplace(RGW_ATTR_ETAG, std::move(bl_etag));
   const req_context rctx{dpp, y, nullptr};
   jspan_context trace{false, false};
   if (const auto ret = head_obj_wop.write_meta(0, size, obj_attrs, rctx, trace); ret < 0) {
-  ldpp_dout(dpp, 1) << " failed to commit logging object '" << temp_obj_name << 
+  ldpp_dout(dpp, 1) << "failed to commit logging object '" << temp_obj_name <<
     "' to bucket id '" << get_bucket_id() <<"'. error: " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << "committed logging object '" << temp_obj_name << 
-    "' with size of " << size << " bytes, to bucket '" << get_key() << "' as '" << 
+  ldpp_dout(dpp, 20) << "committed logging object '" << temp_obj_name <<
+    "' with size of " << size << " bytes, to bucket '" << get_key() << "' as '" <<
     obj_name << "'" << dendl;
   return 0;
 }
@@ -1178,7 +1195,7 @@ int RadosBucket::write_logging_object(const std::string& obj_name, const std::st
   rgw_pool data_pool;
   rgw_obj obj{get_key(), obj_name};
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
-    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() << 
+    ldpp_dout(dpp, 1) << "failed to get data pool for bucket '" << get_name() <<
       "' when writing logging object" << dendl;
     return -EIO;
   }
@@ -1195,11 +1212,11 @@ int RadosBucket::write_logging_object(const std::string& obj_name, const std::st
   librados::ObjectWriteOperation op;
   op.append(bl);
   if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, &op, y); ret < 0) {
-    ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name << 
+    ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<
       "'. ret = " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 1) << "wrote " << record.length() << " bytes to logging object '" << 
+  ldpp_dout(dpp, 1) << "wrote " << record.length() << " bytes to logging object '" <<
     temp_obj_name << "'" << dendl;
   return 0;
 }
@@ -3320,7 +3337,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
     upload_info.cksum_type = cksum_type;
-    
+
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
       upload_info.obj_legal_hold = (*obj_legal_hold);
@@ -4375,9 +4392,9 @@ void RadosLuaManager::handle_reload_notify(const DoutPrefixProvider* dpp, option
     ldpp_dout(dpp, 5) << "WARNING: failed to install Lua package: " << p
             << " from allowlist" << dendl;
   }
-#else 
+#else
   const int r = 0;
-#endif  
+#endif
   ack_reload(dpp, notify_id, cookie, r);
 }
 
