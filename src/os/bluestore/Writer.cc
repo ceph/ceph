@@ -1344,8 +1344,15 @@ void BlueStore::Writer::do_write(
     _try_put_data_on_allocated(location, data_end, ref_end, bd, after_punch_it);
   }
   if (location != data_end) {
-    uint32_t need_size = p2roundup(data_end, au_size) - p2align(location, au_size);
     // make a deferred decision
+    uint32_t need_size = 0;
+    uint32_t location_tmp = location;
+    for (auto& i : bd) {
+      uint32_t location_end = location_tmp + i.real_length;
+      need_size += p2roundup(location_end, au_size) - p2align(location_tmp, au_size);
+      location_tmp = location_end;
+    }
+
     _defer_or_allocate(need_size);
     _do_put_blobs(location, data_end, ref_end, bd, after_punch_it);
   } else {
