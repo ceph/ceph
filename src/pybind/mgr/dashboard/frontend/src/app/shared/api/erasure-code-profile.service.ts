@@ -84,6 +84,13 @@ export class ErasureCodeProfileService {
       domain. For instance, if the failure domain is host no two chunks will be stored on the same
       host. It is used to create a CRUSH rule step such as step chooseleaf host.`,
 
+    crushNumFailureDomains: $localize` Number of failure domains to map. Results in a CRUSH MSR rule being created.
+    Must be specified if crush-osds-per-failure-domain is specified.`,
+
+    crushOsdsPerFailureDomain: $localize`Maximum number of OSDs to place in each failure domain --
+     defaults to 1. Using a value greater than one will cause a CRUSH MSR rule to be created.
+      Must be specified if crush-num-failure-domains is specified.`,
+
     crushDeviceClass: $localize`Restrict placement to devices of a specific class
       (e.g., ssd or hdd), using the crush device class names in the CRUSH map.`,
 
