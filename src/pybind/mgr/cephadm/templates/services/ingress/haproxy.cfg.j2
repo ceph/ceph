@@ -79,8 +79,7 @@ backend backend
 {% endif %}
 {% if mode == 'tcp' %}
     mode        tcp
-    balance     source
-    hash-type   consistent
+    balance     roundrobin
 {% if default_server_opts %}
     default-server {{ default_server_opts|join(" ") }}
 {% endif %}
