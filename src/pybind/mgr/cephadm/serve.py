@@ -780,7 +780,7 @@ class CephadmServe:
         }
 
         rank_map = None
-        if svc.ranked():
+        if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         ha = HostAssignment(
             spec=spec,
