@@ -16,6 +16,7 @@ from .enums import (
     JoinSourceType,
     LoginAccess,
     LoginCategory,
+    SMBClustering,
     UserGroupSourceType,
 )
 from .proto import Self, Simplified
@@ -358,6 +359,8 @@ class Cluster(_RBase):
     custom_smb_global_options: Optional[Dict[str, str]] = None
     # embedded orchestration placement spec
     placement: Optional[WrappedPlacementSpec] = None
+    # control if the cluster is really a cluster
+    clustering: SMBClustering = SMBClustering.DEFAULT
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -394,6 +397,19 @@ class Cluster(_RBase):
     @property
     def cleaned_custom_smb_global_options(self) -> Optional[Dict[str, str]]:
         return validation.clean_custom_options(self.custom_smb_global_options)
+
+    def is_clustered(self) -> bool:
+        """Return true if smbd instance should use (CTDB) clustering."""
+        if self.clustering == SMBClustering.ALWAYS:
+            return True
+        if self.clustering == SMBClustering.NEVER:
+            return False
+        # do clustering automatically, based on the placement spec's count value
+        count = 0
+        if self.placement and self.placement.count:
+            count = self.placement.count
+        # clustering enabled unless we're deploying a single instance "cluster"
+        return count != 1
 
 
 @resourcelib.resource('ceph.smb.join.auth')
