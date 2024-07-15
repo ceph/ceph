@@ -498,6 +498,7 @@ ExtentPlacementManager::write_delayed_ool_extents(
       assert(extent->is_valid());
     });
 #endif
+    assert(writer->get_type() == backend_type_t::SEGMENTED);
     return writer->alloc_write_ool_extents(t, extents);
   });
 }
@@ -524,6 +525,7 @@ ExtentPlacementManager::write_preallocated_ool_extents(
     return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
       auto writer = p.first;
       auto& extents = p.second;
+      assert(writer->get_type() == backend_type_t::RANDOM_BLOCK);
       return writer->alloc_write_ool_extents(t, extents);
     });
   });
