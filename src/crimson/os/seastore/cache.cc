@@ -1136,7 +1136,7 @@ record_t Cache::prepare_record(
   t.read_set.clear();
   t.write_set.clear();
 
-  record_t record(trans_src);
+  record_t record(record_type_t::JOURNAL, trans_src);
   auto commit_time = seastar::lowres_system_clock::now();
 
   // Add new copy of mutated blocks, set_io_wait to block until written
