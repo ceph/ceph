@@ -1,0 +1,76 @@
+.TH funccount 8  "2014-07-19" "USER COMMANDS"
+.SH NAME
+funccount \- count kernel function calls matching specified wildcards. Uses Linux ftrace.
+.SH SYNOPSIS
+.B funccount
+[\-hT] [\-i secs] [\-d secs] [\-t top] funcstring
+.SH DESCRIPTION
+This tool is a quick way to determine which kernel functions are being called,
+and at what rate. It uses ftrace function profiling capabilities.
+
+WARNING: This uses dynamic tracing of (what can be many) kernel functions,
+and could cause kernel panics or freezes. Test, and know what you are doing,
+before use.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+CONFIG_FUNCTION_PROFILER, which you may already have enabled and available on
+recent kernels, and awk.
+.SH OPTIONS
+\-d seconds
+Total duration of the trace.
+.TP
+\-h
+Print usage message.
+.TP
+\-i seconds
+Print an interval summary every so many seconds.
+.TP
+\-t top
+Print top number of entries only.
+.TP
+\-T
+Include timestamp on each summary.
+.TP
+funcstring
+A function name to trace, which may include file glob style wildcards ("*") at
+the beginning or ending of a string only. Eg, "vfs*" means match "vfs" followed
+by anything.
+.SH EXAMPLES
+.TP
+Count every kernel function beginning with "bio_", until Ctrl-C is hit:
+#
+.B funccount 'bio_*'
+.TP
+Count every "tcp_*" kernel function, and print a summary every one second, five in total:
+#
+.B funccount \-i 1 \-d 5 'tcp_*'
+.TP
+Count every "ext4*" kernel function, and print the top 20 when Ctrl-C is hit:
+#
+.B funccount \-t 20 'ext4*'
+.SH FIELDS
+.TP
+FUNC
+Kernel function name.
+.TP
+COUNT
+Number of times this function was called during the tracing interval.
+.SH OVERHEAD
+This uses the ftrace profiling framework, which does in-kernel counts,
+lowering the overhead (compared to tracing each event).
+.SH SOURCE
+This is from the perf-tools collection:
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+functrace(8)

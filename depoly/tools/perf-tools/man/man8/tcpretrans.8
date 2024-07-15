@@ -1,0 +1,93 @@
+.TH tcpretrans 8  "2014-07-31" "USER COMMANDS"
+.SH NAME
+tcpretrans \- show TCP retransmits, with address and other details. Uses Linux ftrace.
+.SH SYNOPSIS
+.B tcpretrans
+[\-hsp]
+.SH DESCRIPTION
+This traces TCP retransmits that are sent by the system tcpretrans is executed
+from, showing address, port, and TCP state information,
+and sometimes the PID (although usually not, since retransmits are usually
+sent by the kernel on timeout events). To keep overhead low, only
+tcp_retransmit_skb() kernel calls are traced (this does not trace every packet).
+
+This was written as a proof of concept for ftrace, for older Linux systems,
+and without kernel debuginfo. It uses dynamic tracing of tcp_retransmit_skb(),
+and reads /proc/net/tcp for socket details. Its use of dynamic tracing and
+CPU registers is an unstable platform-specific workaround, and may require
+modifications to work on different kernels and platforms. This would be better
+written using a tracer such as SystemTap, and will likely be rewritten in the
+future when certain tracing features are added to the Linux kernel.
+
+When \-l is used, this also uses dynamic tracing of tcp_send_loss_probe() and
+a register.
+
+Currently only IPv4 is supported, on x86_64. If you try this on a different
+architecture, you'll likely need to adjust the register locations (search
+for %di).
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE and KPROBE CONFIG, tcp_retransmit_skb() kernel function.
+You may have these already have these on recent kernels. And Perl.
+TCP tail loss probes were added in Linux 3.10.
+.SH OPTIONS
+.TP
+\-h
+Print usage message.
+.TP
+\-s
+Include kernel stack traces.
+.TP
+\-l
+Include TCP tail loss probes.
+.SH EXAMPLES
+.TP
+Trace TCP retransmits
+#
+.B tcpretrans
+.TP
+TIME
+Time of retransmit (may be rounded up to the nearest second).
+.TP
+PID
+Process ID that was on-CPU. This is less useful than it might sound, as it
+may usually be 0, for the kernel, for timer-based retransmits.
+.TP
+LADDR
+Local address.
+.TP
+LPORT
+Local port.
+.TP
+\-\-
+Packet type: "R>" for retransmit, and "L>" for tail loss probe.
+.TP
+RADDR
+Remote address.
+.TP
+RPORT
+Remote port.
+.TP
+STATE
+TCP session state.
+.SH OVERHEAD
+The CPU overhead is relative to the rate of TCP retransmits, and is
+designed to be low as this does not examine every packet. Once per second the
+/proc/net/tcp file is read, and a buffer of retransmit trace events is
+retrieved from the kernel and processed.
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+tcpdump(1)

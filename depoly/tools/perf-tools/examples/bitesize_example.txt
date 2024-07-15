@@ -1,0 +1,63 @@
+Demonstrations of bitesize, the Linux perf_events version.
+
+
+bitesize traces block I/O issued, and reports a histogram of I/O size. By
+default five buckets are used to gather statistics on common I/O sizes:
+
+# ./bitesize 
+Tracing block I/O size (bytes), until Ctrl-C...
+^C
+            Kbytes         : I/O      Distribution
+              -> 0.9       : 0        |                                      |
+          1.0 -> 7.9       : 38       |#                                     |
+          8.0 -> 63.9      : 10108    |######################################|
+         64.0 -> 127.9     : 13       |#                                     |
+        128.0 ->           : 1        |#                                     |
+
+In this case, most of the I/O was between 8 and 63.9 Kbytes. The "63.9"
+really means "less than 64".
+
+
+Specifying custom buckets to examine the I/O size in more detail:
+
+# ./bitesize -b "8 16 24 32"
+Tracing block I/O size (bytes), until Ctrl-C...
+^C
+            Kbytes         : I/O      Distribution
+              -> 7.9       : 89       |#                                     |
+          8.0 -> 15.9      : 14665    |######################################|
+         16.0 -> 23.9      : 657      |##                                    |
+         24.0 -> 31.9      : 661      |##                                    |
+         32.0 ->           : 376      |#                                     |
+
+The I/O is mostly between 8 and 15.9 Kbytes
+
+It's probably 8 Kbytes. Checking:
+
+# ./bitesize -b "8 9"
+Tracing block I/O size (bytes), until Ctrl-C...
+^C
+            Kbytes         : I/O      Distribution
+              -> 7.9       : 62       |#                                     |
+          8.0 -> 8.9       : 11719    |######################################|
+          9.0 ->           : 1358     |#####                                 |
+
+It is.
+
+The overhead of this tool is relative to the number of buckets used, hence only
+using what is necessary.
+
+To study this I/O in more detail, I can use iosnoop(8) and capture it to a file
+for post-processing.
+
+
+Use -h to print the USAGE message:
+
+# ./bitesize -h
+USAGE: bitesize [-h] [-b buckets] [seconds]
+                 -b buckets      # specify histogram buckets (Kbytes)
+                 -h              # this usage message
+   eg,
+       bitesize                  # trace I/O size until Ctrl-C
+       bitesize 10               # trace I/O size for 10 seconds
+       bitesize -b "8 16 32"     # specify custom bucket points

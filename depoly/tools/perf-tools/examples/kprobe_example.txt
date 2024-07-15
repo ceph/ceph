@@ -1,0 +1,379 @@
+Demonstrations of kprobe, the Linux ftrace version.
+
+
+This traces the kernel do_sys_open() function, when it is called:
+
+# ./kprobe p:do_sys_open
+Tracing kprobe do_sys_open. Ctrl-C to end.
+          kprobe-26042 [001] d... 6910441.001452: do_sys_open: (do_sys_open+0x0/0x220)
+          kprobe-26042 [001] d... 6910441.001475: do_sys_open: (do_sys_open+0x0/0x220)
+          kprobe-26042 [001] d... 6910441.001866: do_sys_open: (do_sys_open+0x0/0x220)
+          kprobe-26042 [001] d... 6910441.001966: do_sys_open: (do_sys_open+0x0/0x220)
+       supervise-1689  [000] d... 6910441.083302: do_sys_open: (do_sys_open+0x0/0x220)
+       supervise-1693  [001] d... 6910441.083530: do_sys_open: (do_sys_open+0x0/0x220)
+       supervise-1689  [000] d... 6910441.083759: do_sys_open: (do_sys_open+0x0/0x220)
+       supervise-1693  [001] d... 6910441.083877: do_sys_open: (do_sys_open+0x0/0x220)
+[...]
+
+The "p:" is for creating a probe. Use "r:" to probe the return of the function:
+
+# ./kprobe r:do_sys_open
+Tracing kprobe do_sys_open. Ctrl-C to end.
+          kprobe-29475 [001] d... 6910688.229777: do_sys_open: (SyS_open+0x1e/0x20 <- do_sys_open)
+           <...>-29476 [001] d... 6910688.231101: do_sys_open: (SyS_open+0x1e/0x20 <- do_sys_open)
+           <...>-29476 [001] d... 6910688.231123: do_sys_open: (SyS_open+0x1e/0x20 <- do_sys_open)
+           <...>-29476 [001] d... 6910688.231530: do_sys_open: (SyS_open+0x1e/0x20 <- do_sys_open)
+           <...>-29476 [001] d... 6910688.231624: do_sys_open: (SyS_open+0x1e/0x20 <- do_sys_open)
+       supervise-1685  [001] d... 6910688.328776: do_sys_open: (SyS_open+0x1e/0x20 <- do_sys_open)
+       supervise-1689  [000] d... 6910688.328780: do_sys_open: (SyS_open+0x1e/0x20 <- do_sys_open)
+[...]
+
+This output includes the function that the traced function is returning to.
+
+
+The trace output can be a little different between kernel versions. Use -H to
+print the header:
+
+# ./kprobe -H p:do_sys_open
+Tracing kprobe do_sys_open. Ctrl-C to end.
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 4/4   #P:2
+#
+#                              _-----=> irqs-off
+#                             / _----=> need-resched
+#                            | / _---=> hardirq/softirq
+#                            || / _--=> preempt-depth
+#                            ||| /     delay
+#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+#              | |       |   ||||       |         |
+          kprobe-27952 [001] d... 6910580.008086: do_sys_open: (do_sys_open+0x0/0x220)
+          kprobe-27952 [001] d... 6910580.008109: do_sys_open: (do_sys_open+0x0/0x220)
+          kprobe-27952 [001] d... 6910580.008483: do_sys_open: (do_sys_open+0x0/0x220)
+[...]
+
+These columns are explained in the kernel source under Documentation/trace/ftrace.txt.
+
+
+This traces do_sys_open() returns, using a probe alias "myopen", and showing
+the return value ($retval):
+
+# ./kprobe 'r:myopen do_sys_open $retval'
+Tracing kprobe myopen. Ctrl-C to end.
+          kprobe-26386 [001] d... 6593278.858754: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x3
+           <...>-26387 [001] d... 6593278.860043: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x3
+           <...>-26387 [001] d... 6593278.860064: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x3
+           <...>-26387 [001] d... 6593278.860433: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x3
+           <...>-26387 [001] d... 6593278.860521: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x3
+       supervise-1685  [001] d... 6593279.178806: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1689  [001] d... 6593279.228756: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1689  [001] d... 6593279.229106: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1688  [000] d... 6593279.229501: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1695  [000] d... 6593279.229944: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1685  [001] d... 6593279.230104: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1687  [001] d... 6593279.230293: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1699  [000] d... 6593279.230381: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1692  [000] d... 6593279.230825: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1698  [000] d... 6593279.230915: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1698  [000] d... 6593279.231277: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+       supervise-1690  [000] d... 6593279.231703: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) arg1=0x9
+^C
+Ending tracing...
+
+The string specified, 'r:myopen do_sys_open $retval', is a kprobe definition,
+and is the same as those documented in the Linux kernel source under
+Documentation/trace/kprobetrace.txt, which can be written to the
+/sys/kernel/debug/tracing/kprobe_events file.
+
+Apart from probe name aliases, you can also provide arbitrary names for
+arguments. Eg, instead of the "arg1" default, calling it "rval":
+
+# ./kprobe 'r:myopen do_sys_open rval=$retval'
+Tracing kprobe myopen. Ctrl-C to end.
+          kprobe-27454 [001] d... 6593356.250019: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x3
+           <...>-27455 [001] d... 6593356.251280: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x3
+           <...>-27455 [001] d... 6593356.251301: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x3
+           <...>-27455 [001] d... 6593356.251672: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x3
+           <...>-27455 [001] d... 6593356.251769: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x3
+       supervise-1689  [000] d... 6593356.859758: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x9
+       supervise-1689  [000] d... 6593356.860143: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x9
+       supervise-1696  [000] d... 6593356.862682: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x9
+       supervise-1685  [001] d... 6593356.862684: myopen: (SyS_open+0x1e/0x20 <- do_sys_open) rval=0x9
+[...]
+
+That's a bit better.
+
+
+Tracing the open() mode:
+
+# ./kprobe 'p:myopen do_sys_open mode=%cx:u16'
+Tracing kprobe myopen. Ctrl-C to end.
+          kprobe-29572 [001] d... 6593503.353923: myopen: (do_sys_open+0x0/0x220) mode=0x1
+          kprobe-29572 [001] d... 6593503.353945: myopen: (do_sys_open+0x0/0x220) mode=0x0
+          kprobe-29572 [001] d... 6593503.354307: myopen: (do_sys_open+0x0/0x220) mode=0x5c00
+          kprobe-29572 [001] d... 6593503.354401: myopen: (do_sys_open+0x0/0x220) mode=0x0
+       supervise-1689  [000] d... 6593503.944125: myopen: (do_sys_open+0x0/0x220) mode=0x1a4
+       supervise-1688  [001] d... 6593503.944125: myopen: (do_sys_open+0x0/0x220) mode=0x1a4
+       supervise-1688  [001] d... 6593503.944606: myopen: (do_sys_open+0x0/0x220) mode=0x1a4
+       supervise-1689  [000] d... 6593503.944606: myopen: (do_sys_open+0x0/0x220) mode=0x1a4
+       supervise-1698  [000] d... 6593503.944728: myopen: (do_sys_open+0x0/0x220) mode=0x1a4
+       supervise-1698  [000] d... 6593503.945077: myopen: (do_sys_open+0x0/0x220) mode=0x1a4
+[...]
+
+Here I guessed that the mode was in register %cx, and cast it as a 16-bit
+unsigned integer (":u16"). Your platform and kernel may be different, and the
+mode may be in a different register. If fiddling with such registers becomes too
+painful or unreliable for you, consider installing kernel debuginfo and using
+the named variables with perf_events "perf probe".
+
+
+Tracing the open() filename:
+
+# ./kprobe 'p:myopen do_sys_open filename=+0(%si):string'
+Tracing kprobe myopen. Ctrl-C to end.
+          kprobe-32369 [001] d... 6593706.999728: myopen: (do_sys_open+0x0/0x220) filename="/etc/ld.so.cache"
+          kprobe-32369 [001] d... 6593706.999748: myopen: (do_sys_open+0x0/0x220) filename="/lib/x86_64-linux-gnu/libc.so.6"
+          kprobe-32369 [001] d... 6593707.000092: myopen: (do_sys_open+0x0/0x220) filename="/usr/lib/locale/locale-archive"
+          kprobe-32369 [001] d... 6593707.000176: myopen: (do_sys_open+0x0/0x220) filename="trace_pipe"
+       supervise-1699  [000] d... 6593707.254970: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1689  [001] d... 6593707.254970: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1689  [001] d... 6593707.255432: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1699  [000] d... 6593707.255432: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1695  [001] d... 6593707.258805: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+[...]
+
+As mentioned previously, the %si register may be different on your platform.
+In this example, I cast it as a string.
+
+
+Specifying a duration will buffer in-kernel (reducing overhead), and write at
+the end. Here's tracing for 10 seconds, and writing to the "out" file:
+
+# ./kprobe -d 10 'p:myopen do_sys_open filename=+0(%si):string' > out
+
+
+You can match on a single PID only:
+
+# ./kprobe -p 1696 'p:myopen do_sys_open filename=+0(%si):string' 
+Tracing kprobe myopen. Ctrl-C to end.
+       supervise-1696  [001] d... 6593773.677033: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1696  [001] d... 6593773.677332: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1696  [001] d... 6593774.697144: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1696  [001] d... 6593774.697675: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1696  [001] d... 6593775.717986: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+       supervise-1696  [001] d... 6593775.718499: myopen: (do_sys_open+0x0/0x220) filename="supervise/status.new"
+^C
+Ending tracing...
+
+This will only show events when that PID is on-CPU.
+
+
+The -v option will show you the available variables you can use in custom
+filters:
+
+# ./kprobe -v 'p:myopen do_sys_open filename=+0(%si):string' 
+name: myopen
+ID: 1443
+format:
+	field:unsigned short common_type;	offset:0;	size:2;	signed:0;
+	field:unsigned char common_flags;	offset:2;	size:1;	signed:0;
+	field:unsigned char common_preempt_count;	offset:3;	size:1;	signed:0;
+	field:int common_pid;	offset:4;	size:4;	signed:1;
+
+	field:unsigned long __probe_ip;	offset:8;	size:8;	signed:0;
+	field:__data_loc char[] filename;	offset:16;	size:4;	signed:1;
+
+print fmt: "(%lx) filename=\"%s\"", REC->__probe_ip, __get_str(filename)
+
+
+Tracing filenames that end in "stat", by adding a filter:
+
+# ./kprobe 'p:myopen do_sys_open filename=+0(%si):string' 'filename ~ "*stat"'
+Tracing kprobe myopen. Ctrl-C to end.
+        postgres-1172  [000] d... 6594028.787166: myopen: (do_sys_open+0x0/0x220) filename="pg_stat_tmp/pgstat.stat"
+        postgres-1172  [001] d... 6594028.797410: myopen: (do_sys_open+0x0/0x220) filename="pg_stat_tmp/pgstat.stat"
+        postgres-1172  [001] d... 6594028.797467: myopen: (do_sys_open+0x0/0x220) filename="pg_stat_tmp/pgstat.stat"
+        postgres-4443  [001] d... 6594028.800908: myopen: (do_sys_open+0x0/0x220) filename="pg_stat_tmp/pgstat.stat"
+        postgres-4443  [000] d... 6594028.811237: myopen: (do_sys_open+0x0/0x220) filename="pg_stat_tmp/pgstat.stat"
+        postgres-4443  [000] d... 6594028.811290: myopen: (do_sys_open+0x0/0x220) filename="pg_stat_tmp/pgstat.stat"
+^C
+Ending tracing...
+
+This filtering is done in-kernel context.
+
+
+As an example of tracing a deeper kernel function, lets trace bio_alloc() and
+entry registers:
+
+# ./kprobe 'p:myprobe bio_alloc %ax %bx %cx %dx'
+Tracing kprobe myprobe. Ctrl-C to end.
+       supervise-3055  [000] 2172148.728250: myprobe: (bio_alloc+0x0/0x30) arg1=ffff880064acc8d0 arg2=ffff8800e56a7990 arg3=0 arg4=ffff880064acc910
+       supervise-3055  [000] 2172148.728527: myprobe: (bio_alloc+0x0/0x30) arg1=ffff880064acf948 arg2=ffff8800e56a7990 arg3=0 arg4=ffff880064acf988
+    jbd2/xvda1-8-212   [000] 2172149.749474: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800ad1f87b8 arg3=ffff8800ba22c06c arg4=8
+    jbd2/xvda1-8-212   [000] 2172149.749485: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff880089d053a8 arg3=10f16c5bb arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749487: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff880089d05958 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749488: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff880089d05b60 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749489: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff880089d05820 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749489: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff880089d055b0 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749490: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff88006ff22ea0 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749491: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff880089d1f000 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749492: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff880089d1f138 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749493: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff88005d267138 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749494: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff88005d267680 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.749495: myprobe: (bio_alloc+0x0/0x30) arg1=0 arg2=ffff88005d2675b0 arg3=5 arg4=0
+    jbd2/xvda1-8-212   [000] 2172149.751044: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800cc241ea0 arg3=445f0300 arg4=ffff8800effba000
+       supervise-3055  [000] 2172149.751095: myprobe: (bio_alloc+0x0/0x30) arg1=ffff880064acf948 arg2=ffff8800e56a7990 arg3=0 arg4=ffff880064acf988
+       supervise-3055  [000] 2172149.751341: myprobe: (bio_alloc+0x0/0x30) arg1=ffff880064acc8d0 arg2=ffff8800e56a7990 arg3=0 arg4=ffff880064acc910
+       supervise-3055  [000] 2172150.772033: myprobe: (bio_alloc+0x0/0x30) arg1=ffff880064acc8d0 arg2=ffff8800e56a7990 arg3=0 arg4=ffff880064acc910
+       supervise-3055  [000] 2172150.772305: myprobe: (bio_alloc+0x0/0x30) arg1=ffff880064acf948 arg2=ffff8800e56a7990 arg3=0 arg4=ffff880064acf988
+     flush-202:1-409   [000] 2172151.087815: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800da51d6e8 arg3=16afd arg4=1
+     flush-202:1-409   [000] 2172151.087829: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800e7537f08 arg3=16afd arg4=2
+     flush-202:1-409   [000] 2172151.087844: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800e7519af8 arg3=16afd arg4=3
+     flush-202:1-409   [000] 2172151.087846: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800e7511478 arg3=16afd arg4=4
+     flush-202:1-409   [000] 2172151.087849: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800e75e6a90 arg3=16afd arg4=5
+     flush-202:1-409   [000] 2172151.087851: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800e7512bc8 arg3=16afd arg4=6
+     flush-202:1-409   [000] 2172151.087853: myprobe: (bio_alloc+0x0/0x30) arg1=ffffffff arg2=ffff8800eb3bf410 arg3=16afd arg4=7
+^C
+
+The output includes who is on-CPU, high resolution timestamps, and the arguments
+we requested (registers %ax to %dx). These registers are platform dependent,
+and are mapped by the compiler to the entry arguments of the function.
+
+How are these useful? If you are debugging this kernel function, you'll know. :)
+
+
+Note that you can add qualifiers, eg, if I knew %ax was a uint32:
+
+# ./kprobe 'p:myprobe bio_alloc %ax:u32'
+Tracing kprobe myprobe. Ctrl-C to end.
+       supervise-3055  [000] 2172389.734606: myprobe: (bio_alloc+0x0/0x30) arg1=64acf948
+       supervise-3055  [000] 2172389.734865: myprobe: (bio_alloc+0x0/0x30) arg1=64acc8d0
+       supervise-3055  [000] 2172390.772391: myprobe: (bio_alloc+0x0/0x30) arg1=64acf948
+       supervise-3055  [000] 2172390.772676: myprobe: (bio_alloc+0x0/0x30) arg1=64acc8d0
+^C
+Ending tracing...
+
+You can give them aliases too, instead of the default arg1..N:
+
+# ./kprobe 'p:myprobe bio_alloc ax=%ax'
+Tracing kprobe myprobe. Ctrl-C to end.
+       supervise-3055  [000] 2172420.451663: myprobe: (bio_alloc+0x0/0x30) ax=ffff880064acc8d0
+       supervise-3055  [000] 2172420.451938: myprobe: (bio_alloc+0x0/0x30) ax=ffff880064acf948
+     flush-202:1-409   [000] 2172421.163462: myprobe: (bio_alloc+0x0/0x30) ax=ffff880064acc8d0
+       supervise-3055  [000] 2172421.500994: myprobe: (bio_alloc+0x0/0x30) ax=ffff880064acc8d0
+       supervise-3055  [000] 2172421.501307: myprobe: (bio_alloc+0x0/0x30) ax=ffff880064acf948
+^C
+Ending tracing...
+
+
+Now for the return of bio_alloc():
+
+# ./kprobe 'r:myprobe bio_alloc $retval'
+Tracing kprobe myprobe. Ctrl-C to end.
+       supervise-3055  [000] 2172164.145533: myprobe: (io_submit_init.isra.6+0x74/0x100 <- bio_alloc) arg1=ffff8800e55843c0
+       supervise-3055  [000] 2172164.145829: myprobe: (io_submit_init.isra.6+0x74/0x100 <- bio_alloc) arg1=ffff8800e5584840
+    jbd2/xvda1-8-212   [000] 2172165.166453: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e57596c0
+    jbd2/xvda1-8-212   [000] 2172165.166493: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759c00
+    jbd2/xvda1-8-212   [000] 2172165.166496: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759600
+    jbd2/xvda1-8-212   [000] 2172165.166497: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759e40
+    jbd2/xvda1-8-212   [000] 2172165.166498: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e57590c0
+    jbd2/xvda1-8-212   [000] 2172165.166500: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e57599c0
+    jbd2/xvda1-8-212   [000] 2172165.166500: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759a80
+    jbd2/xvda1-8-212   [000] 2172165.166502: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759f00
+    jbd2/xvda1-8-212   [000] 2172165.166503: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759540
+    jbd2/xvda1-8-212   [000] 2172165.166504: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759180
+    jbd2/xvda1-8-212   [000] 2172165.166504: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759900
+    jbd2/xvda1-8-212   [000] 2172165.166505: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759000
+    jbd2/xvda1-8-212   [000] 2172165.166506: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759480
+           <...>-212   [000] 2172165.176261: myprobe: (submit_bh+0x76/0x120 <- bio_alloc) arg1=ffff8800e5759480
+       supervise-3055  [000] 2172165.176317: myprobe: (io_submit_init.isra.6+0x74/0x100 <- bio_alloc) arg1=ffff8800e57596c0
+       supervise-3055  [000] 2172165.176586: myprobe: (io_submit_init.isra.6+0x74/0x100 <- bio_alloc) arg1=ffff8800e5759900
+^C
+Ending tracing...
+
+Great. This output includes the function we are returning to, in most cases,
+submit_bh().
+
+Note that this mode (without a duration) prints events as they happen,
+so the overheads can be high for frequent events. You could try the -d mode,
+which buffers in-kernel.
+
+
+The -s option will print the kernel stack trace after the event:
+
+# ./kprobe -s 'p:mytcp tcp_init_cwnd'
+Tracing kprobe mytcp. Ctrl-C to end.
+            sshd-5121  [000] d... 6897275.911301: mytcp: (tcp_init_cwnd+0x0/0x40)
+            sshd-5121  [000] d... 6897275.911309: <stack trace>
+ => tcp_write_xmit
+ => __tcp_push_pending_frames
+ => tcp_push
+ => tcp_sendmsg
+ => inet_sendmsg
+ => sock_aio_write
+ => do_sync_write
+ => vfs_write
+ => SyS_write
+ => system_call_fastpath
+            sshd-32219 [000] d... 6897275.911467: mytcp: (tcp_init_cwnd+0x0/0x40)
+            sshd-32219 [000] d... 6897275.911471: <stack trace>
+ => tcp_write_xmit
+ => __tcp_push_pending_frames
+ => tcp_push
+ => tcp_sendmsg
+ => inet_sendmsg
+ => sock_aio_write
+ => do_sync_write
+ => vfs_write
+ => SyS_write
+ => system_call_fastpath
+            sshd-5121  [000] d... 6897277.878794: mytcp: (tcp_init_cwnd+0x0/0x40)
+            sshd-5121  [000] d... 6897277.878801: <stack trace>
+ => tcp_write_xmit
+ => __tcp_push_pending_frames
+ => tcp_push
+ => tcp_sendmsg
+ => inet_sendmsg
+ => sock_aio_write
+ => do_sync_write
+ => vfs_write
+ => SyS_write
+ => system_call_fastpath
+
+This makes use of the kernel options/stacktrace feature.
+
+
+Use -h to print the USAGE message:
+
+# ./kprobe -h
+USAGE: kprobe [-FhHsv] [-d secs] [-p PID] [-L TID] kprobe_definition [filter]
+                 -F              # force. trace despite warnings.
+                 -d seconds      # trace duration, and use buffers
+                 -p PID          # PID to match on events
+                 -L TID          # thread id to match on events
+                 -v              # view format file (don't trace)
+                 -H              # include column headers
+                 -s              # show kernel stack traces
+                 -h              # this usage message
+
+Note that these examples may need modification to match your kernel
+version's function names and platform's register usage.
+   eg,
+       kprobe p:do_sys_open
+                                 # trace open() entry
+       kprobe r:do_sys_open
+                                 # trace open() return
+       kprobe 'r:do_sys_open $retval'
+                                 # trace open() return value
+       kprobe 'r:myopen do_sys_open $retval'
+                                 # use a custom probe name
+       kprobe 'p:myopen do_sys_open mode=%cx:u16'
+                                 # trace open() file mode
+       kprobe 'p:myopen do_sys_open filename=+0(%si):string'
+                                 # trace open() with filename
+       kprobe -s 'p:myprobe tcp_retransmit_skb'
+                                 # show kernel stacks
+       kprobe 'p:do_sys_open file=+0(%si):string' 'file ~ "*stat"'
+                                 # opened files ending in "stat"
+
+See the man page and example file for more info.

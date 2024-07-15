@@ -1,0 +1,166 @@
+.TH funcgraph 8  "2014-07-29" "USER COMMANDS"
+.SH NAME
+funcgraph \- trace kernel function graph, showing child function calls and times. Uses Linux ftrace.
+.SH SYNOPSIS
+.B funcgraph
+[\-aCDhHPtT] [\-m maxdepth] [\-p PID] [\-L TID] [\-d secs] funcstring
+.SH DESCRIPTION
+This is an exploratory tool that shows the graph of child function calls
+for a given kernel function. This can cost moderate overhead to execute, and
+should only be used to understand kernel behavior before using other, lower
+overhead tools. This is a proof of concept using Linux ftrace capabilities
+on older kernels.
+
+The output format is the same as the ftrace function graph trace format,
+described in the kernel source under Documentation/trace/ftrace.txt.
+Note that the output may be shuffled when different CPU buffers are read;
+check the CPU column for changes, or include timestamps (-t) and post sort.
+
+The "-d duration" mode leaves the trace data in the kernel buffer, and
+only reads it at the end. If the trace data is large, beware of exhausting
+buffer space (/sys/kernel/debug/tracing/buffer_size_kb) and losing data.
+
+Also beware of feedback loops: tracing tcp* functions over an ssh session,
+or writing ext4* functions to an ext4 file system. For the former, tcp
+trace data could be redirected to a file (as in the usage message). For
+the latter, trace to the screen or a different file system.
+
+WARNING: This uses dynamic tracing of kernel functions, and could cause
+kernel panics or freezes. Test, and know what you are doing, before use.
+Also see the OVERHEAD section.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE CONFIG, which you may already have enabled and available on recent
+kernels.
+.SH OPTIONS
+.TP
+\-a
+All info. Same as \-HPt. (But no -T, which isn't available in older kernels.)
+.TP
+\-C
+Function durations measure on-CPU time only (exclude sleep time).
+.TP
+\-d seconds
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-D
+Do not show function duration times.
+.TP
+\-h
+Print usage message.
+.TP
+\-H
+Print column headers.
+.TP
+\-m
+Max depth to trace functions. By default, unlimited (0). This feature is only
+available for newer Linux kernel versions.
+.TP
+\-p PID
+Only trace kernel functions when this process ID is on-CPU.
+.TP
+\-L TID
+Only trace kernel functions when this thread ID is on-CPU.
+.TP
+\-P
+Show process names and process IDs with every line of output.
+.TP
+\-t
+Show timestamps on every line of output.
+.TP
+\-T
+Tail mode: decorate function return lines with the name of the function. This
+option may not be available for older kernels.
+.TP
+funcstring
+A function name to trace, which may include file glob style wildcards ("*") at
+the beginning or ending of a string only. Eg, "vfs*" means match "vfs" followed
+by anything. Since the output is verbose, you probably only want to trace
+single functions, and not use wildcards.
+.SH EXAMPLES
+.TP
+Trace calls to do_nanosleep(), showing child functions and durations:
+#
+.B funcgraph do_nanosleep
+.TP
+Same as above, but include column headers:
+#
+.B funcgraph -H do_nanosleep
+.TP
+Same as above, but include timestamps and process names as well:
+#
+.B funcgraph -HtP do_nanosleep
+.TP
+Trace all vfs_read() kernel function calls, and child functions, for PID 198 only:
+#
+.B funcgraph \-p 198 vfs_read
+.TP
+Trace all vfs_read() kernel function calls, and child functions, for 1 second then write to a file.
+#
+.B funcgraph \-d 1 vfs_read > out
+.SH FIELDS
+The output format depends on the kernel version, and headings can be printed
+using \-H. The format is the same as the ftrace function trace format, described
+in the kernel source under Documentation/trace/ftrace.txt.
+
+Typical fields are:
+.TP
+TIME
+(Shown with \-t.) Time of event, in seconds.
+.TP
+CPU
+The CPU this event occurred on.
+.TP
+TASK/PID
+(Shown with \-P.) The process name (which could include dashes), a dash, and the process ID.
+.TP
+DURATION
+Elapsed time during the function call, inclusive of children. This is also
+inclusive of sleep time, unless -C is used. The time is either displayed on
+the return of a function ("}"), or for a leaf function (no children), on the
+same line.
+
+If the trace output begins with some returns that lack entries, their durations
+may not be trusted. This is usually only the case for the first dozen or so
+lines.
+.TP
+FUNCTION CALLS
+Entries and returns from kernel functions.
+.SH OVERHEAD
+This tool causes moderate to high overheads. Use with caution for
+exploratory purposes, then switch to lower overhead techniques based on
+findings. It's expected that the kernel will run at least 50% slower while
+this tool is running -- even while no output is being generated. This is
+because ALL kernel functions are traced, and filtered based on the function
+of interest. When output is generated, it can generate many lines quickly
+depending on the traced event. Such data will cause performance overheads.
+This also works without buffering by default, printing function events
+as they happen (uses trace_pipe), context switching and consuming CPU to do
+so. If needed, you can try the "-d secs" option, which buffers events
+instead, reducing overhead. If you think the buffer option is losing events,
+try increasing the buffer size (buffer_size_kb).
+
+It's a good idea to use funccount(8) first, which is lower overhead, to
+help you select which functions you may want to trace using funcgraph(8).
+.SH SOURCE
+This is from the perf-tools collection:
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+funccount(8), functrace(8), kprobe(8)

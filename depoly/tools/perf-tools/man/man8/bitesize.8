@@ -1,0 +1,70 @@
+.TH bitesize 8  "2014-07-07" "USER COMMANDS"
+.SH NAME
+bitesize \- show disk I/O size as a histogram. Uses Linux perf_events.
+.SH SYNOPSIS
+.B bitesize
+[-h] [-b buckets] [seconds]
+.SH DESCRIPTION
+This can be used to characterize the distribution of block device (disk) I/O
+sizes. To study block device I/O in more detail, see iosnoop(8).
+
+This uses multiple counting tracepoints with different filters, one for each
+histogram bucket. While this is summarized in-kernel, the use of multiple
+tracepoints does add addiitonal overhead, which is more evident if you add
+more buckets. In the future this functionality will be available in an
+efficient way in the kernel, and this tool can be rewritten.
+.SH REQUIREMENTS
+Linux perf_events: add linux-tools-common, run "perf", then add any additional
+packages it requests. This also requires the block:block_rq_issue tracepoint,
+which should already be available in recent kernels.
+.SH OPTIONS
+.TP
+\-h
+Usage message.
+.TP
+\-b buckets
+Specify a list of bucket points for the histogram as a string (eg, "10 500
+1000"). The histogram will include buckets for less-than the minimum, and
+greater-than-or-equal-to the maximum.  If a single value is specified, two
+statistics only are gathered: for less-than and for greater-than-or-equal-to.
+The overhead is relative to the number of buckets, so only specifying a
+single value costs the lowest overhead.
+.TP
+seconds
+Number of seconds to trace. If not specified, this runs until Ctrl-C.
+.SH EXAMPLES
+.TP
+Trace read() syscalls until Ctrl-C, and show histogram of requested size:
+#
+.B bitesize syscalls:sys_enter_read count
+.SH FIELDS
+.TP
+Kbytes
+Kbyte range of the histogram bucket.
+.TP
+I/O
+Number of I/O that occurred in this range while tracing.
+.TP
+Distribution
+ASCII histogram representation of the I/O column.
+.SH OVERHEAD
+While the counts are performed in-kernel, there is one tracepoint used per
+histogram bucket, so the overheads are higher than usual (relative to the
+number of buckets) than function counting using perf stat. The lowest
+overhead is when \-b is used to specify one bucket only, bifurcating
+statistics.
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+iosnoop(8), iolatency(8), iostat(1)

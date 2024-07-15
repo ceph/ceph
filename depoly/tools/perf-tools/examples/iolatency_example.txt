@@ -1,0 +1,350 @@
+Demonstrations of iolatency, the Linux ftrace version.
+
+
+Here's a busy system doing over 4k disk IOPS:
+
+# ./iolatency
+Tracing block I/O. Output every 1 seconds. Ctrl-C to end.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 4381     |######################################|
+       1 -> 2       : 9        |#                                     |
+       2 -> 4       : 5        |#                                     |
+       4 -> 8       : 0        |                                      |
+       8 -> 16      : 1        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 4053     |######################################|
+       1 -> 2       : 18       |#                                     |
+       2 -> 4       : 9        |#                                     |
+       4 -> 8       : 2        |#                                     |
+       8 -> 16      : 1        |#                                     |
+      16 -> 32      : 1        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 4658     |######################################|
+       1 -> 2       : 9        |#                                     |
+       2 -> 4       : 2        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 4298     |######################################|
+       1 -> 2       : 17       |#                                     |
+       2 -> 4       : 10       |#                                     |
+       4 -> 8       : 1        |#                                     |
+       8 -> 16      : 1        |#                                     |
+^C
+Ending tracing...
+
+Disk I/O latency is usually between 0 and 1 milliseconds, as this system uses
+SSDs. There are occasional outliers, up to the 16->32 ms range.
+
+Identifying outliers like these is difficult from iostat(1) alone, which at
+the same time reported:
+
+# iostat 1
+[...]
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.53    0.00    1.05   46.84    0.53   51.05
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util
+xvdap1            0.00     0.00    0.00   28.00     0.00   112.00     8.00     0.02    0.71    0.00    0.71   0.29   0.80
+xvdb              0.00     0.00 2134.00    0.00 18768.00     0.00    17.59     0.51    0.24    0.24    0.00   0.23  50.00
+xvdc              0.00     0.00 2088.00    0.00 18504.00     0.00    17.72     0.47    0.22    0.22    0.00   0.22  46.40
+md0               0.00     0.00 4222.00    0.00 37256.00     0.00    17.65     0.00    0.00    0.00    0.00   0.00   0.00
+
+I/O latency ("await") averages 0.24 and 0.22 ms for our busy disks, but this
+output doesn't show that occasionally is much higher.
+
+To get more information on these I/O, try the iosnoop(8) tool.
+
+
+The -Q option includes the block I/O queued time, by tracing based on
+block_rq_insert instead of block_rq_issue:
+
+# ./iolatency -Q
+Tracing block I/O. Output every 1 seconds. Ctrl-C to end.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1913     |######################################|
+       1 -> 2       : 438      |#########                             |
+       2 -> 4       : 100      |##                                    |
+       4 -> 8       : 145      |###                                   |
+       8 -> 16      : 43       |#                                     |
+      16 -> 32      : 43       |#                                     |
+      32 -> 64      : 1        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 2360     |######################################|
+       1 -> 2       : 132      |###                                   |
+       2 -> 4       : 72       |##                                    |
+       4 -> 8       : 14       |#                                     |
+       8 -> 16      : 1        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 2138     |######################################|
+       1 -> 2       : 496      |#########                             |
+       2 -> 4       : 81       |##                                    |
+       4 -> 8       : 40       |#                                     |
+       8 -> 16      : 1        |#                                     |
+      16 -> 32      : 2        |#                                     |
+^C
+Ending tracing...
+
+I use this along with the default mode to identify problems of load (queueing)
+vs problems of the device, which is shown by default.
+
+
+Here's a more interesting system. This is doing a mixed read/write workload,
+and has a pretty awful latency distribution:
+
+# ./iolatency 5 3
+Tracing block I/O. Output every 5 seconds.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 2809     |######################################|
+       1 -> 2       : 32       |#                                     |
+       2 -> 4       : 14       |#                                     |
+       4 -> 8       : 6        |#                                     |
+       8 -> 16      : 7        |#                                     |
+      16 -> 32      : 14       |#                                     |
+      32 -> 64      : 39       |#                                     |
+      64 -> 128     : 1556     |######################                |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 3027     |######################################|
+       1 -> 2       : 19       |#                                     |
+       2 -> 4       : 6        |#                                     |
+       4 -> 8       : 5        |#                                     |
+       8 -> 16      : 3        |#                                     |
+      16 -> 32      : 7        |#                                     |
+      32 -> 64      : 14       |#                                     |
+      64 -> 128     : 540      |#######                               |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 2939     |######################################|
+       1 -> 2       : 25       |#                                     |
+       2 -> 4       : 15       |#                                     |
+       4 -> 8       : 2        |#                                     |
+       8 -> 16      : 3        |#                                     |
+      16 -> 32      : 7        |#                                     |
+      32 -> 64      : 17       |#                                     |
+      64 -> 128     : 936      |#############                         |
+
+Ending tracing...
+
+It's multi-modal, with most I/O taking 0 to 1 milliseconds, then many between
+64 and 128 milliseconds. This is how it looks in iostat:
+
+# iostat -x 1
+
+avg-cpu:  %user   %nice %system %iowait  %steal   %idle
+           0.52    0.00   12.37   32.99    0.00   54.12
+
+Device:         rrqm/s   wrqm/s     r/s     w/s    rkB/s    wkB/s avgrq-sz avgqu-sz   await r_await w_await  svctm  %util
+xvdap1            0.00    12.00    0.00  156.00     0.00 19968.00   256.00    52.17  184.38    0.00  184.38   2.33  36.40
+xvdb              0.00     0.00  298.00    0.00  2732.00     0.00    18.34     0.04    0.12    0.12    0.00   0.11   3.20
+xvdc              0.00     0.00  297.00    0.00  2712.00     0.00    18.26     0.08    0.27    0.27    0.00   0.24   7.20
+md0               0.00     0.00  595.00    0.00  5444.00     0.00    18.30     0.00    0.00    0.00    0.00   0.00   0.00
+
+Fortunately, it turns out that the high latency is to xvdap1, which is for files
+from a low priority application (processing and writing log files). A high
+priority application is reading from the other disks, xvdb and xvdc.
+
+Examining xvdap1 only:
+
+# ./iolatency -d 202,1 5
+Tracing block I/O. Output every 5 seconds. Ctrl-C to end.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 38       |##                                    |
+       1 -> 2       : 18       |#                                     |
+       2 -> 4       : 0        |                                      |
+       4 -> 8       : 0        |                                      |
+       8 -> 16      : 5        |#                                     |
+      16 -> 32      : 11       |#                                     |
+      32 -> 64      : 26       |##                                    |
+      64 -> 128     : 894      |######################################|
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 75       |###                                   |
+       1 -> 2       : 11       |#                                     |
+       2 -> 4       : 0        |                                      |
+       4 -> 8       : 4        |#                                     |
+       8 -> 16      : 4        |#                                     |
+      16 -> 32      : 7        |#                                     |
+      32 -> 64      : 13       |#                                     |
+      64 -> 128     : 1141     |######################################|
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 61       |########                              |
+       1 -> 2       : 21       |###                                   |
+       2 -> 4       : 5        |#                                     |
+       4 -> 8       : 1        |#                                     |
+       8 -> 16      : 5        |#                                     |
+      16 -> 32      : 7        |#                                     |
+      32 -> 64      : 19       |###                                   |
+      64 -> 128     : 324      |######################################|
+     128 -> 256     : 7        |#                                     |
+     256 -> 512     : 26       |####                                  |
+^C
+Ending tracing...
+
+And now xvdb:
+
+# ./iolatency -d 202,16 5
+Tracing block I/O. Output every 5 seconds. Ctrl-C to end.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1427     |######################################|
+       1 -> 2       : 5        |#                                     |
+       2 -> 4       : 3        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1409     |######################################|
+       1 -> 2       : 6        |#                                     |
+       2 -> 4       : 1        |#                                     |
+       4 -> 8       : 1        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1478     |######################################|
+       1 -> 2       : 6        |#                                     |
+       2 -> 4       : 5        |#                                     |
+       4 -> 8       : 0        |                                      |
+       8 -> 16      : 2        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1437     |######################################|
+       1 -> 2       : 5        |#                                     |
+       2 -> 4       : 7        |#                                     |
+       4 -> 8       : 0        |                                      |
+       8 -> 16      : 1        |#                                     |
+[...]
+
+While that's much better, it is reaching the 8 - 16 millisecond range,
+and these are SSDs with a light workload (~1500 IOPS).
+
+I already know from iosnoop(8) analysis the reason for these high latency
+outliers: they are queued behind writes. However, these writes are to a
+different disk -- somewhere in this virtualized guest (Xen) there may be a
+shared I/O queue.
+
+One way to explore this is to reduce the queue length for the low priority disk,
+so that it is less likely to pollute any shared queue. (There are other ways to
+investigate and fix this too.) Here I reduce the disk queue length from its
+default of 128 to 4:
+
+# echo 4 > /sys/block/xvda1/queue/nr_requests
+
+The overall distribution looks much better:
+
+# ./iolatency 5
+Tracing block I/O. Output every 5 seconds. Ctrl-C to end.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 3005     |######################################|
+       1 -> 2       : 19       |#                                     |
+       2 -> 4       : 9        |#                                     |
+       4 -> 8       : 45       |#                                     |
+       8 -> 16      : 859      |###########                           |
+      16 -> 32      : 16       |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 2959     |######################################|
+       1 -> 2       : 43       |#                                     |
+       2 -> 4       : 16       |#                                     |
+       4 -> 8       : 39       |#                                     |
+       8 -> 16      : 1009     |#############                         |
+      16 -> 32      : 76       |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 3031     |######################################|
+       1 -> 2       : 27       |#                                     |
+       2 -> 4       : 9        |#                                     |
+       4 -> 8       : 24       |#                                     |
+       8 -> 16      : 422      |######                                |
+      16 -> 32      : 5        |#                                     |
+^C
+Ending tracing...
+
+Latency only reaching 32 ms.
+
+Our important disk didn't appear to change much -- maybe a slight improvement
+to the outliers:
+
+# ./iolatency -d 202,16 5
+Tracing block I/O. Output every 5 seconds. Ctrl-C to end.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1449     |######################################|
+       1 -> 2       : 6        |#                                     |
+       2 -> 4       : 5        |#                                     |
+       4 -> 8       : 1        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1519     |######################################|
+       1 -> 2       : 12       |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1466     |######################################|
+       1 -> 2       : 2        |#                                     |
+       2 -> 4       : 3        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 1460     |######################################|
+       1 -> 2       : 4        |#                                     |
+       2 -> 4       : 7        |#                                     |
+[...]
+
+And here's the other disk after the queue length change:
+
+# ./iolatency -d 202,1 5
+Tracing block I/O. Output every 5 seconds. Ctrl-C to end.
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 85       |###                                   |
+       1 -> 2       : 12       |#                                     |
+       2 -> 4       : 21       |#                                     |
+       4 -> 8       : 76       |##                                    |
+       8 -> 16      : 1539     |######################################|
+      16 -> 32      : 10       |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 123      |##################                    |
+       1 -> 2       : 8        |##                                    |
+       2 -> 4       : 6        |#                                     |
+       4 -> 8       : 17       |###                                   |
+       8 -> 16      : 270      |######################################|
+      16 -> 32      : 2        |#                                     |
+
+  >=(ms) .. <(ms)   : I/O      |Distribution                          |
+       0 -> 1       : 91       |###                                   |
+       1 -> 2       : 23       |#                                     |
+       2 -> 4       : 8        |#                                     |
+       4 -> 8       : 71       |###                                   |
+       8 -> 16      : 1223     |######################################|
+      16 -> 32      : 12       |#                                     |
+^C
+Ending tracing...
+
+Much better looking distribution.
+
+
+Use -h to print the USAGE message:
+
+# ./iolatency -h
+USAGE: iolatency [-hQT] [-d device] [-i iotype] [interval [count]]
+                 -d device       # device string (eg, "202,1)
+                 -i iotype       # match type (eg, '*R*' for all reads)
+                 -Q              # use queue insert as start time
+                 -T              # timestamp on output
+                 -h              # this usage message
+                 interval        # summary interval, seconds (default 1)
+                 count           # number of summaries
+  eg,
+       iolatency                 # summarize latency every second
+       iolatency -Q              # include block I/O queue time
+       iolatency 5 2             # 2 x 5 second summaries
+       iolatency -i '*R*'        # trace reads
+       iolatency -d 202,1        # trace device 202,1 only
+
+See the man page and example file for more info.

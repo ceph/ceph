@@ -1,0 +1,168 @@
+.TH uprobe 8  "2014-07-20" "USER COMMANDS"
+.SH NAME
+uprobe \- trace a given uprobe definition. User-level dynamic tracing. Uses Linux ftrace. EXPERIMENTAL.
+.SH SYNOPSIS
+.B uprobe
+[\-FhHsv] [\-d secs] [\-p PID] [\-L TID] {\-l target | uprobe_definition [filter]}
+.SH DESCRIPTION
+This will create, trace, then destroy a given uprobe definition. See
+Documentation/trace/uprobetracer.txt in the Linux kernel source for the
+syntax of a uprobe definition, and "uprobe -h" for examples. With this tool,
+the probe alias is optional (it will default to something meaningful).
+
+WARNING: This uses dynamic tracing of user-level functions, using some
+relatively new kernel code. I have seen this cause target processes to fail,
+either entering endless spin loops or crashing on illegal instructions. I
+believe newer kernels (post 4.0) are relatively safer, but use caution. Test
+in a lab environment, and know what you are doing, before use. Also consider
+other (more developed) user-level tracers (perf_events, LTTng, etc.).
+
+Use extreme caution with the raw address mode: eg, "p:libc:0xbf130". uprobe
+does not check for instruction alignment, so tracing the wrong address (eg,
+mid-way through a multi-byte instruction) will corrupt the target's memory.
+Other tracers (eg, perf_events with debuginfo) check alignment.
+
+Also beware of widespread tracing that interferes with the operation of the
+system, eg, tracing libc:malloc, which by-default will trace _all_ processes.
+
+I wrote this because I kept testing different custom uprobes at the command
+line, and wanted a way to automate the steps. For generic user-level
+tracing, use perf_events directly.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+REQUIREMENTS: FTRACE and UPROBE CONFIG, which you may already have on recent
+kernel versions, file(1), ldconfig(8), objdump(1), and some version of awk.
+Also, currently only executes on Linux 4.0+ (see WARNING) unless -F is used.
+.SH OPTIONS
+.TP
+\-F
+Force. Trace despite kernel version warnings. Use on older kernels may expose
+you to (since fixed) bugs, which can lock up or crash target processes, which
+could also lock up the entire system. Test in a lab environment before use,
+and consider other more developed user-level tracers (perf_events, LTTng,
+etc.).
+.TP
+\-d seconds
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-h
+Print usage message.
+.TP
+\-H
+Print column headers.
+.TP
+\-s
+Print user-level stack traces after each event. These are currently printed
+in hex, and need post-processing to see user-level symbols (eg, addr2line;
+I should automate that).
+.TP
+\-v
+Show the uprobe format file only (do not trace), identifying possible variables
+for use in a custom filter.
+.TP
+\-p PID
+Only trace user-level functions when this process ID is on-CPU.
+.TP
+\-L TID
+Only trace user-level functions when this thread ID is on-CPU.
+.TP
+uprobe_definition
+A full uprobe definition, as documented by Documentation/trace/uprobetracer.txt
+in the Linux kernel source. Note that the probe alias name is optional with
+uprobe(8), and if not specified, it will default to something meaningful.
+See the EXAMPLES section.
+.TP
+filter
+An ftrace filter definition.
+.SH EXAMPLES
+These examples may need modification to match your target software function
+names and platform's register usage. If using platform specific registers
+becomes too painful in practice, consider a debuginfo-based tracer,
+which can trace variables names instead (eg, perf_events).
+.TP
+trace readline() calls in all running "bash" executables:
+#
+.B uprobe p:bash:readline
+.TP
+trace readline() with explicit executable path:
+#
+.B uprobe p:/bin/bash:readline
+.TP
+trace the return of readline() with return value as a string:
+#
+.B uprobe 'r:bash:readline +0($retval):string'
+.TP
+trace sleep() calls in all running libc shared libraries:
+#
+.B uprobe p:libc:sleep
+.TP
+trace sleep() with register %di (x86):
+#
+.B uprobe 'p:libc:sleep %di'
+.TP
+trace this address (use caution: must be instruction aligned):
+#
+.B uprobe p:libc:0xbf130
+.TP
+trace gettimeofday() for PID 1182 only:
+#
+.B uprobe -p 1182 p:libc:gettimeofday
+.TP
+trace the return of fopen() only when it returns NULL:
+#
+.B uprobe 'r:libc:fopen file=$retval' 'file == 0'
+.SH FIELDS
+The output format depends on the kernel version, and headings can be printed
+using \-H. The format is the same as the ftrace function trace format, described
+in the kernel source under Documentation/trace/ftrace.txt.
+
+Typical fields are:
+.TP
+TASK-PID
+The process name (which could include dashes), a dash, and the process ID.
+.TP
+CPU#
+The CPU ID, in brackets.
+.TP
+||||
+Kernel state flags. For example, on Linux 3.16 these are for irqs-off,
+need-resched, hardirq/softirq, and preempt-depth.
+.TP
+TIMESTAMP
+Time of event, in seconds.
+.TP
+FUNCTION
+User-level function name.
+.SH OVERHEAD
+This can generate a lot of trace data quickly, depending on the
+frequency of the traced events. Such data will cause performance overheads.
+This also works without buffering by default, printing function events
+as they happen (uses trace_pipe), context switching and consuming CPU to do
+so. If needed, you can try the "\-d secs" option, which buffers events
+instead, reducing overhead. If you think the buffer option is losing events,
+try increasing the buffer size (buffer_size_kb).
+
+If you find a use for uprobe(8) where the overhead is prohibitive, consider
+the same enabling using perf_events where overhead should be reduced.
+.SH SOURCE
+This is from the perf-tools collection:
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+kprobe(8)

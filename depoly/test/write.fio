@@ -1,0 +1,15 @@
+[write]
+description="test with block size"
+filename = /dev/nvme1n1p11 #注：/dev/vdb是目标测试磁盘的设备名称
+#ioengine=libaio
+#ioengine=rbd
+#clientname=admin
+#pool=pool0
+#rbdname=rbd0
+iodepth=32
+direct=1
+thread=40
+runtime=1000000
+rw=randwrite #write 表示顺序写，randwrite 表示随机写，read 表示顺序读，randread 表示随机读
+bs=4K
+#bs=4M

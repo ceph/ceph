@@ -1,0 +1,58 @@
+Demonstrations of cachestat, the Linux ftrace version.
+
+
+Here is some sample output showing file system cache statistics, followed by
+the workload that caused it:
+
+# ./cachestat -t
+Counting cache functions... Output every 1 seconds.
+TIME         HITS   MISSES  DIRTIES    RATIO   BUFFERS_MB   CACHE_MB
+08:28:57      415        0        0   100.0%            1        191
+08:28:58      411        0        0   100.0%            1        191
+08:28:59      362       97        0    78.9%            0          8
+08:29:00      411        0        0   100.0%            0          9
+08:29:01      775    20489        0     3.6%            0         89
+08:29:02      411        0        0   100.0%            0         89
+08:29:03     6069        0        0   100.0%            0         89
+08:29:04    15249        0        0   100.0%            0         89
+08:29:05      411        0        0   100.0%            0         89
+08:29:06      411        0        0   100.0%            0         89
+08:29:07      411        0        3   100.0%            0         89
+[...]
+
+I used the -t option to include the TIME column, to make describing the output
+easier.
+
+The workload was:
+
+# echo 1 > /proc/sys/vm/drop_caches; sleep 2; cksum 80m; sleep 2; cksum 80m
+
+At 8:28:58, the page cache was dropped by the first command, which can be seen
+by the drop in size for "CACHE_MB" (page cache size) from 191 Mbytes to 8.
+After a 2 second sleep, a cksum command was issued at 8:29:01, for an 80 Mbyte
+file (called "80m"), which caused a total of ~20,400 misses ("MISSES" column),
+and the page cache size to grow by 80 Mbytes. The hit ratio during this dropped
+to 3.6%. Finally, after another 2 second sleep, at 8:29:03 the cksum command
+was run a second time, this time hitting entirely from cache.
+
+Instrumenting all file system cache accesses does cost some overhead, and this
+tool might slow your target system by 2% or so. Test before use if this is a
+concern.
+
+This tool also uses dynamic tracing, and is tied to Linux kernel implementation
+details. If it doesn't work for you, it probably needs fixing.
+
+
+Use -h to print the USAGE message:
+
+# ./cachestat -h
+USAGE: cachestat [-Dht] [interval]
+                 -D              # print debug counters
+                 -h              # this usage message
+                 -t              # include timestamp
+                 interval        # output interval in secs (default 1)
+  eg,
+       cachestat                 # show stats every second
+       cachestat 5               # show stats every 5 seconds
+
+See the man page and example file for more info.

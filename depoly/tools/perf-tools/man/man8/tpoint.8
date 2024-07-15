@@ -1,0 +1,140 @@
+.TH tpoint 8  "2014-07-20" "USER COMMANDS"
+.SH NAME
+tpoint \- trace a given tracepoint. Static tracing. Uses Linux ftrace.
+.SH SYNOPSIS
+.B tpoint
+[\-hHsv] [\-d secs] [\-p PID] [\-L TID] tracepoint [filter]
+
+.B tpoint
+\-l
+.SH DESCRIPTION
+This will enable a given tracepoint, print events, then disable the tracepoint
+when the program ends. This is like a simple version of the "perf" command for
+printing live tracepoint events only. Wildcards are currently not supported.
+If for any reason tpoint(8) is insufficient, use the more powerful perf
+command for tracing tracepoints instead.
+
+Beware of feedback loops: tracing tcp functions over an ssh session,
+or writing ext4 events to an ext4 file system. For the former, tcp
+trace data could be redirected to a file (as in the usage message). For
+the latter, trace to the screen or a different file system.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE CONFIG and tracepoints, which you may already have enabled and available
+on recent kernels.
+.SH OPTIONS
+.TP
+\-d seconds
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-h
+Print usage message.
+.TP
+\-H
+Print column headers.
+.TP
+\-l
+List tracepoints only.
+.TP
+\-s
+Print kernel stack traces after each event.
+.TP
+\-v
+Show the tpoint format file only (do not trace), identifying possible variables
+for use in a custom filter.
+.TP
+\-p PID
+Only trace kernel functions when this process ID is on-CPU.
+.TP
+\-L TID
+Only trace kernel functions when this thread ID is on-CPU.
+.TP
+tracepoint
+A tracepoint name. Eg, block:block_rq_issue. See the EXAMPLES section.
+.TP
+filter
+An ftrace filter definition.
+.SH EXAMPLES
+.TP
+List tracepoints containing "open":
+#
+.B tpoint -l | grep open
+.TP
+Trace open() syscall entry:
+#
+.B tpoint syscalls:sys_enter_open
+.TP
+Trace open() syscall entry, showing column headers:
+#
+.B tpoint -H syscalls:sys_enter_open
+.TP
+Trace block I/O issue:
+#
+.B tpoint block:block_rq_issue
+.TP
+Trace block I/O issue with stack traces:
+#
+.B tpoint \-s block:block_rq_issue
+.SH FIELDS
+The output format depends on the kernel version, and headings can be printed
+using \-H. The format is the same as the ftrace function trace format, described
+in the kernel source under Documentation/trace/ftrace.txt.
+
+Typical fields are:
+.TP
+TASK-PID
+The process name (which could include dashes), a dash, and the process ID.
+.TP
+CPU#
+The CPU ID, in brackets.
+.TP
+||||
+Kernel state flags. For example, on Linux 3.16 these are for irqs-off,
+need-resched, hardirq/softirq, and preempt-depth.
+.TP
+TIMESTAMP
+Time of event, in seconds.
+.TP
+FUNCTION
+Kernel function name.
+.SH OVERHEAD
+This can generate a lot of trace data quickly, depending on the
+frequency of the traced events. Such data will cause performance overheads.
+This also works without buffering by default, printing function events
+as they happen (uses trace_pipe), context switching and consuming CPU to do
+so. If needed, you can try the "\-d secs" option, which buffers events
+instead, reducing overhead. If you think the buffer option is losing events,
+try increasing the buffer size (buffer_size_kb).
+
+Before using tpoint(8), you can use perf_events to count the rate of events
+for the tracepoint of interest, to gauge overhead. For example:
+
+.B perf stat \-e block:block_rq_issue \-a sleep 5
+
+That counts the occurrences of the block:block_rq_issue tracepoint for
+5 seconds.
+
+Also consider using perf_events, which manages buffers differently and more
+efficiently, for higher frequency applications.
+.SH SOURCE
+This is from the perf-tools collection:
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+functrace(8), funccount(8), perf(1)

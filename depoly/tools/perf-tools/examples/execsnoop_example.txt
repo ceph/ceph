@@ -1,0 +1,153 @@
+Demonstrations of execsnoop, the Linux ftrace version.
+
+
+Here's execsnoop showing what's really executed by "man ls":
+
+# ./execsnoop 
+Tracing exec()s. Ctrl-C to end.
+   PID   PPID ARGS
+ 22898  22004 man ls
+ 22905  22898 preconv -e UTF-8
+ 22908  22898 pager -s
+ 22907  22898 nroff -mandoc -rLL=164n -rLT=164n -Tutf8
+ 22906  22898 tbl
+ 22911  22910 locale charmap
+ 22912  22907 groff -mtty-char -Tutf8 -mandoc -rLL=164n -rLT=164n
+ 22913  22912 troff -mtty-char -mandoc -rLL=164n -rLT=164n -Tutf8
+ 22914  22912 grotty
+
+Many commands. This is particularly useful for understanding application
+startup.
+
+
+Another use for execsnoop is identifying short-lived processes. Eg, with the -t
+option to see timestamps:
+
+# ./execsnoop -t
+Tracing exec()s. Ctrl-C to end.
+TIMEs               PID   PPID ARGS
+7419756.154031     8185   8181 mawk -W interactive -v o=1 -v opt_name=0 -v name= [...]
+7419756.154131     8186   8184 cat -v trace_pipe
+7419756.245264     8188   1698 ./run
+7419756.245691     8189   1696 ./run
+7419756.246212     8187   1689 ./run
+7419756.278993     8190   1693 ./run
+7419756.278996     8191   1692 ./run
+7419756.288430     8192   1695 ./run
+7419756.290115     8193   1691 ./run
+7419756.292406     8194   1699 ./run
+7419756.293986     8195   1690 ./run
+7419756.294149     8196   1686 ./run
+7419756.296527     8197   1687 ./run
+7419756.296973     8198   1697 ./run
+7419756.298356     8200   1685 ./run
+7419756.298683     8199   1688 ./run
+7419757.269883     8201   1696 ./run
+[...]
+
+So we're running many "run" commands every second. The PPID is included, so I
+can debug this further (they are "supervise" processes).
+
+Short-lived processes can consume CPU and not be visible from top(1), and can
+be the source of hidden performance issues.
+
+
+Here's another example: I noticed CPU usage was high in top(1), but couldn't
+see the responsible process:
+
+$ top
+top - 00:04:32 up 78 days, 15:41,  3 users,  load average: 0.85, 0.29, 0.14
+Tasks: 123 total,   1 running, 121 sleeping,   0 stopped,   1 zombie
+Cpu(s): 15.7%us, 34.9%sy,  0.0%ni, 49.2%id,  0.0%wa,  0.0%hi,  0.0%si,  0.2%st
+Mem:   7629464k total,  7537216k used,    92248k free,  1376492k buffers
+Swap:        0k total,        0k used,        0k free,  5432356k cached
+
+  PID USER      PR  NI  VIRT  RES  SHR S %CPU %MEM    TIME+  COMMAND
+ 7225 bgregg-t  20   0 29480 6196 2128 S    3  0.1   0:02.64 ec2rotatelogs
+    1 root      20   0 24320 2256 1340 S    0  0.0   0:01.23 init
+    2 root      20   0     0    0    0 S    0  0.0   0:00.00 kthreadd
+    3 root      20   0     0    0    0 S    0  0.0   1:19.61 ksoftirqd/0
+    4 root      20   0     0    0    0 S    0  0.0   0:00.00 kworker/0:0
+    5 root      20   0     0    0    0 S    0  0.0   0:00.01 kworker/u:0
+    6 root      RT   0     0    0    0 S    0  0.0   0:16.00 migration/0
+    7 root      RT   0     0    0    0 S    0  0.0   0:17.29 watchdog/0
+    8 root      RT   0     0    0    0 S    0  0.0   0:15.85 migration/1
+    9 root      20   0     0    0    0 S    0  0.0   0:00.00 kworker/1:0
+[...]
+
+See the line starting with "Cpu(s):". So there's about 50% CPU utilized (this
+is a two CPU server, so that's equivalent to one full CPU), but this CPU usage
+isn't visible from the process listing.
+
+vmstat agreed, showing the same average CPU usage statistics:
+ 
+# vmstat 1
+procs -----------memory---------- ---swap-- -----io---- -system-- ----cpu----
+ r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa
+ 2  0      0  92816 1376476 5432188    0    0     0     3    2    1  0  1 99  0
+ 1  0      0  92676 1376484 5432264    0    0     0    24 6573 6130 12 38 49  0
+ 1  0      0  91964 1376484 5432272    0    0     0     0 6529 6097 16 35 49  0
+ 1  0      0  92692 1376484 5432272    0    0     0     0 6192 5775 17 35 49  0
+ 1  0      0  92692 1376484 5432272    0    0     0     0 6554 6121 14 36 50  0
+ 1  0      0  91940 1376484 5432272    0    0     0    12 6546 6101 13 38 49  0
+ 1  0      0  92560 1376484 5432272    0    0     0     0 6201 5769 15 35 49  0
+ 1  0      0  92676 1376484 5432272    0    0     0     0 6524 6123 17 34 49  0
+ 1  0      0  91932 1376484 5432272    0    0     0     0 6546 6107 10 40 49  0
+ 1  0      0  92832 1376484 5432272    0    0     0     0 6057 5710 13 38 49  0
+ 1  0      0  92248 1376484 5432272    0    0    84    28 6592 6183 16 36 48  1
+ 1  0      0  91504 1376492 5432348    0    0     0    12 6540 6098 18 33 49  1
+[...]
+
+So this could be caused by short-lived processes, who vanish before they are
+seen by top(1). Do I have my execsnoop handy? Yes:
+
+# ~/perf-tools/bin/execsnoop 
+Tracing exec()s. Ctrl-C to end.
+   PID   PPID ARGS
+ 10239  10229 gawk -v o=0 -v opt_name=0 -v name= -v opt_duration=0 [...]
+ 10240  10238 cat -v trace_pipe
+ 10242   7225 sh [?]
+ 10243  10242 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.201201.3122.txt
+ 10245   7225 sh [?]
+ 10246  10245 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.202201.3122.txt
+ 10248   7225 sh [?]
+ 10249  10248 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.203201.3122.txt
+ 10251   7225 sh [?]
+ 10252  10251 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.204201.3122.txt
+ 10254   7225 sh [?]
+ 10255  10254 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.205201.3122.txt
+ 10257   7225 sh [?]
+ 10258  10257 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.210201.3122.txt
+ 10260   7225 sh [?]
+ 10261  10260 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.211201.3122.txt
+ 10263   7225 sh [?]
+ 10264  10263 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.212201.3122.txt
+ 10266   7225 sh [?]
+ 10267  10266 /usr/sbin/lsof -X /logs/tomcat/cores/threaddump.20141215.213201.3122.txt
+[...]
+
+The output scrolled quickly, showing that many shell and lsof processes were
+being launched. If you check the PID and PPID columns carefully, you can see that
+these are ultimately all from PID 7225. We saw that earlier in the top output:
+ec2rotatelogs, at 3% CPU. I now know the culprit.
+
+I should have used "-t" to show the timestamps with this example.
+
+
+Run -h to print the USAGE message:
+
+# ./execsnoop -h
+USAGE: execsnoop [-hrt] [-a argc] [-d secs] [name]
+                 -d seconds      # trace duration, and use buffers
+                 -a argc         # max args to show (default 8)
+                 -r              # include re-execs
+                 -t              # include time (seconds)
+                 -h              # this usage message
+                 name            # process name to match (REs allowed)
+  eg,
+       execsnoop                 # watch exec()s live (unbuffered)
+       execsnoop -d 1            # trace 1 sec (buffered)
+       execsnoop grep            # trace process names containing grep
+       execsnoop 'log$'          # filenames ending in "log"
+
+See the man page and example file for more info.

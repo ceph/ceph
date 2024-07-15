@@ -1,0 +1,111 @@
+.TH cachestat 8  "2014-12-28" "USER COMMANDS"
+.SH NAME
+cachestat \- Measure page cache hits/misses. Uses Linux ftrace.
+.SH SYNOPSIS
+.B cachestat
+[\-Dht] [interval]
+.SH DESCRIPTION
+This tool provides basic cache hit/miss statistics for the Linux page cache.
+
+Its current implementation uses Linux ftrace dynamic function profiling to
+create custom in-kernel counters, which is a workaround until such counters
+can be built-in to the kernel. Specifically, four kernel functions are counted:
+.IP
+mark_page_accessed() for measuring cache accesses
+.IP
+mark_buffer_dirty() for measuring cache writes
+.IP
+add_to_page_cache_lru() for measuring page additions
+.IP
+account_page_dirtied() for measuring page dirties
+.PP
+It is possible that these functions have been renamed (or are different
+logically) for your kernel version, and this script will not work as-is.
+This was written for a Linux 3.13 kernel, and tested on a few others versions.
+This script is a sandcastle: the kernel may wash some away, and you'll
+need to rebuild.
+
+This program's implementation can be improved in the future when other
+kernel capabilities are made available. If you need a more reliable tool now,
+then consider other tracing alternatives (eg, SystemTap). This tool is really
+a proof of concept to see what ftrace can currently do.
+
+WARNING: This uses dynamic tracing of kernel functions, and could cause
+kernel panics or freezes. Test, and know what you are doing, before use.
+It also traces cache activity, which can be frequent, and cost some overhead.
+The statistics should be treated as best-effort: there may be some error
+margin depending on unusual workload types.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+CONFIG_FUNCTION_PROFILER, which you may already have enabled and available on
+recent kernels, and awk.
+.SH OPTIONS
+.TP
+\-D
+Include extra fields for debug purposes (see script).
+.TP
+\-h
+Print usage message.
+.TP
+\-t
+Include timestamps in units of seconds.
+.TP
+interval
+Output interval in seconds. Default is 1.
+.SH EXAMPLES
+.TP
+Show per-second page cache statistics:
+#
+.B cachestat
+.SH FIELDS
+.TP
+TIME
+Time, in HH:MM:SS.
+.TP
+HITS
+Number of page cache hits (reads). Each hit is for one memory page (the size
+depends on your processor architecture; commonly 4 Kbytes). Since this tool
+outputs at a timed interval, this field indicates the cache hit rate.
+.TP
+MISSES
+Number of page cache misses (reads from storage I/O). Each miss is for one
+memory page. Cache misses should be causing disk I/O. Run iostat(1) for
+correlation (although the miss count and size by the time disk I/O is issued
+can differ due to I/O subsystem merging).
+.TP
+DIRTIES
+Number of times a page in the page cache was written to and thus "dirtied".
+The same page may be counted multiple times per interval, if it is written
+to multiple times. This field gives an indication of how much cache churn there
+is, caused by applications writing data.
+.TP
+RATIO
+The ratio of cache hits to total cache accesses (hits + misses), as a
+percentage.
+.TP
+BUFFERS_MB
+Size of the buffer cache, for disk I/O. From /proc/meminfo.
+.TP
+CACHED_MB
+Size of the page cache, for file system I/O. From /proc/meminfo.
+.SH OVERHEAD
+This tool currently uses ftrace function profiling, which provides efficient
+in-kernel counters. However, the functions profiled are executed frequently,
+so the overheads can add up. Test and measure before use. My own testing
+showed around a 2% loss in application performance while this tool was running.
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+iostat(1), iosnoop(8)

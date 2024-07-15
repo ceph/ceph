@@ -1,0 +1,80 @@
+.TH execsnoop\-proc 8  "2014-07-07" "USER COMMANDS"
+.SH NAME
+execsnoop\-proc \- trace process exec() with arguments. Uses Linux ftrace. /proc version.
+.SH SYNOPSIS
+.B execsnoop\-proc
+[\-h] [\-n name]
+.SH DESCRIPTION
+execsnoop\-proc traces process execution, showing PID, PPID, and argument details
+if possible.
+
+This traces exec() from the fork()->exec() sequence, which means it won't
+catch new processes that only fork(), and, it will catch processes that
+re-exec. This instruments sched:sched_process_exec without buffering, and then
+in user-space (this program) reads PPID and process arguments asynchronously
+from /proc.
+
+If the process traced is very short-lived, this program may miss reading
+arguments and PPID details. In that case, "<?>" and "?" will be printed
+respectively.
+
+This program is best-effort (a hack), and should be improved in the future when
+other kernel capabilities are made available. It may be useful in the meantime.
+If you need a more reliable tool now, consider other tracing alternates (eg,
+SystemTap). This tool is really a proof of concept to see what ftrace can
+currently do.
+
+See execsnoop(8) for another version that reads arguments from registers
+instead of /proc.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE CONFIG and the sched:sched_process_exec tracepoint, which you may already
+have enabled and available on recent kernels, and Perl.
+.SH OPTIONS
+\-n name
+Only show processes that match this name. This is filtered in user space.
+.TP
+\-h
+Print usage message.
+.SH EXAMPLES
+.TP
+Trace all new processes and arguments (if possible):
+.B execsnoop\-proc
+.TP
+Trace all new processes with process name "sed":
+.B execsnoop\-proc -n sed
+.SH FIELDS
+.TP
+TIME
+Time of process exec(): HH:MM:SS.
+.TP
+PID
+Process ID.
+.TP
+PPID
+Parent process ID, if this was able to be read (may be missed for short-lived
+processes). If it is unable to be read, "?" is printed.
+.TP
+ARGS
+Command line arguments, if these were able to be read in time (may be missed
+for short-lived processes). If they are unable to be read, "<?>" is printed.
+.SH OVERHEAD
+This reads and processes exec() events in user space as they occur. Since the
+rate of exec() is expected to be low (< 500/s), the overhead is expected to
+be small or negligible.
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+execsnoop(8), top(1)

@@ -1,0 +1,263 @@
+#!/bin/bash
+#
+# killsnoop - trace kill() syscalls with signal/process details.
+#             Written using Linux ftrace.
+#
+# This traces kill() syscalls, showing which process killed which pid and
+# returns the returncode (0 for success, -1 for error).
+#
+# This implementation is designed to work on older kernel versions, and without
+# kernel debuginfo. It works by dynamic tracing of the return value of kill()
+# and associating it with the previous kill() syscall return.
+# This approach is kernel version specific, and may not work on your version.
+# It is a workaround, and proof of concept for ftrace, until more kernel tracing
+# functionality is available.
+#
+# USAGE: ./killsnoop [-hst] [-d secs] [-p pid] [-n name]
+#
+# Run "killsnoop -h" for full usage.
+#
+# REQUIREMENTS: FTRACE and KPROBE CONFIG, syscalls:sys_enter_kill and
+# syscalls:sys_exit_kill kernel tracepoints (you may already have these
+# on recent kernels) and awk.
+#
+# From perf-tools: https://github.com/brendangregg/perf-tools
+#
+# See the killsnoop(8) man page (in perf-tools) for more info.
+#
+# COPYRIGHT: Copyright (c) 2014 Brendan Gregg.
+# COPYRIGHT: Copyright (c) 2014 Martin Probst.
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+#
+#  (http://www.gnu.org/copyleft/gpl.html)
+#
+# 20-Jul-2014   Brendan Gregg   Templated this.
+# 13-Sep-2014   Martin Probst   Created this.
+
+### default variables
+tracing=/sys/kernel/debug/tracing
+flock=/var/tmp/.ftrace-lock; wroteflock=0
+opt_duration=0; duration=; opt_name=0; name=; opt_pid=0; pid=; ftext=
+opt_time=0; opt_fail=0; opt_file=0; file=
+kevent_entry=events/syscalls/sys_enter_kill
+kevent_return=events/syscalls/sys_exit_kill
+trap ':' INT QUIT TERM PIPE HUP # sends execution to end tracing section
+
+function usage {
+    cat <<-END >&2
+USAGE: killsnoop [-hst] [-d secs] [-p PID] [-n name] [filename]
+                 -d seconds      # trace duration, and use buffers
+                 -n name         # process name to match 
+                 -p PID          # PID to match on kill issue
+                 -t              # include time (seconds)
+                 -s              # human readable signal names
+                 -h              # this usage message
+  eg,
+       killsnoop                 # watch kill()s live (unbuffered)
+       killsnoop -d 1            # trace 1 sec (buffered)
+       killsnoop -p 181          # trace kill()s issued to PID 181 only
+
+See the man page and example file for more info.
+END
+    exit
+}
+
+function warn {
+    if ! eval "$@"; then
+        echo >&2 "WARNING: command failed \"$@\""
+    fi
+}
+
+function end {
+    # disable tracing
+    echo 2>/dev/null
+    echo "Ending tracing..." 2>/dev/null
+    cd $tracing
+    warn "echo 0 > $kevent_entry/enable"
+    warn "echo 0 > $kevent_return/enable"
+    warn "echo > trace"
+    (( wroteflock )) && warn "rm $flock"
+}
+
+function die {
+    echo >&2 "$@"
+    exit 1
+}
+
+function edie {
+    # die with a quiet end()
+    echo >&2 "$@"
+    exec >/dev/null 2>&1
+    end
+    exit 1
+}
+
+### process options
+while getopts d:hn:p:st opt
+do
+    case $opt in
+    d)  opt_duration=1; duration=$OPTARG ;;
+    n)  opt_name=1; name=$OPTARG ;;
+    p)  opt_pid=1; pid=$OPTARG ;;
+    t)  opt_time=1 ;;
+    s)  opt_fancy=1 ;;
+    h|?)    usage ;;
+    esac
+done
+shift $(( $OPTIND - 1 ))
+(( $# )) && usage
+
+### option logic
+(( opt_pid && opt_name )) && die "ERROR: use either -p or -n."
+(( opt_pid )) && ftext=" issued to PID $pid"
+(( opt_name )) && ftext=" issued by process name \"$name\""
+if (( opt_duration )); then
+    echo "Tracing kill()s$ftext for $duration seconds (buffered)..."
+else
+    echo "Tracing kill()s$ftext. Ctrl-C to end."
+fi
+
+### select awk
+# workaround for mawk fflush()
+[[ -x /usr/bin/mawk ]] && awk="mawk" && mawk -W interactive && \
+[ $? -eq 0 ] && awk="mawk -W interactive"
+# workaround for gawk strtonum()
+[[ -x /usr/bin/gawk ]] && awk="gawk --non-decimal-data"
+
+### check permissions
+cd $tracing || die "ERROR: accessing tracing. Root user? Kernel has FTRACE?
+    debugfs mounted? (mount -t debugfs debugfs /sys/kernel/debug)"
+
+### ftrace lock
+[[ -e $flock ]] && die "ERROR: ftrace may be in use by PID $(cat $flock) $flock"
+echo $$ > $flock || die "ERROR: unable to write $flock."
+wroteflock=1
+
+### setup and begin tracing
+echo nop > current_tracer
+if ! echo 1 > $kevent_entry/enable; then
+    edie "ERROR: enabling kill() entry tracepoint Exiting."
+fi
+if ! echo 1 > $kevent_return/enable; then
+    edie "ERROR: enabling kill() return tracepoint. Exiting."
+fi
+(( opt_time )) && printf "%-16s " "TIMEs"
+printf "%-16.16s %-6s %-8s %-10s %4s\n" "COMM" "PID" "TPID" "SIGNAL" "RETURN"
+
+#
+# Determine output format. It may be one of the following (newest first):
+#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+#           TASK-PID    CPU#    TIMESTAMP  FUNCTION
+# To differentiate between them, the number of header fields is counted,
+# and an offset set, to skip the extra column when needed.
+#
+offset=$($awk 'BEGIN { o = 0; }
+    $1 == "#" && $2 ~ /TASK/ && NF == 6 { o = 1; }
+    $2 ~ /TASK/ { print o; exit }' trace)
+
+### print trace buffer
+warn "echo > trace"
+( if (( opt_duration )); then
+    # wait then dump buffer
+    sleep $duration
+    cat trace
+else
+    # print buffer live
+    cat trace_pipe
+fi ) | $awk -v o=$offset -v opt_name=$opt_name -v name=$name \
+    -v opt_duration=$opt_duration -v opt_time=$opt_time \
+    -v opt_pid=$pid -v opt_fancy=$opt_fancy '
+    # fancy signal names
+    BEGIN {
+        signals[1] = "SIGHUP"
+        signals[2] = "SIGINT"
+        signals[3] = "SIGQUIT"
+        signals[4] = "SIGILL"
+        signals[6] = "SIGABRT"
+        signals[8] = "SIGFPE"
+        signals[9] = "SIGKILL"
+        signals[11] = "SIGSEGV"
+        signals[13] = "SIGPIPE"
+        signals[14] = "SIGALRM"
+        signals[15] = "SIGTERM"
+        signals[10] = "SIGUSR1"
+        signals[12] = "SIGUSR2"
+        signals[17] = "SIGCHLD"
+        signals[18] = "SIGCONT"
+        signals[19] = "SIGSTOP"
+        signals[20] = "SIGTSTP"
+        signals[21] = "SIGTTIN"
+        signals[22] = "SIGTTOU"
+    }
+
+    # common fields
+    $1 != "#" {
+        # task name can contain dashes
+        comm = pid = $1
+        sub(/-[0-9][0-9]*/, "", comm)
+        if (opt_name && match(comm, name) == 0)
+            next
+        sub(/.*-/, "", pid)
+    }
+
+    # sys_kill() entry
+    $1 != "#" && $(4+o) ~ /sys_kill/ && $(5+o) !~ /->/ {
+        #
+        # eg: ... sys_kill(pid:...
+        #
+        kpid = $(5+o)
+        signal = $(7+o)
+        sub(/,$/, "", kpid)
+        sub(/\)$/, "", signal)
+        kpid = int("0x"kpid)
+        signal = int("0x"signal)
+        current[pid,"kpid"] = kpid
+        current[pid,"signal"] = signal
+    }
+
+    # sys_kill exit
+    $1 != "#" && $(5+o) ~ /->/ {
+        rv = int($NF)
+        killed_pid = current[pid,"kpid"]
+        signal = current[pid,"signal"]
+
+        delete current[pid,"kpid"]
+        delete current[pid,"signal"]
+
+        if(opt_pid && killed_pid != opt_pid) {
+            next
+        }
+
+        if (opt_time) {
+            time = $(3+o); sub(":", "", time)
+            printf "%-16s ", time
+        }
+
+        if (opt_fancy) {
+            if (signals[signal] != "") {
+                signal = signals[signal]
+            }
+        }
+
+        printf "%-16.16s %-6s %-8s %-10s %-4s\n", comm, pid, killed_pid, signal,
+            rv
+    }
+
+    $0 ~ /LOST.*EVENTS/ { print "WARNING: " $0 > "/dev/stderr" }
+'
+
+### end tracing
+end

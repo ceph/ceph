@@ -1,0 +1,100 @@
+.TH killsnoop 8  "2014-09-15" "USER COMMANDS"
+.SH NAME
+killsnoop \- trace kill() syscalls with process and signal details. Uses Linux ftrace.
+.SH SYNOPSIS
+.B killsnoop
+[\-hst] [\-d secs] [\-p pid] [\-n name]
+.SH DESCRIPTION
+This traces kill() syscalls, showing which process killed which pid and
+returns the returncode (0 for success, -1 for error).
+
+This implementation is designed to work on older kernel versions, and without
+kernel debuginfo. It works by dynamic tracing of the return value of kill()
+and associating it with the previous kill() syscall return.
+This approach is kernel version specific, and may not work on your version.
+It is a workaround, and proof of concept for ftrace, until more kernel tracing
+functionality is available.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE and KPROBE CONFIG, syscalls:sys_enter_kill and
+syscalls:sys_exit_kill kernel tracepoints (you may already have these
+on recent kernels) and awk.
+.SH OPTIONS
+.TP
+\-d secs
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-h
+Print usage message.
+.TP
+\-n name
+Only show processes matching this process name. Partial strings and regular
+expressions are allowed. This is post-filtered using awk.
+.TP
+\-p PID
+Only trace this process ID. This is filtered in-kernel.
+.TP
+\-s
+Use human readable signal names, instead of signal numbers.
+.TP
+\-t
+Include timestamps, in seconds.
+.SH EXAMPLES
+.TP
+Trace all kill() syscalls with details:
+#
+.B killsnoop
+.TP
+Trace kill() syscalls with readable signal names, and times:
+#
+.B killsnoop -st
+.TP
+Track kill() syscalls for processes named "httpd":
+#
+.B killsnoop -n httpd
+.SH FIELDS
+.TP
+TIMEs
+Time of open() completion, in units of seconds.
+.TP
+COMM
+Process name (if known) of the process that issued the signal.
+.TP
+PID
+Process ID that issued the signal.
+.TP
+TPID
+Target PID for the signal.
+.TP
+SIGNAL
+Signal number sent to the target process, or name if -s is used.
+.TP
+RETURN
+Return status: 0 for success, -1 for failure.
+.SH OVERHEAD
+This reads and kill() syscalls as they occur. For high rates of kills (> 500/s),
+the overhead may begin to be measurable, however, the rate is unlikely to get
+this high. And if it is: you should investigate why. Test yourself. You can
+also use the \-d mode to buffer output, reducing overheads.
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Martin Probst
+.SH SEE ALSO
+tpoint(8), execsnoop(8), opensnoop(8)

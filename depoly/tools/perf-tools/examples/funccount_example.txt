@@ -1,0 +1,126 @@
+Demonstrations of funccount, the Linux ftrace version.
+
+
+Tracing all kernel functions that start with "bio_" (which would be block
+interface functions), and counting how many times they were executed until
+Ctrl-C is hit:
+
+# ./funccount 'bio_*'
+Tracing "bio_*"... Ctrl-C to end.
+^C
+FUNC                              COUNT
+bio_attempt_back_merge               26
+bio_get_nr_vecs                     361
+bio_alloc                           536
+bio_alloc_bioset                    536
+bio_endio                           536
+bio_free                            536
+bio_fs_destructor                   536
+bio_init                            536
+bio_integrity_enabled               536
+bio_put                             729
+bio_add_page                       1004
+
+Note that these counts are performed in-kernel context, using the ftrace
+function profiler, which means this is a (relatively) low overhead technique.
+Test yourself to quantify overhead.
+
+
+As was demonstrated here, wildcards can be used. Individual functions can also
+be specified. For example, all of the following are valid arguments:
+
+	bio_init
+	bio_*
+	*init
+	*bio*
+
+A "*" within a string (eg, "bio*init") is not supported.
+
+The full list of what can be traced is in:
+/sys/kernel/debug/tracing/available_filter_functions, which can be grep'd to
+check what is there. Note that grep uses regular expressions, whereas
+funccount uses globbing for wildcards.
+
+
+Counting all "tcp_" kernel functions, and printing a summary every one second:
+
+# ./funccount -i 1 -t 5 'tcp_*'
+Tracing "tcp_*". Top 5 only... Ctrl-C to end.
+
+FUNC                              COUNT
+tcp_cleanup_rbuf                    386
+tcp_service_net_dma                 386
+tcp_established_options             549
+tcp_v4_md5_lookup                   560
+tcp_v4_md5_do_lookup                890
+
+FUNC                              COUNT
+tcp_service_net_dma                 498
+tcp_cleanup_rbuf                    499
+tcp_established_options             664
+tcp_v4_md5_lookup                   672
+tcp_v4_md5_do_lookup               1071
+
+[...]
+
+Neat.
+
+
+Tracing all "ext4*" kernel functions for 10 seconds, and printing the top 25:
+
+# ./funccount -t 25 -d 10 'ext4*'
+Tracing "ext4*" for 10 seconds. Top 25 only...
+
+FUNC                              COUNT
+ext4_inode_bitmap                   840
+ext4_meta_trans_blocks              840
+ext4_ext_drop_refs                  843
+ext4_find_entry                     845
+ext4_discard_preallocations        1008
+ext4_free_inodes_count             1120
+ext4_group_desc_csum               1120
+ext4_group_desc_csum_set           1120
+ext4_getblk                        1128
+ext4_es_free_extent                1328
+ext4_map_blocks                    1471
+ext4_es_lookup_extent              1751
+ext4_mb_check_limits               1873
+ext4_es_lru_add                    2031
+ext4_data_block_valid              2312
+ext4_journal_check_start           3080
+ext4_mark_inode_dirty              5320
+ext4_get_inode_flags               5955
+ext4_get_inode_loc                 5955
+ext4_mark_iloc_dirty               5955
+ext4_reserve_inode_write           5955
+ext4_inode_table                   7076
+ext4_get_group_desc                8476
+ext4_has_inline_data               9492
+ext4_inode_touch_time_cmp         38980
+
+Ending tracing...
+
+So ext4_inode_touch_time_cmp() was called the most frequently, at 38,980 times.
+This may be normal, this may not. The purpose of this tool is to give you one
+view of how one or many kernel functions are executed. Previously I had little
+idea what ext4 was doing internally. Now I know the top 25 functions, and their
+rate, and can begin researching them from the source code.
+
+
+Use -h to print the USAGE message:
+
+# ./funccount -h
+USAGE: funccount [-hT] [-i secs] [-d secs] [-t top] funcstring
+                 -d seconds      # total duration of trace
+                 -h              # this usage message
+                 -i seconds      # interval summary
+                 -t top          # show top num entries only
+                 -T              # include timestamp (for -i)
+  eg,
+       funccount 'vfs*'          # trace all funcs that match "vfs*"
+       funccount -d 5 'tcp*'     # trace "tcp*" funcs for 5 seconds
+       funccount -t 10 'ext3*'   # show top 10 "ext3*" funcs
+       funccount -i 1 'ext3*'    # summary every 1 second
+       funccount -i 1 -d 5 'ext3*' # 5 x 1 second summaries
+
+See the man page and example file for more info.

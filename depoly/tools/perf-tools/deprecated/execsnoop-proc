@@ -1,0 +1,150 @@
+#!/usr/bin/perl
+#
+# execsnoop - trace process exec() with arguments. /proc version.
+#             Written using Linux ftrace.
+#
+# This shows the execution of new processes, especially short-lived ones that
+# can be missed by sampling tools such as top(1).
+#
+# USAGE: ./execsnoop [-h] [-n name]
+#
+# REQUIREMENTS: FTRACE CONFIG, sched:sched_process_exec tracepoint (you may
+# already have these on recent kernels), and Perl.
+#
+# This traces exec() from the fork()->exec() sequence, which means it won't
+# catch new processes that only fork(), and, it will catch processes that
+# re-exec. This instruments sched:sched_process_exec without buffering, and then
+# in user-space (this program) reads PPID and process arguments asynchronously
+# from /proc.
+#
+# If the process traced is very short-lived, this program may miss reading
+# arguments and PPID details. In that case, "<?>" and "?" will be printed
+# respectively. This program is best-effort, and should be improved in the
+# future when other kernel capabilities are made available. If you need a
+# more reliable tool now, then consider other tracing alternatives (eg,
+# SystemTap). This tool is really a proof of concept to see what ftrace can
+# currently do.
+#
+# From perf-tools: https://github.com/brendangregg/perf-tools
+#
+# See the execsnoop(8) man page (in perf-tools) for more info.
+#
+# COPYRIGHT: Copyright (c) 2014 Brendan Gregg.
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+#
+#  (http://www.gnu.org/copyleft/gpl.html)
+#
+# 07-Jul-2014	Brendan Gregg	Created this.
+
+use strict;
+use warnings;
+use POSIX qw(strftime);
+use Getopt::Long;
+my $tracing = "/sys/kernel/debug/tracing";
+my $flock = "/var/tmp/.ftrace-lock";
+my $tpdir = "sched/sched_process_exec";
+my $tptext = $tpdir; $tptext =~ s/\//:/;
+local $SIG{INT} = \&cleanup;
+local $SIG{QUIT} = \&cleanup;
+local $SIG{TERM} = \&cleanup;
+local $SIG{PIPE} = \&cleanup;
+local $SIG{HUP} = \&cleanup;
+$| = 1;
+
+### options
+my ($name, $help);
+GetOptions("name=s" => \$name,
+           "help"   => \$help)
+or usage();
+usage() if $help;
+sub usage {
+	print STDERR "USAGE: execsnoop [-h] [-n name]\n";
+	print STDERR "   eg,\n";
+	print STDERR "       execsnoop -n ls	# show \"ls\" cmds only.\n";
+	exit;
+}
+
+sub ldie {
+	unlink $flock;
+	die @_;
+}
+
+sub writeto {
+	my ($string, $file) = @_;
+	open FILE, ">$file" or return 0;
+	print FILE $string or return 0;
+	close FILE or return 0;
+}
+
+### check permissions
+chdir "$tracing" or ldie "ERROR: accessing tracing. Root? Kernel has FTRACE?" .
+    "\ndebugfs mounted? (mount -t debugfs debugfs /sys/kernel/debug)";
+
+### ftrace lock
+if (-e $flock) {
+	open FLOCK, $flock; my $fpid = <FLOCK>; chomp $fpid; close FLOCK;
+	die "ERROR: ftrace may be in use by PID $fpid ($flock)";
+}
+writeto "$$", $flock or die "ERROR: unable to write $flock.";
+
+### setup and begin tracing
+writeto "nop", "current_tracer" or ldie "ERROR: disabling current_tracer.";
+writeto "1", "events/$tpdir/enable" or ldie "ERROR: enabling tracepoint " .
+    "\"$tptext\" (tracepoint missing in this kernel version?)";
+open TPIPE, "trace_pipe"  or warn "ERROR: opening trace_pipe.";
+printf "%-8s %6s %6s %s\n",  "TIME", "PID", "PPID", "ARGS";
+
+while (<TPIPE>) {
+	my ($taskpid, $rest) = split;
+	my ($task, $pid) = $taskpid =~ /(.*)-(\d+)/;
+
+	next if (defined $name and $name ne $task);
+
+	my $args = "$task <?>";
+	if (open CMDLINE, "/proc/$pid/cmdline") {
+		my $arglist = <CMDLINE>;
+		if (defined $arglist) {
+			$arglist =~ s/\000/ /g;
+			$args = $arglist;
+		}
+		close CMDLINE;
+	}
+
+	my $ppid = "?";
+	if (open STAT, "/proc/$pid/stat") {
+		my $fields = <STAT>;
+		if (defined $fields) {
+			$ppid = (split ' ', $fields)[3];
+		}
+		close STAT;
+	}
+
+	my $now = strftime "%H:%M:%S", localtime;
+	printf "%-8s %6s %6s %s\n", $now, $pid, $ppid, $args;
+}
+
+### end tracing
+cleanup();
+
+sub cleanup {
+	print "\nEnding tracing...\n";
+	close TPIPE;
+	writeto "0", "events/$tpdir/enable" or
+	    ldie "ERROR: disabling \"$tptext\"";
+	writeto "", "trace";
+	unlink $flock;
+	exit;
+}

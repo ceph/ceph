@@ -1,0 +1,88 @@
+Demonstrations of reset-ftrace, the Linux ftrace tool.
+
+
+You will probably never need this tool. If you kill -9 an ftrace-based tool,
+leaving the kernel in a tracing enabled state, you could try using this tool
+to reset ftrace and disable tracing. Make sure no other ftrace sessions are
+in use on your system, or it will kill those.
+
+Here's an example:
+
+# ./opensnoop
+Tracing open()s. Ctrl-C to end.
+ERROR: ftrace may be in use by PID 2197 /var/tmp/.ftrace-lock
+
+I tried to run opensnoop, but there's a lock file for PID 2197. Checking if it
+exists:
+
+# ps -fp 2197
+UID        PID  PPID  C STIME TTY          TIME CMD
+#
+
+No.
+
+I also know that no one is using ftrace on this system. So I'll use reset-ftrace
+to clean up this lock file and ftrace state:
+
+# ./reset-ftrace 
+ERROR: ftrace lock (/var/tmp/.ftrace-lock) exists. It shows ftrace may be in use by PID 2197.
+Double check to see if that PID is still active. If not, consider using -f to force a reset. Exiting.
+
+... except it's complaining about the lock file too. I'm already sure that this
+PID doesn't exist, so I'll add the -f option:
+
+# ./reset-ftrace -f
+Reseting ftrace state...
+
+current_tracer, before:
+     1	nop
+current_tracer, after:
+     1	nop
+
+set_ftrace_filter, before:
+     1	#### all functions enabled ####
+set_ftrace_filter, after:
+     1	#### all functions enabled ####
+
+set_ftrace_pid, before:
+     1	no pid
+set_ftrace_pid, after:
+     1	no pid
+
+kprobe_events, before:
+kprobe_events, after:
+
+Done.
+
+The output shows what has been reset, including the before and after state of
+these files.
+
+Now I can try iosnoop again:
+
+# ./iosnoop
+Tracing block I/O. Ctrl-C to end.
+COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+supervise        1689   W    202,1    17039664     4096       0.58
+supervise        1689   W    202,1    17039672     4096       0.47
+supervise        1694   W    202,1    17039744     4096       0.98
+supervise        1694   W    202,1    17039752     4096       0.74
+supervise        1684   W    202,1    17039760     4096       0.63
+[...]
+
+Fixed.
+
+Note that reset-ftrace currently only resets a few methods of enabling
+tracing, such as set_ftrace_filter and kprobe_events. Static tracepoints could 
+be enabled individually, and this script currently doesn't find and disable
+those.
+
+
+Use -h to print the USAGE message:
+
+# ./reset-ftrace -h
+USAGE: reset-ftrace [-fhq]
+                 -f              # force: delete ftrace lock file
+                 -q              # quiet: reset, but say nothing
+                 -h              # this usage message
+  eg,
+       reset-ftrace              # disable active ftrace session

@@ -1,0 +1,321 @@
+Demonstrations of uprobe, the Linux ftrace version.
+
+Trace the readline() function from all processes named "bash":
+
+# ./uprobe p:bash:readline
+Tracing uprobe readline (p:readline /bin/bash:0x8db60). Ctrl-C to end.
+            bash-11886 [003] d... 19601233.618462: readline: (0x48db60)
+            bash-11886 [003] d... 19601235.152067: readline: (0x48db60)
+            bash-11915 [003] d... 19601238.976244: readline: (0x48db60)
+^C
+Ending tracing...
+
+readline() is the bash shell's function for reading interactive input, and
+a line is printed each time I entered commands in separate bash shells.
+The line contains default ftrace columns: the process name, "-", and PID;
+the CPU, flags, a timestamp (in units of seconds), the probe name, then
+other arguments. These columns are documented in the kernel source, under
+Documentation/trace/ftrace.txt.
+
+The first line of output is informational, and shows what uprobe is really
+doing: it turned "bash" into "/bin/bash", using a $PATH lookup (via which(1)).
+It then turned the "readline" symbol into 0x8db60, using objdump(1) for
+symbol lookups.
+
+Note that this traces _all_ bash processes simultaneously.
+
+
+Tracing PID 11886 only:
+
+# ./uprobe -p 11886 p:bash:readline
+Tracing uprobe readline (p:readline /bin/bash:0x8db60). Ctrl-C to end.
+            bash-11886 [002] d... 19601657.753893: readline: (0x48db60)
+            bash-11886 [002] d... 19601658.246613: readline: (0x48db60)
+            bash-11886 [002] d... 19601658.386666: readline: (0x48db60)
+            bash-11886 [002] d... 19601661.415952: readline: (0x48db60)
+^C
+Ending tracing...
+
+This may be important if you are tracing shared library functions, and only care
+about one target process.
+
+
+You can specify the full path to a binary to trace:
+
+# ./uprobe p:/bin/bash:readline
+Tracing uprobe readline (p:readline /bin/bash:0x8db60). Ctrl-C to end.
+            bash-11886 [002] d... 19601746.902461: readline: (0x48db60)
+            bash-11886 [002] d... 19601749.543485: readline: (0x48db60)
+            bash-11886 [001] d... 19601749.702369: readline: (0x48db60)
+^C
+Ending tracing...
+
+This might be useful if uprobe picked the wrong binary to trace, as shown by
+the informational line, and you wanted to specify it directly. It is also useful
+for tracing binaries not in the $PATH, which uprobe can't otherwise find.
+
+
+Use -l to list symbols available to trace; eg, searching for functions
+containing "readline" in bash:
+
+# ./uprobe -l bash | grep readline
+initialize_readline
+pcomp_set_readline_variables
+posix_readline_initialize
+readline
+readline_internal_char
+readline_internal_setup
+readline_internal_teardown
+
+
+Tracing the return of readline() with return value as a string:
+
+# ./uprobe 'r:bash:readline +0($retval):string'
+Tracing uprobe readline (r:readline /bin/bash:0x8db60 +0($retval):string). Ctrl-C to end.
+            bash-11886 [003] d... 19601837.001935: readline: (0x41e876 <- 0x48db60) arg1="ls -l"
+            bash-11886 [002] d... 19601851.008409: readline: (0x41e876 <- 0x48db60) arg1="echo "hello world""
+            bash-11886 [002] d... 19601854.099730: readline: (0x41e876 <- 0x48db60) arg1="df -h"
+            bash-11886 [002] d... 19601858.805740: readline: (0x41e876 <- 0x48db60) arg1="cd .."
+            bash-11886 [003] d... 19601898.378753: readline: (0x41e876 <- 0x48db60) arg1="foo bar"
+^C
+Ending tracing...
+
+Now I can see the commands entered. Note that this traces what bash reads in,
+even if the command eventually fails. Eg, the last command "foo bar" didn't
+work (No command 'foo' found).
+
+Note that this invocation now uses "r:" at the start of the probe description,
+instead of "p:". r is for return probes, p for entry probes.
+
+
+Tracing sleep() calls in all running libc shared libraries:
+
+# ./uprobe p:libc:sleep
+Tracing uprobe sleep (p:sleep /lib/x86_64-linux-gnu/libc-2.15.so:0xbf130). Ctrl-C to end.
+          svscan-2134  [000] d... 19602402.959904: sleep: (0x7f2dba562130)
+            cron-923   [000] d... 19602404.640507: sleep: (0x7f3e26d9e130)
+            cron-923   [002] d... 19602404.655232: sleep: (0x7f3e26d9e130)
+            cron-923   [002] d... 19602405.189271: sleep: (0x7f3e26d9e130)
+          svscan-2134  [000] d... 19602407.959947: sleep: (0x7f2dba562130)
+[...]
+
+This shows different programs calling sleep -- likely threads waiting for work.
+
+I ran a "sleep 1" command in a bash shell, which wasn't seen above: probably
+using a different sleep library call, which I'd need to trace separately.
+
+
+Including headers (-H):
+
+# ./uprobe -H p:libc:sleep
+Tracing uprobe sleep (p:sleep /lib/x86_64-linux-gnu/libc-2.15.so:0xbf130). Ctrl-C to end.
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 0/0   #P:4
+#
+#                              _-----=> irqs-off
+#                             / _----=> need-resched
+#                            | / _---=> hardirq/softirq
+#                            || / _--=> preempt-depth
+#                            ||| /     delay
+#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+#              | |       |   ||||       |         |
+          svscan-2134  [000] d... 19603052.976770: sleep: (0x7f2dba562130)
+          svscan-2134  [002] d... 19603057.976927: sleep: (0x7f2dba562130)
+[...]
+
+These are documented in Documentation/trace/ftrace.txt.
+
+
+Tracing sleep() with its argument (seconds):
+
+# ./uprobe 'p:libc:sleep %di'
+Tracing uprobe sleep (p:sleep /lib/x86_64-linux-gnu/libc-2.15.so:0xbf130 %di). Ctrl-C to end.
+          svscan-2134  [002] d... 19602517.962925: sleep: (0x7f2dba562130) arg1=0x5
+          svscan-2134  [002] d... 19602522.963082: sleep: (0x7f2dba562130) arg1=0x5
+            cron-923   [002] d... 19602524.187733: sleep: (0x7f3e26d9e130) arg1=0x3c
+          svscan-2134  [002] d... 19602527.963267: sleep: (0x7f2dba562130) arg1=0x5
+[...]
+
+So svcan was sleeping for 5 seconds, and cron for 60 seconds (0x3c = 60).
+
+The argument is specified by its register, %di. This is platform dependent: %di
+may only be meaningful on x86. If you're on a different architecture (eg, ARM),
+you will probably need to use something else.
+
+If working with registers is not for you, then consider tracing this using
+perf_events with debuginfo installed: in which case you can use the variable
+names. Or consider a different tracer.
+
+
+Here is an example of the optional filter expression, to only trace the return
+of fopen() when it failed and returned NULL (0):
+
+# ./uprobe 'r:libc:fopen file=$retval' 'file == 0'
+Tracing uprobe fopen (r:fopen /lib/x86_64-linux-gnu/libc-2.15.so:0x6e540 file=$retval). Ctrl-C to end.
+           prog1-23982 [000] d... 19602894.346872: fopen: (0x40051e <- 0x7f637867f540) file=0x0
+^C
+Ending tracing...
+
+The argument $retval was given a vanity name "file", which was then tested in
+the filter expression "file == 0".
+
+
+Here's an example of tracing the MySQL server dispatch_command() function, along
+with the query string (note: the %dx register is only valid for this
+architecture and this software build):
+
+# ./uprobe 'p:dispatch_command /opt/mysql/bin/mysqld:_Z16dispatch_command19enum_server_commandP3THDPcj +0(%dx):string'
+Tracing uprobe dispatch_command (p:dispatch_command /opt/mysql/bin/mysqld:0x2dbd40 +0(%dx):string). Ctrl-C to end.
+          mysqld-2855  [001] d... 19956674.509085: dispatch_command: (0x6dbd40) arg1="show tables"
+          mysqld-2855  [001] d... 19956675.541155: dispatch_command: (0x6dbd40) arg1="SELECT * FROM numbers where number > 32000"
+^C
+Ending tracing...
+
+The function name, "_Z16dispatch_command19enum_server_commandP3THDPcj", is the
+C++ mangled symbol.
+
+I can name the query string argument "cmd" then test it in a filter; eg, to only
+match queries that begin with "SELECT":
+
+# ./uprobe 'p:dispatch_command /opt/mysql/bin/mysqld:_Z16dispatch_command19enum_server_commandP3THDPcj cmd=+0(%dx):string' 'cmd ~ "SELECT*"'
+Tracing uprobe dispatch_command (p:dispatch_command /opt/mysql/bin/mysqld:0x2dbd40 cmd=+0(%dx):string). Ctrl-C to end.
+          mysqld-2855  [001] d... 19956754.619958: dispatch_command: (0x6dbd40) cmd="SELECT * FROM numbers where number > 32000"
+          mysqld-2855  [001] d... 19956755.060125: dispatch_command: (0x6dbd40) cmd="SELECT * FROM numbers where number > 32000"
+^C
+Ending tracing...
+
+
+Overhead is relative to the rate of events: a higher rate of traced events,
+means uprobe costs higher overhead. If you are unsure of the rate of events,
+you can capture a set number only, or trace for a limited duration only (covered
+in the next example). To trace a set number only, you can pipe into head, eg:
+
+# ./uprobe -p 11982 p:bash:sh_malloc | head -15
+Tracing uprobe sh_malloc (p:sh_malloc /bin/bash:0xaafa0). Ctrl-C to end.
+            bash-11982 [001] d... 19643121.529484: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529493: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529506: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529510: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529519: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529521: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529523: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529525: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529531: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529533: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529536: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529541: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529546: sh_malloc: (0x4aafa0)
+            bash-11982 [001] d... 19643121.529549: sh_malloc: (0x4aafa0)
+
+uprobe traps SIGPIPE, so that it properly exits and cleans up probes when used
+in this fashion.
+
+Note the timestamps: by examining the rate they are increasing, you can have
+some estimation for the rate of events. In this case, the 15 events all
+happened within the same millisecond (the timestamp column is in units of
+seconds), which suggests these are frequent events.
+
+
+The -d option can be used to specify a duration for tracing, which also causes
+uprobe to perform in-kernel buffering, which reduces the overhead of tracing:
+
+# ./uprobe -d 5 p:libc:gettimeofday
+Tracing uprobe gettimeofday for 5 seconds (buffered)...
+           sleep-12743 [001] d... 19642858.943440: gettimeofday: (0x7f400138ac10)
+       rotatelog-12744 [000] d... 19642858.955665: gettimeofday: (0x7f0ba34ebc10)
+       rotatelog-12745 [003] d... 19642858.956425: gettimeofday: (0x7f1e6db20c10)
+       rotatelog-12744 [000] d... 19642858.956924: gettimeofday: (0x7f0ba34ebc10)
+       rotatelog-12745 [003] d... 19642858.957608: gettimeofday: (0x7f1e6db20c10)
+       rotatelog-12744 [001] d... 19642858.958005: gettimeofday: (0x7fd8a1d64c10)
+       rotatelog-12744 [003] d... 19642858.959496: gettimeofday: (0x7f9531acdc10)
+           mkdir-12746 [002] d... 19642858.959542: gettimeofday: (0x7fd539474c10)
+           chown-12747 [001] d... 19642858.961455: gettimeofday: (0x7ff5646afc10)
+       rotatelog-12745 [000] d... 19642858.963065: gettimeofday: (0x7f406aca7c10)
+       rotatelog-12745 [001] d... 19642858.964280: gettimeofday: (0x7f6548debc10)
+       rotatelog-12749 [000] d... 19642859.977462: gettimeofday: (0x7fecaf7e1c10)
+       rotatelog-12750 [003] d... 19642859.977697: gettimeofday: (0x7f821eb3cc10)
+       rotatelog-12749 [000] d... 19642859.978707: gettimeofday: (0x7fecaf7e1c10)
+[...]
+
+You will not see live output during the -d mode, as it is being buffered
+in-kernel.
+
+
+Tracing func_abc() in my test program, and including user-level stacks:
+
+# ./uprobe -s p:/root/func_abc:func_c
+Tracing uprobe func_c (p:func_c /root/func_abc:0x4f4). Ctrl-C to end.
+        func_abc-25394 [000] d... 19603250.054040: func_c: (0x4004f4)
+        func_abc-25394 [000] d... 19603250.054056: <user stack trace>
+ =>  <00000000004004f4>
+ =>  <0000000000400527>
+ =>  <0000000000400537>
+ =>  <00007fca9f0e376d>
+        func_abc-25394 [000] d... 19603251.054250: func_c: (0x4004f4)
+        func_abc-25394 [000] d... 19603251.054266: <user stack trace>
+ =>  <00000000004004f4>
+ =>  <0000000000400527>
+ =>  <0000000000400537>
+ =>  <00007fca9f0e376d>
+^C
+Ending tracing...
+
+The output has the raw hex addresses. If this is too much of a nuisance, then
+try tracing this using perf_events which should automate the translation.
+
+It can get worse, eg:
+
+l# ./uprobe -s p:bash:readline
+Tracing uprobe readline (p:readline /bin/bash:0x8db60). Ctrl-C to end.
+            bash-11886 [002] d... 19603434.397818: readline: (0x48db60)
+            bash-11886 [002] d... 19603434.397832: <user stack trace>
+ =>  <000000000048db60>
+            bash-11886 [002] d... 19603434.592500: readline: (0x48db60)
+            bash-11886 [002] d... 19603434.592510: <user stack trace>
+ =>  <000000000048db60>
+^C
+Ending tracing...
+
+Here the stack trace is missing (0x48db60 is the traced function, transposed
+from the base load address). This is due to compiler optimizations. It can be
+fixed by recompiling with -fno-omit-frame-pointer, or, using perf_events and
+a different method of stack walking.
+
+
+Use -h to print the USAGE message:
+
+# ./uprobe -h
+USAGE: uprobe [-FhHsv] [-d secs] [-p PID] [-L TID] {-l target |
+              uprobe_definition [filter]}
+                 -F              # force. trace despite warnings.
+                 -d seconds      # trace duration, and use buffers
+                 -l target       # list functions from this executable
+                 -p PID          # PID to match on events
+                 -L TID          # thread id to match on events
+                 -v              # view format file (don't trace)
+                 -H              # include column headers
+                 -s              # show user stack traces
+                 -h              # this usage message
+
+Note that these examples may need modification to match your kernel
+version's function names and platform's register usage.
+   eg,
+       # trace readline() calls in all running "bash" executables:
+           uprobe p:bash:readline
+       # trace readline() with explicit executable path:
+           uprobe p:/bin/bash:readline
+       # trace the return of readline() with return value as a string:
+           uprobe 'r:bash:readline +0($retval):string'
+       # trace sleep() calls in all running libc shared libraries:
+           uprobe p:libc:sleep
+       # trace sleep() with register %di (x86):
+           uprobe 'p:libc:sleep %di'
+       # trace this address (use caution: must be instruction aligned):
+           uprobe p:libc:0xbf130
+       # trace gettimeofday() for PID 1182 only:
+           uprobe -p 1182 p:libc:gettimeofday
+       # trace the return of fopen() only when it returns NULL:
+           uprobe 'r:libc:fopen file=$retval' 'file == 0'
+
+See the man page and example file for more info.

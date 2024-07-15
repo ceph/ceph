@@ -1,0 +1,113 @@
+.TH opensnoop 8  "2014-07-20" "USER COMMANDS"
+.SH NAME
+opensnoop \- trace open() syscalls with file details. Uses Linux ftrace.
+.SH SYNOPSIS
+.B opensnoop
+[\-htx] [\-d secs] [\-p pid] [\-L tid] [\-n name] [filename]
+.SH DESCRIPTION
+This traces open() syscalls, showing the file name (pathname) and returned file
+descriptor number (or \-1, for error).
+
+This implementation is designed to work on older kernel versions, and without
+kernel debuginfo. It works by dynamic tracing of the return value of getname()
+as a string, and associating it with the following open() syscall return.
+This approach is kernel version specific, and may not work on your version.
+It is a workaround, and proof of concept for ftrace, until more kernel tracing
+functionality is available.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE and KPROBE CONFIG, the syscalls:sys_exit_open tracepoint, and the
+getname() kernel function. You may already have these enabled and available
+on recent Linux kernels. And awk.
+.SH OPTIONS
+.TP
+\-d secs
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-h
+Print usage message.
+.TP
+\-n name
+Only show processes matching this process name. Partial strings and regular
+expressions are allowed. This is post-filtered using awk.
+.TP
+\-p PID
+Only trace this process ID. This is filtered in-kernel.
+.TP
+\-L TID
+Only trace this thread ID. This is filtered in-kernel.
+.TP
+\-t
+Include timestamps, in seconds.
+.TP
+\-x
+Only print failed open()s.
+.TP
+filename
+Only show open()s which match this filename. Partial strings and regular
+expressions are allowed. This is post-filtered using awk.
+.SH EXAMPLES
+.TP
+Trace all open() syscalls with details:
+#
+.B opensnoop
+.TP
+Only trace open()s for PID 81:
+#
+.B opensnoop -p 81
+.TP
+Trace failed open() syscalls:
+#
+.B opensnoop -x
+.TP
+Trace open() syscalls for filenames containing "conf":
+#
+.B opensnoop conf
+.TP
+Trace open() syscalls for filenames ending in "log":
+#
+.B opensnoop 'log$'
+.SH FIELDS
+.TP
+TIMEs
+Time of open() completion, in units of seconds.
+.TP
+COMM
+Process name (if known).
+.TP
+PID
+Process ID.
+.TP
+FD
+File descriptor. If this is a successful open, the file descriptor number is
+shown. If this is unsuccessful, -1 is shown. Numbers beginning with 0x are
+hexadecimal.
+.TP
+FILE
+Filename (pathname) used by the open() syscall.
+.SH OVERHEAD
+This reads and open() syscalls and getname() kernel functions as they occur.
+For high rates of opens (> 500/s), the overhead may begin to be measurable.
+Test yourself. You can use the \-d mode to buffer output, reducing overheads.
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+execsnoop(8), strace(1)

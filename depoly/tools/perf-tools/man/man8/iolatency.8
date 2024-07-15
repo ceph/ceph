@@ -1,0 +1,116 @@
+.TH iolatency 8  "2014-07-12" "USER COMMANDS"
+.SH NAME
+iolatency \- summarize block device I/O latency as a histogram. Uses Linux ftrace.
+.SH SYNOPSIS
+.B iolatency
+[\-hQT] [\-d device] [\-i iotype] [interval [count]]
+.SH DESCRIPTION
+This shows the distribution of latency, allowing modes and latency outliers
+to be identified and studied. For more details of block device I/O, use
+iosnoop(8).
+
+This is a proof of concept tool using ftrace, and involves user space
+processing and related overheads. See the OVERHEAD section.
+
+NOTE: Due to the way trace buffers are switched per interval, there is the
+possibility of losing a small number of I/O (usually less than 1%). The
+summary therefore shows the general distribution, but may be slightly
+incomplete. If 100% of I/O must be studied, use iosnoop(8) and post-process.
+Also note that I/O may be missed when the trace buffer is full: see the
+interval section in OPTIONS.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE CONFIG, and the tracepoints block:block_rq_issue and
+block:block_rq_complete, which you may already have enabled and available on
+recent Linux kernels. And awk.
+.SH OPTIONS
+.TP
+\-d device
+Only show I/O issued by this device. (eg, "202,1"). This matches the DEV
+column in the iolatency output, and is filtered in-kernel.
+.TP
+\-i iotype
+Only show I/O issued that matches this I/O type. This matches the TYPE column
+in the iolatency output, and wildcards ("*") can be used at the beginning or
+end (only). Eg, "*R*" matches all reads. This is filtered in-kernel.
+.TP
+\-h
+Print usage message.
+.TP
+\-Q
+Include block I/O queueing time. This uses block I/O queue insertion as the
+start tracepoint (block:block_rq_insert), instead of block I/O issue
+(block:block_rq_issue).
+.TP
+\-T
+Include timestamps with each summary output.
+.TP
+interval
+Interval between summary histograms, in seconds.
+
+During the interval, trace output will be buffered in-kernel, which is then
+read and processed for the summary. This buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size (the bufsize_kb setting in iolatency). With the
+default setting (4 Mbytes), I'd expect this to happen around 50k I/O per
+summary.
+.TP
+count
+Number of summaries to print.
+.SH EXAMPLES
+.TP
+Default output, print a summary of block I/O latency every 1 second:
+# 
+.B iolatency
+.TP
+Include block I/O queue time:
+.B iolatency \-Q
+.TP
+Print 5 x 1 second summaries:
+#
+.B iolatency 1 5
+.TP
+Trace reads only:
+#
+.B iolatency \-i '*R*'
+.TP
+Trace I/O issued to device 202,1 only:
+#
+.B iolatency \-d 202,1
+.SH FIELDS
+.TP
+>=(ms)
+Latency was greater than or equal-to this value, in milliseconds.
+.TP
+<(ms)
+Latency was less than this value, in milliseconds.
+.TP
+I/O
+Number of block device I/O in this latency range, during the interval.
+.TP
+Distribution
+ASCII histogram representation of the I/O column.
+.SH OVERHEAD
+Block device I/O issue and completion events are traced and buffered
+in-kernel, then processed and summarized in user space. There may be
+measurable overhead with this approach, relative to the block device IOPS.
+
+The overhead may be acceptable in many situations. If it isn't, this tool
+can be reimplemented in C, or using a different tracer (eg, perf_events,
+SystemTap, ktap.)
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+iosnoop(8), iostat(1)

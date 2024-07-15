@@ -1,0 +1,96 @@
+.TH syscount 8  "2014-07-07" "USER COMMANDS"
+.SH NAME
+syscount \- count system calls. Uses Linux perf_events.
+.SH SYNOPSIS
+.B syscount
+[\-chv] [\-t top] {\-p PID|\-d seconds|command}
+.SH DESCRIPTION
+This is a proof-of-concept using perf_events capabilities for older kernel
+versions, that lack custom in-kernel aggregations. Once they exist, this
+script can be substantially rewritten and improved (lower overhead).
+.SH REQUIREMENTS
+Linux perf_events: add linux-tools-common, run "perf", then
+add any additional packages it requests. Also needs awk.
+.SH OPTIONS
+.TP
+\-c
+Show counts by syscall name. This mode (without -v) uses in-kernel counts, which
+have lower overhead than the default mode.
+.TP
+\-h
+Usage message.
+.TP
+\-v
+Verbose: include PID.
+.TP
+\-p PID
+Trace this process ID only.
+.TP
+\-d seconds
+Duration of trace in seconds.
+.TP
+command
+Run and trace this command.
+.SH EXAMPLES
+.TP
+Trace and summarize syscalls by process name:
+#
+.B syscount
+.TP
+Trace and summarize syscalls by syscall name (lower overhead):
+#
+.B syscount \-c
+.TP
+Trace for 5 seconds, showing by process name:
+#
+.B syscount \-d 5
+.TP
+Trace PID 932 only, and show by syscall name (lower overhead):
+#
+.B syscount \-cp 923
+.TP
+Execute the """ls""" command, and show by syscall name:
+#
+.B syscount -c ls
+.SH FIELDS
+.TP
+PID
+Process ID.
+.TP
+COMM
+Process command name.
+.TP
+SYSCALL
+Syscall name.
+.TP
+COUNT
+Number of syscalls during tracing.
+.SH OVERHEAD
+Modes that report syscall names only (\-c, \-cp PID, \-cd secs) have
+lower overhead, since they use in-kernel counts. Other modes which report
+process IDs (\-cv) or process names (default) create a perf.data file for
+post processing, and you will see messages about it doing this. Beware of
+the file size (test for short durations, or use \-c to see counts based on
+in-kernel counters), and gauge overheads based on the perf.data size.
+
+Note that this script delibrately does not pipe perf record into
+perf script, which would avoid perf.data, because it can create a feedback
+loop where the perf script syscalls are recorded. Hopefully there will be a
+fix for this in a later perf version, so perf.data can be skipped, or other
+kernel features to aggregate by process name in-kernel directly (eg, via
+eBPF, ktap, or SystemTap).
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+iosnoop(8), iolatency(8), iostat(1)

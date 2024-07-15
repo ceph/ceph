@@ -1,0 +1,169 @@
+.TH iosnoop 8  "2014-07-12" "USER COMMANDS"
+.SH NAME
+iosnoop \- trace block I/O events as they occur. Uses Linux ftrace.
+.SH SYNOPSIS
+.B iosnoop
+[\-hQst] [\-d device] [\-i iotype] [\-p pid] [\-n name] [duration]
+.SH DESCRIPTION
+iosnoop prints block device I/O events as they happen, with useful details such
+as PID, device, I/O type, block number, I/O size, and latency.
+
+This traces disk I/O at the block device interface, using the block:
+tracepoints. This can help characterize the I/O requested for the storage
+devices and their resulting performance. I/O completions can also be studied
+event-by-event for debugging disk and controller I/O scheduling issues.
+
+NOTE: Use of a duration buffers I/O, which reduces overheads, but this also
+introduces a limit to the number of I/O that will be captured. See the duration
+section in OPTIONS.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE CONFIG, and the tracepoints block:block_rq_insert, block:block_rq_issue,
+and block:block_rq_complete, which you may already have enabled and available on
+recent Linux kernels. And awk.
+.SH OPTIONS
+.TP
+\-d device
+Only show I/O issued by this device. (eg, "202,1"). This matches the DEV
+column in the iosnoop output, and is filtered in-kernel.
+.TP
+\-i iotype
+Only show I/O issued that matches this I/O type. This matches the TYPE column
+in the iosnoop output, and wildcards ("*") can be used at the beginning or
+end (only). Eg, "*R*" matches all reads. This is filtered in-kernel.
+.TP
+\-p PID
+Only show I/O issued by this PID. This filters in-kernel. Note that I/O may be
+issued indirectly; for example, as the result of a memory allocation, causing
+dirty buffers (maybe from another PID) to be written to storage.
+
+With the \-Q
+option, the identified PID is more accurate, however, LATms now includes
+queueing time (see the \-Q option).
+.TP
+\-n name
+Only show I/O issued by processes with this name. Partial strings and regular
+expressions are allowed. This is a post-filter, so all I/O is traced and then
+filtered in user space. As with PID, this includes indirectly issued I/O,
+and \-Q can be used to improve accuracy (see the \-Q option).
+.TP
+\-h
+Print usage message.
+.TP
+\-Q
+Use block I/O queue insertion as the start tracepoint (block:block_rq_insert),
+instead of block I/O issue (block:block_rq_issue). This makes the following
+changes: COMM and PID are more likely to identify the origin process, as are
+\-p PID and \-n name; STARTs shows queue insert; and LATms shows I/O
+time including time spent on the block I/O queue.
+.TP
+\-s
+Include a column for the start time (issue time) of the I/O, in seconds.
+If the \-Q option is used, this is the time the I/O is inserted on the block
+I/O queue.
+.TP
+\-t
+Include a column for the completion time of the I/O, in seconds.
+.TP
+duration
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size (the bufsize_kb setting in iosnoop). With the
+default setting (4 Mbytes), I'd expect this to happen around 50k I/O.
+.SH EXAMPLES
+.TP
+Default output, print I/O activity as it occurs:
+# 
+.B iosnoop
+.TP
+Buffer for 5 seconds (lower overhead) and write to a file:
+# 
+.B iosnoop 5 > outfile
+.TP
+Trace based on block I/O queue insertion, showing queueing time:
+#
+.B iosnoop -Q
+.TP
+Trace reads only:
+#
+.B iosnoop \-i '*R*'
+.TP
+Trace I/O issued to device 202,1 only:
+#
+.B iosnoop \-d 202,1
+.TP
+Include I/O start and completion timestamps:
+#
+.B iosnoop \-ts
+.TP
+Include I/O queueing and completion timestamps:
+#
+.B iosnop \-Qts
+.TP
+Trace I/O issued when PID 181 was on-CPU only:
+#
+.B iosnoop \-p 181
+.TP
+Trace I/O queued when PID 181 was on-CPU (more accurate), and include queue time:
+#
+.B iosnoop \-Qp 181
+.SH FIELDS
+.TP
+COMM
+Process name (command) for the PID that was on-CPU when the I/O was issued, or
+inserted if \-Q is used. See PID. This column is truncated to 12 characters.
+.TP
+PID
+Process ID which was on-CPU when the I/O was issued, or inserted if \-Q is
+used. This will usually be the
+process directly requesting I/O, however, it may also include indirect I/O. For
+example, a memory allocation by this PID which causes dirty memory from another
+PID to be flushed to disk.
+.TP
+TYPE
+Type of I/O. R=read, W=write, M=metadata, S=sync, A=readahead, F=flush or FUA (force unit access), D=discard, E=secure, N=null (not RWFD).
+.TP
+DEV
+Storage device ID.
+.TP
+BLOCK
+Disk block for the operation (location, relative to this device).
+.TP
+BYTES
+Size of the I/O, in bytes.
+.TP
+LATms
+Latency (time) for the I/O, in milliseconds.
+.SH OVERHEAD
+By default, iosnoop works without buffering, printing I/O events
+as they happen (uses trace_pipe), context switching and consuming CPU to do
+so. This has a limit of about 10,000 IOPS (depending on your platform), at
+which point iosnoop will be consuming 1 CPU. The duration mode uses buffering,
+and can handle much higher IOPS rates, however, the buffer has a limit of
+about 50,000 I/O, after which events will be dropped. You can tune this with
+bufsize_kb, which is per-CPU. Also note that the "-n" option is currently
+post-filtered, so all events are traced.
+
+The overhead may be acceptable in many situations. If it isn't, this tool
+can be reimplemented in C, or using a different tracer (eg, perf_events,
+SystemTap, ktap.)
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+iolatency(8), iostat(1), lsblk(8)

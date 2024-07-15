@@ -1,0 +1,76 @@
+#!/usr/bin/env stap
+#
+##stap -l 'process("/usr/bin/ceph-osd").function("*read*")'
+##stap -g cc_stap_set_var.stp -c './cc_stap_test'
+
+global device_name
+
+probe begin {
+#	device_name = @1
+	printf ("begin\n");
+#	printf ("device : %s\n", device_name)
+}
+
+#probe module("hello").function("test")
+#{
+#       print("Hello Systemtap!\n")
+#}
+
+#probe process("/usr/bin/ceph-osd").function("*").call
+#{
+#           printf("%s -> %s\n", thread_indent(-4), ppfunc());
+#}
+
+#probe kernel.statement("__tcp_ack_snd_check@/build/buildd/linux-lts-trusty-3.13.0/net/ipv4/tcp_input.c:*")
+#{
+#           printf("%s\n", pp());
+#}
+
+#probe nd_syscall.*
+probe syscall.*
+{
+#	procname = execname();
+#	if (procname =~ "ceph-osd*") {
+#		printf("%s[%d]: %s\n", procname, pid(), name);
+#	}
+
+	if (target() == pid()) {
+#		print_backtrace()
+		printf("%s <- %s\n", thread_indent(-4), ppfunc())
+	}
+}
+
+probe kernel.function("aio_read")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("aio_write")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("aio_fsync")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("do_io_getevents")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("submit_bio")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}

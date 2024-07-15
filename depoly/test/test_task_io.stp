@@ -1,0 +1,137 @@
+#!/usr/bin/env stap
+
+#stap -l 'process("/usr/bin/ceph-osd").function("*read*")'
+#stap -g cc_stap_set_var.stp -c './cc_stap_test'
+
+global device_name
+ 
+probe begin {
+	#device_name = @1
+	printf ("begin\n");
+	#printf ("device : %s\n", device_name)
+}
+     
+#probe kernel.function("submit_bio") {
+#	dev = $bio->bi_bdev->bd_dev
+#	if (dev == device_of_interest)
+#		printf ("[%s](%d) dev:0x%x rw:%d size:%d\n",execname(), pid(), dev, $rw, $bio->bi_size)
+#}
+
+#	print_backtrace(); 
+
+
+#probe process("/usr/bin/ceph-osd").function("*").call
+#{
+#	    printf("%s -> %s\n", thread_indent(4), ppfunc());
+#}
+
+#probe process("/usr/bin/ceph-osd").function("*").return
+#{
+#	    printf("%s <- %s\n", thread_indent(-4), ppfunc());
+#}
+
+#probe kernel.statement("__tcp_ack_snd_check@/build/buildd/linux-lts-trusty-3.13.0/net/ipv4/tcp_input.c:*")
+#{
+#	    printf("%s\n", pp());
+#}
+
+#probe syscall.*.call
+#{
+#	if (target() == pid()) {
+#		print_ubacktrace();
+#		print_backtrace();
+#		printf("nd_syscall.* %s <- %s \n", thread_indent(-4), ppfunc());
+#	}
+#}
+
+probe process("/usr/bin/ceph-osd").function("BlueFS::_read_random").call
+{
+	if (target() == pid()) {
+		#$file_name = $h->file->fnode.ino;
+		#$file_off = $off;
+		#$file_len = $len;
+		#$disk_len = $l;
+		if ($len > 4096) {
+			print_ubacktrace();
+		}
+		printf("process %s <- %s  off_t(%d) flen(%d)\n", thread_indent(-4), ppfunc(), $off, $len);
+	}
+}
+
+probe process("/usr/bin/ceph-osd").function("KernelDevice::read_random").call
+{
+	if (target() == pid()) {
+		printf("process %s <- %s  off_t(%d) len(%d)\n", thread_indent(-4), ppfunc(), $off, $len);
+	}
+}
+
+#probe process("/usr/bin/ceph-osd").function("*read*")
+#{
+#	if (target() == pid()) {
+#		printf("process.* %s <- %s \n", thread_indent(-4), ppfunc());
+#	}
+#}
+
+#probe process("/usr/bin/ceph-osd").function("*write*")
+#{
+#	 if (target() == pid()) {
+#		printf("process.* %s <- %s \n", thread_indent(-4), ppfunc());
+#	}       
+#}
+
+#probe process("/usr/bin/ceph-osd").function("read").call
+#{
+#	if (target() == pid()) {
+#		printf("process.* %s <- %s \n", thread_indent(-4), ppfunc());
+#	}
+#}
+
+#probe process("/usr/bin/ceph-osd").function("pread").call
+#{
+#	if (target() == pid()) {
+#		printf("process.* %s <- %s \n", thread_indent(-4), ppfunc());
+#	}       
+#}
+
+#probe process("/usr/bin/ceph-osd").function("io_submit").call
+#{
+#	if (target() == pid()) {
+#		printf("process.* %s <- %s \n", thread_indent(-4), ppfunc());
+#	}
+#}
+
+probe kernel.function("aio_read")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("aio_write")
+{       
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("aio_fsync")
+{       
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("do_io_getevents")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+
+probe kernel.function("submit_bio")
+{
+	if (target() == pid()) {
+		printf("kernel %s <- %s\n", thread_indent(-4), ppfunc());
+	}
+}
+

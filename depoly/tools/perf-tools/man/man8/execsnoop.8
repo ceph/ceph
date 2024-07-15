@@ -1,0 +1,104 @@
+.TH execsnoop 8  "2014-07-07" "USER COMMANDS"
+.SH NAME
+execsnoop \- trace process exec() with arguments. Uses Linux ftrace.
+.SH SYNOPSIS
+.B execsnoop
+[\-hrt] [\-a argc] [\-d secs] [name]
+.SH DESCRIPTION
+execsnoop traces process execution, showing PID, PPID, and argument details
+if possible.
+
+This traces exec() from the fork()->exec() sequence, which means it won't
+catch new processes that only fork(). With the -r option, it will also catch
+processes that re-exec. It makes a best-effort attempt to retrieve the program
+arguments and PPID; if these are unavailable, 0 and "[?]" are printed
+respectively. There is also a limit to the number of arguments printed (by
+default, 8), which can be increased using -a.
+
+This implementation is designed to work on older kernel versions, and without
+kernel debuginfo. It works by dynamic tracing an execve kernel function to
+read the arguments from the %si register. The stub_execve() function is tried
+first, and then the do_execve() function. The sched:sched_process_fork
+tracepoint, is used for the PPID. Tracing registers and kernel functions is
+an unstable technique, and this tool may not work for some kernels or platforms.
+
+This program is a workaround that should be
+improved in the future when other kernel capabilities are made available. If
+you need a more reliable tool now, then consider other tracing alternatives
+(eg, SystemTap). This tool is really a proof of concept to see what ftrace can
+currently do.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE and KPROBE CONFIG, sched:sched_process_fork tracepoint,
+and either the stub_execve() or do_execve() kernel function. You may already
+have these on recent kernels. And awk.
+.SH OPTIONS
+.TP
+\-a argc
+Maximum number of arguments to show. The default is 8, and the maximum allowed
+is 16. If execsnoop thinks it has truncated the argument list, an ellipsis 
+"[...]" will be shown.
+.TP
+\-d seconds
+Duration to trace, in seconds. This also uses in-kernel buffering.
+.TP
+\-h
+Print usage message.
+.TP
+\-r
+Include re-exec()s.
+.TP
+\-t
+Include timestamps in units of seconds.
+.TP
+name
+Only show processes that match this name.
+Partials and regular expressions are allowed, as this is filtered in
+user space by awk.
+.SH EXAMPLES
+.TP
+Trace all new processes and arguments (if possible):
+#
+.B execsnoop
+.TP
+Trace all new process names containing the text "http":
+#
+.B execsnoop http
+.SH FIELDS
+.TP
+TIMEs
+Time of the exec(), in seconds.
+.TP
+PID
+Process ID.
+.TP
+PPID
+Parent process ID, if this was able to be read. If it wasn't, 0 is printed.
+.TP
+ARGS
+Command line arguments, if these were able to be read. If they aren't able to be
+read, "[?]" is printed (which would be due to a limitation in this tools
+implementation, since this is workaround for older kernels; if you need
+reliable argument tracing, use a different tracer). They will be truncated
+to the argc limit, and an ellipsis "[...]" may be printed if execsnoop is
+aware of the truncation.
+.SH OVERHEAD
+This reads and processes exec() events in user space as they occur. Since the
+rate of exec() is expected to be low (< 500/s), the overhead is expected to
+be small or negligible.
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+top(1)

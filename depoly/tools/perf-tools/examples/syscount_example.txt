@@ -1,0 +1,297 @@
+Demonstrations of syscount, the Linux perf_events version.
+
+
+The first mode I use is "-c", where it behaves like "strace -c", but for the
+entire system (all procesess) and with much lower overhead:
+
+# ./syscount -c
+Tracing... Ctrl-C to end.
+^Csleep: Interrupt
+SYSCALL              COUNT
+accept                   1
+getsockopt               1
+setsid                   1
+chdir                    2
+getcwd                   2
+getpeername              2
+getsockname              2
+setgid                   2
+setgroups                2
+setpgid                  2
+setuid                   2
+getpgrp                  4
+getpid                   4
+rename                   4
+setitimer                4
+setrlimit                4
+setsockopt               4
+statfs                   4
+set_tid_address          5
+readlink                 6
+set_robust_list          6
+nanosleep                7
+newuname                 7
+faccessat                8
+futex                   10
+clock_gettime           16
+newlstat                20
+pipe                    20
+epoll_wait              24
+getrlimit               25
+socket                  27
+connect                 29
+exit_group              30
+getppid                 31
+dup2                    34
+wait4                   51
+fcntl                   58
+getegid                 72
+getgid                  72
+getuid                  72
+geteuid                 75
+perf_event_open        100
+munmap                 121
+gettimeofday           216
+access                 266
+ioctl                  340
+poll                   348
+sendto                 374
+mprotect               414
+brk                    597
+rt_sigaction           632
+recvfrom               664
+lseek                  749
+newfstatat            2922
+openat                2925
+newfstat              3229
+newstat               4334
+open                  4534
+fchdir                5845
+getdents              5854
+read                  7673
+close                 7728
+select                9633
+rt_sigprocmask       19886
+write                34581
+
+While tracing, the write() syscall was executed 34,581 times.
+
+This mode uses "perf stat" to count the syscalls:* tracepoints in-kernel.
+
+
+You can add a duration (-d) and limit the number shown (-t):
+
+# ./syscount -cd 5 -t 10
+Tracing for 5 seconds. Top 10 only...
+SYSCALL              COUNT
+gettimeofday          1009
+write                 3583
+read                  8174
+openat               21550
+newfstat             21558
+open                 21824
+fchdir               43098
+getdents             43106
+close                43694
+newfstatat          110936
+
+While tracing for 5 seconds, the newfstatat() syscall was executed 110,936
+times.
+
+
+Without the -c, syscount shows syscalls by process name:
+
+# ./syscount -d 5 -t 10
+Tracing for 5 seconds. Top 10 only...
+[ perf record: Woken up 66 times to write data ]
+[ perf record: Captured and wrote 16.513 MB perf.data (~721455 samples) ]
+COMM                COUNT
+stat                  450
+perl                  537
+catalina.sh          1700
+postgres             2094
+run                  2362
+:6946                4764
+ps                   5961
+sshd                45796
+find                61039
+
+So processes named "find" called 61,039 syscalls during the 5 seconds of
+tracing.
+
+Note that this mode writes a perf.data file. This is higher overhead for a
+few reasons:
+
+- all data is passed from kernel to user space, which eats CPU for the memory
+  copy. Note that it is buffered in an efficient way by perf_events, which
+  wakes up and context switches only a small number of times: 66 in this case,
+  to hand 16 Mbytes of trace data to user space.
+- data is post-processed in user space, eating more CPU.
+- data is stored on the file system in the perf.data file, consuming available
+  storage.
+
+This will be improved in future kernels, but it is difficult to improve this
+much further in existing kernels. For example, using a pipe to "perf script"
+instead of writing perf.data can have issues with feedback loops, where
+perf traces itself. This syscount version goes to lengths to avoid tracing
+its own perf, but 
+right now with existing functionality in older kernels. The trip via perf.data
+is necessary
+
+
+Running without options shows syscalls by process name until Ctrl-C:
+
+# ./syscount 
+Tracing... Ctrl-C to end.
+^C[ perf record: Woken up 39 times to write data ]
+[ perf record: Captured and wrote 9.644 MB perf.data (~421335 samples) ]
+COMM                COUNT
+apache2                 8
+apacheLogParser        13
+platformservice        16
+snmpd                  16
+ntpd                   21
+multilog               66
+supervise              84
+dirname               102
+echo                  102
+svstat                108
+cut                   111
+bash                  113
+grep                  132
+xargs                 132
+redis-server          190
+sed                   192
+setuidgid             294
+stat                  450
+perl                  537
+catalina.sh          1275
+postgres             1736
+run                  2352
+:7396                4527
+ps                   5925
+sshd                20154
+find                28700
+
+Note again it is writing a perf.data file to do this.
+
+
+The -v option adds process IDs:
+
+# ./syscount -v
+Tracing... Ctrl-C to end.
+^C[ perf record: Woken up 48 times to write data ]
+[ perf record: Captured and wrote 12.114 MB perf.data (~529276 samples) ]
+PID    COMM                COUNT
+3599   apacheLogParser         3
+7977   xargs                   3
+7982   supervise               3
+7993   xargs                   3
+3575   apache2                 4
+1311   ntpd                    6
+3135   postgres                6
+3600   apacheLogParser         6
+3210   platformservice         8
+6503   sshd                    9
+7978   :7978                   9
+7994   run                     9
+7968   :7968                  11
+7984   run                    11
+1451   snmpd                  16
+3040   svscan                 17
+3066   postgres               17
+3133   postgres               24
+3134   postgres               24
+3136   postgres               24
+3061   multilog               29
+3055   supervise              30
+7979   bash                   31
+7977   echo                   34
+7981   dirname                34
+7993   echo                   34
+7968   svstat                 36
+7984   svstat                 36
+7975   cut                    37
+7991   cut                    37
+9857   bash                   37
+7967   :7967                  40
+7983   run                    40
+7972   :7972                  41
+7976   xargs                  41
+7988   run                    41
+7992   xargs                  41
+7969   :7969                  42
+7976   :7976                  42
+7985   run                    42
+7992   run                    42
+7973   :7973                  43
+7974   :7974                  43
+7989   run                    43
+7990   run                    43
+7973   grep                   44
+7989   grep                   44
+7975   :7975                  45
+7991   run                    45
+7970   :7970                  51
+7986   run                    51
+7981   catalina.sh            52
+7974   sed                    64
+7990   sed                    64
+3455   postgres               66
+7971   :7971                  66
+7987   run                    66
+7966   :7966                  96
+7966   setuidgid              98
+3064   redis-server          110
+7970   stat                  150
+7986   stat                  150
+7969   perl                  179
+7985   perl                  179
+7982   run                   341
+7966   catalina.sh           373
+7980   postgres              432
+7972   ps                   1971
+7988   ps                   1983
+9832   sshd                37511
+7979   find                51040
+
+Once you've found a process ID of interest, you can use "-c" and "-p PID" to
+show syscall names. This also switches to "perf stat" mode for in-kernel
+counts, and lower overhead:
+
+# ./syscount -cp 7979
+Tracing PID 7979... Ctrl-C to end.
+^CSYSCALL              COUNT
+brk                     10
+newfstat              2171
+open                  2171
+newfstatat            2175
+openat                2175
+close                 4346
+fchdir                4346
+getdents              4351
+write                25482
+
+So the most frequent syscall by PID 7979 was write().
+
+
+Use -h to print the USAGE message:
+
+# ./syscount -h
+USAGE: syscount [-chv] [-t top] {-p PID|-d seconds|command}
+       syscount                  # count by process name
+                -c               # show counts by syscall name
+                -h               # this usage message
+                -v               # verbose: shows PID
+                -p PID           # trace this PID only
+                -d seconds       # duration of trace
+                -t num           # show top number only
+                command          # run and trace this command
+  eg,
+        syscount                 # syscalls by process name
+        syscount -c              # syscalls by syscall name
+        syscount -d 5            # trace for 5 seconds
+        syscount -cp 923         # syscall names for PID 923
+        syscount -c ls           # syscall names for "ls"
+
+See the man page and example file for more info.

@@ -1,0 +1,341 @@
+Demonstrations of functrace, the Linux ftrace version.
+
+
+A (usually) good example to start with is do_nanosleep(), since it is not called
+frequently, and easily triggered. Here's tracing it using functrace:
+
+# ./functrace 'do_nanosleep'
+Tracing "do_nanosleep"... Ctrl-C to end.
+          svscan-1678  [000] .... 6412438.703521: do_nanosleep <-hrtimer_nanosleep
+          svscan-1678  [000] .... 6412443.703678: do_nanosleep <-hrtimer_nanosleep
+          svscan-1678  [000] .... 6412448.703865: do_nanosleep <-hrtimer_nanosleep
+          vmstat-28371 [000] .... 6412453.216241: do_nanosleep <-hrtimer_nanosleep
+          svscan-1678  [000] .... 6412453.704049: do_nanosleep <-hrtimer_nanosleep
+          vmstat-28371 [000] .... 6412454.216524: do_nanosleep <-hrtimer_nanosleep
+          vmstat-28371 [000] .... 6412455.216816: do_nanosleep <-hrtimer_nanosleep
+          vmstat-28371 [000] .... 6412456.217093: do_nanosleep <-hrtimer_nanosleep
+          vmstat-28371 [000] .... 6412457.217378: do_nanosleep <-hrtimer_nanosleep
+          vmstat-28371 [000] .... 6412458.217660: do_nanosleep <-hrtimer_nanosleep
+^C
+Ending tracing...
+
+While tracing, I ran a "vmstat 1" in another window. vmstat and its process ID
+can be seen as the 1st column, and the timestamp and one second intervals can
+be seen as the 4th column.
+
+This is basic details: who was on-CPU (process name and PID), flags, timestamp,
+and calling function. Treat this as the next step, after funccount, for getting
+a little more information on kernel function execution, before using more
+capabilities to dig further.
+
+This is Linux 3.16, and the output is the ftrace text buffer format, which has
+changed slightly between kernel versions.
+
+
+To see the column headers, use -H. This is Linux 3.16:
+
+# ./functrace -H do_nanosleep
+Tracing "do_nanosleep"... Ctrl-C to end.
+# tracer: function
+#
+# entries-in-buffer/entries-written: 0/0   #P:2
+#
+#                              _-----=> irqs-off
+#                             / _----=> need-resched
+#                            | / _---=> hardirq/softirq
+#                            || / _--=> preempt-depth
+#                            ||| /     delay
+#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+#              | |       |   ||||       |         |
+          svscan-1678  [001] .... 6413283.729520: do_nanosleep <-hrtimer_nanosleep
+          svscan-1678  [001] .... 6413288.729679: do_nanosleep <-hrtimer_nanosleep
+
+For comparison, here's Linux 3.2:
+
+# ./functrace -H do_nanosleep
+Tracing "do_nanosleep"... Ctrl-C to end.
+# tracer: function
+#
+#           TASK-PID    CPU#    TIMESTAMP  FUNCTION
+#              | |       |          |         |
+          vmstat-11789 [000] 1763207.021204: do_nanosleep <-hrtimer_nanosleep
+          vmstat-11789 [000] 1763208.022970: do_nanosleep <-hrtimer_nanosleep
+          vmstat-11789 [000] 1763209.023267: do_nanosleep <-hrtimer_nanosleep
+
+For documentation on the exact format, see the Linux kernel source under
+Documentation/trace/ftrace.txt.
+
+
+This error:
+
+# ./functrace 'ext4_z*'
+Tracing "ext4_z*"... Ctrl-C to end.
+./functrace: line 136: echo: write error: Invalid argument
+ERROR: enabling "ext4_z*". Exiting.
+
+Is because there were no functions beginning with "ext4_z". You can check
+available functions in the /sys/kernel/debug/tracing/available_filter_functions
+file.
+
+
+You might want to use funccount to check the frequency of events before using
+functrace. For example, counting ext3 events on a system:
+
+# ./funccount -d 10 'ext3*'
+Tracing "ext3*" for 10 seconds...
+
+FUNC                              COUNT
+ext3_journal_dirty_data               1
+ext3_ordered_write_end                1
+ext3_write_begin                      1
+ext3_writepage_trans_blocks           1
+ext3_dirty_inode                      2
+ext3_do_update_inode                  2
+ext3_get_group_desc                   2
+ext3_get_inode_block.isra.20          2
+ext3_get_inode_flags                  2
+ext3_get_inode_loc                    2
+ext3_mark_iloc_dirty                  2
+ext3_mark_inode_dirty                 2
+ext3_reserve_inode_write              2
+ext3_journal_start_sb                 3
+ext3_block_to_path.isra.22            6
+ext3_bmap                             6
+ext3_get_block                        6
+ext3_get_blocks_handle                6
+ext3_get_branch                       6
+ext3_discard_reservation             11
+ext3_ioctl                           11
+ext3_release_file                    11
+
+Ending tracing...
+
+During 10 seconds, there weren't many ext3 calls. I might consider tracing
+them all (warnings about dynamic tracing many kernel functions apply: test
+before use, as in the past there have been bugs causing panics).
+
+# ./functrace 'ext3_*'
+Tracing "ext3_*"... Ctrl-C to end.
+ register_start.-17008 [000] 1763557.577985: ext3_release_file <-__fput
+ register_start.-17008 [000] 1763557.577987: ext3_discard_reservation <-ext3_release_file
+ register_start.-17026 [000] 1763558.163620: ext3_ioctl <-file_ioctl
+ register_start.-17026 [000] 1763558.481081: ext3_release_file <-__fput
+ register_start.-17026 [000] 1763558.481083: ext3_discard_reservation <-ext3_release_file
+ register_start.-17041 [000] 1763559.186984: ext3_ioctl <-file_ioctl
+ register_start.-17041 [000] 1763559.511267: ext3_release_file <-__fput
+[...]
+
+For comparison, here's a different system and ext4:
+
+# ./funccount -d 10 'ext4*'
+Tracing "ext4*" for 10 seconds...
+
+FUNC                              COUNT
+ext4_journal_commit_callback          2
+ext4_htree_fill_tree                  6
+ext4_htree_free_dir_info              6
+ext4_release_dir                      6
+ext4_readdir                         12
+ext4fs_dirhash                       29
+ext4_htree_store_dirent              29
+ext4_follow_link                     36
+ext4_file_mmap                       42
+ext4_free_data_callback              44
+ext4_getattr                         45
+ext4_bmap                            62
+ext4_get_block                       62
+ext4_add_entry                      280
+ext4_add_nondir                     280
+ext4_alloc_da_blocks                280
+ext4_alloc_inode                    280
+ext4_bio_write_page                 280
+ext4_can_truncate                   280
+ext4_claim_free_clusters            280
+ext4_clear_inode                    280
+ext4_create                         280
+ext4_da_get_block_prep              280
+ext4_da_invalidatepage              280
+ext4_da_update_reserve_space        280
+ext4_da_write_begin                 280
+ext4_da_write_end                   280
+ext4_dec_count.isra.22              280
+ext4_delete_entry                   280
+ext4_destroy_inode                  280
+ext4_drop_inode                     280
+ext4_end_bio                        280
+ext4_es_init_tree                   280
+ext4_es_lru_del                     280
+ext4_evict_inode                    280
+ext4_ext_calc_metadata_amount       280
+ext4_ext_correct_indexes            280
+ext4_ext_find_goal                  280
+ext4_ext_insert_extent              280
+ext4_ext_remove_space               280
+ext4_ext_tree_init                  280
+ext4_ext_truncate                   280
+ext4_ext_truncate_extend_resta      280
+ext4_ext_try_to_merge               280
+ext4_ext_try_to_merge_right         280
+ext4_file_write_iter                280
+ext4_find_dest_de                   280
+ext4_finish_bio                     280
+ext4_free_blocks                    280
+ext4_free_inode                     280
+ext4_generic_delete_entry           280
+ext4_has_free_clusters              280
+ext4_i_callback                     280
+ext4_init_acl                       280
+ext4_init_security                  280
+ext4_inode_attach_jinode            280
+ext4_inode_to_goal_block            280
+ext4_insert_dentry                  280
+ext4_invalidatepage                 280
+ext4_io_submit_init                 280
+ext4_itable_unused_count            280
+ext4_lookup                         280
+ext4_mb_complex_scan_group          280
+ext4_mb_find_by_goal                280
+ext4_mb_free_metadata               280
+ext4_mb_initialize_context          280
+ext4_mb_mark_diskspace_used         280
+ext4_mb_new_blocks                  280
+ext4_mb_normalize_request           280
+ext4_mb_regular_allocator           280
+ext4_mb_release_context             280
+ext4_mb_use_best_found              280
+ext4_mb_use_preallocated            280
+ext4_nonda_switch                   280
+ext4_orphan_del                     280
+ext4_put_io_end_defer               280
+ext4_releasepage                    280
+ext4_rename                         280
+ext4_set_aops                       280
+ext4_setent                         280
+ext4_set_inode_flags                280
+ext4_truncate                       280
+ext4_writepages                     280
+ext4_writepage_trans_blocks         280
+ext4_xattr_delete_inode             280
+ext4_xattr_get                      285
+ext4_xattr_ibody_get                285
+ext4_xattr_security_get             285
+ext4_bread                          286
+ext4_release_file                   288
+ext4_file_open                      305
+ext4_superblock_csum_set            494
+ext4_block_bitmap_csum_set          560
+ext4_es_free_extent                 560
+ext4_es_insert_extent               560
+ext4_es_remove_extent               560
+ext4_ext_find_extent                560
+ext4_ext_map_blocks                 560
+ext4_free_group_clusters_set        560
+ext4_free_inodes_set                560
+ext4_get_group_no_and_offset        560
+ext4_get_reserved_space             560
+ext4_init_io_end                    560
+ext4_inode_bitmap_csum_set          560
+ext4_io_submit                      560
+ext4_mb_good_group                  560
+ext4_orphan_add                     560
+ext4_put_io_end                     560
+ext4_read_block_bitmap              560
+ext4_read_block_bitmap_nowait       560
+ext4_read_inode_bitmap              560
+ext4_release_io_end                 560
+ext4_set_bits                       560
+ext4_validate_block_bitmap          560
+ext4_wait_block_bitmap              560
+ext4_mb_load_buddy                  604
+ext4_mb_unload_buddy.isra.24        604
+ext4_block_bitmap                   840
+ext4_discard_preallocations         840
+ext4_ext_drop_refs                  840
+ext4_ext_get_access.isra.30         840
+ext4_ext_index_trans_blocks         840
+ext4_find_entry                     840
+ext4_free_group_clusters            840
+ext4_handle_dirty_dirent_node       840
+ext4_inode_bitmap                   840
+ext4_meta_trans_blocks              840
+ext4_dirty_inode                    845
+ext4_free_inodes_count             1120
+ext4_group_desc_csum               1120
+ext4_group_desc_csum_set           1120
+ext4_getblk                        1126
+ext4_map_blocks                    1468
+ext4_es_lookup_extent              1748
+ext4_mb_check_limits               1875
+ext4_es_lru_add                    2028
+ext4_data_block_valid              2308
+ext4_journal_check_start           3085
+ext4_mark_inode_dirty              5325
+ext4_get_inode_flags               5951
+ext4_get_inode_loc                 5951
+ext4_mark_iloc_dirty               5951
+ext4_reserve_inode_write           5951
+ext4_inode_table                   7071
+ext4_get_group_desc                8471
+ext4_has_inline_data               9486
+
+Ending tracing...
+
+There are many functions called frequently. Tracing them all may cost
+significant performance overhead. I may read through this list and look for
+the most interesting functions to trace, reducing overheads by only selecting
+a few.
+
+For example, ext4_create() looks interesting:
+
+# ./functrace ext4_create
+Tracing "ext4_create"... Ctrl-C to end.
+       supervise-1681  [000] .... 6414396.700163: ext4_create <-vfs_create
+       supervise-1684  [001] .... 6414396.700287: ext4_create <-vfs_create
+       supervise-1681  [000] .... 6414396.700598: ext4_create <-vfs_create
+       supervise-1684  [001] .... 6414396.700636: ext4_create <-vfs_create
+       supervise-1687  [001] .... 6414396.701577: ext4_create <-vfs_create
+       supervise-1688  [000] .... 6414396.702590: ext4_create <-vfs_create
+       supervise-1693  [001] .... 6414396.702829: ext4_create <-vfs_create
+       supervise-1693  [001] .... 6414396.703592: ext4_create <-vfs_create
+       supervise-1688  [000] .... 6414396.703598: ext4_create <-vfs_create
+       supervise-1687  [001] .... 6414396.703988: ext4_create <-vfs_create
+       supervise-1685  [001] .... 6414396.704126: ext4_create <-vfs_create
+       supervise-1685  [001] .... 6414396.704458: ext4_create <-vfs_create
+       supervise-1682  [001] .... 6414396.704577: ext4_create <-vfs_create
+       supervise-1683  [000] .... 6414396.704984: ext4_create <-vfs_create
+       supervise-1682  [001] .... 6414396.704985: ext4_create <-vfs_create
+[...]
+
+Now I know that different PIDs of the supervise program are calling ext4_create,
+of around the same time, and from vfs_create().
+
+
+The duration mode uses buffering, instead of printing events as they occur.
+This greatly reduces overheads. For example:
+
+# ./functrace -d 10 ext4_create > out.ext4_create
+# wc out.ext4_create
+  283  1687 21059 out.ext4_create
+
+Note that the buffer has a limited size. Check the timestamps to see if the
+range does not match your duration, as one clue that the buffer was exhausted
+and events were missed.
+
+
+Use -h to print the USAGE message:
+
+# ./functrace -h
+USAGE: functrace [-hH] [-p PID] [-L TID] [-d secs] funcstring
+                 -d seconds      # trace duration, and use buffers
+                 -h              # this usage message
+                 -H              # include column headers
+                 -p PID          # trace when this pid is on-CPU
+                 -L TID          # trace when this thread is on-CPU
+  eg,
+       functrace do_nanosleep    # trace the do_nanosleep() function
+       functrace '*sleep'        # trace functions ending in "sleep"
+       functrace -p 198 'vfs*'   # trace "vfs*" funcs for PID 198
+       functrace 'tcp*' > out    # trace all "tcp*" funcs to out file
+       functrace -d 1 'tcp*' > out  # trace 1 sec, then write out file
+
+See the man page and example file for more info.

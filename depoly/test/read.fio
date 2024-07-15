@@ -1,0 +1,13 @@
+[READ]
+description="test with block"
+filename=/dev/nvme0n1   #注：/dev/vdb是目标测试磁盘的设备名称
+ioengine=libaio
+#ioengine=rbd
+#clientname=admin
+#pool=pool9
+#rbdname=rbd1
+iodepth=32
+thread=40
+runtime=1000000
+rw=randread #write 表示顺序写，randwrite 表示随机写，read 表示顺序读，randread 表示随机读
+bs=4K

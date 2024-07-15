@@ -1,0 +1,110 @@
+Demonstrations of funcslower, the Linux ftrace version.
+
+
+Show me ext3_readpages() calls slower than 1000 microseconds (1 ms):
+
+# ./funcslower ext3_readpages 1000
+Tracing "ext3_readpages" slower than 1000 us... Ctrl-C to end.
+ 0) ! 8147.120 us |  } /* ext3_readpages */
+ 0) ! 8135.067 us |  } /* ext3_readpages */
+ 0) ! 12202.93 us |  } /* ext3_readpages */
+ 0) ! 12201.84 us |  } /* ext3_readpages */
+ 0) ! 8142.667 us |  } /* ext3_readpages */
+ 0) ! 12194.14 us |  } /* ext3_readpages */
+^C
+Ending tracing...
+
+Neat. So this confirms that there are ext3_readpages() calls that are taking
+over 8000 us (8 ms).
+
+funcslower uses the ftrace function graph profiler to dynamically instrument
+the given kernel function, time it in-kernel, and only emit events slower
+than the given latency threshold in-kernel. Since this all operates in
+kernel context, the overheads are relatively low (compared to post-processing
+in user space).
+
+
+Now include the process name and PID (-P) of the process who is on-CPU, and the
+absolute timestamp (-t) of the event:
+
+# ./funcslower -Pt ext3_readpages 1000
+Tracing "ext3_readpages" slower than 1000 us... Ctrl-C to end.
+2678112.003180 |   0)  cksum-26695   | ! 8145.268 us |  } /* ext3_readpages */
+2678113.538763 |   0)  cksum-26695   | ! 8139.086 us |  } /* ext3_readpages */
+2678113.704901 |   0)  cksum-26695   | ! 8147.549 us |  } /* ext3_readpages */
+2678113.721102 |   0)  cksum-26695   | ! 8142.530 us |  } /* ext3_readpages */
+2678113.810269 |   0)  cksum-26695   | ! 12234.70 us |  } /* ext3_readpages */
+2678113.996625 |   0)  cksum-26695   | ! 8146.129 us |  } /* ext3_readpages */
+2678114.012832 |   0)  cksum-26695   | ! 8148.153 us |  } /* ext3_readpages */
+^C
+Ending tracing...
+
+Great! Now I can see the process name, which in this case is the responsible
+process. The timestamps also let me determine the rate of these slow events.
+
+
+Now measure time differently: excluding time spent sleeping, so that we only
+see on-CPU time:
+
+# ./funcslower -Pct ext3_readpages 1000
+Tracing "ext3_readpages" slower than 1000 us... Ctrl-C to end.
+^C
+Ending tracing...
+
+I believe the workload hasn't changed, so these ext3_readpages() calls are
+still happening, however, their CPU time doesn't exceed 1 ms. Compared to the
+earlier output, this tells me that the latency in this function is due to time
+spent blocked off-CPU, and not on-CPU. This makes sense: this function is
+ultimately being blocked on disk I/O.
+
+Were the function duration times to be similar with and without -C, that would
+tell us that the high latency is due to time spent on-CPU executing code.
+
+
+This traces the sys_nanosleep() kernel function, and shows calls taking over
+100 us:
+
+# ./funcslower sys_nanosleep 100
+Tracing "sys_nanosleep" slower than 100 us... Ctrl-C to end.
+ 0) ! 2000147 us |  } /* sys_nanosleep */
+ ------------------------------------------
+ 0) registe-27414  =>  vmstat-27419 
+ ------------------------------------------
+
+ 0) ! 1000143 us |  } /* sys_nanosleep */
+ 0) ! 1000154 us |  } /* sys_nanosleep */
+ ------------------------------------------
+ 0)  vmstat-27419  => registe-27414 
+ ------------------------------------------
+
+ 0) ! 2000183 us |  } /* sys_nanosleep */
+ ------------------------------------------
+ 0) registe-27414  =>  vmstat-27419 
+ ------------------------------------------
+
+ 0) ! 1000141 us |  } /* sys_nanosleep */
+^C
+Ending tracing...
+
+This is an example where I did not use -P, but ftrace has included process
+information anyway. Look for the lines containing "=>", which indicate a process
+switch on the given CPU.
+
+
+Use -h to print the USAGE message:
+
+# ./funcslower -h
+USAGE: funcslower [-aChHPt] [-p PID] [-d secs] funcstring latency_us
+                 -a              # all info (same as -HPt)
+                 -C              # measure on-CPU time only
+                 -d seconds      # trace duration, and use buffers
+                 -h              # this usage message
+                 -H              # include column headers
+                 -p PID          # trace when this pid is on-CPU
+                 -L TID          # trace when this thread is on-CPU
+                 -P              # show process names & PIDs
+                 -t              # show timestamps
+  eg,
+       funcslower vfs_read 10000 # trace vfs_read() slower than 10 ms
+
+See the man page and example file for more info.

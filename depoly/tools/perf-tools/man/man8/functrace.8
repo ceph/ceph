@@ -1,0 +1,123 @@
+.TH functrace 8  "2014-07-20" "USER COMMANDS"
+.SH NAME
+functrace \- trace kernel function calls matching specified wildcards. Uses Linux ftrace.
+.SH SYNOPSIS
+.B functrace
+[\-hH] [\-p PID] [\-L TID] [\-d secs] funcstring
+.SH DESCRIPTION
+This tool provides a quick way to capture the execution of kernel functions,
+showing basic details including as the process ID, timestamp, and calling
+function.
+
+WARNING: This uses dynamic tracing of (what can be many) kernel functions,
+and could cause kernel panics or freezes. Test, and know what you are doing,
+before use.
+
+Also beware of feedback loops: tracing tcp* functions over an ssh session,
+or writing ext4* functions to an ext4 file system. For the former, tcp
+trace data could be redirected to a file (as in the usage message). For
+the latter, trace to the screen or a different file system.
+
+SEE ALSO: kprobe(8), which can dynamically trace a single function call or
+return, and examine CPU registers and return values.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE CONFIG, which you may already have enabled and available on recent
+kernels.
+.SH OPTIONS
+.TP
+\-d seconds
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-h
+Print usage message.
+.TP
+\-H
+Print column headers.
+.TP
+\-p PID
+Only trace kernel functions when this process ID is on-CPU.
+.TP
+\-L TID
+Only trace kernel functions when this thread ID is on-CPU.
+.TP
+funcstring
+A function name to trace, which may include file glob style wildcards ("*") at
+the beginning or ending of a string only. Eg, "vfs*" means match "vfs" followed
+by anything.
+.SH EXAMPLES
+.TP
+Trace calls to do_nanosleep():
+#
+.B functrace do_nanosleep
+.TP
+Trace calls to all kernel functions ending in "*sleep":
+#
+.B functrace '*sleep'
+.TP
+Trace all "vfs*" kernel function calls for PID 198:
+#
+.B functrace \-p 198 'vfs*'
+.TP
+Trace all "tcp*" kernel function calls, and output to a file until Ctrl-C:
+#
+.B functrace 'tcp*' > out
+.TP
+Trace all "tcp*" kernel function calls, output to a file, for 1 second (buffered):
+#
+.B functrace \-d 1 'tcp*' > out
+.SH FIELDS
+The output format depends on the kernel version, and headings can be printed
+using \-H. The format is the same as the ftrace function trace format, described
+in the kernel source under Documentation/trace/ftrace.txt.
+
+Typical fields are:
+.TP
+TASK-PID
+The process name (which could include dashes), a dash, and the process ID.
+.TP
+CPU#
+The CPU ID, in brackets.
+.TP
+||||
+Kernel state flags. For example, on Linux 3.16 these are for irqs-off,
+need-resched, hardirq/softirq, and preempt-depth.
+.TP
+TIMESTAMP
+Time of event, in seconds.
+.TP
+FUNCTION
+Kernel function name.
+.SH OVERHEAD
+This can generate a lot of trace data quickly, depending on the
+frequency of the traced events. Such data will cause performance overheads.
+This also works without buffering by default, printing function events
+as they happen (uses trace_pipe), context switching and consuming CPU to do
+so. If needed, you can try the "\-d secs" option, which buffers events
+instead, reducing overhead. If you think the buffer option is losing events,
+try increasing the buffer size (buffer_size_kb).
+
+It's a good idea to use funccount(8) first, which is lower overhead, to
+help you select which functions you may want to trace using functrace(8).
+.SH SOURCE
+This is from the perf-tools collection:
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+funccount(8), kprobe(8)

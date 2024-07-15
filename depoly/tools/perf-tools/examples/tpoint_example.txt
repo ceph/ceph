@@ -1,0 +1,210 @@
+Demonstrations of tpoint, the Linux ftrace version.
+
+
+Let's trace block:block_rq_issue, to see block device (disk) I/O requests:
+
+# ./tpoint block:block_rq_issue 
+Tracing block:block_rq_issue. Ctrl-C to end.
+       supervise-1692  [001] d... 7269912.982162: block_rq_issue: 202,1 W 0 () 17039656 + 8 [supervise]
+       supervise-1696  [000] d... 7269912.982243: block_rq_issue: 202,1 W 0 () 12862264 + 8 [supervise]
+           cksum-12994 [000] d... 7269913.317924: block_rq_issue: 202,1 R 0 () 9357056 + 72 [cksum]
+           cksum-12994 [000] d... 7269913.319013: block_rq_issue: 202,1 R 0 () 2977536 + 144 [cksum]
+           cksum-12994 [000] d... 7269913.320217: block_rq_issue: 202,1 R 0 () 2986240 + 216 [cksum]
+           cksum-12994 [000] d... 7269913.321677: block_rq_issue: 202,1 R 0 () 620344 + 56 [cksum]
+           cksum-12994 [001] d... 7269913.329309: block_rq_issue: 202,1 R 0 () 9107912 + 88 [cksum]
+           cksum-12994 [001] d... 7269913.340133: block_rq_issue: 202,1 R 0 () 3147008 + 248 [cksum]
+           cksum-12994 [001] d... 7269913.354551: block_rq_issue: 202,1 R 0 () 11583488 + 256 [cksum]
+           cksum-12994 [001] d... 7269913.379904: block_rq_issue: 202,1 R 0 () 11583744 + 256 [cksum]
+[...]
+^C
+Ending tracing...
+
+Great, that was easy!
+
+perf_events can do this as well, and is better in many ways, including a more
+efficient buffering strategy, and multi-user access. It's not that easy to do
+this one-liner in perf_events, however. An equivalent for recent kernels is:
+
+perf record --no-buffer -e block:block_rq_issue -a -o - | PAGER=cat stdbuf -oL perf script -i -
+
+Older kernels, use -D instead of --no-buffer. Even better is to set the buffer
+page size to a sufficient grouping (using -m), to minimize overheads, at the
+expense of liveliness of updates. Note that stack traces (-g) don't work on
+my systems with this perf one-liner, however, they do work with tpoint -s.
+
+
+Column headings can be printed using -H:
+
+# ./tpoint -H block:block_rq_issue 
+Tracing block:block_rq_issue. Ctrl-C to end.
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 0/0   #P:2
+#
+#                              _-----=> irqs-off
+#                             / _----=> need-resched
+#                            | / _---=> hardirq/softirq
+#                            || / _--=> preempt-depth
+#                            ||| /     delay
+#           TASK-PID   CPU#  ||||    TIMESTAMP  FUNCTION
+#              | |       |   ||||       |         |
+       supervise-1697  [000] d... 7270545.340856: block_rq_issue: 202,1 W 0 () 12862464 + 8 [supervise]
+       supervise-1697  [000] d... 7270545.341256: block_rq_issue: 202,1 W 0 () 12862472 + 8 [supervise]
+       supervise-1690  [000] d... 7270545.342363: block_rq_issue: 202,1 W 0 () 17040368 + 8 [supervise]
+[...]
+
+They are also documented in the Linux kernel source under:
+Documentation/trace/ftrace.txt.
+
+
+How about stacks traces for those block_rq_issue events? Adding -s:
+
+# ./tpoint -s block:block_rq_issue
+Tracing block:block_rq_issue. Ctrl-C to end.
+       supervise-1691  [000] d... 7269511.079179: block_rq_issue: 202,1 W 0 () 17040232 + 8 [supervise]
+       supervise-1691  [000] d... 7269511.079188: <stack trace>
+ => blk_peek_request
+ => do_blkif_request
+ => __blk_run_queue
+ => queue_unplugged
+ => blk_flush_plug_list
+ => blk_finish_plug
+ => ext4_writepages
+ => do_writepages
+ => __filemap_fdatawrite_range
+ => filemap_flush
+ => ext4_alloc_da_blocks
+ => ext4_rename
+ => vfs_rename
+ => SYSC_renameat2
+ => SyS_renameat2
+ => SyS_rename
+ => system_call_fastpath
+           cksum-7428  [000] d... 7269511.331778: block_rq_issue: 202,1 R 0 () 9006848 + 208 [cksum]
+           cksum-7428  [000] d... 7269511.331784: <stack trace>
+ => blk_peek_request
+ => do_blkif_request
+ => __blk_run_queue
+ => queue_unplugged
+ => blk_flush_plug_list
+ => blk_finish_plug
+ => __do_page_cache_readahead
+ => ondemand_readahead
+ => page_cache_async_readahead
+ => generic_file_read_iter
+ => new_sync_read
+ => vfs_read
+ => SyS_read
+ => system_call_fastpath
+           cksum-7428  [000] d... 7269511.332631: block_rq_issue: 202,1 R 0 () 620992 + 200 [cksum]
+           cksum-7428  [000] d... 7269511.332639: <stack trace>
+ => blk_peek_request
+ => do_blkif_request
+ => __blk_run_queue
+ => queue_unplugged
+ => blk_flush_plug_list
+ => blk_finish_plug
+ => __do_page_cache_readahead
+ => ondemand_readahead
+ => page_cache_sync_readahead
+ => generic_file_read_iter
+ => new_sync_read
+ => vfs_read
+ => SyS_read
+ => system_call_fastpath
+^C
+Ending tracing...
+
+Easy. Now I can read the ancestry to understand what actually lead to issuing
+a block device (disk) I/O.
+
+
+Here's insertion onto the block I/O queue (better matches processes):
+
+# ./tpoint -s block:block_rq_insert
+Tracing block:block_rq_insert. Ctrl-C to end.
+           cksum-11908 [000] d... 7269834.882517: block_rq_insert: 202,1 R 0 () 736304 + 256 [cksum]
+           cksum-11908 [000] d... 7269834.882528: <stack trace>
+ => __elv_add_request
+ => blk_flush_plug_list
+ => blk_finish_plug
+ => __do_page_cache_readahead
+ => ondemand_readahead
+ => page_cache_sync_readahead
+ => generic_file_read_iter
+ => new_sync_read
+ => vfs_read
+ => SyS_read
+ => system_call_fastpath
+[...]
+
+
+You can also add tracepoint filters. To see what variables you can use, use -v:
+
+# ./tpoint -v block:block_rq_issue 
+name: block_rq_issue
+ID: 942
+format:
+	field:unsigned short common_type;	offset:0;	size:2;	signed:0;
+	field:unsigned char common_flags;	offset:2;	size:1;	signed:0;
+	field:unsigned char common_preempt_count;	offset:3;	size:1;	signed:0;
+	field:int common_pid;	offset:4;	size:4;	signed:1;
+
+	field:dev_t dev;	offset:8;	size:4;	signed:0;
+	field:sector_t sector;	offset:16;	size:8;	signed:0;
+	field:unsigned int nr_sector;	offset:24;	size:4;	signed:0;
+	field:unsigned int bytes;	offset:28;	size:4;	signed:0;
+	field:char rwbs[8];	offset:32;	size:8;	signed:1;
+	field:char comm[16];	offset:40;	size:16;	signed:1;
+	field:__data_loc char[] cmd;	offset:56;	size:4;	signed:1;
+
+print fmt: "%d,%d %s %u (%s) %llu + %u [%s]", ((unsigned int) ((REC->dev) >> 20)), ((unsigned int) ((REC->dev) & ((1U << 20) - 1))), REC->rwbs, REC->bytes, __get_str(cmd), (unsigned long long)REC->sector, REC->nr_sector, REC->comm
+
+
+Now I'll add a filter to check that the rwbs field (I/O type) includes an "R",
+making it a read:
+
+# ./tpoint -s block:block_rq_insert 'rwbs ~ "*R*"'
+           cksum-11908 [000] d... 7269839.919098: block_rq_insert: 202,1 R 0 () 736560 + 136 [cksum]
+           cksum-11908 [000] d... 7269839.919107: <stack trace>
+ => __elv_add_request
+ => blk_flush_plug_list
+ => blk_finish_plug
+ => __do_page_cache_readahead
+ => ondemand_readahead
+ => page_cache_async_readahead
+ => generic_file_read_iter
+ => new_sync_read
+ => vfs_read
+ => SyS_read
+ => system_call_fastpath
+[...]
+
+
+Use -h to print the USAGE message:
+
+# ./tpoint -h
+USAGE: tpoint [-hHsv] [-d secs] [-p PID] [-L TID] tracepoint [filter]
+       tpoint -l
+                 -d seconds      # trace duration, and use buffers
+                 -p PID          # PID to match on events
+                 -L TID          # thread id to match on events
+                 -v              # view format file (don't trace)
+                 -H              # include column headers
+                 -l              # list all tracepoints
+                 -s              # show kernel stack traces
+                 -h              # this usage message
+
+Note that these examples may need modification to match your kernel
+version's function names and platform's register usage.
+   eg,
+       tpoint -l | grep open
+                                 # find tracepoints containing "open"
+       tpoint syscalls:sys_enter_open
+                                 # trace open() syscall entry
+       tpoint block:block_rq_issue
+                                 # trace block I/O issue
+       tpoint -s block:black_rq_issue
+                                 # show kernel stacks
+
+See the man page and example file for more info.

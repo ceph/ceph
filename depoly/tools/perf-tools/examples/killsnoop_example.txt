@@ -1,0 +1,62 @@
+Demonstrations of killsnoop, the Linux ftrace version.
+
+
+What signals are happening on my system?
+
+# ./killsnoop 
+Tracing kill()s. Ctrl-C to end.
+COMM             PID    TPID     SIGNAL     RETURN
+postgres         2209   2148     10         0   
+postgres         5416   2209     12         0   
+postgres         5416   2209     12         0   
+supervise        2135   5465     15         0   
+supervise        2135   5465     18         0   
+^C
+Ending tracing...
+
+The first line of output shows that PID 2209, process name "postgres", has
+sent a signal 10 (SIGUSR1) to target PID 2148. This signal returned success (0).
+
+kilsnoop traces the kill() syscall, which is used to send signals to other
+processes. These signals can include SIGKILL and SIGTERM, both of which
+ultimately kill the target process (in different fashions), but the signals
+may also include other operations, including checking if a process still
+exists (signal 0). To read more about signals, see "man -s7 signal".
+
+killsnoop can be useful to identify why some processes are abruptly and
+unexpectedly ending (also check for the OOM killer in dmesg).
+
+
+The -s option can be used to print signal names instead of numbers:
+
+# ./killsnoop -s
+Tracing kill()s. Ctrl-C to end.
+COMM             PID    KILLED   SIGNAL     RETURN
+postgres         2209   2148     SIGUSR1    0   
+postgres         5665   2209     SIGUSR2    0   
+postgres         5665   2209     SIGUSR2    0   
+supervise        2135   5711     SIGTERM    0   
+supervise        2135   5711     SIGCONT    0   
+bash             27450  27450    0          0   
+[...]
+
+On the last line: there wasn't a nice signal name for signal 0, so just numeric
+0 is printed. You'll see signal 0's used to check if processes still exist.
+
+
+Use -h to print the USAGE message:
+
+# ./opensnoop -h
+USAGE: killsnoop [-ht] [-d secs] [-p PID] [-n name] [filename]
+                 -d seconds      # trace duration, and use buffers
+                 -n name         # process name to match 
+                 -p PID          # PID to match on kill issue
+                 -t              # include time (seconds)
+                 -s              # human readable signal names
+                 -h              # this usage message
+  eg,
+       killsnoop                 # watch kill()s live (unbuffered)
+       killsnoop -d 1            # trace 1 sec (buffered)
+       killsnoop -p 181          # trace kill()s issued to PID 181 only
+
+See the man page and example file for more info.

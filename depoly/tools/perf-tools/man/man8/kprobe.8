@@ -1,0 +1,162 @@
+.TH kprobe 8  "2014-07-20" "USER COMMANDS"
+.SH NAME
+kprobe \- trace a given kprobe definition. Kernel dynamic tracing. Uses Linux ftrace.
+.SH SYNOPSIS
+.B kprobe
+[\-FhHsv] [\-d secs] [\-p PID] [\-L TID] kprobe_definition [filter]
+.SH DESCRIPTION
+This will create, trace, then destroy a given kprobe definition. See
+Documentation/trace/kprobetrace.txt in the Linux kernel source for the
+syntax of a kprobe definition, and "kprobe -h" for examples. With this tool,
+the probe alias is optional (it will become to kprobe:<funcname> if not
+specified).
+
+WARNING: This uses dynamic tracing of kernel functions, and could cause
+kernel panics or freezes, depending on the function traced. Test in a lab
+environment, and know what you are doing, before use.
+
+Also beware of feedback loops: tracing tcp functions over an ssh session,
+or writing ext4 functions to an ext4 file system. For the former, tcp
+trace data could be redirected to a file (as in the usage message). For
+the latter, trace to the screen or a different file system.
+
+SEE ALSO: functrace(8), which can perform basic tracing (event only) of
+multiple kernel functions using wildcards.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE and KPROBES CONFIG, which you may already have enabled and available on
+recent kernels.
+.SH OPTIONS
+.TP
+\-F
+Force. Trace despite warnings. By default the specified kernel function must
+exist in the available_filter_functions file. This option overrides this check.
+This might expose you to more unsafe functions, which could cause kernel
+panics or freezes when traced.
+.TP
+\-d seconds
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-h
+Print usage message.
+.TP
+\-H
+Print column headers.
+.TP
+\-s
+Print kernel stack traces after each event.
+.TP
+\-v
+Show the kprobe format file only (do not trace), identifying possible variables
+for use in a custom filter.
+.TP
+\-p PID
+Only trace kernel functions when this process ID is on-CPU.
+.TP
+\-L TID
+Only trace kernel functions when this thread ID is on-CPU.
+.TP
+kprobe_definition
+A full kprobe definition, as documented by Documentation/trace/kprobetrace.txt
+in the Linux kernel source. Note that the probe alias name is optional with
+kprobe(8), and if not specified, the tracepoint will become kprobe:<funcname>.
+See the EXAMPLES section.
+.TP
+filter
+An ftrace filter definition.
+.SH EXAMPLES
+These examples may need modification to match your kernel version's function
+names and platform's register usage. If using platform specific registers
+becomes too painful in practice, consider a kernel debuginfo-based tracer,
+which can trace variables names instead. For example, perf_events.
+.TP
+Trace do_sys_open() entry:
+#
+.B kprobe p:do_sys_open
+.TP
+Trace do_sys_open() return:
+#
+.B kprobe r:do_sys_open
+.TP
+Trace do_sys_open() return value:
+#
+.B kprobe 'r:do_sys_open $retval'
+.TP
+Trace do_sys_open() return value, with a custom probe alias "myopen":
+#
+.B kprobe 'r:myopen do_sys_open $retval'
+.TP
+Trace do_sys_open() file mode:
+#
+.B kprobe 'p:myopen do_sys_open mode=%cx:u16'
+.TP
+Trace do_sys_open() file mode for PID 81:
+#
+.B kprobe -p 81 'p:myopen do_sys_open mode=%cx:u16'
+.TP
+Trace do_sys_open() with filename string:
+#
+.B kprobe 'p:myopen do_sys_open filename=+0(%si):string'
+.TP
+Trace do_sys_open() for filenames ending in "stat":
+#
+.B kprobe 'p:myopen do_sys_open fn=+0(%si):string' 'fn ~ """*stat"""'
+.TP
+Trace tcp_retransmit_skb() and show kernel stack traces, showing the path that led to it (can help explain why):
+#
+.B kprobe \-s 'p:myprobe tcp_retransmit_skb'
+.SH FIELDS
+The output format depends on the kernel version, and headings can be printed
+using \-H. The format is the same as the ftrace function trace format, described
+in the kernel source under Documentation/trace/ftrace.txt.
+
+Typical fields are:
+.TP
+TASK-PID
+The process name (which could include dashes), a dash, and the process ID.
+.TP
+CPU#
+The CPU ID, in brackets.
+.TP
+||||
+Kernel state flags. For example, on Linux 3.16 these are for irqs-off,
+need-resched, hardirq/softirq, and preempt-depth.
+.TP
+TIMESTAMP
+Time of event, in seconds.
+.TP
+FUNCTION
+Kernel function name.
+.SH OVERHEAD
+This can generate a lot of trace data quickly, depending on the
+frequency of the traced events. Such data will cause performance overheads.
+This also works without buffering by default, printing function events
+as they happen (uses trace_pipe), context switching and consuming CPU to do
+so. If needed, you can try the "\-d secs" option, which buffers events
+instead, reducing overhead. If you think the buffer option is losing events,
+try increasing the buffer size (buffer_size_kb).
+
+It's a good idea to use funccount(8) first, which is lower overhead, to
+help you select which functions you may want to trace using kprobe(8).
+.SH SOURCE
+This is from the perf-tools collection:
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+functrace(8), funccount(8)

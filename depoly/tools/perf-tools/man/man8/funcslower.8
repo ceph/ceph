@@ -1,0 +1,129 @@
+.TH funcslower 8  "2014-07-30" "USER COMMANDS"
+.SH NAME
+funcslower \- trace kernel functions slower than a threshold (microseconds). Uses Linux ftrace.
+.SH SYNOPSIS
+.B funcslower
+[\-aChHPt] [\-p PID] [\-L TID] [\-d secs] funcstring latency_us
+.SH DESCRIPTION
+This uses the Linux ftrace function graph profiler to time kernel functions
+and filter them based on a latency threshold. Latency outliers can be studied
+this way, confirming their presence, duration, and rate. This tool
+is a proof of concept using Linux ftrace capabilities on older kernels.
+
+The output format is based on the ftrace function graph trace format,
+described in the kernel source under Documentation/trace/ftrace.txt. Use the
+\-H option to print column headings.
+Note that the output may be shuffled when different CPU buffers are read;
+check the CPU column for changes, or include timestamps (-t) and post sort.
+
+WARNING: This uses dynamic tracing of kernel functions, and could cause
+kernel panics or freezes. Test, and know what you are doing, before use.
+
+Since this uses ftrace, only the root user can use this tool.
+.SH REQUIREMENTS
+FTRACE function graph, which you may already have enabled and available on
+recent kernels. And awk.
+.SH OPTIONS
+.TP
+\-a
+All info. Same as \-HPt.
+.TP
+\-C
+Function durations measure on-CPU time only (exclude sleep time).
+.TP
+\-d seconds
+Set the duration of tracing, in seconds. Trace output will be buffered and
+printed at the end. This also reduces overheads by buffering in-kernel,
+instead of printing events as they occur.
+
+The ftrace buffer has a fixed size per-CPU (see
+/sys/kernel/debug/tracing/buffer_size_kb). If you think events are missing,
+try increasing that size.
+.TP
+\-h
+Print usage message.
+.TP
+\-H
+Print column headers.
+.TP
+\-p PID
+Only trace kernel functions when this process ID is on-CPU.
+.TP
+\-L TID
+Only trace kernel functions when this thread ID is on-CPU.
+.TP
+\-P
+Show process names and process IDs with every line of output.
+.TP
+\-t
+Show timestamps on every line of output.
+.TP
+funcstring
+A function name to trace, which may include file glob style wildcards ("*") at
+the beginning or ending of a string only. Eg, "vfs*" means match "vfs" followed
+by anything. Since the output is verbose, you probably only want to trace
+single functions, and not use wildcards.
+.TP
+latency_us
+Minimum function duration to trace, in units of microseconds. This is filtered
+in-kernel.
+.SH EXAMPLES
+.TP
+Trace calls to vfs_read(), showing events slower than 10 ms:
+#
+.B funcslower vfs_read 10000
+.TP
+Same as above, but include column headers, event timestamps, and process names:
+#
+.B funcslower -HPt vfs_read 10000
+.TP
+Trace slow vfs_read()s for PID 198 only:
+#
+.B funcslower \-p 198 vfs_read 10000
+.SH FIELDS
+The output format depends on the kernel version, and headings can be printed
+using \-H. The format is the same as the ftrace function trace format, described
+in the kernel source under Documentation/trace/ftrace.txt.
+
+Typical fields are:
+.TP
+TIME
+(Shown with \-t.) Time of event, in seconds.
+.TP
+CPU
+The CPU this event occurred on.
+.TP
+TASK/PID
+(Shown with \-P.) The process name (which could include dashes), a dash, and the process ID.
+.TP
+DURATION
+Elapsed time during the function call, inclusive of children. This is also
+inclusive of sleep time, unless -C is used.
+.TP
+FUNCTION CALLS
+Kernel function returns.
+.SH OVERHEAD
+OVERHEADS: Timing and filtering is performed in-kernel context, costing
+lower overheads than post-processing in user space. If you trace frequent
+events (eg, pick a common function and a low threshold), you might want to
+try the "-d secs" option, which buffers events in-kernel instead of printing
+them live.
+
+It's a good idea to start with a high threshold (eg, "100000" for 100 ms) then
+to decrease it. If you start low instead, you may start printing too many
+events.
+.SH SOURCE
+This is from the perf-tools collection:
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+funccount(8), functrace(8), funcgraph(8), kprobe(8)

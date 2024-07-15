@@ -1,0 +1,46 @@
+Demonstrations of execsnoop-proc, the Linux ftrace version.
+
+Here's execsnoop showing what's really executed by "man ls":
+
+# ./execsnoop
+TIME        PID   PPID ARGS
+17:52:37  22406  25781 man ls 
+17:52:37  22413  22406 preconv -e UTF-8 
+17:52:37  22416  22406 pager -s 
+17:52:37  22415  22406 /bin/sh /usr/bin/nroff -mandoc -rLL=162n -rLT=162n -Tutf8 
+17:52:37  22414  22406 tbl 
+17:52:37  22419  22418 locale charmap 
+17:52:37  22420  22415 groff -mtty-char -Tutf8 -mandoc -rLL=162n -rLT=162n 
+17:52:37  22421  22420 troff -mtty-char -mandoc -rLL=162n -rLT=162n -Tutf8 
+17:52:37  22422  22420 grotty 
+
+
+These are short-lived processes, where the argument and PPID details are often
+missed by execsnoop:
+
+# ./execsnoop 
+TIME        PID   PPID ARGS
+18:00:33  26750   1961 multilog <?>
+18:00:33  26749   1972 multilog <?>
+18:00:33  26749   1972 multilog <?>
+18:00:33  26751      ? mkdir <?>
+18:00:33  26749   1972 multilog <?>
+18:00:33  26752      ? chown <?>
+18:00:33  26750   1961 multilog <?>
+18:00:33  26750   1961 multilog <?>
+18:00:34  26753   1961 multilog <?>
+18:00:34  26754   1972 multilog <?>
+[...]
+
+This will be fixed in a later version, but likely requires some kernel or
+tracer changes first (fetching cmdline as the probe fires).
+
+
+The previous examples were on Linux 3.14 and 3.16 kernels. Here's a 3.2 system
+I'm running:
+
+# ./execsnoop 
+ERROR: enabling tracepoint "sched:sched_process_exec" (tracepoint missing in this kernel version?) at ./execsnoop line 78.
+
+This kernel version is missing the sched_process_exec probe, which is pretty
+annoying.

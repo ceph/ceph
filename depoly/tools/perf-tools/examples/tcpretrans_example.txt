@@ -1,0 +1,93 @@
+Demonstrations of tcpretrans, the Linux ftrace version.
+
+
+Tracing TCP retransmits on a busy server:
+
+# ./tcpretrans 
+TIME     PID    LADDR:LPORT          -- RADDR:RPORT          STATE
+05:16:44 3375   10.150.18.225:53874  R> 10.105.152.3:6001    ESTABLISHED
+05:16:44 3375   10.150.18.225:53874  R> 10.105.152.3:6001    ESTABLISHED
+05:16:54 4028   10.150.18.225:6002   R> 10.150.30.249:1710   ESTABLISHED
+05:16:54 4028   10.150.18.225:6002   R> 10.150.30.249:1710   ESTABLISHED
+05:16:54 4028   10.150.18.225:6002   R> 10.150.30.249:1710   ESTABLISHED
+05:16:54 4028   10.150.18.225:6002   R> 10.150.30.249:1710   ESTABLISHED
+05:16:54 4028   10.150.18.225:6002   R> 10.150.30.249:1710   ESTABLISHED
+05:16:54 4028   10.150.18.225:6002   R> 10.150.30.249:1710   ESTABLISHED
+05:16:54 4028   10.150.18.225:6002   R> 10.150.30.249:1710   ESTABLISHED
+05:16:55 0      10.150.18.225:47115  R> 10.71.171.158:6001   ESTABLISHED
+05:16:58 0      10.150.18.225:44388  R> 10.103.130.120:6001  ESTABLISHED
+05:16:58 0      10.150.18.225:44388  R> 10.103.130.120:6001  ESTABLISHED
+05:16:58 0      10.150.18.225:44388  R> 10.103.130.120:6001  ESTABLISHED
+05:16:59 0      10.150.18.225:56086  R> 10.150.32.107:6001   ESTABLISHED
+05:16:59 0      10.150.18.225:56086  R> 10.150.32.107:6001   ESTABLISHED
+^C
+Ending tracing...
+
+This shows TCP retransmits by dynamically tracing the kernel function that does
+the retransmit. This is a low overhead approach.
+
+The PID may or may not make sense: it's showing the PID that was on-CPU,
+however, retransmits are often timer-based, where it's the kernel that is
+on-CPU.
+
+The STATE column shows the TCP state for the socket performing the retransmit.
+The "--" column is the packet type. "R>" for retransmit.
+
+
+Kernel stack traces can be included with -s, which may show the type of
+retransmit:
+
+# ./tcpretrans -s
+TIME     PID    LADDR:LPORT          -- RADDR:RPORT          STATE
+06:21:10 19516  10.144.107.151:22    R> 10.13.106.251:32167  ESTABLISHED
+ => tcp_fastretrans_alert
+ => tcp_ack
+ => tcp_rcv_established
+ => tcp_v4_do_rcv
+ => tcp_v4_rcv
+ => ip_local_deliver_finish
+ => ip_local_deliver
+ => ip_rcv_finish
+ => ip_rcv
+ => __netif_receive_skb
+ => netif_receive_skb
+ => handle_incoming_queue
+ => xennet_poll
+ => net_rx_action
+ => __do_softirq
+ => call_softirq
+ => do_softirq
+ => irq_exit
+ => xen_evtchn_do_upcall
+ => xen_do_hypervisor_callback
+
+This looks like a fast retransmit (inclusion of tcp_fastretrans_alert(), and
+being based on receiving an ACK, rather than a timer).
+
+
+The -l option will include TCP tail loss probe events (TLP; see
+http://lwn.net/Articles/542642/). Eg:
+
+# ./tcpretrans -l
+TIME     PID    LADDR:LPORT          -- RADDR:RPORT          STATE       
+21:56:06 0      10.100.155.200:22    R> 10.10.237.72:18554   LAST_ACK    
+21:56:08 0      10.100.155.200:22    R> 10.10.237.72:18554   LAST_ACK    
+21:56:10 16452  10.100.155.200:22    R> 10.10.237.72:18554   LAST_ACK    
+21:56:10 0      10.100.155.200:22    L> 10.10.237.72:46408   LAST_ACK    
+21:56:10 0      10.100.155.200:22    R> 10.10.237.72:46408   LAST_ACK    
+21:56:12 0      10.100.155.200:22    R> 10.10.237.72:46408   LAST_ACK    
+21:56:13 0      10.100.155.200:22    R> 10.10.237.72:46408   LAST_ACK    
+^C
+Ending tracing...
+
+Look for "L>" in the type column ("--") for TLP events.
+
+
+Use -h to print the USAGE message:
+
+# ./tcpretrans -h
+USAGE: tcpretrans [-hs]
+                  -h       # help message
+                  -s       # print stack traces
+   eg,
+       tcpretrans          # trace TCP retransmits

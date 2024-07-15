@@ -1,0 +1,49 @@
+.TH reset-ftrace 8  "2014-07-07" "USER COMMANDS"
+.SH NAME
+reset-ftrace \- reset state of ftrace, disabling all tracing. Written for Linux ftrace.
+.SH SYNOPSIS
+.B reset-ftrace
+[\-fhq]
+.SH DESCRIPTION
+This resets the state of various ftrace files, and shows the before and after
+state.
+
+This may only be of use to ftrace hackers who, in the process of developing
+ftrace software, often get the subsystem into a partially active state, and
+would like a quick way to reset state. Check the end of this script for the
+actually files reset, and add more if you need.
+
+WARNING: Only use this if and when you are sure that there are no other active
+ftrace sessions on your system, as otherwise it will kill them.
+.SH REQUIREMENTS
+FTRACE CONFIG.
+.SH OPTIONS
+.TP
+\-f
+Force. If the ftrace lock file exists (/var/tmp/.ftrace-lock), delete it.
+.TP
+\-h
+Print usage message.
+.TP
+\-q
+Quiet. Run, but don't print any output.
+.SH EXAMPLES
+.TP
+Reset various ftrace files:
+#
+.B reset-ftrace
+.SH SOURCE
+This is from the perf-tools collection.
+.IP
+https://github.com/brendangregg/perf-tools
+.PP
+Also look under the examples directory for a text file containing example
+usage, output, and commentary for this tool.
+.SH OS
+Linux
+.SH STABILITY
+Unstable - in development.
+.SH AUTHOR
+Brendan Gregg
+.SH SEE ALSO
+perf(1)

@@ -1,0 +1,167 @@
+#!/bin/bash
+#
+# cachestat - show Linux page cache hit/miss statistics.
+#             Uses Linux ftrace.
+#
+# This is a proof of concept using Linux ftrace capabilities on older kernels,
+# and works by using function profiling for in-kernel counters. Specifically,
+# four kernel functions are traced:
+#
+#	mark_page_accessed() for measuring cache accesses
+#	mark_buffer_dirty() for measuring cache writes
+#	add_to_page_cache_lru() for measuring page additions
+#	account_page_dirtied() for measuring page dirties
+#
+# It is possible that these functions have been renamed (or are different
+# logically) for your kernel version, and this script will not work as-is.
+# This script was written on Linux 3.13. This script is a sandcastle: the
+# kernel may wash some away, and you'll need to rebuild.
+#
+# USAGE: cachestat [-Dht] [interval]
+#    eg,
+#        cachestat 5	# show stats every 5 seconds
+#
+# Run "cachestat -h" for full usage.
+#
+# WARNING: This uses dynamic tracing of kernel functions, and could cause
+# kernel panics or freezes. Test, and know what you are doing, before use.
+# It also traces cache activity, which can be frequent, and cost some overhead.
+# The statistics should be treated as best-effort: there may be some error
+# margin depending on unusual workload types.
+#
+# REQUIREMENTS: CONFIG_FUNCTION_PROFILER, awk.
+#
+# From perf-tools: https://github.com/brendangregg/perf-tools
+#
+# COPYRIGHT: Copyright (c) 2014 Brendan Gregg.
+#
+#  This program is free software; you can redistribute it and/or
+#  modify it under the terms of the GNU General Public License
+#  as published by the Free Software Foundation; either version 2
+#  of the License, or (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software Foundation,
+#  Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+#
+#  (http://www.gnu.org/copyleft/gpl.html)
+#
+# 28-Dec-2014	Brendan Gregg	Created this.
+
+### default variables
+tracing=/sys/kernel/debug/tracing
+interval=1; opt_timestamp=0; opt_debug=0
+trap 'quit=1' INT QUIT TERM PIPE HUP	# sends execution to end tracing section
+
+function usage {
+	cat <<-END >&2
+	USAGE: cachestat [-Dht] [interval]
+	                 -D              # print debug counters
+	                 -h              # this usage message
+	                 -t              # include timestamp
+	                 interval        # output interval in secs (default 1)
+	  eg,
+	       cachestat                 # show stats every second
+	       cachestat 5               # show stats every 5 seconds
+
+	See the man page and example file for more info.
+END
+	exit
+}
+
+function warn {
+	if ! eval "$@"; then
+		echo >&2 "WARNING: command failed \"$@\""
+	fi
+}
+
+function die {
+	echo >&2 "$@"
+	exit 1
+}
+
+### process options
+while getopts Dht opt
+do
+	case $opt in
+	D)	opt_debug=1 ;;
+	t)	opt_timestamp=1 ;;
+	h|?)	usage ;;
+	esac
+done
+shift $(( $OPTIND - 1 ))
+
+### option logic
+if (( $# )); then
+	interval=$1
+fi
+echo "Counting cache functions... Output every $interval seconds."
+
+### check permissions
+cd $tracing || die "ERROR: accessing tracing. Root user? Kernel has FTRACE?
+    debugfs mounted? (mount -t debugfs debugfs /sys/kernel/debug)"
+
+### enable tracing
+sysctl -q kernel.ftrace_enabled=1	# doesn't set exit status
+printf "mark_page_accessed\nmark_buffer_dirty\nadd_to_page_cache_lru\naccount_page_dirtied\n" > set_ftrace_filter || \
+    die "ERROR: tracing these four kernel functions: mark_page_accessed,"\
+    "mark_buffer_dirty, add_to_page_cache_lru and account_page_dirtied (unknown kernel version?). Exiting."
+warn "echo nop > current_tracer"
+if ! echo 1 > function_profile_enabled; then
+	echo > set_ftrace_filter
+	die "ERROR: enabling function profiling. Have CONFIG_FUNCTION_PROFILER? Exiting."
+fi
+
+(( opt_timestamp )) && printf "%-8s " TIME
+printf "%8s %8s %8s %8s %12s %10s" HITS MISSES DIRTIES RATIO "BUFFERS_MB" "CACHE_MB"
+(( opt_debug )) && printf "  DEBUG"
+echo
+
+### summarize
+quit=0; secs=0
+while (( !quit && (!opt_duration || secs < duration) )); do
+	(( secs += interval ))
+	echo 0 > function_profile_enabled
+	echo 1 > function_profile_enabled
+	sleep $interval
+
+	(( opt_timestamp )) && printf "%(%H:%M:%S)T " -1
+
+	# cat both meminfo and trace stats, and let awk pick them apart
+	cat /proc/meminfo trace_stat/function* | awk -v debug=$opt_debug '
+	# match meminfo stats:
+	$1 == "Buffers:" && $3 == "kB" { buffers_mb = $2 / 1024 }
+	$1 == "Cached:" && $3 == "kB" { cached_mb = $2 / 1024 }
+	# identify and save trace counts:
+	$2 ~ /[0-9]/ && $3 != "kB" { a[$1] += $2 }
+	END {
+		mpa = a["mark_page_accessed"]
+		mbd = a["mark_buffer_dirty"]
+		apcl = a["add_to_page_cache_lru"]
+		apd = a["account_page_dirtied"]
+
+		total = mpa - mbd
+		misses = apcl - apd
+		if (misses < 0)
+			misses = 0
+		hits = total - misses
+
+		ratio = 100 * hits / total
+		printf "%8d %8d %8d %7.1f%% %12.0f %10.0f", hits, misses, mbd,
+		    ratio, buffers_mb, cached_mb
+		if (debug)
+			printf "  (%d %d %d %d)", mpa, mbd, apcl, apd
+		printf "\n"
+	}'
+done
+
+### end tracing
+echo 2>/dev/null
+echo "Ending tracing..." 2>/dev/null
+warn "echo 0 > function_profile_enabled"
+warn "echo > set_ftrace_filter"

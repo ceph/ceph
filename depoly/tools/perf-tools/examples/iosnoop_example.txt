@@ -1,0 +1,302 @@
+Demonstrations of iosnoop, the Linux ftrace version.
+
+
+Here's Linux 3.16, tracing tar archiving a filesystem:
+
+# ./iosnoop 
+Tracing block I/O... Ctrl-C to end.
+COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+supervise        1809   W    202,1    17039968     4096       1.32
+supervise        1809   W    202,1    17039976     4096       1.30
+tar              14794  RM   202,1    8457608      4096       7.53
+tar              14794  RM   202,1    8470336      4096      14.90
+tar              14794  RM   202,1    8470368      4096       0.27
+tar              14794  RM   202,1    8470784      4096       7.74
+tar              14794  RM   202,1    8470360      4096       0.25
+tar              14794  RM   202,1    8469968      4096       0.24
+tar              14794  RM   202,1    8470240      4096       0.24
+tar              14794  RM   202,1    8470392      4096       0.23
+tar              14794  RM   202,1    8470544      4096       5.96
+tar              14794  RM   202,1    8470552      4096       0.27
+tar              14794  RM   202,1    8470384      4096       0.24
+[...]
+
+The "tar" I/O looks like it is slightly random (based on BLOCK) and 4 Kbytes
+in size (BYTES). One returned in 14.9 milliseconds, but the rest were fast,
+so fast (0.24 ms) some may be returning from some level of cache (disk or
+controller).
+
+The "RM" TYPE means Read of Metadata. The start of the trace shows a
+couple of Writes by supervise PID 1809.
+
+
+Here's a deliberate random I/O workload:
+
+# ./iosnoop 
+Tracing block I/O. Ctrl-C to end.
+COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+randread         9182   R    202,32   30835224     8192       0.18
+randread         9182   R    202,32   21466088     8192       0.15
+randread         9182   R    202,32   13529496     8192       0.16
+randread         9182   R    202,16   21250648     8192       0.18
+randread         9182   R    202,16   1536776      32768      0.30
+randread         9182   R    202,32   17157560     24576      0.23
+randread         9182   R    202,32   21313320     8192       0.16
+randread         9182   R    202,32   862184       8192       0.18
+randread         9182   R    202,16   25496872     8192       0.21
+randread         9182   R    202,32   31471768     8192       0.18
+randread         9182   R    202,16   27571336     8192       0.20
+randread         9182   R    202,16   30783448     8192       0.16
+randread         9182   R    202,16   21435224     8192       1.28
+randread         9182   R    202,16   970616       8192       0.15
+randread         9182   R    202,32   13855608     8192       0.16
+randread         9182   R    202,32   17549960     8192       0.15
+randread         9182   R    202,32   30938232     8192       0.14
+[...]
+
+Note the changing offsets. The resulting latencies are very good in this case,
+because the storage devices are flash memory-based solid state disks (SSDs).
+For rotational disks, I'd expect these latencies to be roughly 10 ms.
+
+
+Here's an idle Linux 3.2 system:
+
+# ./iosnoop 
+Tracing block I/O. Ctrl-C to end.
+COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+supervise        3055   W    202,1    12852496     4096       0.64
+supervise        3055   W    202,1    12852504     4096       1.32
+supervise        3055   W    202,1    12852800     4096       0.55
+supervise        3055   W    202,1    12852808     4096       0.52
+jbd2/xvda1-212   212    WS   202,1    1066720      45056     41.52
+jbd2/xvda1-212   212    WS   202,1    1066808      12288     41.52
+jbd2/xvda1-212   212    WS   202,1    1066832      4096      32.37
+supervise        3055   W    202,1    12852800     4096      14.28
+supervise        3055   W    202,1    12855920     4096      14.07
+supervise        3055   W    202,1    12855960     4096       0.67
+supervise        3055   W    202,1    12858208     4096       1.00
+flush:1-409      409    W    202,1    12939640     12288     18.00
+[...]
+
+This shows supervise doing various writes from PID 3055. The highest latency
+was from jbd2/xvda1-212, the journaling block device driver, doing
+synchronous writes (TYPE = WS).
+
+
+Options can be added to show the start time (-s) and end time (-t):
+
+# ./iosnoop -ts
+Tracing block I/O. Ctrl-C to end.
+STARTs         ENDs           COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+5982800.302061 5982800.302679 supervise        1809   W    202,1    17039600     4096       0.62
+5982800.302423 5982800.302842 supervise        1809   W    202,1    17039608     4096       0.42
+5982800.304962 5982800.305446 supervise        1801   W    202,1    17039616     4096       0.48
+5982800.305250 5982800.305676 supervise        1801   W    202,1    17039624     4096       0.43
+5982800.308849 5982800.309452 supervise        1810   W    202,1    12862464     4096       0.60
+5982800.308856 5982800.309470 supervise        1806   W    202,1    17039632     4096       0.61
+5982800.309206 5982800.309740 supervise        1806   W    202,1    17039640     4096       0.53
+5982800.309211 5982800.309805 supervise        1810   W    202,1    12862472     4096       0.59
+5982800.309332 5982800.309953 supervise        1812   W    202,1    17039648     4096       0.62
+5982800.309676 5982800.310283 supervise        1812   W    202,1    17039656     4096       0.61
+[...]
+
+This is useful when gathering I/O event data for post-processing.
+
+
+Now for matching on a single PID:
+
+# ./iosnoop -p 1805
+Tracing block I/O issued by PID 1805. Ctrl-C to end.
+COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+supervise        1805   W    202,1    17039648     4096       0.68
+supervise        1805   W    202,1    17039672     4096       0.60
+supervise        1805   W    202,1    17040040     4096       0.62
+supervise        1805   W    202,1    17040056     4096       0.47
+supervise        1805   W    202,1    17040624     4096       0.49
+supervise        1805   W    202,1    17040632     4096       0.44
+^C
+Ending tracing...
+
+This option works by using an in-kernel filter for that PID on I/O issue. There
+is also a "-n" option to match on process names, however, that currently does so
+in user space, so is less efficient.
+
+I would say that this will generally identify the origin process, but there will
+be an error margin. Depending on the file system, block I/O queueing, and I/O
+subsystem, this could miss events that aren't issued in this PID context but are
+related to this PID (eg, triggering a read readahead on the completion of
+previous I/O. Again, whether this happens is up to the file system and storage
+subsystem). You can try the -Q option for more reliable process identification.
+
+
+The -Q option begins tracing on block I/O queue insert, instead of issue.
+Here's before and after, while dd(1) writes a large file:
+
+# ./iosnoop
+Tracing block I/O. Ctrl-C to end.
+COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+dd               26983  WS   202,16   4064416      45056     16.70
+dd               26983  WS   202,16   4064504      45056     16.72
+dd               26983  WS   202,16   4064592      45056     16.74
+dd               26983  WS   202,16   4064680      45056     16.75
+cat              27031  WS   202,16   4064768      45056     16.56
+cat              27031  WS   202,16   4064856      45056     16.46
+cat              27031  WS   202,16   4064944      45056     16.40
+gawk             27030  WS   202,16   4065032      45056      0.88
+gawk             27030  WS   202,16   4065120      45056      1.01
+gawk             27030  WS   202,16   4065208      45056     16.15
+gawk             27030  WS   202,16   4065296      45056     16.16
+gawk             27030  WS   202,16   4065384      45056     16.16
+[...]
+
+The output here shows the block I/O time from issue to completion (LATms),
+which is largely representative of the device.
+
+The process names and PIDs identify dd, cat, and gawk. By default iosnoop shows
+who is on-CPU at time of block I/O issue, but these may not be the processes
+that originated the I/O. In this case (having debugged it), the reason is that
+processes such as cat and gawk are making hypervisor calls (this is a Xen
+guest instance), eg, for memory operations, and during hypervisor processing a
+queue of pending work is checked and dispatched. So cat and gawk were on-CPU
+when the block device I/O was issued, but they didn't originate it.
+
+Now the -Q option is used:
+
+# ./iosnoop -Q
+Tracing block I/O. Ctrl-C to end.
+COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+kjournald        1217   WS   202,16   6132200      45056    141.12
+kjournald        1217   WS   202,16   6132288      45056    141.10
+kjournald        1217   WS   202,16   6132376      45056    141.10
+kjournald        1217   WS   202,16   6132464      45056    141.11
+kjournald        1217   WS   202,16   6132552      40960    141.11
+dd               27718  WS   202,16   6132624      4096       0.18
+flush:16-1279    1279   W    202,16   6132632      20480      0.52
+flush:16-1279    1279   W    202,16   5940856      4096       0.50
+flush:16-1279    1279   W    202,16   5949056      4096       0.52
+flush:16-1279    1279   W    202,16   5957256      4096       0.54
+flush:16-1279    1279   W    202,16   5965456      4096       0.56
+flush:16-1279    1279   W    202,16   5973656      4096       0.58
+flush:16-1279    1279   W    202,16   5981856      4096       0.60
+flush:16-1279    1279   W    202,16   5990056      4096       0.63
+[...]
+
+This uses the block_rq_insert tracepoint as the starting point of I/O, instead
+of block_rq_issue. This makes the following differences to columns and options:
+
+- COMM: more likely to show the originating process.
+- PID: more likely to show the originating process.
+- LATms: shows the I/O time, including time spent on the block I/O queue.
+- STARTs (not shown above): shows the time of queue insert, not I/O issue.
+- -p PID: more likely to match the originating process.
+- -n name: more likely to match the originating process.
+
+The reason that this ftrace-based iosnoop does not just instrument both insert
+and issue tracepoints is one of overhead. Even with buffering, iosnoop can
+have difficulty under high load.
+
+
+If I want to capture events for post-processing, I use the duration mode, which
+not only lets me set the duration, but also uses buffering, which reduces the
+overheads of tracing.
+
+Capturing 5 seconds, with both start timestamps (-s) and end timestamps (-t):
+
+# time ./iosnoop -ts 5 > out
+
+real	0m5.566s
+user	0m0.336s
+sys	0m0.140s
+# wc out
+  27010  243072 2619744 out
+
+This server is doing over 5,000 disk IOPS. Even with buffering, this did
+consume a measurable amount of CPU to capture: 0.48 seconds of CPU time in
+total. Note that the run took 5.57 seconds: this is 5 seconds for the capture,
+followed by the CPU time for iosnoop to fetch and process the buffer.
+
+Now tracing for 30 seconds:
+
+# time ./iosnoop -ts 30 > out
+
+real	0m31.207s
+user	0m0.884s
+sys	0m0.472s
+# wc out
+  64259  578313 6232898 out
+
+Since it's the same server and workload, this should have over 150k events,
+but only has 64k. The tracing buffer has overflowed, and events have been
+dropped. If I really must capture this many events, I can either increase
+the trace buffer size (it's the bufsize_kb setting in the script), or, use
+a different tracer (perf_evets, SystemTap, ktap, etc.) If the IOPS rate is low
+(eg, less than 5k), then unbuffered (no duration), despite the higher overheads,
+may be sufficient, and will keep capturing events until Ctrl-C.
+
+
+Here's an example of digging into the sequence of I/O to explain an outlier.
+My randread program on an SSD server (which is an AWS EC2 instance) usually
+experiences about 0.15 ms I/O latency, but there are some outliers as high as
+20 milliseconds. Here's an excerpt:
+
+# ./iosnoop -ts > out
+# more out
+Tracing block I/O. Ctrl-C to end.
+STARTs         ENDs           COMM             PID    TYPE DEV      BLOCK        BYTES     LATms
+6037559.121523 6037559.121685 randread         22341  R    202,32   29295416     8192       0.16
+6037559.121719 6037559.121874 randread         22341  R    202,16   27515304     8192       0.16
+[...]
+6037595.999508 6037596.000051 supervise        1692   W    202,1    12862968     4096       0.54
+6037595.999513 6037596.000144 supervise        1687   W    202,1    17040160     4096       0.63
+6037595.999634 6037596.000309 supervise        1693   W    202,1    17040168     4096       0.68
+6037595.999937 6037596.000440 supervise        1693   W    202,1    17040176     4096       0.50
+6037596.000579 6037596.001192 supervise        1689   W    202,1    17040184     4096       0.61
+6037596.000826 6037596.001360 supervise        1689   W    202,1    17040192     4096       0.53
+6037595.998302 6037596.018133 randread         22341  R    202,32   954168       8192      20.03
+6037595.998303 6037596.018150 randread         22341  R    202,32   954200       8192      20.05
+6037596.018182 6037596.018347 randread         22341  R    202,32   18836600     8192       0.16
+[...]
+
+It's important to sort on the I/O completion time (ENDs). In this case it's
+already in the correct order.
+
+So my 20 ms reads happened after a large group of supervise writes were
+completed (I truncated dozens of supervise write lines to keep this example
+short). Other latency outliers in this output file showed the same sequence:
+slow reads after a batch of writes.
+
+Note the I/O request timestamp (STARTs), which shows that these 20 ms reads were
+issued before the supervise writes – so they had been sitting on a queue. I've
+debugged this type of issue many times before, but this one is different: those
+writes were to a different device (202,1), so I would have assumed they would be
+on different queues, and wouldn't interfere with each other. Somewhere in this
+system (Xen guest) it looks like there is a shared queue. (Having just
+discovered this using iosnoop, I can't yet tell you which queue, but I'd hope
+that after identifying it there would be a way to tune its queueing behavior,
+so that we can eliminate or reduce the severity of these outliers.)
+
+
+Use -h to print the USAGE message:
+
+# ./iosnoop -h
+USAGE: iosnoop [-hQst] [-d device] [-i iotype] [-p PID] [-n name]
+               [duration]
+                 -d device       # device string (eg, "202,1)
+                 -i iotype       # match type (eg, '*R*' for all reads)
+                 -n name         # process name to match on I/O issue
+                 -p PID          # PID to match on I/O issue
+                 -Q              # use queue insert as start time
+                 -s              # include start time of I/O (s)
+                 -t              # include completion time of I/O (s)
+                 -h              # this usage message
+                 duration        # duration seconds, and use buffers
+  eg,
+       iosnoop                   # watch block I/O live (unbuffered)
+       iosnoop 1                 # trace 1 sec (buffered)
+       iosnoop -Q                # include queueing time in LATms
+       iosnoop -ts               # include start and end timestamps
+       iosnoop -i '*R*'          # trace reads
+       iosnoop -p 91             # show I/O issued when PID 91 is on-CPU
+       iosnoop -Qp 91            # show I/O queued by PID 91, queue time
+
+See the man page and example file for more info.
