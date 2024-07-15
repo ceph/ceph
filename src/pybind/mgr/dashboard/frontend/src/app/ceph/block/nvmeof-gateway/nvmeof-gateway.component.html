@@ -1,0 +1,14 @@
+<cd-nvmeof-tabs></cd-nvmeof-tabs>
+
+<legend i18n>
+  Gateways
+  <cd-help-text>
+    The NVMe-oF gateway integrates Ceph with the NVMe over TCP (NVMe/TCP) protocol to provide an NVMe/TCP target that exports RADOS Block Device (RBD) images.
+  </cd-help-text>
+</legend>
+<div>
+  <cd-table [data]="gateways"
+            (fetchData)="getGateways()"
+            [columns]="gatewayColumns">
+  </cd-table>
+</div>

@@ -29,6 +29,9 @@ public:
       ::crimson::osd::IOInterruptCondition,
       load_obc_ertr>;
 
+  using interruptor = ::crimson::interruptible::interruptor<
+    ::crimson::osd::IOInterruptCondition>;
+
   using with_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
@@ -72,12 +75,15 @@ private:
   load_obc_iertr::future<> with_head_obc(const hobject_t& oid,
                                          with_obc_func_t&& func);
 
+  template<RWState::State State, bool track, typename Func>
+  load_obc_iertr::future<> with_locked_obc(const hobject_t& oid,
+					   Func&& func);
+
   template<RWState::State State>
   load_obc_iertr::future<ObjectContextRef>
   get_or_load_obc(ObjectContextRef obc,
                   bool existed);
 
-  load_obc_iertr::future<ObjectContextRef>
-  load_obc(ObjectContextRef obc);
+  load_obc_iertr::future<> load_obc(ObjectContextRef obc);
 };
 }

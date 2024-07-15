@@ -1172,6 +1172,9 @@ public:
     crush_rule *n = crush_make_rule(len, type);
     ceph_assert(n);
     ruleno = crush_add_rule(crush, n, ruleno);
+    if (ruleno < 0) {
+      free(n);
+    }
     return ruleno;
   }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
@@ -1610,14 +1613,14 @@ public:
   void do_rule(int rule, int x, std::vector<int>& out, int maxout,
 	       const WeightVector& weight,
 	       uint64_t choose_args_index) const {
-    int rawout[maxout];
-    char work[crush_work_size(crush, maxout)];
-    crush_init_workspace(crush, work);
+    std::vector<int> rawout(maxout);
+    std::vector<char> work(crush_work_size(crush, maxout));
+    crush_init_workspace(crush, std::data(work));
     crush_choose_arg_map arg_map = choose_args_get_with_fallback(
       choose_args_index);
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout,
+    int numrep = crush_do_rule(crush, rule, x, std::data(rawout), maxout,
 			       std::data(weight), std::size(weight),
-			       work, arg_map.args);
+			       std::data(work), arg_map.args);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);

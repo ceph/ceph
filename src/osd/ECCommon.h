@@ -209,6 +209,20 @@ struct ECListener {
 };
 
 struct ECCommon {
+  struct ec_align_t {
+    uint64_t offset;
+    uint64_t size;
+    uint32_t flags;
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
+
+  struct ec_extent_t {
+    int err;
+    extent_map emap;
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
+  using ec_extents_t = std::map<hobject_t, ec_extent_t>;
+
   virtual ~ECCommon() = default;
 
   virtual void handle_sub_write(
@@ -220,17 +234,16 @@ struct ECCommon {
     ) = 0;
 
   virtual void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
-    > &reads,
+    const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
-    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func) = 0;
+    GenContextURef<ec_extents_t &&> &&func) = 0;
 
   struct read_request_t {
-    const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
+    const std::list<ec_align_t> to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
     read_request_t(
-      const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
+      const std::list<ec_align_t> &to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
       bool want_attrs)
       : to_read(to_read), need(need), want_attrs(want_attrs) {}
@@ -272,7 +285,8 @@ struct ECCommon {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read) = 0;
+      std::list<ECCommon::ec_align_t> to_read,
+      std::set<int> wanted_to_read) = 0;
 
     virtual void finish(int priority) && = 0;
 
@@ -282,11 +296,11 @@ struct ECCommon {
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
     unsigned objects_to_read;
-    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> func;
-    std::map<hobject_t,std::pair<int, extent_map> > results;
+    GenContextURef<ec_extents_t &&> func;
+    ec_extents_t results;
     explicit ClientAsyncReadStatus(
       unsigned objects_to_read,
-      GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func)
+      GenContextURef<ec_extents_t &&> &&func)
       : objects_to_read(objects_to_read), func(std::move(func)) {}
     void complete_object(
       const hobject_t &hoid,
@@ -295,7 +309,7 @@ struct ECCommon {
       ceph_assert(objects_to_read);
       --objects_to_read;
       ceph_assert(!results.count(hoid));
-      results.emplace(hoid, std::make_pair(err, std::move(buffers)));
+      results.emplace(hoid, ec_extent_t{err, std::move(buffers)});
     }
     bool is_complete() const {
       return objects_to_read == 0;
@@ -353,8 +367,8 @@ struct ECCommon {
 	for (auto &&extent: hpair.second.to_read) {
 	  returned.push_back(
 	    boost::make_tuple(
-	      extent.get<0>(),
-	      extent.get<1>(),
+	      extent.offset,
+	      extent.size,
 	      std::map<pg_shard_t, ceph::buffer::list>()));
 	}
       }
@@ -365,10 +379,9 @@ struct ECCommon {
   };
   struct ReadPipeline {
     void objects_read_and_reconstruct(
-      const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
-      > &reads,
+      const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
-      GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
+      GenContextURef<ec_extents_t &&> &&func);
 
     template <class F, class G>
     void filter_read_op(
@@ -428,6 +441,27 @@ struct ECCommon {
         sinfo(sinfo),
         parent(parent) {
     }
+
+    /**
+     * While get_want_to_read_shards creates a want_to_read based on the EC
+     * plugin's all get_data_chunk_count() (full stripe), this method
+     * inserts only the chunks actually necessary to read the length of data.
+     * That is, we can do so called "partial read" -- fetch subset of stripe.
+     *
+     * Like in get_want_to_read_shards, we check the plugin's mapping.
+     *
+     */
+    void get_min_want_to_read_shards(
+      uint64_t offset,				///< [in]
+      uint64_t length,    			///< [in]
+      std::set<int> *want_to_read               ///< [out]
+      );
+    static void get_min_want_to_read_shards(
+      const uint64_t offset,
+      const uint64_t length,
+      const ECUtil::stripe_info_t& sinfo,
+      const std::vector<int>& chunk_mapping,
+      std::set<int> *want_to_read);
 
     int get_remaining_shards(
       const hobject_t &hoid,
@@ -618,18 +652,18 @@ struct ECCommon {
       const std::map<hobject_t,extent_set> &to_read,
       Func &&on_complete
     ) {
-      std::map<hobject_t,std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
+      std::map<hobject_t, std::list<ec_align_t>> _to_read;
       for (auto &&hpair: to_read) {
         auto &l = _to_read[hpair.first];
         for (auto extent: hpair.second) {
-          l.emplace_back(extent.first, extent.second, 0);
+          l.emplace_back(ec_align_t{extent.first, extent.second, 0});
         }
       }
       ec_backend.objects_read_and_reconstruct(
         _to_read,
         false,
         make_gen_lambda_context<
-        std::map<hobject_t,std::pair<int, extent_map> > &&, Func>(
+        ECCommon::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
     }
     void handle_sub_write(

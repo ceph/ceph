@@ -520,16 +520,6 @@ options:
     stats (inc. scrub/block duration) every this many seconds.
   default: 120
   with_legacy: false
-- name: osd_scrub_reservation_timeout
-  type: millisecs
-  level: advanced
-  desc: Maximum wait (milliseconds) for replicas' response to scrub reservation requests
-  long_desc: Maximum wait (milliseconds) for all replicas to respond to
-    scrub reservation requests, before the scrub session is aborted. Disable by setting
-    to a very large value.
-  default: 300000
-  min: 2000
-  with_legacy: false
 - name: osd_scrub_disable_reservation_queuing
   type: bool
   level: advanced
@@ -1243,6 +1233,11 @@ options:
   type: bool
   level: advanced
   default: false
+  with_legacy: true
+- name: osd_ec_partial_reads
+  type: bool
+  level: advanced
+  default: true
   with_legacy: true
 - name: osd_recovery_delay_start
   type: float

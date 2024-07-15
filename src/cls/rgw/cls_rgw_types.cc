@@ -814,6 +814,19 @@ void rgw_usage_log_entry::generate_test_instances(list<rgw_usage_log_entry *> &o
   o.push_back(new rgw_usage_log_entry);
 }
 
+std::string to_string(cls_rgw_reshard_initiator i) {
+  switch (i) {
+  case cls_rgw_reshard_initiator::Unknown:
+    return "unknown";
+  case cls_rgw_reshard_initiator::Admin:
+    return "administrator";
+  case cls_rgw_reshard_initiator::Dynamic:
+    return "dynamic resharding";
+  default:
+    return "error";
+  }
+}
+
 void cls_rgw_reshard_entry::generate_key(const string& tenant, const string& bucket_name, string *key)
 {
   *key = tenant + ":" + bucket_name;
@@ -827,12 +840,13 @@ void cls_rgw_reshard_entry::get_key(string *key) const
 void cls_rgw_reshard_entry::dump(Formatter *f) const
 {
   utime_t ut(time);
-  encode_json("time",ut, f);
+  encode_json("time", ut, f);
   encode_json("tenant", tenant, f);
   encode_json("bucket_name", bucket_name, f);
   encode_json("bucket_id", bucket_id, f);
   encode_json("old_num_shards", old_num_shards, f);
   encode_json("tentative_new_num_shards", new_num_shards, f);
+  encode_json("initiator", to_string(initiator), f);
 }
 
 void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>& ls)

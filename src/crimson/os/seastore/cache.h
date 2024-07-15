@@ -953,10 +953,12 @@ public:
 	      NULL_GENERATION,
               t.get_trans_id());
 
+    auto extent = ext->template cast<T>();
+    extent->set_laddr(remap_laddr);
     t.add_fresh_extent(ext);
     SUBTRACET(seastore_cache, "allocated {} {}B, hint={}, has ptr? {} -- {}",
-      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *ext);
-    return ext;
+      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
+    return extent;
   }
 
   /**
@@ -1514,9 +1516,6 @@ private:
     }
   };
 
-  template <typename CounterT>
-  using counter_by_src_t = std::array<CounterT, TRANSACTION_TYPE_MAX>;
-
   static constexpr std::size_t NUM_SRC_COMB =
       TRANSACTION_TYPE_MAX * (TRANSACTION_TYPE_MAX + 1) / 2;
 
@@ -1554,14 +1553,6 @@ private:
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
   } stats;
-
-  template <typename CounterT>
-  CounterT& get_by_src(
-      counter_by_src_t<CounterT>& counters_by_src,
-      Transaction::src_t src) {
-    assert(static_cast<std::size_t>(src) < counters_by_src.size());
-    return counters_by_src[static_cast<std::size_t>(src)];
-  }
 
   template <typename CounterT>
   CounterT& get_by_ext(

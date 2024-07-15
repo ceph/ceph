@@ -398,6 +398,7 @@ struct MDRequestImpl : public MutationImpl {
   
   More* more();
   More const* more() const;
+  bool is_live() const { return !(killed || dead); }
   bool has_more() const;
   bool has_witnesses();
   bool peer_did_prepare();

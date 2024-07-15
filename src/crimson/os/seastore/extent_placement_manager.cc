@@ -84,7 +84,7 @@ SegmentedOolWriter::do_write(
       return do_write(t, extents);
     });
   }
-  record_t record(TRANSACTION_TYPE_NULL);
+  record_t record(record_type_t::OOL, t.get_src());
   std::list<LogicalCachedExtentRef> pending_extents;
   auto commit_time = seastar::lowres_system_clock::now();
 
@@ -191,12 +191,12 @@ void ExtentPlacementManager::init(
     dynamic_max_rewrite_generation = MAX_REWRITE_GENERATION;
   }
 
-  if (trimmer->get_journal_type() == journal_type_t::SEGMENTED) {
+  if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
     auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
     ceph_assert(segment_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
 
-    data_writers_by_gen.resize(num_writers, {});
+    data_writers_by_gen.resize(num_writers, nullptr);
     for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::DATA, gen, *segment_cleaner,
@@ -217,11 +217,11 @@ void ExtentPlacementManager::init(
       add_device(device);
     }
   } else {
-    assert(trimmer->get_journal_type() == journal_type_t::RANDOM_BLOCK);
+    assert(trimmer->get_backend_type() == backend_type_t::RANDOM_BLOCK);
     auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
     ceph_assert(rb_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
-    data_writers_by_gen.resize(num_writers, {});
+    data_writers_by_gen.resize(num_writers, nullptr);
     md_writers_by_gen.resize(num_writers, {});
     writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(
 	    rb_cleaner));
@@ -268,6 +268,161 @@ void ExtentPlacementManager::set_primary_device(Device *device)
   ceph_assert(primary_device == nullptr);
   primary_device = device;
   ceph_assert(devices_by_id[device->get_device_id()] == device);
+}
+
+device_stats_t
+ExtentPlacementManager::get_device_stats(
+  const writer_stats_t &journal_stats,
+  bool report_detail) const
+{
+  LOG_PREFIX(ExtentPlacementManager::get_device_stats);
+
+  /*
+   * RecordSubmitter::get_stats() isn't reentrant.
+   * And refer to EPM::init() for the writers.
+   */
+
+  writer_stats_t main_stats = journal_stats;
+  std::vector<writer_stats_t> main_writer_stats;
+  using enum data_category_t;
+  if (get_main_backend_type() == backend_type_t::SEGMENTED) {
+    // 0. oolmdat
+    main_writer_stats.emplace_back(
+        get_writer(METADATA, OOL_GENERATION)->get_stats());
+    main_stats.add(main_writer_stats.back());
+    // 1. ooldata
+    main_writer_stats.emplace_back(
+        get_writer(DATA, OOL_GENERATION)->get_stats());
+    main_stats.add(main_writer_stats.back());
+    // 2. mainmdat
+    main_writer_stats.emplace_back();
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+      const auto &writer = get_writer(METADATA, gen);
+      ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
+      main_writer_stats.back().add(writer->get_stats());
+    }
+    main_stats.add(main_writer_stats.back());
+    // 3. maindata
+    main_writer_stats.emplace_back();
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+      const auto &writer = get_writer(DATA, gen);
+      ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
+      main_writer_stats.back().add(writer->get_stats());
+    }
+    main_stats.add(main_writer_stats.back());
+  } else { // RBM
+    ceph_assert(get_main_backend_type() == backend_type_t::RANDOM_BLOCK);
+    // In RBM, md_writer and data_wrtier share a single writer, so we only register
+    // md_writer's writer here.
+    main_writer_stats.emplace_back(
+        get_writer(METADATA, OOL_GENERATION)->get_stats());
+    main_stats.add(main_writer_stats.back());
+  }
+
+  writer_stats_t cold_stats = {};
+  std::vector<writer_stats_t> cold_writer_stats;
+  bool has_cold_tier = background_process.has_cold_tier();
+  if (has_cold_tier) {
+    // 0. coldmdat
+    cold_writer_stats.emplace_back();
+    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      const auto &writer = get_writer(METADATA, gen);
+      ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
+      cold_writer_stats.back().add(writer->get_stats());
+    }
+    cold_stats.add(cold_writer_stats.back());
+    // 1. colddata
+    cold_writer_stats.emplace_back();
+    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+      const auto &writer = get_writer(DATA, gen);
+      ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
+      cold_writer_stats.back().add(writer->get_stats());
+    }
+    cold_stats.add(cold_writer_stats.back());
+  }
+
+  auto now = seastar::lowres_clock::now();
+  if (last_tp == seastar::lowres_clock::time_point::min()) {
+    last_tp = now;
+    return {};
+  }
+  std::chrono::duration<double> duration_d = now - last_tp;
+  double seconds = duration_d.count();
+  last_tp = now;
+
+  if (report_detail) {
+    std::ostringstream oss;
+    auto report_writer_stats = [seconds, &oss](
+        const char* name,
+        const writer_stats_t& stats) {
+      oss << "\n" << name << ": " << writer_stats_printer_t{seconds, stats};
+    };
+    report_writer_stats("tier-main", main_stats);
+    report_writer_stats("  inline", journal_stats);
+    if (get_main_backend_type() == backend_type_t::SEGMENTED) {
+      report_writer_stats("  oolmdat", main_writer_stats[0]);
+      report_writer_stats("  ooldata", main_writer_stats[1]);
+      report_writer_stats("  mainmdat", main_writer_stats[2]);
+      report_writer_stats("  maindata", main_writer_stats[3]);
+    } else { // RBM
+      report_writer_stats("  ool", main_writer_stats[0]);
+    }
+    if (has_cold_tier) {
+      report_writer_stats("tier-cold", cold_stats);
+      report_writer_stats("  coldmdat", cold_writer_stats[0]);
+      report_writer_stats("  colddata", cold_writer_stats[1]);
+    }
+
+    auto report_by_src = [seconds, has_cold_tier, &oss,
+                          &journal_stats,
+                          &main_writer_stats,
+                          &cold_writer_stats](transaction_type_t src) {
+      auto t_stats = get_by_src(journal_stats.stats_by_src, src);
+      for (const auto &writer_stats : main_writer_stats) {
+        t_stats += get_by_src(writer_stats.stats_by_src, src);
+      }
+      for (const auto &writer_stats : cold_writer_stats) {
+        t_stats += get_by_src(writer_stats.stats_by_src, src);
+      }
+      if (src == transaction_type_t::READ) {
+        ceph_assert(t_stats.is_empty());
+        return;
+      }
+      oss << "\n" << src << ": "
+          << tw_stats_printer_t{seconds, t_stats};
+
+      auto report_tw_stats = [seconds, src, &oss](
+          const char* name,
+          const writer_stats_t& stats) {
+        const auto& tw_stats = get_by_src(stats.stats_by_src, src);
+        if (tw_stats.is_empty()) {
+          return;
+        }
+        oss << "\n  " << name << ": "
+            << tw_stats_printer_t{seconds, tw_stats};
+      };
+      report_tw_stats("inline", journal_stats);
+      report_tw_stats("oolmdat", main_writer_stats[0]);
+      report_tw_stats("ooldata", main_writer_stats[1]);
+      report_tw_stats("mainmdat", main_writer_stats[2]);
+      report_tw_stats("maindata", main_writer_stats[3]);
+      if (has_cold_tier) {
+        report_tw_stats("coldmdat", cold_writer_stats[0]);
+        report_tw_stats("colddata", cold_writer_stats[1]);
+      }
+    };
+    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
+      auto src = static_cast<transaction_type_t>(_src);
+      report_by_src(src);
+    }
+
+    INFO("{}", oss.str());
+  }
+
+  main_stats.add(cold_stats);
+  return {main_stats.io_depth_stats.num_io,
+          main_stats.io_depth_stats.num_io_grouped,
+          main_stats.get_total_bytes()};
 }
 
 ExtentPlacementManager::open_ertr::future<>
@@ -869,6 +1024,10 @@ RandomBlockOolWriter::do_write(
       bp = ceph::bufferptr(ex->get_bptr(), offset, len);
     } else {
       bp = ex->get_bptr();
+      auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
+      ++(trans_stats.num_records);
+      trans_stats.data_bytes += ex->get_length();
+      w_stats.data_bytes += ex->get_length();
     }
     return trans_intr::make_interruptible(
       rbm->write(paddr + offset,

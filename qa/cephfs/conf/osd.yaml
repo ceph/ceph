@@ -1,5 +1,5 @@
 overrides:
   ceph:
-    conf:
+    cluster-conf:
       osd:
         osd op complaint time: 180

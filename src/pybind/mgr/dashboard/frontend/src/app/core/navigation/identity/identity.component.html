@@ -1,28 +1,36 @@
-<div ngbDropdown
-     placement="bottom-right">
-  <a ngbDropdownToggle
-     i18n-title
-     title="Logged in user"
-     role="button">
-    <i [ngClass]="[icons.user]"></i>
-    <span i18n
-          class="d-md-none">Logged in user</span>
-  </a>
-  <div ngbDropdownMenu>
-    <button ngbDropdownItem
-            disabled
-            i18n>Signed in as <strong>{{ username }}</strong></button>
-    <hr class="dropdown-divider" />
-    <button ngbDropdownItem
-            *ngIf="!sso"
-            routerLink="/user-profile/edit">
-      <i [ngClass]="[icons.lock]"></i>
-      <span i18n>Change password</span>
-    </button>
-    <button ngbDropdownItem
-            (click)="logout()">
-      <i [ngClass]="[icons.signOut]"></i>
-      <span i18n>Sign out</span>
-    </button>
-  </div>
-</div>
+<cds-overflow-menu [customTrigger]="customTrigger"
+                   [offset]="{y:0, x:-80}">
+  <li disabled="true"
+      class="show cds--overflow-menu-options__option cds--overflow-menu-options__option--disabled my-2"
+      i18n>
+    <div class="cds--overflow-menu-options__btn">Signed in as {{ username }}
+    </div>
+  </li>
+  <li class="cds--overflow-menu-options__option cds--overflow-menu--divider mb-2">
+    <button *ngIf="!sso"
+            routerLink="/user-profile/edit"
+            class="cds--overflow-menu-options__btn"
+            i18n>
+    <svg cdsIcon="locked"
+         class="me-2"
+         size="16"></svg>Change password
+  </button>
+  </li>
+  <li class="cds--overflow-menu-options__option mb-2">
+    <button (click)="logout()"
+            data-testid="logout"
+            class="cds--overflow-menu-options__btn"
+            i18n><svg cdsIcon="logout"
+                      class="me-2"
+                      size="16"></svg>Sign out
+  </button>
+  </li>
+</cds-overflow-menu>
+
+<ng-template #customTrigger>
+  <svg cdsIcon="user--filled"
+       size="20"
+       title="user"></svg>
+  <span i18n
+        class="d-md-none">Logged in user</span>
+</ng-template>

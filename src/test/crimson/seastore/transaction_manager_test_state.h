@@ -183,7 +183,6 @@ class EphemeralTestState
   {
 #endif
 protected:
-  journal_type_t journal_type;
   size_t num_main_device_managers = 0;
   size_t num_cold_device_managers = 0;
   EphemeralDevicesRef devices;
@@ -274,6 +273,7 @@ protected:
   Cache* cache;
   ExtentPlacementManager *epm;
   uint64_t seq = 0;
+  shard_stats_t shard_stats;
 
   TMTestState() : EphemeralTestState(1, 0) {}
 
@@ -293,7 +293,8 @@ protected:
 	"seastore_full_integrity_check", "false");
     }
 #endif
-    tm = make_transaction_manager(p_dev, sec_devices, true);
+    shard_stats = {};
+    tm = make_transaction_manager(p_dev, sec_devices, shard_stats, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
     cache = tm->get_cache();

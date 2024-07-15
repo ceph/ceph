@@ -242,12 +242,6 @@ if(WITH_XFS)
   set(HAVE_LIBXFS ${XFS_FOUND})
 endif()
 
-option(WITH_ZFS "enable LibZFS if found" OFF)
-if(WITH_ZFS)
-  find_package(zfs)
-  set(HAVE_LIBZFS ${ZFS_FOUND})
-endif()
-
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
   if(LINUX)
@@ -282,7 +276,10 @@ if(WITH_LIBURING)
     build_uring()
   endif()
   # enable uring in boost::asio
-  add_compile_definitions("BOOST_ASIO_HAS_IO_URING")
+
+  if(CMAKE_SYSTEM_VERSION VERSION_GREATER_EQUAL "5.10")
+    add_compile_definitions("BOOST_ASIO_HAS_IO_URING")
+  endif()
 endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
@@ -580,10 +577,13 @@ endif (WITH_RADOSGW)
 option(WITH_CEPHFS "CephFS is enabled" ON)
 
 if(NOT WIN32)
-# Please specify 3.[0-7] if you want to build with a certain version of python3.
+# Please specify 3.x if you want to build with a certain version of python3.
 set(WITH_PYTHON3 "3" CACHE STRING "build with specified python3 version")
 find_package(Python3 ${WITH_PYTHON3} EXACT REQUIRED
   COMPONENTS Interpreter Development)
+if(Python3_VERSION VERSION_LESS 3.9)
+  message(FATAL_ERROR "${Python3_VERSION} is not supported, please use Python 3.9 and up")
+endif()
 
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
@@ -637,7 +637,6 @@ if(WITH_BABELTRACE)
 endif(WITH_BABELTRACE)
 
 option(DEBUG_GATHER "C_Gather debugging is enabled" ON)
-option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
@@ -700,7 +699,7 @@ option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
   atomic chrono thread system regex random program_options date_time
-  iostreams context coroutine)
+  iostreams context coroutine url)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
@@ -729,7 +728,7 @@ if(WITH_SYSTEM_BOOST)
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
-  find_package(Boost 1.82 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.85 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
   if(NOT ENABLE_SHARED)
     set_property(TARGET Boost::iostreams APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
@@ -743,15 +742,10 @@ else()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.82
+  build_boost(1.85
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
-
-if(Boost_VERSION VERSION_LESS 1.84)
-  # This is a workaround for https://github.com/boostorg/phoenix/issues/111
-  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DBOOST_PHOENIX_STL_TUPLE_H_>)
-endif()
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)

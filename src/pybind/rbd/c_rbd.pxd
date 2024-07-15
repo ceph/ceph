@@ -86,6 +86,10 @@ cdef extern from "rbd/librbd.h" nogil:
         char *group_name
         char *group_snap_name
 
+    ctypedef struct rbd_snap_trash_namespace_t:
+        rbd_snap_namespace_type_t original_namespace_type;
+        char *original_name;
+
     ctypedef enum rbd_snap_mirror_state_t:
         _RBD_SNAP_MIRROR_STATE_PRIMARY "RBD_SNAP_MIRROR_STATE_PRIMARY"
         _RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED "RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED"
@@ -329,6 +333,9 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
                    const char *p_snapname, rados_ioctx_t c_ioctx,
                    const char *c_name, rbd_image_options_t c_opts)
+    int rbd_clone4(rados_ioctx_t p_ioctx, const char *p_name,
+                   uint64_t p_snap_id, rados_ioctx_t c_ioctx,
+                   const char *c_name, rbd_image_options_t c_opts)
     int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
                                  librbd_progress_fn_t cb, void *cbdata)
     int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
@@ -546,8 +553,11 @@ cdef extern from "rbd/librbd.h" nogil:
                                      size_t snap_group_namespace_size)
     void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_spec,
                                           size_t snap_group_namespace_size)
-    int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
-                                     char *original_name, size_t max_length)
+    int rbd_snap_get_trash_namespace2(rbd_image_t image, uint64_t snap_id,
+                                      rbd_snap_trash_namespace_t *trash_snap,
+                                      size_t trash_snap_size)
+    void rbd_snap_trash_namespace_cleanup(rbd_snap_trash_namespace_t *trash_snap,
+                                          size_t trash_snap_size)
     int rbd_snap_get_mirror_namespace(
         rbd_image_t image, uint64_t snap_id,
         rbd_snap_mirror_namespace_t *mirror_ns,
@@ -662,6 +672,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
+    int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
+                         char *group_id, size_t *size)
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)

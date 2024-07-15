@@ -63,6 +63,7 @@ set(librgw_common_srcs
   rgw_acl_swift.cc
   rgw_aio.cc
   rgw_aio_throttle.cc
+  rgw_asio_thread.cc
   rgw_auth.cc
   rgw_auth_s3.cc
   rgw_arn.cc
@@ -70,6 +71,7 @@ set(librgw_common_srcs
   rgw_bucket.cc
   rgw_bucket_layout.cc
   rgw_cache.cc
+  rgw_cksum_pipe.cc
   rgw_common.cc
   rgw_compression.cc
   rgw_cors.cc
@@ -304,15 +306,17 @@ target_link_libraries(rgw_common
     RapidJSON::RapidJSON
     Boost::context
     ${FMT_LIB}
-    OpenSSL::SSL)
+    OpenSSL::SSL
+    BLAKE3::blake3)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
 
-if(WITH_RADOSGW_D4N)
-  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/boost_redis/include")
-endif()
+# work around https://github.com/Cyan4973/xxHash/issues/943 for debug builds
+target_compile_definitions(rgw_common PUBLIC
+  $<$<CONFIG:Debug>:XXH_NO_INLINE_HINTS=1>
+  $<$<CONFIG:RelWithDebInfo>:XXH_NO_INLINE_HINTS=1>)
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc

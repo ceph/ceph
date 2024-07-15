@@ -261,6 +261,58 @@ int execute_rename(const po::variables_map &vm,
   return 0;
 }
 
+int execute_info(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  size_t arg_index = 0;
+
+  std::string pool_name;
+  std::string namespace_name;
+  std::string group_name;
+
+  int r = utils::get_pool_generic_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
+    &namespace_name, GROUP_NAME, "group", &group_name, nullptr, true,
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+  if (r < 0) {
+    return r;
+  }
+
+  at::Format::Formatter formatter;
+  r = utils::get_formatter(vm, &formatter);
+  if (r < 0) {
+    return r;
+  }
+  Formatter *f = formatter.get();
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  std::string group_id;
+  r = rbd.group_get_id(io_ctx, group_name.c_str(), &group_id);
+  if (r < 0) {
+    return r;
+  }
+
+  if (f) {
+    f->open_object_section("group");
+    f->dump_string("group_name", group_name);
+    f->dump_string("group_id", group_id);
+    f->close_section();
+    f->flush(std::cout);
+  } else {
+    std::cout << "rbd group '" << group_name << "':\n"
+              << "\t" << "id: " << group_id << std::endl;
+  }
+
+  return 0;
+}
+
 int execute_add(const po::variables_map &vm,
                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -771,6 +823,13 @@ void get_rename_arguments(po::options_description *positional,
                          false);
 }
 
+void get_info_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                         false);
+  at::add_format_options(options);
+}
+
 void get_add_arguments(po::options_description *positional,
                        po::options_description *options) {
   positional->add_options()
@@ -877,6 +936,9 @@ Shell::Action action_list(
 Shell::Action action_rename(
   {"group", "rename"}, {}, "Rename a group within pool.",
   "", &get_rename_arguments, &execute_rename);
+Shell::Action action_info(
+  {"group", "info"}, {}, "Show information about a group.",
+  "", &get_info_arguments, &execute_info);
 Shell::Action action_add(
   {"group", "image", "add"}, {}, "Add an image to a group.",
   "", &get_add_arguments, &execute_add);

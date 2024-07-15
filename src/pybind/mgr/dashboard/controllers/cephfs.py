@@ -639,6 +639,17 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         cfs.rm_snapshot(path, name)
 
+    @RESTController.Resource('PUT', path='/rename-path')
+    def rename_path(self, fs_id, src_path, dst_path) -> None:
+        """
+        Rename a file or directory.
+        :param fs_id: The filesystem identifier.
+        :param src_path: The path to the existing file or directory.
+        :param dst_path: The new name of the file or directory.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.rename_path(src_path, dst_path)
+
 
 class CephFSClients(object):
     def __init__(self, module_inst, fscid):
@@ -842,6 +853,15 @@ class CephFSSubvolumeGroups(RESTController):
                         f'Failed to get info for subvolume group {group["name"]}: {err}'
                     )
                 group['info'] = json.loads(out)
+
+                error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_getpath',
+                                                  None, {'vol_name': vol_name,
+                                                         'group_name': group['name']})
+                if error_code != 0:
+                    raise DashboardException(
+                        f'Failed to get path for subvolume group {group["name"]}: {err}'
+                    )
+                group['info']['path'] = out
         return subvolume_groups
 
     @RESTController.Resource('GET')

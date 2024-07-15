@@ -1126,7 +1126,7 @@ std::unique_ptr<LuaManager> MotrStore::get_lua_manager(const DoutPrefixProvider 
   return std::make_unique<MotrLuaManager>(this, dpp, luarocks_path);
 }
 
-int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **_state, optional_yield y, bool follow_olh)
+int MotrObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
   // Get object's metadata (those stored in rgw_bucket_dir_entry).
   bufferlist bl;
@@ -1182,7 +1182,7 @@ MotrObject::~MotrObject() {
 //    return read_op.prepare(dpp);
 //  }
 
-int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
+int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   // TODO: implement
   ldpp_dout(dpp, 20) <<__func__<< ": MotrObject::set_obj_attrs()" << dendl;
@@ -1238,7 +1238,7 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, op
   }
   set_atomic();
   state.attrset[attr_name] = attr_val;
-  return set_obj_attrs(dpp, &state.attrset, nullptr, y);
+  return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -1249,7 +1249,7 @@ int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 
   set_atomic();
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 bool MotrObject::is_expired() {
@@ -1393,7 +1393,7 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   }
 
   // Skip opening an empty object.
-  if(source->get_obj_size() == 0)
+  if(source->get_size() == 0)
     return 0;
 
   // Open the object here.
@@ -1449,7 +1449,7 @@ MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source) :
   source(_source)
 { }
 
-// Implementation of DELETE OBJ also requires MotrObject::get_obj_state()
+// Implementation of DELETE OBJ also requires MotrObject::load_obj_state()
 // to retrieve and set object's state from object's metadata.
 //
 // TODO:

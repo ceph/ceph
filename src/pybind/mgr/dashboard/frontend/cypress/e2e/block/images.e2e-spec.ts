@@ -11,7 +11,7 @@ describe('Images page', () => {
     cy.login();
     // Need pool for image testing
     pools.navigateTo('create');
-    pools.create(poolName, 8, 'rbd');
+    pools.create(poolName, 8, ['rbd']);
     pools.existTableCell(poolName);
   });
 

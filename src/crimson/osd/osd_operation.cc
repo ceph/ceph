@@ -33,18 +33,11 @@ void OSDOperationRegistry::do_stop()
 		     /* add_ref= */ false
 		   };
 		 });
-  last_of_recents = std::end(historic_registry);
   // to_ref_down is going off
 }
 
 OSDOperationRegistry::OSDOperationRegistry()
-  : OperationRegistryT(seastar::this_shard_id())
-{
-  constexpr auto historic_reg_index =
-    static_cast<size_t>(OperationTypeCode::historic_client_request);
-  auto& historic_registry = get_registry<historic_reg_index>();
-  last_of_recents = std::begin(historic_registry);
-}
+  : OperationRegistryT(seastar::this_shard_id()) {}
 
 static auto get_duration(const ClientRequest& client_request)
 {
@@ -55,50 +48,49 @@ static auto get_duration(const ClientRequest& client_request)
 
 void OSDOperationRegistry::put_historic(const ClientRequest& op)
 {
+  using crimson::common::local_conf;
   // unlink the op from the client request registry. this is a part of
-  // the re-link procedure. finally it will be in historic registry.
-  constexpr auto client_reg_index =
-    static_cast<size_t>(OperationTypeCode::client_request);
+  // the re-link procedure. finally it will be in historic/historic_slow registry.
   constexpr auto historic_reg_index =
     static_cast<size_t>(OperationTypeCode::historic_client_request);
-  auto& client_registry = get_registry<client_reg_index>();
-  auto& historic_registry = get_registry<historic_reg_index>();
-  historic_registry.splice(std::end(historic_registry),
-			   client_registry,
-			   client_registry.iterator_to(op));
-  ClientRequest::ICRef(
-    &op, /* add_ref= */true
-  ).detach(); // yes, "leak" it for now!
+  constexpr auto slow_historic_reg_index = 
+    static_cast<size_t>(OperationTypeCode::historic_slow_client_request);
 
-  // check whether the history size limit is not exceeded; if so, then
-  // purge the oldest op.
-  // NOTE: Operation uses the auto-unlink feature of boost::intrusive.
-  // NOTE: the cleaning happens in OSDOperationRegistry::do_stop()
-  using crimson::common::local_conf;
-  if (num_recent_ops >= local_conf()->osd_op_history_size) {
-    ++last_of_recents;
-    ++num_slow_ops;
+  if (get_duration(op) > local_conf()->osd_op_complaint_time) {
+    auto& slow_historic_registry = get_registry<slow_historic_reg_index>();
+    _put_historic(slow_historic_registry,
+      op,
+      local_conf()->osd_op_history_slow_op_size);
   } else {
-    ++num_recent_ops;
+    auto& historic_registry = get_registry<historic_reg_index>();
+    _put_historic(historic_registry,
+      op,
+      local_conf()->osd_op_history_size);
   }
-  if (num_slow_ops > local_conf()->osd_op_history_slow_op_size) {
-    // we're interested in keeping slowest ops. if the slow op history
-    // is disabled, the list will have only one element, so the full-blown
-    // search will boil down into `.front()`.
-    const auto fastest_historic_iter = std::min_element(
-      std::cbegin(historic_registry), last_of_recents,
-      [] (const auto& lop, const auto& rop) {
-        const auto& lclient_request = static_cast<const ClientRequest&>(lop);
-        const auto& rclient_request = static_cast<const ClientRequest&>(rop);
-	return get_duration(lclient_request) < get_duration(rclient_request);
-    });
-    assert(fastest_historic_iter != std::end(historic_registry));
-    const auto& fastest_historic_op =
-      static_cast<const ClientRequest&>(*fastest_historic_iter);
-    historic_registry.erase(fastest_historic_iter);
+}
+
+void OSDOperationRegistry::_put_historic(
+  op_list& list,
+  const class ClientRequest& op,
+  uint64_t max)
+{
+  constexpr auto client_reg_index =
+    static_cast<size_t>(OperationTypeCode::client_request);
+  auto& client_registry = get_registry<client_reg_index>();
+
+  // we only save the newest op
+  list.splice(std::end(list), client_registry, client_registry.iterator_to(op));
+  ClientRequest::ICRef(
+      &op, /* add_ref= */true
+    ).detach(); // yes, "leak" it for now!
+
+  if (list.size() >= max) {
+    auto old_op_ptr = &list.front();
+    list.pop_front();
+    const auto& old_op =
+      static_cast<const ClientRequest&>(*old_op_ptr);
     // clear a previously "leaked" op
-    ClientRequest::ICRef(&fastest_historic_op, /* add_ref= */false);
-    --num_slow_ops;
+    ClientRequest::ICRef(&old_op, /* add_ref= */false);
   }
 }
 
@@ -125,33 +117,20 @@ size_t OSDOperationRegistry::dump_historic_client_requests(ceph::Formatter* f) c
 
 size_t OSDOperationRegistry::dump_slowest_historic_client_requests(ceph::Formatter* f) const
 {
-  const auto& historic_client_registry =
-    get_registry<static_cast<size_t>(OperationTypeCode::historic_client_request)>(); //ClientRequest::type)>();
+  const auto& slow_historic_client_registry =
+    get_registry<static_cast<size_t>(OperationTypeCode::historic_slow_client_request)>(); //ClientRequest::type)>();
   f->open_object_section("op_history");
-  f->dump_int("size", historic_client_registry.size());
+  f->dump_int("size", slow_historic_client_registry.size());
   // TODO: f->dump_int("duration", history_duration.load());
   // the intrusive list is configured to not store the size
-  std::multimap<utime_t,
-		const ClientRequest*,
-		std::greater<utime_t>> sorted_slowest_ops;
-  // iterating over the entire registry as a slow op could be also
-  // in the "recently added" part.
-  std::transform(std::begin(historic_client_registry),
-		 std::end(historic_client_registry),
-		 std::inserter(sorted_slowest_ops, std::end(sorted_slowest_ops)),
-		 [] (const Operation& op) {
-		   const auto& cop = static_cast<const ClientRequest&>(op);
-		   return std::make_pair(get_duration(cop), &cop);
-		 });
-  f->open_array_section("ops");
-  using crimson::common::local_conf;
   size_t ops_count = 0;
-  for (auto it = std::begin(sorted_slowest_ops);
-       ops_count < local_conf()->osd_op_history_slow_op_size
-	   && it != std::end(sorted_slowest_ops);
-       ++it, ++ops_count)
   {
-    it->second->dump(f);
+    f->open_array_section("ops");
+    for (const auto& op : slow_historic_client_registry) {
+      op.dump(f);
+      ++ops_count;
+    }
+    f->close_section();
   }
   f->close_section();
   return ops_count;

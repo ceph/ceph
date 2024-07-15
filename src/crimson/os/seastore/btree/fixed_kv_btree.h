@@ -511,6 +511,8 @@ public:
           &child_node);
       } else {
         if (i->get_val().pladdr.is_laddr()) {
+          assert(!node->children[i->get_offset()] ||
+                  is_reserved_ptr(node->children[i->get_offset()]));
           continue;
         }
         ret = c.trans.get_extent(
@@ -586,7 +588,7 @@ public:
                 : true);
             }
           }
-          if (child == get_reserved_ptr()) {
+          if (is_reserved_ptr(child)) {
             if constexpr(
               !std::is_base_of_v<typename internal_node_t::base_t,
                                  child_node_t>) {
@@ -1491,9 +1493,9 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return v.get_child_fut().safe_then(
-        [on_found=std::move(on_found), node_iter, c,
-        parent_entry](auto child) mutable {
+      return trans_intr::make_interruptible(std::move(v.get_child_fut())
+      ).si_then([on_found=std::move(on_found), node_iter, c,
+                parent_entry](auto child) {
         LOG_PREFIX(FixedKVBtree::lookup_internal_level);
         SUBTRACET(seastore_fixedkv_tree,
           "got child on {}, pos: {}, res: {}",
@@ -1561,9 +1563,9 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return v.get_child_fut().safe_then(
-        [on_found=std::move(on_found), node_iter, c,
-        parent_entry](auto child) mutable {
+      return trans_intr::make_interruptible(std::move(v.get_child_fut())
+      ).si_then([on_found=std::move(on_found), node_iter, c,
+                parent_entry](auto child) {
         LOG_PREFIX(FixedKVBtree::lookup_leaf);
         SUBTRACET(seastore_fixedkv_tree,
           "got child on {}, pos: {}, res: {}",
@@ -2116,9 +2118,9 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      return v.get_child_fut().safe_then(
-        [do_merge=std::move(do_merge), &pos,
-        donor_iter, donor_is_left, c, parent_pos](auto child) mutable {
+      return trans_intr::make_interruptible(std::move(v.get_child_fut())
+      ).si_then([do_merge=std::move(do_merge), &pos,
+                donor_iter, donor_is_left, c, parent_pos](auto child) {
         LOG_PREFIX(FixedKVBtree::merge_level);
         SUBTRACET(seastore_fixedkv_tree,
           "got child on {}, pos: {}, res: {}",

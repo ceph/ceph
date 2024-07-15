@@ -323,7 +323,9 @@ public:
   }
   Context *on_clean() final;
   void on_activate_committed() final {
-    // Not needed yet (will be needed for IO unblocking)
+    if (!is_primary()) {
+      wait_for_active_blocker.unblock();
+    }
   }
   void on_active_exit() final {
     // Not needed yet
@@ -437,6 +439,9 @@ public:
 
 
   // Utility
+  bool is_active_clean() const {
+    return peering_state.is_active() && peering_state.is_clean();
+  }
   bool is_primary() const final {
     return peering_state.is_primary();
   }
@@ -737,6 +742,10 @@ public:
     // TODO: see PrimaryLogPG::mark_all_unfound_lost()
     return seastar::now();
   }
+  interruptible_future<> find_unfound(epoch_t epoch_started);
+  bool have_unfound() const {
+    return peering_state.have_unfound();
+  }
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch) const;
 
@@ -769,9 +778,6 @@ private:
   friend class SnapTrimEvent;
   friend class SnapTrimObjSubEvent;
 private:
-  seastar::future<bool> find_unfound() {
-    return seastar::make_ready_future<bool>(true);
-  }
 
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
@@ -831,12 +837,17 @@ struct PG::do_osd_ops_params_t {
     return orig_source_inst.name;
   }
 
+  snapid_t get_snapid() const {
+    return snapid;
+  }
+
   crimson::net::ConnectionXcoreRef &conn;
   osd_reqid_t reqid;
   utime_t mtime;
   epoch_t map_epoch;
   entity_inst_t orig_source_inst;
   uint64_t features;
+  snapid_t snapid;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);

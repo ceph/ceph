@@ -146,9 +146,6 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y)
 {
-  if (key.instance.empty()) {
-    key.instance = "null";
-  }
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
@@ -667,13 +664,13 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
           }
         } else {
           std::unique_ptr<rgw::sal::Object> object = bucket->get_object({olh_entry.key.name});
-          RGWObjState *state;
-          ret = object->get_obj_state(dpp, &state, y, false);
+          ret = object->load_obj_state(dpp, y, false);
           if (ret < 0) {
-            ldpp_dout(dpp, -1) << "ERROR failed to get state for: " << olh_entry.key.name << " get_obj_state(): " << cpp_strerror(-ret) << dendl;
+            ldpp_dout(dpp, -1) << "ERROR failed to load state for: " << olh_entry.key.name << " load_obj_state(): " << cpp_strerror(-ret) << dendl;
             continue;
           }
-          ret = store->update_olh(dpp, obj_ctx, state, bucket->get_info(), obj, y);
+	  RGWObjState& state = static_cast<rgw::sal::RadosObject*>(object.get())->get_state();
+          ret = store->update_olh(dpp, obj_ctx, &state, bucket->get_info(), obj, y);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR failed to update olh for: " << olh_entry.key.name << " update_olh(): " << cpp_strerror(-ret) << dendl;
             continue;

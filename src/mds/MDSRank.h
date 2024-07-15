@@ -15,6 +15,7 @@
 #ifndef MDS_RANK_H_
 #define MDS_RANK_H_
 
+#include <atomic>
 #include <string_view>
 
 #include <boost/asio/io_context.hpp>
@@ -225,6 +226,8 @@ class MDSRank {
     bool is_stopped() const { return mdsmap->is_stopped(whoami); }
     bool is_cluster_degraded() const { return cluster_degraded; }
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
+
+    bool is_active_lockless() const { return m_is_active.load(); }
 
     bool is_cache_trimmable() const {
       return is_standby_replay() || is_clientreplay() || is_active() || is_stopping();
@@ -526,12 +529,12 @@ class MDSRank {
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
-    int command_quiesce_path(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
-    void command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
+    void command_quiesce_path(Formatter *f, const cmdmap_t &cmdmap, asok_finisher on_finish);
+    void command_lock_path(Formatter* f, const cmdmap_t& cmdmap, asok_finisher on_finish);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
-    void command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
+    void command_quiesce_db(const cmdmap_t& cmdmap, asok_finisher on_finish);
 
     // FIXME the state machine logic should be separable from the dispatch
     // logic that calls it.
@@ -669,6 +672,8 @@ private:
 
     mono_time starttime = mono_clock::zero();
     boost::asio::io_context& ioc;
+
+    std::atomic_bool m_is_active = false; /* accessed outside mds_lock */
 };
 
 class C_MDS_RetryMessage : public MDSInternalContext {
@@ -725,7 +730,7 @@ public:
     const cmdmap_t& cmdmap,
     Formatter *f,
     const bufferlist &inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish);
+    asok_finisher on_finish);
   void handle_mds_map(const cref_t<MMDSMap> &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
@@ -735,7 +740,7 @@ public:
 
   void dump_sessions(const SessionFilter &filter, Formatter *f, bool cap_dump=false) const;
   void evict_clients(const SessionFilter &filter,
-		     std::function<void(int,const std::string&,bufferlist&)> on_finish);
+		     asok_finisher on_finish);
 
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(const cref_t<Message> &m);

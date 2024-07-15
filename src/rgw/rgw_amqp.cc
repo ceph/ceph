@@ -513,10 +513,10 @@ bool new_state(connection_t* conn, const connection_id_t& conn_id) {
 
 /// struct used for holding messages in the message queue
 struct message_wrapper_t {
-  connection_id_t conn_id;
-  std::string topic;
-  std::string message;
-  reply_callback_t cb;
+  const connection_id_t conn_id;
+  const std::string topic;
+  const std::string message;
+  const reply_callback_t cb;
 
   message_wrapper_t(const connection_id_t& _conn_id,
       const std::string& _topic,
@@ -836,8 +836,11 @@ public:
       // when a new connection is added.
       connections.max_load_factor(10.0);
       // give the runner thread a name for easier debugging
-      const auto rc = ceph_pthread_setname(runner.native_handle(), "amqp_manager");
-      ceph_assert(rc==0);
+      const char* thread_name = "amqp_manager";
+      if (const auto rc = ceph_pthread_setname(runner.native_handle(), thread_name); rc != 0) {
+        ldout(cct, 1) << "ERROR: failed to set amqp manager thread name to: " << thread_name
+          << ". error: " << rc << dendl;
+      }
   }
 
   // non copyable

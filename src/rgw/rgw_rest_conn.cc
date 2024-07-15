@@ -257,10 +257,11 @@ int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_own
   return 0;
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamS3PutObj *req, string& etag,
+int RGWRESTConn::complete_request(const DoutPrefixProvider* dpp,
+                                  RGWRESTStreamS3PutObj *req, string& etag,
                                   real_time *mtime, optional_yield y)
 {
-  int ret = req->complete_request(y, &etag, mtime);
+  int ret = req->complete_request(dpp, y, &etag, mtime);
   if (ret == -EIO) {
     ldout(cct, 5) << __func__ << ": complete_request() returned ret=" << ret << dendl;
     set_url_unconnectable(req->get_url_orig());
@@ -408,7 +409,8 @@ done_err:
   return r;
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req,
+int RGWRESTConn::complete_request(const DoutPrefixProvider* dpp,
+                                  RGWRESTStreamRWRequest *req,
                                   string *etag,
                                   real_time *mtime,
                                   uint64_t *psize,
@@ -416,7 +418,7 @@ int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req,
                                   map<string, string> *pheaders,
                                   optional_yield y)
 {
-  int ret = req->complete_request(y, etag, mtime, psize, pattrs, pheaders);
+  int ret = req->complete_request(dpp, y, etag, mtime, psize, pattrs, pheaders);
   if (ret == -EIO) {
     ldout(cct, 5) << __func__ << ": complete_request() returned ret=" << ret << dendl;
     set_url_unconnectable(req->get_url_orig());
@@ -467,7 +469,7 @@ int RGWRESTConn::get_resource(const DoutPrefixProvider *dpp,
       return ret;
     }
 
-    ret = req.complete_request(y);
+    ret = req.complete_request(dpp, y);
     if (ret == -EIO) {
       set_url_unconnectable(url);
       if (tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
@@ -521,7 +523,7 @@ int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string&
       return ret;
     }
 
-    ret = req.complete_request(y);
+    ret = req.complete_request(dpp, y);
     if (ret == -EIO) {
       set_url_unconnectable(url);
       if (tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
@@ -580,7 +582,7 @@ int RGWRESTReadResource::read(const DoutPrefixProvider *dpp, optional_yield y)
     return ret;
   }
 
-  ret = req.complete_request(y);
+  ret = req.complete_request(dpp, y);
   if (ret == -EIO) {
     conn->set_url_unconnectable(req.get_url_orig());
     ldpp_dout(dpp, 20) << __func__ << ": complete_request() returned ret=" << ret << dendl;
@@ -647,7 +649,7 @@ int RGWRESTSendResource::send(const DoutPrefixProvider *dpp, bufferlist& outbl, 
     return ret;
   }
 
-  ret = req.complete_request(y);
+  ret = req.complete_request(dpp, y);
   if (ret == -EIO) {
     conn->set_url_unconnectable(req.get_url_orig());
     ldpp_dout(dpp, 20) << __func__ << ": complete_request() returned ret=" << ret << dendl;

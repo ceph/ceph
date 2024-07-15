@@ -3,7 +3,9 @@
 import base64
 import json
 import re
+import tempfile
 import time
+from typing import Any, Dict
 from urllib.parse import urlparse
 
 import requests
@@ -37,8 +39,14 @@ class MultiCluster(RESTController):
                     'Accept': 'application/vnd.ceph.api.v1.0+json',
                     'Content-Type': 'application/json',
                 }
+            cert_file_path = verify
+            if verify:
+                with tempfile.NamedTemporaryFile(delete=False) as cert_file:
+                    cert_file.write(cert.encode('utf-8'))
+                    cert_file_path = cert_file.name
             response = requests.request(method, base_url + path, params=params,
-                                        json=payload, verify=verify, cert=cert, headers=headers)
+                                        json=payload, verify=cert_file_path,
+                                        headers=headers)
         except Exception as e:
             raise DashboardException(
                 "Could not reach {}, {}".format(base_url+path, e),
@@ -78,11 +86,13 @@ class MultiCluster(RESTController):
                         payload={'url': cors_endpoints_string}, token=cluster_token,
                         verify=ssl_verify, cert=ssl_certificate)
 
-            fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=cluster_token)
+            fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=cluster_token,
+                               verify=ssl_verify, cert=ssl_certificate)
 
             managed_by_clusters_content = self._proxy('GET', url,
                                                       'api/settings/MANAGED_BY_CLUSTERS',
-                                                      token=cluster_token)
+                                                      token=cluster_token,
+                                                      verify=ssl_verify, cert=ssl_certificate)
 
             managed_by_clusters_config = managed_by_clusters_content['value']
 
@@ -95,7 +105,8 @@ class MultiCluster(RESTController):
 
             # add prometheus targets
             prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
-                                         token=cluster_token)
+                                         token=cluster_token, verify=ssl_verify,
+                                         cert=ssl_certificate)
 
             _set_prometheus_targets(prometheus_url)
 
@@ -145,7 +156,8 @@ class MultiCluster(RESTController):
                                          component='multi-cluster')
 
             user_content = self._proxy('GET', url, f'api/user/{username}',
-                                       token=content['token'])
+                                       token=content['token'], verify=ssl_verify,
+                                       cert=ssl_certificate)
 
             if 'status' in user_content and user_content['status'] == '403 Forbidden':
                 raise DashboardException(msg='User is not an administrator',
@@ -164,7 +176,8 @@ class MultiCluster(RESTController):
         cluster_token = content['token']
 
         managed_by_clusters_content = self._proxy('GET', url, 'api/settings/MANAGED_BY_CLUSTERS',
-                                                  token=cluster_token)
+                                                  token=cluster_token, verify=ssl_verify,
+                                                  cert=ssl_certificate)
 
         managed_by_clusters_config = managed_by_clusters_content['value']
 
@@ -218,7 +231,7 @@ class MultiCluster(RESTController):
 
     @Endpoint('PUT')
     @UpdatePermission
-    def set_config(self, config: object):
+    def set_config(self, config: Dict[str, Any]):
         multicluster_config = self.load_multi_cluster_config()
         multicluster_config.update({'current_url': config['url']})
         multicluster_config.update({'current_user': config['user']})
@@ -247,19 +260,24 @@ class MultiCluster(RESTController):
                     for cluster in cluster_details:
                         if cluster["url"] == url and cluster["user"] == username:
                             cluster['token'] = cluster_token
+                            cluster['ssl_verify'] = ssl_verify
+                            cluster['ssl_certificate'] = ssl_certificate
             Settings.MULTICLUSTER_CONFIG = multicluster_config
         return True
 
     @Endpoint('PUT')
     @UpdatePermission
     # pylint: disable=unused-variable
-    def edit_cluster(self, url, cluster_alias, username):
+    def edit_cluster(self, name, url, cluster_alias, username, verify=False, ssl_certificate=None):
         multicluster_config = self.load_multi_cluster_config()
         if "config" in multicluster_config:
             for key, cluster_details in multicluster_config["config"].items():
                 for cluster in cluster_details:
-                    if cluster["url"] == url and cluster["user"] == username:
+                    if cluster["name"] == name and cluster["user"] == username:
+                        cluster['url'] = url
                         cluster['cluster_alias'] = cluster_alias
+                        cluster['ssl_verify'] = verify
+                        cluster['ssl_certificate'] = ssl_certificate if verify else ''
         Settings.MULTICLUSTER_CONFIG = multicluster_config
         return Settings.MULTICLUSTER_CONFIG
 
@@ -291,7 +309,9 @@ class MultiCluster(RESTController):
 
                     managed_by_clusters_content = self._proxy('GET', cluster_url,
                                                               'api/settings/MANAGED_BY_CLUSTERS',
-                                                              token=cluster_token)
+                                                              token=cluster_token,
+                                                              verify=cluster_ssl_verify,
+                                                              cert=cluster_ssl_certificate)
 
                     managed_by_clusters_config = managed_by_clusters_content['value']
                     for cluster in managed_by_clusters_config:

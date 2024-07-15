@@ -9,20 +9,20 @@
               class="bold">Hosts</td>
           <td>{{ hostsCount }}</td>
         </tr>
-        <tr>
+        <tr *ngIf="!isSimpleDeployment; else simpleDeploymentTextTpl">
           <td>
-          <dl>
-            <dt>
-              <p i18n>Storage Capacity</p>
-            </dt>
-            <dd>
-              <p i18n>Number of devices</p>
-            </dd>
-            <dd>
-              <p i18n>Raw capacity</p>
-            </dd>
-          </dl>
-        </td>
+            <dl>
+              <dt>
+                <p i18n>Storage Capacity</p>
+              </dt>
+              <dd>
+                <p i18n>Number of devices</p>
+              </dd>
+              <dd>
+                <p i18n>Raw capacity</p>
+              </dd>
+            </dl>
+          </td>
           <td class="pt-5"><p>{{ totalDevices }}</p><p>
             {{ totalCapacity | dimlessBinary }}</p></td>
         </tr>
@@ -40,13 +40,28 @@
     </fieldset>
   </div>
 
-<div class="col-lg-9">
+  <div class="col-lg-9">
   <legend i18n
           class="cd-header">Host Details</legend>
   <cd-hosts [hiddenColumns]="['services', 'status']"
             [hideToolHeader]="true"
             [hasTableDetails]="false"
-            [showGeneralActionsOnly]="true">
-  </cd-hosts>
+            [showGeneralActionsOnly]="true"
+            [showExpandClusterBtn]="false">
+    </cd-hosts>
+  </div>
 </div>
-</div>
+<ng-template #simpleDeploymentTextTpl>
+  <tr>
+    <td>
+      <dl>
+        <dt>
+          <p i18n>Storage Capacity</p>
+        </dt>
+        <dd>
+          <p i18n>{{deploymentDescText}}</p>
+        </dd>
+      </dl>
+    </td>
+  </tr>
+</ng-template>

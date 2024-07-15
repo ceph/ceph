@@ -3454,7 +3454,7 @@ struct [[nodiscard]] value_or_errc
 
     constexpr value_or_errc(value_or_errc && other) noexcept
     {
-        if (other.is_value()) {
+        if (other.success()) {
             if constexpr (!std::is_void_v<Type>) {
                 if constexpr (!std::is_reference_v<Type>) {
                     ::new (std::addressof(m_return_value))

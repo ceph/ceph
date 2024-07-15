@@ -287,8 +287,7 @@ ceph-volume:
   - src/python-common/ceph/deployment/drive_selection/**
 
 tests:
-  - qa/tasks/**
-  - qa/workunits/**
+  - qa/**
   - src/test/**
 
 nfs:
@@ -323,3 +322,8 @@ telemetry:
   - qa/workunits/test_telemetry_quincy_x.sh
   - src/pybind/mgr/telemetry/**
   - src/telemetry/**
+
+script:
+  - src/script/**
+  - admin/**
+  - doc/scripts/**

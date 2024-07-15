@@ -56,6 +56,7 @@ protected:
     delete old_engine;
     delete kv_engine;
     delete transit_engine;
+    delete cct;
   }
 
 };

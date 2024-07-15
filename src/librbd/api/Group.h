@@ -21,6 +21,8 @@ struct Group {
   static int create(librados::IoCtx& io_ctx, const char *group_name);
   static int remove(librados::IoCtx& io_ctx, const char *group_name);
   static int list(librados::IoCtx& io_ctx, std::vector<std::string> *names);
+  static int get_id(librados::IoCtx& io_ctx, const char *group_name,
+                    std::string *group_id);
   static int rename(librados::IoCtx& io_ctx, const char *src_group_name,
                     const char *dest_group_name);
 

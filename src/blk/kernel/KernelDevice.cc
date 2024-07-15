@@ -591,7 +591,7 @@ void KernelDevice::discard_drain()
 {
   dout(10) << __func__ << dendl;
   std::unique_lock l(discard_lock);
-  while (!discard_queued.empty() || discard_running) {
+  while (!discard_queued.empty() || (discard_running > 0)) {
     discard_cond.wait(l);
   }
 }
@@ -731,6 +731,12 @@ void KernelDevice::_aio_thread()
   dout(10) << __func__ << " end" << dendl;
 }
 
+void KernelDevice::swap_discard_queued(interval_set<uint64_t>& other)
+{
+  std::unique_lock l(discard_lock);
+  discard_queued.swap(other);
+}
+
 void KernelDevice::_discard_thread(uint64_t tid)
 {
   dout(10) << __func__ << " thread " << tid << " start" << dendl;
@@ -755,13 +761,21 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
-      // Swap the queued discards for a local list we'll process here
-      // without caring about thread fairness.  This allows the current
-      // thread to wait on the discard running while other threads pick
-      // up the next-in-queue, and do the same, ultimately issuing more
-      // discards in parallel, which is the goal.
-      discard_processing.swap(discard_queued);
-      discard_running = true;
+      // Limit local processing to MAX_LOCAL_DISCARD items.
+      // This will allow threads to work in parallel
+      //      instead of a single thread taking over the whole discard_queued.
+      // It will also allow threads to finish in a timely manner.
+      constexpr unsigned MAX_LOCAL_DISCARD = 32;
+      unsigned count = 0;
+      for (auto p = discard_queued.begin();
+	   p != discard_queued.end() && count < MAX_LOCAL_DISCARD;
+	   ++p, ++count) {
+	discard_processing.insert(p.get_start(), p.get_len());
+	discard_queued.erase(p);
+      }
+
+      // there are multiple active threads -> must use a counter instead of a flag
+      discard_running ++;
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
       for (auto p = discard_processing.begin(); p != discard_processing.end(); ++p) {
@@ -771,7 +785,8 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_callback(discard_callback_priv, static_cast<void*>(&discard_processing));
       discard_processing.clear();
       l.lock();
-      discard_running = false;
+      discard_running --;
+      ceph_assert(discard_running >= 0);
     }
   }
 
@@ -1116,8 +1131,8 @@ int KernelDevice::_discard(uint64_t offset, uint64_t len)
     return 0;
   }
   dout(10) << __func__
-	   << " 0x" << std::hex << offset << "~" << len << std::dec
-	   << dendl;
+           << " 0x" << std::hex << offset << "~" << len << std::dec
+           << dendl;
   r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
   return r;
 }

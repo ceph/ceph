@@ -110,107 +110,8 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
   return next->create(dpp, params, y);
 }
 
-int D4NFilterObject::copy_object(const ACLOwner& owner,
-                              const rgw_user& remote_user,
-                              req_info* info,
-                              const rgw_zone_id& source_zone,
-                              rgw::sal::Object* dest_object,
-                              rgw::sal::Bucket* dest_bucket,
-                              rgw::sal::Bucket* src_bucket,
-                              const rgw_placement_rule& dest_placement,
-                              ceph::real_time* src_mtime,
-                              ceph::real_time* mtime,
-                              const ceph::real_time* mod_ptr,
-                              const ceph::real_time* unmod_ptr,
-                              bool high_precision_time,
-                              const char* if_match,
-                              const char* if_nomatch,
-                              AttrsMod attrs_mod,
-                              bool copy_if_newer,
-                              Attrs& attrs,
-                              RGWObjCategory category,
-                              uint64_t olh_epoch,
-                              boost::optional<ceph::real_time> delete_at,
-                              std::string* version_id,
-                              std::string* tag,
-                              std::string* etag,
-                              void (*progress_cb)(off_t, void *),
-                              void* progress_data,
-                              const DoutPrefixProvider* dpp,
-                              optional_yield y)
-{
-  rgw::d4n::CacheObj obj = rgw::d4n::CacheObj{
-                                 .objName = this->get_key().get_oid(),
-                                 .bucketName = src_bucket->get_name()
-                               };
-
-  if (driver->get_obj_dir()->copy(&obj, dest_object->get_name(), dest_bucket->get_name(), y) < 0) 
-    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory copy method failed." << dendl;
-
-  /* Append additional metadata to attributes */
-  rgw::sal::Attrs baseAttrs = this->get_attrs();
-  buffer::list bl;
-
-  bl.append(to_iso_8601(*mtime));
-  baseAttrs.insert({"mtime", bl});
-  bl.clear();
-  
-  if (version_id != NULL) { 
-    bl.append(*version_id);
-    baseAttrs.insert({"version_id", bl});
-    bl.clear();
-  }
- 
-  if (!etag->empty()) {
-    bl.append(*etag);
-    baseAttrs.insert({"etag", bl});
-    bl.clear();
-  }
-
-  if (attrs_mod == rgw::sal::ATTRSMOD_REPLACE) { /* Replace */
-    rgw::sal::Attrs::iterator iter;
-
-    for (const auto& pair : attrs) {
-      iter = baseAttrs.find(pair.first);
-    
-      if (iter != baseAttrs.end()) {
-        iter->second = pair.second;
-      } else {
-        baseAttrs.insert({pair.first, pair.second});
-      }
-    }
-  } else if (attrs_mod == rgw::sal::ATTRSMOD_MERGE) { /* Merge */
-    baseAttrs.insert(attrs.begin(), attrs.end()); 
-  }
-
-  /*
-  int copy_attrsReturn = driver->get_cache_driver()->copy_attrs(this->get_key().get_oid(), dest_object->get_key().get_oid(), &baseAttrs);
-
-  if (copy_attrsReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache copy attributes operation failed." << dendl;
-  } else {
-    int copy_dataReturn = driver->get_cache_driver()->copy_data(this->get_key().get_oid(), dest_object->get_key().get_oid());
-
-    if (copy_dataReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy data operation failed." << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation succeeded." << dendl;
-    }
-  }*/
-
-  return next->copy_object(owner, remote_user, info, source_zone,
-                           nextObject(dest_object),
-                           nextBucket(dest_bucket),
-                           nextBucket(src_bucket),
-                           dest_placement, src_mtime, mtime,
-                           mod_ptr, unmod_ptr, high_precision_time, if_match,
-                           if_nomatch, attrs_mod, copy_if_newer, attrs,
-                           category, olh_epoch, delete_at, version_id, tag,
-                           etag, progress_cb, progress_data, dpp, y);
-}
-
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y) 
+                            Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   if (setattrs != NULL) {
     /* Ensure setattrs and delattrs do not overlap */
@@ -241,7 +142,7 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver delete_attrs method failed." << dendl;
   }
 
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y);  
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -255,28 +156,29 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
   } else {
     /* Set metadata locally */
     RGWQuotaInfo quota_info;
-    RGWObjState* astate;
-    this->get_obj_state(dpp, &astate, y);
+    this->load_obj_state(dpp, y);
 
     for (auto it = attrs.begin(); it != attrs.end(); ++it) {
       if (it->second.length() > 0) {
 	if (it->first == "mtime") {
-	  parse_time(it->second.c_str(), &astate->mtime);
+	  ceph::real_time mtime;
+	  parse_time(it->second.c_str(), &mtime);
+	  this->set_mtime(mtime);
 	  attrs.erase(it->first);
 	} else if (it->first == "object_size") {
 	  this->set_obj_size(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
 	} else if (it->first == "accounted_size") {
-	  astate->accounted_size = std::stoull(it->second.c_str());
+	  this->set_accounted_size(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
 	} else if (it->first == "epoch") {
-	  astate->epoch = std::stoull(it->second.c_str());
+	  this->set_epoch(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
 	} else if (it->first == "version_id") {
 	  this->set_instance(it->second.c_str());
 	  attrs.erase(it->first);
 	} else if (it->first == "this_zone_short_id") {
-	  astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second.c_str()));
+	  this->set_short_zone_id(static_cast<uint32_t>(std::stoul(it->second.c_str())));
 	  attrs.erase(it->first);
 	} else if (it->first == "user_quota.max_size") {
 	  quota_info.max_size = std::stoull(it->second.c_str());
@@ -293,8 +195,6 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
       }
     }
 
-    this->set_obj_state(*astate);
-   
     /* Set attributes locally */
     if (this->set_attrs(attrs) < 0) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): D4NFilterObject set_attrs method failed." << dendl;
@@ -390,29 +290,29 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): CacheDriver get_attrs method failed." << dendl;
   } else {
     /* Set metadata locally */
-    RGWObjState* astate;
     RGWQuotaInfo quota_info;
-    source->get_obj_state(dpp, &astate, y);
+    source->load_obj_state(dpp, y);
 
     for (auto& attr : attrs) {
       if (attr.second.length() > 0) {
 	if (attr.first == "mtime") {
-	  parse_time(attr.second.c_str(), &astate->mtime);
-	  attrs.erase(attr.first);
+	  ceph::real_time mtime;
+	  parse_time(attr.second.c_str(), &mtime);
+	  source->set_mtime(mtime);
 	} else if (attr.first == "object_size") {
 	  source->set_obj_size(std::stoull(attr.second.c_str()));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "accounted_size") {
-	  astate->accounted_size = std::stoull(attr.second.c_str());
+	  source->set_accounted_size(std::stoull(attr.second.c_str()));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "epoch") {
-	  astate->epoch = std::stoull(attr.second.c_str());
+	  source->set_epoch(std::stoull(attr.second.c_str()));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "version_id") {
 	  source->set_instance(attr.second.c_str());
 	  attrs.erase(attr.first);
 	} else if (attr.first == "source_zone_short_id") {
-	  astate->zone_short_id = static_cast<uint32_t>(std::stoul(attr.second.c_str()));
+	  source->set_short_zone_id(static_cast<uint32_t>(std::stoul(attr.second.c_str())));
 	  attrs.erase(attr.first);
 	} else if (attr.first == "user_quota.max_size") {
 	  quota_info.max_size = std::stoull(attr.second.c_str());
@@ -426,7 +326,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 	  ldpp_dout(dpp, 20) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): Unexpected attribute; not locally set." << dendl;
 	}
       }
-    source->set_obj_state(*astate);
    
     /* Set attributes locally */
     if (source->set_attrs(attrs) < 0)
@@ -435,14 +334,12 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   }
 
   //versioned objects have instance set to versionId, and get_oid() returns oid containing instance, hence using id tag as version for non versioned objects only
-  if (! this->source->have_instance()) {
-    RGWObjState* state = nullptr;
-    if (this->source->get_obj_state(dpp, &state, y) == 0) {
-      auto it = state->attrset.find(RGW_ATTR_ID_TAG);
-      if (it != state->attrset.end()) {
-        bufferlist bl = it->second;
-        this->source->set_object_version(bl.c_str());
-        ldpp_dout(dpp, 20) << __func__ << "id tag version is: " << this->source->get_object_version() << dendl;
+  if (! source->have_instance()) {
+    if (source->load_obj_state(dpp, y) == 0) {
+      bufferlist bl;
+      if (source->get_attr(RGW_ATTR_ID_TAG, bl)) {
+        source->set_object_version(bl.c_str());
+        ldpp_dout(dpp, 20) << __func__ << "id tag version is: " << source->get_object_version() << dendl;
       } else {
         ldpp_dout(dpp, 20) << __func__ << "Failed to find id tag" << dendl;
       }
@@ -914,6 +811,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -933,7 +831,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(save_dpp, 10) << "D4NFilterWriter::" << __func__ << "(): ObjectDirectory set method failed." << dendl;
    
   /* Retrieve complete set of attrs */
-  int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+  int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, rctx, flags);
   obj->get_obj_attrs(rctx.y, save_dpp, NULL);
@@ -942,14 +840,13 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   rgw::sal::Attrs baseAttrs = obj->get_attrs();
   rgw::sal::Attrs attrs_temp = baseAttrs;
   buffer::list bl;
-  RGWObjState* astate;
-  obj->get_obj_state(save_dpp, &astate, rctx.y);
+  obj->load_obj_state(save_dpp, rctx.y);
 
   bl.append(to_iso_8601(obj->get_mtime()));
   baseAttrs.insert({"mtime", bl});
   bl.clear();
 
-  bl.append(std::to_string(obj->get_obj_size()));
+  bl.append(std::to_string(obj->get_size()));
   baseAttrs.insert({"object_size", bl});
   bl.clear();
 
@@ -957,7 +854,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   baseAttrs.insert({"accounted_size", bl});
   bl.clear();
  
-  bl.append(std::to_string(astate->epoch));
+  bl.append(std::to_string(obj->get_epoch()));
   baseAttrs.insert({"epoch", bl});
   bl.clear();
 
@@ -973,7 +870,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   auto iter = attrs_temp.find(RGW_ATTR_SOURCE_ZONE);
   if (iter != attrs_temp.end()) {
-    bl.append(std::to_string(astate->zone_short_id));
+    bl.append(std::to_string(obj->get_short_zone_id()));
     baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   } else {

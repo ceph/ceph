@@ -3,24 +3,37 @@ from io import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra import run
 
+import logging
 import os
 import time
-import logging
 log = logging.getLogger(__name__)
 
+DIRFRAG_KILLPOINTS = [
+  # (killpoint, rank), assuming rank=1 is auth
+  (1, 1),
+  (2, 0),
+  (3, 0),
+  (4, 1),
+  (5, 1),
+  (6, 1),
+  (7, 1),
+  (8, 1),
+  (9, 1),
+  (10, 1),
+]
 
 class TestFragmentation(CephFSTestCase):
     CLIENTS_REQUIRED = 1
-    MDSS_REQUIRED = 1
+    MDSS_REQUIRED = 3
 
-    def get_splits(self):
-        return self.fs.mds_asok(['perf', 'dump', 'mds'])['mds']['dir_split']
+    def get_splits(self, rank=0):
+        return self.fs.rank_asok(['perf', 'dump', 'mds'], rank=rank)['mds']['dir_split']
 
-    def get_merges(self):
-        return self.fs.mds_asok(['perf', 'dump', 'mds'])['mds']['dir_merge']
+    def get_merges(self, rank=0):
+        return self.fs.rank_asok(['perf', 'dump', 'mds'], rank=rank)['mds']['dir_merge']
 
-    def get_dir_ino(self, path):
-        dir_cache = self.fs.read_cache(path, 0)
+    def get_dir_ino(self, path, rank=0):
+        dir_cache = self.fs.read_cache(path, 0, rank=rank)
         dir_ino = None
         dir_inono = self.mount_a.path_to_ino(path.strip("/"))
         for ino in dir_cache:
@@ -32,17 +45,13 @@ class TestFragmentation(CephFSTestCase):
 
     def _configure(self, **kwargs):
         """
-        Apply kwargs as MDS configuration settings, enable dirfrags
-        and restart the MDSs.
+        Apply kwargs as MDS configuration settings.
         """
 
         for k, v in kwargs.items():
-            self.ceph_cluster.set_ceph_conf("mds", k, v.__str__())
+            self.config_set('mds', k.__str__(), v.__str__())
 
-        self.mds_cluster.mds_fail_restart()
-        self.fs.wait_for_daemons()
-
-    def test_oversize(self):
+    def _test_oversize(self, killpoint=None):
         """
         That a directory is split when it becomes too large.
         """
@@ -50,40 +59,83 @@ class TestFragmentation(CephFSTestCase):
         split_size = 20
         merge_size = 5
 
-        self._configure(
-            mds_bal_split_size=split_size,
-            mds_bal_merge_size=merge_size,
-            mds_bal_split_bits=1
-        )
+        self.fs.set_max_mds(3)
+        status = self.fs.wait_for_daemons()
 
-        self.assertEqual(self.get_splits(), 0)
+        confs = {
+            'mds_bal_split_size': split_size,
+            'mds_bal_merge_size': merge_size,
+            'mds_bal_split_bits': 1,
+        }
+        self._configure(**confs)
+        if killpoint is not None:
+            log.info(f"testing killpoint {killpoint}")
+            kill_rank = next(filter(lambda k: k[0] == killpoint, DIRFRAG_KILLPOINTS))[1]
+            self.fs.set_config('mds_kill_dirfrag_at', str(killpoint), rank=kill_rank)
 
-        self.mount_a.create_n_files("splitdir/file", split_size + 1)
+        # In order to exercise MMDSFragmentNotify, we need 3 MDS with 3 nested
+        # subtrees. Also, all MDS need to have splitdir replicated, use
+        # subtrees for bottom{0,2} below to effect that.
+        subtrees = []
+        self.mount_a.run_shell_payload("mkdir -p top/splitdir/bottom{0,2}/placeholder")
+        self.mount_a.setfattr("top", "ceph.dir.pin", 2)
+        subtrees.append(('/top', 2))
+        self.mount_a.setfattr("top/splitdir/bottom0", "ceph.dir.pin", 0)
+        subtrees.append(('/top/splitdir/bottom0', 0))
+        self._wait_subtrees(subtrees, status=status, rank=2)
+        self.mount_a.create_n_files("top/splitdir/file", split_size-2) # -2 because bottom{0,2} exist
+        self.mount_a.setfattr("top/splitdir", "ceph.dir.pin", 1)
+        subtrees.append(('/top/splitdir', 1))
+        self.mount_a.setfattr("top/splitdir/bottom2", "ceph.dir.pin", 2)
+        subtrees.append(('/top/splitdir/bottom2', 2))
+        self._wait_subtrees(subtrees, status=status, rank=1)
+        self.assertEqual(self.get_splits(rank=1), 0)
+        dir_cache = self.fs.read_cache("top/", rank=1)
+        log.info(f"splitdir = {dir_cache}")
+
+        # create the final dentry to trigger split
+        self.mount_a.run_shell_payload("touch top/splitdir/fileN")
+
+        if killpoint is not None:
+            kill_rank = next(filter(lambda k: k[0] == killpoint, DIRFRAG_KILLPOINTS))[1]
+            self.fs.wait_for_death(timeout=60, status=status, rank=kill_rank)
+            rinfo = self.fs.get_rank(rank=kill_rank, status=status)
+            self.delete_mds_coredump(rinfo['name'])
 
         self.wait_until_true(
-            lambda: self.get_splits() == 1,
+            lambda: self.get_splits(rank=1) >= 1,
             timeout=30
         )
 
-        frags = self.get_dir_ino("/splitdir")['dirfrags']
+        self.wait_until_true(
+            lambda: len(self.get_dir_ino("/top/splitdir", rank=1)['dirfrags']) == 2,
+            timeout=30
+        )
+
+        ino = self.mount_a.path_to_ino("top/splitdir")
+        ino = "0x{:x}".format(ino)
+        frags = self.get_dir_ino("/top/splitdir", rank=1)['dirfrags']
         self.assertEqual(len(frags), 2)
-        self.assertEqual(frags[0]['dirfrag'], "0x10000000000.0*")
-        self.assertEqual(frags[1]['dirfrag'], "0x10000000000.1*")
+        self.assertEqual(frags[0]['dirfrag'], ino+".0*")
+        self.assertEqual(frags[1]['dirfrag'], ino+".1*")
         self.assertEqual(
             sum([len(f['dentries']) for f in frags]),
             split_size + 1
         )
 
-        self.assertEqual(self.get_merges(), 0)
+        self.assertEqual(self.get_merges(rank=1), 0)
 
-        self.mount_a.run_shell(["rm", "-f", run.Raw("splitdir/file*")])
+        self.mount_a.run_shell_payload("rm -f top/splitdir/file*")
 
         self.wait_until_true(
-            lambda: self.get_merges() == 1,
+            lambda: self.get_merges(rank=1) == 1,
             timeout=30
         )
 
-        self.assertEqual(len(self.get_dir_ino("/splitdir")["dirfrags"]), 1)
+        self.assertEqual(len(self.get_dir_ino("/top/splitdir", rank=1)["dirfrags"]), 1)
+
+    def test_oversize(self):
+        self._test_oversize()
 
     def test_rapid_creation(self):
         """
@@ -356,3 +408,17 @@ class TestFragmentation(CephFSTestCase):
 
         self.assertEqual(self.get_merges(), 0)
         self.assertEqual(len(self.get_dir_ino("/splitdir")["dirfrags"]), 2)
+
+    def _run_dir_frag(self, killpoint):
+        self._test_oversize(killpoint=killpoint)
+
+def make_test_killpoints(killpoint):
+    def test_export_killpoints(self):
+        self.init = False
+        self._run_dir_frag(killpoint)
+        log.info("Test passed for killpoint %d" %killpoint)
+    return test_export_killpoints
+
+for (killpoint, rank) in DIRFRAG_KILLPOINTS:
+    test_export_killpoints = make_test_killpoints(killpoint)
+    setattr(TestFragmentation, "test_dirfrag_killpoints_%d" % (killpoint), test_export_killpoints)

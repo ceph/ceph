@@ -42,6 +42,7 @@ protected:
   // Serving a custom error page from an object is really a 200 response with
   // just the status line altered.
   int custom_http_ret = 0;
+  bool checksum_mode{false};
   std::map<std::string, std::string> crypt_http_responses;
   int override_range_hdr(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y);
 public:
@@ -302,6 +303,12 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   std::string get_current_filename() const override;
   std::string get_current_content_type() const override;
 
+  inline void put_prop(const std::string_view k, const std::string_view v) {
+    /* assume the caller will mangle the key name, if required */
+    auto& map = const_cast<env_map_t&>(s->info.env->get_map());
+    map.insert(env_map_t::value_type(k, v));
+  }
+
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() override {}
@@ -518,8 +525,8 @@ public:
   void send_status() override;
   void begin_response() override;
   void send_partial_response(const rgw_obj_key& key, bool delete_marker,
-                             const std::string& marker_version_id, int ret,
-                             boost::asio::deadline_timer *formatter_flush_cond) override;
+                             const std::string& marker_version_id,
+                             int ret) override;
   void end_response() override;
 };
 

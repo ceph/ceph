@@ -127,7 +127,7 @@ public:
     const cmdmap_t& cmdmap,
     Formatter *f,
     const bufferlist& inbl,
-    std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
+    asok_finisher on_finish) override {
     mds->asok_command(command, cmdmap, f, inbl, on_finish);
   }
 };
@@ -137,7 +137,7 @@ void MDSDaemon::asok_command(
   const cmdmap_t& cmdmap,
   Formatter *f,
   const bufferlist& inbl,
-  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+  asok_finisher on_finish)
 {
   dout(1) << "asok_command: " << command << " " << cmdmap
 	  << " (starting...)" << dendl;
@@ -366,6 +366,7 @@ void MDSDaemon::set_up_admin_socket()
                                      " name=ap_dont_block,type=CephBool,req=false"
                                      " name=ap_freeze,type=CephBool,req=false"
                                      " name=await,type=CephBool,req=false"
+                                     " name=lifetime,type=CephFloat,req=false"
 				     ,asok_hook
 				     ,"lock a path");
   ceph_assert(r == 0);
@@ -375,7 +376,7 @@ void MDSDaemon::set_up_admin_socket()
   ceph_assert(r == 0);
   r = admin_socket->register_command("quiesce path"
                                      " name=path,type=CephString,req=true"
-                                     " name=wait,type=CephBool,req=false"
+                                     " name=await,type=CephBool,req=false"
 				     ,asok_hook
 				     ,"quiesce a subtree");
   ceph_assert(r == 0);
@@ -407,11 +408,11 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "List client sessions based on a filter");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session evict name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("session evict name=filters,type=CephString,n=N,req=true",
 				     asok_hook,
 				     "Evict client session(s) based on a filter");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("client evict name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("client evict name=filters,type=CephString,n=N,req=true",
 				     asok_hook,
 				     "Evict client session(s) based on a filter");
   ceph_assert(r == 0);

@@ -635,6 +635,8 @@ paths:
                 force:
                   default: false
                   type: boolean
+                image_mirror_mode:
+                  type: string
                 metadata:
                   type: string
                 mirror_mode:
@@ -3114,6 +3116,55 @@ paths:
       - jwt: []
       tags:
       - Cephfs
+  /api/cephfs/{fs_id}/rename-path:
+    put:
+      description: "\n        Rename a file or directory.\n        :param fs_id: The\
+        \ filesystem identifier.\n        :param src_path: The path to the existing\
+        \ file or directory.\n        :param dst_path: The new name of the file or\
+        \ directory.\n        "
+      parameters:
+      - in: path
+        name: fs_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                dst_path:
+                  type: string
+                src_path:
+                  type: string
+              required:
+              - src_path
+              - dst_path
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Cephfs
   /api/cephfs/{fs_id}/snapshot:
     delete:
       description: "\n        Remove a snapshot.\n        :param fs_id: The filesystem\
@@ -4204,11 +4255,15 @@ paths:
                   type: string
                 name:
                   type: string
+                pool_type:
+                  default: replication
+                  type: string
+                profile:
+                  type: string
                 root:
                   type: string
               required:
               - name
-              - root
               - failure_domain
               type: object
       responses:
@@ -4916,6 +4971,28 @@ paths:
       - jwt: []
       tags:
       - Health
+  /api/health/get_telemetry_status:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Health
   /api/health/minimal:
     get:
       parameters: []
@@ -4984,6 +5061,9 @@ paths:
                               description: ''
                               properties:
                                 balancer:
+                                  description: ''
+                                  type: string
+                                btime:
                                   description: ''
                                   type: string
                                 compat:
@@ -5105,6 +5185,7 @@ paths:
                               - failed
                               - metadata_pool
                               - epoch
+                              - btime
                               - stopped
                               - max_mds
                               - compat
@@ -7222,11 +7303,19 @@ paths:
               properties:
                 cluster_alias:
                   type: string
+                name:
+                  type: string
+                ssl_certificate:
+                  type: string
                 url:
                   type: string
                 username:
                   type: string
+                verify:
+                  default: false
+                  type: boolean
               required:
+              - name
               - url
               - cluster_alias
               - username
@@ -10246,6 +10335,8 @@ paths:
                   type: string
                 flags:
                   type: string
+                rbd_mirroring:
+                  type: string
               type: object
       responses:
         '200':
@@ -10586,6 +10677,9 @@ paths:
                   type: string
                 placement_target:
                   type: string
+                replication:
+                  default: 'false'
+                  type: string
                 tags:
                   type: string
                 uid:
@@ -10892,6 +10986,8 @@ paths:
                   type: string
                 key_id:
                   type: string
+                lifecycle:
+                  type: string
                 lock_mode:
                   type: string
                 lock_retention_period_days:
@@ -10903,6 +10999,8 @@ paths:
                 mfa_token_pin:
                   type: string
                 mfa_token_serial:
+                  type: string
+                replication:
                   type: string
                 tags:
                   type: string
@@ -11058,6 +11156,427 @@ paths:
       - jwt: []
       tags:
       - RgwDaemon
+  /api/rgw/multisite/sync-flow:
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                bucket_name:
+                  default: ''
+                  type: string
+                destination_zone:
+                  default: ''
+                  type: string
+                flow_id:
+                  type: string
+                flow_type:
+                  type: string
+                group_id:
+                  type: string
+                source_zone:
+                  default: ''
+                  type: string
+                zones:
+                  type: string
+              required:
+              - flow_id
+              - flow_type
+              - group_id
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create or update the sync flow
+      tags:
+      - RgwMultisite
+  /api/rgw/multisite/sync-flow/{flow_id}/{flow_type}/{group_id}:
+    delete:
+      parameters:
+      - in: path
+        name: flow_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: flow_type
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: group_id
+        required: true
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: source_zone
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: destination_zone
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: zones
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: bucket_name
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Remove the sync flow
+      tags:
+      - RgwMultisite
+  /api/rgw/multisite/sync-pipe:
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                bucket_name:
+                  default: ''
+                  type: string
+                destination_buckets:
+                  type: string
+                destination_zones:
+                  type: string
+                group_id:
+                  type: string
+                pipe_id:
+                  type: string
+                source_zones:
+                  type: string
+              required:
+              - group_id
+              - pipe_id
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create or update the sync pipe
+      tags:
+      - RgwMultisite
+  /api/rgw/multisite/sync-pipe/{group_id}/{pipe_id}:
+    delete:
+      parameters:
+      - in: path
+        name: group_id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: pipe_id
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: source_zones
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: destination_zones
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: destination_buckets
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: bucket_name
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Remove the sync pipe
+      tags:
+      - RgwMultisite
+  /api/rgw/multisite/sync-policy:
+    get:
+      parameters:
+      - default: ''
+        in: query
+        name: bucket_name
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: zonegroup_name
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: all_policy
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the sync policy
+      tags:
+      - RgwMultisite
+  /api/rgw/multisite/sync-policy-group:
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                bucket_name:
+                  default: ''
+                  type: string
+                group_id:
+                  type: string
+                status:
+                  type: string
+              required:
+              - group_id
+              - status
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create the sync policy group
+      tags:
+      - RgwMultisite
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                bucket_name:
+                  default: ''
+                  type: string
+                group_id:
+                  type: string
+                status:
+                  type: string
+              required:
+              - group_id
+              - status
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Update the sync policy group
+      tags:
+      - RgwMultisite
+  /api/rgw/multisite/sync-policy-group/{group_id}:
+    delete:
+      parameters:
+      - in: path
+        name: group_id
+        required: true
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: bucket_name
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Remove the sync policy group
+      tags:
+      - RgwMultisite
+    get:
+      parameters:
+      - in: path
+        name: group_id
+        required: true
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: bucket_name
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the sync policy group
+      tags:
+      - RgwMultisite
   /api/rgw/multisite/sync_status:
     get:
       parameters: []
@@ -11078,6 +11597,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get the sync status
       tags:
       - RgwMultisite
   /api/rgw/realm:
@@ -11205,7 +11725,6 @@ paths:
               - realm_token
               - zone_name
               - port
-              - placement_spec
               type: object
       responses:
         '201':

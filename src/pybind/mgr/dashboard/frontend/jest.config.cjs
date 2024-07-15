@@ -20,7 +20,8 @@ const jestConfig = {
   globalSetup: 'jest-preset-angular/global-setup',
   moduleNameMapper: {
     '\\.scss$': 'identity-obj-proxy',
-    '~/(.*)$': '<rootDir>/src/$1'
+    '~/(.*)$': '<rootDir>/src/$1',
+    '^@carbon/icons/es/(.*)$': '@carbon/icons/lib/$1.js',
   },
   moduleFileExtensions: ['ts', 'html', 'js', 'json', 'mjs', 'cjs'],
   preset: 'jest-preset-angular',
@@ -32,7 +33,7 @@ const jestConfig = {
   },
   setupFiles: ['jest-canvas-mock'],
   coverageReporters: ['cobertura', 'html'],
-  modulePathIgnorePatterns: ['<rootDir>/coverage/', '<rootDir>/node_modules/simplebar-angular'],
+  modulePathIgnorePatterns: ['<rootDir>/coverage/', '<rootDir>/node_modules/simplebar-angular', '<rootDir>/cypress'],
   testMatch: ['**/*.spec.ts'],
   testRunner: 'jest-jasmine2'
 };

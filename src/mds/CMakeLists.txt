@@ -45,13 +45,12 @@ set(mds_srcs
   QuiesceDbManager.cc
   QuiesceAgent.cc
   MDSRankQuiesce.cc
-  BoostUrlImpl.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/MDSPerfMetricTypes.cc)
 add_library(mds STATIC ${mds_srcs})
 target_link_libraries(mds PRIVATE
-  legacy-option-headers
+  legacy-option-headers Boost::url
   heap_profiler cpu_profiler osdc ${LUA_LIBRARIES})
 target_include_directories(mds PRIVATE "${LUA_INCLUDE_DIR}")

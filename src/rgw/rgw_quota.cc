@@ -358,6 +358,21 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
 
     void *entry() override {
       ldout(cct, 20) << "BucketsSyncThread: start" << dendl;
+
+      // rgw_reshard_debug_interval is a DEV level configuration
+      // option, so we can assume it won't change while the RGW server
+      // is running, so we'll handle it once before we loop
+      double sync_interval_factor = 1.0;
+      const int64_t debug_interval = cct->_conf->rgw_reshard_debug_interval;
+      if (debug_interval >= 1) {
+	  constexpr double secs_per_day = 60 * 60 * 24;
+	  sync_interval_factor = debug_interval / secs_per_day;
+
+	  ldout(cct, 0) << "DEBUG: since the rgw_reshard_debug_interval is set at " <<
+	    debug_interval << " the rgw_user_quota_bucket_sync_interval will be "
+	    "multiplied by a factor of " << sync_interval_factor << dendl;
+      }
+
       do {
         map<rgw_bucket, rgw_owner> buckets;
 
@@ -372,14 +387,20 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
           }
         }
 
-        if (stats->going_down())
+        if (stats->going_down()) {
           break;
+	}
 
+	uint64_t wait_secs = cct->_conf->rgw_user_quota_bucket_sync_interval;
+	wait_secs = std::max(uint64_t(1),
+			     uint64_t(wait_secs * sync_interval_factor));
+
+	// note: this will likely wait for the intended period of
+	// time, but could wait for less
 	std::unique_lock locker{lock};
-	cond.wait_for(
-          locker,
-          std::chrono::seconds(cct->_conf->rgw_user_quota_bucket_sync_interval));
+	cond.wait_for(locker, std::chrono::seconds(wait_secs));
       } while (!stats->going_down());
+
       ldout(cct, 20) << "BucketsSyncThread: done" << dendl;
 
       return NULL;
@@ -958,30 +979,7 @@ public:
     bucket_stats_cache.adjust_stats(owner, bucket, obj_delta, added_bytes, removed_bytes);
     owner_stats_cache.adjust_stats(owner, bucket, obj_delta, added_bytes, removed_bytes);
   }
-
-  void check_bucket_shards(const DoutPrefixProvider *dpp, uint64_t max_objs_per_shard,
-                           uint64_t num_shards, uint64_t num_objs, bool is_multisite,
-                           bool& need_resharding, uint32_t *suggested_num_shards) override
-  {
-    if (num_objs > num_shards * max_objs_per_shard) {
-      ldpp_dout(dpp, 0) << __func__ << ": resharding needed: stats.num_objects=" << num_objs
-             << " shard max_objects=" <<  max_objs_per_shard * num_shards << dendl;
-      need_resharding = true;
-      if (suggested_num_shards) {
-        uint32_t obj_multiplier = 2;
-        if (is_multisite) {
-          // if we're maintaining bilogs for multisite, reshards are significantly
-          // more expensive. scale up the shard count much faster to minimize the
-          // number of reshard events during a write workload
-          obj_multiplier = 8;
-        }
-        *suggested_num_shards = num_objs * obj_multiplier / max_objs_per_shard;
-      }
-    } else {
-      need_resharding = false;
-    }
-  }
-};
+}; // class RGWQuotaHandlerImpl
 
 
 RGWQuotaHandler *RGWQuotaHandler::generate_handler(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, bool quota_threads)

@@ -1,7 +1,6 @@
 """
 MDS admin socket scrubbing-related tests.
 """
-import json
 import logging
 import errno
 import time
@@ -177,6 +176,40 @@ done
 
         self._check_task_status_na()
 
+    def test_scrub_when_mds_is_inactive(self):
+        test_dir = "scrub_control_test_path"
+        abs_test_path = f"/{test_dir}"
+
+        self.create_scrub_data(test_dir)
+
+        # allow standby-replay
+        self.fs.set_max_mds(1)
+        self.fs.set_allow_standby_replay(True)
+        status = self.fs.wait_for_daemons()
+        sr_mds_id = self.fs.get_daemon_names('up:standby-replay', status=status)[0]
+
+        # start the scrub and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 
+                              'start', abs_test_path, 'recursive')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+        # pause and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 'pause')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        
+        # abort and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 'abort')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        
+        # resume and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 'resume')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+
 class TestScrubChecks(CephFSTestCase):
     """
     Run flush and scrub commands on the specified files in the filesystem. This
@@ -227,7 +260,7 @@ class TestScrubChecks(CephFSTestCase):
         success_validator = lambda j, r: self.json_validator(j, r, "return_code", 0)
 
         nep = "{test_path}/i/dont/exist".format(test_path=abs_test_path)
-        self.asok_command(mds_rank, "flush_path {nep}".format(nep=nep),
+        self.tell_command(mds_rank, "flush_path {nep}".format(nep=nep),
                           lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
         self.tell_command(mds_rank, "scrub start {nep}".format(nep=nep),
                           lambda j, r: self.json_validator(j, r, "return_code", -errno.ENOENT))
@@ -238,7 +271,7 @@ class TestScrubChecks(CephFSTestCase):
         if run_seq == 0:
             log.info("First run: flushing {dirpath}".format(dirpath=dirpath))
             command = "flush_path {dirpath}".format(dirpath=dirpath)
-            self.asok_command(mds_rank, command, success_validator)
+            self.tell_command(mds_rank, command, success_validator)
         command = "scrub start {dirpath}".format(dirpath=dirpath)
         self.tell_command(mds_rank, command, success_validator)
 
@@ -247,14 +280,14 @@ class TestScrubChecks(CephFSTestCase):
         if run_seq == 0:
             log.info("First run: flushing {filepath}".format(filepath=filepath))
             command = "flush_path {filepath}".format(filepath=filepath)
-            self.asok_command(mds_rank, command, success_validator)
+            self.tell_command(mds_rank, command, success_validator)
         command = "scrub start {filepath}".format(filepath=filepath)
         self.tell_command(mds_rank, command, success_validator)
 
         if run_seq == 0:
             log.info("First run: flushing base dir /")
             command = "flush_path /"
-            self.asok_command(mds_rank, command, success_validator)
+            self.tell_command(mds_rank, command, success_validator)
         command = "scrub start /"
         self.tell_command(mds_rank, command, success_validator)
 
@@ -263,7 +296,7 @@ class TestScrubChecks(CephFSTestCase):
                                                         i=run_seq)
         self.mount_a.run_shell(["mkdir", new_dir])
         command = "flush_path {dir}".format(dir=test_new_dir)
-        self.asok_command(mds_rank, command, success_validator)
+        self.tell_command(mds_rank, command, success_validator)
 
         new_file = "{repo_path}/new_file_{i}".format(repo_path=repo_path,
                                                      i=run_seq)
@@ -272,7 +305,7 @@ class TestScrubChecks(CephFSTestCase):
         self.mount_a.write_n_mb(new_file, 1)
 
         command = "flush_path {file}".format(file=test_new_file)
-        self.asok_command(mds_rank, command, success_validator)
+        self.tell_command(mds_rank, command, success_validator)
 
         # check that scrub fails on errors
         ino = self.mount_a.path_to_ino(new_file)
@@ -296,7 +329,7 @@ class TestScrubChecks(CephFSTestCase):
         self.assertTrue(_check_and_clear_damage(ino, "backtrace"));
 
         command = "flush_path /"
-        self.asok_command(mds_rank, command, success_validator)
+        self.tell_command(mds_rank, command, success_validator)
 
     def scrub_with_stray_evaluation(self, fs, mnt, path, flag, files=2000,
                                     _hard_links=3):
@@ -472,7 +505,7 @@ class TestScrubChecks(CephFSTestCase):
         log.info("Running command '{command}'".format(command=command))
 
         command_list = command.split()
-        jout = self.fs.rank_tell(command_list, rank=mds_rank)
+        jout = self.fs.rank_tell(command_list, rank=mds_rank, check_status=False)
 
         log.info("command '{command}' returned '{jout}'".format(
                      command=command, jout=jout))
@@ -480,33 +513,6 @@ class TestScrubChecks(CephFSTestCase):
         success, errstring = validator(jout, 0)
         if not success:
             raise AsokCommandFailedError(command, 0, jout, errstring)
-        return jout
-
-    def asok_command(self, mds_rank, command, validator):
-        log.info("Running command '{command}'".format(command=command))
-
-        command_list = command.split()
-
-        # we just assume there's an active mds for every rank
-        mds_id = self.fs.get_active_names()[mds_rank]
-        proc = self.fs.mon_manager.admin_socket('mds', mds_id,
-                                                command_list, check_status=False)
-        rout = proc.exitstatus
-        sout = proc.stdout.getvalue()
-
-        if sout.strip():
-            jout = json.loads(sout)
-        else:
-            jout = None
-
-        log.info("command '{command}' got response code '{rout}' and stdout '{sout}'".format(
-            command=command, rout=rout, sout=sout))
-
-        success, errstring = validator(jout, rout)
-
-        if not success:
-            raise AsokCommandFailedError(command, rout, jout, errstring)
-
         return jout
 
     @staticmethod

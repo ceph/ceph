@@ -244,6 +244,40 @@ void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
     std::chrono::duration_cast<seastar::lowres_clock::duration>(delay));
 }
 
+PG::interruptible_future<> PG::find_unfound(epoch_t epoch_started)
+{
+  if (!have_unfound()) {
+    return interruptor::now();
+  }
+  PeeringCtx rctx;
+  if (!peering_state.discover_all_missing(rctx)) {
+    if (peering_state.state_test(PG_STATE_BACKFILLING)) {
+      logger().debug(
+        "{} {} no luck, giving up on this pg for now (in backfill)",
+        *this, __func__);
+      std::ignore = get_shard_services().start_operation<LocalPeeringEvent>(
+        this,
+        get_pg_whoami(),
+        get_pgid(),
+        epoch_started,
+        epoch_started,
+        PeeringState::UnfoundBackfill());
+    } else if (peering_state.state_test(PG_STATE_RECOVERING)) {
+      logger().debug(
+        "{} {} no luck, giving up on this pg for now (in recovery)",
+        *this, __func__);
+      std::ignore = get_shard_services().start_operation<LocalPeeringEvent>(
+        this,
+        get_pg_whoami(),
+        get_pgid(),
+        epoch_started,
+        epoch_started,
+        PeeringState::UnfoundRecovery());
+    }
+  }
+  return get_shard_services().dispatch_context(get_collection_ref(), std::move(rctx));
+}
+
 void PG::recheck_readable()
 {
   bool changed = false;
@@ -534,20 +568,22 @@ void PG::on_active_actmap()
           const auto needs_pause = !snap_trimq.empty();
           return trim_snap(to_trim, needs_pause);
         }
-      ).finally([this] {
+      ).then_interruptible([this] {
         logger().debug("{}: PG::on_active_actmap() finished trimming",
                        *this);
         peering_state.state_clear(PG_STATE_SNAPTRIM);
         peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-        publish_stats_to_osd();
+        return seastar::now();
       });
     }, [this](std::exception_ptr eptr) {
       logger().debug("{}: snap trimming interrupted", *this);
-      peering_state.state_clear(PG_STATE_SNAPTRIM);
-    }, pg_ref);
+      ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
+    }, pg_ref).finally([pg_ref, this] {
+      publish_stats_to_osd();
+    });
   } else {
     logger().debug("{}: pg not clean, skipping snap trim");
-    assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
+    ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
   }
 }
 
@@ -1585,6 +1621,12 @@ void PG::on_change(ceph::os::Transaction &t) {
   }
   scrubber.on_interval_change();
   obc_registry.invalidate_on_interval_change();
+  // snap trim events are all going to be interrupted,
+  // clearing PG_STATE_SNAPTRIM/PG_STATE_SNAPTRIM_ERROR here
+  // is save and in time.
+  peering_state.state_clear(PG_STATE_SNAPTRIM);
+  peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+  snap_mapper.reset_backend();
 }
 
 void PG::context_registry_on_change() {

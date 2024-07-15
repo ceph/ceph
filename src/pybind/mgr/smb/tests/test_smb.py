@@ -39,11 +39,7 @@ def test_internal_apply_cluster(tmodule):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -58,11 +54,7 @@ def test_cluster_add_cluster_ls(tmodule):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -80,11 +72,7 @@ def test_internal_apply_cluster_and_share(tmodule):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -117,8 +105,7 @@ def test_internal_apply_remove_cluster(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -149,8 +136,7 @@ def test_internal_apply_remove_shares(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             },
@@ -230,8 +216,7 @@ def test_internal_apply_add_joinauth(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -262,8 +247,7 @@ def test_internal_apply_add_usergroups(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -296,13 +280,19 @@ def _example_cfg_1(tmodule):
                     'realm': 'dom1.example.com',
                     'join_sources': [
                         {
-                            'source_type': 'password',
-                            'auth': {
-                                'username': 'testadmin',
-                                'password': 'Passw0rd',
-                            },
+                            'source_type': 'resource',
+                            'ref': 'foo',
                         }
                     ],
+                },
+            },
+            'join_auths.foo': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
                 },
             },
             'shares.foo.s1': {
@@ -490,15 +480,24 @@ def test_cluster_create_ad1(tmodule):
     assert len(result.src.domain_settings.join_sources) == 1
     assert (
         result.src.domain_settings.join_sources[0].source_type
-        == smb.enums.JoinSourceType.PASSWORD
+        == smb.enums.JoinSourceType.RESOURCE
+    )
+    assert result.src.domain_settings.join_sources[0].ref.startswith('fizzle')
+    assert 'additional_results' in result.status
+    assert len(result.status['additional_results']) == 1
+    assert (
+        result.status['additional_results'][0]['resource']['resource_type']
+        == 'ceph.smb.join.auth'
     )
     assert (
-        result.src.domain_settings.join_sources[0].auth.username
-        == 'Administrator'
+        result.status['additional_results'][0]['resource'][
+            'linked_to_cluster'
+        ]
+        == 'fizzle'
     )
-    assert (
-        result.src.domain_settings.join_sources[0].auth.password == 'Passw0rd'
-    )
+    assert result.status['additional_results'][0]['resource'][
+        'auth_id'
+    ].startswith('fizzle')
 
 
 def test_cluster_create_ad2(tmodule):
@@ -554,6 +553,24 @@ def test_cluster_create_user1(tmodule):
     assert result.status['state'] == 'created'
     assert result.src.cluster_id == 'dizzle'
     assert len(result.src.user_group_settings) == 1
+
+
+def test_cluster_create_user2(tmodule):
+    _example_cfg_1(tmodule)
+
+    result = tmodule.cluster_create(
+        'dizzle',
+        smb.enums.AuthMode.USER,
+        define_user_pass=['alice%123letmein', 'bob%1n0wh4t1t15'],
+    )
+    assert result.success
+    assert result.status['state'] == 'created'
+    assert result.src.cluster_id == 'dizzle'
+    assert len(result.src.user_group_settings) == 1
+    assert (
+        result.src.user_group_settings[0].source_type
+        == smb.enums.UserGroupSourceType.RESOURCE
+    )
 
 
 def test_cluster_create_badpass(tmodule):
@@ -619,11 +636,8 @@ def test_cmd_show_resource_json(tmodule):
     "realm": "dom1.example.com",
     "join_sources": [
       {
-        "source_type": "password",
-        "auth": {
-          "username": "testadmin",
-          "password": "Passw0rd"
-        }
+        "source_type": "resource",
+        "ref": "foo"
       }
     ]
   }
@@ -649,9 +663,77 @@ intent: present
 domain_settings:
   realm: dom1.example.com
   join_sources:
-  - source_type: password
-    auth:
-      username: testadmin
-      password: Passw0rd
+  - source_type: resource
+    ref: foo
 """.strip()
     )
+
+
+def test_apply_invalid_res(tmodule):
+    result = tmodule.apply_resources(
+        """
+resource_type: ceph.smb.cluster
+cluster_id: ""
+auth_mode: doop
+"""
+    )
+    assert not result.success
+    assert 'doop' in result.to_simplified()['results'][0]['msg']
+
+
+def test_show_all(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show()
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 4
+    assert {r['resource_type'] for r in res} == {
+        'ceph.smb.cluster',
+        'ceph.smb.share',
+        'ceph.smb.join.auth',
+    }
+
+
+def test_show_shares(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share'])
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 2
+    assert {r['resource_type'] for r in res} == {
+        'ceph.smb.share',
+    }
+
+
+def test_show_shares_in_cluster(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share.foo'])
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 2
+    assert {r['resource_type'] for r in res} == {
+        'ceph.smb.share',
+    }
+    assert {r['cluster_id'] for r in res} == {'foo'}
+
+
+def test_show_specific_share(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share.foo.s1'])
+    assert 'resources' not in out
+    assert out['resource_type'] == 'ceph.smb.share'
+    assert out['cluster_id'] == 'foo'
+    assert out['share_id'] == 's1'
+
+
+def test_show_nomatches(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share.foo.whoops'])
+    assert 'resources' in out
+    assert out['resources'] == []
+
+
+def test_show_invalid_input(tmodule):
+    _example_cfg_1(tmodule)
+    with pytest.raises(smb.cli.InvalidInputValue):
+        tmodule.show(['ceph.smb.export'])

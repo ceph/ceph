@@ -6,10 +6,10 @@ export class LanguagePageHelper extends PageHelper {
   };
 
   getLanguageBtn() {
-    return cy.get('cd-language-selector a').first();
+    return cy.get('cd-language-selector cds-header-menu a').first();
   }
 
   getAllLanguages() {
-    return cy.get('cd-language-selector button');
+    return cy.get('cd-language-selector cds-header-menu cds-header-item');
   }
 }

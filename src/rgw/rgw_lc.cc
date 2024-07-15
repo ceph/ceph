@@ -514,8 +514,7 @@ static bool pass_size_limit_checks(const DoutPrefixProvider *dpp, lc_op_ctx& oc)
     auto& o = oc.o;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o.key);
 
-    RGWObjState *obj_state{nullptr};
-    ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
+    ret = obj->load_obj_state(dpp, null_yield, true);
     if (ret < 0) {
       return false;
     }
@@ -524,10 +523,10 @@ static bool pass_size_limit_checks(const DoutPrefixProvider *dpp, lc_op_ctx& oc)
     bool lt_p{true};
 
     if (op.size_gt) {
-      gt_p = (obj_state->size > op.size_gt.get());
+      gt_p = (obj->get_size() > op.size_gt.get());
     }
     if (op.size_lt) {
-      lt_p = (obj_state->size < op.size_lt.get());
+      lt_p = (obj->get_size() < op.size_lt.get());
     }
 
     return gt_p && lt_p;
@@ -538,6 +537,35 @@ static bool pass_size_limit_checks(const DoutPrefixProvider *dpp, lc_op_ctx& oc)
 
 static std::string lc_id = "rgw lifecycle";
 static std::string lc_req_id = "0";
+
+static void send_notification(const DoutPrefixProvider* dpp,
+                              rgw::sal::Driver* driver,
+                              rgw::sal::Object* obj,
+                              rgw::sal::Bucket* bucket,
+                              const std::string& etag,
+                              uint64_t size,
+                              const std::string& version_id,
+                              const rgw::notify::EventTypeList& event_types) {
+  // notification supported only for RADOS driver for now
+  auto notify = driver->get_notification(
+      dpp, obj, nullptr, event_types, bucket, lc_id,
+      const_cast<std::string&>(bucket->get_tenant()), lc_req_id, null_yield);
+
+  int ret = notify->publish_reserve(dpp, nullptr);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: notify publish_reserve failed, with error: "
+                      << ret << " for lc object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+    return;
+  }
+  ret = notify->publish_commit(dpp, size, ceph::real_clock::now(), etag,
+                               version_id);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed, with error: "
+                      << ret << " for lc object: " << obj->get_name()
+                      << " for event_types: " << event_types << dendl;
+  }
+}
 
 /* do all zones in the zone group process LC? */
 static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zone)
@@ -572,7 +600,6 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   auto& meta = o.meta;
   int ret;
   auto version_id = obj_key.instance; // deep copy, so not cleared below
-  std::unique_ptr<rgw::sal::Notification> notify;
 
   /* per discussion w/Daniel, Casey,and Eric, we *do need*
    * a new sal object handle, based on the following decision
@@ -585,16 +612,16 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   }
   auto obj = oc.bucket->get_object(obj_key);
 
-  RGWObjState* obj_state{nullptr};
   string etag;
-  ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
+  ret = obj->load_obj_state(dpp, null_yield, true);
   if (ret < 0) {
     return ret;
   }
-  auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
-  if (iter != obj_state->attrset.end()) {
-    etag = rgw_bl_str(iter->second);
+  bufferlist bl;
+  if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+    etag = rgw_bl_str(bl);
   }
+  auto size = obj->get_size();
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
     = obj->get_delete_op();
@@ -605,20 +632,6 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
   del_op->params.bucket_owner = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
 
-  // notification supported only for RADOS driver for now
-  notify = driver->get_notification(
-      dpp, obj.get(), nullptr, event_types, oc.bucket, lc_id,
-      const_cast<std::string&>(oc.bucket->get_tenant()), lc_req_id, null_yield);
-
-  ret = notify->publish_reserve(dpp, nullptr);
-  if ( ret < 0) {
-    ldpp_dout(dpp, 1)
-      << "ERROR: notify reservation failed, deferring delete of object k="
-      << o.key
-      << dendl;
-    return ret;
-  }
-
   uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
                    ? rgw::sal::FLAG_LOG_OP : 0;
   ret =  del_op->delete_obj(dpp, null_yield, flags);
@@ -626,14 +639,8 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 1) <<
       fmt::format("ERROR: {} failed, with error: {}", __func__, ret) << dendl;
   } else {
-    // send request to notification manager
-    int publish_ret = notify->publish_commit(dpp, obj_state->size,
-				 ceph::real_clock::now(),
-				 etag,
-				 version_id);
-    if (publish_ret < 0) {
-      ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
-    }
+    send_notification(dpp, driver, obj.get(), oc.bucket, etag, size, version_id,
+                      event_types);
   }
 
   return ret;
@@ -882,8 +889,6 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = MultipartMetaFilter;
 
-  const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
-
   auto pf = [&](RGWLC::LCWorker *wk, WorkQ *wq, WorkItem &wi) {
     int ret{0};
     auto wt = boost::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
@@ -894,46 +899,22 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       auto mpu = target->get_multipart_upload(key.name);
       auto sal_obj = target->get_object(key);
 
-      RGWObjState* obj_state{nullptr};
       string etag;
-      ret = sal_obj->get_obj_state(this, &obj_state, null_yield, true);
+      ret = sal_obj->load_obj_state(this, null_yield, true);
       if (ret < 0) {
 	return ret;
       }
-      auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
-      if (iter != obj_state->attrset.end()) {
-        etag = rgw_bl_str(iter->second);
+      bufferlist bl;
+      if (sal_obj->get_attr(RGW_ATTR_ETAG, bl)) {
+        etag = rgw_bl_str(bl);
       }
-
-      std::unique_ptr<rgw::sal::Notification> notify
-	= driver->get_notification(
-          this, sal_obj.get(), nullptr, {event_type}, target, lc_id,
-          const_cast<std::string&>(target->get_tenant()), lc_req_id,
-          null_yield);
-      auto version_id = obj.key.instance;
-
-      ret = notify->publish_reserve(this, nullptr);
-      if (ret < 0) {
-        ldpp_dout(wk->get_lc(), 0)
-            << "ERROR: reserving persistent notification for "
-               "abort_multipart_upload, ret="
-            << ret << ", thread:" << wq->thr_name()
-            << ", deferring mpu cleanup for meta:" << obj.key << dendl;
-        return ret;
-      }
+      auto size = sal_obj->get_size();
 
       ret = mpu->abort(this, cct, null_yield);
       if (ret == 0) {
-        int publish_ret = notify->publish_commit(
-            this, obj_state->size,
-	    ceph::real_clock::now(),
-            etag,
-	    version_id);
-        if (publish_ret < 0) {
-          ldpp_dout(wk->get_lc(), 5)
-              << "WARNING: notify publish_commit failed, with error: " << ret
-              << dendl;
-        }
+        const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
+        send_notification(this, driver, sal_obj.get(), target, etag, size,
+                          obj.key.instance, {event_type});
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
         }
@@ -1250,7 +1231,7 @@ public:
   int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
-                               {rgw::notify::ObjectExpirationNoncurrent});
+                               {rgw::notify::ObjectExpirationNonCurrent});
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 			   << oc.bucket << ":" << o.key
@@ -1393,7 +1374,7 @@ public:
                               << "flags: " << oc.o.flags << dendl;
       } else {
         ret = remove_expired_obj(oc.dpp, oc, true,
-                                 {rgw::notify::ObjectTransitionNoncurrent});
+                                 {rgw::notify::ObjectTransitionNonCurrent});
         ldpp_dout(oc.dpp, 20)
             << "delete_tier_obj Object(key:" << oc.o.key << ") not current "
             << "versioned_epoch:  " << oc.o.versioned_epoch
@@ -1414,41 +1395,16 @@ public:
     auto& bucket = oc.bucket;
     auto& obj = oc.obj;
 
-    RGWObjState* obj_state{nullptr};
     string etag;
-    ret = obj->get_obj_state(oc.dpp, &obj_state, null_yield, true);
+    ret = obj->load_obj_state(oc.dpp, null_yield, true);
     if (ret < 0) {
       return ret;
     }
-    auto iter = obj_state->attrset.find(RGW_ATTR_ETAG);
-    if (iter != obj_state->attrset.end()) {
-      etag = rgw_bl_str(iter->second);
+    bufferlist bl;
+    if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+      etag = rgw_bl_str(bl);
     }
-
-    rgw::notify::EventTypeList event_types;
-    if (bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
-      event_types.insert(event_types.end(),
-                         {rgw::notify::ObjectTransitionCurrent,
-                          rgw::notify::LifecycleTransition});
-    } else {
-      event_types.push_back(rgw::notify::ObjectTransitionNoncurrent);
-    }
-
-    std::unique_ptr<rgw::sal::Notification> notify =
-        oc.driver->get_notification(
-            oc.dpp, obj.get(), nullptr, event_types, bucket, lc_id,
-            const_cast<std::string&>(oc.bucket->get_tenant()), lc_req_id,
-            null_yield);
-    auto version_id = oc.o.key.instance;
-
-    ret = notify->publish_reserve(oc.dpp, nullptr);
-    if (ret < 0) {
-      ldpp_dout(oc.dpp, 1)
-	<< "ERROR: notify reservation failed, deferring transition of object k="
-	<< oc.o.key
-	<< dendl;
-      return ret;
-    }
+    auto size = obj->get_size();
 
     ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
 				      oc.env.worker->get_cloud_targets(),
@@ -1457,15 +1413,17 @@ public:
     if (ret < 0) {
       return ret;
     } else {
-      // send request to notification manager
-      int publish_ret =  notify->publish_commit(oc.dpp, obj_state->size,
-				    ceph::real_clock::now(),
-				    etag,
-				    version_id);
-      if (publish_ret < 0) {
-	ldpp_dout(oc.dpp, 5) <<
-	  "WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
+      rgw::notify::EventTypeList event_types;
+      if (bucket->versioned() && oc.o.is_current() &&
+          !oc.o.is_delete_marker()) {
+        event_types.insert(event_types.end(),
+                           {rgw::notify::ObjectTransitionCurrent,
+                            rgw::notify::LifecycleTransition});
+      } else {
+        event_types.push_back(rgw::notify::ObjectTransitionNonCurrent);
       }
+      send_notification(oc.dpp, oc.driver, obj.get(), oc.bucket, etag, size,
+                        oc.o.key.instance, event_types);
     }
 
     if (delete_object) {
@@ -2997,6 +2955,12 @@ void lc_op::dump(Formatter *f) const
 void LCFilter::dump(Formatter *f) const
 {
   f->dump_string("prefix", prefix);
+  if (has_size_gt()) {
+    f->dump_string("obj_size_gt", size_gt);
+  }
+  if (has_size_lt()) {
+    f->dump_string("obj_size_lt", size_lt);
+  }
   f->dump_object("obj_tags", obj_tags);
   if (have_flag(LCFlagType::ArchiveZone)) {
     f->dump_string("archivezone", "");
@@ -3007,6 +2971,9 @@ void LCExpiration::dump(Formatter *f) const
 {
   f->dump_string("days", days);
   f->dump_string("date", date);
+  if (has_newer()) {
+    f->dump_string("newer_noncurrent_versions", newer_noncurrent);
+  }
 }
 
 void LCRule::dump(Formatter *f) const

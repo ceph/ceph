@@ -712,10 +712,27 @@ void BlueFS::_init_alloc()
 {
   dout(20) << __func__ << dendl;
 
+  // 'changed' should keep its previous value if no actual modification occurred
+  auto change_alloc_size = [this](uint64_t& max_alloc_size,
+                                  uint64_t new_alloc, bool& changed) {
+    if (max_alloc_size == 0 ||
+        (max_alloc_size > new_alloc && ((new_alloc & (new_alloc -1)) == 0))) {
+      max_alloc_size = new_alloc;
+      changed = true;
+      dout(5) << " changed alloc_size to 0x" << std::hex << new_alloc << dendl;
+    } else if (max_alloc_size != new_alloc) {
+      derr << " can not change current alloc_size 0x" << std::hex
+           << max_alloc_size << " to new alloc_size 0x" << new_alloc << dendl;
+    }
+  };
+
+  bool alloc_size_changed = false;
   size_t wal_alloc_size = 0;
   if (bdev[BDEV_WAL]) {
     wal_alloc_size = cct->_conf->bluefs_alloc_size;
     alloc_size[BDEV_WAL] = wal_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_WAL],
+                      wal_alloc_size, alloc_size_changed);
   }
   logger->set(l_bluefs_wal_alloc_unit, wal_alloc_size);
 
@@ -731,18 +748,38 @@ void BlueFS::_init_alloc()
   if (bdev[BDEV_SLOW]) {
     alloc_size[BDEV_DB] = cct->_conf->bluefs_alloc_size;
     alloc_size[BDEV_SLOW] = shared_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
+                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_SLOW],
+                      shared_alloc_size, alloc_size_changed);
   } else {
     alloc_size[BDEV_DB] = shared_alloc_size;
     alloc_size[BDEV_SLOW] = 0;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_DB],
+                      shared_alloc_size, alloc_size_changed);
   }
   logger->set(l_bluefs_db_alloc_unit, alloc_size[BDEV_DB]);
   logger->set(l_bluefs_slow_alloc_unit, alloc_size[BDEV_SLOW]);
   // new wal and db devices are never shared
   if (bdev[BDEV_NEWWAL]) {
     alloc_size[BDEV_NEWWAL] = cct->_conf->bluefs_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_NEWWAL],
+                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
   }
+  if (alloc_size_changed) {
+    dout(1) << __func__ << " alloc_size changed, the new super is:" << super << dendl;
+    _write_super(BDEV_DB);
+  }
+
+  alloc_size_changed = false;
   if (bdev[BDEV_NEWDB]) {
     alloc_size[BDEV_NEWDB] = cct->_conf->bluefs_alloc_size;
+    change_alloc_size(super.bluefs_max_alloc_size[BDEV_NEWDB],
+                      cct->_conf->bluefs_alloc_size, alloc_size_changed);
+  }
+  if (alloc_size_changed) {
+    dout(1) << __func__ << " alloc_size changed, the new super is:" << super << dendl;
+    _write_super(BDEV_NEWDB);
   }
 
   for (unsigned id = 0; id < bdev.size(); ++id) {
@@ -750,6 +787,7 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
+    ceph_assert(super.bluefs_max_alloc_size[id]);
     if (is_shared_alloc(id)) {
       dout(1) << __func__ << " shared, id " << id << std::hex
               << ", capacity 0x" << bdev[id]->get_size()
@@ -769,10 +807,11 @@ void BlueFS::_init_alloc()
               << ", capacity 0x" << bdev[id]->get_size()
               << ", reserved 0x" << block_reserved[id]
               << ", block size 0x" << alloc_size[id]
+              << ", max alloc size 0x" << super.bluefs_max_alloc_size[id]
               << std::dec << dendl;
       alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				    bdev[id]->get_size(),
-				    alloc_size[id],
+				    super.bluefs_max_alloc_size[id],
 				    name);
       alloc[id]->init_add_free(
         block_reserved[id],
@@ -992,6 +1031,7 @@ int BlueFS::mount()
 
   _init_alloc();
 
+  dout(5) << __func__ << " super: " << super << dendl;
   r = _replay(false, false);
   if (r < 0) {
     derr << __func__ << " failed to replay log: " << cpp_strerror(r) << dendl;
@@ -4737,6 +4777,37 @@ size_t BlueFS::probe_alloc_avail(int dev, uint64_t alloc_size)
     alloc[dev]->foreach(iterated_allocation);
   }
   return total;
+}
+
+void BlueFS::trim_free_space(const string& type, std::ostream& outss)
+{
+  unsigned bdev_id;
+  if(type == "bdev-wal") {
+    bdev_id = BDEV_WAL;
+  } else if (type == "bdev-db") {
+    bdev_id = BDEV_DB;
+  } else {
+    derr << __func__ << " unknown bdev type " << type << dendl;
+    return;
+  }
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    ceph_assert(len > 0);
+    interval_set<uint64_t> to_discard;
+    to_discard.union_insert(off, len);
+    bdev[bdev_id]->try_discard(to_discard, false);
+  };
+  if (!bdev[bdev_id]) {
+    outss << "device " << type << " is not configured";
+    return;
+  }
+  if (alloc[bdev_id] && !is_shared_alloc(bdev_id)) {
+    if (!bdev[bdev_id]->is_discard_supported()) {
+      outss << "device " << type << " does not support trim";
+      return;
+    }
+    alloc[bdev_id]->foreach(iterated_allocation);
+    outss << "device " << type << " trim done";
+  }
 }
 // ===============================================
 // OriginalVolumeSelector

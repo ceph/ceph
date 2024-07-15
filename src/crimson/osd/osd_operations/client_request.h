@@ -53,9 +53,6 @@ public:
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
     } await_map;
-    struct WaitRepop : OrderedConcurrentPhaseT<WaitRepop> {
-      static constexpr auto type_name = "ClientRequest::PGPipeline::wait_repop";
-    } wait_repop;
     struct SendReply : OrderedExclusivePhaseT<SendReply> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::send_reply";
     } send_reply;
@@ -180,6 +177,7 @@ public:
     instance_handle = new instance_handle_t;
   }
   auto get_instance_handle() { return instance_handle; }
+  auto get_instance_handle() const { return instance_handle; }
 
   std::set<snapid_t> snaps_need_to_recover() {
     std::set<snapid_t> ret;

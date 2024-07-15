@@ -101,17 +101,20 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
 
   ngOnInit() {
     super.ngOnInit();
-    this.isHardwareEnabled$ = this.getHardwareConfig();
-    this.hardwareSummary$ = this.hardwareSubject.pipe(
-      switchMap(() =>
-        this.hardwareService.getSummary().pipe(
-          switchMap((data: any) => {
-            this.hasHardwareError = data.host.flawed;
-            return of(data);
-          })
+    if (this.permissions.configOpt.read) {
+      this.isHardwareEnabled$ = this.getHardwareConfig();
+      this.hardwareSummary$ = this.hardwareSubject.pipe(
+        switchMap(() =>
+          this.hardwareService.getSummary().pipe(
+            switchMap((data: any) => {
+              this.hasHardwareError = data.host.flawed;
+              return of(data);
+            })
+          )
         )
-      )
-    );
+      );
+      this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
+    }
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
       this.getCapacityCardData();
@@ -120,7 +123,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
-    this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
     this.prometheusAlertService.getAlerts(true);
   }
 
@@ -184,8 +186,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   private getTelemetryReport() {
-    this.mgrModuleService.getConfig('telemetry').subscribe((resp: any) => {
-      this.telemetryEnabled = resp?.enabled;
+    this.healthService.getTelemetryStatus().subscribe((enabled: boolean) => {
+      this.telemetryEnabled = enabled;
     });
   }
 

@@ -31,10 +31,11 @@ std::string instance_oid(const std::string &instance_id) {
 } // anonymous namespace
 
 InstanceWatcher::InstanceWatcher(librados::IoCtx &ioctx,
-                                 Listener &listener, ContextWQ *work_queue)
+                                 Listener &listener, ErrorListener &elistener, ContextWQ *work_queue)
   : Watcher(ioctx, instance_oid(stringify(ioctx.get_instance_id())), work_queue),
     m_ioctx(ioctx),
     m_listener(listener),
+    m_elistener(elistener),
     m_work_queue(work_queue),
     m_lock(ceph::make_mutex("cephfs::mirror::instance_watcher")) {
 }
@@ -116,15 +117,15 @@ void InstanceWatcher::handle_rewatch_complete(int r) {
     dout(0) << ": client blocklisted" <<dendl;
     std::scoped_lock locker(m_lock);
     m_blocklisted = true;
-    m_blocklisted_ts = clock::now();
+    m_elistener.set_blocklisted_ts();
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;
     m_failed = true;
-    m_failed_ts = clock::now();
+    m_elistener.set_failed_ts();
   } else if (r < 0) {
     derr << ": rewatch error: " << cpp_strerror(r) << dendl;
     m_failed = true;
-    m_failed_ts = clock::now();
+    m_elistener.set_failed_ts();
   }
 }
 

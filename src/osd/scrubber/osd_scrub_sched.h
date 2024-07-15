@@ -84,7 +84,6 @@ ScrubQueue interfaces (main functions):
   - can_inc_scrubs()
   - {inc/dec}_scrubs_{local/remote}()
   - dump_scrub_reservations()
-  - {set/clear/is}_reserving_now()
 
 <2> - environment conditions:
 
@@ -116,13 +115,6 @@ ScrubQueue interfaces (main functions):
 namespace Scrub {
 
 using namespace ::std::literals;
-
-/// possible outcome when trying to select a PG and scrub it
-enum class schedule_result_t {
-  scrub_initiated,	    // successfully started a scrub
-  target_specific_failure,  // failed to scrub this specific target
-  osd_wide_failure	    // failed to scrub any target
-};
 
 // the OSD services provided to the scrub scheduler
 class ScrubSchedListener {
@@ -238,30 +230,6 @@ class ScrubQueue {
  public:
   void dump_scrubs(ceph::Formatter* f) const;
 
-  /**
-   * No new scrub session will start while a scrub was initiated on a PG,
-   * and that PG is trying to acquire replica resources.
-   *
-   * \todo replace the atomic bool with a regular bool protected by a
-   * common OSD-service lock. Or better still - once PR#53263 is merged,
-   * remove this flag altogether.
-   */
-
-  /**
-   * set_reserving_now()
-   * \returns 'false' if the flag was already set
-   * (which is a possible result of a race between the check in OsdScrub and
-   * the initiation of a scrub by some other PG)
-   */
-  bool set_reserving_now(spg_t reserving_id, utime_t now_is);
-
-  /**
-   * silently ignore attempts to clear the flag if it was not set by
-   * the named pg.
-   */
-  void clear_reserving_now(spg_t reserving_id);
-  bool is_reserving_now() const;
-
   /// counting the number of PGs stuck while scrubbing, waiting for objects
   void mark_pg_scrub_blocked(spg_t blocked_pg);
   void clear_pg_scrub_blocked(spg_t blocked_pg);
@@ -330,17 +298,6 @@ class ScrubQueue {
    * existence of such a situation in the scrub-queue log messages.
    */
   std::atomic_int_fast16_t blocked_scrubs_cnt{0};
-
-  /**
-   * One of the OSD's primary PGs is in the initial phase of a scrub,
-   * trying to secure its replicas' resources. We will refrain from initiating
-   * any other scrub sessions until this one is done.
-   *
-   * \todo replace the local lock with regular osd-service locking
-   */
-  ceph::mutex reserving_lock = ceph::make_mutex("ScrubQueue::reserving_lock");
-  std::optional<spg_t> reserving_pg;
-  utime_t reserving_since;
 
   /**
    * If the scrub job was not explicitly requested, we postpone it by some

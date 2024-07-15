@@ -104,8 +104,8 @@ options:
 - name: public_network_interface
   type: str
   level: advanced
-  desc: Interface name(s) from which to choose an address from a public_network to
-    bind to; public_network must also be specified.
+  desc: Interface name(s) from which to choose an address from a ``public_network`` to
+    bind to; ``public_network`` must also be specified.
   tags:
   - network
   services:
@@ -135,8 +135,8 @@ options:
 - name: cluster_network_interface
   type: str
   level: advanced
-  desc: Interface name(s) from which to choose an address from a cluster_network to
-    bind to; cluster_network must also be specified.
+  desc: Interface name(s) from which to choose an address from a ``cluster_network`` to
+    bind to; ``cluster_network`` must also be specified.
   tags:
   - network
   services:
@@ -1298,6 +1298,23 @@ options:
   level: dev
   desc: Inject a network congestions that stuck with N times operations
   default: 0
+  with_legacy: true
+- name: ms_time_events_min_wait_interval
+  type: uint
+  level: dev
+  desc: In microseconds, msgr-worker's time_events min wait time for epoll_wait timeout
+  default: 1000
+  min: 0
+  max: 60000000
+  with_legacy: true
+- name: ms_client_throttle_retry_time_interval
+  type: uint
+  level: dev
+  desc: In microseconds, user client, the time interval between the next retry
+        when the throttle get_or_fail.
+  default: 5000
+  min: 1000
+  max: 60000000
   with_legacy: true
 - name: ms_blackhole_osd
   type: bool
@@ -5049,10 +5066,17 @@ options:
     [hash_begin..hash_end) defines characters to use for hash calculation. Recommended
     hash ranges: O(0-13) P(0-8) m(0-16). Sharding of S,T,C,M,B prefixes is inadvised'
   fmt_desc: Definition of BlueStore's RocksDB sharding.
-    The optimal value depends on multiple factors, and modification is invadvisable.
+    The optimal value depends on multiple factors, and modification is inadvisable.
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
+- name: bluestore_async_db_compaction
+  type: bool
+  level: dev
+  desc: Perform DB compaction requests asynchronously
+  long_desc: 'How to perform DB compactions triggered either through async socket or
+    by OSD initialization procedure on start.'
+  default: true
 - name: bluestore_qfsck_on_mount
   type: bool
   level: dev

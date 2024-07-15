@@ -90,6 +90,10 @@ cdef nogil:
         char *group_name
         char *group_snap_name
 
+    ctypedef struct rbd_snap_trash_namespace_t:
+        rbd_snap_namespace_type_t original_namespace_type;
+        char *original_name;
+
     ctypedef enum rbd_snap_mirror_state_t:
         _RBD_SNAP_MIRROR_STATE_PRIMARY "RBD_SNAP_MIRROR_STATE_PRIMARY"
         _RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED "RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED"
@@ -348,6 +352,10 @@ cdef nogil:
         pass
     int rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
                    const char *p_snapname, rados_ioctx_t c_ioctx,
+                   const char *c_name, rbd_image_options_t c_opts):
+        pass
+    int rbd_clone4(rados_ioctx_t p_ioctx, const char *p_name,
+                   uint64_t p_snap_id, rados_ioctx_t c_ioctx,
                    const char *c_name, rbd_image_options_t c_opts):
         pass
     int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
@@ -673,8 +681,12 @@ cdef nogil:
     void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_spec,
                                           size_t snap_group_namespace_size):
         pass
-    int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
-                                     char *original_name, size_t max_length):
+    int rbd_snap_get_trash_namespace2(rbd_image_t image, uint64_t snap_id,
+                                      rbd_snap_trash_namespace_t *trash_snap,
+                                      size_t trash_snap_size):
+        pass
+    void rbd_snap_trash_namespace_cleanup(rbd_snap_trash_namespace_t *trash_snap,
+                                          size_t trash_snap_size):
         pass
     int rbd_snap_get_mirror_namespace(
         rbd_image_t image, uint64_t snap_id,
@@ -840,6 +852,9 @@ cdef nogil:
     int rbd_group_remove(rados_ioctx_t p, const char *name):
         pass
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size):
+        pass
+    int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
+                         char *group_id, size_t *size):
         pass
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest):
         pass

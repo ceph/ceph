@@ -1887,9 +1887,6 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   cls_rgw_obj_key dest_key = op.key;
-  if (dest_key.instance == "null") {
-    dest_key.instance.clear();
-  }
 
   BIVerObjEntry obj(hctx, dest_key);
   BIOLHEntry olh(hctx, dest_key);
@@ -4422,15 +4419,31 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-
-  string key;
+  std::string key;
   op.entry.get_key(&key);
 
+  int ret;
   bufferlist bl;
+
+  if (op.create_only) {
+    ret = cls_cxx_map_get_val(hctx, key, &bl);
+    if (ret == 0) {
+      // entry already exists; make no changes
+      return -EEXIST;
+    } else if (ret != -ENOENT) {
+      CLS_ERR("error accessing reshard queue for %s with key %s",
+	      op.entry.bucket_name.c_str(), key.c_str());
+      return ret;
+    }
+
+    // we got a -ENOENT and can just fall through...
+  }
+
   encode(op.entry, bl);
-  int ret = cls_cxx_map_set_val(hctx, key, &bl);
+  ret = cls_cxx_map_set_val(hctx, key, &bl);
   if (ret < 0) {
-    CLS_ERR("error adding reshard job for bucket %s with key %s",op.entry.bucket_name.c_str(), key.c_str());
+    CLS_ERR("error adding reshard job for bucket %s with key %s",
+	    op.entry.bucket_name.c_str(), key.c_str());
     return ret;
   }
 

@@ -46,7 +46,7 @@ describe('Logs page', () => {
   describe('audit logs respond to pool creation and deletion test', () => {
     it('should create pool and check audit logs reacted', () => {
       pools.navigateTo('create');
-      pools.create(poolname, 8);
+      pools.create(poolname, 8, ['rbd']);
       pools.navigateTo();
       pools.existTableCell(poolname, true);
       logs.checkAuditForPoolFunction(poolname, 'create', hour, minute);

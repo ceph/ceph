@@ -717,13 +717,13 @@ int RGWRadosBILogTrimCR::request_complete()
   return r;
 }
 
-int send_sync_notification(const DoutPrefixProvider* dpp,
-                           rgw::sal::RadosStore* store,
-                           rgw::sal::Bucket* bucket,
-                           rgw::sal::Object* obj,
-                           const rgw::sal::Attrs& attrs,
-                           uint64_t obj_size,
-                           const rgw::notify::EventTypeList& event_types) {
+void send_sync_notification(const DoutPrefixProvider* dpp,
+                            rgw::sal::RadosStore* store,
+                            rgw::sal::Bucket* bucket,
+                            rgw::sal::Object* obj,
+                            const rgw::sal::Attrs& attrs,
+                            uint64_t obj_size,
+                            const rgw::notify::EventTypeList& event_types) {
   // send notification that object was successfully synced
   std::string user_id = "rgw sync";
   std::string req_id = "0";
@@ -738,7 +738,6 @@ int send_sync_notification(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 1) << "ERROR: " << __func__
                         << ": caught buffer::error couldn't decode TagSet "
                         << dendl;
-      return -EIO;
     }
   }
   // bucket attrs are required for notification and since its not loaded,
@@ -748,7 +747,7 @@ int send_sync_notification(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 1) << "ERROR: failed to load bucket attrs for bucket:"
                       << bucket->get_name() << " with error ret= " << r
                       << " . Not sending notification" << dendl;
-    return r;
+    return;
   }
   rgw::notify::reservation_t notify_res(dpp, store, obj, nullptr, bucket,
                                         user_id, bucket->get_tenant(), req_id,
@@ -772,7 +771,6 @@ int send_sync_notification(const DoutPrefixProvider* dpp,
                         << ret << dendl;
     }
   }
-  return ret;
 }
 
 int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
@@ -902,26 +900,24 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 
   obj->set_atomic();
 
-  RGWObjState *state;
-
-  int ret = obj->get_obj_state(dpp, &state, null_yield);
+  int ret = obj->load_obj_state(dpp, null_yield);
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): load_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
   }
 
   /* has there been any racing object write? */
-  if (del_if_older && (state->mtime > timestamp)) {
-    ldpp_dout(dpp, 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << state->mtime << ", request timestamp=" << timestamp << ")" << dendl;
+  if (del_if_older && (obj->get_mtime() > timestamp)) {
+    ldpp_dout(dpp, 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << obj->get_mtime() << ", request timestamp=" << timestamp << ")" << dendl;
     return 0;
   }
 
   RGWAccessControlPolicy policy;
 
   /* decode policy */
-  map<string, bufferlist>::iterator iter = state->attrset.find(RGW_ATTR_ACL);
-  if (iter != state->attrset.end()) {
-    auto bliter = iter->second.cbegin();
+  bufferlist bl;
+  if (obj->get_attr(RGW_ATTR_ACL, bl)) {
+    auto bliter = bl.cbegin();
     try {
       policy.decode(bliter);
     } catch (buffer::error& err) {
@@ -940,6 +936,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   if (versioned) {
     del_op->params.versioning_status = BUCKET_VERSIONED;
   }
+
   del_op->params.olh_epoch = versioned_epoch;
   del_op->params.marker_version_id = marker_version_id;
   del_op->params.obj_owner.id = rgw_user(owner);
@@ -947,6 +944,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   del_op->params.mtime = timestamp;
   del_op->params.high_precision_time = true;
   del_op->params.zones_trace = &zones_trace;
+  del_op->params.null_verid = false;
 
   ret = del_op->delete_obj(dpp, null_yield, true);
   if (ret < 0) {
@@ -954,7 +952,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   } else {
     send_sync_notification(
         dpp, store, bucket.get(), obj.get(), obj->get_attrs(),
-        obj->get_obj_size(),
+        obj->get_size(),
         {rgw::notify::ObjectSyncedDelete, rgw::notify::ReplicationDelete});
   }
   return ret;

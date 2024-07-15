@@ -339,12 +339,15 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
   for (const auto sdata : sharded_in_flight_list) {
     ceph_assert(sdata);
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);
-    if (!sdata->ops_in_flight_sharded.empty()) {
-      utime_t oldest_op_tmp =
-	sdata->ops_in_flight_sharded.front().get_initiated();
+    for (auto& op : sdata->ops_in_flight_sharded) {
+      if (!op.warn_interval_multiplier || op.is_continuous())
+	continue;
+
+      utime_t oldest_op_tmp = op.get_initiated();
       if (oldest_op_tmp < oldest_op) {
         oldest_op = oldest_op_tmp;
       }
+      break;
     }
     std::transform(std::begin(sdata->ops_in_flight_sharded),
                    std::end(sdata->ops_in_flight_sharded),

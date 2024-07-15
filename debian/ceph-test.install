@@ -16,5 +16,6 @@ usr/bin/ceph_scratchtool
 usr/bin/ceph_scratchtoolpp
 usr/bin/ceph_test_*
 usr/bin/ceph-dedup-tool
+usr/bin/ceph-dedup-daemon
 usr/lib/ceph/ceph-monstore-update-crush.sh
 usr/share/java/libcephfs-test.jar

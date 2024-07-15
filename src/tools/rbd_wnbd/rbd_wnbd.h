@@ -55,11 +55,6 @@ typedef struct {
 bool is_process_running(DWORD pid);
 void unmap_at_exit();
 
-int disconnect_all_mappings(
-  bool unregister,
-  bool hard_disconnect,
-  int soft_disconnect_timeout,
-  int worker_count);
 int restart_registered_mappings(
   int worker_count, int total_timeout, int image_map_timeout);
 int map_device_using_same_process(std::string command_line);

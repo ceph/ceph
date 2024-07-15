@@ -204,10 +204,11 @@ The output format is JSON and contains fields as follows:
 
 * ``atime``: access time of the subvolume group path in the format ``YYYY-MM-DD
   HH:MM:SS``
-* ``mtime``: modification time of the subvolume group path in the format
+* ``mtime``: time of the most recent modification of the subvolume group path
+  in the format
   ``YYYY-MM-DD HH:MM:SS``
-* ``ctime``: change time of the subvolume group path in the format ``YYYY-MM-DD
-  HH:MM:SS``
+* ``ctime``: time of the most recent change of the subvolume group path in the
+  format ``YYYY-MM-DD HH:MM:SS``
 * ``uid``: uid of the subvolume group path
 * ``gid``: gid of the subvolume group path
 * ``mode``: mode of the subvolume group path
@@ -227,8 +228,8 @@ following form:
 
 The ``exist`` command outputs:
 
-* "subvolumegroup exists": if any subvolumegroup is present
-* "no subvolumegroup exists": if no subvolumegroup is present
+* ``subvolumegroup exists``: if any subvolumegroup is present
+* ``no subvolumegroup exists``: if no subvolumegroup is present
 
 .. note:: This command checks for the presence of custom groups and not
    presence of the default one. A subvolumegroup-existence check alone is not
@@ -675,7 +676,7 @@ Cloning Snapshots
 
 Subvolumes can be created by cloning subvolume snapshots. Cloning is an
 asynchronous operation that copies data from a snapshot to a subvolume. Because
-cloning is an operation that involves bulk copying, it is inefficient for
+cloning is an operation that involves bulk copying, it is slow for
 very large data sets.
 
 .. note:: Removing a snapshot (source subvolume) fails when there are
@@ -901,7 +902,7 @@ to policies. This can distribute load across MDS ranks in predictable and
 stable ways.  Review :ref:`cephfs-pinning` and :ref:`cephfs-ephemeral-pinning`
 for details on how pinning works.
 
-Run a command of the following form to configure pinning for subvolumegroups:
+Run a command of the following form to configure pinning for subvolume groups:
 
 .. prompt:: bash #
 

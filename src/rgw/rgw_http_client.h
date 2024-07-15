@@ -151,9 +151,9 @@ public:
     req_timeout = timeout;
   }
 
-  int process(optional_yield y);
+  int process(const DoutPrefixProvider* dpp, optional_yield y);
 
-  int wait(optional_yield y);
+  int wait(const DoutPrefixProvider* dpp, optional_yield y);
   void cancel();
   bool is_done();
 
@@ -349,5 +349,6 @@ class RGWHTTP
 {
 public:
   static int send(RGWHTTPClient *req);
-  static int process(RGWHTTPClient *req, optional_yield y);
+  static int process(const DoutPrefixProvider* dpp, RGWHTTPClient *req,
+                     optional_yield y);
 };

@@ -61,6 +61,9 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
   ceph::common::intrusive_lru_config<
     hobject_t, ObjectContext, obc_to_hoid<ObjectContext>>>
 {
+private:
+  tri_mutex lock;
+
 public:
   ObjectState obs;
   SnapSetContextRef ssc;
@@ -70,7 +73,8 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
-  ObjectContext(hobject_t hoid) : obs(std::move(hoid)) {}
+  ObjectContext(hobject_t hoid) : lock(hoid),
+                                  obs(std::move(hoid)) {}
 
   const hobject_t &get_oid() const {
     return obs.oi.soid;
@@ -112,35 +116,30 @@ public:
   template<typename Exception>
   void interrupt(Exception ex) {
     lock.abort(std::move(ex));
-    if (recovery_read_marker) {
-      drop_recovery_read();
-    }
   }
 
-  bool is_loaded_and_valid() const {
-    return fully_loaded && !invalidated_by_interval_change;
+  bool is_loaded() const {
+    return fully_loaded;
+  }
+
+  bool is_valid() const {
+    return !invalidated_by_interval_change;
   }
 
 private:
-  tri_mutex lock;
-  bool recovery_read_marker = false;
-
   template <typename Lock, typename Func>
   auto _with_lock(Lock& lock, Func&& func) {
-    Ref obc = this;
-    return lock.lock().then([&lock, func = std::forward<Func>(func), obc]() mutable {
-      return seastar::futurize_invoke(func).finally([&lock, obc] {
+    return lock.lock(
+    ).then([&lock, func=std::forward<Func>(func), obc=Ref(this)]() mutable {
+      return seastar::futurize_invoke(
+	func
+      ).finally([&lock, obc=std::move(obc)] {
+	/* We chain the finally block here because it's possible for lock.lock()
+	 * above to fail due to a call to ObjectContext::interrupt, which calls
+	 * tri_mutex::abort.  In the event of such an error, the lock isn't
+	 * actually taken and calling unlock() would be incorrect. */
 	lock.unlock();
       });
-    });
-  }
-
-  template <typename Lock, typename Func>
-  auto _with_promoted_lock(Lock& lock, Func&& func) {
-    Ref obc = this;
-    lock.lock();
-    return seastar::futurize_invoke(func).finally([&lock, obc] {
-      lock.unlock();
     });
   }
 
@@ -204,36 +203,84 @@ public:
       }
     }
   }
-  template<RWState::State Type, typename InterruptCond = void, typename Func>
-  auto with_promoted_lock(Func&& func) {
-    if constexpr (!std::is_void_v<InterruptCond>) {
-      auto wrapper = ::crimson::interruptible::interruptor<InterruptCond>::wrap_function(std::forward<Func>(func));
-      switch (Type) {
-      case RWState::RWWRITE:
-	return _with_promoted_lock(lock.excl_from_write(), std::move(wrapper));
-      case RWState::RWREAD:
-	return _with_promoted_lock(lock.excl_from_read(), std::move(wrapper));
-      case RWState::RWEXCL:
-	return seastar::futurize_invoke(std::move(wrapper));
-      case RWState::RWNONE:
-	return _with_lock(lock.for_excl(), std::move(wrapper));
-       default:
-	assert(0 == "noop");
+
+  /**
+   * load_then_with_lock
+   *
+   * Takes two functions as arguments -- load_func to be invoked
+   * with an exclusive lock, and func to be invoked under the
+   * lock type specified by the Type template argument.
+   *
+   * Caller must ensure that *this is not already locked, presumably
+   * by invoking load_then_with_lock immediately after construction.
+   *
+   * @param [in] load_func Function to be invoked under excl lock
+   * @param [in] func Function to be invoked after load_func under
+   *             lock of type Type.
+   */
+  template<RWState::State Type, typename Func, typename Func2>
+  auto load_then_with_lock(Func &&load_func, Func2 &&func) {
+    class lock_state_t {
+      tri_mutex *lock = nullptr;
+      bool excl = false;
+
+    public:
+      lock_state_t(tri_mutex &lock) : lock(&lock), excl(true) {
+	ceph_assert(lock.try_lock_for_excl());
       }
-    } else {
-      switch (Type) {
-      case RWState::RWWRITE:
-	return _with_promoted_lock(lock.excl_from_write(), std::forward<Func>(func));
-      case RWState::RWREAD:
-	return _with_promoted_lock(lock.excl_from_read(), std::forward<Func>(func));
-      case RWState::RWEXCL:
-	return seastar::futurize_invoke(std::forward<Func>(func));
-      case RWState::RWNONE:
-	return _with_lock(lock.for_excl(), std::forward<Func>(func));
-       default:
-	assert(0 == "noop");
+      lock_state_t(lock_state_t &&o) : lock(o.lock), excl(o.excl) {
+	o.lock = nullptr;
+	o.excl = false;
       }
-    }
+      lock_state_t() = delete;
+      lock_state_t &operator=(lock_state_t &&o) = delete;
+      lock_state_t(const lock_state_t &o) = delete;
+      lock_state_t &operator=(const lock_state_t &o) = delete;
+
+      void demote() {
+	ceph_assert(excl);
+	ceph_assert(lock);
+	if constexpr (Type == RWState::RWWRITE) {
+	  lock->demote_to_write();
+	} else if constexpr (Type == RWState::RWREAD) {
+	  lock->demote_to_read();
+	} else if constexpr (Type == RWState::RWNONE) {
+	  lock->unlock_for_excl();
+	}
+	excl = false;
+      }
+
+      ~lock_state_t() {
+	if (!lock)
+	  return;
+
+	if constexpr (Type == RWState::RWEXCL) {
+	  lock->unlock_for_excl();
+	} else {
+	  if (excl) {
+	    lock->unlock_for_excl();
+	    return;
+	  }
+
+	  if constexpr (Type == RWState::RWWRITE) {
+	    lock->unlock_for_write();
+	  } else if constexpr (Type == RWState::RWREAD) {
+	    lock->unlock_for_read();
+	  }
+	}
+      }
+    };
+
+    return seastar::do_with(
+      lock_state_t{lock},
+      [load_func=std::move(load_func), func=std::move(func)](auto &ls) mutable {
+	return std::invoke(
+	  std::move(load_func)
+	).si_then([func=std::move(func), &ls]() mutable {
+	  ls.demote();
+	  return std::invoke(std::move(func));
+	});
+      });
   }
 
   bool empty() const {
@@ -241,26 +288,6 @@ public:
   }
   bool is_request_pending() const {
     return lock.is_acquired();
-  }
-
-  bool get_recovery_read() {
-    if (lock.try_lock_for_read()) {
-      recovery_read_marker = true;
-      return true;
-    } else {
-      return false;
-    }
-  }
-  void wait_recovery_read() {
-    assert(lock.get_readers() > 0);
-    recovery_read_marker = true;
-  }
-  void drop_recovery_read() {
-    assert(recovery_read_marker);
-    recovery_read_marker = false;
-  }
-  bool maybe_get_excl() {
-    return lock.try_lock_for_excl();
   }
 };
 using ObjectContextRef = ObjectContext::Ref;

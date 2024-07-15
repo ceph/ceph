@@ -111,6 +111,7 @@ inline std::ostream& operator<<(std::ostream& out, RGWModifyOp op) {
 
 enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
+  RGW_BILOG_NULL_VERSION = 0X2,
 };
 
 enum RGWCheckMTimeType {
@@ -660,6 +661,11 @@ struct rgw_bi_log_entry {
   bool is_versioned() {
     return ((bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
   }
+
+  bool is_null_verid() {
+    return ((bilog_flags & RGW_BILOG_NULL_VERSION) != 0);
+  }
+
 };
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 
@@ -1325,30 +1331,45 @@ struct cls_rgw_lc_entry {
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_entry);
 
+
+// used to track the initiator of a reshard entry on the reshard queue (log)
+enum class cls_rgw_reshard_initiator : uint8_t {
+  Unknown = 0,
+  Admin = 1,
+  Dynamic = 2,
+};
+std::string to_string(cls_rgw_reshard_initiator i);
+inline std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_initiator i) {
+  return out << to_string(i);
+}
+
+
 struct cls_rgw_reshard_entry
 {
   ceph::real_time time;
   std::string tenant;
   std::string bucket_name;
   std::string bucket_id;
-  uint32_t old_num_shards{0};
-  uint32_t new_num_shards{0};
+  uint32_t old_num_shards {0};
+  uint32_t new_num_shards {0};
+  cls_rgw_reshard_initiator initiator {cls_rgw_reshard_initiator::Unknown};
 
   cls_rgw_reshard_entry() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(time, bl);
     encode(tenant, bl);
     encode(bucket_name, bl);
     encode(bucket_id, bl);
     encode(old_num_shards, bl);
     encode(new_num_shards, bl);
+    encode(initiator, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(time, bl);
     decode(tenant, bl);
     decode(bucket_name, bl);
@@ -1359,6 +1380,11 @@ struct cls_rgw_reshard_entry
     }
     decode(old_num_shards, bl);
     decode(new_num_shards, bl);
+    if (struct_v >= 3) {
+      decode(initiator, bl);
+    } else {
+      initiator = cls_rgw_reshard_initiator::Unknown;
+    }
     DECODE_FINISH(bl);
   }
 

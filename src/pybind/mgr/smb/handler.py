@@ -3,6 +3,7 @@ from typing import (
     Collection,
     Dict,
     Iterable,
+    Iterator,
     List,
     Optional,
     Set,
@@ -22,27 +23,31 @@ from .enums import (
     CephFSStorageProvider,
     Intent,
     JoinSourceType,
+    LoginAccess,
+    LoginCategory,
     State,
     UserGroupSourceType,
 )
 from .internal import (
     ClusterEntry,
     JoinAuthEntry,
-    ResourceEntry,
     ShareEntry,
     UsersAndGroupsEntry,
+    resource_entry,
+    resource_key,
 )
 from .proto import (
     AccessAuthorizer,
     ConfigEntry,
     ConfigStore,
+    EntryKey,
     OrchSubmitter,
     PathResolver,
     Simplified,
-    checked,
 )
 from .resources import SMBResource
 from .results import ErrorResult, Result, ResultGroup
+from .utils import checked, ynbool
 
 ClusterRef = Union[resources.Cluster, resources.RemovedCluster]
 ShareRef = Union[resources.Share, resources.RemovedShare]
@@ -180,6 +185,99 @@ class _Matcher:
         )
 
 
+class _Staging:
+    def __init__(self, store: ConfigStore) -> None:
+        self.destination_store = store
+        self.incoming: Dict[EntryKey, SMBResource] = {}
+        self.deleted: Dict[EntryKey, SMBResource] = {}
+        self._store_keycache: Set[EntryKey] = set()
+        self._virt_keycache: Set[EntryKey] = set()
+
+    def stage(self, resource: SMBResource) -> None:
+        self._virt_keycache = set()
+        ekey = resource_key(resource)
+        if resource.intent == Intent.REMOVED:
+            self.deleted[ekey] = resource
+        else:
+            self.deleted.pop(ekey, None)
+            self.incoming[ekey] = resource
+
+    def _virtual_keys(self) -> Collection[EntryKey]:
+        if self._virt_keycache:
+            return self._virt_keycache
+        self._virt_keycache = set(self._store_keys()) - set(
+            self.deleted
+        ) | set(self.incoming)
+        return self._virt_keycache
+
+    def _store_keys(self) -> Collection[EntryKey]:
+        if not self._store_keycache:
+            self._store_keycache = set(self.destination_store)
+        return self._store_keycache
+
+    def __iter__(self) -> Iterator[EntryKey]:
+        return iter(self._virtual_keys())
+
+    def namespaces(self) -> Collection[str]:
+        return {k[0] for k in self}
+
+    def contents(self, ns: str) -> Collection[str]:
+        return {kname for kns, kname in self if kns == ns}
+
+    def is_new(self, resource: SMBResource) -> bool:
+        ekey = resource_key(resource)
+        return ekey not in self._store_keys()
+
+    def get_cluster(self, cluster_id: str) -> resources.Cluster:
+        ekey = (str(ClusterEntry.namespace), cluster_id)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.Cluster)
+            return res
+        return ClusterEntry.from_store(
+            self.destination_store, cluster_id
+        ).get_cluster()
+
+    def get_join_auth(self, auth_id: str) -> resources.JoinAuth:
+        ekey = (str(JoinAuthEntry.namespace), auth_id)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.JoinAuth)
+            return res
+        return JoinAuthEntry.from_store(
+            self.destination_store, auth_id
+        ).get_join_auth()
+
+    def get_users_and_groups(self, ug_id: str) -> resources.UsersAndGroups:
+        ekey = (str(UsersAndGroupsEntry.namespace), ug_id)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.UsersAndGroups)
+            return res
+        return UsersAndGroupsEntry.from_store(
+            self.destination_store, ug_id
+        ).get_users_and_groups()
+
+    def save(self) -> ResultGroup:
+        results = ResultGroup()
+        for res in self.deleted.values():
+            results.append(self._save(res))
+        for res in self.incoming.values():
+            results.append(self._save(res))
+        return results
+
+    def _save(self, resource: SMBResource) -> Result:
+        entry = resource_entry(self.destination_store, resource)
+        if resource.intent == Intent.REMOVED:
+            removed = entry.remove()
+            state = State.REMOVED if removed else State.NOT_PRESENT
+        else:
+            state = entry.create_or_update(resource)
+        log.debug('saved resource: %r; state: %s', resource, state)
+        result = Result(resource, success=True, status={'state': state})
+        return result
+
+
 class ClusterConfigHandler:
     """The central class for ingesting and handling smb configuration change
     requests.
@@ -244,23 +342,36 @@ class ClusterConfigHandler:
             f' orch {self._orch!r}'
         )
 
-    def apply(self, inputs: Iterable[SMBResource]) -> ResultGroup:
+    def apply(
+        self, inputs: Iterable[SMBResource], *, create_only: bool = False
+    ) -> ResultGroup:
+        """Apply resource configuration changes.
+        Set `create_only` to disable changing existing resource values.
+        """
         log.debug('applying changes to internal data store')
         results = ResultGroup()
-        for resource in self._order_inputs(inputs):
-            try:
-                result = self._update_resource(resource)
-            except ErrorResult as err:
-                result = err
-            except Exception as err:
-                log.exception("error updating resource")
-                result = ErrorResult(resource, msg=str(err))
+        staging = _Staging(self.internal_store)
+        try:
+            incoming = order_resources(inputs)
+            for resource in incoming:
+                staging.stage(resource)
+            for resource in incoming:
+                results.append(
+                    self._check(resource, staging, create_only=create_only)
+                )
+        except ErrorResult as err:
+            results.append(err)
+        except Exception as err:
+            log.exception("error updating resource")
+            result = ErrorResult(resource, msg=str(err))
             results.append(result)
         if results.success:
             log.debug(
                 'successfully updated %s resources. syncing changes to public stores',
                 len(list(results)),
             )
+            results = staging.save()
+            _prune_linked_entries(staging)
             self._sync_modified(results)
         return results
 
@@ -324,57 +435,43 @@ class ClusterConfigHandler:
         log.debug("search found %d resources", len(out))
         return out
 
-    def _order_inputs(
-        self, inputs: Iterable[SMBResource]
-    ) -> List[SMBResource]:
-        """Sort resource objects by type so that the user can largely input
-        objects freely but that references map out cleanly.
-        """
-
-        def _keyfunc(r: SMBResource) -> int:
-            if isinstance(r, resources.RemovedShare):
-                return -2
-            if isinstance(r, resources.RemovedCluster):
-                return -1
-            if isinstance(r, resources.Share):
-                return 2
-            if isinstance(r, resources.Cluster):
-                return 1
-            return 0
-
-        return sorted(inputs, key=_keyfunc)
-
-    def _update_resource(self, resource: SMBResource) -> Result:
-        """Update the internal store with a new resource object."""
-        entry: ResourceEntry
-        log.debug('updating resource: %r', resource)
-        if isinstance(
-            resource, (resources.Cluster, resources.RemovedCluster)
-        ):
-            self._check_cluster(resource)
-            entry = self._cluster_entry(resource.cluster_id)
-        elif isinstance(resource, (resources.Share, resources.RemovedShare)):
-            self._check_share(resource)
-            entry = self._share_entry(resource.cluster_id, resource.share_id)
-        elif isinstance(resource, resources.JoinAuth):
-            self._check_join_auths(resource)
-            entry = self._join_auth_entry(resource.auth_id)
-        elif isinstance(resource, resources.UsersAndGroups):
-            self._check_users_and_groups(resource)
-            entry = self._users_and_groups_entry(resource.users_groups_id)
-        else:
-            raise TypeError('not a valid smb resource')
-        state = self._save(entry, resource)
-        result = Result(resource, success=True, status={'state': state})
-        log.debug('saved resource: %r; state: %s', resource, state)
+    def _check(
+        self,
+        resource: SMBResource,
+        staging: _Staging,
+        *,
+        create_only: bool = False,
+    ) -> Result:
+        """Check/validate a staged resource."""
+        log.debug('staging resource: %r', resource)
+        if create_only:
+            if not staging.is_new(resource):
+                return Result(
+                    resource,
+                    success=False,
+                    msg='a resource with the same ID already exists',
+                )
+        try:
+            if isinstance(
+                resource, (resources.Cluster, resources.RemovedCluster)
+            ):
+                _check_cluster(resource, staging)
+            elif isinstance(
+                resource, (resources.Share, resources.RemovedShare)
+            ):
+                _check_share(resource, staging, self._path_resolver)
+            elif isinstance(resource, resources.JoinAuth):
+                _check_join_auths(resource, staging)
+            elif isinstance(resource, resources.UsersAndGroups):
+                _check_users_and_groups(resource, staging)
+            else:
+                raise TypeError('not a valid smb resource')
+        except ErrorResult as err:
+            log.debug('rejected resource: %r', resource)
+            return err
+        log.debug('checked resource: %r', resource)
+        result = Result(resource, success=True, status={'checked': True})
         return result
-
-    def _save(self, entry: ResourceEntry, resource: SMBResource) -> State:
-        # Returns the Intent indicating the previous state.
-        if resource.intent == Intent.REMOVED:
-            removed = entry.remove()
-            return State.REMOVED if removed else State.NOT_PRESENT
-        return entry.create_or_update(resource)
 
     def _sync_clusters(
         self, modified_cluster_ids: Optional[Collection[str]] = None
@@ -572,92 +669,6 @@ class ClusterConfigHandler:
         external.rm_cluster(self.priv_store, cluster_id)
         external.rm_cluster(self.public_store, cluster_id)
 
-    def _check_cluster(self, cluster: ClusterRef) -> None:
-        """Check that the cluster resource can be updated."""
-        if cluster.intent == Intent.REMOVED:
-            share_ids = ShareEntry.ids(self.internal_store)
-            clusters_used = {cid for cid, _ in share_ids}
-            if cluster.cluster_id in clusters_used:
-                raise ErrorResult(
-                    cluster,
-                    msg="cluster in use by shares",
-                    status={
-                        'clusters': [
-                            shid
-                            for cid, shid in share_ids
-                            if cid == cluster.cluster_id
-                        ]
-                    },
-                )
-            return
-        assert isinstance(cluster, resources.Cluster)
-        cluster.validate()
-
-    def _check_share(self, share: ShareRef) -> None:
-        """Check that the share resource can be updated."""
-        if share.intent == Intent.REMOVED:
-            return
-        assert isinstance(share, resources.Share)
-        share.validate()
-        if share.cluster_id not in ClusterEntry.ids(self.internal_store):
-            raise ErrorResult(
-                share,
-                msg="no matching cluster id",
-                status={"cluster_id": share.cluster_id},
-            )
-        assert share.cephfs is not None
-        try:
-            self._path_resolver.resolve_exists(
-                share.cephfs.volume,
-                share.cephfs.subvolumegroup,
-                share.cephfs.subvolume,
-                share.cephfs.path,
-            )
-        except (FileNotFoundError, NotADirectoryError):
-            raise ErrorResult(
-                share, msg="path is not a valid directory in volume"
-            )
-
-    def _check_join_auths(self, join_auth: resources.JoinAuth) -> None:
-        """Check that the JoinAuth resource can be updated."""
-        if join_auth.intent == Intent.PRESENT:
-            return  # adding is always ok
-        refs_in_use: Dict[str, List[str]] = {}
-        for cluster_id in ClusterEntry.ids(self.internal_store):
-            cluster = self._cluster_entry(cluster_id).get_cluster()
-            for ref in _auth_refs(cluster):
-                refs_in_use.setdefault(ref, []).append(cluster_id)
-        log.debug('refs_in_use: %r', refs_in_use)
-        if join_auth.auth_id in refs_in_use:
-            raise ErrorResult(
-                join_auth,
-                msg='join auth resource in use by clusters',
-                status={
-                    'clusters': refs_in_use[join_auth.auth_id],
-                },
-            )
-
-    def _check_users_and_groups(
-        self, users_and_groups: resources.UsersAndGroups
-    ) -> None:
-        """Check that the UsersAndGroups resource can be updated."""
-        if users_and_groups.intent == Intent.PRESENT:
-            return  # adding is always ok
-        refs_in_use: Dict[str, List[str]] = {}
-        for cluster_id in ClusterEntry.ids(self.internal_store):
-            cluster = self._cluster_entry(cluster_id).get_cluster()
-            for ref in _ug_refs(cluster):
-                refs_in_use.setdefault(ref, []).append(cluster_id)
-        log.debug('refs_in_use: %r', refs_in_use)
-        if users_and_groups.users_groups_id in refs_in_use:
-            raise ErrorResult(
-                users_and_groups,
-                msg='users and groups resource in use by clusters',
-                status={
-                    'clusters': refs_in_use[users_and_groups.users_groups_id],
-                },
-            )
-
     def _cluster_entry(self, cluster_id: str) -> ClusterEntry:
         return ClusterEntry.from_store(self.internal_store, cluster_id)
 
@@ -716,6 +727,210 @@ class ClusterConfigHandler:
         )
 
 
+def order_resources(
+    resource_objs: Iterable[SMBResource],
+) -> List[SMBResource]:
+    """Sort resource objects by type so that the user can largely input
+    objects freely but that references map out cleanly.
+    """
+
+    def _keyfunc(r: SMBResource) -> int:
+        if isinstance(r, resources.RemovedShare):
+            return -2
+        if isinstance(r, resources.RemovedCluster):
+            return -1
+        if isinstance(r, resources.Share):
+            return 2
+        if isinstance(r, resources.Cluster):
+            return 1
+        return 0
+
+    return sorted(resource_objs, key=_keyfunc)
+
+
+def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
+    """Check that the cluster resource can be updated."""
+    if cluster.intent == Intent.REMOVED:
+        share_ids = ShareEntry.ids(staging)
+        clusters_used = {cid for cid, _ in share_ids}
+        if cluster.cluster_id in clusters_used:
+            raise ErrorResult(
+                cluster,
+                msg="cluster in use by shares",
+                status={
+                    'clusters': [
+                        shid
+                        for cid, shid in share_ids
+                        if cid == cluster.cluster_id
+                    ]
+                },
+            )
+        return
+    assert isinstance(cluster, resources.Cluster)
+    cluster.validate()
+    for auth_ref in _auth_refs(cluster):
+        auth = staging.get_join_auth(auth_ref)
+        if (
+            auth.linked_to_cluster
+            and auth.linked_to_cluster != cluster.cluster_id
+        ):
+            raise ErrorResult(
+                cluster,
+                msg="join auth linked to different cluster",
+                status={
+                    'other_cluster_id': auth.linked_to_cluster,
+                },
+            )
+    for ug_ref in _ug_refs(cluster):
+        ug = staging.get_users_and_groups(ug_ref)
+        if (
+            ug.linked_to_cluster
+            and ug.linked_to_cluster != cluster.cluster_id
+        ):
+            raise ErrorResult(
+                cluster,
+                msg="users and groups linked to different cluster",
+                status={
+                    'other_cluster_id': ug.linked_to_cluster,
+                },
+            )
+
+
+def _check_share(
+    share: ShareRef, staging: _Staging, resolver: PathResolver
+) -> None:
+    """Check that the share resource can be updated."""
+    if share.intent == Intent.REMOVED:
+        return
+    assert isinstance(share, resources.Share)
+    share.validate()
+    if share.cluster_id not in ClusterEntry.ids(staging):
+        raise ErrorResult(
+            share,
+            msg="no matching cluster id",
+            status={"cluster_id": share.cluster_id},
+        )
+    assert share.cephfs is not None
+    try:
+        resolver.resolve_exists(
+            share.cephfs.volume,
+            share.cephfs.subvolumegroup,
+            share.cephfs.subvolume,
+            share.cephfs.path,
+        )
+    except (FileNotFoundError, NotADirectoryError):
+        raise ErrorResult(
+            share, msg="path is not a valid directory in volume"
+        )
+
+
+def _check_join_auths(
+    join_auth: resources.JoinAuth, staging: _Staging
+) -> None:
+    """Check that the JoinAuth resource can be updated."""
+    if join_auth.intent == Intent.PRESENT:
+        return _check_join_auths_present(join_auth, staging)
+    return _check_join_auths_removed(join_auth, staging)
+
+
+def _check_join_auths_removed(
+    join_auth: resources.JoinAuth, staging: _Staging
+) -> None:
+    cids = set(ClusterEntry.ids(staging))
+    refs_in_use: Dict[str, List[str]] = {}
+    for cluster_id in cids:
+        cluster = staging.get_cluster(cluster_id)
+        for ref in _auth_refs(cluster):
+            refs_in_use.setdefault(ref, []).append(cluster_id)
+    log.debug('refs_in_use: %r', refs_in_use)
+    if join_auth.auth_id in refs_in_use:
+        raise ErrorResult(
+            join_auth,
+            msg='join auth resource in use by clusters',
+            status={
+                'clusters': refs_in_use[join_auth.auth_id],
+            },
+        )
+
+
+def _check_join_auths_present(
+    join_auth: resources.JoinAuth, staging: _Staging
+) -> None:
+    if join_auth.linked_to_cluster:
+        cids = set(ClusterEntry.ids(staging))
+        if join_auth.linked_to_cluster not in cids:
+            raise ErrorResult(
+                join_auth,
+                msg='linked_to_cluster id not valid',
+                status={
+                    'unknown_id': join_auth.linked_to_cluster,
+                },
+            )
+
+
+def _check_users_and_groups(
+    users_and_groups: resources.UsersAndGroups, staging: _Staging
+) -> None:
+    """Check that the UsersAndGroups resource can be updated."""
+    if users_and_groups.intent == Intent.PRESENT:
+        return _check_users_and_groups_present(users_and_groups, staging)
+    return _check_users_and_groups_removed(users_and_groups, staging)
+
+
+def _check_users_and_groups_removed(
+    users_and_groups: resources.UsersAndGroups, staging: _Staging
+) -> None:
+    refs_in_use: Dict[str, List[str]] = {}
+    cids = set(ClusterEntry.ids(staging))
+    for cluster_id in cids:
+        cluster = staging.get_cluster(cluster_id)
+        for ref in _ug_refs(cluster):
+            refs_in_use.setdefault(ref, []).append(cluster_id)
+    log.debug('refs_in_use: %r', refs_in_use)
+    if users_and_groups.users_groups_id in refs_in_use:
+        raise ErrorResult(
+            users_and_groups,
+            msg='users and groups resource in use by clusters',
+            status={
+                'clusters': refs_in_use[users_and_groups.users_groups_id],
+            },
+        )
+
+
+def _check_users_and_groups_present(
+    users_and_groups: resources.UsersAndGroups, staging: _Staging
+) -> None:
+    if users_and_groups.linked_to_cluster:
+        cids = set(ClusterEntry.ids(staging))
+        if users_and_groups.linked_to_cluster not in cids:
+            raise ErrorResult(
+                users_and_groups,
+                msg='linked_to_cluster id not valid',
+                status={
+                    'unknown_id': users_and_groups.linked_to_cluster,
+                },
+            )
+
+
+def _prune_linked_entries(staging: _Staging) -> None:
+    cids = set(ClusterEntry.ids(staging))
+    for auth_id in JoinAuthEntry.ids(staging):
+        join_auth = staging.get_join_auth(auth_id)
+        if (
+            join_auth.linked_to_cluster
+            and join_auth.linked_to_cluster not in cids
+        ):
+            JoinAuthEntry.from_store(
+                staging.destination_store, auth_id
+            ).remove()
+    for ug_id in UsersAndGroupsEntry.ids(staging):
+        ug = staging.get_users_and_groups(ug_id)
+        if ug.linked_to_cluster and ug.linked_to_cluster not in cids:
+            UsersAndGroupsEntry.from_store(
+                staging.destination_store, ug_id
+            ).remove()
+
+
 def _auth_refs(cluster: resources.Cluster) -> Collection[str]:
     if cluster.auth_mode != AuthMode.ACTIVE_DIRECTORY:
         return set()
@@ -739,11 +954,6 @@ def _ug_refs(cluster: resources.Cluster) -> Collection[str]:
     }
 
 
-def _ynbool(value: bool) -> str:
-    """Convert a bool to an smb.conf compatible string."""
-    return 'Yes' if value else 'No'
-
-
 def _generate_share(
     share: resources.Share, resolver: PathResolver, cephx_entity: str
 ) -> Dict[str, Dict[str, str]]:
@@ -763,7 +973,7 @@ def _generate_share(
         share.cephfs.subvolume,
         share.cephfs.path,
     )
-    return {
+    cfg = {
         # smb.conf options
         'options': {
             'path': path,
@@ -771,12 +981,56 @@ def _generate_share(
             'ceph:config_file': '/etc/ceph/ceph.conf',
             'ceph:filesystem': share.cephfs.volume,
             'ceph:user_id': cephx_entity,
-            'read only': _ynbool(share.readonly),
-            'browseable': _ynbool(share.browseable),
+            'read only': ynbool(share.readonly),
+            'browseable': ynbool(share.browseable),
             'kernel share modes': 'no',
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
         }
     }
+    # extend share with user+group login access lists
+    _generate_share_login_control(share, cfg)
+    # extend share with custom options
+    custom_opts = share.cleaned_custom_smb_share_options
+    if custom_opts:
+        cfg['options'].update(custom_opts)
+        cfg['options']['x:ceph:has_custom_options'] = 'yes'
+    return cfg
+
+
+def _generate_share_login_control(
+    share: resources.Share, cfg: Simplified
+) -> None:
+    valid_users: List[str] = []
+    invalid_users: List[str] = []
+    read_list: List[str] = []
+    write_list: List[str] = []
+    admin_users: List[str] = []
+    for entry in share.login_control or []:
+        if entry.category == LoginCategory.GROUP:
+            name = f'@{entry.name}'
+        else:
+            name = entry.name
+        if entry.access == LoginAccess.NONE:
+            invalid_users.append(name)
+            continue
+        elif entry.access == LoginAccess.ADMIN:
+            admin_users.append(name)
+        elif entry.access == LoginAccess.READ_ONLY:
+            read_list.append(name)
+        elif entry.access == LoginAccess.READ_WRITE:
+            write_list.append(name)
+        if share.restrict_access:
+            valid_users.append(name)
+    if valid_users:
+        cfg['options']['valid users'] = ' '.join(valid_users)
+    if invalid_users:
+        cfg['options']['invalid users'] = ' '.join(invalid_users)
+    if read_list:
+        cfg['options']['read list'] = ' '.join(read_list)
+    if write_list:
+        cfg['options']['write list'] = ' '.join(write_list)
+    if admin_users:
+        cfg['options']['admin users'] = ' '.join(admin_users)
 
 
 def _generate_config(
@@ -801,7 +1055,7 @@ def _generate_config(
         for share in shares
     }
 
-    return {
+    cfg: Dict[str, Any] = {
         'samba-container-config': 'v0',
         'configs': {
             cluster.cluster_id: {
@@ -827,6 +1081,14 @@ def _generate_config(
         },
         'shares': share_configs,
     }
+    # insert global custom options
+    custom_opts = cluster.cleaned_custom_smb_global_options
+    if custom_opts:
+        # isolate custom config opts into a section for cleanliness
+        gname = f'{cluster.cluster_id}_custom'
+        cfg['configs'][cluster.cluster_id]['globals'].append(gname)
+        cfg['globals'][gname] = {'options': dict(custom_opts)}
+    return cfg
 
 
 def _generate_smb_service_spec(
@@ -911,8 +1173,6 @@ def _save_pending_join_auths(
     for idx, src in enumerate(checked(cluster.domain_settings).join_sources):
         if src.source_type == JoinSourceType.RESOURCE:
             javalues = checked(arefs[src.ref].auth)
-        elif src.source_type == JoinSourceType.PASSWORD:
-            javalues = checked(src.auth)
         else:
             raise ValueError(
                 f'unsupported join source type: {src.source_type}'
@@ -936,9 +1196,8 @@ def _save_pending_users_and_groups(
         if ugsv.source_type == UserGroupSourceType.RESOURCE:
             ugvalues = augs[ugsv.ref].values
             assert ugvalues
-        elif ugsv.source_type == UserGroupSourceType.INLINE:
-            ugvalues = ugsv.values
-            assert ugvalues
+        elif ugsv.source_type == UserGroupSourceType.EMPTY:
+            continue
         else:
             raise ValueError(
                 f'unsupported users/groups source type: {ugsv.source_type}'

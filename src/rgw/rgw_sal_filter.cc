@@ -1044,16 +1044,15 @@ RGWAccessControlPolicy& FilterObject::get_acl()
   return next->get_acl();
 }
 
-int FilterObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate,
-				optional_yield y, bool follow_olh)
-{
-  return next->get_obj_state(dpp, pstate, y, follow_olh);
+int FilterObject::load_obj_state(const DoutPrefixProvider *dpp,
+                                 optional_yield y, bool follow_olh) {
+  return next->load_obj_state(dpp, y, follow_olh);
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-				Attrs* delattrs, optional_yield y)
+				Attrs* delattrs, optional_yield y, uint32_t flags)
 {
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y);
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
 int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -1443,6 +1442,7 @@ int FilterWriter::process(bufferlist&& data, uint64_t offset)
 int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -1450,7 +1450,7 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+  return next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, rctx, flags);
 }

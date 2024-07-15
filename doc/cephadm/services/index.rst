@@ -20,6 +20,7 @@ for details on individual services:
     snmp-gateway
     tracing
     smb
+    mgmt-gateway
 
 Service Status
 ==============

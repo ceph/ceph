@@ -33,9 +33,12 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
   timer.async_wait([&](const boost::system::error_code &e) {
     std::cerr << e << std::endl;
     update_sockets();
+
+    bool sort_metrics = g_conf().get_val<bool>("exporter_sort_metrics");
+    auto prio_limit = g_conf().get_val<int64_t>("exporter_prio_limit");
     std::string dump_response;
     std::string schema_response;
-    dump_asok_metrics(false, -1, true, dump_response, schema_response, true);
+    dump_asok_metrics(sort_metrics, prio_limit, true, dump_response, schema_response, true);
     auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
     // time to wait before sending requests again
     timer.expires_from_now(std::chrono::seconds(stats_period));
@@ -153,16 +156,14 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
   std::vector<std::pair<std::string, int>> daemon_pids;
 
   int failures = 0;
-  bool sort;
-  sort = sort_metrics ? true : g_conf().get_val<bool>("exporter_sort_metrics");
-  if (sort) {
+  if (sort_metrics) {
     builder =
         std::unique_ptr<OrderedMetricsBuilder>(new OrderedMetricsBuilder());
   } else {
     builder =
         std::unique_ptr<UnorderedMetricsBuilder>(new UnorderedMetricsBuilder());
   }
-  auto prio_limit = counter_prio >=0 ? counter_prio : g_conf().get_val<int64_t>("exporter_prio_limit");
+  auto prio_limit = counter_prio;
   for (auto &[daemon_name, sock_client] : clients) {
     if (sockClientsPing) {
       bool ok;
@@ -186,6 +187,9 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
     }
 
     try {
+      parse_asok_metrics(counter_dump_response, counter_schema_response,
+                         prio_limit, daemon_name);
+
       std::string config_show = !config_show_response ? "" :
         asok_request(sock_client, "config show", daemon_name);
       if (config_show.size() == 0) {
@@ -203,8 +207,6 @@ void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter
       if (!pid_str.empty()) {
         daemon_pids.push_back({daemon_name, std::stoi(pid_str)});
       }
-      parse_asok_metrics(counter_dump_response, counter_schema_response,
-                         prio_limit, daemon_name);
     } catch (const std::invalid_argument &e) {
       failures++;
       dout(1) << "failed to handle " << daemon_name << ": " << e.what()

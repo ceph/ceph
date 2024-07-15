@@ -51,6 +51,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_disable_s3select
+  type: bool
+  level: advanced
+  desc: disable the s3select operation; RGW will report an error and will return ERR_INVALID_REQUEST.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_rados_tracing
   type: bool
   level: advanced
@@ -1460,7 +1468,7 @@ options:
   desc: Ops log object name format
   long_desc: Defines the format of the RADOS objects names that ops log uses to store
     ops log data
-  fmt_desc: The logging format for an object name. See ma npage
+  fmt_desc: The logging format for an object name. See man page
     :manpage:`date` for details about format specifiers.
   default: '%Y-%m-%d-%H-%i-%n'
   services:
@@ -2227,6 +2235,14 @@ options:
     limited by the thread count, but debugging and tracing the synchronous
     calls can be easier.
   default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_asio_assert_yielding
+  type: bool
+  level: dev
+  desc: Trigger an assertion failure if an operation would block an asio thread
+  default: false
   services:
   - rgw
   with_legacy: true
@@ -3236,6 +3252,36 @@ options:
   see_also:
   - rgw_max_objs_per_shard
   - rgw_max_dynamic_shards
+- name: rgw_dynamic_resharding_may_reduce
+  type: bool
+  level: advanced
+  desc: Whether dynamic resharding can reduce the number of shards
+  long_desc: If true, RGW's dynamic resharding ability is allowed to
+    reduce the number of shards if it appears there are too many.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_dynamic_resharding
+- name: rgw_dynamic_resharding_reduction_wait
+  type: uint
+  level: advanced
+  desc: Number of hours to delay bucket index shard reduction.
+  long_desc: >-
+    In order to avoid resharding buckets with object
+    counts that fluctuate up and down regularly, we implemement a delay
+    between noting a shard reduction might be appropriate and when it's
+    actually done. This allows us to cancel the reshard operation if the
+    number of object significantly increases during this delay.
+    WARNING: Setting this value too low could result in significantly reduced
+    cluster performance.
+  default: 120
+  min: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_dynamic_resharding_may_reduce
 - name: rgw_max_objs_per_shard
   type: uint
   level: basic
@@ -3271,6 +3317,23 @@ options:
   services:
   - rgw
   min: 10
+- name: rgw_reshard_debug_interval
+  type: int
+  level: dev
+  desc: The number of seconds that simulate one "day" in order to debug RGW dynamic resharding.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW dynamic resharding, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change dynamic resharding behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_reshard_thread_interval
+  - rgw_dynamic_resharding_reduction_wait
 - name: rgw_cache_expiry_interval
   type: uint
   level: advanced

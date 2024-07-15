@@ -30,36 +30,35 @@ by a programmer by implementing the ``encode`` and ``decode`` methods.
 
 Principles for format change
 ----------------------------
-It is not unusual that the format of serialization changes. This
-process requires careful attention from during both development
+It is not unusual for the format of serialization to change. This
+process requires careful attention both during development
 and review.
 
-The general rule is that a decoder must understand what had been
-encoded by an encoder. Most of the problems come from ensuring
-that compatibility continues between old decoders and new encoders
-as well as new decoders and old decoders. One should assume
-that -- if not otherwise derogated -- any mix (old/new) is
-possible in a cluster. There are 2 main reasons for that:
+The general rule is that a decoder must understand what has been encoded by an
+encoder. Most difficulties arise during the process of ensuring the continuity
+of compatibility of old decoders with new encoders, and ensuring the continuity
+of compatibility of new decoders with old decoders. One should assume -- if not
+otherwise specified -- that any mix of old and new is possible in a cluster.
+There are two primary concerns:
 
-1. Upgrades. Although there are recommendations related to the order
-   of entity types (mons/osds/clients), it is not mandatory and
-   no assumption should be made about it.
-2. Huge variability of client versions. It was always the case
-   that kernel (and thus kernel clients) upgrades are decoupled
-   from Ceph upgrades. Moreover, proliferation of containerization
-   bring the variability even to e.g. ``librbd`` -- now user space
-   libraries live on the container own.
+1. **Upgrades.** Although there are recommendations related to the order of
+   entity types (mons/OSDs/clients), it is not mandatory and no assumption
+   should be made.
+2. **Huge variability of client versions.** It has always been the case that
+   kernel upgrades (and thus kernel clients) are decoupled from Ceph upgrades.
+   Containerization brings variability even to ``librbd`` -- now user space
+   libraries live in the container itself:
 
-With this being said, there are few rules limiting the degree
-of interoperability between dencoders:
+There are a few rules limiting the degree of interoperability between
+dencoders:
 
 * ``n-2`` for dencoding between daemons,
-* ``n-3`` hard requirement for client-involved scenarios,
-* ``n-3..``  soft requirements for clinet-involved scenarios. Ideally
-  every client should be able to talk any version of daemons.
+* ``n-3`` hard requirement for client scenarios,
+* ``n-3..`` soft requirement for client scenarios. Ideally every client should
+  be able to talk to any version of daemons.
 
-As the underlying reasons are the same, the rules dencoders
-follow are virtually the same as for deprecations of our features
+As the underlying reasons are the same, the rules that dencoders
+follow are nearly the same as the rules for deprecations of our features
 bits. See the ``Notes on deprecation`` in ``src/include/ceph_features.h``.
 
 Frameworks
@@ -163,7 +162,7 @@ macro.
 The append-extendability of our dencoders is a result of the forward
 compatibility that the ``ENCODE_START`` and ``DECODE_FINISH`` macros bring.
 
-They are implementing extendibility facilities. An encoder, when filling
+They are implementing extensibility facilities. An encoder, when filling
 the bufferlist, prepends three fields: version of the current format,
 minimal version of a decoder compatible with it and the total size of
 all encoded fields.

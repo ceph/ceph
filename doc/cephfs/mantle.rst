@@ -6,20 +6,25 @@ Mantle
     Mantle is for research and development of metadata balancer algorithms,
     not for use on production CephFS clusters.
 
-Multiple, active MDSs can migrate directories to balance metadata load. The
-policies for when, where, and how much to migrate are hard-coded into the
-metadata balancing module. Mantle is a programmable metadata balancer built
-into the MDS. The idea is to protect the mechanisms for balancing load
-(migration, replication, fragmentation) but stub out the balancing policies
-using Lua. Mantle is based on [1] but the current implementation does *NOT*
-have the following features from that paper:
+Mantle is a programmable metadata balancer that is built into the MDS.
+
+By default (without Mantle), multiple, active MDSs can migrate directories to
+balance metadata load. The policies for when, where, and how much to migrate
+are hard-coded into the metadata balancing module. 
+
+Mantle works by protecting the mechanisms for balancing load (migration,
+replication, fragmentation) while suppressing the balancing policies using Lua.
+Mantle is based on [1] but the current implementation does *NOT* have the
+following features from that paper:
 
 1. Balancing API: in the paper, the user fills in when, where, how much, and
-   load calculation policies; currently, Mantle only requires that Lua policies
-   return a table of target loads (e.g., how much load to send to each MDS)
-2. "How much" hook: in the paper, there was a hook that let the user control
-   the fragment selector policy; currently, Mantle does not have this hook
-3. Instantaneous CPU utilization as a metric
+   load calculation policies. Currently, Mantle requires only that Lua policies
+   return a table of target loads (for example, how much load to send to each
+   MDS)
+2. The "how much" hook: in the paper, there was a hook that allowed the user to
+   control the "fragment selector policy". Currently, Mantle does not have this
+   hook.
+3. "Instantaneous CPU utilization" as a metric.
 
 [1] Supercomputing '15 Paper:
 http://sc15.supercomputing.org/schedule/event_detail-evid=pap168.html
@@ -30,10 +35,11 @@ Quickstart with vstart
 .. warning::
 
     Developing balancers with vstart is difficult because running all daemons
-    and clients on one node can overload the system. Let it run for a while, even
-    though you will likely see a bunch of lost heartbeat and laggy MDS warnings.
-    Most of the time this guide will work but sometimes all MDSs lock up and you
-    cannot actually see them spill. It is much better to run this on a cluster.
+    and clients on one node can overload the system. Let the system run for a
+    while, even though there will likely be many lost heartbeat warnings and
+    many laggy MDS warnings. In most cases this guide will work, but sometimes
+    when developing with vstart all MDSs will lock up and you cannot actually
+    see them spill. It is better to run this on a multi-node cluster.
 
 As a prerequisite, we assume you have installed `mdtest
 <https://sourceforge.net/projects/mdtest/>`_ or pulled the `Docker image
