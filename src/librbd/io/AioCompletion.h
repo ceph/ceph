@@ -180,8 +180,7 @@ struct AioCompletion {
 private:
   void queue_complete();
   void complete_external_callback();
-  void complete_event_socket();
-  void notify_callbacks_complete();
+  void mark_complete_and_notify();
 };
 
 class C_AioRequest : public Context {
