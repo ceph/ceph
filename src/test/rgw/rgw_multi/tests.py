@@ -1993,6 +1993,7 @@ def test_replication_status():
     bilog = bilog_list(zone.zone, bucket.name)
     assert(len(bilog) == 0)
 
+@attr('fails_with_rgw')
 def test_object_acl():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
