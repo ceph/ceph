@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Iterator, List, Tuple, cast
+from typing import Any, Dict, List, Tuple, cast
 
 from ceph.deployment.service_spec import ServiceSpec, SMBSpec
 
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SMBService(CephService):
     TYPE = 'smb'
+    smb_pool = '.smb'  # minor layering violation. try to clean up later.
 
     def config(self, spec: ServiceSpec) -> None:
         assert self.TYPE == spec.service_type
@@ -70,35 +71,53 @@ class SMBService(CephService):
         # data path access.
         return AuthEntity(f'client.{self.TYPE}.config.{daemon_id}')
 
-    def _rados_uri_to_pool(self, uri: str) -> str:
-        """Given a psudo-uri possibly pointing to an object in a pool, return
-        the name of the pool if a rados uri, otherwise return an empty string.
-        """
-        if not uri.startswith('rados://'):
-            return ''
-        pool = uri[8:].lstrip('/').split('/')[0]
-        logger.debug('extracted pool %r from uri %r', pool, uri)
-        return pool
-
     def _allow_config_key_command(self, name: str) -> str:
         # permit the samba container config access to the mon config key store
         # with keys like smb/config/<cluster_id>/*.
         return f'allow command "config-key get" with "key" prefix "smb/config/{name}/"'
 
-    def _pools_in_spec(self, smb_spec: SMBSpec) -> Iterator[str]:
+    def _pool_caps_from_uri(self, uri: str) -> List[str]:
+        if not uri.startswith('rados://'):
+            logger.warning("ignoring unexpected uri scheme: %r", uri)
+            return []
+        part = uri[8:].rstrip('/')
+        if part.count('/') > 1:
+            # assumes no extra "/"s
+            pool, ns, _ = part.split('/', 2)
+        else:
+            pool, _ = part.split('/', 1)
+            ns = ''
+        if pool != self.smb_pool:
+            logger.debug('extracted pool %r from uri %r', pool, uri)
+            return [f'allow r pool={pool}']
+        logger.debug(
+            'found smb pool in uri [pool=%r, ns=%r]: %r', pool, ns, uri
+        )
+        # enhanced caps for smb pools to be used for ctdb mgmt
+        return [
+            # TODO - restrict this read access to the namespace too?
+            f'allow r pool={pool}',
+            # the x perm is needed to lock the cluster meta object
+            f'allow rwx pool={pool} namespace={ns} object_prefix cluster.meta.',
+        ]
+
+    def _expand_osd_caps(self, smb_spec: SMBSpec) -> str:
+        caps = set()
         uris = [smb_spec.config_uri]
         uris.extend(smb_spec.join_sources or [])
         uris.extend(smb_spec.user_sources or [])
         for uri in uris:
-            pool = self._rados_uri_to_pool(uri)
-            if pool:
-                yield pool
+            for cap in self._pool_caps_from_uri(uri):
+                caps.add(cap)
+        return ', '.join(caps)
 
     def _key_for_user(self, entity: str) -> str:
-        ret, keyring, err = self.mgr.mon_command({
-            'prefix': 'auth get',
-            'entity': entity,
-        })
+        ret, keyring, err = self.mgr.mon_command(
+            {
+                'prefix': 'auth get',
+                'entity': entity,
+            }
+        )
         if ret != 0:
             raise ValueError(f'no auth key for user: {entity!r}')
         return '\n' + simplified_keyring(entity, keyring)
@@ -108,12 +127,10 @@ class SMBService(CephService):
     ) -> Dict[str, str]:
         ackc = self._allow_config_key_command(smb_spec.cluster_id)
         wanted_caps = ['mon', f'allow r, {ackc}']
-        pools = list(self._pools_in_spec(smb_spec))
-        if pools:
+        osd_caps = self._expand_osd_caps(smb_spec)
+        if osd_caps:
             wanted_caps.append('osd')
-            wanted_caps.append(
-                ', '.join(f'allow r pool={pool}' for pool in pools)
-            )
+            wanted_caps.append(osd_caps)
         entity = self.get_auth_entity(daemon_id)
         keyring = self.get_keyring_with_caps(entity, wanted_caps)
         # add additional data-path users to the ceph keyring
