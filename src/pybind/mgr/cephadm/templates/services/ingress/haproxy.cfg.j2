@@ -62,6 +62,9 @@ frontend frontend
 {% else %}
     bind {{ ip }}:{{ frontend_port }}
 {% endif %}
+{% if mode == 'tcp' %}
+    option tcplog
+{% endif %}
     default_backend backend
 
 backend backend
@@ -73,16 +76,24 @@ backend backend
 {% endif %}
     balance static-rr
     option httpchk HEAD / HTTP/1.0
-    {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100 inter {{ health_check_interval }}
-    {% endfor %}
 {% endif %}
 {% if mode == 'tcp' %}
     mode        tcp
     balance     roundrobin
+{% if spec.use_tcp_mode_over_rgw %}
+{% if backend_spec.ssl %}
+    option ssl-hello-chk
+{% endif %}
+{% endif %}
 {% if default_server_opts %}
     default-server {{ default_server_opts|join(" ") }}
 {% endif %}
+{% endif %}
+{% if backend_spec.service_type == 'rgw' %}
+    {% for server in servers %}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100 inter {{ health_check_interval }}
+    {% endfor %}
+{% else %}
     {% for server in servers %}
     server {{ server.name }} {{ server.ip }}:{{ server.port }} check
     {% endfor %}
