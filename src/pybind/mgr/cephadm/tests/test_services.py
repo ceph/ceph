@@ -2044,6 +2044,26 @@ class TestRGWService:
                 })
                 assert f == expected
 
+    @pytest.mark.parametrize(
+        "disable_sync_traffic",
+        [
+            (True),
+            (False),
+        ]
+    )
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_disable_sync_traffic(self, disable_sync_traffic, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(service_id="foo",
+                        disable_multisite_sync_traffic=disable_sync_traffic)
+            with with_service(cephadm_module, s) as dds:
+                _, f, _ = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': f'client.{dds[0]}',
+                    'key': 'rgw_run_sync_thread',
+                })
+                assert f == ('false' if disable_sync_traffic else 'true')
+
 
 class TestMonService:
 
