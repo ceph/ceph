@@ -397,6 +397,10 @@ void dump_content_length(req_state* const s, const uint64_t len)
 
 static void dump_chunked_encoding(req_state* const s)
 {
+  // omit transfer-encoding for HEAD requests so ChunkingFilter doesn't
+  // try to write the final chunk
+  if(s->op == OP_HEAD)
+    return;
   try {
     RESTFUL_IO(s)->send_chunked_transfer_encoding();
   } catch (rgw::io::Exception& e) {
