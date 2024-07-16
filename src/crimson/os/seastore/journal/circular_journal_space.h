@@ -69,7 +69,7 @@ class CircularJournalSpace : public JournalAllocator {
   CircularJournalSpace(RBMDevice * device);
 
   struct cbj_header_t;
-  using write_ertr = Journal::submit_record_ertr;
+  using submit_ertr = Journal::submit_record_ertr;
   /*
    * device_write_bl
    *
@@ -77,7 +77,8 @@ class CircularJournalSpace : public JournalAllocator {
    * @param bufferlist to write
    *
    */
-  write_ertr::future<> device_write_bl(rbm_abs_addr offset, ceph::bufferlist &bl);
+  submit_ertr::future<>
+  device_write_bl(rbm_abs_addr offset, ceph::bufferlist &bl);
 
   using read_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -100,7 +101,7 @@ class CircularJournalSpace : public JournalAllocator {
 
   ceph::bufferlist encode_header();
 
-  write_ertr::future<> write_header();
+  submit_ertr::future<> write_header();
 
 
   /**
