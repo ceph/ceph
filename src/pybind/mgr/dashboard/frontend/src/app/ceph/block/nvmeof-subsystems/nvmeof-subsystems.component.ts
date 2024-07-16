@@ -53,7 +53,7 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
         prop: 'namespace_count'
       },
       {
-        name: $localize`# Maximum Namespaces`,
+        name: $localize`# Maximum Allowed Namespaces`,
         prop: 'max_namespaces'
       }
     ];

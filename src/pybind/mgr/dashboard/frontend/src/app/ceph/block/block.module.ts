@@ -45,6 +45,8 @@ import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-subsystems-form.component';
 import { NvmeofListenersFormComponent } from './nvmeof-listeners-form/nvmeof-listeners-form.component';
 import { NvmeofListenersListComponent } from './nvmeof-listeners-list/nvmeof-listeners-list.component';
+import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list/nvmeof-namespaces-list.component';
+import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form/nvmeof-namespaces-form.component';
 
 @NgModule({
   imports: [
@@ -91,7 +93,9 @@ import { NvmeofListenersListComponent } from './nvmeof-listeners-list/nvmeof-lis
     NvmeofTabsComponent,
     NvmeofSubsystemsFormComponent,
     NvmeofListenersFormComponent,
-    NvmeofListenersListComponent
+    NvmeofListenersListComponent,
+    NvmeofNamespacesListComponent,
+    NvmeofNamespacesFormComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
@@ -238,6 +242,7 @@ const routes: Routes = [
         component: NvmeofSubsystemsComponent,
         data: { breadcrumbs: 'Subsystems' },
         children: [
+          // subsystems
           { path: '', component: NvmeofSubsystemsComponent },
           {
             path: URLVerbs.CREATE,
@@ -245,13 +250,24 @@ const routes: Routes = [
             outlet: 'modal'
           },
           {
-            path: `${URLVerbs.EDIT}/:subsystem_nqn`,
+            path: `${URLVerbs.EDIT}/:subsystem_nqn/:max_ns`,
             component: NvmeofSubsystemsFormComponent,
             outlet: 'modal'
           },
+          // listeners
           {
             path: `${URLVerbs.CREATE}/:subsystem_nqn/listener`,
-            component: NvmeofListenersFormComponent,
+            component: NvmeofListenersFormComponent
+          },
+          // namespaces
+          {
+            path: `${URLVerbs.CREATE}/:subsystem_nqn/namespace`,
+            component: NvmeofNamespacesFormComponent,
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
+            component: NvmeofNamespacesFormComponent,
             outlet: 'modal'
           }
         ]

@@ -28,3 +28,22 @@ export interface NvmeofListener {
   trsvcid: number; // 4420
   id?: number; // for table
 }
+
+export interface NvmeofSubsystemHost {
+  nqn: string;
+}
+
+export interface NvmeofSubsystemNamespace {
+  nsid: number;
+  uuid: string;
+  bdev_name: string;
+  rbd_image_name: string;
+  rbd_pool_name: string;
+  load_balancing_group: number;
+  rbd_image_size: number;
+  block_size: number;
+  rw_ios_per_second: number;
+  rw_mbytes_per_second: number;
+  r_mbytes_per_second: number;
+  w_mbytes_per_second: number;
+}
