@@ -80,5 +80,10 @@ int __erasure_code_init(char *plugin_name, char *directory)
   if (r) {
     return -r;
   }
-  return instance.add(plugin_name, new ErasureCodePluginJerasure());
+  auto plugin = std::make_unique<ErasureCodePluginJerasure>();
+  r = instance.add(plugin_name, plugin.get());
+  if (r == 0) {
+    plugin.release();
+  }
+  return r;
 }

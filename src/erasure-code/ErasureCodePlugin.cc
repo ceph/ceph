@@ -15,6 +15,7 @@
  * 
  */
 
+#include <cassert>
 #include <errno.h>
 
 #include "ceph_ver.h"
@@ -39,15 +40,14 @@ ErasureCodePluginRegistry::ErasureCodePluginRegistry() = default;
 
 ErasureCodePluginRegistry::~ErasureCodePluginRegistry()
 {
-  if (disable_dlclose)
-    return;
-
-  for (std::map<std::string,ErasureCodePlugin*>::iterator i = plugins.begin();
-       i != plugins.end();
-       ++i) {
-    void *library = i->second->library;
-    delete i->second;
-    dlclose(library);
+  for (auto& name_plugin : plugins) {
+    auto *plugin = name_plugin.second;
+    assert(plugin);
+    void *library = plugin->library;
+    delete plugin;
+    if (!disable_dlclose) {
+      dlclose(library);
+    }
   }
 }
 
