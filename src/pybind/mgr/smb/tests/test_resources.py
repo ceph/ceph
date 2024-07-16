@@ -447,6 +447,164 @@ user_group_settings:
             "exc_type": ValueError,
             "error": "reference value must be",
         },
+        # missing name field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+login_control:
+  - nmae: frink
+    access: r
+""",
+            "exc_type": ValueError,
+            "error": "field: name",
+        },
+        # bad value in access field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+login_control:
+  - name: frink
+    access: rwx
+""",
+            "exc_type": ValueError,
+            "error": "rwx",
+        },
+        # bad value in category field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+login_control:
+  - category: admins
+    name: frink
+    access: admin
+""",
+            "exc_type": ValueError,
+            "error": "admins",
+        },
+        # bad value in category field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+restrict_access: true
+""",
+            "exc_type": ValueError,
+            "error": "restricted access",
+        },
+        # removed share, no cluster id value
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: ""
+share_id: whammo
+intent: removed
+""",
+            "exc_type": ValueError,
+            "error": "cluster_id",
+        },
+        # removed share, no share id value
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: whammo
+share_id: ""
+intent: removed
+""",
+            "exc_type": ValueError,
+            "error": "share_id",
+        },
+        # share w/o cephfs sub-obj
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: whammo
+share_id: blammo
+""",
+            "exc_type": ValueError,
+            "error": "cephfs",
+        },
+        # ad cluster, invalid join source, no ref
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: whammo
+auth_mode: active-directory
+domain_settings:
+  realm: FOO.EXAMPLE.NET
+  join_sources:
+    - {}
+""",
+            "exc_type": ValueError,
+            "error": "reference value",
+        },
+        # removed cluster, no cluster_id value
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: ""
+intent: removed
+""",
+            "exc_type": ValueError,
+            "error": "cluster_id",
+        },
+        # u&g, missing id value
+        {
+            "yaml": """
+resource_type: ceph.smb.usersgroups
+users_groups_id: ""
+""",
+            "exc_type": ValueError,
+            "error": "users_groups_id",
+        },
+        # u&g, bad linked_to_cluster value
+        {
+            "yaml": """
+resource_type: ceph.smb.usersgroups
+users_groups_id: wobble
+linked_to_cluster: ~~~
+values:
+  users:
+    - name: charlie
+      password: 7unaF1sh
+    - name: lucky
+      password: CH4rmz
+  groups: []
+""",
+            "exc_type": ValueError,
+            "error": "not a valid",
+        },
+        # join auth, missing id value
+        {
+            "yaml": """
+resource_type: ceph.smb.join.auth
+auth_id: ""
+""",
+            "exc_type": ValueError,
+            "error": "auth_id",
+        },
     ],
 )
 def test_load_error(params):
@@ -519,3 +677,164 @@ placement:
     assert sd
     assert 'placement' in sd
     assert sd['placement'] == {'count': 3, 'label': 'ilovesmb'}
+
+
+def test_share_with_login_control_1():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: shake
+name: Shake It
+cephfs:
+  volume: abc
+  path: /shake1
+  subvolume: foo
+login_control:
+  - name: bob
+    access: read
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    share = loaded[0]
+    assert share.login_control
+    assert len(share.login_control) == 1
+    assert share.login_control[0].name == 'bob'
+    assert share.login_control[0].category == enums.LoginCategory.USER
+    assert share.login_control[0].access == enums.LoginAccess.READ_ONLY
+
+
+def test_share_with_login_control_2():
+    import yaml
+
+    yaml_str = """
+resource_type: ceph.smb.share
+cluster_id: rhumba
+share_id: shake
+name: Shake It
+cephfs:
+  volume: abc
+  path: /shake1
+  subvolume: foo
+login_control:
+  - name: alice
+    access: r
+  - name: itstaff
+    category: group
+    access: rw
+  - name: caldor
+    category: user
+    access: admin
+  - name: delbard
+    access: none
+"""
+    data = yaml.safe_load_all(yaml_str)
+    loaded = smb.resources.load(data)
+    assert loaded
+    share = loaded[0]
+    assert share.login_control
+    assert len(share.login_control) == 4
+    assert share.login_control[0].name == 'alice'
+    assert share.login_control[0].category == enums.LoginCategory.USER
+    assert share.login_control[0].access == enums.LoginAccess.READ_ONLY
+    assert share.login_control[1].name == 'itstaff'
+    assert share.login_control[1].category == enums.LoginCategory.GROUP
+    assert share.login_control[1].access == enums.LoginAccess.READ_WRITE
+    assert share.login_control[2].name == 'caldor'
+    assert share.login_control[2].category == enums.LoginCategory.USER
+    assert share.login_control[2].access == enums.LoginAccess.ADMIN
+    assert share.login_control[3].name == 'delbard'
+    assert share.login_control[3].category == enums.LoginCategory.USER
+    assert share.login_control[3].access == enums.LoginAccess.NONE
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # single share json
+        {
+            "txt": """
+{
+    "resource_type": "ceph.smb.share",
+    "cluster_id": "foo",
+    "share_id": "bar",
+    "cephfs": {"volume": "zippy", "path": "/"}
+}
+""",
+            'simplified': [
+                {
+                    'resource_type': 'ceph.smb.share',
+                    'cluster_id': 'foo',
+                    'share_id': 'bar',
+                    'intent': 'present',
+                    'name': 'bar',
+                    'cephfs': {
+                        'volume': 'zippy',
+                        'path': '/',
+                        'provider': 'samba-vfs',
+                    },
+                    'browseable': True,
+                    'readonly': False,
+                }
+            ],
+        },
+        # single share yaml
+        {
+            "txt": """
+resource_type: ceph.smb.share
+cluster_id: foo
+share_id: bar
+cephfs: {volume: zippy, path: /}
+""",
+            'simplified': [
+                {
+                    'resource_type': 'ceph.smb.share',
+                    'cluster_id': 'foo',
+                    'share_id': 'bar',
+                    'intent': 'present',
+                    'name': 'bar',
+                    'cephfs': {
+                        'volume': 'zippy',
+                        'path': '/',
+                        'provider': 'samba-vfs',
+                    },
+                    'browseable': True,
+                    'readonly': False,
+                }
+            ],
+        },
+        # invalid share yaml
+        {
+            "txt": """
+resource_type: ceph.smb.share
+""",
+            'exc_type': ValueError,
+            'error': 'missing',
+        },
+        # invalid input
+        {
+            "txt": """
+:
+""",
+            'exc_type': ValueError,
+            'error': 'parsing',
+        },
+        # invalid json, but useless yaml
+        {
+            "txt": """
+slithy
+""",
+            'exc_type': ValueError,
+            'error': 'input',
+        },
+    ],
+)
+def test_load_text(params):
+    if 'simplified' in params:
+        loaded = smb.resources.load_text(params['txt'])
+        assert params['simplified'] == [r.to_simplified() for r in loaded]
+    else:
+        with pytest.raises(params['exc_type'], match=params['error']):
+            smb.resources.load_text(params['txt'])

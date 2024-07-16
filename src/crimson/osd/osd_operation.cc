@@ -50,44 +50,48 @@ void OSDOperationRegistry::put_historic(const ClientRequest& op)
 {
   using crimson::common::local_conf;
   // unlink the op from the client request registry. this is a part of
-  // the re-link procedure. finally it will be in historic registry.
-  constexpr auto client_reg_index =
-    static_cast<size_t>(OperationTypeCode::client_request);
+  // the re-link procedure. finally it will be in historic/historic_slow registry.
   constexpr auto historic_reg_index =
     static_cast<size_t>(OperationTypeCode::historic_client_request);
   constexpr auto slow_historic_reg_index = 
     static_cast<size_t>(OperationTypeCode::historic_slow_client_request);
 
-  auto& client_registry = get_registry<client_reg_index>();
-  // slow ops should put into historic_slow_client_request list
-  // we only save the newest op
   if (get_duration(op) > local_conf()->osd_op_complaint_time) {
     auto& slow_historic_registry = get_registry<slow_historic_reg_index>();
-    slow_historic_registry.splice(std::end(slow_historic_registry),
-          client_registry,
-          client_registry.iterator_to(op));
-
-    if (num_slow_ops >= local_conf()->osd_op_history_slow_op_size) {
-      slow_historic_registry.pop_front();
-    } else {
-      ++num_slow_ops;
-    }
+    _put_historic(slow_historic_registry,
+      op,
+      local_conf()->osd_op_history_slow_op_size);
   } else {
     auto& historic_registry = get_registry<historic_reg_index>();
-    historic_registry.splice(std::end(historic_registry),
-          client_registry,
-          client_registry.iterator_to(op));
-
-    if (num_recent_ops >= local_conf()->osd_op_history_size) {
-      historic_registry.pop_front();
-    } else {
-      ++num_recent_ops;
-    }
+    _put_historic(historic_registry,
+      op,
+      local_conf()->osd_op_history_size);
   }
+}
 
+void OSDOperationRegistry::_put_historic(
+  op_list& list,
+  const class ClientRequest& op,
+  uint64_t max)
+{
+  constexpr auto client_reg_index =
+    static_cast<size_t>(OperationTypeCode::client_request);
+  auto& client_registry = get_registry<client_reg_index>();
+
+  // we only save the newest op
+  list.splice(std::end(list), client_registry, client_registry.iterator_to(op));
   ClientRequest::ICRef(
-    &op, /* add_ref= */true
-  ).detach(); // yes, "leak" it for now!
+      &op, /* add_ref= */true
+    ).detach(); // yes, "leak" it for now!
+
+  if (list.size() >= max) {
+    auto old_op_ptr = &list.front();
+    list.pop_front();
+    const auto& old_op =
+      static_cast<const ClientRequest&>(*old_op_ptr);
+    // clear a previously "leaked" op
+    ClientRequest::ICRef(&old_op, /* add_ref= */false);
+  }
 }
 
 size_t OSDOperationRegistry::dump_historic_client_requests(ceph::Formatter* f) const

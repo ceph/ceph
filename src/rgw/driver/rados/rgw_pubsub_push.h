@@ -8,6 +8,7 @@
 #include "include/common_fwd.h"
 #include "common/async/yield_context.h"
 
+class DoutPrefixProvider;
 class RGWHTTPArgs;
 struct rgw_pubsub_s3_event;
 
@@ -28,7 +29,9 @@ public:
  
   // this method is used in order to send notification and wait for completion 
   // in async manner via a coroutine when invoked in the frontend environment
-  virtual int send(const rgw_pubsub_s3_event& event, optional_yield y) = 0;
+  virtual int send(const DoutPrefixProvider* dpp,
+                   const rgw_pubsub_s3_event& event,
+                   optional_yield y) = 0;
 
   // present as string
   virtual std::string to_str() const = 0;

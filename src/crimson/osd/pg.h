@@ -439,6 +439,9 @@ public:
 
 
   // Utility
+  bool is_active_clean() const {
+    return peering_state.is_active() && peering_state.is_clean();
+  }
   bool is_primary() const final {
     return peering_state.is_primary();
   }
@@ -739,6 +742,10 @@ public:
     // TODO: see PrimaryLogPG::mark_all_unfound_lost()
     return seastar::now();
   }
+  interruptible_future<> find_unfound(epoch_t epoch_started);
+  bool have_unfound() const {
+    return peering_state.have_unfound();
+  }
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch) const;
 
@@ -771,9 +778,6 @@ private:
   friend class SnapTrimEvent;
   friend class SnapTrimObjSubEvent;
 private:
-  seastar::future<bool> find_unfound() {
-    return seastar::make_ready_future<bool>(true);
-  }
 
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;

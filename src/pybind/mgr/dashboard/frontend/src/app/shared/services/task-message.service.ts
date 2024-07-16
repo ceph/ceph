@@ -324,6 +324,26 @@ export class TaskMessageService {
         metadata.bucket_names.length > 1 ? 'selected buckets' : metadata.bucket_names[0]
       }`;
     }),
+    'rgw/multisite/sync-policy/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.group_names.length > 1
+            ? 'selected policy groups'
+            : `policy group '${metadata.group_names[0]}'`
+        }`;
+      }
+    ),
+    'rgw/multisite/sync-flow/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.flow_ids.length > 1
+            ? 'selected Flow Names'
+            : `Flow Name '${metadata.flow_ids[0]}'`
+        }`;
+      }
+    ),
     // iSCSI target tasks
     'iscsi/target/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.iscsiTarget(metadata)
@@ -333,6 +353,13 @@ export class TaskMessageService {
     ),
     'iscsi/target/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.iscsiTarget(metadata)
+    ),
+    // NVME/TCP tasks
+    'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nvmeofSubsystem(metadata)
+    ),
+    'nvmeof/subsystem/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofSubsystem(metadata)
     ),
     'nfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nfs(metadata)
@@ -457,6 +484,10 @@ export class TaskMessageService {
 
   iscsiTarget(metadata: any) {
     return $localize`target '${metadata.target_iqn}'`;
+  }
+
+  nvmeofSubsystem(metadata: any) {
+    return $localize`subsystem '${metadata.nqn}'`;
   }
 
   nfs(metadata: any) {

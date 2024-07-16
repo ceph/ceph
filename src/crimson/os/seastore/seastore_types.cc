@@ -388,20 +388,32 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail)
 
 extent_len_t record_size_t::get_raw_mdlength() const
 {
+  assert(record_type < record_type_t::MAX);
   // empty record is allowed to submit
-  return plain_mdlength +
-         ceph::encoded_sizeof_bounded<record_header_t>();
+  extent_len_t ret = plain_mdlength;
+  if (record_type == record_type_t::JOURNAL) {
+    ret += ceph::encoded_sizeof_bounded<record_header_t>();
+  } else {
+    // OOL won't contain metadata
+    assert(ret == 0);
+  }
+  return ret;
 }
 
 void record_size_t::account_extent(extent_len_t extent_len)
 {
   assert(extent_len);
-  plain_mdlength += ceph::encoded_sizeof_bounded<extent_info_t>();
+  if (record_type == record_type_t::JOURNAL) {
+    plain_mdlength += ceph::encoded_sizeof_bounded<extent_info_t>();
+  } else {
+    // OOL won't contain metadata
+  }
   dlength += extent_len;
 }
 
 void record_size_t::account(const delta_info_t& delta)
 {
+  assert(record_type == record_type_t::JOURNAL);
   assert(delta.bl.length());
   plain_mdlength += ceph::encoded_sizeof(delta);
 }
@@ -433,15 +445,32 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
 std::ostream &operator<<(std::ostream& out, const record_size_t& rsize)
 {
   return out << "record_size_t("
+             << "record_type=" << rsize.record_type
              << "raw_md=" << rsize.get_raw_mdlength()
              << ", data=" << rsize.dlength
              << ")";
 }
 
+std::ostream &operator<<(std::ostream& out, const record_type_t& type)
+{
+  switch (type) {
+  case record_type_t::JOURNAL:
+    return out << "JOURNAL";
+  case record_type_t::OOL:
+    return out << "OOL";
+  case record_type_t::MAX:
+    return out << "NULL";
+  default:
+    return out << "INVALID_RECORD_TYPE("
+               << static_cast<std::size_t>(type)
+               << ")";
+  }
+}
+
 std::ostream &operator<<(std::ostream& out, const record_t& r)
 {
   return out << "record_t("
-             << "type=" << r.type
+             << "trans_type=" << r.trans_type
              << ", num_extents=" << r.extents.size()
              << ", num_deltas=" << r.deltas.size()
              << ", modify_time=" << sea_time_point_printer_t{r.modify_time}
@@ -472,9 +501,16 @@ std::ostream& operator<<(std::ostream& out, const record_group_header_t& h)
 
 extent_len_t record_group_size_t::get_raw_mdlength() const
 {
-  return plain_mdlength +
-         sizeof(checksum_t) +
-         ceph::encoded_sizeof_bounded<record_group_header_t>();
+  assert(record_type < record_type_t::MAX);
+  extent_len_t ret = plain_mdlength;
+  if (record_type == record_type_t::JOURNAL) {
+    ret += sizeof(checksum_t);
+    ret += ceph::encoded_sizeof_bounded<record_group_header_t>();
+  } else {
+    // OOL won't contain metadata
+    assert(ret == 0);
+  }
+  return ret;
 }
 
 void record_group_size_t::account(
@@ -485,14 +521,23 @@ void record_group_size_t::account(
   assert(_block_size > 0);
   assert(rsize.dlength % _block_size == 0);
   assert(block_size == 0 || block_size == _block_size);
-  plain_mdlength += rsize.get_raw_mdlength();
-  dlength += rsize.dlength;
+  assert(record_type == RECORD_TYPE_NULL ||
+         record_type == rsize.record_type);
   block_size = _block_size;
+  record_type = rsize.record_type;
+  if (record_type == record_type_t::JOURNAL) {
+    plain_mdlength += rsize.get_raw_mdlength();
+  } else {
+    // OOL won't contain metadata
+    assert(rsize.get_raw_mdlength() == 0);
+  }
+  dlength += rsize.dlength;
 }
 
 std::ostream& operator<<(std::ostream& out, const record_group_size_t& size)
 {
   return out << "record_group_size_t("
+             << "record_type=" << size.record_type
              << "raw_md=" << size.get_raw_mdlength()
              << ", data=" << size.dlength
              << ", block_size=" << size.block_size
@@ -526,6 +571,7 @@ ceph::bufferlist encode_records(
   const journal_seq_t& committed_to,
   segment_nonce_t current_segment_nonce)
 {
+  assert(record_group.size.record_type < record_type_t::MAX);
   assert(record_group.size.block_size > 0);
   assert(record_group.records.size() > 0);
 
@@ -537,6 +583,15 @@ ceph::bufferlist encode_records(
     }
   }
 
+  if (record_group.size.record_type == record_type_t::OOL) {
+    // OOL won't contain metadata
+    assert(record_group.size.get_mdlength() == 0);
+    ceph_assert(data_bl.length() ==
+                record_group.size.get_encoded_length());
+    record_group.clear();
+    return data_bl;
+  }
+  // JOURNAL
   bufferlist bl;
   record_group_header_t header{
     static_cast<extent_len_t>(record_group.records.size()),
@@ -552,7 +607,7 @@ ceph::bufferlist encode_records(
 
   for (auto& r: record_group.records) {
     record_header_t rheader{
-      r.type,
+      r.trans_type,
       (extent_len_t)r.deltas.size(),
       (extent_len_t)r.extents.size(),
       timepoint_to_mod(r.modify_time)
@@ -911,7 +966,7 @@ std::ostream& operator<<(std::ostream& out, const writer_stats_printer_t& p)
       << ",sizeB="
       << fmt::format(dfmt, p.stats.get_total_bytes()/d_num_io)
       << "("
-      << fmt::format(dfmt, p.stats.record_group_data_bytes/d_num_io)
+      << fmt::format(dfmt, p.stats.data_bytes/d_num_io)
       << ","
       << fmt::format(dfmt, p.stats.record_group_metadata_bytes/d_num_io)
       << ","

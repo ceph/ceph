@@ -2164,6 +2164,11 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
       << " s->info.domain=" << s->info.domain
       << " s->info.request_uri=" << s->info.request_uri
       << dendl;
+  } else if (s3website_enabled && api_priority_s3website > api_priority_s3) {
+    // If the Host header is missing, but the s3website API is enabled and has
+    // a higher priority than the regular S3 API, then we should still treat
+    // the request as a website request.
+    s->prot_flags |= RGW_REST_WEBSITE;
   }
 
   if (s->info.domain.empty()) {

@@ -54,3 +54,26 @@ class ConfigNS(_StrEnum):
     SHARES = 'shares'
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
+
+
+class LoginCategory(_StrEnum):
+    USER = 'user'
+    GROUP = 'group'
+
+
+class LoginAccess(_StrEnum):
+    ADMIN = 'admin'
+    NONE = 'none'
+    READ_ONLY = 'read'
+    READ_ONLY_SHORT = 'r'
+    READ_WRITE = 'read-write'
+    READ_WRITE_SHORT = 'rw'
+
+    def expand(self) -> 'LoginAccess':
+        """Exapend abbreviated enum values into their full forms."""
+        # the extra LoginAccess(...) calls are to appease mypy
+        if self == self.READ_ONLY_SHORT:
+            return LoginAccess(self.READ_ONLY)
+        if self == self.READ_WRITE_SHORT:
+            return LoginAccess(self.READ_WRITE)
+        return self

@@ -24,6 +24,14 @@
   height: 25px;
 }
 
+cds-header-item {
+  width: 500px;
+}
+
+.cluster-switcher {
+  margin-left: 6rem;
+}
+
 ::ng-deep cd-navigation .cd-navbar-top {
   .cd-navbar-brand {
     background: vv.$secondary;

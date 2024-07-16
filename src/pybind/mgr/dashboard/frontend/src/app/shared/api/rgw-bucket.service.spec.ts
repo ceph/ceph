@@ -89,11 +89,13 @@ describe('RgwBucketService', () => {
         '10',
         null,
         null,
-        'private'
+        'private',
+        'true',
+        null
       )
       .subscribe();
     const req = httpTesting.expectOne(
-      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&bucket_id=bar&uid=baz&versioning_state=Enabled&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=10&tags=null&bucket_policy=null&canned_acl=private`
+      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&bucket_id=bar&uid=baz&versioning_state=Enabled&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=10&tags=null&bucket_policy=null&canned_acl=private&replication=true&lifecycle=null`
     );
     expect(req.request.method).toBe('PUT');
   });

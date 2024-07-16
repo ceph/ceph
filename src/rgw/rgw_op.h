@@ -34,6 +34,7 @@
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
 
+#include "rgw_cksum.h"
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
 #include "rgw_sal.h"
@@ -1227,7 +1228,7 @@ protected:
   std::string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
-  std::unique_ptr <RGWObjTags> obj_tags;
+  RGWObjTags obj_tags;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
   rgw::sal::Attrs attrs;
@@ -1252,6 +1253,8 @@ protected:
   //object lock
   RGWObjectRetention *obj_retention;
   RGWObjectLegalHold *obj_legal_hold;
+
+  std::optional<rgw::cksum::Cksum> cksum;
 
 public:
   RGWPutObj() : ofs(0),
@@ -1332,6 +1335,7 @@ protected:
   RGWAccessControlPolicy policy;
   std::map<std::string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
+  std::optional<rgw::cksum::Cksum> cksum;
 
   /* Must be called after get_data() or the result is undefined. */
   virtual std::string get_current_filename() const = 0;
@@ -1846,6 +1850,8 @@ protected:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+  rgw::sal::Attrs attrs;
+  rgw::cksum::Type cksum_algo{rgw::cksum::Type::none};
 
 public:
   RGWInitMultipart() {}
@@ -1872,6 +1878,10 @@ protected:
   jspan_ptr multipart_trace;
   ceph::real_time upload_time;
   std::unique_ptr<rgw::sal::Notification> res;
+  std::unique_ptr<rgw::sal::Object> meta_obj;
+  std::optional<rgw::cksum::Cksum> cksum;
+  std::optional<std::string> armored_cksum;
+  off_t ofs = 0;
 
 public:
   RGWCompleteMultipart() {}
@@ -1915,6 +1925,7 @@ protected:
   RGWAccessControlPolicy policy;
   bool truncated;
   rgw_placement_rule* placement;
+  std::optional<rgw::cksum::Cksum> cksum;
 
 public:
   RGWListMultipart() {
@@ -2152,7 +2163,12 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
       "x-amz-server-side-encryption-customer-key-md5",
-      "x-amz-storage-class"
+      /* XXX agreed w/cbodley that probably a cleanup is needed here--we probably
+       * don't want to store these, esp. under user.rgw */
+      "x-amz-storage-class",
+      "x-amz-content-sha256",
+      "x-amz-checksum-algorithm",
+      "x-amz-date"
   };
 
   size_t valid_meta_count = 0;
@@ -2218,18 +2234,14 @@ inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 } /* encode_delete_at_attr */
 
-inline void encode_obj_tags_attr(RGWObjTags* obj_tags, std::map<std::string, bufferlist>& attrs)
+inline void encode_obj_tags_attr(const RGWObjTags& obj_tags, std::map<std::string, bufferlist>& attrs)
 {
-  if (obj_tags == nullptr){
-    // we assume the user submitted a tag format which we couldn't parse since
-    // this wouldn't be parsed later by get/put obj tags, lets delete if the
-    // attr was populated
+  if (obj_tags.empty()) {
     return;
   }
-
   bufferlist tagsbl;
-  obj_tags->encode(tagsbl);
-  attrs[RGW_ATTR_TAGS] = tagsbl;
+  obj_tags.encode(tagsbl);
+  attrs[RGW_ATTR_TAGS] = std::move(tagsbl);
 }
 
 inline int encode_dlo_manifest_attr(const char * const dlo_manifest,

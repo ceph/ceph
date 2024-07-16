@@ -9,7 +9,6 @@ from typing import (
     List,
     Optional,
     Tuple,
-    TypeVar,
 )
 
 import sys
@@ -155,27 +154,3 @@ class AccessAuthorizer(Protocol):
         self, volume: str, entity: str, caps: str = ''
     ) -> None:
         ...  # pragma: no cover
-
-
-T = TypeVar('T')
-
-
-# TODO: move to a utils.py
-def one(lst: List[T]) -> T:
-    if len(lst) != 1:
-        raise ValueError("list does not contain exactly one element")
-    return lst[0]
-
-
-class IsNoneError(ValueError):
-    pass
-
-
-def checked(v: Optional[T]) -> T:
-    """Ensures the provided value is not a None or raises a IsNoneError.
-    Intended use is similar to an `assert v is not None` but more usable in
-    one-liners and list/dict/etc comprehensions.
-    """
-    if v is None:
-        raise IsNoneError('value is None')
-    return v

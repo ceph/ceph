@@ -17,6 +17,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, expectItemTasks, PermissionHelper } from '~/testing/unit-test-helper';
 import { NfsDetailsComponent } from '../nfs-details/nfs-details.component';
 import { NfsListComponent } from './nfs-list.component';
+import { SUPPORTED_FSAL } from '../models/nfs.fsal';
 
 describe('NfsListComponent', () => {
   let component: NfsListComponent;
@@ -45,6 +46,7 @@ describe('NfsListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsListComponent);
     component = fixture.componentInstance;
+    component.fsal = SUPPORTED_FSAL.CEPH;
     summaryService = TestBed.inject(SummaryService);
     nfsService = TestBed.inject(NfsService);
     httpTesting = TestBed.inject(HttpTestingController);
@@ -89,7 +91,9 @@ describe('NfsListComponent', () => {
       const model = {
         export_id: export_id,
         path: 'path_' + export_id,
-        fsal: 'fsal_' + export_id,
+        fsal: {
+          name: 'CEPH'
+        },
         cluster_id: 'cluster_' + export_id
       };
       exports.push(model);
@@ -102,7 +106,9 @@ describe('NfsListComponent', () => {
         case 'nfs/create':
           task.metadata = {
             path: 'path_' + export_id,
-            fsal: 'fsal_' + export_id,
+            fsal: {
+              name: 'CEPH'
+            },
             cluster_id: 'cluster_' + export_id
           };
           break;

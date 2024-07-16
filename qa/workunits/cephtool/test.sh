@@ -609,6 +609,26 @@ function test_auth()
   ceph auth del client.xx
   expect_false ceph auth get client.xx
 
+  # test rotation
+  ceph auth get-or-create client.admin2 mon 'allow *'
+  ceph auth get client.admin2 >> keyring1
+  env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth get client.admin2 >> keyring2
+  # they are the same:
+  expect_true diff -au keyring1 keyring2
+  # rotate itself
+  env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth rotate client.admin2 >> keyring3
+  # only the key has changed:
+  diff -au keyring1 keyring3 | grep -E '^[-+][^-+]' | expect_false grep -v key
+  # the key in keyring1 no longer works:
+  expect_false env CEPH_KEYRING=keyring1 ceph -n client.admin2 auth get client.admin2
+  # the key in keyring3 should work:
+  expect_true env CEPH_KEYRING=keyring3 ceph -n client.admin2 auth get client.admin2
+  # now verify the key from `auth get` matches what rotate produced:
+  expect_true ceph auth get client.admin2 >> keyring4
+  expect_true diff -au keyring3 keyring4
+  expect_true ceph auth rm client.admin2
+  rm keyring[1234]
+
   # (almost) interactive mode
   echo -e 'auth add client.xx mon "allow *" osd "allow *"\n' | ceph
   ceph auth get client.xx
@@ -868,7 +888,7 @@ function test_tell_output_file()
   # only one line of json
   expect_true sed '2q1' < /tmp/foo > /dev/null
   expect_true jq -e '.version | length > 0' < /tmp/foo
-  rm -f /tmp/foo
+  sudo rm -f /tmp/foo
 
   J=$(ceph tell --format=json-pretty --daemon-output-file=/tmp/foo "$name" version)
   expect_true jq -e '.path == "/tmp/foo"' <<<"$J"
@@ -876,24 +896,24 @@ function test_tell_output_file()
   # more than one line of json
   expect_false sed '2q1' < /tmp/foo > /dev/null
   expect_true jq -e '.version | length > 0' < /tmp/foo
-  rm -f /tmp/foo
+  sudo rm -f /tmp/foo
 
   # Test --daemon-output-file=:tmp:
   J=$(ceph tell --format=json --daemon-output-file=":tmp:" "$name" version)
   path=$(jq -r .path <<<"$J")
   expect_true test -e "$path"
   # only one line of json
-  expect_true sed '2q1' < "$path" > /dev/null
-  expect_true jq -e '.version | length > 0' < "$path"
-  rm -f "$path"
+  expect_true sudo sh -c "sed '2q1' < \"$path\" > /dev/null"
+  expect_true sudo sudo sh -c "jq -e '.version | length > 0' < \"$path\""
+  sudo rm -f "$path"
 
   J=$(ceph tell --format=json-pretty --daemon-output-file=":tmp:" "$name" version)
   path=$(jq -r .path <<<"$J")
   expect_true test -e "$path"
   # only one line of json
-  expect_false sed '2q1' < "$path" > /dev/null
-  expect_true jq -e '.version | length > 0' < "$path"
-  rm -f "$path"
+  expect_false sudo sh -c "sed '2q1' < \"$path\" > /dev/null"
+  expect_true sudo sh -c "jq -e '.version | length > 0' < \"$path\""
+  sudo rm -f "$path"
 }
 
 function test_mds_tell()
@@ -2533,7 +2553,7 @@ function test_mon_osd_erasure_code()
   ceph osd erasure-code-profile set fooprofile a=b c=d
   ceph osd erasure-code-profile set fooprofile a=b c=d
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f
-  ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
+  ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force --yes-i-really-mean-it
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
   # make sure rule-foo doesn't work anymore

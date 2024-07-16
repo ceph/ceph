@@ -1,9 +1,10 @@
-from typing import Iterator, List, Optional
+from typing import Iterable, Iterator, List, Optional
 
 import errno
 
-from .proto import Simplified, one
+from .proto import Simplified
 from .resources import SMBResource
+from .utils import one
 
 _DOMAIN = 'domain'
 
@@ -56,13 +57,38 @@ class ErrorResult(Result, Exception):
         super().__init__(src, success=False, msg=msg, status=status)
 
 
+class InvalidResourceResult(Result):
+    def __init__(
+        self,
+        resource_data: Simplified,
+        msg: str = '',
+        status: Optional[Simplified] = None,
+    ) -> None:
+        self.resource_data = resource_data
+        self.success = False
+        self.msg = msg
+        self.status = status
+
+    def to_simplified(self) -> Simplified:
+        ds: Simplified = {}
+        ds['resource'] = self.resource_data
+        ds['success'] = self.success
+        if self.msg:
+            ds['msg'] = self.msg
+        if self.status:
+            ds.update(self.status)
+        return ds
+
+
 class ResultGroup:
     """Result of applying multiple smb resource updates to the system."""
 
     # Compatible with object formatter, thus suitable for being returned
     # directly to mgr module.
-    def __init__(self) -> None:
-        self._contents: List[Result] = []
+    def __init__(
+        self, initial_results: Optional[Iterable[Result]] = None
+    ) -> None:
+        self._contents: List[Result] = list(initial_results or [])
 
     def append(self, result: Result) -> None:
         self._contents.append(result)

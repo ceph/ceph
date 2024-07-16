@@ -140,7 +140,8 @@ public:
   int put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
   int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_owner& uid, const rgw_obj& obj,
                          std::map<std::string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req);
-  int complete_request(RGWRESTStreamS3PutObj *req, std::string& etag,
+  int complete_request(const DoutPrefixProvider* dpp,
+                       RGWRESTStreamS3PutObj *req, std::string& etag,
                        ceph::real_time *mtime, optional_yield y);
 
   struct get_obj_params {
@@ -178,7 +179,8 @@ public:
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
               bool skip_decrypt, rgw_zone_set_entry *dst_zone_trace, bool sync_cloudtiered,
               bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
-  int complete_request(RGWRESTStreamRWRequest *req,
+  int complete_request(const DoutPrefixProvider* dpp,
+                       RGWRESTStreamRWRequest *req,
                        std::string *etag,
                        ceph::real_time *mtime,
                        uint64_t *psize,
@@ -344,8 +346,8 @@ public:
     return req.get_http_status();
   }
 
-  int wait(bufferlist *pbl, optional_yield y) {
-    int ret = req.wait(y);
+  int wait(const DoutPrefixProvider* dpp, bufferlist *pbl, optional_yield y) {
+    int ret = req.wait(dpp, y);
     if (ret < 0) {
       if (ret == -EIO) {
         conn->set_url_unconnectable(req.get_url_orig());
@@ -361,7 +363,7 @@ public:
   }
 
   template <class T>
-  int wait(T *dest, optional_yield y);
+  int wait(const DoutPrefixProvider* dpp, T *dest, optional_yield y);
 
   template <class T>
   int fetch(const DoutPrefixProvider *dpp, T *dest, optional_yield y);
@@ -398,9 +400,10 @@ int RGWRESTReadResource::fetch(const DoutPrefixProvider *dpp, T *dest, optional_
 }
 
 template <class T>
-int RGWRESTReadResource::wait(T *dest, optional_yield y)
+int RGWRESTReadResource::wait(const DoutPrefixProvider* dpp, T *dest,
+                              optional_yield y)
 {
-  int ret = req.wait(y);
+  int ret = req.wait(dpp, y);
   if (ret < 0) {
     if (ret == -EIO) {
       conn->set_url_unconnectable(req.get_url_orig());
@@ -472,8 +475,9 @@ public:
   }
 
   template <class E = int>
-  int wait(bufferlist *pbl, optional_yield y, E *err_result = nullptr) {
-    int ret = req.wait(y);
+  int wait(const DoutPrefixProvider* dpp, bufferlist *pbl,
+           optional_yield y, E *err_result = nullptr) {
+    int ret = req.wait(dpp, y);
     *pbl = bl;
 
     if (ret == -EIO) {
@@ -488,13 +492,15 @@ public:
   }
 
   template <class T, class E = int>
-  int wait(T *dest, optional_yield y, E *err_result = nullptr);
+  int wait(const DoutPrefixProvider* dpp, T *dest,
+           optional_yield y, E *err_result = nullptr);
 };
 
 template <class T, class E>
-int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
+int RGWRESTSendResource::wait(const DoutPrefixProvider* dpp, T *dest,
+                              optional_yield y, E *err_result)
 {
-  int ret = req.wait(y);
+  int ret = req.wait(dpp, y);
   if (ret == -EIO) {
     conn->set_url_unconnectable(req.get_url_orig());
   }

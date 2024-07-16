@@ -312,11 +312,12 @@ struct ValueBuilderImpl final : public ValueBuilder {
     return ret;
   }
 
-  ValueImpl build_value(NodeExtentManager& nm,
+  ValueImpl build_value(const hobject_t &hobj,
+			NodeExtentManager& nm,
                         const ValueBuilder& vb,
                         Ref<tree_cursor_t>& p_cursor) const {
     assert(vb.get_header_magic() == get_header_magic());
-    return ValueImpl(nm, vb, p_cursor);
+    return ValueImpl(hobj, nm, vb, p_cursor);
   }
 };
 

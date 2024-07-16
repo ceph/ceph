@@ -9,6 +9,7 @@
 #include "common/Formatter.h"
 #include "common/iso_8601.h"
 #include "common/async/completion.h"
+#include "rgw_asio_thread.h"
 #include "rgw_common.h"
 #include "rgw_data_sync.h"
 #include "rgw_pubsub.h"
@@ -88,7 +89,8 @@ public:
     }
   }
 
-  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const DoutPrefixProvider* dpp, const rgw_pubsub_s3_event& event,
+           optional_yield y) override {
     std::shared_lock lock(s_http_manager_mutex);
     if (!s_http_manager) {
       ldout(cct, 1) << "ERROR: send failed. http endpoint manager not running" << dendl;
@@ -114,7 +116,7 @@ public:
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
     auto rc = s_http_manager->add_request(&request);
     if (rc == 0) {
-      rc = request.wait(y);
+      rc = request.wait(dpp, y);
     }
     if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
     // TODO: use read_bl to process return code and handle according to ack level
@@ -144,7 +146,7 @@ class Waiter {
   mutable std::condition_variable cond;
 
 public:
-  int wait(optional_yield y) {
+  int wait(const DoutPrefixProvider* dpp, optional_yield y) {
     std::unique_lock l{lock};
     if (done) {
       return ret;
@@ -160,6 +162,8 @@ public:
           }, token, yield.get_executor());
       return -ec.value();
     }
+    maybe_warn_about_blocking(dpp);
+
     cond.wait(l, [this]{return (done==true);});
     return ret;
   }
@@ -247,7 +251,7 @@ public:
     }
   }
 
-  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const DoutPrefixProvider* dpp, const rgw_pubsub_s3_event& event, optional_yield y) override {
     if (ack_level == ack_level_t::None) {
       return amqp::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
@@ -262,7 +266,7 @@ public:
         // failed to publish, does not wait for reply
         return rc;
       }
-      return w->wait(y);
+      return w->wait(dpp, y);
     }
   }
 
@@ -289,8 +293,7 @@ private:
   };
   const std::string topic;
   const ack_level_t ack_level;
-  std::string conn_name;
-
+  kafka::connection_id_t conn_id;
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
     bool exists;
@@ -311,38 +314,36 @@ public:
       const RGWHTTPArgs& args) : 
         topic(_topic),
         ack_level(get_ack_level(args)) {
-    if (!kafka::connect(conn_name, _endpoint,
-                        get_bool(args, "use-ssl", false),
-                        get_bool(args, "verify-ssl", true),
-                        args.get_optional("ca-location"),
-                        args.get_optional("mechanism"),
-                        args.get_optional("user-name"),
-                        args.get_optional("password"))) {
-      throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
-    }
-  }
+   if (!kafka::connect(
+           conn_id, _endpoint, get_bool(args, "use-ssl", false),
+           get_bool(args, "verify-ssl", true), args.get_optional("ca-location"),
+           args.get_optional("mechanism"), args.get_optional("user-name"),
+           args.get_optional("password"))) {
+     throw configuration_error("Kafka: failed to create connection to: " +
+                               _endpoint);
+   }
+ }
 
-  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const DoutPrefixProvider* dpp, const rgw_pubsub_s3_event& event,
+           optional_yield y) override {
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn_name, topic, json_format_pubsub_event(event));
+      return kafka::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
       auto w = std::make_unique<Waiter>();
-      const auto rc = kafka::publish_with_confirm(conn_name, 
-        topic,
-        json_format_pubsub_event(event),
-        [wp = w.get()](int r) { wp->finish(r); }
-      );
+      const auto rc = kafka::publish_with_confirm(
+          conn_id, topic, json_format_pubsub_event(event),
+          [wp = w.get()](int r) { wp->finish(r); });
       if (rc < 0) {
         // failed to publish, does not wait for reply
         return rc;
       }
-      return w->wait(y);
+      return w->wait(dpp, y);
     }
   }
 
   std::string to_str() const override {
     std::string str("Kafka Endpoint");
-    str += "\nBroker: " + conn_name;
+    str += "\nBroker: " + to_string(conn_id);
     str += "\nTopic: " + topic;
     return str;
   }

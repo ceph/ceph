@@ -555,6 +555,24 @@ def test_cluster_create_user1(tmodule):
     assert len(result.src.user_group_settings) == 1
 
 
+def test_cluster_create_user2(tmodule):
+    _example_cfg_1(tmodule)
+
+    result = tmodule.cluster_create(
+        'dizzle',
+        smb.enums.AuthMode.USER,
+        define_user_pass=['alice%123letmein', 'bob%1n0wh4t1t15'],
+    )
+    assert result.success
+    assert result.status['state'] == 'created'
+    assert result.src.cluster_id == 'dizzle'
+    assert len(result.src.user_group_settings) == 1
+    assert (
+        result.src.user_group_settings[0].source_type
+        == smb.enums.UserGroupSourceType.RESOURCE
+    )
+
+
 def test_cluster_create_badpass(tmodule):
     _example_cfg_1(tmodule)
 
@@ -648,4 +666,129 @@ domain_settings:
   - source_type: resource
     ref: foo
 """.strip()
+    )
+
+
+def test_apply_invalid_res(tmodule):
+    result = tmodule.apply_resources(
+        """
+resource_type: ceph.smb.cluster
+cluster_id: ""
+auth_mode: doop
+"""
+    )
+    assert not result.success
+    assert 'doop' in result.to_simplified()['results'][0]['msg']
+
+
+def test_show_all(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show()
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 4
+    assert {r['resource_type'] for r in res} == {
+        'ceph.smb.cluster',
+        'ceph.smb.share',
+        'ceph.smb.join.auth',
+    }
+
+
+def test_show_shares(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share'])
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 2
+    assert {r['resource_type'] for r in res} == {
+        'ceph.smb.share',
+    }
+
+
+def test_show_shares_in_cluster(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share.foo'])
+    assert 'resources' in out
+    res = out['resources']
+    assert len(res) == 2
+    assert {r['resource_type'] for r in res} == {
+        'ceph.smb.share',
+    }
+    assert {r['cluster_id'] for r in res} == {'foo'}
+
+
+def test_show_specific_share(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share.foo.s1'])
+    assert 'resources' not in out
+    assert out['resource_type'] == 'ceph.smb.share'
+    assert out['cluster_id'] == 'foo'
+    assert out['share_id'] == 's1'
+
+
+def test_show_nomatches(tmodule):
+    _example_cfg_1(tmodule)
+    out = tmodule.show(['ceph.smb.share.foo.whoops'])
+    assert 'resources' in out
+    assert out['resources'] == []
+
+
+def test_show_invalid_input(tmodule):
+    _example_cfg_1(tmodule)
+    with pytest.raises(smb.cli.InvalidInputValue):
+        tmodule.show(['ceph.smb.export'])
+
+
+def test_show_cluster_without_shares(tmodule):
+    # this cluster will have no shares associated with it
+    tmodule._internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'active-directory',
+                'intent': 'present',
+                'domain_settings': {
+                    'realm': 'dom1.example.com',
+                    'join_sources': [
+                        {
+                            'source_type': 'resource',
+                            'ref': 'foo',
+                        }
+                    ],
+                },
+            },
+            'join_auths.foo': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
+                },
+            },
+        }
+    )
+
+    res, body, status = tmodule.show.command(['ceph.smb.cluster.foo'])
+    assert res == 0
+    assert (
+        body.strip()
+        == """
+{
+  "resource_type": "ceph.smb.cluster",
+  "cluster_id": "foo",
+  "auth_mode": "active-directory",
+  "intent": "present",
+  "domain_settings": {
+    "realm": "dom1.example.com",
+    "join_sources": [
+      {
+        "source_type": "resource",
+        "ref": "foo"
+      }
+    ]
+  }
+}
+    """.strip()
     )

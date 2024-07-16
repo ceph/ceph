@@ -549,9 +549,9 @@ class Builder:
         if self._cached_py_site_packages is not None:
             return self._cached_py_site_packages
         # use the container image to probe for the correct python site-packages dir
+        py_vers = ['3.12', '3.11', '3.10', '3.9', '3.8', '3.6']
         valid_site_packages = [
-            "/usr/lib/python3.8/site-packages",
-            "/usr/lib/python3.6/site-packages",
+            f'/usr/lib/python{v}/site-packages' for v in py_vers
         ]
         cmd = [
             self._ctx.engine,

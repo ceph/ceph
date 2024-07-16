@@ -10,7 +10,7 @@
 #include "include/buffer.h"
 #include "include/byteorder.h"
 
-#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
+#include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
 #include "crimson/os/seastore/logging.h"
 
 SET_SUBSYS(seastore_lba);
@@ -31,6 +31,7 @@ std::ostream &LBALeafNode::_print_detail(std::ostream &out) const
 {
   out << ", size=" << this->get_size()
       << ", meta=" << this->get_meta()
+      << ", modifications=" << this->modifications
       << ", my_tracker=" << (void*)this->my_tracker;
   if (this->my_tracker) {
     out << ", my_tracker->parent=" << (void*)this->my_tracker->get_parent().get();
@@ -49,6 +50,25 @@ void LBALeafNode::resolve_relative_addrs(paddr_t base)
       TRACE("{} -> {}", i->get_val().pladdr, val.pladdr);
       i->set_val(val);
     }
+  }
+}
+
+void LBALeafNode::maybe_fix_mapping_pos(BtreeLBAMapping &mapping)
+{
+  assert(mapping.get_parent() == this);
+  auto key = mapping.is_indirect()
+    ? mapping.get_intermediate_base()
+    : mapping.get_key();
+  if (key != iter_idx(mapping.get_pos()).get_key()) {
+    auto iter = lower_bound(key);
+    {
+      // a mapping that no longer exist or has its value
+      // modified is considered an outdated one, and
+      // shouldn't be used anymore
+      ceph_assert(iter != end());
+      assert(iter.get_val() == mapping.get_map_val());
+    }
+    mapping._new_pos(iter.get_offset());
   }
 }
 

@@ -176,6 +176,7 @@ from cephadmlib.daemons import (
     NFSGanesha,
     SMB,
     SNMPGateway,
+    MgmtGateway,
     Tracing,
     NodeProxy,
 )
@@ -227,6 +228,7 @@ def get_supported_daemons():
     supported_daemons.append(Keepalived.daemon_type)
     supported_daemons.append(CephadmAgent.daemon_type)
     supported_daemons.append(SNMPGateway.daemon_type)
+    supported_daemons.append(MgmtGateway.daemon_type)
     supported_daemons.extend(Tracing.components)
     supported_daemons.append(NodeProxy.daemon_type)
     supported_daemons.append(SMB.daemon_type)
@@ -463,6 +465,8 @@ def update_default_image(ctx: CephadmContext) -> None:
             ctx.image = Keepalived.default_image
         if type_ == SNMPGateway.daemon_type:
             ctx.image = SNMPGateway.default_image
+        if type_ == MgmtGateway.daemon_type:
+            ctx.image = MgmtGateway.default_image
         if type_ == CephNvmeof.daemon_type:
             ctx.image = CephNvmeof.default_image
         if type_ in Tracing.components:
@@ -854,6 +858,10 @@ def create_daemon_dirs(
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.init(ctx, fsid, ident.daemon_id)
         sg.create_daemon_conf()
+
+    elif daemon_type == MgmtGateway.daemon_type:
+        cg = MgmtGateway.init(ctx, fsid, ident.daemon_id)
+        cg.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == NodeProxy.daemon_type:
         node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
@@ -2565,6 +2573,12 @@ def finish_bootstrap_config(
     if ipv6 or ipv6_cluster_network:
         logger.info('Enabling IPv6 (ms_bind_ipv6) binding')
         cli(['config', 'set', 'global', 'ms_bind_ipv6', 'true'])
+        # note: Ceph does not fully support dual stack.
+        # kernel clients: https://tracker.ceph.com/issues/49581
+        # if we do not disable ipv4 binding, daemons will bind
+        # to 0.0.0.0 and clients will misbehave.
+        logger.info('Disabling IPv4 (ms_bind_ipv4) binding')
+        cli(['config', 'set', 'global', 'ms_bind_ipv4', 'false'])
 
     with open(ctx.output_config, 'w') as f:
         f.write(config)
@@ -2877,6 +2891,10 @@ def command_bootstrap(ctx):
         cli(['config-key', 'set', 'mgr/cephadm/registry_credentials', json.dumps(registry_credentials)])
 
     cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
+
+    if ctx.no_cgroups_split:
+        logger.info('Setting mgr/cephadm/cgroups_split to false')
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/cgroups_split', 'false', '--force'])
 
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
@@ -3564,6 +3582,9 @@ def list_daemons(
                                     pass
                                 elif daemon_type == SNMPGateway.daemon_type:
                                     version = SNMPGateway.get_version(ctx, fsid, daemon_id)
+                                    seen_versions[image_id] = version
+                                elif daemon_type == MgmtGateway.daemon_type:
+                                    version = MgmtGateway.get_version(ctx, container_id)
                                     seen_versions[image_id] = version
                                 else:
                                     logger.warning('version for unknown daemon type %s' % daemon_type)

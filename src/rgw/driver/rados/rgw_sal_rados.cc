@@ -59,6 +59,8 @@
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_cls.h"
+#include "services/svc_bilog_rados.h"
+#include "services/svc_bi_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_quota.h"
@@ -2254,6 +2256,40 @@ RadosObject::~RadosObject()
     delete rados_ctx;
 }
 
+bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
+   const ceph::real_time& obj_mtime)
+{
+  const auto& bucket_info = get_bucket()->get_info();
+  if (bucket_info.is_indexless()) {
+    ldpp_dout(dpp, 0) << "ERROR: Trying to check object replication status for object in an indexless bucket. obj=" << get_key() << dendl;
+    return false;
+  }
+
+  const auto& log_layout = bucket_info.layout.logs.front();
+  const uint32_t shard_count = num_shards(log_to_index_layout(log_layout));
+
+  std::string marker;
+  bool truncated;
+  list<rgw_bi_log_entry> entries;
+
+  const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
+
+  int ret = store->svc()->bilog_rados->log_list(dpp, bucket_info, log_layout, shard_id,
+    marker, 1, entries, &truncated);
+
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: Failed to retrieve bilog info for obj=" << get_key() << dendl;
+    return false;
+  }
+
+  if (entries.empty()) {
+    return true;
+  }
+
+  const rgw_bi_log_entry& earliest_marker = entries.front();
+  return earliest_marker.timestamp > obj_mtime;
+}
+
 int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
 {
   RGWObjState *pstate{nullptr};
@@ -2286,18 +2322,19 @@ int RadosObject::read_attrs(const DoutPrefixProvider* dpp, RGWRados::Object::Rea
   return read_op.prepare(y, dpp);
 }
 
-int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
+int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   Attrs empty;
+  const bool log_op = flags & rgw::sal::FLAG_LOG_OP;
   // make a tiny adjustment to the existing mtime so that fetch_remote_obj()
   // won't return ERR_NOT_MODIFIED when syncing the modified object
-  const auto mtime = state.mtime + std::chrono::nanoseconds(1);
+  const auto mtime = log_op ? state.mtime + std::chrono::nanoseconds(1) : state.mtime;
   return store->getRados()->set_attrs(dpp, rados_ctx,
 			bucket->get_info(),
 			get_obj(),
 			setattrs ? *setattrs : empty,
 			delattrs ? delattrs : nullptr,
-			y, mtime);
+			y, log_op, mtime);
 }
 
 int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
@@ -2321,7 +2358,7 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
   state.obj = target;
   set_atomic();
   state.attrset[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &state.attrset, nullptr, y);
+  r = set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
   /* Restore target */
   state.obj = save;
 
@@ -2335,7 +2372,7 @@ int RadosObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* att
 
   set_atomic();
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 bool RadosObject::is_expired() {
@@ -2488,7 +2525,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   set_atomic();
   map<string, bufferlist> attrs;
   attrs[RGW_ATTR_ACL] = bl;
-  r = set_obj_attrs(dpp, &attrs, nullptr, y);
+  r = set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: modify attr failed " << cpp_strerror(-r) << dendl;
     return r;
@@ -2810,6 +2847,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.zones_trace = params.zones_trace;
   parent_op.params.abortmp = params.abortmp;
   parent_op.params.parts_accounted_size = params.parts_accounted_size;
+  parent_op.params.null_verid = params.null_verid;
 
   int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
   if (ret < 0)
@@ -3097,6 +3135,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
 
     multipart_upload_info upload_info;
     upload_info.dest_placement = dest_placement;
+    upload_info.cksum_type = cksum_type;
     
     if (obj_legal_hold) {
       upload_info.obj_legal_hold_exist = true;
@@ -3425,6 +3464,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return 0;
   }
 
+  /* Handle caching */
   if (rule) {
     if (!placement.empty()) {
       *rule = &placement;
@@ -3434,6 +3474,14 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
       }
     } else {
       *rule = nullptr;
+    }
+  }
+
+  if (attrs) {
+    if (!cached_attrs.empty()) {
+      *attrs = cached_attrs;
+      if (!rule || *rule != nullptr)
+        return 0;
     }
   }
 
@@ -3457,11 +3505,13 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     return ret;
   }
 
+  /* Cache attrs filled in by prepare */
+  cached_attrs = meta_obj->get_attrs();
+
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
 
   if (attrs) {
-    /* Attrs are filled in by prepare */
-    *attrs = meta_obj->get_attrs();
+    *attrs = cached_attrs;
     if (!rule || *rule != nullptr) {
       /* placement was cached; don't actually read */
       return 0;
@@ -3489,6 +3539,7 @@ int RadosMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
     ldpp_dout(dpp, 0) << "ERROR: failed to decode multipart upload info" << dendl;
     return -EIO;
   }
+  cksum_type = upload_info.cksum_type;
   placement = upload_info.dest_placement;
   upload_information = upload_info;
   *rule = &placement;
@@ -3688,6 +3739,7 @@ int RadosAtomicWriter::process(bufferlist&& data, uint64_t offset)
 int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3695,8 +3747,9 @@ int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 int RadosAppendWriter::prepare(optional_yield y)
@@ -3712,6 +3765,7 @@ int RadosAppendWriter::process(bufferlist&& data, uint64_t offset)
 int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3719,8 +3773,9 @@ int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 int RadosMultipartWriter::prepare(optional_yield y)
@@ -3733,9 +3788,12 @@ int RadosMultipartWriter::process(bufferlist&& data, uint64_t offset)
   return processor.process(std::move(data), offset);
 }
 
-int RadosMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+int RadosMultipartWriter::complete(
+		       size_t accounted_size,
+		       const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -3743,8 +3801,9 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const req_context& rctx,
                        uint32_t flags)
 {
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-                            if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    cksum, delete_at, if_match, if_nomatch,
+			    user_data, zones_trace, canceled, rctx, flags);
 }
 
 bool RadosZoneGroup::placement_target_exists(std::string& target) const

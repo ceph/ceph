@@ -1552,6 +1552,7 @@ static void rename_swift_keys(const rgw_user& user,
   user.to_str(user_id);
 
   auto modify_keys = std::move(keys);
+  keys = {};
   for ([[maybe_unused]] auto& [k, key] : modify_keys) {
     std::string id = user_id + ":" + key.subuser;
     key.id = id;

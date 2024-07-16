@@ -898,7 +898,7 @@ int DaosObject::load_obj_state(const DoutPrefixProvider* dpp,
 DaosObject::~DaosObject() { close(nullptr); }
 
 int DaosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                              Attrs* delattrs, optional_yield y) {
+                              Attrs* delattrs, optional_yield y, uint32_t flags) {
   ldpp_dout(dpp, 20) << "DEBUG: DaosObject::set_obj_attrs()" << dendl;
   // TODO handle target_obj
   // Get object's metadata (those stored in rgw_bucket_dir_entry)
@@ -957,7 +957,7 @@ int DaosObject::delete_obj_attrs(const DoutPrefixProvider* dpp,
   bufferlist bl;
 
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 bool DaosObject::is_expired() {
@@ -1596,6 +1596,7 @@ int DaosMultipartUpload::init(const DoutPrefixProvider* dpp, optional_yield y,
 
   multipart_upload_info upload_info;
   upload_info.dest_placement = dest_placement;
+  upload_info.cksum_type = cksum_type;
 
   ent.encode(bl);
   encode(attrs, bl);
@@ -1968,6 +1969,7 @@ int DaosMultipartUpload::get_info(const DoutPrefixProvider* dpp,
 
   // Now decode the placement rule
   decode(upload_info, iter);
+  cksum_type = upload_info.cksum_type;
   placement = upload_info.dest_placement;
   *rule = &placement;
 

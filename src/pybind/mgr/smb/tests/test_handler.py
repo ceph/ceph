@@ -372,6 +372,164 @@ def test_generate_config_ad(thandler):
     assert cfg['globals']['foo']['options']['realm'] == 'dom1.example.com'
 
 
+def test_generate_config_with_login_control(thandler):
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'active-directory',
+                'intent': 'present',
+                'domain_settings': {
+                    'realm': 'dom1.example.com',
+                    'join_sources': [
+                        {
+                            'source_type': 'resource',
+                            'ref': 'foo1',
+                        }
+                    ],
+                },
+            },
+            'join_auths.foo1': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo1',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
+                },
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'intent': 'present',
+                'name': 'Ess One',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                },
+                'login_control': [
+                    {
+                        'name': 'dom1\\alan',
+                        'category': 'user',
+                        'access': 'read',
+                    },
+                    {
+                        'name': 'dom1\\betsy',
+                        'category': 'user',
+                        'access': 'read-write',
+                    },
+                    {
+                        'name': 'dom1\\chuck',
+                        'category': 'user',
+                        'access': 'admin',
+                    },
+                    {
+                        'name': 'dom1\\ducky',
+                        'category': 'user',
+                        'access': 'none',
+                    },
+                    {
+                        'name': 'dom1\\eggbert',
+                        'category': 'user',
+                        'access': 'read',
+                    },
+                    {
+                        'name': 'dom1\\guards',
+                        'category': 'group',
+                        'access': 'read-write',
+                    },
+                ],
+            },
+        }
+    )
+
+    cfg = thandler.generate_config('foo')
+    assert cfg
+    assert cfg['shares']['Ess One']['options']
+    shopts = cfg['shares']['Ess One']['options']
+    assert shopts['invalid users'] == 'dom1\\ducky'
+    assert shopts['read list'] == 'dom1\\alan dom1\\eggbert'
+    assert shopts['write list'] == 'dom1\\betsy @dom1\\guards'
+    assert shopts['admin users'] == 'dom1\\chuck'
+
+
+def test_generate_config_with_login_control_restricted(thandler):
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'active-directory',
+                'intent': 'present',
+                'domain_settings': {
+                    'realm': 'dom1.example.com',
+                    'join_sources': [
+                        {
+                            'source_type': 'resource',
+                            'ref': 'foo1',
+                        }
+                    ],
+                },
+            },
+            'join_auths.foo1': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo1',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
+                },
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'intent': 'present',
+                'name': 'Ess One',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                },
+                'restrict_access': True,
+                'login_control': [
+                    {
+                        'name': 'dom1\\alan',
+                        'category': 'user',
+                        'access': 'read',
+                    },
+                    {
+                        'name': 'dom1\\betsy',
+                        'category': 'user',
+                        'access': 'read-write',
+                    },
+                    {
+                        'name': 'dom1\\chuck',
+                        'category': 'user',
+                        'access': 'none',
+                    },
+                ],
+            },
+        }
+    )
+
+    cfg = thandler.generate_config('foo')
+    assert cfg
+    assert cfg['shares']['Ess One']['options']
+    shopts = cfg['shares']['Ess One']['options']
+    assert shopts['invalid users'] == 'dom1\\chuck'
+    assert shopts['valid users'] == 'dom1\\alan dom1\\betsy'
+    assert shopts['read list'] == 'dom1\\alan'
+    assert shopts['write list'] == 'dom1\\betsy'
+
+
 def test_error_result():
     share = smb.resources.Share(
         cluster_id='foo',
@@ -414,14 +572,6 @@ def test_apply_no_matching_cluster_error(thandler):
     )
     rg = thandler.apply([share])
     assert not rg.success
-
-
-def test_one():
-    assert smb.proto.one(['a']) == 'a'
-    with pytest.raises(ValueError):
-        smb.proto.one([])
-    with pytest.raises(ValueError):
-        smb.proto.one(['a', 'b'])
 
 
 def test_apply_full_cluster_create(thandler):
@@ -1101,18 +1251,285 @@ def test_apply_cluster_bad_linked_auth(thandler):
     assert rs['results'][1]['msg'] == 'join auth linked to different cluster'
 
 
-def test_rand_name():
-    name = smb.handler.rand_name('bob')
-    assert name.startswith('bob')
-    assert len(name) == 11
-    name = smb.handler.rand_name('carla')
-    assert name.startswith('carla')
-    assert len(name) == 13
-    name = smb.handler.rand_name('dangeresque')
-    assert name.startswith('dangeresqu')
-    assert len(name) == 18
-    name = smb.handler.rand_name('fhqwhgadsfhqwhgadsfhqwhgads')
-    assert name.startswith('fhqwhgadsf')
-    assert len(name) == 18
-    name = smb.handler.rand_name('')
-    assert len(name) == 8
+def test_apply_cluster_bad_linked_ug(thandler):
+    to_apply = [
+        smb.resources.UsersAndGroups(
+            users_groups_id='ug1',
+            values=smb.resources.UserGroupSettings(
+                users=[{"username": "foo"}],
+                groups=[],
+            ),
+            linked_to_cluster='mycluster2',
+        ),
+        smb.resources.Cluster(
+            cluster_id='mycluster1',
+            auth_mode=smb.enums.AuthMode.USER,
+            user_group_settings=[
+                smb.resources.UserGroupSource(
+                    source_type=smb.resources.UserGroupSourceType.RESOURCE,
+                    ref='ug1',
+                ),
+            ],
+        ),
+    ]
+    results = thandler.apply(to_apply)
+    assert not results.success
+    rs = results.to_simplified()
+    assert len(rs['results']) == 2
+    assert rs['results'][0]['msg'] == 'linked_to_cluster id not valid'
+    assert (
+        rs['results'][1]['msg']
+        == 'users and groups linked to different cluster'
+    )
+
+
+def test_apply_with_create_only(thandler):
+    test_apply_full_cluster_create(thandler)
+
+    to_apply = [
+        smb.resources.Cluster(
+            cluster_id='mycluster1',
+            auth_mode=smb.enums.AuthMode.ACTIVE_DIRECTORY,
+            domain_settings=smb.resources.DomainSettings(
+                realm='MYDOMAIN.EXAMPLE.ORG',
+                join_sources=[
+                    smb.resources.JoinSource(
+                        source_type=smb.enums.JoinSourceType.RESOURCE,
+                        ref='join1',
+                    ),
+                ],
+            ),
+            custom_dns=['192.168.76.204'],
+        ),
+        smb.resources.Share(
+            cluster_id='mycluster1',
+            share_id='homedirs',
+            name='Altered Home Directries',
+            cephfs=smb.resources.CephFSStorage(
+                volume='cephfs',
+                subvolume='homedirs',
+                path='/',
+            ),
+        ),
+        smb.resources.Share(
+            cluster_id='mycluster1',
+            share_id='foodirs',
+            name='Foo Directries',
+            cephfs=smb.resources.CephFSStorage(
+                volume='cephfs',
+                subvolume='homedirs',
+                path='/foo',
+            ),
+        ),
+    ]
+    results = thandler.apply(to_apply, create_only=True)
+    assert not results.success
+    rs = results.to_simplified()
+    assert len(rs['results']) == 3
+    assert (
+        rs['results'][0]['msg']
+        == 'a resource with the same ID already exists'
+    )
+    assert (
+        rs['results'][1]['msg']
+        == 'a resource with the same ID already exists'
+    )
+
+    # no changes to the store
+    assert (
+        'shares',
+        'mycluster1.foodirs',
+    ) not in thandler.internal_store.data
+    assert ('shares', 'mycluster1.homedirs') in thandler.internal_store.data
+    assert (
+        thandler.internal_store.data[('shares', 'mycluster1.homedirs')][
+            'name'
+        ]
+        == 'Home Directries'
+    )
+
+    # foodirs share is new, it can be applied separately
+    to_apply = [
+        smb.resources.Share(
+            cluster_id='mycluster1',
+            share_id='foodirs',
+            name='Foo Directries',
+            cephfs=smb.resources.CephFSStorage(
+                volume='cephfs',
+                subvolume='homedirs',
+                path='/foo',
+            ),
+        ),
+    ]
+    results = thandler.apply(to_apply, create_only=True)
+    assert results.success
+    rs = results.to_simplified()
+    assert len(rs['results']) == 1
+    assert (
+        'shares',
+        'mycluster1.foodirs',
+    ) in thandler.internal_store.data
+
+
+def test_remove_in_use_cluster(thandler):
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'active-directory',
+                'intent': 'present',
+                'domain_settings': {
+                    'realm': 'dom1.example.com',
+                    'join_sources': [
+                        {
+                            'source_type': 'resource',
+                            'ref': 'foo1',
+                        }
+                    ],
+                },
+            },
+            'join_auths.foo1': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo1',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
+                },
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'intent': 'present',
+                'name': 'Ess One',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                },
+            },
+        }
+    )
+
+    to_apply = [
+        smb.resources.RemovedCluster(
+            cluster_id='foo',
+        ),
+    ]
+    results = thandler.apply(to_apply)
+    rs = results.to_simplified()
+    assert not results.success
+    assert 'cluster in use' in rs['results'][0]['msg']
+
+
+def test_remove_in_use_join_auth(thandler):
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'active-directory',
+                'intent': 'present',
+                'domain_settings': {
+                    'realm': 'dom1.example.com',
+                    'join_sources': [
+                        {
+                            'source_type': 'resource',
+                            'ref': 'foo1',
+                        }
+                    ],
+                },
+            },
+            'join_auths.foo1': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo1',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
+                },
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'intent': 'present',
+                'name': 'Ess One',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                },
+            },
+        }
+    )
+
+    to_apply = [
+        smb.resources.JoinAuth(
+            auth_id='foo1',
+            intent=smb.enums.Intent.REMOVED,
+        ),
+    ]
+    results = thandler.apply(to_apply)
+    rs = results.to_simplified()
+    assert not results.success
+    assert 'resource in use' in rs['results'][0]['msg']
+
+
+def test_remove_in_use_ug(thandler):
+    thandler.internal_store.overwrite(
+        {
+            'clusters.foo': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'foo',
+                'auth_mode': 'user',
+                'intent': 'present',
+                'user_group_settings': [
+                    {
+                        'source_type': 'resource',
+                        'ref': 'foo1',
+                    }
+                ],
+            },
+            'users_and_groups.foo1': {
+                'resource_type': 'ceph.smb.usersgroups',
+                'users_groups_id': 'foo1',
+                'intent': 'present',
+                'values': {
+                    'users': [{"username": "foo"}],
+                    'groups': [],
+                },
+            },
+            'shares.foo.s1': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'foo',
+                'share_id': 's1',
+                'intent': 'present',
+                'name': 'Ess One',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/',
+                    'provider': 'samba-vfs',
+                },
+            },
+        }
+    )
+
+    to_apply = [
+        smb.resources.UsersAndGroups(
+            users_groups_id='foo1',
+            intent=smb.enums.Intent.REMOVED,
+        ),
+    ]
+    results = thandler.apply(to_apply)
+    rs = results.to_simplified()
+    assert not results.success
+    assert 'resource in use' in rs['results'][0]['msg']

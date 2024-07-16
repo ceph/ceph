@@ -14,6 +14,7 @@
 #include "crimson/os/seastore/segment_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
+#include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 
 using namespace crimson;
 using namespace crimson::os;
@@ -2171,6 +2172,42 @@ TEST_P(tm_single_device_intergrity_check_test_t, remap_lazy_read)
     replay();
     enable_max_extent_size();
    });
+}
+
+TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
+{
+  run_async([this] {
+    using namespace crimson::os::seastore::lba_manager::btree;
+    {
+      auto t = create_transaction();
+      for (int i = 0; i < LEAF_NODE_CAPACITY; i++) {
+	auto extent = alloc_extent(
+	  t,
+	  i * 4096,
+	  4096,
+	  'a');
+      }
+      submit_transaction(std::move(t));
+    }
+
+    {
+      auto t = create_transaction();
+      auto pin = get_pin(t, (LEAF_NODE_CAPACITY - 1) * 4096);
+      assert(pin->is_parent_valid());
+      auto extent = alloc_extent(t, LEAF_NODE_CAPACITY * 4096, 4096, 'a');
+      assert(!pin->is_parent_valid());
+      pin = get_pin(t, LEAF_NODE_CAPACITY * 4096);
+      std::ignore = alloc_extent(t, (LEAF_NODE_CAPACITY + 1) * 4096, 4096, 'a');
+      assert(pin->is_parent_valid());
+      assert(pin->parent_modified());
+      pin->maybe_fix_pos();
+      auto v = pin->get_logical_extent(*t.t);
+      assert(v.has_child());
+      auto extent2 = v.get_child_fut().unsafe_get0();
+      assert(extent.get() == extent2.get());
+      submit_transaction(std::move(t));
+    }
+  });
 }
 
 TEST_P(tm_single_device_test_t, random_writes_concurrent)

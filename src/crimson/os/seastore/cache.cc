@@ -884,7 +884,7 @@ void Cache::mark_transaction_conflicted(
   if (t.get_src() != Transaction::src_t::READ) {
     io_stat_t retire_stat;
     for (auto &i: t.retired_set) {
-      retire_stat.increment(i->get_length());
+      retire_stat.increment(i.extent->get_length());
     }
     efforts.retire.increment_stat(retire_stat);
 
@@ -1136,7 +1136,7 @@ record_t Cache::prepare_record(
   t.read_set.clear();
   t.write_set.clear();
 
-  record_t record(trans_src);
+  record_t record(record_type_t::JOURNAL, trans_src);
   auto commit_time = seastar::lowres_system_clock::now();
 
   // Add new copy of mutated blocks, set_io_wait to block until written
@@ -1249,18 +1249,19 @@ record_t Cache::prepare_record(
   alloc_delta_t rel_delta;
   rel_delta.op = alloc_delta_t::op_types_t::CLEAR;
   for (auto &i: t.retired_set) {
+    auto &extent = i.extent;
     get_by_ext(efforts.retire_by_ext,
-               i->get_type()).increment(i->get_length());
-    retire_stat.increment(i->get_length());
-    DEBUGT("retired and remove extent -- {}", t, *i);
-    commit_retire_extent(t, i);
-    if (is_backref_mapped_extent_node(i)
-	  || is_retired_placeholder(i->get_type())) {
+               extent->get_type()).increment(extent->get_length());
+    retire_stat.increment(extent->get_length());
+    DEBUGT("retired and remove extent -- {}", t, *extent);
+    commit_retire_extent(t, extent);
+    if (is_backref_mapped_extent_node(extent)
+	  || is_retired_placeholder(extent->get_type())) {
       rel_delta.alloc_blk_ranges.emplace_back(
-	i->get_paddr(),
+	extent->get_paddr(),
 	L_ADDR_NULL,
-	i->get_length(),
-	i->get_type());
+	extent->get_length(),
+	extent->get_type());
     }
   }
   alloc_deltas.emplace_back(std::move(rel_delta));
@@ -1621,7 +1622,8 @@ void Cache::complete_commit(
   }
 
   for (auto &i: t.retired_set) {
-    epm.mark_space_free(i->get_paddr(), i->get_length());
+    auto &extent = i.extent;
+    epm.mark_space_free(extent->get_paddr(), extent->get_length());
   }
   for (auto &i: t.existing_block_list) {
     if (i->is_valid()) {
@@ -1638,24 +1640,25 @@ void Cache::complete_commit(
 
   last_commit = start_seq;
   for (auto &i: t.retired_set) {
-    i->dirty_from_or_retired_at = start_seq;
-    if (is_backref_mapped_extent_node(i)
-	  || is_retired_placeholder(i->get_type())) {
+    auto &extent = i.extent;
+    extent->dirty_from_or_retired_at = start_seq;
+    if (is_backref_mapped_extent_node(extent)
+	  || is_retired_placeholder(extent->get_type())) {
       DEBUGT("backref_list free {} len {}",
 	     t,
-	     i->get_paddr(),
-	     i->get_length());
+	     extent->get_paddr(),
+	     extent->get_length());
       backref_list.emplace_back(
 	std::make_unique<backref_entry_t>(
-	  i->get_paddr(),
+	  extent->get_paddr(),
 	  L_ADDR_NULL,
-	  i->get_length(),
-	  i->get_type(),
+	  extent->get_length(),
+	  extent->get_type(),
 	  start_seq));
-    } else if (is_backref_node(i->get_type())) {
-      remove_backref_extent(i->get_paddr());
+    } else if (is_backref_node(extent->get_type())) {
+      remove_backref_extent(extent->get_paddr());
     } else {
-      ERRORT("{}", t, *i);
+      ERRORT("{}", t, *extent);
       ceph_abort("not possible");
     }
   }

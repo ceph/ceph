@@ -21,28 +21,47 @@ bool init(CephContext* cct);
 // shutdown the kafka manager
 void shutdown();
 
+// key class for the connection list
+struct connection_id_t {
+  std::string broker;
+  std::string user;
+  std::string password;
+  std::string ca_location;
+  std::string mechanism;
+  bool ssl = false;
+  connection_id_t() = default;
+  connection_id_t(const std::string& _broker,
+                  const std::string& _user,
+                  const std::string& _password,
+                  const boost::optional<const std::string&>& _ca_location,
+                  const boost::optional<const std::string&>& _mechanism,
+                  bool _ssl);
+};
+
+std::string to_string(const connection_id_t& id);
+
 // connect to a kafka endpoint
-bool connect(std::string& broker,
-  const std::string& url,
-  bool use_ssl,
-  bool verify_ssl,
-  boost::optional<const std::string&> ca_location,
-  boost::optional<const std::string&> mechanism,
-  boost::optional<const std::string&> user_name,
-  boost::optional<const std::string&> password);
+bool connect(connection_id_t& conn_id,
+             const std::string& url,
+             bool use_ssl,
+             bool verify_ssl,
+             boost::optional<const std::string&> ca_location,
+             boost::optional<const std::string&> mechanism,
+             boost::optional<const std::string&> user_name,
+             boost::optional<const std::string&> password);
 
 // publish a message over a connection that was already created
-int publish(const std::string& conn_name,
-    const std::string& topic,
-    const std::string& message);
+int publish(const connection_id_t& conn_id,
+            const std::string& topic,
+            const std::string& message);
 
 // publish a message over a connection that was already created
 // and pass a callback that will be invoked (async) when broker confirms
 // receiving the message
-int publish_with_confirm(const std::string& conn_name,
-    const std::string& topic,
-    const std::string& message,
-    reply_callback_t cb);
+int publish_with_confirm(const connection_id_t& conn_id,
+                         const std::string& topic,
+                         const std::string& message,
+                         reply_callback_t cb);
 
 // convert the integer status returned from the "publish" function to a string
 std::string status_to_string(int s);

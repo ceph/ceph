@@ -91,6 +91,19 @@ class QuiesceDbTest: public testing::Test {
         submit_condition.notify_all();
         return ++cluster_membership->epoch;
       }
+      std::atomic<std::optional<bool>> has_work_override;
+      bool db_thread_has_work() const override {
+        if (auto has_work = has_work_override.load()) {
+          return *has_work;
+        }
+        return QuiesceDbManager::db_thread_has_work();
+      }
+
+      void spurious_submit_wakeup()
+      {
+        std::lock_guard l(submit_mutex);
+        submit_condition.notify_all();
+      }
     };
 
     epoch_t epoch = 0;
@@ -110,6 +123,16 @@ class QuiesceDbTest: public testing::Test {
     {
       std::lock_guard l(comms_mutex);
       auto &&[_, promise] = ack_hooks.emplace_back(predicate, std::promise<void> {});
+      return promise.get_future();
+    }
+
+    using ListingHook = std::function<bool(QuiesceInterface::PeerId, QuiesceDbListing&)>;
+    std::list<std::pair<ListingHook, std::promise<void>>> listing_hooks;
+
+    std::future<void> add_listing_hook(ListingHook&& predicate)
+    {
+      std::lock_guard l(comms_mutex);
+      auto&& [_, promise] = listing_hooks.emplace_back(predicate, std::promise<void> {});
       return promise.get_future();
     }
 
@@ -153,7 +176,17 @@ class QuiesceDbTest: public testing::Test {
             std::unique_lock l(comms_mutex);
             if (epoch == this->epoch) {
               if (this->managers.contains(recipient)) {
+                std::queue<std::promise<void>> done_hooks;
                 dout(10) << "listing from " << me << " (leader=" << leader << ") to " << recipient << " for version " << listing.db_version << " with " << listing.sets.size() << " sets" << dendl;
+
+                for (auto it = listing_hooks.begin(); it != listing_hooks.end();) {
+                  if (it->first(recipient, listing)) {
+                    done_hooks.emplace(std::move(it->second));
+                    it = listing_hooks.erase(it);
+                  } else {
+                    it++;
+                  }
+                }
 
                 ceph::bufferlist bl;
                 encode(listing, bl);
@@ -163,6 +196,11 @@ class QuiesceDbTest: public testing::Test {
 
                 this->managers[recipient]->submit_peer_listing({me, std::move(listing)});
                 comms_cond.notify_all();
+                l.unlock();
+                while (!done_hooks.empty()) {
+                  done_hooks.front().set_value();
+                  done_hooks.pop();
+                }
                 return 0;
               }
             }
@@ -1347,6 +1385,34 @@ TEST_F(QuiesceDbTest, LeaderShutdown)
 }
 
 /* ================================================================ */
+TEST_F(QuiesceDbTest, MultiRankBootstrap)
+{
+  // create a cluster with a peer that doesn't process messages
+  managers.at(mds_gid_t(2))->has_work_override = false;
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({  mds_gid_t(1), mds_gid_t(2) }));
+
+  const QuiesceTimeInterval PEER_DISCOVERY_INTERVAL = std::chrono::milliseconds(1100);
+
+  // we should be now in the bootstrap loop,
+  // which should send discoveries to silent peers
+  // once in PEER_DISCOVERY_INTERVAL
+  for (int i = 0; i < 5; i++) {
+
+    if (i > 2) {
+      // through a wrench by disrupting the wait sleep in the bootstrap flow
+      managers.at(mds_gid_t(1))->spurious_submit_wakeup();
+    }
+
+    // wait for the next peer discovery request
+    auto saw_discovery = add_listing_hook([](auto recipient, auto const& listing) {
+      return recipient == mds_gid_t(2) && listing.db_version.set_version == 0;
+    });
+
+    EXPECT_EQ(std::future_status::ready, saw_discovery.wait_for(PEER_DISCOVERY_INTERVAL + std::chrono::milliseconds(100)));
+  }
+}
+
+/* ================================================================ */
 TEST_F(QuiesceDbTest, MultiRankQuiesce)
 {
   ASSERT_NO_FATAL_FAILURE(configure_cluster({  mds_gid_t(1), mds_gid_t(2), mds_gid_t(3) }));
@@ -1659,4 +1725,80 @@ TEST_F(QuiesceDbTest, AckDuringEpochMismatch)
     r.set_id = "set1";
     r.await = sec(10);
   }));
+}
+
+/* ==================================== */
+TEST_F(QuiesceDbTest, QuiesceRootMerge)
+{
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1) }));
+  managers.at(mds_gid_t(1))->reset_agent_callback(QUIESCING_AGENT_CB);
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.timeout = sec(60);
+    r.expiration = sec(60);
+    r.await = sec(60);
+    r.include_roots({ "root1", "root2" });
+  }));
+
+  EXPECT_EQ(QS_QUIESCED, last_request->response.sets.at("set1").rstate.state);
+  auto set1_exp = last_request->response.sets.at("set1").expiration;
+
+  // reset the agent callback to SILENT so that
+  // our sets stay RELEASING and QUIESCING forever
+  managers.at(mds_gid_t(1))->reset_agent_callback(SILENT_AGENT_CB);
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.release();
+  }));
+
+  EXPECT_EQ(QS_RELEASING, last_request->response.sets.at("set1").rstate.state);
+
+  ASSERT_EQ(OK(), run_request([=](auto& r) {
+    r.set_id = "set2";
+    r.timeout = set1_exp*2;
+    r.expiration = set1_exp*2;
+    r.include_roots({ "root2", "root3" });
+  }));
+
+  EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set2").rstate.state);
+
+  // at this point, we should expect to have root1 RELEASING, root3 QUIESCING
+  // and root2, which is shared, should take the min state (QUIESCING) and the max ttl
+
+  auto agent_map = [this]() -> std::optional<QuiesceMap> {
+    std::promise<QuiesceMap> agent_map_promise;
+    auto agent_map_future = agent_map_promise.get_future();
+
+    managers.at(mds_gid_t(1))->reset_agent_callback([&agent_map_promise](QuiesceMap& map) -> bool {
+      try {
+        agent_map_promise.set_value(map);
+      } catch (std::future_error) {
+        // ignore this if we accidentally get called more than once
+      }
+      return false;
+    });
+
+    if (std::future_status::ready == agent_map_future.wait_for(std::chrono::seconds(10))) {
+      return agent_map_future.get();
+    }
+    else {
+      return std::nullopt;
+    }
+  }();
+
+  ASSERT_TRUE(agent_map.has_value());
+  EXPECT_EQ(3, agent_map->roots.size());
+
+  {
+    auto const & r1 = agent_map->roots.at("file:/root1");
+    auto const & r2 = agent_map->roots.at("file:/root2");
+    auto const & r3 = agent_map->roots.at("file:/root3");
+
+    EXPECT_EQ(QS_RELEASING, r1.state);
+    EXPECT_EQ(QS_QUIESCING, r2.state);
+    EXPECT_EQ(QS_QUIESCING, r3.state);
+    EXPECT_EQ(std::max(r1.ttl, r3.ttl), r2.ttl);
+  }
 }

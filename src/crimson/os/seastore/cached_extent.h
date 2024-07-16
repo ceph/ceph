@@ -651,6 +651,7 @@ private:
   friend struct paddr_cmp;
   friend struct ref_paddr_cmp;
   friend class ExtentIndex;
+  friend struct trans_retired_extent_link_t;
 
   /// Pointer to containing index (or null)
   ExtentIndex *parent_index = nullptr;
@@ -735,6 +736,7 @@ private:
 
 protected:
   trans_view_set_t mutation_pendings;
+  trans_view_set_t retired_transactions;
 
   CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&_ptr) : ptr(std::move(_ptr)) {
@@ -884,17 +886,54 @@ struct paddr_cmp {
   }
 };
 
+// trans_retired_extent_link_t is used to link stable extents with
+// the transactions that retired them. With this link, we can find
+// out whether an extent has been retired by a specific transaction
+// in a way that's more efficient than searching through the transaction's
+// retired_set (Transaction::is_retired())
+struct trans_retired_extent_link_t {
+  CachedExtentRef extent;
+  // We use trans_spec_view_t instead of transaction_id_t, so that,
+  // when a transaction is deleted or reset, we can efficiently remove
+  // that transaction from the extents' extent-transaction link set.
+  // Otherwise, we have to search through each extent's "retired_transactions"
+  // to remove the transaction
+  trans_spec_view_t trans_view;
+  trans_retired_extent_link_t(CachedExtentRef extent, transaction_id_t id)
+    : extent(extent), trans_view{id}
+  {
+    assert(extent->is_stable());
+    extent->retired_transactions.insert(trans_view);
+  }
+};
+
 /// Compare extent refs by paddr
 struct ref_paddr_cmp {
   using is_transparent = paddr_t;
-  bool operator()(const CachedExtentRef &lhs, const CachedExtentRef &rhs) const {
-    return lhs->poffset < rhs->poffset;
+  bool operator()(
+    const trans_retired_extent_link_t &lhs,
+    const trans_retired_extent_link_t &rhs) const {
+    return lhs.extent->poffset < rhs.extent->poffset;
   }
-  bool operator()(const paddr_t &lhs, const CachedExtentRef &rhs) const {
-    return lhs < rhs->poffset;
+  bool operator()(
+    const paddr_t &lhs,
+    const trans_retired_extent_link_t &rhs) const {
+    return lhs < rhs.extent->poffset;
   }
-  bool operator()(const CachedExtentRef &lhs, const paddr_t &rhs) const {
-    return lhs->poffset < rhs;
+  bool operator()(
+    const trans_retired_extent_link_t &lhs,
+    const paddr_t &rhs) const {
+    return lhs.extent->poffset < rhs;
+  }
+  bool operator()(
+    const CachedExtentRef &lhs,
+    const trans_retired_extent_link_t &rhs) const {
+    return lhs->poffset < rhs.extent->poffset;
+  }
+  bool operator()(
+    const trans_retired_extent_link_t &lhs,
+    const CachedExtentRef &rhs) const {
+    return lhs.extent->poffset < rhs->poffset;
   }
 };
 
@@ -910,7 +949,7 @@ class addr_extent_set_base_t
 
 using pextent_set_t = addr_extent_set_base_t<
   paddr_t,
-  CachedExtentRef,
+  trans_retired_extent_link_t,
   ref_paddr_cmp
   >;
 
@@ -1111,6 +1150,15 @@ public:
   virtual bool is_clone() const = 0;
   bool is_zero_reserved() const {
     return !get_val().is_real();
+  }
+  virtual bool is_parent_valid() const = 0;
+  virtual bool parent_modified() const {
+    ceph_abort("impossible");
+    return false;
+  };
+
+  virtual void maybe_fix_pos() {
+    ceph_abort("impossible");
   }
 
   virtual ~PhysicalNodeMapping() {}

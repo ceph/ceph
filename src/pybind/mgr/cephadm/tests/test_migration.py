@@ -1,13 +1,21 @@
 import json
 import pytest
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
+from ceph.deployment.service_spec import (
+    PlacementSpec,
+    ServiceSpec,
+    HostPlacementSpec,
+    RGWSpec,
+    IngressSpec,
+    IscsiServiceSpec
+)
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
 from cephadm.inventory import SPEC_STORE_PREFIX
 from cephadm.migrations import LAST_MIGRATION
 from cephadm.tests.fixtures import _run_cephadm, wait, with_host, receive_agent_metadata_all_hosts
 from cephadm.serve import CephadmServe
+from orchestrator import DaemonDescription
 from tests import mock
 
 
@@ -338,3 +346,44 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
             # if it was migrated, so we can use this to test the spec
             # was untouched
             assert 'rgw.foo' not in cephadm_module.spec_store.all_specs
+
+
+def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
+    rgw_spec = RGWSpec(service_id='foo', rgw_frontend_ssl_certificate='rgw_cert', ssl=True)
+    iscsi_spec = IscsiServiceSpec(service_id='foo', pool='foo', ssl_cert='iscsi_cert', ssl_key='iscsi_key')
+    ingress_spec = IngressSpec(service_id='rgw.foo', ssl_cert='ingress_cert', ssl_key='ingress_key', ssl=True)
+    cephadm_module.spec_store._specs = {
+        'rgw.foo': rgw_spec,
+        'iscsi.foo': iscsi_spec,
+        'ingress.rgw.foo': ingress_spec
+    }
+
+    cephadm_module.set_store('cephadm_agent/root/cert', 'agent_cert')
+    cephadm_module.set_store('cephadm_agent/root/key', 'agent_key')
+    cephadm_module.set_store('service_discovery/root/cert', 'service_discovery_cert')
+    cephadm_module.set_store('service_discovery/root/key', 'service_discovery_key')
+
+    cephadm_module.set_store('host1/grafana_crt', 'grafana_cert1')
+    cephadm_module.set_store('host1/grafana_key', 'grafana_key1')
+    cephadm_module.set_store('host2/grafana_crt', 'grafana_cert2')
+    cephadm_module.set_store('host2/grafana_key', 'grafana_key2')
+    cephadm_module.cache.daemons = {'host1': {'grafana.host1': DaemonDescription('grafana', 'host1', 'host1')},
+                                    'host2': {'grafana.host2': DaemonDescription('grafana', 'host2', 'host2')}}
+
+    cephadm_module.migration.migrate_6_7()
+
+    assert cephadm_module.cert_key_store.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo')
+    assert cephadm_module.cert_key_store.get_cert('iscsi_ssl_cert', service_name='iscsi.foo')
+    assert cephadm_module.cert_key_store.get_key('iscsi_ssl_key', service_name='iscsi.foo')
+    assert cephadm_module.cert_key_store.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
+    assert cephadm_module.cert_key_store.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')
+
+    assert cephadm_module.cert_key_store.get_cert('agent_endpoint_root_cert')
+    assert cephadm_module.cert_key_store.get_key('agent_endpoint_key')
+    assert cephadm_module.cert_key_store.get_cert('service_discovery_root_cert')
+    assert cephadm_module.cert_key_store.get_key('service_discovery_key')
+
+    assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host1')
+    assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host2')
+    assert cephadm_module.cert_key_store.get_key('grafana_key', host='host1')
+    assert cephadm_module.cert_key_store.get_key('grafana_key', host='host2')

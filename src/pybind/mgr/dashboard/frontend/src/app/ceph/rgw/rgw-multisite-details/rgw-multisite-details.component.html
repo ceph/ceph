@@ -1,54 +1,67 @@
-<div class="row">
-  <div class="col-sm-12 col-lg-12">
-    <div>
-      <cd-alert-panel   *ngIf="!rgwModuleStatus"
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs"
+     [(activeId)]="activeId"
+     (navChange)="onNavChange($event)">
+  <ng-container ngbNavItem="configuration">
+    <a ngbNavLink
+       i18n>Configuration</a>
+    <ng-template ngbNavContent>
+      <div>
+        <cd-alert-panel *ngIf="!rgwModuleStatus"
                         type="info"
                         spacingClass="mb-3"
                         class="d-flex align-items-center"
                         i18n>In order to access the import/export feature, the rgw module must be enabled
-
-        <button class="btn btn-light mx-2"
-                type="button"
-                (click)="enableRgwModule()">Enable</button>
-      </cd-alert-panel>
-      <cd-alert-panel   *ngIf="restartGatewayMessage"
-                        type="warning"
-                        spacingClass="mb-3"
-                        i18n>Please restart all Ceph Object Gateway instances in all zones to ensure consistent multisite configuration updates.
-        <a class="text-decoration-underline"
-           routerLink="/services">
-           Cluster->Services</a>
-      </cd-alert-panel>
-      <cd-table-actions class="btn-group mb-4 me-2"
-                        [permission]="permission"
-                        [selection]="selection"
-                        [tableActions]="createTableActions">
-      </cd-table-actions>
-      <span *ngIf="showMigrateAction">
-        <cd-table-actions class="btn-group mb-4 me-2 secondary"
+          <button class="btn btn-light mx-2"
+                  type="button"
+                  (click)="enableRgwModule()">Enable</button>
+        </cd-alert-panel>
+        <cd-alert-panel   *ngIf="restartGatewayMessage"
+                          type="warning"
+                          spacingClass="mb-3"
+                          i18n>Please restart all Ceph Object Gateway instances in all zones to ensure consistent multisite configuration updates.
+          <a class="text-decoration-underline"
+             routerLink="/services">
+             Cluster->Services</a>
+        </cd-alert-panel>
+        <span *ngIf="!showMigrateAndReplicationActions; else migrateAndReplicationActionTpl">
+          <cd-table-actions class="btn-group mb-4 me-2"
+                            [permission]="permission"
+                            [selection]="selection"
+                            [tableActions]="createTableActions">
+          </cd-table-actions>
+        </span>
+        <ng-template #migrateAndReplicationActionTpl>
+          <cd-table-actions class="btn-group mb-4 me-2"
+                            [permission]="permission"
+                            [selection]="selection"
+                            [tableActions]="multisiteReplicationActions">
+          </cd-table-actions>
+          <cd-table-actions class="btn-group mb-4 me-2 secondary"
+                            [permission]="permission"
+                            [btnColor]="'light'"
+                            [selection]="selection"
+                            [tableActions]="migrateTableAction">
+          </cd-table-actions>
+        </ng-template>
+        <cd-table-actions class="btn-group mb-4 me-2"
                           [permission]="permission"
                           [btnColor]="'light'"
                           [selection]="selection"
-                          [tableActions]="migrateTableAction">
+                          [tableActions]="importAction">
         </cd-table-actions>
-      </span>
-      <cd-table-actions class="btn-group mb-4 me-2"
-                        [permission]="permission"
-                        [btnColor]="'light'"
-                        [selection]="selection"
-                        [tableActions]="importAction">
-      </cd-table-actions>
-      <cd-table-actions class="btn-group mb-4 me-2"
-                        [permission]="permission"
-                        [btnColor]="'light'"
-                        [selection]="selection"
-                        [tableActions]="exportAction">
-      </cd-table-actions>
-    </div>
-    <div class="card">
-      <div class="card-header"
-           i18n>Topology Viewer</div>
-      <div class="card-body">
+        <cd-table-actions class="btn-group mb-4 me-2"
+                          [permission]="permission"
+                          [btnColor]="'light'"
+                          [selection]="selection"
+                          [tableActions]="exportAction">
+        </cd-table-actions>
+      </div>
+      <div class="card">
+        <div class="card-header"
+             i18n>Topology Viewer
+        </div>
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
             <i *ngIf="loadingIndicator"
@@ -68,16 +81,14 @@
                         [ngClass]="icons.danger"></i>
                   </span>
                   <i [ngClass]="node.data.icon"></i>
-                    {{ node.data.name }}
+                  {{ node.data.name }}
                 </span>
                 <span class="badge badge-success me-2"
                       *ngIf="node.data.is_default">
-                  default
+                    default
                 </span>
                 <span class="badge badge-warning me-2"
-                      *ngIf="node.data.is_master">
-                  master
-                </span>
+                      *ngIf="node.data.is_master"> master </span>
                 <span class="badge badge-warning me-2"
                       *ngIf="node.data.secondary_zone">
                   secondary-zone
@@ -118,6 +129,16 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</div>
+    </ng-template>
+  </ng-container>
+  <ng-container ngbNavItem="syncPolicy">
+    <a ngbNavLink
+       i18n>Sync Policy</a>
+    <ng-template ngbNavContent>
+      <cd-rgw-multisite-sync-policy></cd-rgw-multisite-sync-policy>
+    </ng-template>
+  </ng-container>
+</nav>
+
+<div [ngbNavOutlet]="nav"></div>
+<router-outlet name="modal"></router-outlet>

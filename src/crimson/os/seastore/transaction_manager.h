@@ -65,7 +65,8 @@ public:
     CacheRef cache,
     LBAManagerRef lba_manager,
     ExtentPlacementManagerRef &&epm,
-    BackrefManagerRef&& backref_manager);
+    BackrefManagerRef&& backref_manager,
+    shard_stats_t& shard_stats);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -181,14 +182,27 @@ public:
     Transaction &t,
     LBAMappingRef pin)
   {
-    // checking the lba child must be atomic with creating
-    // and linking the absent child
-    auto ret = get_extent_if_linked<T>(t, std::move(pin));
-    if (ret.index() == 1) {
-      return std::move(std::get<1>(ret));
+    auto fut = base_iertr::make_ready_future<LBAMappingRef>();
+    if (!pin->is_parent_valid()) {
+      fut = get_pin(t, pin->get_key()
+      ).handle_error_interruptible(
+	crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
+	crimson::ct_error::input_output_error::pass_further{}
+      );
     } else {
-      return this->pin_to_extent<T>(t, std::move(std::get<0>(ret)));
+      pin->maybe_fix_pos();
+      fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
     }
+    return fut.si_then([&t, this](auto npin) mutable {
+      // checking the lba child must be atomic with creating
+      // and linking the absent child
+      auto ret = get_extent_if_linked<T>(t, std::move(npin));
+      if (ret.index() == 1) {
+	return std::move(std::get<1>(ret));
+      } else {
+	return this->pin_to_extent<T>(t, std::move(std::get<0>(ret)));
+      }
+    });
   }
 
   template <typename T>
@@ -197,6 +211,9 @@ public:
     Transaction &t,
     LBAMappingRef pin)
   {
+    ceph_assert(pin->is_parent_valid());
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut().safe_then([pin=std::move(pin)](auto extent) {
@@ -220,6 +237,7 @@ public:
     LBAMappingRef pin,
     extent_types_t type)
   {
+    ceph_assert(!pin->parent_modified());
     auto v = pin->get_logical_extent(t);
     // checking the lba child must be atomic with creating
     // and linking the absent child
@@ -457,16 +475,31 @@ public:
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
       if (!pin->is_indirect()) {
-	auto fut2 = base_iertr::make_ready_future<TCachedExtentRef<T>>();
-	if (full_extent_integrity_check) {
-	  fut2 = read_pin<T>(t, pin->duplicate());
+	if (!pin->is_parent_valid()) {
+	  fut = get_pin(t, pin->get_key()
+	  ).si_then([&pin](auto npin) {
+	    assert(npin);
+	    pin = std::move(npin);
+	    return seastar::now();
+	  }).handle_error_interruptible(
+	    crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
+	    crimson::ct_error::input_output_error::pass_further{}
+	  );
 	} else {
-	  auto ret = get_extent_if_linked<T>(t, pin->duplicate());
-	  if (ret.index() == 1) {
-	    fut2 = std::move(std::get<1>(ret));
-	  }
+	  pin->maybe_fix_pos();
 	}
-	fut = fut2.si_then([this, &t, &remaps, original_paddr,
+
+	fut = fut.si_then([this, &t, &pin] {
+	  if (full_extent_integrity_check) {
+	    return read_pin<T>(t, pin->duplicate());
+	  } else {
+	    auto ret = get_extent_if_linked<T>(t, pin->duplicate());
+	    if (ret.index() == 1) {
+	      return std::move(std::get<1>(ret));
+	    }
+	  }
+	  return base_iertr::make_ready_future<TCachedExtentRef<T>>();
+	}).si_then([this, &t, &remaps, original_paddr,
 			    original_laddr, original_len,
 			    &extents, FNAME](auto ext) mutable {
 	  ceph_assert(full_extent_integrity_check
@@ -629,6 +662,10 @@ public:
   /*
    * ExtentCallbackInterface
    */
+
+  shard_stats_t& get_shard_stats() {
+    return shard_stats;
+  }
 
   /// weak transaction should be type READ
   TransactionRef create_transaction(
@@ -801,6 +838,8 @@ private:
   WritePipeline write_pipeline;
 
   bool full_extent_integrity_check = true;
+
+  shard_stats_t& shard_stats;
 
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
@@ -978,5 +1017,6 @@ using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 TransactionManagerRef make_transaction_manager(
     Device *primary_device,
     const std::vector<Device*> &secondary_devices,
+    shard_stats_t& shard_stats,
     bool is_test);
 }

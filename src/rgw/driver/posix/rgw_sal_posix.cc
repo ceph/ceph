@@ -1543,7 +1543,7 @@ int POSIXObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y)
+                            Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   if (delattrs) {
     for (auto& it : *delattrs) {
@@ -2408,7 +2408,7 @@ int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
     return ret;
   }
 
-  ret = dobj->set_obj_attrs(dpp, &get_attrs(), NULL, y);
+  ret = dobj->set_obj_attrs(dpp, &get_attrs(), NULL, y, rgw::sal::FLAG_LOG_OP);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not write attrs to dest object "
                       << dobj->get_name() << dendl;
@@ -2509,6 +2509,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   meta_obj = get_meta_obj();
 
+  mp_obj.upload_info.cksum_type = cksum_type;
   mp_obj.upload_info.dest_placement = dest_placement;
 
   bufferlist bl;
@@ -2516,7 +2517,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
 
-  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y);
+  return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
@@ -2796,9 +2797,12 @@ int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
   return obj->write(offset, data, dpp, null_yield);
 }
 
-int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+int POSIXMultipartWriter::complete(
+		       size_t accounted_size,
+		       const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -2828,6 +2832,7 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
 
   info.num = part_num;
   info.etag = etag;
+  info.cksum = cksum;
   info.mtime = set_mtime;
 
   bufferlist bl;
@@ -2867,6 +2872,7 @@ int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
 int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,

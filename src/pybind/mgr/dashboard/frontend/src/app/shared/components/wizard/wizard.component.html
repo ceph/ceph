@@ -3,7 +3,7 @@
     <nav class="col">
       <ul class="nav nav-pills flex-column"
           *ngFor="let step of steps | async; let i = index;">
-        <li class="nav-item">
+        <li class="nav-item text-nowrap">
           <a class="nav-link"
              (click)="onStepClick(step)"
              [ngClass]="{active: currentStep.stepIndex === step.stepIndex}">

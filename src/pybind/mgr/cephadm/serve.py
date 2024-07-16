@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof']
+REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof', 'mgmt-gateway']
 
 WHICH = ssh.RemoteExecutable('which')
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
@@ -136,8 +136,10 @@ class CephadmServe:
 
     def _check_certificates(self) -> None:
         for d in self.mgr.cache.get_daemons_by_type('grafana'):
-            cert = self.mgr.get_store(f'{d.hostname}/grafana_crt')
-            key = self.mgr.get_store(f'{d.hostname}/grafana_key')
+            host = d.hostname
+            assert host is not None
+            cert = self.mgr.cert_key_store.get_cert('grafana_cert', host=host)
+            key = self.mgr.cert_key_store.get_key('grafana_key', host=host)
             if (not cert or not cert.strip()) and (not key or not key.strip()):
                 # certificate/key are empty... nothing to check
                 return
@@ -778,7 +780,7 @@ class CephadmServe:
         }
 
         rank_map = None
-        if svc.ranked():
+        if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
         ha = HostAssignment(
             spec=spec,
@@ -1091,10 +1093,12 @@ class CephadmServe:
                 self.log.debug(f'{dd.name()} deps {last_deps} -> {deps}')
                 self.log.info(f'Reconfiguring {dd.name()} (dependencies changed)...')
                 action = 'reconfig'
-                # we need only redeploy if secure_monitoring_stack value has changed:
+                # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
+                # TODO(redo): check if we should just go always with redeploy (it's fast enough)
                 if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager']:
-                    diff = list(set(last_deps) - set(deps))
-                    if any('secure_monitoring_stack' in e for e in diff):
+                    diff = list(set(last_deps).symmetric_difference(set(deps)))
+                    REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
+                    if any(svc in e for e in diff for svc in REDEPLOY_TRIGGERS):
                         action = 'redeploy'
                 elif dd.daemon_type == 'jaeger-agent':
                     # changes to jaeger-agent deps affect the way the unit.run for

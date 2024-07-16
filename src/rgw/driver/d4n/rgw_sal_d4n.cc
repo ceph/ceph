@@ -110,107 +110,8 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
   return next->create(dpp, params, y);
 }
 
-int D4NFilterObject::copy_object(const ACLOwner& owner,
-                              const rgw_user& remote_user,
-                              req_info* info,
-                              const rgw_zone_id& source_zone,
-                              rgw::sal::Object* dest_object,
-                              rgw::sal::Bucket* dest_bucket,
-                              rgw::sal::Bucket* src_bucket,
-                              const rgw_placement_rule& dest_placement,
-                              ceph::real_time* src_mtime,
-                              ceph::real_time* mtime,
-                              const ceph::real_time* mod_ptr,
-                              const ceph::real_time* unmod_ptr,
-                              bool high_precision_time,
-                              const char* if_match,
-                              const char* if_nomatch,
-                              AttrsMod attrs_mod,
-                              bool copy_if_newer,
-                              Attrs& attrs,
-                              RGWObjCategory category,
-                              uint64_t olh_epoch,
-                              boost::optional<ceph::real_time> delete_at,
-                              std::string* version_id,
-                              std::string* tag,
-                              std::string* etag,
-                              void (*progress_cb)(off_t, void *),
-                              void* progress_data,
-                              const DoutPrefixProvider* dpp,
-                              optional_yield y)
-{
-  rgw::d4n::CacheObj obj = rgw::d4n::CacheObj{
-                                 .objName = this->get_key().get_oid(),
-                                 .bucketName = src_bucket->get_name()
-                               };
-
-  if (driver->get_obj_dir()->copy(&obj, dest_object->get_name(), dest_bucket->get_name(), y) < 0) 
-    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory copy method failed." << dendl;
-
-  /* Append additional metadata to attributes */
-  rgw::sal::Attrs baseAttrs = this->get_attrs();
-  buffer::list bl;
-
-  bl.append(to_iso_8601(*mtime));
-  baseAttrs.insert({"mtime", bl});
-  bl.clear();
-  
-  if (version_id != NULL) { 
-    bl.append(*version_id);
-    baseAttrs.insert({"version_id", bl});
-    bl.clear();
-  }
- 
-  if (!etag->empty()) {
-    bl.append(*etag);
-    baseAttrs.insert({"etag", bl});
-    bl.clear();
-  }
-
-  if (attrs_mod == rgw::sal::ATTRSMOD_REPLACE) { /* Replace */
-    rgw::sal::Attrs::iterator iter;
-
-    for (const auto& pair : attrs) {
-      iter = baseAttrs.find(pair.first);
-    
-      if (iter != baseAttrs.end()) {
-        iter->second = pair.second;
-      } else {
-        baseAttrs.insert({pair.first, pair.second});
-      }
-    }
-  } else if (attrs_mod == rgw::sal::ATTRSMOD_MERGE) { /* Merge */
-    baseAttrs.insert(attrs.begin(), attrs.end()); 
-  }
-
-  /*
-  int copy_attrsReturn = driver->get_cache_driver()->copy_attrs(this->get_key().get_oid(), dest_object->get_key().get_oid(), &baseAttrs);
-
-  if (copy_attrsReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache copy attributes operation failed." << dendl;
-  } else {
-    int copy_dataReturn = driver->get_cache_driver()->copy_data(this->get_key().get_oid(), dest_object->get_key().get_oid());
-
-    if (copy_dataReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy data operation failed." << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation succeeded." << dendl;
-    }
-  }*/
-
-  return next->copy_object(owner, remote_user, info, source_zone,
-                           nextObject(dest_object),
-                           nextBucket(dest_bucket),
-                           nextBucket(src_bucket),
-                           dest_placement, src_mtime, mtime,
-                           mod_ptr, unmod_ptr, high_precision_time, if_match,
-                           if_nomatch, attrs_mod, copy_if_newer, attrs,
-                           category, olh_epoch, delete_at, version_id, tag,
-                           etag, progress_cb, progress_data, dpp, y);
-}
-
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y) 
+                            Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   if (setattrs != NULL) {
     /* Ensure setattrs and delattrs do not overlap */
@@ -241,7 +142,7 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver delete_attrs method failed." << dendl;
   }
 
-  return next->set_obj_attrs(dpp, setattrs, delattrs, y);  
+  return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -910,6 +811,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -929,7 +831,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     ldpp_dout(save_dpp, 10) << "D4NFilterWriter::" << __func__ << "(): ObjectDirectory set method failed." << dendl;
    
   /* Retrieve complete set of attrs */
-  int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+  int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, rctx, flags);
   obj->get_obj_attrs(rctx.y, save_dpp, NULL);

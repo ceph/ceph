@@ -8,8 +8,7 @@
 SET_SUBSYS(osd);
 //TODO: SET_SUBSYS(crimson_tri_mutex);
 
-std::optional<seastar::future<>>
-read_lock::lock()
+seastar::future<> read_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_read();
 }
@@ -19,8 +18,7 @@ void read_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_read();
 }
 
-std::optional<seastar::future<>>
-write_lock::lock()
+seastar::future<> write_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_write();
 }
@@ -30,8 +28,7 @@ void write_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_write();
 }
 
-std::optional<seastar::future<>>
-excl_lock::lock()
+seastar::future<> excl_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_excl();
 }
@@ -41,26 +38,6 @@ void excl_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_excl();
 }
 
-void excl_lock_from_read::lock()
-{
-  static_cast<tri_mutex*>(this)->promote_from_read();
-}
-
-void excl_lock_from_read::unlock()
-{
-  static_cast<tri_mutex*>(this)->demote_to_read();
-}
-
-void excl_lock_from_write::lock()
-{
-  static_cast<tri_mutex*>(this)->promote_from_write();
-}
-
-void excl_lock_from_write::unlock()
-{
-  static_cast<tri_mutex*>(this)->demote_to_write();
-}
-
 tri_mutex::~tri_mutex()
 {
   LOG_PREFIX(tri_mutex::~tri_mutex());
@@ -68,17 +45,16 @@ tri_mutex::~tri_mutex()
   assert(!is_acquired());
 }
 
-std::optional<seastar::future<>>
-tri_mutex::lock_for_read()
+seastar::future<> tri_mutex::lock_for_read()
 {
   LOG_PREFIX(tri_mutex::lock_for_read());
   DEBUGDPP("", *this);
   if (try_lock_for_read()) {
     DEBUGDPP("lock_for_read successfully", *this);
-    return std::nullopt;
+    return seastar::now();
   }
   DEBUGDPP("can't lock_for_read, adding to waiters", *this);
-  waiters.emplace_back(seastar::promise<>(), type_t::read, name);
+  waiters.emplace_back(seastar::promise<>(), type_t::read);
   return waiters.back().pr.get_future();
 }
 
@@ -103,15 +79,6 @@ void tri_mutex::unlock_for_read()
   }
 }
 
-void tri_mutex::promote_from_read()
-{
-  LOG_PREFIX(tri_mutex::promote_from_read());
-  DEBUGDPP("", *this);
-  assert(readers == 1);
-  --readers;
-  exclusively_used = true;
-}
-
 void tri_mutex::demote_to_read()
 {
   LOG_PREFIX(tri_mutex::demote_to_read());
@@ -121,17 +88,16 @@ void tri_mutex::demote_to_read()
   ++readers;
 }
 
-std::optional<seastar::future<>>
-tri_mutex::lock_for_write()
+seastar::future<> tri_mutex::lock_for_write()
 {
   LOG_PREFIX(tri_mutex::lock_for_write());
   DEBUGDPP("", *this);
   if (try_lock_for_write()) {
     DEBUGDPP("lock_for_write successfully", *this);
-    return std::nullopt;
+    return seastar::now();
   }
   DEBUGDPP("can't lock_for_write, adding to waiters", *this);
-  waiters.emplace_back(seastar::promise<>(), type_t::write, name);
+  waiters.emplace_back(seastar::promise<>(), type_t::write);
   return waiters.back().pr.get_future();
 }
 
@@ -156,15 +122,6 @@ void tri_mutex::unlock_for_write()
   }
 }
 
-void tri_mutex::promote_from_write()
-{
-  LOG_PREFIX(tri_mutex::promote_from_write());
-  DEBUGDPP("", *this);
-  assert(writers == 1);
-  --writers;
-  exclusively_used = true;
-}
-
 void tri_mutex::demote_to_write()
 {
   LOG_PREFIX(tri_mutex::demote_to_write());
@@ -175,17 +132,16 @@ void tri_mutex::demote_to_write()
 }
 
 // for exclusive users
-std::optional<seastar::future<>>
-tri_mutex::lock_for_excl()
+seastar::future<> tri_mutex::lock_for_excl()
 {
   LOG_PREFIX(tri_mutex::lock_for_excl());
   DEBUGDPP("", *this);
   if (try_lock_for_excl()) {
     DEBUGDPP("lock_for_excl, successfully", *this);
-    return std::nullopt;
+    return seastar::now();
   }
   DEBUGDPP("can't lock_for_excl, adding to waiters", *this);
-  waiters.emplace_back(seastar::promise<>(), type_t::exclusive, name);
+  waiters.emplace_back(seastar::promise<>(), type_t::exclusive);
   return waiters.back().pr.get_future();
 }
 
@@ -254,7 +210,7 @@ void tri_mutex::wake()
     default:
       assert(0);
     }
-    DEBUGDPP("waking up {}", *this, waiter.waiter_name);
+    DEBUGDPP("waking up", *this);
     waiter.pr.set_value();
     waiters.pop_front();
   }

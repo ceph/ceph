@@ -16,9 +16,9 @@ sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://download.ceph.com/qa/boost_1_82_0.tar.bz2"
-boostSha256Sum="a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6"
-boostSrcDir="${depsSrcDir}/boost_1_82_0"
+boostUrl="https://download.ceph.com/qa/boost_1_85_0.tar.bz2"
+boostSha256Sum="7009fe1faa1697476bdc7027703a2badb84e849b7b0baad5086b087b971f8617"
+boostSrcDir="${depsSrcDir}/boost_1_85_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
@@ -223,27 +223,6 @@ patch -N boost/thread/pthread/thread_data.hpp <<EOL
  #else
            std::size_t page_size = ::sysconf( _SC_PAGESIZE);
  #endif
-EOL
-
-# https://github.com/boostorg/stacktrace/pull/140
-# https://github.com/boostorg/stacktrace/issues/133
-patch -N boost/stacktrace/detail/frame_msvc.ipp <<'EOL'
---- boost/stacktrace/detail/frame_msvc.ipp      2023-08-18 12:29:37.127229733 +0000
-+++ boost/stacktrace/detail/frame_msvc.ipp.new  2023-08-18 12:28:23.713294554 +0000
-@@ -28,9 +28,13 @@
-
-
- #ifdef __CRT_UUID_DECL // for __MINGW32__
-+#if !defined(__MINGW32__) || \
-+    (!defined(__clang__) && __GNUC__ < 12) || \
-+    (defined(__clang__) && __clang_major__ < 16)
-     __CRT_UUID_DECL(IDebugClient,0x27fe5639,0x8407,0x4f47,0x83,0x64,0xee,0x11,0x8f,0xb0,0x8a,0xc8)
-     __CRT_UUID_DECL(IDebugControl,0x5182e668,0x105e,0x416e,0xad,0x92,0x24,0xef,0x80,0x04,0x24,0xba)
-     __CRT_UUID_DECL(IDebugSymbols,0x8c31e98c,0x983a,0x48a5,0x90,0x16,0x6f,0xe5,0xd6,0x67,0xa9,0x50)
-+#endif
- #elif defined(DEFINE_GUID) && !defined(BOOST_MSVC)
-     DEFINE_GUID(IID_IDebugClient,0x27fe5639,0x8407,0x4f47,0x83,0x64,0xee,0x11,0x8f,0xb0,0x8a,0xc8);
-     DEFINE_GUID(IID_IDebugControl,0x5182e668,0x105e,0x416e,0xad,0x92,0x24,0xef,0x80,0x04,0x24,0xba);
 EOL
 
 ./bootstrap.sh

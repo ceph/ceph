@@ -277,7 +277,7 @@ public:
           return io_block(0);
         }
         yield {
-          op_ret = http_op->wait(shard_info, null_yield);
+          op_ret = http_op->wait(dpp, shard_info, null_yield);
           http_op->put();
         }
 
@@ -377,7 +377,7 @@ public:
         }
         yield {
           timer.reset();
-          op_ret = http_op->wait(&response, null_yield);
+          op_ret = http_op->wait(dpp, &response, null_yield);
           http_op->put();
         }
 
@@ -495,7 +495,7 @@ public:
   }
 
   int request_complete() override {
-    int ret = http_op->wait(result, null_yield);
+    int ret = http_op->wait(sync_env->dpp, result, null_yield);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(sync_env->dpp, 5) << "ERROR: failed to list remote datalog shard, ret=" << ret << dendl;
@@ -4391,6 +4391,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   rgw_obj_key key;
   bool versioned;
+  bool null_verid;
   std::optional<uint64_t> versioned_epoch;
   rgw_bucket_entry_owner owner;
   real_time timestamp;
@@ -4418,6 +4419,7 @@ public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncCtx *_sc,
                              rgw_bucket_sync_pipe& _sync_pipe,
                              const rgw_obj_key& _key, bool _versioned,
+                             bool _null_verid,
                              std::optional<uint64_t> _versioned_epoch,
                              real_time& _timestamp,
                              const rgw_bucket_entry_owner& _owner,
@@ -4426,7 +4428,8 @@ public:
                              RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sc->cct),
 						      sc(_sc), sync_env(_sc->env),
                                                       sync_pipe(_sync_pipe), bs(_sync_pipe.info.source_bs),
-                                                      key(_key), versioned(_versioned), versioned_epoch(_versioned_epoch),
+                                                      key(_key), versioned(_versioned),
+                                                      null_verid(_null_verid),versioned_epoch(_versioned_epoch),
                                                       owner(_owner),
                                                       timestamp(_timestamp), op(_op),
                                                       op_state(_op_state),
@@ -4503,6 +4506,9 @@ public:
 	    }
             if (op == CLS_RGW_OP_UNLINK_INSTANCE) {
               versioned = true;
+            }
+            if (null_verid) {
+              key.instance = "null";
             }
             tn->log(10, SSTR("removing obj: " << sc->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
             call(data_sync_module->remove_object(dpp, sc, sync_pipe, key, timestamp, versioned, versioned_epoch.value_or(0), &zones_trace));
@@ -4714,6 +4720,7 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
           using SyncCR = RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>;
           yield spawn(new SyncCR(sc, sync_pipe, entry->key,
                                  false, /* versioned, only matters for object removal */
+                                 false,
                                  entry->versioned_epoch, entry->mtime,
                                  entry->owner, entry->get_modify_op(), CLS_RGW_STATE_COMPLETE,
                                  entry->key, &marker_tracker, zones_trace, tn),
@@ -5122,7 +5129,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
             tn->log(20, SSTR("entry->timestamp=" << entry->timestamp));
             using SyncCR = RGWBucketSyncSingleEntryCR<string, rgw_obj_key>;
             spawn(new SyncCR(sc, sync_pipe, key,
-                             entry->is_versioned(), versioned_epoch,
+                             entry->is_versioned(), entry->is_null_verid(), versioned_epoch,
                              entry->timestamp, owner, entry->op, entry->state,
                              cur_id, &marker_tracker, entry->zones_trace, tn),
                   false);

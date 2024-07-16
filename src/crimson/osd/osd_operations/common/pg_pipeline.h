@@ -29,6 +29,9 @@ protected:
   struct Process : OrderedExclusivePhaseT<Process> {
     static constexpr auto type_name = "CommonPGPipeline::process";
   } process;
+  struct WaitRepop : OrderedConcurrentPhaseT<WaitRepop> {
+    static constexpr auto type_name = "ClientRequest::PGPipeline::wait_repop";
+  } wait_repop;
 };
 
 } // namespace crimson::osd

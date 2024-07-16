@@ -1893,7 +1893,20 @@ constexpr bool is_modify_transaction(transaction_type_t type) {
       is_background_transaction(type));
 }
 
+// Note: It is possible to statically introduce structs for OOL, which must be
+// more efficient, but that requires to specialize the RecordSubmitter as well.
+// Let's delay this optimization until necessary.
+enum class record_type_t {
+  JOURNAL = 0,
+  OOL, // no header, no metadata, so no padding
+  MAX
+};
+std::ostream &operator<<(std::ostream&, const record_type_t&);
+
+static constexpr auto RECORD_TYPE_NULL = record_type_t::MAX;
+
 struct record_size_t {
+  record_type_t record_type = RECORD_TYPE_NULL; // must not be NULL in use
   extent_len_t plain_mdlength = 0; // mdlength without the record header
   extent_len_t dlength = 0;
 
@@ -1917,22 +1930,30 @@ struct record_size_t {
 std::ostream &operator<<(std::ostream&, const record_size_t&);
 
 struct record_t {
-  transaction_type_t type = TRANSACTION_TYPE_NULL;
+  transaction_type_t trans_type = TRANSACTION_TYPE_NULL;
   std::vector<extent_t> extents;
   std::vector<delta_info_t> deltas;
   record_size_t size;
   sea_time_point modify_time = NULL_TIME;
 
-  record_t(transaction_type_t type) : type{type} { }
+  record_t(record_type_t r_type,
+           transaction_type_t t_type)
+  : trans_type{t_type} {
+    assert(r_type != RECORD_TYPE_NULL);
+    size.record_type = r_type;
+  }
 
   // unit test only
   record_t() {
-    type = transaction_type_t::MUTATE;
+    trans_type = transaction_type_t::MUTATE;
+    size.record_type = record_type_t::JOURNAL;
   }
 
   // unit test only
   record_t(std::vector<extent_t>&& _extents,
            std::vector<delta_info_t>&& _deltas) {
+    trans_type = transaction_type_t::MUTATE;
+    size.record_type = record_type_t::JOURNAL;
     auto modify_time = seastar::lowres_system_clock::now();
     for (auto& e: _extents) {
       push_back(std::move(e), modify_time);
@@ -1940,7 +1961,6 @@ struct record_t {
     for (auto& d: _deltas) {
       push_back(std::move(d));
     }
-    type = transaction_type_t::MUTATE;
   }
 
   bool is_empty() const {
@@ -1949,6 +1969,13 @@ struct record_t {
   }
 
   std::size_t get_delta_size() const {
+    assert(size.record_type < record_type_t::MAX);
+    if (size.record_type == record_type_t::OOL) {
+      // OOL won't contain metadata
+      assert(deltas.size() == 0);
+      return 0;
+    }
+    // JOURNAL
     auto delta_size = std::accumulate(
         deltas.begin(), deltas.end(), 0,
         [](uint64_t sum, auto& delta) {
@@ -2018,6 +2045,7 @@ struct record_group_header_t {
 std::ostream& operator<<(std::ostream&, const record_group_header_t&);
 
 struct record_group_size_t {
+  record_type_t record_type = RECORD_TYPE_NULL; // must not be NULL in use
   extent_len_t plain_mdlength = 0; // mdlength without the group header
   extent_len_t dlength = 0;
   extent_len_t block_size = 0;
@@ -2033,7 +2061,14 @@ struct record_group_size_t {
 
   extent_len_t get_mdlength() const {
     assert(block_size > 0);
-    return p2roundup(get_raw_mdlength(), block_size);
+    assert(record_type < record_type_t::MAX);
+    if (record_type == record_type_t::JOURNAL) {
+      return p2roundup(get_raw_mdlength(), block_size);
+    } else {
+      // OOL won't contain metadata
+      assert(get_raw_mdlength() == 0);
+      return 0;
+    }
   }
 
   extent_len_t get_encoded_length() const {
@@ -2330,7 +2365,7 @@ struct writer_stats_t {
   grouped_io_stats io_depth_stats;
   uint64_t record_group_padding_bytes = 0;
   uint64_t record_group_metadata_bytes = 0;
-  uint64_t record_group_data_bytes = 0;
+  uint64_t data_bytes = 0;
   counter_by_src_t<trans_writer_stats_t> stats_by_src;
 
   bool is_empty() const {
@@ -2340,7 +2375,7 @@ struct writer_stats_t {
   uint64_t get_total_bytes() const {
     return record_group_padding_bytes +
            record_group_metadata_bytes +
-           record_group_data_bytes;
+           data_bytes;
   }
 
   void add(const writer_stats_t &o) {
@@ -2348,7 +2383,7 @@ struct writer_stats_t {
     io_depth_stats.add(o.io_depth_stats);
     record_group_padding_bytes += o.record_group_padding_bytes;
     record_group_metadata_bytes += o.record_group_metadata_bytes;
-    record_group_data_bytes += o.record_group_data_bytes;
+    data_bytes += o.data_bytes;
     add_srcs(stats_by_src, o.stats_by_src);
   }
 
@@ -2357,7 +2392,7 @@ struct writer_stats_t {
     io_depth_stats.minus(o.io_depth_stats);
     record_group_padding_bytes -= o.record_group_padding_bytes;
     record_group_metadata_bytes -= o.record_group_metadata_bytes;
-    record_group_data_bytes -= o.record_group_data_bytes;
+    data_bytes -= o.data_bytes;
     minus_srcs(stats_by_src, o.stats_by_src);
   }
 };
@@ -2366,6 +2401,96 @@ struct writer_stats_printer_t {
   const writer_stats_t &stats;
 };
 std::ostream& operator<<(std::ostream&, const writer_stats_printer_t&);
+
+struct shard_stats_t {
+  // transaction_type_t::MUTATE
+  uint64_t io_num = 0;
+  uint64_t repeat_io_num = 0;
+  uint64_t pending_io_num = 0;
+  uint64_t starting_io_num = 0;
+  uint64_t waiting_collock_io_num = 0;
+  uint64_t waiting_throttler_io_num = 0;
+  uint64_t processing_inlock_io_num = 0;
+  uint64_t processing_postlock_io_num = 0;
+
+  // transaction_type_t::READ
+  uint64_t read_num = 0;
+  uint64_t repeat_read_num = 0;
+  uint64_t pending_read_num = 0;
+
+  // transaction_type_t::TRIM_DIRTY~CLEANER_COLD
+  uint64_t pending_bg_num = 0;
+  uint64_t trim_alloc_num = 0;
+  uint64_t repeat_trim_alloc_num = 0;
+  uint64_t trim_dirty_num = 0;
+  uint64_t repeat_trim_dirty_num = 0;
+  uint64_t cleaner_main_num = 0;
+  uint64_t repeat_cleaner_main_num = 0;
+  uint64_t cleaner_cold_num = 0;
+  uint64_t repeat_cleaner_cold_num = 0;
+
+  uint64_t flush_num = 0;
+  uint64_t pending_flush_num = 0;
+
+  uint64_t get_bg_num() const {
+    return trim_alloc_num +
+           trim_dirty_num +
+           cleaner_main_num +
+           cleaner_cold_num;
+  }
+
+  uint64_t get_repeat_bg_num() const {
+    return repeat_trim_alloc_num +
+           repeat_trim_dirty_num +
+           repeat_cleaner_main_num +
+           repeat_cleaner_cold_num;
+  }
+
+  void add(const shard_stats_t &o) {
+    io_num += o.io_num;
+    repeat_io_num += o.repeat_io_num;
+    pending_io_num += o.pending_io_num;
+    starting_io_num += o.starting_io_num;
+    waiting_collock_io_num += o.waiting_collock_io_num;
+    waiting_throttler_io_num += o.waiting_throttler_io_num;
+    processing_inlock_io_num += o.processing_inlock_io_num;
+    processing_postlock_io_num += o.processing_postlock_io_num;
+
+    read_num += o.read_num;
+    repeat_read_num += o.repeat_read_num;
+    pending_read_num += o.pending_read_num;
+
+    pending_bg_num += o.pending_bg_num;
+    trim_alloc_num += o.trim_alloc_num;
+    repeat_trim_alloc_num += o.repeat_trim_alloc_num;
+    trim_dirty_num += o.trim_dirty_num;
+    repeat_trim_dirty_num += o.repeat_trim_dirty_num;
+    cleaner_main_num += o.cleaner_main_num;
+    repeat_cleaner_main_num += o.repeat_cleaner_main_num;
+    cleaner_cold_num += o.cleaner_cold_num;
+    repeat_cleaner_cold_num += o.repeat_cleaner_cold_num;
+
+    flush_num += o.flush_num;
+    pending_flush_num += o.pending_flush_num;
+  }
+
+  void minus(const shard_stats_t &o) {
+    // realtime(e.g. pending) stats are not related
+    io_num -= o.io_num;
+    repeat_io_num -= o.repeat_io_num;
+    read_num -= o.read_num;
+    repeat_read_num -= o.repeat_read_num;
+    trim_alloc_num -= o.trim_alloc_num;
+    repeat_trim_alloc_num -= o.repeat_trim_alloc_num;
+    trim_dirty_num -= o.trim_dirty_num;
+    repeat_trim_dirty_num -= o.repeat_trim_dirty_num;
+    cleaner_main_num -= o.cleaner_main_num;
+    repeat_cleaner_main_num -= o.repeat_cleaner_main_num;
+    cleaner_cold_num -= o.cleaner_cold_num;
+    repeat_cleaner_cold_num -= o.repeat_cleaner_cold_num;
+    flush_num -= o.flush_num;
+  }
+};
 
 }
 
@@ -2401,6 +2526,7 @@ template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> 
 template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_locator_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::record_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::rewrite_gen_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::scan_valid_records_cursor> : fmt::ostream_formatter {};

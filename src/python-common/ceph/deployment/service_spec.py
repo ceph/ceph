@@ -765,6 +765,7 @@ class ServiceSpec(object):
         'elasticsearch',
         'grafana',
         'ingress',
+        'mgmt-gateway',
         'iscsi',
         'jaeger-agent',
         'jaeger-collector',
@@ -819,6 +820,7 @@ class ServiceSpec(object):
             'nvmeof': NvmeofServiceSpec,
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
+            'mgmt-gateway': MgmtGatewaySpec,
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
@@ -1331,6 +1333,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
                  client_cert: Optional[str] = None,
+                 root_ca_cert: Optional[str] = None,
                  spdk_path: Optional[str] = None,
                  tgt_path: Optional[str] = None,
                  spdk_timeout: Optional[float] = 60.0,
@@ -1408,13 +1411,15 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``bdevs_per_cluster`` number of bdevs per cluster
         self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
-        self.server_key = server_key or './server.key'
+        self.server_key = server_key
         #: ``server_cert`` gateway server certificate
-        self.server_cert = server_cert or './server.crt'
+        self.server_cert = server_cert
         #: ``client_key`` client key
-        self.client_key = client_key or './client.key'
+        self.client_key = client_key
         #: ``client_cert`` client certificate
-        self.client_cert = client_cert or './client.crt'
+        self.client_cert = client_cert
+        #: ``root_ca_cert`` CA cert for server/client certs
+        self.root_ca_cert = root_ca_cert
         #: ``spdk_path`` path to SPDK
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
         #: ``tgt_path`` nvmeof target path
@@ -1469,9 +1474,15 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
 
         if self.enable_auth:
-            if not any([self.server_key, self.server_cert, self.client_key, self.client_cert]):
-                raise SpecValidationError(
-                    'enable_auth is true but client/server certificates are missing')
+            if not all([self.server_key, self.server_cert, self.client_key,
+                        self.client_cert, self.root_ca_cert]):
+                err_msg = 'enable_auth is true but '
+                for cert_key_attr in ['server_key', 'server_cert', 'client_key',
+                                      'client_cert', 'root_ca_cert']:
+                    if not hasattr(self, cert_key_attr):
+                        err_msg += f'{cert_key_attr}, '
+                err_msg += 'attribute(s) not set in the spec'
+                raise SpecValidationError(err_msg)
 
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
@@ -1753,6 +1764,135 @@ class IngressSpec(ServiceSpec):
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
+
+
+class MgmtGatewaySpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'mgmt-gateway',
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 disable_https: Optional[bool] = False,
+                 port: Optional[int] = None,
+                 ssl_certificate: Optional[str] = None,
+                 ssl_certificate_key: Optional[str] = None,
+                 ssl_prefer_server_ciphers: Optional[str] = None,
+                 ssl_session_tickets: Optional[str] = None,
+                 ssl_session_timeout: Optional[str] = None,
+                 ssl_session_cache: Optional[str] = None,
+                 server_tokens: Optional[str] = None,
+                 ssl_stapling: Optional[str] = None,
+                 ssl_stapling_verify: Optional[str] = None,
+                 ssl_protocols: Optional[List[str]] = None,
+                 ssl_ciphers: Optional[List[str]] = None,
+                 preview_only: bool = False,
+                 unmanaged: bool = False,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'mgmt-gateway'
+
+        super(MgmtGatewaySpec, self).__init__(
+            'mgmt-gateway', service_id=service_id,
+            placement=placement, config=config,
+            networks=networks,
+            preview_only=preview_only,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs
+        )
+        #: Is a flag to disable HTTPS. If True, the server will use unsecure HTTP
+        self.disable_https = disable_https
+        #: The port number on which the server will listen
+        self.port = port
+        #: A multi-line string that contains the SSL certificate
+        self.ssl_certificate = ssl_certificate
+        #: A multi-line string that contains the SSL key
+        self.ssl_certificate_key = ssl_certificate_key
+        #: Prefer server ciphers over client ciphers: on | off
+        self.ssl_prefer_server_ciphers = ssl_prefer_server_ciphers
+        #: A multioption flag to control session tickets: on | off
+        self.ssl_session_tickets = ssl_session_tickets
+        #: The duration for SSL session timeout. Syntax: time (i.e: 5m)
+        self.ssl_session_timeout = ssl_session_timeout
+        #: Duration an SSL/TLS session is cached: off | none | [builtin[:size]] [shared:name:size]
+        self.ssl_session_cache = ssl_session_cache
+        #: Flag control server tokens in responses:  on | off | build | string
+        self.server_tokens = server_tokens
+        #: Flag to enable or disable SSL stapling: on | off
+        self.ssl_stapling = ssl_stapling
+        #: Flag to control verification of SSL stapling: on | off
+        self.ssl_stapling_verify = ssl_stapling_verify
+        #: A list of supported SSL protocols (as supported by nginx)
+        self.ssl_protocols = ssl_protocols
+        #: List of supported secure SSL ciphers. Changing this list may reduce system security.
+        self.ssl_ciphers = ssl_ciphers
+
+    def get_port_start(self) -> List[int]:
+        ports = []
+        if self.port is not None:
+            ports.append(cast(int, self.port))
+        return ports
+
+    def validate(self) -> None:
+        super(MgmtGatewaySpec, self).validate()
+        self._validate_port(self.port)
+        self._validate_certificate(self.ssl_certificate, "ssl_certificate")
+        self._validate_private_key(self.ssl_certificate_key, "ssl_certificate_key")
+        self._validate_boolean_switch(self.ssl_prefer_server_ciphers, "ssl_prefer_server_ciphers")
+        self._validate_boolean_switch(self.ssl_session_tickets, "ssl_session_tickets")
+        self._validate_session_timeout(self.ssl_session_timeout)
+        self._validate_session_cache(self.ssl_session_cache)
+        self._validate_server_tokens(self.server_tokens)
+        self._validate_boolean_switch(self.ssl_stapling, "ssl_stapling")
+        self._validate_boolean_switch(self.ssl_stapling_verify, "ssl_stapling_verify")
+        self._validate_ssl_protocols(self.ssl_protocols)
+
+    def _validate_port(self, port: Optional[int]) -> None:
+        if port is not None and not (1 <= port <= 65535):
+            raise SpecValidationError(f"Invalid port: {port}. Must be between 1 and 65535.")
+
+    def _validate_certificate(self, cert: Optional[str], name: str) -> None:
+        if cert is not None and not isinstance(cert, str):
+            raise SpecValidationError(f"Invalid {name}. Must be a string.")
+
+    def _validate_private_key(self, key: Optional[str], name: str) -> None:
+        if key is not None and not isinstance(key, str):
+            raise SpecValidationError(f"Invalid {name}. Must be a string.")
+
+    def _validate_boolean_switch(self, value: Optional[str], name: str) -> None:
+        if value is not None and value not in ['on', 'off']:
+            raise SpecValidationError(f"Invalid {name}: {value}. Supported values: on | off.")
+
+    def _validate_session_timeout(self, timeout: Optional[str]) -> None:
+        if timeout is not None and not re.match(r'^\d+[smhd]$', timeout):
+            raise SpecValidationError(f"Invalid SSL Session Timeout: {timeout}. \
+            Value must be a number followed by 's', 'm', 'h', or 'd'.")
+
+    def _validate_session_cache(self, cache: Optional[str]) -> None:
+        valid_caches = ['none', 'off', 'builtin', 'shared']
+        if cache is not None and not any(cache.startswith(vc) for vc in valid_caches):
+            raise SpecValidationError(f"Invalid SSL Session Cache: {cache}. Supported values are: \
+            off | none | [builtin[:size]] [shared:name:size]")
+
+    def _validate_server_tokens(self, tokens: Optional[str]) -> None:
+        if tokens is not None and tokens not in ['on', 'off', 'build', 'string']:
+            raise SpecValidationError(f"Invalid Server Tokens: {tokens}. Must be one of \
+            ['on', 'off', 'build', 'version'].")
+
+    def _validate_ssl_protocols(self, protocols: Optional[List[str]]) -> None:
+        if protocols is None:
+            return
+        valid_protocols = ['TLSv1.2', 'TLSv1.3']
+        for protocol in protocols:
+            if protocol not in valid_protocols:
+                raise SpecValidationError(f"Invalid SSL Protocol: {protocol}. \
+                Must be one of {valid_protocols}.")
+
+
+yaml.add_representer(MgmtGatewaySpec, ServiceSpec.yaml_representer)
 
 
 class InitContainerSpec(object):

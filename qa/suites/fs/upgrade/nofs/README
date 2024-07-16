@@ -1,3 +1,8 @@
-This test just verifies that upgrades work with no file system present. In
+This suite just verifies that upgrades work with no file system present. In
 particular, catch that MDSMonitor doesn't blow up somehow with version
 mismatches.
+
+This suite has always been tested upgrading to the latest release,
+66fd89a860e3a3258849105d7f9149f5baf804b8 added pacific to reef upgrade since
+reef was the latest release at that point. So this suite should upgrade from
+N-1|N-2 to main.

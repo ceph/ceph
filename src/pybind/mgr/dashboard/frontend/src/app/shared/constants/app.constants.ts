@@ -148,6 +148,8 @@ export class ActionLabelsI18n {
   DISCONNECT: string;
   RECONNECT: string;
   AUTHORIZE: string;
+  EXPAND_CLUSTER: string;
+  SETUP_MULTISITE_REPLICATION: string;
 
   constructor() {
     /* Create a new item */
@@ -156,6 +158,8 @@ export class ActionLabelsI18n {
     this.EXPORT = $localize`Export`;
 
     this.IMPORT = $localize`Import`;
+
+    this.SETUP_MULTISITE_REPLICATION = $localize`Setup Multi-site Replication`;
 
     this.MIGRATE = $localize`Migrate`;
 
@@ -234,6 +238,7 @@ export class ActionLabelsI18n {
     this.CONNECT = $localize`Connect`;
     this.DISCONNECT = $localize`Disconnect`;
     this.RECONNECT = $localize`Reconnect`;
+    this.EXPAND_CLUSTER = $localize`Expand Cluster`;
   }
 }
 

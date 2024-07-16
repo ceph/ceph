@@ -32,7 +32,7 @@ from .grafana import push_local_dashboards
 from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
-from .services.rgw_client import configure_rgw_credentials
+from .services.service import RgwServiceManager
 from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
@@ -417,7 +417,8 @@ class Module(MgrModule, CherryPyConfig):
     @CLIWriteCommand("dashboard set-rgw-credentials")
     def set_rgw_credentials(self):
         try:
-            configure_rgw_credentials()
+            rgw_service_manager = RgwServiceManager()
+            rgw_service_manager.configure_rgw_credentials()
         except Exception as error:
             return -errno.EINVAL, '', str(error)
 

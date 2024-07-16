@@ -32,7 +32,7 @@ private:
   entity_inst_t req_src_inst;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
-  const char* last_event_detail = nullptr;
+  std::string last_event_detail;
 
   static const uint8_t flag_started =              1 << 0;
   static const uint8_t flag_queued_for_module =    1 << 1;

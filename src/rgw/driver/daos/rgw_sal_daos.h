@@ -620,7 +620,7 @@ class DaosObject : public StoreObject {
   virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
                              bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
-                            Attrs* delattrs, optional_yield y) override;
+                            Attrs* delattrs, optional_yield y, uint32_t flags) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
                             rgw_obj* target_obj = NULL) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -742,6 +742,7 @@ class DaosAtomicWriter : public StoreWriter {
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time* mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at, const char* if_match,
                        const char* if_nomatch, const std::string* user_data,
                        rgw_zone_set* zones_trace, bool* canceled,
@@ -788,6 +789,7 @@ class DaosMultipartWriter : public StoreWriter {
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time* mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at, const char* if_match,
                        const char* if_nomatch, const std::string* user_data,
                        rgw_zone_set* zones_trace, bool* canceled,
@@ -809,6 +811,10 @@ class DaosMultipartPart : public StoreMultipartPart {
   virtual uint64_t get_size() { return info.accounted_size; }
   virtual const std::string& get_etag() { return info.etag; }
   virtual ceph::real_time& get_mtime() { return info.modified; }
+
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
+    return info.cksum;
+  }
 
   friend class DaosMultipartUpload;
 };

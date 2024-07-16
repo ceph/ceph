@@ -10,6 +10,6 @@ export class LanguagePageHelper extends PageHelper {
   }
 
   getAllLanguages() {
-    return cy.get('cd-language-selector cds-header-menu');
+    return cy.get('cd-language-selector cds-header-menu cds-header-item');
   }
 }
