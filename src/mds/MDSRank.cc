@@ -602,7 +602,7 @@ MDSRank::~MDSRank()
 void MDSRankDispatcher::init()
 {
   objecter->init();
-  messenger->add_dispatcher_head(objecter);
+  messenger->add_dispatcher_tail(objecter); // the default priority
 
   objecter->start();
 
@@ -2110,7 +2110,7 @@ void MDSRank::active_start()
 
   dout(10) << __func__ << ": initializing metrics handler" << dendl;
   metrics_handler.init();
-  messenger->add_dispatcher_tail(&metrics_handler);
+  messenger->add_dispatcher_tail(&metrics_handler, Dispatcher::PRIORITY_HIGH);
 
   // metric aggregation is solely done by rank 0
   if (is_rank0()) {
