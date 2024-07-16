@@ -4265,8 +4265,8 @@ void Locker::_do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id,
                   new C_Locker_RetryCapRelease(this, client, ino, cap_id, mseq, seq));
     return;
   }
-  if (seq != cap->get_last_issue()) {
-    dout(7) << " issue_seq " << seq << " != " << cap->get_last_issue() << dendl;
+  if (seq < cap->get_last_issue()) {
+    dout(7) << " issue_seq " << seq << " < " << cap->get_last_issue() << dendl;
     // clean out any old revoke history
     cap->clean_revoke_from(seq);
     eval_cap_gather(in);
