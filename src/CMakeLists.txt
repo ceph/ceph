@@ -743,22 +743,7 @@ add_subdirectory(erasure-code)
 
 # Support/Tools
 if(WITH_TESTS)
-  option(WITH_SYSTEM_GTEST "require and build with system gtest and gmock" OFF)
-  if(WITH_SYSTEM_GTEST)
-    find_package(GTest REQUIRED)
-    find_package(GMock REQUIRED)
-  else()
-    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    add_subdirectory(googletest)
-    add_library(GMock::GMock ALIAS gmock)
-    add_library(GMock::Main ALIAS gmock_main)
-    target_include_directories(gmock INTERFACE
-      $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
-    target_include_directories(gmock_main INTERFACE
-      $<TARGET_PROPERTY:gtest,INTERFACE_INCLUDE_DIRECTORIES>)
-    add_library(GTest::GTest ALIAS gtest)
-    add_library(GTest::Main ALIAS gtest_main)
-  endif()
+  find_package(GTest REQUIRED)
 endif(WITH_TESTS)
 
 # dmClock (after gmock)

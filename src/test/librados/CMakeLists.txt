@@ -1,7 +1,6 @@
 # radostest
 add_library(radostest_shared OBJECT test_shared.cc)
-target_include_directories(radostest_shared PRIVATE
-  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(radostest_shared PUBLIC GTest::gtest)
 
 add_library(radostest STATIC
   test_common.cc
@@ -9,7 +8,7 @@ add_library(radostest STATIC
   test.cc
   $<TARGET_OBJECTS:radostest_shared>)
 target_link_libraries(radostest PUBLIC
-  GTest::GTest
+  GTest::gtest
   ceph-common
   json_spirit
   ${GSSAPI_LIBRARIES} ${EXTRALIBS})
@@ -18,7 +17,7 @@ add_library(radostest-cxx STATIC
   test_cxx.cc
   $<TARGET_OBJECTS:radostest_shared>)
 target_link_libraries(radostest-cxx PUBLIC
-  GTest::GTest
+  GTest::gtest
   ceph-common)
 
 add_executable(ceph_test_rados_api_cmd

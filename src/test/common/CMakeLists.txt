@@ -248,7 +248,7 @@ add_executable(unittest_interval_set
   test_interval_set.cc
 )
 add_ceph_unittest(unittest_interval_set)
-target_link_libraries(unittest_interval_set ceph-common GTest::Main)
+target_link_libraries(unittest_interval_set ceph-common GTest::gtest_main)
 
 # unittest_weighted_priority_queue
 add_executable(unittest_weighted_priority_queue
@@ -387,7 +387,7 @@ add_ceph_unittest(unittest_ceph_timer)
 target_link_libraries(unittest_ceph_timer global ceph-common)
 
 add_executable(unittest_option test_option.cc)
-target_link_libraries(unittest_option ceph-common GTest::Main)
+target_link_libraries(unittest_option ceph-common GTest::gtest_main)
 add_ceph_unittest(unittest_option)
 
 add_executable(unittest_fault_injector test_fault_injector.cc
@@ -397,7 +397,7 @@ add_ceph_unittest(unittest_fault_injector)
 
 add_executable(unittest_blocked_completion test_blocked_completion.cc)
 add_ceph_unittest(unittest_blocked_completion)
-target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
+target_link_libraries(unittest_blocked_completion Boost::system GTest::gtest)
 
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)

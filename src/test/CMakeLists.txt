@@ -1,6 +1,6 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT}
+set(UNITTEST_LIBS GTest::gmock_main GTest::gmock GTest::gtest ${CMAKE_THREAD_LIBS_INIT}
     ${GSSAPI_LIBRARIES} ${CMAKE_DL_LIBS})
 
 if(WIN32)
@@ -9,8 +9,7 @@ if(WIN32)
 endif()
 
 add_library(unit-main OBJECT unit.cc)
-target_include_directories(unit-main PRIVATE
-  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries(unit-main PUBLIC GTest::gtest)
 
 add_subdirectory(common)
 add_subdirectory(compressor)
@@ -959,7 +958,7 @@ endif(WITH_RBD)
 add_executable(unittest_ipaddr
   test_ipaddr.cc)
 add_ceph_unittest(unittest_ipaddr)
-target_link_libraries(unittest_ipaddr global GTest::Main)
+target_link_libraries(unittest_ipaddr global GTest::gtest_main)
 
 # unittest_utime
 add_executable(unittest_utime

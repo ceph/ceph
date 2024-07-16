@@ -5,7 +5,7 @@ add_library(rados_striper_test STATIC TestCase.cc)
 target_link_libraries(rados_striper_test
   radostest
   radostest-cxx
-  GTest::GTest)
+  GTest::gtest)
 
 add_executable(ceph_test_rados_striper_api_striping
   striping.cc

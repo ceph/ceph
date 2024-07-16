@@ -4,7 +4,7 @@ target_link_libraries(ceph_test_neorados global libneorados
   radostest
   radostest-cxx
   librados
-  GTest::GTest)
+  GTest::gtest)
 
 add_executable(ceph_test_neorados_start_stop start_stop.cc)
 target_link_libraries(ceph_test_neorados_start_stop global libneorados
@@ -20,7 +20,7 @@ target_link_libraries(ceph_test_neorados_op_speed
 
 add_library(neoradostest-support STATIC common_tests.cc)
 target_link_libraries(neoradostest-support
-  libneorados ${FMT_LIB} GTest::GTest)
+  libneorados ${FMT_LIB} GTest::gtest)
 
 add_executable(ceph_test_neorados_list_pool list_pool.cc)
 target_link_libraries(ceph_test_neorados_list_pool

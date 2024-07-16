@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14.0)
 project(dbstore-tests)
 
-set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} gtest)
+set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} GTest::gtest)
 
 set(dbstore_tests_srcs
     dbstore_tests.cc)
@@ -13,5 +13,5 @@ target_link_libraries(unittest_dbstore_tests ${CMAKE_LINK_LIBRARIES})
 add_ceph_unittest(unittest_dbstore_tests)
 
 add_executable(unittest_dbstore_mgr_tests dbstore_mgr_tests.cc)
-target_link_libraries(unittest_dbstore_mgr_tests dbstore gtest_main)
+target_link_libraries(unittest_dbstore_mgr_tests dbstore GTest::gtest_main)
 add_ceph_unittest(unittest_dbstore_mgr_tests)

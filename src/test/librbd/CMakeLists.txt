@@ -3,7 +3,7 @@ set(librbd_test_support_srcs
   )
 add_library(rbd_test_support STATIC ${librbd_test_support_srcs})
 target_link_libraries(rbd_test_support PRIVATE
-  GTest::GTest)
+  GTest::gtest)
 
 set(librbd_test
   test_fixture.cc
@@ -28,15 +28,15 @@ target_link_libraries(rbd_test PRIVATE
   radostest-cxx
   librados
   Boost::thread
-  GMock::GMock
-  GTest::GTest)
+  GTest::gmock
+  GTest::gtest)
 
 set(librbd_test_mock_srcs
   mock/MockImageCtx.cc
   mock/MockJournal.cc)
 add_library(rbd_test_mock STATIC ${librbd_test_mock_srcs})
 target_link_libraries(rbd_test_mock PUBLIC
-  GMock::GMock)
+  GTest::gmock)
 
 # unittest_librbd
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh

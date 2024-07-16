@@ -16,10 +16,6 @@
 [submodule "ceph-erasure-code-corpus"]
 	path = ceph-erasure-code-corpus
 	url = https://github.com/ceph/ceph-erasure-code-corpus.git
-[submodule "src/googletest"]
-	path = src/googletest
-	url = https://github.com/ceph/googletest
-	branch = ceph-release-1.7.x
 [submodule "src/spdk"]
 	path = src/spdk
 	url = https://github.com/ceph/spdk.git

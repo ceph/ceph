@@ -268,6 +268,8 @@ BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
 BuildRequires:  libatomic
 %endif
+BuildRequires:	gmock-devel
+BuildRequires:	gtest-devel
 %if 0%{with tcmalloc}
 # libprofiler did not build on ppc64le until 2.7.90
 %if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
