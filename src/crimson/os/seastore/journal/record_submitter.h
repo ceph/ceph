@@ -102,6 +102,10 @@ public:
     return pending.size;
   }
 
+  std::optional<journal_seq_t> get_write_base() const {
+    return write_base;
+  }
+
   bool needs_flush() const {
     assert(state != state_t::SUBMITTING);
     assert(pending.get_size() <= batch_capacity);
@@ -147,15 +151,22 @@ public:
   //
   // Set write_result_t::write_length to 0 if the record is not the first one
   // in the batch.
+  //
+  // write_base must be assigned when the state is empty
   using add_pending_ertr = JournalAllocator::write_ertr;
   using add_pending_ret = add_pending_ertr::future<record_locator_t>;
   add_pending_ret add_pending(
       const std::string& name,
       record_t&&,
-      extent_len_t block_size);
+      extent_len_t block_size,
+      std::optional<journal_seq_t> maybe_write_base);
 
   // Encode the batched records for write.
-  ceph::bufferlist encode_batch(
+  struct encode_ret_t {
+    journal_seq_t write_base;
+    ceph::bufferlist bl;
+  };
+  encode_ret_t encode_batch(
       const journal_seq_t& committed_to,
       segment_nonce_t segment_nonce);
 
@@ -188,6 +199,8 @@ private:
   std::size_t index = 0;
   std::size_t batch_capacity = 0;
   std::size_t batch_flush_size = 0;
+  // Valid at state_t::PENDING
+  std::optional<journal_seq_t> write_base;
 
   record_group_t pending;
   std::size_t submitting_size = 0;
