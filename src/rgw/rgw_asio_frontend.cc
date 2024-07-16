@@ -1101,7 +1101,7 @@ void AsioFrontend::join()
 
 void AsioFrontend::pause()
 {
-  ldout(ctx(), 4) << "frontend pausing connections..." << dendl;
+  ldout(ctx(), 4) << "frontend pausing, closing connections..." << dendl;
 
   // cancel pending calls to accept(), but don't close the sockets
   boost::system::error_code ec;
@@ -1109,7 +1109,10 @@ void AsioFrontend::pause()
     l.acceptor.cancel(ec);
   }
 
-  // pause and wait for outstanding requests to complete
+  // close all connections so outstanding requests fail quickly
+  connections.close(ec);
+
+  // pause and wait until outstanding requests complete
   pause_mutex.lock(ec);
 
   if (ec) {

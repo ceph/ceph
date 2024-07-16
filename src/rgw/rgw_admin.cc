@@ -1947,6 +1947,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
     if (ret < 0) {
       cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
     }
+    (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
     return ret;
   }
 
