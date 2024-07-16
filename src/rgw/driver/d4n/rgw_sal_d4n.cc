@@ -102,6 +102,20 @@ std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<D4NFilterObject>(std::move(o), this, filter);
 }
 
+std::unique_ptr<Bucket> D4NFilterDriver::get_bucket(const RGWBucketInfo& i)
+{
+  return std::make_unique<D4NFilterBucket>(next->get_bucket(i), this);
+}
+
+int D4NFilterDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+				 std::unique_ptr<Bucket>* bucket, optional_yield y)
+{
+  std::unique_ptr<Bucket> nb;
+  const int ret = next->load_bucket(dpp, b, &nb, y);
+  *bucket = std::make_unique<D4NFilterBucket>(std::move(nb), this);
+  return ret;
+}
+
 int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
                             const CreateParams& params,
                             optional_yield y)
