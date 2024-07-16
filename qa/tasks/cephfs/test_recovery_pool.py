@@ -138,7 +138,7 @@ class TestRecoveryPool(CephFSTestCase):
         if False:
             with self.assertRaises(CommandFailedError):
                 # Normal reset should fail when no objects are present, we'll use --force instead
-                self.fs.journal_tool(["journal", "reset"], 0)
+                self.fs.journal_tool(["journal", "reset", "--yes-i-really-really-mean-it"], 0)
 
         recovery_fs.data_scan(['scan_extents', '--alternate-pool',
                            recovery_pool, '--filesystem', self.fs.name,
@@ -150,7 +150,7 @@ class TestRecoveryPool(CephFSTestCase):
         recovery_fs.data_scan(['scan_links', '--filesystem', recovery_fs.name])
         recovery_fs.journal_tool(['event', 'recover_dentries', 'list',
                               '--alternate-pool', recovery_pool], 0)
-        recovery_fs.journal_tool(["journal", "reset", "--force"], 0)
+        recovery_fs.journal_tool(["journal", "reset", "--force", "--yes-i-really-really-mean-it"], 0)
 
         # Start the MDS
         recovery_fs.set_joinable()
