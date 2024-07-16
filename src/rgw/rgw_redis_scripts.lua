@@ -6,14 +6,15 @@ local lerrorCodes = {
     ENOENT = 2,
     EBUSY = 16,
     EEXIST = 17,
-    ENOMEM = 12
+    ENOMEM = 12,
+    ENOSPC = 28
 }
 
 ---
 --- Reply for all functions need to be of the format
 --- {"errorCode": <error code>, "errorMessage": <error message>, "data": <data>}
 ---
-local function formatResponse(errorCode, errorMessage, data)
+local function format_response(errorCode, errorMessage, data)
     return {
         map = {
             errorCode = errorCode,
@@ -39,12 +40,12 @@ local function assert_lock(keys, args)
     if redis.call('EXISTS', name) == 1 then
         local existing_cookie = redis.call('GET', name)
         if existing_cookie == cookie then
-            return formatResponse(0, "", "")
+            return format_response(0, "", "")
         else
-            return formatResponse(-lerrorCodes.EBUSY, "Lock is held by another process", "")
+            return format_response(-lerrorCodes.EBUSY, "Lock is held by another process", "")
         end
     end
-    return formatResponse(-lerrorCodes.ENOENT, "Lock does not exist", "")
+    return format_response(-lerrorCodes.ENOENT, "Lock does not exist", "")
 end
 
 --- Acquire a lock on a resource.
@@ -61,10 +62,10 @@ local function lock(keys, args)
     local lock_status = assert_lock(keys, args)
     if lock_status.map.errorCode == 0 then
         redis.call('PEXPIRE', name, timeout)
-        return formatResponse(0, "", "")
+        return format_response(0, "", "")
     elseif lock_status.map.errorCode == -lerrorCodes.ENOENT then
         redis.call('SET', name, cookie, 'PX', timeout)
-        return formatResponse(0, "", "")
+        return format_response(0, "", "")
     end
     return lock_status
 end
@@ -79,7 +80,7 @@ local function unlock(keys, args)
     local lock_status = assert_lock(keys, args)
     if lock_status.map.errorCode == 0 then
         redis.call('DEL', name)
-        return formatResponse(0, "", "")
+        return format_response(0, "", "")
     end
     return lock_status
 end
@@ -113,7 +114,7 @@ end
 --- Add an item to the reserve queue for n bytes
 --- @param keys table A single element list - queue name
 --- @param args table A single-element list - item size
---- @return number 0 if the item is added to the queue, -lerrorCodes.ENOMEM if the queue is full
+--- @return number 0 if the item is added to the queue, -lerrorCodes.ENOSPC if the queue is full
 local function reserve(keys, args)
     local name = "reserve:" .. keys[1]
     local item_size = tonumber(args[1])
@@ -123,9 +124,9 @@ local function reserve(keys, args)
     local time = redis.call("TIME")[0]
     local value = '{"timestamp":' .. redis.call("TIME")[1] .. ',"data":"' .. randomString .. '"}'
     if not redis.call('LPUSH', name, value) then
-        return formatResponse(-lerrorCodes.ENOMEM, "Not enough memory", "")
+        return format_response(-lerrorCodes.ENOSPC, "Not enough memory", "")
     end
-    return formatResponse(0, "", "")
+    return format_response(0, "", "")
 end
 
 --- Remove an item from the reserve queue
@@ -136,9 +137,9 @@ local function unreserve(keys)
 
     local value = redis.call('RPOP', name)
     if not value then
-        return formatResponse(-lerrorCodes.ENOENT, "Queue is empty", "")
+        return format_response(-lerrorCodes.ENOENT, "Queue is empty", "")
     end
-    return formatResponse(0, "", "")
+    return format_response(0, "", "")
 end
 
 --- Commit message to the queue
@@ -151,9 +152,9 @@ local function commit(keys, args)
 
     unreserve(keys)
     if not redis.call('LPUSH', name, message) then
-        return formatResponse(-lerrorCodes.ENOMEM, "Not enough memory", "")
+        return format_response(-lerrorCodes.ENOSPC, "Not enough memory", "")
     end
-    return formatResponse(0, "", "")
+    return format_response(0, "", "")
 end
 
 --- Abort the message reservation
@@ -164,11 +165,11 @@ end
 --- Read a message from the queue
 --- @param keys table A single element list - queue name
 --- @return string message if the message is read from the queue, nil if the queue is empty
---- @return This does not remove the message from the queue
+--- This does not remove the message from the queue
 local function read(keys)
     local name = "queue:" .. keys[1]
     local value = redis.call('LRANGE', name, -1, -1)[1]
-    return formatResponse(0, "", value)
+    return format_response(0, "", value)
 end
 
 --- Option one
@@ -186,7 +187,7 @@ local function locked_read(keys, args)
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
     if lock_status.map.errorCode == 0 then
         local value = redis.call('LRANGE', name, -1, -1)[1]
-        return formatResponse(0, "", value)
+        return format_response(0, "", value)
     end
     return lock_status
 end
@@ -205,20 +206,34 @@ local function ack_read(keys, args)
     local lock_status = assert_lock(assert_lock_keys, assert_lock_args)
     if lock_status.map.errorCode == 0 then
         redis.call('RPOP', name)
-        return formatResponse(0, "", "")
+        return format_response(0, "", "")
     end
     return lock_status
 end
 
 --- Stale queue cleanup
---- TODO: Implement the cleanup function
 --- @param keys table A single element list - queue name
 --- @param args table A single element - timeout
 --- @return number 0 if the cleanup is successful
 local function cleanup(keys, args)
     local name = "reserve:" .. keys[1]
     local timeout = args[1]
-    return formatResponse(0, "", "")
+
+    local values = redis.call('LRANGE', name, 0, -1)
+    local index = -1
+    for i, value in ipairs(values) do
+        local message = cjson.decode(value)
+        if message.timestamp + timeout < tonumber(redis.call("TIME")[1]) then
+            index = i - 1
+            break
+        end
+    end
+    if index > 0 then
+        redis.call('LTRIM', name, 0, index)
+    else
+        redis.call('DEL', name)
+    end
+    return format_response(0, "", index)
 end
 
 --- Register the functions.

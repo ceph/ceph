@@ -10,8 +10,9 @@ namespace redis {
 using boost::redis::config;
 using boost::redis::connection;
 
-int loadLuaFunctions(boost::asio::io_context& io, connection* conn, config* cfg,
-                     optional_yield y) {
+int load_lua_rgwlib(boost::asio::io_context& io,
+                    std::unique_ptr<connection>& conn,
+                    std::unique_ptr<config>& cfg, optional_yield y) {
   conn->async_run(*cfg, {}, boost::asio::detached);
 
   boost::redis::request req;
@@ -30,9 +31,9 @@ int loadLuaFunctions(boost::asio::io_context& io, connection* conn, config* cfg,
   return 0;
 }
 
-RedisResponse doRedisFunc(connection* conn, boost::redis::request& req,
-                          RedisResponseMap& resp, std::string func_name,
-                          optional_yield y) {
+RedisResponse do_redis_func(std::unique_ptr<connection>& conn,
+                            boost::redis::request& req, RedisResponseMap& resp,
+                            std::string func_name, optional_yield y) {
   try {
     boost::system::error_code ec;
     rgw::redis::redis_exec(conn, ec, req, resp, y);

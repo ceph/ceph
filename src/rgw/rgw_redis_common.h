@@ -2,6 +2,7 @@
 
 #include <boost/asio/detached.hpp>
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include "boost/redis/connection.hpp"
@@ -17,33 +18,22 @@ using boost::redis::connection;
 using RedisResponseMap =
     boost::redis::response<std::map<std::string, std::string>>;
 
-// struct ReadResponse {
-//   int errorCode;
-//   std::string errorMessage;
-
-//   ReadResponse(RedisResponseMap resp) {
-//     errorCode = std::stoi(std::get<0>(resp).value()["errorCode"]);
-//     errorMessage = std::get<0>(resp).value()["errorMessage"];
-//   }
-// };
-
 struct RedisResponse {
-  int errorCode;
-  std::string errorMessage;
-  std::string data;
+  const int errorCode;
+  const std::string errorMessage;
+  const std::string data;
 
-  RedisResponse(int ec, std::string msg)
-      : errorCode(ec), errorMessage(msg), data("") {}
+  RedisResponse(const int ec, const std::string& msg)
+      : errorCode(ec), errorMessage(msg) {}
 
-  RedisResponse(RedisResponseMap resp) {
-    errorCode = std::stoi(std::get<0>(resp).value()["errorCode"]);
-    errorMessage = std::get<0>(resp).value()["errorMessage"];
-    data = std::get<0>(resp).value()["data"];
-  }
+  RedisResponse(const RedisResponseMap& resp)
+      : errorCode(std::stoi(std::get<0>(resp).value().at("errorCode"))),
+        errorMessage(std::get<0>(resp).value().at("errorMessage")),
+        data(std::get<0>(resp).value().at("data")) {}
 };
 
 struct initiate_exec {
-  connection* conn;
+  std::unique_ptr<connection> conn;
 
   using executor_type = boost::redis::connection::executor_type;
   executor_type get_executor() const noexcept { return conn->get_executor(); }
@@ -60,16 +50,17 @@ struct initiate_exec {
 };
 
 template <typename Response, typename CompletionToken>
-auto async_exec(connection* conn, const boost::redis::request& req,
-                Response& resp, CompletionToken&& token) {
+auto async_exec(std::unique_ptr<connection>& conn,
+                const boost::redis::request& req, Response& resp,
+                CompletionToken&& token) {
   return boost::asio::async_initiate<
       CompletionToken, void(boost::system::error_code, std::size_t)>(
       initiate_exec{conn}, token, req, resp);
 }
 
 template <typename T, typename... Ts>
-void redis_exec(connection* conn, boost::system::error_code& ec,
-                boost::redis::request& req,
+void redis_exec(std::unique_ptr<connection>& conn,
+                boost::system::error_code& ec, boost::redis::request& req,
                 boost::redis::response<T, Ts...>& resp, optional_yield y) {
   if (y) {
     auto yield = y.get_yield_context();
@@ -79,12 +70,13 @@ void redis_exec(connection* conn, boost::system::error_code& ec,
   }
 }
 
-RedisResponse doRedisFunc(connection* conn, boost::redis::request& req,
-                          RedisResponseMap& resp, std::string func_name,
-                          optional_yield y);
+RedisResponse do_redis_func(std::unique_ptr<connection>& conn,
+                            boost::redis::request& req, RedisResponseMap& resp,
+                            std::string func_name, optional_yield y);
 
-int loadLuaFunctions(boost::asio::io_context& io, connection* conn, config* cfg,
-                     optional_yield y);
+int load_lua_rgwlib(boost::asio::io_context& io,
+                    std::unique_ptr<connection>& conn,
+                    std::unique_ptr<config>& cfg, optional_yield y);
 
 }  // namespace redis
 }  // namespace rgw

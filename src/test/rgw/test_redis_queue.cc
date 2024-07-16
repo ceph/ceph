@@ -3,6 +3,7 @@
 #include <rgw_redis_queue.h>
 
 #include <boost/asio/io_context.hpp>
+#include <memory>
 
 using boost::redis::config;
 using boost::redis::connection;
@@ -10,18 +11,17 @@ using boost::redis::connection;
 class RGWRedisQueueTest : public ::testing::Test {
  protected:
   boost::asio::io_context io;
-  connection* conn;
-  config* cfg;
+  std::unique_ptr<connection> conn;
+  std::unique_ptr<config> cfg;
 
   void SetUp() {
-    // Creating the default config
-    cfg = new config;
-    conn = new connection(io);
+    cfg = std::make_unique<config>();
+    conn = std::make_unique<connection>(io);
 
     boost::asio::spawn(
         io,
         [this](boost::asio::yield_context yield) {
-          int res = rgw::redisqueue::initQueue(io, conn, cfg, yield);
+          int res = rgw::redis::load_lua_rgwlib(io, conn, cfg, yield);
           ASSERT_EQ(res, 0);
         },
         [this](std::exception_ptr eptr) {
@@ -31,10 +31,7 @@ class RGWRedisQueueTest : public ::testing::Test {
     io.run();
   }
 
-  void TearDown() {
-    delete conn;
-    delete cfg;
-  }
+  void TearDown() {}
 };
 
 TEST_F(RGWRedisQueueTest, Reserve) {
@@ -45,7 +42,7 @@ TEST_F(RGWRedisQueueTest, Reserve) {
         int res;
         std::tuple<int, int> status;
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
@@ -54,7 +51,7 @@ TEST_F(RGWRedisQueueTest, Reserve) {
         res = rgw::redisqueue::reserve(conn, "test_queue", yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -74,7 +71,7 @@ TEST_F(RGWRedisQueueTest, Commit) {
         int res;
         std::tuple<int, int> status;
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
@@ -83,7 +80,7 @@ TEST_F(RGWRedisQueueTest, Commit) {
         res = rgw::redisqueue::reserve(conn, "test_queue", yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -104,7 +101,7 @@ TEST_F(RGWRedisQueueTest, Commit) {
         res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
@@ -124,7 +121,7 @@ TEST_F(RGWRedisQueueTest, Abort) {
         int res;
         std::tuple<int, int> status;
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
@@ -133,7 +130,7 @@ TEST_F(RGWRedisQueueTest, Abort) {
         res = rgw::redisqueue::reserve(conn, "test_queue", yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -141,7 +138,7 @@ TEST_F(RGWRedisQueueTest, Abort) {
         res = rgw::redisqueue::abort(conn, "test_queue", yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue);
@@ -161,7 +158,7 @@ TEST_F(RGWRedisQueueTest, Read) {
         int res;
         std::tuple<int, int> status;
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
@@ -186,7 +183,7 @@ TEST_F(RGWRedisQueueTest, Read) {
         res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
@@ -270,7 +267,7 @@ TEST_F(RGWRedisQueueTest, LockedReadInvalidLock) {
         ASSERT_EQ(read_res, "");
 
         // Try to read an expired lock
-        boost::asio::steady_timer timer(io, std::chrono::milliseconds(500));
+        boost::asio::steady_timer timer(io, std::chrono::milliseconds(1000));
         timer.async_wait(yield);
 
         res = rgw::redisqueue::locked_read(conn, "test_queue", lock_cookie,
@@ -286,8 +283,7 @@ TEST_F(RGWRedisQueueTest, LockedReadInvalidLock) {
   io.run();
 }
 
-// Use a valid lock and ack_read
-TEST_F(RGWRedisQueueTest, AckRead) {
+TEST_F(RGWRedisQueueTest, AckReadLocked) {
   io.restart();
   boost::asio::spawn(
       io,
@@ -296,7 +292,7 @@ TEST_F(RGWRedisQueueTest, AckRead) {
         std::string read_res;
         std::tuple<int, int> status;
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
 
         int initial_reserve = std::get<0>(status);
@@ -321,7 +317,7 @@ TEST_F(RGWRedisQueueTest, AckRead) {
         res = rgw::redisqueue::commit(conn, "test_queue", data, yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue + 1);
@@ -341,7 +337,7 @@ TEST_F(RGWRedisQueueTest, AckRead) {
         res = rgw::redisqueue::ack_read(conn, "test_queue", "mycookie", yield);
         ASSERT_EQ(res, 0);
 
-        res = rgw::redisqueue::queueStatus(conn, "test_queue", status, yield);
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
         ASSERT_EQ(std::get<1>(status), initial_queue);

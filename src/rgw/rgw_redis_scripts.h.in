@@ -1,3 +1,12 @@
+/*
+ * ========================================================================
+ * THIS FILE IS AUTO-GENERATED. DO NOT EDIT!
+ *
+ * This file is generated from "rgw_redis_scripts.lua". Update the redis
+ * functions in "rgw_redis_scripts.lua" and run cmake to regenerate this.
+ * ========================================================================
+ */
+
 #pragma once
 
 #include <string>
