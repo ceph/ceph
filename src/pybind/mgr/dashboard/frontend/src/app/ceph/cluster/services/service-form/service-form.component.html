@@ -16,6 +16,13 @@
              Click here</a> to create a new Realm/Zone Group/Zone
         </cd-alert-panel>
 
+        <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'mgmt-gateway'"
+                        type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          With an active mgmt-gateway service, Dashboard will be served on {{currentURL}}:{{port}} and all other services will be accessible from {{currentURL}}:{{port}}/service_name
+        </cd-alert-panel>
+
         <!-- Service type -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -883,8 +890,114 @@
             </div>
           </fieldset>
         </ng-container>
-        <!-- RGW, Ingress & iSCSI -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress'].includes(serviceForm.controls.service_type.value)">
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['mgmt-gateway'].includes(serviceForm.controls.service_type.value)">
+          <!-- port -->
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="port">Port</label>
+            <div class="cd-col-form-input">
+              <input id="port"
+                     class="form-control"
+                     type="number"
+                     formControlName="port"
+                     min="1"
+                     max="65535"
+                     [(ngModel)]="port">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+            </div>
+          </div>
+          <!-- enable_auth -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="enable_auth"
+                   i18n>Authentication</label>
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="enable_auth"
+                       type="checkbox"
+                       formControlName="enable_auth">
+                <label class="custom-control-label"
+                       for="enable_auth"
+                       i18n>Enable
+                <cd-help-text>Authentication for the service when running an oauth2-proxy service</cd-help-text>
+                </label>
+              </div>
+            </div>
+          </div>
+          <!-- ssl_protocols -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="ssl_protocols"
+                   i18n>SSL Protocols</label>
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="tlsv1_2"
+                       type="checkbox"
+                       formControlName="tlsv1_2">
+                <label class="custom-control-label"
+                       for="tlsv1_2"
+                       i18n>TLSv1.2</label>
+              </div>
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="tlsv1_3"
+                       type="checkbox"
+                       formControlName="tlsv1_3">
+                <label class="custom-control-label"
+                       for="tlsv1_3"
+                       i18n>TLSv1.3</label>
+              </div>
+            </div>
+          </div>
+          <!-- ssl_ciphers -->
+          <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="ssl_ciphers"
+                 i18n>SSL Ciphers</label>
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="aes128_sha"
+                       type="checkbox"
+                       formControlName="aes128_sha">
+                <label class="custom-control-label"
+                       for="aes128_sha"
+                       i18n>AES128-SHA</label>
+              </div>
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="aes256_sha"
+                       type="checkbox"
+                       formControlName="aes256_sha">
+                <label class="custom-control-label"
+                       for="aes256_sha"
+                       i18n>AES256-SHA</label>
+              </div>
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="rc4_sha"
+                       type="checkbox"
+                       formControlName="rc4_sha">
+                <label class="custom-control-label"
+                       for="rc4_sha"
+                       i18n>RC4-SHA</label>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+        <!-- RGW, Ingress, iSCSI & mgmt-gateway -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress', 'mgmt-gateway'].includes(serviceForm.controls.service_type.value)">
           <!-- ssl -->
           <div class="form-group row">
             <div class="cd-col-form-offset">
@@ -926,7 +1039,7 @@
           </div>
 
           <!-- ssl_key -->
-          <div *ngIf="serviceForm.controls.ssl.value && !(['rgw', 'ingress'].includes(serviceForm.controls.service_type.value))"
+          <div *ngIf="serviceForm.controls.ssl.value && !(['rgw', 'ingress' ].includes(serviceForm.controls.service_type.value))"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="ssl_key">
