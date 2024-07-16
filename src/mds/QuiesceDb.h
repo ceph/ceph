@@ -124,8 +124,8 @@ namespace QuiesceInterface {
 }
 
 struct QuiesceDbVersion {
-  epoch_t epoch;
-  QuiesceSetVersion set_version;
+  epoch_t epoch = 0;
+  QuiesceSetVersion set_version = 0;
   auto operator<=>(QuiesceDbVersion const& other) const = default;
   QuiesceDbVersion& operator+(unsigned int delta) {
     set_version += delta;
