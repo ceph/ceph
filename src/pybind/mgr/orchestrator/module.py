@@ -1129,6 +1129,61 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             return HandleCommandResult(stdout=table.get_string())
 
+    def _process_cert_store_json(self, d: Dict[str, Any], level: int = 0) -> str:
+        result_str = ''
+        indent = '  ' * level
+        for k, v in d.items():
+            if isinstance(v, dict):
+                result_str += f'{indent}{k}\n'
+                result_str += self._process_cert_store_json(v, level + 1)
+            else:
+                result_str += f'{indent}{k} - {v}\n'
+        return result_str
+
+    @_cli_read_command('orch cert-store cert ls')
+    def _cert_store_cert_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_cert_ls()
+        cert_ls = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(cert_ls, format, many=False, cls=None))
+        else:
+            result_str = self._process_cert_store_json(cert_ls, 0)
+            return HandleCommandResult(stdout=result_str)
+
+    @_cli_read_command('orch cert-store key ls')
+    def _cert_store_key_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_key_ls()
+        key_ls = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(key_ls, format, many=False, cls=None))
+        else:
+            result_str = self._process_cert_store_json(key_ls, 0)
+            return HandleCommandResult(stdout=result_str)
+
+    @_cli_read_command('orch cert-store get cert')
+    def _cert_store_get_cert(
+        self,
+        entity: str,
+        _end_positional_: int = 0,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None
+    ) -> HandleCommandResult:
+        completion = self.cert_store_get_cert(entity, service_name, hostname)
+        cert = raise_if_exception(completion)
+        return HandleCommandResult(stdout=cert)
+
+    @_cli_read_command('orch cert-store get key')
+    def _cert_store_get_key(
+        self,
+        entity: str,
+        _end_positional_: int = 0,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None
+    ) -> HandleCommandResult:
+        completion = self.cert_store_get_key(entity, service_name, hostname)
+        key = raise_if_exception(completion)
+        return HandleCommandResult(stdout=key)
+
     def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
 
         _username = username

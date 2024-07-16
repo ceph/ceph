@@ -557,6 +557,28 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def cert_store_cert_ls(self) -> OrchResult[Dict[str, Any]]:
+        raise NotImplementedError()
+
+    def cert_store_key_ls(self) -> OrchResult[Dict[str, Any]]:
+        raise NotImplementedError()
+
+    def cert_store_get_cert(
+        self,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
+    def cert_store_get_key(
+        self,
+        entity: str,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None
+    ) -> OrchResult[str]:
+        raise NotImplementedError()
+
     @handle_orch_error
     def apply(self, specs: Sequence["GenericSpec"], no_overwrite: bool = False) -> List[str]:
         """

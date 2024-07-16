@@ -426,10 +426,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = ./server.key
-client_key = ./client.key
-server_cert = ./server.crt
-client_cert = ./client.crt
+server_key = /server.key
+client_key = /client.key
+server_cert = /server.cert
+client_cert = /client.cert
+root_ca_cert = /root.ca.cert
 
 [spdk]
 tgt_path = /usr/local/bin/nvmf_tgt
@@ -691,6 +692,9 @@ class TestMonitoring:
                     }),
                     use_current_daemon_image=False,
                 )
+
+                assert cephadm_module.cert_key_store.get_cert('alertmanager_cert', host='test') == 'mycert'
+                assert cephadm_module.cert_key_store.get_key('alertmanager_key', host='test') == 'mykey'
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
@@ -1155,8 +1159,8 @@ class TestMonitoring:
         _run_cephadm.side_effect = async_side_effect(("{}", "", 0))
 
         with with_host(cephadm_module, "test"):
-            cephadm_module.set_store("test/grafana_crt", grafana_cert)
-            cephadm_module.set_store("test/grafana_key", grafana_key)
+            cephadm_module.cert_key_store.save_cert('grafana_cert', grafana_cert, host='test')
+            cephadm_module.cert_key_store.save_key('grafana_key', grafana_key, host='test')
             with with_service(
                 cephadm_module, PrometheusSpec("prometheus")
             ) as _, with_service(cephadm_module, ServiceSpec("mgr")) as _, with_service(
