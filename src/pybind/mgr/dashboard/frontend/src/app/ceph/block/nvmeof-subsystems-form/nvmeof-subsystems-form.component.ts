@@ -25,8 +25,6 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
   resource: string;
   pageURL: string;
 
-  NQN_REGEX = /^nqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+)$/;
-
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
@@ -40,6 +38,16 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
     this.pageURL = 'block/nvmeof/subsystems';
   }
 
+  DEFAULT_NQN = 'nqn.2001-07.com.ceph:' + Date.now();
+  NQN_REGEX = /^nqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+(:[A-Za-z0-9-\.]+)*)$/;
+  NQN_REGEX_UUID = /^nqn\.2014-08\.org\.nvmexpress:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+  customNQNValidator = CdValidators.custom(
+    'pattern',
+    (nqnInput: string) =>
+      !!nqnInput && !(this.NQN_REGEX.test(nqnInput) || this.NQN_REGEX_UUID.test(nqnInput))
+  );
+
   ngOnInit() {
     this.createForm();
     this.action = this.actionLabels.CREATE;
@@ -47,8 +55,9 @@ export class NvmeofSubsystemsFormComponent implements OnInit {
 
   createForm() {
     this.subsystemForm = new CdFormGroup({
-      nqn: new UntypedFormControl('nqn.2001-07.com.ceph:' + Date.now(), {
+      nqn: new UntypedFormControl(this.DEFAULT_NQN, {
         validators: [
+          this.customNQNValidator,
           Validators.required,
           Validators.pattern(this.NQN_REGEX),
           CdValidators.custom(

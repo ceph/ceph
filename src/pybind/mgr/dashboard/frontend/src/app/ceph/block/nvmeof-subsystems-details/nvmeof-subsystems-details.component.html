@@ -19,6 +19,13 @@
         </cd-nvmeof-listeners-list>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="namespaces">
+      <a ngbNavLink
+         i18n>Namespaces</a>
+      <ng-template ngbNavContent>
+        <cd-nvmeof-namespaces-list [subsystemNQN]="subsystemNQN"></cd-nvmeof-namespaces-list>
+      </ng-template>
+    </ng-container>
   </nav>
 
   <div [ngbNavOutlet]="nav"></div>
