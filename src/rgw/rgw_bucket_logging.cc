@@ -316,7 +316,9 @@ int log_record(rgw::sal::Driver* driver,
     const std::string& op_name, 
     const std::string& etag, 
     const configuration& conf,
-  const DoutPrefixProvider *dpp, optional_yield y) {
+    const DoutPrefixProvider *dpp, 
+    optional_yield y,
+    bool async_completion) {
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
   auto ret = driver->load_bucket(dpp, rgw_bucket(s->bucket_tenant, conf.target_bucket),
                                &target_bucket, y);
@@ -374,7 +376,11 @@ int log_record(rgw::sal::Driver* driver,
       break;
   }
 
-  if (ret = target_bucket->write_logging_object(obj_name, record, y, dpp); ret < 0) {
+  if (ret = target_bucket->write_logging_object(obj_name,
+        record,
+        y,
+        dpp,
+        async_completion); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write record to logging object '" <<
       obj_name << "'. ret = " << ret << dendl;
     return ret;

@@ -1166,7 +1166,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
       bucket_info,
       obj_ctx,
       head_obj);
-  // disable versioning on the logging object
+  // disable versioning on the logging objects
   rgw_head_obj.set_versioning_disabled(true);
   RGWRados::Object::Write head_obj_wop(&rgw_head_obj);
   head_obj_wop.meta.manifest = &manifest;
@@ -1174,10 +1174,9 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   head_obj_wop.meta.flags = PUT_OBJ_CREATE;
   head_obj_wop.meta.mtime = &mtime;
   // TODO: head_obj_wop.meta.ptag
-  // TODO: missing display name
   // the owner of the logging object is the bucket owner
   // not the user that wrote the log that triggered the commit
-  const ACLOwner owner(bucket_info.owner, "");
+  const ACLOwner owner(bucket_info.owner, ""); // TODO: missing display name
   head_obj_wop.meta.owner = owner;
   const std::string etag = calculate_etag(bl_data);
   bufferlist bl_etag;
@@ -1196,7 +1195,31 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   return 0;
 }
 
-int RadosBucket::write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp) {
+struct BucketLoggingCompleteArg {
+    BucketLoggingCompleteArg(const std::string& _obj_name, size_t _size, CephContext* _cct)
+            : obj_name{_obj_name}, size{_size}, cct{_cct} {}
+    const std::string obj_name;
+    const size_t size;
+    CephContext* cct;
+};
+
+void bucket_logging_completion(rados_completion_t completion, void* args) {
+  auto* aio_comp = reinterpret_cast<librados::AioCompletionImpl*>(completion);
+  std::unique_ptr<BucketLoggingCompleteArg> logging_args(reinterpret_cast<BucketLoggingCompleteArg*>(args));
+  if (aio_comp->get_return_value() < 0) {
+    ldout(logging_args->cct, 1) << "failed to complete append to logging object '" << logging_args->obj_name <<
+      "'. ret = " << aio_comp->get_return_value() << dendl;
+  } else {
+    ldout(logging_args->cct, 20) << "wrote " << logging_args->size << " bytes to logging object '" <<
+      logging_args->obj_name << "'" << dendl;
+  }
+}
+
+int RadosBucket::write_logging_object(const std::string& obj_name, 
+    const std::string& record, 
+    optional_yield y, 
+    const DoutPrefixProvider *dpp,
+    bool async_completion) {
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
   rgw_pool data_pool;
   rgw_obj obj{get_key(), obj_name};
@@ -1217,12 +1240,25 @@ int RadosBucket::write_logging_object(const std::string& obj_name, const std::st
   // if this is the first record, the object will be created
   librados::ObjectWriteOperation op;
   op.append(bl);
+  if (async_completion) {
+    aio_completion_ptr completion{librados::Rados::aio_create_completion()};
+    auto arg = make_unique<BucketLoggingCompleteArg>(temp_obj_name, record.length(), store->ctx());
+    completion->set_complete_callback(arg.get(), bucket_logging_completion);
+    if (const auto ret = io_ctx.aio_operate(temp_obj_name, completion.get(), &op); ret < 0) {
+      ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<
+        "'. ret = " << ret << dendl;
+      return ret;
+    }
+    arg.release();
+    completion.release();
+    return 0;
+  }
   if (const auto ret = rgw_rados_operate(dpp, io_ctx, temp_obj_name, &op, y); ret < 0) {
     ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<
       "'. ret = " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 1) << "wrote " << record.length() << " bytes to logging object '" <<
+  ldpp_dout(dpp, 20) << "wrote " << record.length() << " bytes to logging object '" <<
     temp_obj_name << "'" << dendl;
   return 0;
 }

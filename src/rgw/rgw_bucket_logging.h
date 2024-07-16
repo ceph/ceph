@@ -134,7 +134,7 @@ inline std::string to_string(const Records& records) {
 
 // log a bucket logging record according to the configuration
 int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& op_name, const std::string& etag, const configuration& conf,
-    const DoutPrefixProvider *dpp, optional_yield y);
+    const DoutPrefixProvider *dpp, optional_yield y, bool async_completion);
 
 // return the oid of the object holding the name of the temporary logging object
 // bucket - log bucket
