@@ -46,7 +46,11 @@ class CircularJournalSpace : public JournalAllocator {
 
   roll_ertr::future<> roll() final;
 
-  write_ret write(ceph::bufferlist&& to_write) final;
+  journal_seq_t get_written_to() const final {
+    return written_to;
+  }
+
+  write_ertr::future<> write(ceph::bufferlist&& to_write) final;
 
   void update_modify_time(record_t& record) final {}
 
@@ -140,9 +144,6 @@ class CircularJournalSpace : public JournalAllocator {
    *
    */
 
-  journal_seq_t get_written_to() const {
-    return written_to;
-  }
   rbm_abs_addr get_rbm_addr(journal_seq_t seq) const {
     return convert_paddr_to_abs_addr(seq.offset);
   }

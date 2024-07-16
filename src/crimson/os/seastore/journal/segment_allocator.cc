@@ -168,27 +168,32 @@ SegmentAllocator::roll()
   });
 }
 
-SegmentAllocator::write_ret
+journal_seq_t
+SegmentAllocator::get_written_to() const
+{
+  return journal_seq_t{
+    segment_provider.get_seg_info(
+      current_segment->get_segment_id()).seq,
+    paddr_t::make_seg_paddr(
+      current_segment->get_segment_id(),
+      written_to)
+  };
+}
+
+SegmentAllocator::write_ertr::future<>
 SegmentAllocator::write(ceph::bufferlist&& to_write)
 {
   LOG_PREFIX(SegmentAllocator::write);
   assert(can_write());
   auto write_length = to_write.length();
   auto write_start_offset = written_to;
-  auto write_start_seq = journal_seq_t{
-    segment_provider.get_seg_info(current_segment->get_segment_id()).seq,
-    paddr_t::make_seg_paddr(
-      current_segment->get_segment_id(), write_start_offset)
-  };
-  TRACE("{} {}~{}", print_name, write_start_seq, write_length);
+  if (unlikely(LOCAL_LOGGER.is_enabled(seastar::log_level::trace))) {
+    TRACE("{} {}~{}", print_name, get_written_to(), write_length);
+  }
   assert(write_length > 0);
   assert((write_length % get_block_size()) == 0);
   assert(!needs_roll(write_length));
 
-  auto write_result = write_result_t{
-    write_start_seq,
-    write_length
-  };
   written_to += write_length;
   segment_provider.update_segment_avail_bytes(
     type,
@@ -202,9 +207,7 @@ SegmentAllocator::write(ceph::bufferlist&& to_write)
     crimson::ct_error::assert_all{
       "Invalid error in SegmentAllocator::write"
     }
-  ).safe_then([write_result, cs=current_segment] {
-    return write_result;
-  });
+  ).finally([cs=current_segment] {});
 }
 
 SegmentAllocator::close_ertr::future<>

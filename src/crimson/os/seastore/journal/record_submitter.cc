@@ -311,11 +311,14 @@ RecordSubmitter::submit(
       journal_allocator.get_nonce());
     DEBUG("{} fast submit {}, committed_to={}, outstanding_io={} ...",
           get_name(), sizes, get_committed_to(), num_outstanding_io);
+    write_result_t result{
+        journal_allocator.get_written_to(),
+        to_write.length()};
     return journal_allocator.write(std::move(to_write)
-    ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
+    ).safe_then([mdlength=sizes.get_mdlength(), result] {
       return record_locator_t{
-        write_result.start_seq.offset.add_offset(mdlength),
-        write_result
+        result.start_seq.offset.add_offset(mdlength),
+        result
       };
     }).finally([this] {
       decrement_io_with_flush();
@@ -533,11 +536,14 @@ void RecordSubmitter::flush_current_batch()
   // Note: rg is cleared
   DEBUG("{} {} records, {}, committed_to={}, outstanding_io={} ...",
         get_name(), num, sizes, get_committed_to(), num_outstanding_io);
+  write_result_t result{
+      journal_allocator.get_written_to(),
+      to_write.length()};
   std::ignore = journal_allocator.write(std::move(to_write)
-  ).safe_then([this, p_batch, FNAME, num, sizes](auto write_result) {
+  ).safe_then([this, p_batch, FNAME, num, sizes, result] {
     TRACE("{} {} records, {}, write done with {}",
-          get_name(), num, sizes, write_result);
-    finish_submit_batch(p_batch, write_result);
+          get_name(), num, sizes, result);
+    finish_submit_batch(p_batch, result);
   }).handle_error(
     crimson::ct_error::all_same_way([this, p_batch, FNAME, num, sizes](auto e) {
       ERROR("{} {} records, {}, got error {}",

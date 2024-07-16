@@ -49,7 +49,7 @@ CircularJournalSpace::roll_ertr::future<> CircularJournalSpace::roll() {
   return roll_ertr::now();
 }
 
-CircularJournalSpace::write_ret
+CircularJournalSpace::write_ertr::future<>
 CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   LOG_PREFIX(CircularJournalSpace::write);
   assert(get_written_to().segment_seq != NULL_SEG_SEQ);
@@ -60,7 +60,6 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   assert(encoded_size + get_rbm_addr(get_written_to())
 	 < get_journal_end());
 
-  journal_seq_t j_seq = get_written_to();
   auto target = get_rbm_addr(get_written_to());
   auto new_written_to = target + encoded_size;
   assert(new_written_to < get_journal_end());
@@ -69,21 +68,11 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
     get_device_id());
   set_written_to(
     journal_seq_t{get_written_to().segment_seq, paddr});
-  DEBUG("{}, target {}", to_write.length(), target);
+  DEBUG("length {}, commit target {}, used_size {}",
+        encoded_size, target, get_records_used_size());
 
-  auto write_result = write_result_t{
-    j_seq,
-    encoded_size
-  };
   return device_write_bl(target, to_write
-  ).safe_then([this, target,
-    length=encoded_size,
-    write_result,
-    FNAME] {
-    DEBUG("commit target {} used_size {} written length {}",
-          target, get_records_used_size(), length);
-    return write_result;
-  }).handle_error(
+  ).handle_error(
     write_ertr::pass_further{},
     crimson::ct_error::assert_all{ "Invalid error" }
   );

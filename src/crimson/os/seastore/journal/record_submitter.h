@@ -36,9 +36,10 @@ public:
 
   virtual segment_nonce_t get_nonce() const  = 0;
 
+  virtual journal_seq_t get_written_to() const = 0;
+
   using write_ertr = base_ertr;
-  using write_ret = write_ertr::future<write_result_t>;
-  virtual write_ret write(ceph::bufferlist&& to_write) = 0;
+  virtual write_ertr::future<> write(ceph::bufferlist&& to_write) = 0;
 
   virtual bool can_write() const = 0;
   
