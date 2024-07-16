@@ -4,6 +4,7 @@ import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbActiveModal, NgbModalRef, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { ListItem } from 'carbon-components-angular';
 import _ from 'lodash';
 import { forkJoin, merge, Observable, Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
@@ -24,7 +25,9 @@ import { SelectOption } from '~/app/shared/components/select/select-option.model
 import {
   ActionLabelsI18n,
   TimerServiceInterval,
-  URLVerbs
+  URLVerbs,
+  SSL_PROTOCOLS,
+  SSL_CIPHERS
 } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -50,6 +53,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
   readonly SMB_CONFIG_URI_PATTERN = /^(http:|https:|rados:|rados:mon-config-key:)/;
   readonly OAUTH2_ISSUER_URL_PATTERN = /^(https?:\/\/)?([a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+)(:[0-9]{1,5})?(\/.*)?$/;
+  readonly SSL_CIPHERS_PATTERN = /^[a-zA-Z0-9\-:]+$/;
+  readonly DEFAULT_SSL_PROTOCOL_ITEM = [{ content: 'TLSv1.3', selected: true }];
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
@@ -90,6 +95,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   zonegroupNames: string[];
   zoneNames: string[];
   smbFeaturesList = ['domain'];
+  currentURL: string;
+  port: number = 443;
+  sslProtocolsItems: Array<ListItem> = Object.values(SSL_PROTOCOLS).map((protocol) => ({
+    content: protocol,
+    selected: true
+  }));
+  sslCiphersItems: Array<ListItem> = Object.values(SSL_CIPHERS).map((cipher) => ({
+    content: cipher,
+    selected: false
+  }));
+  showMgmtGatewayMessage: boolean = false;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -301,6 +317,18 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         ]
       ],
       virtual_interface_networks: [null],
+      ssl_protocols: [this.DEFAULT_SSL_PROTOCOL_ITEM],
+      ssl_ciphers: [
+        null,
+        [
+          CdValidators.custom('invalidPattern', (ciphers: string) => {
+            if (_.isEmpty(ciphers)) {
+              return false;
+            }
+            return !this.SSL_CIPHERS_PATTERN.test(ciphers);
+          })
+        ]
+      ],
       // RGW, Ingress & iSCSI
       ssl: [false],
       ssl_cert: [
@@ -337,6 +365,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               ssl: true
             },
             [Validators.required, CdValidators.sslCert()]
+          ),
+          CdValidators.composeIf(
+            {
+              service_type: 'mgmt-gateway',
+              unmanaged: false,
+              ssl: false
+            },
+            [CdValidators.sslCert()]
           )
         ]
       ],
@@ -358,9 +394,20 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               ssl: true
             },
             [Validators.required, CdValidators.sslPrivKey()]
+          ),
+          CdValidators.composeIf(
+            {
+              service_type: 'mgmt-gateway',
+              unmanaged: false,
+              ssl: false
+            },
+            [CdValidators.sslPrivKey()]
           )
         ]
       ],
+      // mgmt-gateway
+      enable_auth: [null],
+      port: [443, [CdValidators.number(false)]],
       // snmp-gateway
       snmp_version: [
         null,
@@ -620,6 +667,36 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
               }
               break;
+            case 'mgmt-gateway':
+              let hrefSplitted = window.location.href.split(':');
+              this.currentURL = hrefSplitted[0] + hrefSplitted[1];
+              this.port = response[0].spec?.port;
+
+              if (response[0].spec?.ssl_protocols) {
+                let selectedValues: Array<ListItem> = [];
+                for (const value of response[0].spec.ssl_protocols) {
+                  selectedValues.push({ content: value, selected: true });
+                }
+                this.serviceForm.get('ssl_protocols').setValue(selectedValues);
+              }
+              if (response[0].spec?.ssl_ciphers) {
+                this.serviceForm
+                  .get('ssl_ciphers')
+                  .setValue(response[0].spec?.ssl_ciphers.join(':'));
+              }
+              if (response[0].spec?.ssl_cert) {
+                this.serviceForm.get('ssl_cert').setValue(response[0].spec.ssl_certificate);
+              }
+              if (response[0].spec?.ssl_key) {
+                this.serviceForm.get('ssl_key').setValue(response[0].spec.ssl_certificate_key);
+              }
+              if (response[0].spec?.enable_auth) {
+                this.serviceForm.get('enable_auth').setValue(response[0].spec.enable_auth);
+              }
+              if (response[0].spec?.port) {
+                this.serviceForm.get('port').setValue(response[0].spec.port);
+              }
+              break;
             case 'smb':
               const smbSpecKeys = [
                 'cluster_id',
@@ -701,6 +778,35 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
         });
     }
+    this.detectChanges();
+  }
+
+  detectChanges(): void {
+    const service_type = this.serviceForm.get('service_type');
+    if (service_type) {
+      service_type.valueChanges.subscribe((value) => {
+        if (value === 'mgmt-gateway') {
+          const port = this.serviceForm.get('port');
+          if (port) {
+            port.valueChanges.subscribe((_) => {
+              this.showMgmtGatewayMessage = true;
+            });
+          }
+          const ssl_protocols = this.serviceForm.get('ssl_protocols');
+          if (ssl_protocols) {
+            ssl_protocols.valueChanges.subscribe((_) => {
+              this.showMgmtGatewayMessage = true;
+            });
+          }
+          const ssl_ciphers = this.serviceForm.get('ssl_ciphers');
+          if (ssl_ciphers) {
+            ssl_ciphers.valueChanges.subscribe((_) => {
+              this.showMgmtGatewayMessage = true;
+            });
+          }
+        }
+      });
+    }
   }
 
   getDefaultsEntitiesForRgw(
@@ -763,6 +869,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       case 'jaeger-query':
       case 'smb':
       case 'oauth2-proxy':
+      case 'mgmt-gateway':
         this.serviceForm.get('count').setValue(1);
         break;
       default:
@@ -893,6 +1000,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     if (selectedServiceType === 'rgw') {
       this.setRgwFields();
+    }
+    if (selectedServiceType === 'mgmt-gateway') {
+      let hrefSplitted = window.location.href.split(':');
+      this.currentURL = hrefSplitted[0] + hrefSplitted[1];
+      // mgmt-gateway lacks HA for now
+      this.serviceForm.get('count').disable();
+    } else {
+      this.serviceForm.get('count').enable();
     }
   }
 
@@ -1093,6 +1208,23 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           }
           serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
           break;
+        case 'mgmt-gateway':
+          serviceSpec['ssl_certificate'] = values['ssl_cert']?.trim();
+          serviceSpec['ssl_certificate_key'] = values['ssl_key']?.trim();
+          serviceSpec['enable_auth'] = values['enable_auth'];
+          serviceSpec['port'] = values['port'];
+          if (serviceSpec['port'] === (443 || 80)) {
+            // omit port default values due to issues with redirect_url on the backend
+            delete serviceSpec['port'];
+          }
+          serviceSpec['ssl_protocols'] = [];
+          if (values['ssl_protocols'] != this.DEFAULT_SSL_PROTOCOL_ITEM) {
+            for (const key of Object.keys(values['ssl_protocols'])) {
+              serviceSpec['ssl_protocols'].push(values['ssl_protocols'][key]['content']);
+            }
+          }
+          serviceSpec['ssl_ciphers'] = values['ssl_ciphers']?.trim().split(':');
+          break;
         case 'grafana':
           serviceSpec['port'] = values['grafana_port'];
           serviceSpec['initial_admin_password'] = values['grafana_admin_password'];
@@ -1104,7 +1236,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['oidc_issuer_url'] = values['oidc_issuer_url']?.trim();
           serviceSpec['https_address'] = values['https_address']?.trim();
           serviceSpec['redirect_url'] = values['redirect_url']?.trim();
-          serviceSpec['allowlist_domains'] = values['allowlist_domains']?.trim().split(',');
+          serviceSpec['allowlist_domains'] = values['allowlist_domains']
+            .split(',')
+            .map((domain: string) => {
+              return domain.trim();
+            });
           if (values['ssl']) {
             serviceSpec['ssl_cert'] = values['ssl_cert']?.trim();
             serviceSpec['ssl_key'] = values['ssl_key']?.trim();
