@@ -40,11 +40,10 @@ RecordBatch::add_pending(
     assert(maybe_write_base.has_value());
     assert(!write_base.has_value());
     write_base = maybe_write_base;
-  } else {
-    assert(io_promise.has_value());
   }
   state = state_t::PENDING;
   assert(write_base.has_value());
+  assert(io_promise.has_value());
 
   return io_promise->get_shared_future(
   ).then([dlength_offset, FNAME, &name

@@ -149,9 +149,6 @@ public:
   // Add to the batch, the future will be resolved after the batch is
   // written.
   //
-  // Set write_result_t::write_length to 0 if the record is not the first one
-  // in the batch.
-  //
   // write_base must be assigned when the state is empty
   using add_pending_ertr = JournalAllocator::write_ertr;
   using add_pending_ret = add_pending_ertr::future<record_locator_t>;
