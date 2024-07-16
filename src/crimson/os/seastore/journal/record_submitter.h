@@ -168,8 +168,8 @@ public:
       segment_nonce_t segment_nonce);
 
   // Set the write result and reset for reuse
-  using maybe_result_t = std::optional<write_result_t>;
-  void set_result(maybe_result_t maybe_write_end_seq);
+  using maybe_result_t = std::optional<extent_len_t>;
+  void set_result(maybe_result_t maybe_write_length);
 
   // The fast path that is equivalent to submit a single record as a batch.
   //
@@ -205,7 +205,7 @@ private:
   extent_len_t submitting_mdlength = 0;
 
   struct promise_result_t {
-    write_result_t write_result;
+    extent_len_t write_length;
     extent_len_t mdlength;
   };
   using maybe_promise_result_t = std::optional<promise_result_t>;

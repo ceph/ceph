@@ -46,17 +46,16 @@ RecordBatch::add_pending(
   assert(io_promise.has_value());
 
   return io_promise->get_shared_future(
-  ).then([dlength_offset, FNAME, &name
+  ).then([dlength_offset, FNAME, &name, write_base=*write_base
          ](auto maybe_promise_result) -> add_pending_ret {
     if (!maybe_promise_result.has_value()) {
       ERROR("{} write failed", name);
       return crimson::ct_error::input_output_error::make();
     }
-    auto write_result = maybe_promise_result->write_result;
     auto submit_result = record_locator_t{
-      write_result.start_seq.offset.add_offset(
+      write_base.offset.add_offset(
           maybe_promise_result->mdlength + dlength_offset),
-      write_result
+      write_result_t{write_base, maybe_promise_result->write_length}
     };
     TRACE("{} write finish with {}", name, submit_result);
     return add_pending_ret(
@@ -87,13 +86,13 @@ RecordBatch::encode_ret_t RecordBatch::encode_batch(
 }
 
 void RecordBatch::set_result(
-  maybe_result_t maybe_write_result)
+  maybe_result_t maybe_write_length)
 {
   maybe_promise_result_t result;
-  if (maybe_write_result.has_value()) {
-    assert(maybe_write_result->length == submitting_length);
+  if (maybe_write_length.has_value()) {
+    assert(*maybe_write_length == submitting_length);
     result = promise_result_t{
-      *maybe_write_result,
+      *maybe_write_length,
       submitting_mdlength
     };
   }
@@ -551,17 +550,18 @@ void RecordSubmitter::flush_current_batch()
   auto encode_ret = p_batch->encode_batch(
     get_committed_to(), journal_allocator.get_nonce());
   // Note: rg is cleared
-  DEBUG("{} {} records, {}, committed_to={}, outstanding_io={} ...",
-        get_name(), num, sizes, get_committed_to(), num_outstanding_io);
-  assert(encode_ret.write_base == journal_allocator.get_written_to());
-  write_result_t result{
-      encode_ret.write_base,
-      encode_ret.bl.length()};
+  auto write_base = encode_ret.write_base;
+  auto write_len = encode_ret.bl.length();
+  DEBUG("{} {} records, {}, write_to={}, committed_to={}, outstanding_io={} ...",
+        get_name(), num, sizes,
+        write_result_t{write_base, write_len},
+        get_committed_to(), num_outstanding_io);
+  assert(write_base == journal_allocator.get_written_to());
   std::ignore = journal_allocator.write(std::move(encode_ret.bl)
-  ).safe_then([this, p_batch, FNAME, num, sizes, result] {
-    TRACE("{} {} records, {}, write done with {}",
-          get_name(), num, sizes, result);
-    finish_submit_batch(p_batch, result);
+  ).safe_then([this, p_batch, FNAME, num, sizes, write_len] {
+    TRACE("{} {} records, {}, write done",
+          get_name(), num, sizes);
+    finish_submit_batch(p_batch, write_len);
   }).handle_error(
     crimson::ct_error::all_same_way([this, p_batch, FNAME, num, sizes](auto e) {
       ERROR("{} {} records, {}, got error {}",
