@@ -722,6 +722,22 @@ bool Elector::peer_tracker_is_clean()
   return peer_tracker.is_clean(mon->rank, paxos_size());
 }
 
+bool Elector::is_tiebreaker(int rank) const
+{
+  return mon->monmap->tiebreaker_mon == mon->monmap->get_name(rank);
+}
+
+bool Elector::is_stretch_marked_down_mons(int rank) const
+{
+  std::string mon_name = mon->monmap->get_name(rank);
+  for (auto& i : mon->monmap->stretch_marked_down_mons) {
+    if (i == mon_name) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void Elector::notify_clear_peer_state()
 {
   dout(10) << __func__ << dendl;
