@@ -71,4 +71,28 @@ export class RgwMultisiteService {
     }
     return this.http.delete(`${this.url}/sync-policy-group/${group_id}`, { params });
   }
+
+  setUpMultisiteReplication(
+    realmName: string,
+    zonegroupName: string,
+    zonegroupEndpoints: string,
+    zoneName: string,
+    zoneEndpoints: string,
+    username: string,
+    cluster?: string
+  ) {
+    let params = new HttpParams()
+      .set('realm_name', realmName)
+      .set('zonegroup_name', zonegroupName)
+      .set('zonegroup_endpoints', zonegroupEndpoints)
+      .set('zone_name', zoneName)
+      .set('zone_endpoints', zoneEndpoints)
+      .set('username', username);
+
+    if (cluster) {
+      params = params.set('cluster_fsid', cluster);
+    }
+
+    return this.http.post(`${this.uiUrl}/multisite-replications`, null, { params: params });
+  }
 }
