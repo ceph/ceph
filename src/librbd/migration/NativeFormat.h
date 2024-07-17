@@ -62,10 +62,6 @@ private:
   json_spirit::mObject m_json_object;
   bool m_import_only;
 
-  int64_t m_pool_id = -1;
-  std::string m_pool_namespace;
-  std::string m_image_name;
-  std::string m_image_id;
   std::string m_snap_name;
   uint64_t m_snap_id = CEPH_NOSNAP;
 

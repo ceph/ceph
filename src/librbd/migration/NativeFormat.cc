@@ -62,95 +62,124 @@ void NativeFormat<I>::open(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << dendl;
 
-  auto& pool_name_val = m_json_object[POOL_NAME_KEY];
-  if (pool_name_val.type() == json_spirit::str_type) {
-    librados::Rados rados(m_image_ctx->md_ctx);
-    m_pool_id = rados.pool_lookup(pool_name_val.get_str().c_str());
-    if (m_pool_id < 0) {
-      lderr(cct) << "failed to lookup pool" << dendl;
-      on_finish->complete(static_cast<int>(m_pool_id));
+  int64_t pool_id = -1;
+  std::string pool_namespace;
+  std::string image_name;
+  std::string image_id;
+
+  if (auto it = m_json_object.find(POOL_NAME_KEY);
+      it != m_json_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      librados::Rados rados(m_image_ctx->md_ctx);
+      pool_id = rados.pool_lookup(it->second.get_str().c_str());
+      if (pool_id < 0) {
+        lderr(cct) << "failed to lookup pool" << dendl;
+        on_finish->complete(static_cast<int>(pool_id));
+        return;
+      }
+    } else {
+      lderr(cct) << "invalid pool name" << dendl;
+      on_finish->complete(-EINVAL);
       return;
     }
-  } else if (pool_name_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid pool name" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
   }
 
-  auto& pool_id_val = m_json_object[POOL_ID_KEY];
-  if (m_pool_id != -1 && pool_id_val.type() != json_spirit::null_type) {
-    lderr(cct) << "cannot specify both pool name and pool id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  } else if (pool_id_val.type() == json_spirit::int_type) {
-    m_pool_id = pool_id_val.get_int64();
-  } else if (pool_id_val.type() == json_spirit::str_type) {
-    try {
-      m_pool_id = boost::lexical_cast<int64_t>(pool_id_val.get_str());
-    } catch (boost::bad_lexical_cast &) {
+  if (auto it = m_json_object.find(POOL_ID_KEY);
+      it != m_json_object.end()) {
+    if (pool_id != -1) {
+      lderr(cct) << "cannot specify both pool name and pool id" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+    if (it->second.type() == json_spirit::int_type) {
+      pool_id = it->second.get_int64();
+    } else if (it->second.type() == json_spirit::str_type) {
+      try {
+        pool_id = boost::lexical_cast<int64_t>(it->second.get_str());
+      } catch (boost::bad_lexical_cast&) {
+      }
+    }
+    if (pool_id == -1) {
+      lderr(cct) << "invalid pool id" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
     }
   }
 
-  if (m_pool_id == -1) {
-    lderr(cct) << "missing or invalid pool id" << dendl;
+  if (pool_id == -1) {
+    lderr(cct) << "missing pool name or pool id" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
 
-  auto& pool_namespace_val = m_json_object[POOL_NAMESPACE_KEY];
-  if (pool_namespace_val.type() == json_spirit::str_type) {
-    m_pool_namespace = pool_namespace_val.get_str();
-  } else if (pool_namespace_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid pool namespace" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& image_name_val = m_json_object[IMAGE_NAME_KEY];
-  if (image_name_val.type() != json_spirit::str_type) {
-    lderr(cct) << "missing or invalid image name" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-  m_image_name = image_name_val.get_str();
-
-  auto& image_id_val = m_json_object[IMAGE_ID_KEY];
-  if (image_id_val.type() == json_spirit::str_type) {
-    m_image_id = image_id_val.get_str();
-  } else if (image_id_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid image id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& snap_name_val = m_json_object[SNAP_NAME_KEY];
-  if (snap_name_val.type() == json_spirit::str_type) {
-    m_snap_name = snap_name_val.get_str();
-  } else if (snap_name_val.type() != json_spirit::null_type) {
-    lderr(cct) << "invalid snap name" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  auto& snap_id_val = m_json_object[SNAP_ID_KEY];
-  if (!m_snap_name.empty() && snap_id_val.type() != json_spirit::null_type) {
-    lderr(cct) << "cannot specify both snap name and snap id" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  } else if (snap_id_val.type() == json_spirit::str_type) {
-    try {
-      m_snap_id = boost::lexical_cast<uint64_t>(snap_id_val.get_str());
-    } catch (boost::bad_lexical_cast &) {
+  if (auto it = m_json_object.find(POOL_NAMESPACE_KEY);
+      it != m_json_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      pool_namespace = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid pool namespace" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
     }
-  } else if (snap_id_val.type() == json_spirit::int_type) {
-    m_snap_id = snap_id_val.get_uint64();
   }
 
-  if (snap_id_val.type() != json_spirit::null_type &&
-      m_snap_id == CEPH_NOSNAP) {
-    lderr(cct) << "invalid snap id" << dendl;
+  if (auto it = m_json_object.find(IMAGE_NAME_KEY);
+      it != m_json_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      image_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid image name" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+  } else {
+    lderr(cct) << "missing image name" << dendl;
     on_finish->complete(-EINVAL);
     return;
+  }
+
+  if (auto it = m_json_object.find(IMAGE_ID_KEY);
+      it != m_json_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      image_id = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid image id" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+  }
+
+  if (auto it = m_json_object.find(SNAP_NAME_KEY);
+      it != m_json_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      m_snap_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid snap name" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+  }
+
+  if (auto it = m_json_object.find(SNAP_ID_KEY);
+      it != m_json_object.end()) {
+    if (!m_snap_name.empty()) {
+      lderr(cct) << "cannot specify both snap name and snap id" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+    if (it->second.type() == json_spirit::int_type) {
+      m_snap_id = it->second.get_uint64();
+    } else if (it->second.type() == json_spirit::str_type) {
+      try {
+        m_snap_id = boost::lexical_cast<uint64_t>(it->second.get_str());
+      } catch (boost::bad_lexical_cast&) {
+      }
+    }
+    if (m_snap_id == CEPH_NOSNAP) {
+      lderr(cct) << "invalid snap id" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
   }
 
   // snapshot is required for import to keep source read-only
@@ -163,7 +192,7 @@ void NativeFormat<I>::open(Context* on_finish) {
   // TODO add support for external clusters
   librados::IoCtx io_ctx;
   int r = util::create_ioctx(m_image_ctx->md_ctx, "source image",
-                             m_pool_id, m_pool_namespace, &io_ctx);
+                             pool_id, pool_namespace, &io_ctx);
   if (r < 0) {
     on_finish->complete(r);
     return;
@@ -171,13 +200,13 @@ void NativeFormat<I>::open(Context* on_finish) {
 
   m_image_ctx->md_ctx.dup(io_ctx);
   m_image_ctx->data_ctx.dup(io_ctx);
-  m_image_ctx->name = m_image_name;
+  m_image_ctx->name = image_name;
 
   uint64_t flags = 0;
-  if (m_image_id.empty() && !m_import_only) {
+  if (image_id.empty() && !m_import_only) {
     flags |= OPEN_FLAG_OLD_FORMAT;
   } else {
-    m_image_ctx->id = m_image_id;
+    m_image_ctx->id = image_id;
   }
 
   if (m_image_ctx->child != nullptr) {
