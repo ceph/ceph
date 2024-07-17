@@ -151,8 +151,14 @@ public:
   //
   // write_base must be assigned when the state is empty
   using add_pending_ertr = JournalAllocator::write_ertr;
-  using add_pending_ret = add_pending_ertr::future<record_locator_t>;
-  add_pending_ret add_pending(
+  using add_pending_fut = add_pending_ertr::future<record_locator_t>;
+  struct add_pending_ret_t {
+    // The supposed record base if no metadata,
+    // only useful in case of ool.
+    journal_seq_t record_base_regardless_md;
+    add_pending_fut future;
+  };
+  add_pending_ret_t add_pending(
       const std::string& name,
       record_t&&,
       extent_len_t block_size,
@@ -275,8 +281,7 @@ public:
   roll_segment_ertr::future<> roll_segment();
 
   // when available, submit the record if possible
-  using submit_ertr = base_ertr;
-  using submit_ret = submit_ertr::future<record_locator_t>;
+  using submit_ret = RecordBatch::add_pending_ret_t;
   submit_ret submit(record_t&&, bool with_atomic_roll_segment=false);
 
   void update_committed_to(const journal_seq_t& new_committed_to) {

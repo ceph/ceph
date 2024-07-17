@@ -13,7 +13,7 @@ SET_SUBSYS(seastore_journal);
 
 namespace crimson::os::seastore::journal {
 
-RecordBatch::add_pending_ret
+RecordBatch::add_pending_ret_t
 RecordBatch::add_pending(
   const std::string& name,
   record_t&& record,
@@ -45,23 +45,26 @@ RecordBatch::add_pending(
   assert(write_base.has_value());
   assert(io_promise.has_value());
 
-  return io_promise->get_shared_future(
-  ).then([dlength_offset, FNAME, &name, write_base=*write_base
-         ](auto maybe_promise_result) -> add_pending_ret {
+  auto _write_base = *write_base;
+  auto fut = io_promise->get_shared_future(
+  ).then([dlength_offset, FNAME, &name, _write_base
+         ](auto maybe_promise_result) -> add_pending_fut {
     if (!maybe_promise_result.has_value()) {
       ERROR("{} write failed", name);
       return crimson::ct_error::input_output_error::make();
     }
     auto submit_result = record_locator_t{
-      write_base.offset.add_offset(
+      _write_base.offset.add_offset(
           maybe_promise_result->mdlength + dlength_offset),
-      write_result_t{write_base, maybe_promise_result->write_length}
+      write_result_t{_write_base, maybe_promise_result->write_length}
     };
     TRACE("{} write finish with {}", name, submit_result);
-    return add_pending_ret(
+    return add_pending_fut(
       add_pending_ertr::ready_future_marker{},
       submit_result);
   });
+  _write_base.offset = _write_base.offset.add_offset(dlength_offset);
+  return {_write_base, std::move(fut)};
 }
 
 RecordBatch::encode_ret_t RecordBatch::encode_batch(
@@ -321,7 +324,7 @@ RecordSubmitter::submit(
     write_result_t result{
         journal_allocator.get_written_to(),
         to_write.length()};
-    return journal_allocator.write(std::move(to_write)
+    auto write_fut = journal_allocator.write(std::move(to_write)
     ).safe_then([mdlength=sizes.get_mdlength(), result] {
       return record_locator_t{
         result.start_seq.offset.add_offset(mdlength),
@@ -330,6 +333,7 @@ RecordSubmitter::submit(
     }).finally([this] {
       decrement_io_with_flush();
     });
+    return {result.start_seq, std::move(write_fut)};
   }
   // indirect batched write
   std::optional<journal_seq_t> maybe_write_base;
@@ -340,7 +344,7 @@ RecordSubmitter::submit(
     assert(*p_current_batch->get_write_base() ==
            journal_allocator.get_written_to());
   }
-  auto write_fut = p_current_batch->add_pending(
+  auto ret = p_current_batch->add_pending(
     get_name(),
     std::move(record),
     journal_allocator.get_block_size(),
@@ -380,7 +384,7 @@ RecordSubmitter::submit(
           num_outstanding_io);
     assert(!p_current_batch->needs_flush());
   }
-  return write_fut;
+  return ret;
 }
 
 RecordSubmitter::open_ret

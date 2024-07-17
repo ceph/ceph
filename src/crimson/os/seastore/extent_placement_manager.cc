@@ -47,15 +47,20 @@ SegmentedOolWriter::write_record(
   stats.md_bytes += record.size.get_raw_mdlength();
   stats.num_records += 1;
 
-  return record_submitter.submit(
+  auto ret = record_submitter.submit(
     std::move(record),
-    with_atomic_roll_segment
-  ).safe_then([this, FNAME, &t, extents=std::move(extents)
+    with_atomic_roll_segment);
+  return std::move(ret.future
+  ).safe_then([this, FNAME, &t,
+               record_base=ret.record_base_regardless_md,
+               extents=std::move(extents)
               ](record_locator_t ret) mutable {
-    DEBUGT("{} finish with {} and {} extents",
+    DEBUGT("{} finish with {}={} and {} extents",
            t, segment_allocator.get_name(),
-           ret, extents.size());
+           ret, record_base, extents.size());
     paddr_t extent_addr = ret.record_block_base;
+    // ool won't write metadata, so the paddrs must be equal
+    assert(record_base.offset == extent_addr);
     for (auto& extent : extents) {
       TRACET("{} ool extent written at {} -- {}",
              t, segment_allocator.get_name(),
