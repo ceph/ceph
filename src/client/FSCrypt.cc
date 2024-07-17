@@ -418,32 +418,25 @@ int FSCryptKeyStore::maybe_add_user(std::list<int>* users, int user)
 int FSCryptKeyStore::maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::list<int>* users, int user)
 {
   ldout(cct, 10) << __FILE__ << ":" << __LINE__ << " user=" << user << dendl;
-  uint32_t status_flags = 0;
-  int err = 0;
-  bool removed = false;
+  uint32_t status_flags = arg->removal_status_flags;
+
   if (!valid_key_spec(arg->key_spec)) {
     return -EINVAL;
   }
 
   auto it = std::find(users->begin(), users->end(), user);
   if (it != users->end()) {
-    ldout(cct, 10) << "maybe_remove_user, user found removing!" << dendl;
-    removed = true;
     users->erase(it);
-  } else {
-    return -EUSERS;
   }
-  ldout(cct, 10) << "maybe_add_user size is now=" << users->size() << dendl;
 
-  if (users->size() != 0 && removed) {
-
+  if (users->size() != 0) {
     //set bits for removed for requested user
     status_flags |= FSCRYPT_KEY_REMOVAL_STATUS_FLAG_OTHER_USERS;
-    err = -EBUSY;
+    arg->removal_status_flags = status_flags;
+    return -EUSERS;
   }
 
-  arg->removal_status_flags = status_flags;
-  return err;
+  return 0;
 }
 
 int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_handler, int user)
@@ -477,7 +470,8 @@ int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_h
     if (r == -EEXIST) {
       return 0; //returns 0 regardless
     }
-
+    key_handler->present = true;
+    key_handler->di = new FSCryptDecryptedInodes();
     m[id] = key_handler;
   }
 
@@ -521,15 +515,25 @@ int FSCryptKeyStore::invalidate(struct fscrypt_remove_key_arg* arg, int user)
 
   auto& users = kh->get_users();
   r = maybe_remove_user(arg, &users, user);
-  if (r < 0) {
-    return r;
+  if (r == -EUSERS) {
+    r = 0;
+    goto out;
   }
 
-  kh->reset(++epoch, nullptr);
+  kh->present = false;
 
-  m.erase(id);
+  //do a final clean up
+  if (!kh->present && kh->di->get_inodes().empty()) {
+    kh->reset(++epoch, nullptr);
+    free(kh->di);
+    m.erase(id);
+  } else {
+    r = 0;
+    arg->removal_status_flags |= FSCRYPT_KEY_REMOVAL_STATUS_FLAG_FILES_BUSY;
+  }
 
-  return 0;
+out:
+  return r;
 }
 
 FSCryptKeyValidator::FSCryptKeyValidator(CephContext *cct, FSCryptKeyHandlerRef& kh, int64_t e) : cct(cct), handler(kh), epoch(e) {

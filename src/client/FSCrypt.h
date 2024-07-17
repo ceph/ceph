@@ -294,6 +294,28 @@ public:
 
 using FSCryptFDataDencRef = std::shared_ptr<FSCryptFDataDenc>;
 
+class FSCryptDecryptedInodes {
+  std::list<ino_t> decrypted_inodes;
+  int open_inodes;
+
+public:
+  void add_inode(ino_t inode) {
+    decrypted_inodes.emplace_back(inode);
+  }
+
+  int del_inode(ino_t inode) {
+    if (decrypted_inodes.size() == 0)
+      return 0;
+    auto it = std::find(decrypted_inodes.begin(), decrypted_inodes.end(), inode);
+    if (it != decrypted_inodes.end())
+      decrypted_inodes.erase(it);
+    return 0;
+  }
+  std::list<ino_t> get_inodes() {
+    return decrypted_inodes;
+  }
+};
+
 class FSCryptKeyHandler {
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyHandler");
   int64_t epoch = -1;
@@ -308,6 +330,8 @@ public:
   int64_t get_epoch();
   std::list<int>& get_users() { return users; }
   FSCryptKeyRef& get_key();
+  FSCryptDecryptedInodes* di;
+  bool present = false;
 };
 
 using FSCryptKeyHandlerRef = std::shared_ptr<FSCryptKeyHandler>;

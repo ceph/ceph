@@ -10521,6 +10521,11 @@ int Client::_release_fh(Fh *f)
   in->unset_deleg(f);
 
   if (in->snapid == CEPH_NOSNAP) {
+    FSCryptKeyHandlerRef kh;
+    get_keyhandler(in->fscrypt_ctx, kh);
+    if (kh && kh->di) {
+      kh->di->del_inode(in->ino);
+    }
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
       check_caps(in, 0);
@@ -10576,6 +10581,12 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
+
+  FSCryptKeyHandlerRef kh;
+  get_keyhandler(in->fscrypt_ctx, kh);
+  if (kh && kh->di) {
+    kh->di->add_inode(in->ino);
+  }
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
@@ -10650,6 +10661,11 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     if (fhp)
       *fhp = _create_fh(in, flags, cmode, perms);
   } else {
+    FSCryptKeyHandlerRef kh;
+    get_keyhandler(in->fscrypt_ctx, kh);
+    if (kh && kh->di) {
+      kh->di->del_inode(in->ino);
+    }
     in->put_open_ref(cmode);
   }
 
@@ -15510,6 +15526,12 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   /* If the caller passed a value in fhp, do the open */
   if(fhp) {
+    FSCryptKeyHandlerRef kh;
+    get_keyhandler((*inp)->fscrypt_ctx, kh);
+    if (kh && kh->di) {
+      kh->di->add_inode((*inp)->ino);
+    }
+
     (*inp)->get_open_ref(cmode);
     *fhp = _create_fh(inp->get(), flags, cmode, perms);
   }
@@ -15962,12 +15984,25 @@ int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
   return _rmdir(in, name, perms);
 }
 
+int Client::get_keyhandler(FSCryptContextRef fscrypt_ctx, FSCryptKeyHandlerRef& kh){
+  if (fscrypt_ctx) {
+    int r = fscrypt->get_key_store().find(fscrypt_ctx->master_key_identifier, kh);
+    if (kh)
+      if (kh && kh->di)
+        return r;
+  }
+  return 0;
+}
+
 bool Client::is_inode_locked(Inode *to_check)
 {
   if (to_check && to_check->fscrypt_ctx) {
     FSCryptKeyHandlerRef kh;
     int r = fscrypt->get_key_store().find(to_check->fscrypt_ctx->master_key_identifier, kh);
     if (r < 0) {
+      return true;
+    }
+    if (!kh->present) {
       return true;
     }
   }
@@ -17931,7 +17966,6 @@ int Client::add_fscrypt_key(const char *key_data, int key_len,
   }
 
   auto& k = kh->get_key();
-
   if (kid) {
     *kid = k->get_identifier();
   }
@@ -17943,7 +17977,12 @@ int Client::remove_fscrypt_key(fscrypt_remove_key_arg* kid, int user)
 {
   auto& key_store = fscrypt->get_key_store();
 
-  return key_store.invalidate(kid, user);
+  int r = key_store.invalidate(kid, user);
+  if (kid->removal_status_flags & (FSCRYPT_KEY_REMOVAL_STATUS_FLAG_FILES_BUSY == 0)) {
+    sync_fs();
+  }
+
+  return r;
 }
 
 int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy)

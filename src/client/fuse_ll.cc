@@ -1044,7 +1044,6 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      /* FIXME: handle busy cases */
       const struct fuse_ctx *ctx = fuse_req_ctx(req);
       r = cfuse->client->remove_fscrypt_key(arg, ctx->uid);
       if (r < 0) {
