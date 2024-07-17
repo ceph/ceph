@@ -153,7 +153,7 @@ TEST_F(RGWRedisQueueTest, Abort) {
   io.run();
 }
 
-TEST_F(RGWRedisQueueTest, Read) {
+TEST_F(RGWRedisQueueTest, ReadAndAck) {
   io.restart();
   boost::asio::spawn(
       io,
@@ -195,6 +195,14 @@ TEST_F(RGWRedisQueueTest, Read) {
         res = rgw::redisqueue::read(conn, "test_queue", read_res, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(read_res, data);
+
+        res = rgw::redisqueue::ack(conn, "test_queue", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve);
+        ASSERT_EQ(std::get<1>(status), initial_queue);
       },
       [this](std::exception_ptr eptr) {
         conn->cancel();
@@ -337,12 +345,55 @@ TEST_F(RGWRedisQueueTest, AckReadLocked) {
         ASSERT_EQ(res, 0);
         ASSERT_EQ(data, read_res);
 
-        res = rgw::redisqueue::ack_read(conn, "test_queue", "mycookie", yield);
+        res =
+            rgw::redisqueue::locked_ack(conn, "test_queue", "mycookie", yield);
         ASSERT_EQ(res, 0);
 
         res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
         ASSERT_EQ(res, 0);
         ASSERT_EQ(std::get<0>(status), initial_reserve);
+        ASSERT_EQ(std::get<1>(status), initial_queue);
+      },
+      [this](std::exception_ptr eptr) {
+        conn->cancel();
+        if (eptr) std::rethrow_exception(eptr);
+      });
+  io.run();
+}
+
+TEST_F(RGWRedisQueueTest, CleanupStaleReservations) {
+  io.restart();
+  boost::asio::spawn(
+      io,
+      [this](boost::asio::yield_context yield) {
+        int res;
+        std::tuple<int, int> status;
+
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+
+        int initial_reserve = std::get<0>(status);
+        int initial_queue = std::get<1>(status);
+
+        res = rgw::redisqueue::reserve(conn, "test_queue", yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), initial_reserve + 1);
+        ASSERT_EQ(std::get<1>(status), initial_queue);
+
+        boost::asio::steady_timer timer(io, std::chrono::milliseconds(1100));
+        timer.async_wait(yield);
+
+        int stale_timeout = 1;  // 1 second
+        res = rgw::redisqueue::cleanup_stale_reservations(conn, "test_queue",
+                                                          stale_timeout, yield);
+        ASSERT_EQ(res, 0);
+
+        res = rgw::redisqueue::queue_status(conn, "test_queue", status, yield);
+        ASSERT_EQ(res, 0);
+        ASSERT_EQ(std::get<0>(status), 1);
         ASSERT_EQ(std::get<1>(status), initial_queue);
       },
       [this](std::exception_ptr eptr) {

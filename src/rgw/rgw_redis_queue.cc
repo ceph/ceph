@@ -95,20 +95,29 @@ int locked_read(connection* conn, const std::string& name,
   return ret.errorCode;
 }
 
-int ack_read(connection* conn, const std::string& name,
-             const std::string& lock_cookie, optional_yield y) {
+int ack(connection* conn, const std::string& name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
-  req.push("FCALL", "ack_read", 1, name, lock_cookie);
+  req.push("FCALL", "ack", 1, name);
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int cleanup(connection* conn, const std::string& name, optional_yield y) {
+int locked_ack(connection* conn, const std::string& name,
+               const std::string& lock_cookie, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
-  req.push("FCALL", "cleanup", 1, name);
+  req.push("FCALL", "locked_ack", 1, name, lock_cookie);
+  return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
+}
+
+int cleanup_stale_reservations(connection* conn, const std::string& name,
+                               int stale_timeout, optional_yield y) {
+  boost::redis::request req;
+  rgw::redis::RedisResponseMap resp;
+
+  req.push("FCALL", "cleanup", 1, name, stale_timeout);
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 

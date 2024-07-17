@@ -192,11 +192,17 @@ local function locked_read(keys, args)
     return lock_status
 end
 
+local function ack(keys)
+    local name = "queue:" .. keys[1]
+    redis.call('RPOP', name)
+    return format_response(0, "", "")
+end
+
 --- Acknowledge the Read
 --- @param keys table A single element list - queue name
 --- @param args table A single element list - cookie
 --- @return number 0 if the message is acknowledged
-local function ack_read(keys, args)
+local function locked_ack(keys, args)
     local name = "queue:" .. keys[1]
     local cookie = args[1]
 
@@ -228,10 +234,10 @@ local function cleanup(keys, args)
             break
         end
     end
-    if index > 0 then
-        redis.call('LTRIM', name, 0, index)
-    else
+    if index == 0 then
         redis.call('DEL', name)
+    else
+        redis.call('LTRIM', name, 0, index)
     end
     return format_response(0, "", index)
 end
@@ -242,5 +248,6 @@ redis.register_function('commit', commit)
 redis.register_function('abort', abort)
 redis.register_function('read', read)
 redis.register_function('locked_read', locked_read)
+redis.register_function('ack', ack)
+redis.register_function('locked_ack', locked_ack)
 redis.register_function('cleanup', cleanup)
-redis.register_function('ack_read', ack_read)
