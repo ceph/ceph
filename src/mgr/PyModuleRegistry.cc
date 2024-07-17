@@ -212,7 +212,7 @@ void PyModuleRegistry::active_start(
       continue;
     }
 
-    dout(4) << "Starting " << i.first << dendl;
+    dout(4) << "Starting module '" << i.first << "'" << dendl;
     active_modules->start_one(i.second);
   }
 }
