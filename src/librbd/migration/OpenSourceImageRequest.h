@@ -6,6 +6,7 @@
 
 #include "include/rados/librados_fwd.hpp"
 #include "librbd/Types.h"
+#include "json_spirit/json_spirit.h"
 #include <map>
 #include <memory>
 
@@ -78,7 +79,8 @@ private:
   uint64_t m_image_size = 0;
   SnapInfos m_snap_infos;
 
-  void open_source();
+  void open_source(const json_spirit::mObject& source_spec_object,
+                   bool import_only);
   void handle_open_source(int r);
 
   void get_image_size();
