@@ -30,12 +30,9 @@ const std::string TYPE_KEY{"type"};
 template <typename I>
 int SourceSpecBuilder<I>::parse_source_spec(
     const std::string& source_spec,
-    json_spirit::mObject* source_spec_object) const {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
-
+    json_spirit::mObject* source_spec_object) {
   json_spirit::mValue json_root;
-  if(json_spirit::read(source_spec, json_root)) {
+  if (json_spirit::read(source_spec, json_root)) {
     try {
       *source_spec_object = json_root.get_obj();
       return 0;
@@ -43,7 +40,6 @@ int SourceSpecBuilder<I>::parse_source_spec(
     }
   }
 
-  lderr(cct) << "invalid source-spec JSON" << dendl;
   return -EBADMSG;
 }
 
