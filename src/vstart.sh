@@ -778,7 +778,7 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="iostat nfs"
+    local mgr_modules="iostat nfs volumes"
     if $with_mgr_dashboard; then
         mgr_modules+=" dashboard"
     fi

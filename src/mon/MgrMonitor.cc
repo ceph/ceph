@@ -81,9 +81,6 @@ static const std::map<uint32_t, std::set<std::string>>& always_on_modules() {
 #ifdef WITH_RBD
     "rbd_support",
 #endif
-#ifdef WITH_CEPHFS
-    "volumes",
-#endif
     "pg_autoscaler",
     "telemetry",
   };
