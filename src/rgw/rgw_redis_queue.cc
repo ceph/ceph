@@ -5,7 +5,7 @@ namespace redisqueue {
 
 // FIXME: Perhaps return the queue length in calls to reserve, commit, abort
 // etc and do not use this function explicitly?
-int queue_status(std::unique_ptr<connection>& conn, const std::string& name,
+int queue_status(connection* conn, const std::string& name,
                  std::tuple<int, int>& res, optional_yield y) {
   boost::redis::request req;
   boost::redis::response<int, int> resp;
@@ -31,8 +31,7 @@ int queue_status(std::unique_ptr<connection>& conn, const std::string& name,
   }
 }
 
-int reserve(std::unique_ptr<connection>& conn, const std::string name,
-            optional_yield y) {
+int reserve(connection* conn, const std::string name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -41,8 +40,8 @@ int reserve(std::unique_ptr<connection>& conn, const std::string name,
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int commit(std::unique_ptr<connection>& conn, const std::string& name,
-           const std::string& data, optional_yield y) {
+int commit(connection* conn, const std::string& name, const std::string& data,
+           optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -50,8 +49,7 @@ int commit(std::unique_ptr<connection>& conn, const std::string& name,
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int abort(std::unique_ptr<connection>& conn, const std::string& name,
-          optional_yield y) {
+int abort(connection* conn, const std::string& name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -59,8 +57,8 @@ int abort(std::unique_ptr<connection>& conn, const std::string& name,
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int read(std::unique_ptr<connection>& conn, const std::string& name,
-         std::string& res, optional_yield y) {
+int read(connection* conn, const std::string& name, std::string& res,
+         optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -78,7 +76,7 @@ int read(std::unique_ptr<connection>& conn, const std::string& name,
   return ret.errorCode;
 }
 
-int locked_read(std::unique_ptr<connection>& conn, const std::string& name,
+int locked_read(connection* conn, const std::string& name,
                 std::string& lock_cookie, std::string& res, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
@@ -97,7 +95,7 @@ int locked_read(std::unique_ptr<connection>& conn, const std::string& name,
   return ret.errorCode;
 }
 
-int ack_read(std::unique_ptr<connection>& conn, const std::string& name,
+int ack_read(connection* conn, const std::string& name,
              const std::string& lock_cookie, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
@@ -106,8 +104,7 @@ int ack_read(std::unique_ptr<connection>& conn, const std::string& name,
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int cleanup(std::unique_ptr<connection>& conn, const std::string& name,
-            optional_yield y) {
+int cleanup(connection* conn, const std::string& name, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 

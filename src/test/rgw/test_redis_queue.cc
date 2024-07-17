@@ -11,12 +11,12 @@ using boost::redis::connection;
 class RGWRedisQueueTest : public ::testing::Test {
  protected:
   boost::asio::io_context io;
-  std::unique_ptr<connection> conn;
-  std::unique_ptr<config> cfg;
+  connection* conn;
+  config* cfg;
 
   void SetUp() {
-    cfg = std::make_unique<config>();
-    conn = std::make_unique<connection>(io);
+    cfg = new config();
+    conn = new connection(io);
 
     boost::asio::spawn(
         io,
@@ -31,7 +31,10 @@ class RGWRedisQueueTest : public ::testing::Test {
     io.run();
   }
 
-  void TearDown() {}
+  void TearDown() {
+    delete conn;
+    delete cfg;
+  }
 };
 
 TEST_F(RGWRedisQueueTest, Reserve) {

@@ -3,8 +3,8 @@
 namespace rgw {
 namespace redislock {
 
-int lock(std::unique_ptr<connection>& conn, const std::string& name,
-         const std::string& cookie, int duration, optional_yield y) {
+int lock(connection* conn, const std::string& name, const std::string& cookie,
+         int duration, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -13,8 +13,8 @@ int lock(std::unique_ptr<connection>& conn, const std::string& name,
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int unlock(std::unique_ptr<connection>& conn, const std::string& name,
-           const std::string& cookie, optional_yield y) {
+int unlock(connection* conn, const std::string& name, const std::string& cookie,
+           optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;
 
@@ -22,7 +22,7 @@ int unlock(std::unique_ptr<connection>& conn, const std::string& name,
   return rgw::redis::do_redis_func(conn, req, resp, __func__, y).errorCode;
 }
 
-int assert_locked(std::unique_ptr<connection>& conn, const std::string& name,
+int assert_locked(connection* conn, const std::string& name,
                   const std::string& cookie, optional_yield y) {
   boost::redis::request req;
   rgw::redis::RedisResponseMap resp;

@@ -33,7 +33,7 @@ struct RedisResponse {
 };
 
 struct initiate_exec {
-  std::unique_ptr<connection> conn;
+  connection* conn;
 
   using executor_type = boost::redis::connection::executor_type;
   executor_type get_executor() const noexcept { return conn->get_executor(); }
@@ -50,17 +50,16 @@ struct initiate_exec {
 };
 
 template <typename Response, typename CompletionToken>
-auto async_exec(std::unique_ptr<connection>& conn,
-                const boost::redis::request& req, Response& resp,
-                CompletionToken&& token) {
+auto async_exec(connection* conn, const boost::redis::request& req,
+                Response& resp, CompletionToken&& token) {
   return boost::asio::async_initiate<
       CompletionToken, void(boost::system::error_code, std::size_t)>(
       initiate_exec{conn}, token, req, resp);
 }
 
 template <typename T, typename... Ts>
-void redis_exec(std::unique_ptr<connection>& conn,
-                boost::system::error_code& ec, boost::redis::request& req,
+void redis_exec(connection* conn, boost::system::error_code& ec,
+                boost::redis::request& req,
                 boost::redis::response<T, Ts...>& resp, optional_yield y) {
   if (y) {
     auto yield = y.get_yield_context();
@@ -70,13 +69,12 @@ void redis_exec(std::unique_ptr<connection>& conn,
   }
 }
 
-RedisResponse do_redis_func(std::unique_ptr<connection>& conn,
-                            boost::redis::request& req, RedisResponseMap& resp,
-                            std::string func_name, optional_yield y);
+RedisResponse do_redis_func(connection* conn, boost::redis::request& req,
+                            RedisResponseMap& resp, std::string func_name,
+                            optional_yield y);
 
-int load_lua_rgwlib(boost::asio::io_context& io,
-                    std::unique_ptr<connection>& conn,
-                    std::unique_ptr<config>& cfg, optional_yield y);
+int load_lua_rgwlib(boost::asio::io_context& io, connection* conn, config* cfg,
+                    optional_yield y);
 
 }  // namespace redis
 }  // namespace rgw
