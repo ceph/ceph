@@ -51,6 +51,9 @@
 
 #include "common/convenience.h"
 #include "common/error_code.h"
+#include "common/likely.h"
+#include "ceph_release.h"
+#include "include/rados.h"
 
 template<typename T, typename=void>
 struct denc_traits {
@@ -1781,6 +1784,13 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 // wrappers for DENC_{START,FINISH} for inter-version
 // interoperability.
 
+[[maybe_unused]] static void denc_compat_throw(
+  const char* _pretty_function_, uint8_t code_v,
+  uint8_t struct_v, uint8_t struct_compat) {
+  throw ::ceph::buffer::malformed_input("Decoder at '" + std::string(_pretty_function_) +
+    "' v=" + std::to_string(code_v)+ " cannot decode v=" + std::to_string(struct_v) +
+    " minimal_decoder=" + std::to_string(struct_compat));
+}
 #define DENC_HELPERS							\
   /* bound_encode */							\
   static void _denc_start(size_t& p,					\
@@ -1818,8 +1828,11 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 			  __u8 *struct_compat,				\
 			  char **start_pos,				\
 			  uint32_t *struct_len) {			\
+    __u8 code_v = *struct_v;						\
     denc(*struct_v, p);							\
     denc(*struct_compat, p);						\
+    if (unlikely(code_v < *struct_compat))				\
+      denc_compat_throw(__PRETTY_FUNCTION__, code_v, *struct_v, *struct_compat);\
     denc(*struct_len, p);						\
     *start_pos = const_cast<char*>(p.get_pos());			\
   }									\
@@ -1840,11 +1853,38 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 // Helpers for versioning the encoding.  These correspond to the
 // {ENCODE,DECODE}_{START,FINISH} macros.
 
+// DENC_START interface suggests it is checking compatibility,
+// but the feature was unimplemented until SQUID.
+// Due to -2 compatibility rule we cannot bump up compat until U____ release.
+// SQUID=19 T____=20 U____=21
+
 #define DENC_START(v, compat, p)					\
   __u8 struct_v = v;							\
   __u8 struct_compat = compat;						\
   char *_denc_pchar;							\
   uint32_t _denc_u32;							\
+  static_assert(CEPH_RELEASE >= (CEPH_RELEASE_SQUID /*19*/ + 2) || compat == 1);	\
+  _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  do {
+
+// For the only type that is with compat 2: unittest.
+#define DENC_START_COMPAT_2(v, compat, p)				\
+  __u8 struct_v = v;							\
+  __u8 struct_compat = compat;						\
+  char *_denc_pchar;							\
+  uint32_t _denc_u32;							\
+  static_assert(CEPH_RELEASE >= (CEPH_RELEASE_SQUID /*19*/ + 2) || compat == 2);	\
+  _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  do {
+
+// For osd_reqid_t which cannot be upgraded at all.
+// We used it to communicate with clients and now we cannot safely upgrade.
+#define DENC_START_OSD_REQID(v, compat, p)				\
+  __u8 struct_v = v;							\
+  __u8 struct_compat = compat;						\
+  char *_denc_pchar;							\
+  uint32_t _denc_u32;							\
+  static_assert(compat == 2, "osd_reqid_t cannot be upgraded");		\
   _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
   do {
 
