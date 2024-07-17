@@ -98,6 +98,7 @@ Code cleanup
   `ceph_release_t::*`)
 - [ ] search code for `require_osd_release`
 - [ ] search code for `min_mon_release`
+- [ ] check include/denc.h if DENC_START macro still needs reference to squid
 
 QA suite
 --------
