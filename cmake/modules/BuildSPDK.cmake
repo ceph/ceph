@@ -34,7 +34,13 @@ macro(build_spdk)
   endif()
 
   set(source_dir "${CMAKE_SOURCE_DIR}/src/spdk")
-  foreach(c lvol env_dpdk sock nvmf bdev nvme conf thread trace notify accel event_accel blob vmd event_vmd event_bdev sock_posix event_sock event rpc jsonrpc json util log)
+  set (options lvol env_dpdk sock nvmf bdev nvme conf thread trace notify accel event_accel blob vmd event_vmd event_bdev sock_posix event_sock event rpc jsonrpc json util log)
+  set(configure_command ./configure --with-dpdk=${DPDK_DIR} --without-isal --without-vhost --target-arch=${target_arch})
+  if(WITH_RDMA)
+    list(APPEND options "rdma")
+    list(APPEND configure_command "--with-rdma=mlx5_dv")
+  endif()
+  foreach(c ${options})
     add_library(spdk::${c} STATIC IMPORTED)
     set(lib_path "${source_dir}/build/lib/${CMAKE_STATIC_LIBRARY_PREFIX}spdk_${c}${CMAKE_STATIC_LIBRARY_SUFFIX}")
     set_target_properties(spdk::${c} PROPERTIES
@@ -47,11 +53,7 @@ macro(build_spdk)
   ExternalProject_Add(spdk-ext
     DEPENDS dpdk-ext
     SOURCE_DIR ${source_dir}
-    CONFIGURE_COMMAND ./configure
-      --with-dpdk=${DPDK_DIR}
-      --without-isal
-      --without-vhost
-      --target-arch=${target_arch}
+    CONFIGURE_COMMAND ${configure_command}
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
