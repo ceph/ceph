@@ -1266,7 +1266,7 @@ static int remount_cb(void *handle)
   // trims all unused dentries in the file system
   char cmd[128+PATH_MAX];
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
-  snprintf(cmd, sizeof(cmd), "LIBMOUNT_FSTAB=/dev/null mount -i -o remount %s",
+  snprintf(cmd, sizeof(cmd), "LIBMOUNT_FSTAB=/dev/null LIBMOUNT_FORCE_MOUNT2=always mount -i -o remount %s",
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
                   cfuse->opts.mountpoint);
 #else
