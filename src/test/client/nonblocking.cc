@@ -18,6 +18,7 @@
 #include <string>
 
 #include <fmt/format.h>
+#include <sys/statvfs.h>
 
 #include "test/client/TestClient.h"
 
