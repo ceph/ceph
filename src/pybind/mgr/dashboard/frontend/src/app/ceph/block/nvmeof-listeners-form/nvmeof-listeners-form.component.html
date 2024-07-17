@@ -1,0 +1,76 @@
+<cd-modal [pageURL]="pageURL">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+  <ng-container class="modal-content">
+    <form name="listenerForm"
+          #formDir="ngForm"
+          [formGroup]="listenerForm"
+          novalidate>
+      <div class="modal-body">
+        <!-- Host -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="host">
+            <span class="required"
+                  i18n>Host Name</span>
+          </label>
+          <div class="cd-col-form-input">
+            <select id="host"
+                    name="host"
+                    class="form-select"
+                    formControlName="host">
+              <option *ngIf="hosts === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="hosts && hosts.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No hosts available --</option>
+              <option *ngIf="hosts && hosts.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a host --</option>
+              <option *ngFor="let hostsItem of hosts"
+                      [ngValue]="hostsItem">{{ hostsItem.hostname }}</option>
+            </select>
+            <cd-help-text i18n>
+                This hostname uniquely identifies the gateway on which the listener is being set up.
+            </cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="listenerForm.showError('host', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+        <!-- Transport Service ID -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="trsvcid">
+            <span i18n>Transport Service ID</span>
+          </label>
+          <div class="cd-col-form-input">
+            <input id="trsvcid"
+                   class="form-control"
+                   type="text"
+                   name="trsvcid"
+                   formControlName="trsvcid">
+            <cd-help-text i18n>The IP port to use. Default is 4420.</cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="listenerForm.showError('trsvcid', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="listenerForm.showError('trsvcid', formDir, 'max')"
+                  i18n>The value cannot be greated than 65535.</span>
+            <span class="invalid-feedback"
+                  *ngIf="listenerForm.showError('trsvcid', formDir, 'pattern')"
+                  i18n>The value must be a positive integer.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="text-right">
+          <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                                [form]="listenerForm"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

@@ -43,6 +43,8 @@ import { NvmeofSubsystemsComponent } from './nvmeof-subsystems/nvmeof-subsystems
 import { NvmeofSubsystemsDetailsComponent } from './nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-subsystems-form.component';
+import { NvmeofListenersFormComponent } from './nvmeof-listeners-form/nvmeof-listeners-form.component';
+import { NvmeofListenersListComponent } from './nvmeof-listeners-list/nvmeof-listeners-list.component';
 
 @NgModule({
   imports: [
@@ -87,7 +89,9 @@ import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-s
     NvmeofSubsystemsComponent,
     NvmeofSubsystemsDetailsComponent,
     NvmeofTabsComponent,
-    NvmeofSubsystemsFormComponent
+    NvmeofSubsystemsFormComponent,
+    NvmeofListenersFormComponent,
+    NvmeofListenersListComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
@@ -243,6 +247,11 @@ const routes: Routes = [
           {
             path: `${URLVerbs.EDIT}/:subsystem_nqn`,
             component: NvmeofSubsystemsFormComponent,
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.CREATE}/:subsystem_nqn/listener`,
+            component: NvmeofListenersFormComponent,
             outlet: 'modal'
           }
         ]

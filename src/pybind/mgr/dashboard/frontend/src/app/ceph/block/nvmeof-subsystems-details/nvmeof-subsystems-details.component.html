@@ -11,6 +11,14 @@
         </cd-table-key-value>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="listeners">
+      <a ngbNavLink
+         i18n>Listeners</a>
+      <ng-template ngbNavContent>
+        <cd-nvmeof-listeners-list [subsystemNQN]="subsystemNQN">
+        </cd-nvmeof-listeners-list>
+      </ng-template>
+    </ng-container>
   </nav>
 
   <div [ngbNavOutlet]="nav"></div>

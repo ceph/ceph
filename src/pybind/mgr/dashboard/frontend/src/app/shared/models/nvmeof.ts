@@ -19,3 +19,12 @@ export interface NvmeofSubsystem {
   subtype: string;
   max_namespaces: number;
 }
+
+export interface NvmeofListener {
+  host_name: string;
+  trtype: string;
+  traddr: string;
+  adrfam: number; // 0: IPv4, 1: IPv6
+  trsvcid: number; // 4420
+  id?: number; // for table
+}

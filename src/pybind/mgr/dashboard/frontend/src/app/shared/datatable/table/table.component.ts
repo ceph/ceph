@@ -77,6 +77,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   pathTpl: TemplateRef<any>;
   @ViewChild('tooltipTpl', { static: true })
   tooltipTpl: TemplateRef<any>;
+  @ViewChild('copyTpl', { static: true })
+  copyTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -615,6 +617,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.timeAgo = this.timeAgoTpl;
     this.cellTemplates.path = this.pathTpl;
     this.cellTemplates.tooltip = this.tooltipTpl;
+    this.cellTemplates.copy = this.copyTpl;
   }
 
   useCustomClass(value: any): string {

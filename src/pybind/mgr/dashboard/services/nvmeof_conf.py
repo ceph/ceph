@@ -11,6 +11,7 @@ from ..services.orchestrator import OrchClient
 
 logger = logging.getLogger('nvmeof_conf')
 
+
 class NvmeofGatewayAlreadyExists(Exception):
     def __init__(self, gateway_name):
         super(NvmeofGatewayAlreadyExists, self).__init__(
