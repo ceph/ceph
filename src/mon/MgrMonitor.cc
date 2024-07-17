@@ -164,10 +164,12 @@ void MgrMonitor::create_initial()
   }
   pending_map.always_on_modules = always_on_modules;
   pending_command_descs = mgr_commands;
-  dout(10) << __func__ << " initial modules " << pending_map.modules
-	   << ", always on modules " << pending_map.get_always_on_modules()
-           << ", " << pending_command_descs.size() << " commands"
+  dout(10) << __func__ << " initial enabled modules: " << pending_map.modules
 	   << dendl;
+  dout(10) << __func__ << "always on modules: " <<
+	     pending_map.get_always_on_modules() << dendl;
+  dout(10) << __func__ << "total " << pending_command_descs.size() <<
+	      " commands" << dendl;
 }
 
 void MgrMonitor::get_store_prefixes(std::set<string>& s) const
