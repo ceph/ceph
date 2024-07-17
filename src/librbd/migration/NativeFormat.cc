@@ -65,15 +65,12 @@ void NativeFormat<I>::open(Context* on_finish) {
   auto& pool_name_val = m_json_object[POOL_NAME_KEY];
   if (pool_name_val.type() == json_spirit::str_type) {
     librados::Rados rados(m_image_ctx->md_ctx);
-    librados::IoCtx io_ctx;
-    int r = rados.ioctx_create(pool_name_val.get_str().c_str(), io_ctx);
-    if (r < 0 ) {
-      lderr(cct) << "invalid pool name" << dendl;
-      on_finish->complete(r);
+    m_pool_id = rados.pool_lookup(pool_name_val.get_str().c_str());
+    if (m_pool_id < 0) {
+      lderr(cct) << "failed to lookup pool" << dendl;
+      on_finish->complete(static_cast<int>(m_pool_id));
       return;
     }
-
-    m_pool_id = io_ctx.get_id();
   } else if (pool_name_val.type() != json_spirit::null_type) {
     lderr(cct) << "invalid pool name" << dendl;
     on_finish->complete(-EINVAL);
