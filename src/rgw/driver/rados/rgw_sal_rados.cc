@@ -1113,6 +1113,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
   std::map<string, bufferlist> obj_attrs;
   ceph::real_time mtime;
   bufferlist bl_data;
+  // TODO: this is needed only for etag calculation
   if (const auto ret = rgw_get_system_obj(store->svc()->sysobj,
                      data_pool,
                      temp_obj_name,
@@ -1128,12 +1129,11 @@ int RadosBucket::commit_logging_object(const std::string& obj_name, optional_yie
     return ret;
   }
 
-
   uint64_t size = bl_data.length();
-  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  const uint64_t max_obj_size = store->ctx()->_conf->osd_max_object_size;
   RGWObjManifest manifest;
   manifest.set_prefix(obj_name);
-  manifest.set_trivial_rule(0, default_stripe_size);
+  manifest.set_trivial_rule(0, max_obj_size);
   RGWObjManifest::generator manifest_gen;
   if (const auto ret = manifest_gen.create_begin(store->ctx(), &manifest,
                                 placement_rule,
@@ -1242,7 +1242,7 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
   op.append(bl);
   if (async_completion) {
     aio_completion_ptr completion{librados::Rados::aio_create_completion()};
-    auto arg = make_unique<BucketLoggingCompleteArg>(temp_obj_name, record.length(), store->ctx());
+    auto arg = std::make_unique<BucketLoggingCompleteArg>(temp_obj_name, record.length(), store->ctx());
     completion->set_complete_callback(arg.get(), bucket_logging_completion);
     if (const auto ret = io_ctx.aio_operate(temp_obj_name, completion.get(), &op); ret < 0) {
       ldpp_dout(dpp, 1) << "failed to append to logging object '" << temp_obj_name <<

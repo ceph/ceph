@@ -269,6 +269,23 @@ int new_logging_object(const configuration& conf,
   return 0;
 }
 
+int rollover_logging_object(const configuration& conf,
+    const std::unique_ptr<rgw::sal::Bucket>& bucket,
+    const std::string& rgw_id,
+    std::string& obj_name,
+    const DoutPrefixProvider *dpp,
+    optional_yield y) {
+  const auto old_obj = obj_name;
+  if (const auto ret = new_logging_object(conf, bucket, rgw_id, obj_name, dpp, y); ret < 0 ) {
+    return ret;
+  }
+  if (const auto ret = bucket->commit_logging_object(old_obj, y, dpp); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to commit logging object '" << old_obj << "' to bucket '" <<
+      conf.target_bucket << "', ret = " << ret << dendl;
+    // we still want to write the new records to the new object even if commit failed
+  }
+  return 0;
+}
 
 #define dash_if_empty(S) (S).empty() ? "-" : S
 
@@ -331,16 +348,10 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == 0) {
     const auto time_to_commit = time_from_name(obj_name, dpp) + std::chrono::seconds(conf.obj_roll_time);
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
-      const auto old_obj = obj_name;
-      ldpp_dout(dpp, 20) << "INFO: logging object '" << old_obj << "' exceeded its time, will be committed to bucket '" <<
+      ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to bucket '" <<
         conf.target_bucket << "'" << dendl;
-      if (ret = new_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
+      if (ret = rollover_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
         return ret;
-      }
-      if (target_bucket->commit_logging_object(old_obj, y, dpp); ret < 0) {
-        ldpp_dout(dpp, 5) << "WARNING: failed to commit logging object '" << old_obj << "' to bucket '" <<
-          conf.target_bucket << "', ret = " << ret << dendl;
-        // we still want to write the new records to the new object even if commit failed
       }
     } else {
       ldpp_dout(dpp, 20) << "INFO: record will be written to current logging object '" << obj_name << "'. will be comitted at: " << time_to_commit << dendl;
@@ -380,11 +391,28 @@ int log_record(rgw::sal::Driver* driver,
         record,
         y,
         dpp,
-        async_completion); ret < 0) {
+        async_completion); ret < 0 && ret != -EFBIG) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write record to logging object '" <<
       obj_name << "'. ret = " << ret << dendl;
     return ret;
   }
+  if (ret == -EFBIG) {
+    ldpp_dout(dpp, 20) << "WARNING: logging object '" << obj_name << "' is full, will be committed to bucket '" <<
+      conf.target_bucket << "'" << dendl;
+    if (ret = rollover_logging_object(conf, target_bucket, driver->get_host_id(), obj_name, dpp, y); ret < 0 ) {
+      return ret;
+    }
+    if (ret = target_bucket->write_logging_object(obj_name,
+        record,
+        y,
+        dpp,
+        async_completion); ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to write record to logging object '" <<
+      obj_name << "'. ret = " << ret << dendl;
+    return ret;
+    }
+  }
+
   ldpp_dout(dpp, 20) << "INFO: wrote logging record: '" << record
     << "' to '" << obj_name << "'" << dendl;
   return 0;
