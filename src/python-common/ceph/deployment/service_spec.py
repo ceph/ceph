@@ -1228,6 +1228,7 @@ class RGWSpec(ServiceSpec):
                  update_endpoints: Optional[bool] = False,
                  zone_endpoints: Optional[str] = None,  # comma separated endpoints list
                  zonegroup_hostnames: Optional[List[str]] = None,
+                 data_pool_attributes: Optional[Dict[str, str]] = None,
                  rgw_user_counters_cache: Optional[bool] = False,
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
@@ -1290,6 +1291,8 @@ class RGWSpec(ServiceSpec):
         #: Used to make RGW not do multisite replication so it can dedicate to IO
         self.disable_multisite_sync_traffic = disable_multisite_sync_traffic
         self.wildcard_enabled = wildcard_enabled
+        #: Attributes for <zone-name>.rgw.buckets.data pool created in rgw realm bootstrap command
+        self.data_pool_attributes = data_pool_attributes
 
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
@@ -1339,6 +1342,18 @@ class RGWSpec(ServiceSpec):
         if self.generate_cert and self.rgw_frontend_ssl_certificate:
             raise SpecValidationError('"generate_cert" field and "rgw_frontend_ssl_certificate" '
                                       'field are mutually exclusive')
+
+        if self.data_pool_attributes:
+            if self.data_pool_attributes.get('type', 'ec') == 'ec':
+                if any(attr not in self.data_pool_attributes.keys() for attr in ['k', 'm']):
+                    raise SpecValidationError(
+                        '"k" and "m" are required parameters for ec pool (defaults to ec pool)'
+                    )
+                if 'erasure_code_profile' in self.data_pool_attributes.keys():
+                    raise SpecValidationError(
+                        'invalid option in data_pool_attribues "erasure_code_profile"'
+                        'ec profile will be generated automatically based on provided attributes'
+                    )
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
