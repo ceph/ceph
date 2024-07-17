@@ -64,6 +64,7 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
         flow_id: this.flowSelectedRow.id,
         bucket_name: this.groupExpandedRow.bucket || ''
       });
+      this.currentFormGroupContext.get('flow_id').disable();
     }
 
     this.rgwDaemonService.selectedDaemon$

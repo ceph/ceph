@@ -1,10 +1,12 @@
 import { TitleCasePipe } from '@angular/common';
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -43,10 +45,11 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
     private rgwMultisiteService: RgwMultisiteService,
     private titleCasePipe: TitleCasePipe,
     private actionLabels: ActionLabelsI18n,
-    private urlBuilder: URLBuilderService,
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private router: Router,
+    private rgwDaemonService: RgwDaemonService
   ) {
     super();
   }
@@ -92,28 +95,26 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
         flexGrow: 1
       }
     ];
-    const getSyncGroupName = () => {
-      if (this.selection.first() && this.selection.first().groupName) {
-        if (this.selection.first().bucket) {
-          return `${encodeURIComponent(this.selection.first().groupName)}/${encodeURIComponent(
-            this.selection.first().bucket
-          )}`;
-        }
-        return `${encodeURIComponent(this.selection.first().groupName)}`;
+    this.rgwDaemonService.list().subscribe();
+    const getEditURL = () => {
+      if (this.selection.first().groupName && this.selection.first().bucket) {
+        return `${URLVerbs.EDIT}/${this.selection.first().groupName}/${
+          this.selection.first().bucket
+        }`;
       }
-      return '';
+      return `${URLVerbs.EDIT}/${this.selection.first().groupName}`;
     };
     const addAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
-      routerLink: () => this.urlBuilder.getCreate(),
+      click: () => this.router.navigate([BASE_URL, { outlets: { modal: URLVerbs.CREATE } }]),
       name: this.actionLabels.CREATE,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
     };
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => this.urlBuilder.getEdit(getSyncGroupName()),
+      click: () => this.router.navigate([BASE_URL, { outlets: { modal: getEditURL() } }]),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
@@ -146,14 +147,16 @@ export class RgwMultisiteSyncPolicyComponent extends ListWithDetails implements 
     this.selection = selection;
   }
 
-  getPolicyList(context: CdTableFetchDataContext) {
+  getPolicyList(context?: CdTableFetchDataContext) {
     this.rgwMultisiteService.getSyncPolicy('', '', true).subscribe(
       (resp: object[]) => {
         this.syncPolicyData = [];
         this.transformSyncPolicyData(resp);
       },
       () => {
-        context.error();
+        if (context) {
+          context.error();
+        }
       }
     );
   }
