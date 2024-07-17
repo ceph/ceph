@@ -1,3 +1,5 @@
+.. _cephfs-mount-using-kernel-driver:
+
 =================================
  Mount CephFS using Kernel Driver
 =================================

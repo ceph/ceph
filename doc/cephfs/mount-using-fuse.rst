@@ -2,27 +2,32 @@
  Mount CephFS using FUSE
 ========================
 
-`ceph-fuse`_ is an alternate way of mounting CephFS, although it mounts it
-in userspace. Therefore, performance of FUSE can be relatively lower but FUSE
-clients can be more manageable, especially while upgrading CephFS.
+`ceph-fuse`_ can be used as an alternative to the :ref:`CephFS kernel
+driver<cephfs-mount-using-kernel-driver>` to mount CephFS file systems.
+`ceph-fuse`_ mounts are made in userspace. This means that `ceph-fuse`_ mounts
+are less performant than kernel driver mounts, but they are easier to manage
+and easier to upgrade.
 
 Prerequisites
 =============
 
-Go through the prerequisites required by both, kernel as well as FUSE mounts,
-in `Mount CephFS: Prerequisites`_ page.
+Ensure that you have all the prerequisites required by both kernel and FUSE
+mounts, as listed on the `Mount CephFS: Prerequisites`_ page.
 
 .. note:: Mounting CephFS using FUSE requires superuser privileges (sudo/root).
-          The libfuse interface does not provide a mechanism to trim cache entries in the
-          kernel so a remount (``mount(2)``) system call is required to force the kernel
-          to drop the cached metadata. ``ceph-fuse`` issues these remount system calls
-          periodically in response to cache pressure in the MDS or due to metadata cache revocations.
+   The libfuse interface does not provide a mechanism to trim cache entries in
+   the kernel so a remount (``mount(2)``) system call is required to force the
+   kernel to drop the cached metadata. ``ceph-fuse`` issues these remount
+   system calls periodically in response to cache pressure in the MDS or due to
+   metadata cache revocations.
 
 Synopsis
 ========
-In general, the command to mount CephFS via FUSE looks like this::
+This is the general form of the command for mounting CephFS via FUSE: 
 
-    ceph-fuse {mountpoint} {options}
+.. prompt:: bash #
+
+   ceph-fuse {mountpoint} {options}
 
 Mounting CephFS
 ===============
