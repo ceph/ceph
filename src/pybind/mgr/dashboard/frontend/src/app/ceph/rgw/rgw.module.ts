@@ -62,6 +62,7 @@ import { RgwMultisiteWizardComponent } from './rgw-multisite-wizard/rgw-multisit
 import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-policy-details/rgw-multisite-sync-policy-details.component';
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
+import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
 
 @NgModule({
   imports: [
@@ -128,7 +129,8 @@ import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-mo
     RgwMultisiteWizardComponent,
     RgwMultisiteSyncPolicyDetailsComponent,
     RgwMultisiteSyncFlowModalComponent,
-    RgwMultisiteSyncPipeModalComponent
+    RgwMultisiteSyncPipeModalComponent,
+    RgwMultisiteTabsComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -219,29 +221,40 @@ const routes: Routes = [
   },
   {
     path: 'multisite',
-    component: RgwMultisiteDetailsComponent,
     data: { breadcrumbs: 'Multi-site' },
     children: [
-      { path: '', component: RgwMultisiteDetailsComponent },
+      { path: '', redirectTo: 'configuration', pathMatch: 'full' },
       {
-        path: `sync-policy/${URLVerbs.CREATE}`,
-        component: RgwMultisiteSyncPolicyFormComponent,
-        data: { breadcrumbs: `${ActionLabels.CREATE} Sync Policy` }
+        path: 'configuration',
+        component: RgwMultisiteDetailsComponent,
+        children: [
+          {
+            path: 'setup-multisite-replication',
+            component: RgwMultisiteWizardComponent,
+            outlet: 'modal'
+          }
+        ]
       },
       {
-        path: `sync-policy/${URLVerbs.EDIT}/:groupName`,
-        component: RgwMultisiteSyncPolicyFormComponent,
-        data: { breadcrumbs: `${ActionLabels.EDIT} Sync Policy` }
-      },
-      {
-        path: `sync-policy/${URLVerbs.EDIT}/:groupName/:bucketName`,
-        component: RgwMultisiteSyncPolicyFormComponent,
-        data: { breadcrumbs: `${ActionLabels.EDIT} Sync Policy` }
-      },
-      {
-        path: 'setup-multisite-replication',
-        component: RgwMultisiteWizardComponent,
-        outlet: 'modal'
+        path: 'sync-policy',
+        component: RgwMultisiteSyncPolicyComponent,
+        children: [
+          {
+            path: `${URLVerbs.CREATE}`,
+            component: RgwMultisiteSyncPolicyFormComponent,
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:groupName`,
+            component: RgwMultisiteSyncPolicyFormComponent,
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:groupName/:bucketName`,
+            component: RgwMultisiteSyncPolicyFormComponent,
+            outlet: 'modal'
+          }
+        ]
       }
     ]
   },
