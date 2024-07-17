@@ -181,7 +181,8 @@ function(do_export_dpdk dpdk_dir)
   set_target_properties(dpdk::dpdk PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES ${DPDK_INCLUDE_DIR}
     INTERFACE_LINK_LIBRARIES
-    "-Wl,--whole-archive $<JOIN:${DPDK_ARCHIVES}, > -Wl,--no-whole-archive ${dpdk_numa} -Wl,-lpthread,-ldl")
+    "-Wl,--whole-archive $<JOIN:${DPDK_ARCHIVES}, > -Wl,--no-whole-archive ${dpdk_numa} -Wl,-lpthread,-ldl,-lmlx5")
+  target_link_libraries(dpdk::dpdk INTERFACE RDMA::RDMAcm IBVerbs::verbs)
   if(dpdk_rte_CFLAGS)
     set_target_properties(dpdk::dpdk PROPERTIES
       INTERFACE_COMPILE_OPTIONS "${dpdk_rte_CFLAGS}")
