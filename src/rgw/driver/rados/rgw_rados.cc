@@ -36,6 +36,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_datalog.h"
 #include "rgw_putobj_processor.h"
+#include "rgw_lc_tier.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -5121,6 +5122,170 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   }
 
   return 0;
+}
+
+int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
+                             RGWObjectCtx& obj_ctx,
+                             RGWBucketInfo& dest_bucket_info,
+                             const rgw_obj& dest_obj,
+                             rgw_placement_rule& dest_placement,
+                             real_time& mtime,
+                             uint64_t olh_epoch,
+                             std::optional<uint64_t> days,
+                             const DoutPrefixProvider *dpp,
+                             optional_yield y,
+                             bool log_op){
+
+  //XXX: read below from attrs .. check transition_obj()
+  ACLOwner owner;
+  rgw::sal::Attrs attrs;
+  const req_context rctx{dpp, y, nullptr};
+  int ret = 0;
+
+  string tag;
+  append_rand_alpha(cct, tag, tag, 32);
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  jspan_context no_trace{false, false};
+  rgw::putobj::AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
+                                  owner, obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
+ 
+ void (*progress_cb)(off_t, void *) = NULL;
+ void *progress_data = NULL;
+  RGWFetchObjFilter *filter;
+  RGWFetchObjFilter_Default source_filter;
+  if (!filter) {
+    filter = &source_filter;
+  }
+  boost::optional<RGWPutObj_Compress> compressor;
+  CompressorRef plugin;
+  RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
+                    [&](map<string, bufferlist> obj_attrs) {
+                      // XXX: do we need filter() like in fetch_remote_obj() cb
+  //                    int ret = 0;
+                      dest_placement.inherit_from(dest_bucket_info.placement_rule);
+                      /* For now we always restore to STANDARD storage-class.
+                       * Later we will add support to take restore-target-storage-class
+                       * for permanent restore
+                       */
+                      dest_placement.storage_class = RGW_STORAGE_CLASS_STANDARD;
+
+                      processor.set_tail_placement(dest_placement);
+
+                      ret = processor.prepare(rctx.y);
+                      if (ret < 0) {
+                        return ret;
+                      }
+                      return 0;
+                    });
+
+  uint64_t accounted_size = 0;
+  string etag;
+  real_time set_mtime;
+  std::map<std::string, std::string> headers;
+  ret = rgw_cloud_tier_get_object(tier_ctx, false,  headers,
+                                &set_mtime, etag, accounted_size,
+                                attrs, &cb);
+
+  if (ret < 0) { 
+    return ret; 
+  }
+
+  ret = cb.flush();
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (cb.get_data_len() != accounted_size) {
+    ret = -EIO;
+    ldpp_dout(dpp, -1) << "ERROR: object truncated during fetching, expected "
+        << accounted_size << " bytes but received " << cb.get_data_len() << dendl;
+    return ret;
+  }
+
+  {
+    bufferlist bl;
+    encode(rgw::sal::RGWRestoreStatus::CloudRestored, bl);
+    attrs[RGW_ATTR_RESTORE_STATUS] = std::move(bl);
+  }
+
+  ceph::real_time restore_time = real_clock::now();
+  {
+    char buf[32];
+    utime_t ut(restore_time); //DDDDD : + days
+    snprintf(buf, sizeof(buf), "%lld.%09lld",
+          (long long)ut.sec(),
+          (long long)ut.nsec());
+    bufferlist bl;
+    bl.append(buf, 32);
+    encode(restore_time, bl);
+    attrs[RGW_ATTR_RESTORE_TIME] = std::move(bl);
+}
+
+  if (days) { //temp copy; do not change mtime and set expiry date
+    int expiry_days = days.value();
+    constexpr int32_t secs_in_a_day = 24 * 60 * 60;
+    ceph::real_time expiration_date = restore_time + make_timespan(double(expiry_days) * secs_in_a_day);
+
+    {
+      char buf[32];
+      utime_t ut(expiration_date); //DDDDD : + days
+      snprintf(buf, sizeof(buf), "%lld.%09lld",
+            (long long)ut.sec(),
+            (long long)ut.nsec());
+      bufferlist bl;
+      bl.append(buf, 32);
+      encode(expiration_date, bl);
+      attrs[RGW_ATTR_RESTORE_EXPIRY_DATE] = std::move(bl);
+    }
+    {
+      bufferlist bl;
+      encode(rgw::sal::RGWRestoreType::Temporary, bl);
+      attrs[RGW_ATTR_RESTORE_TYPE] = std::move(bl);
+    }
+    {
+      string sc = tier_ctx.storage_class;
+      bufferlist bl;
+      bl.append(sc.c_str(), sc.size());
+      attrs[RGW_ATTR_CLOUDTIER_STORAGE_CLASS] = std::move(bl);
+      ldpp_dout(dpp, 20) << "Setting RGW_ATTR_CLOUDTIER_STORAGE_CLASS: " << tier_ctx.storage_class << dendl;
+    }
+   
+    // XXX: also keep meta.category as CloudTiered?
+
+  } else {
+    {
+      bufferlist bl;
+      encode(rgw::sal::RGWRestoreType::Permanent, bl);
+      attrs[RGW_ATTR_RESTORE_TYPE] = std::move(bl);
+    }
+  }
+
+  {
+    string sc = dest_placement.get_storage_class(); //"STANDARD";
+    bufferlist bl;
+    bl.append(sc.c_str(), sc.size());
+    attrs[RGW_ATTR_STORAGE_CLASS] = std::move(bl);
+  }
+    //set same old mtime as that of transition
+    if (days) {
+    set_mtime = tier_ctx.o.meta.mtime; // DDDDDDDD check if its right
+    } else {
+      set_mtime = real_clock::now();
+    }
+
+  // XXX: handle COMPLETE_RETRY like in fetch_remote_obj
+  bool canceled = false;
+	real_time delete_at = real_time(); // XXX: is this neeaded
+  rgw_zone_set zone_set{};
+  ret = processor.complete(accounted_size, etag, &mtime, set_mtime,
+                           attrs, rgw::cksum::no_cksum, delete_at , nullptr, nullptr, nullptr,
+                           (rgw_zone_set *)&zone_set, &canceled, rctx, log_op ? rgw::sal::FLAG_LOG_OP : 0);
+    if (ret < 0) {
+      return ret;
+    }
+
+  // XXX: handle olh_epoch for versioned objects like in fetch_remote_obj
+  return ret; 
 }
 
 int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)

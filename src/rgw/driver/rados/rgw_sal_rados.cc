@@ -54,6 +54,7 @@
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_user.h"
+#include "rgw_lc_tier.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
@@ -2551,6 +2552,93 @@ int RadosObject::transition(Bucket* bucket,
                                            mtime, olh_epoch, dpp, y, flags & FLAG_LOG_OP);
 }
 
+int RadosObject::restore_obj_from_cloud(Bucket* bucket,
+                                  rgw::sal::PlacementTier* tier,
+                                  rgw_placement_rule& placement_rule,
+                            		  rgw_bucket_dir_entry& o,
+                          			  CephContext* cct,
+                                  real_time& mtime,
+                                  uint64_t olh_epoch,
+                                  std::optional<uint64_t> days,
+                                  const DoutPrefixProvider* dpp, 
+                                  optional_yield y,
+                                  uint32_t flags)
+{
+  /* init */
+  rgw::sal::RadosPlacementTier* rtier = static_cast<rgw::sal::RadosPlacementTier*>(tier);
+  string id = "cloudid";
+  string endpoint = rtier->get_rt().t.s3.endpoint;
+  RGWAccessKey key = rtier->get_rt().t.s3.key;
+  string region = rtier->get_rt().t.s3.region;
+  HostStyle host_style = rtier->get_rt().t.s3.host_style;
+  string bucket_name = rtier->get_rt().t.s3.target_path;
+  const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
+  int ret = 0;
+  string src_storage_class = o.meta.storage_class; // or take src_placement also as input
+
+  if (bucket_name.empty()) {
+    bucket_name = "rgwx-" + zonegroup.get_name() + "-" + tier->get_storage_class() +
+                    "-cloud-bucket";
+    boost::algorithm::to_lower(bucket_name);
+  }
+  /* Create RGW REST connection */
+  S3RESTConn conn(cct, id, { endpoint }, key, zonegroup.get_id(), region, host_style);
+
+  // save source cloudtier storage class
+  RGWLCCloudTierCtx tier_ctx(cct, dpp, o, store, bucket->get_info(),
+           this, conn, bucket_name,
+           rtier->get_rt().t.s3.target_storage_class);
+  tier_ctx.acl_mappings = rtier->get_rt().t.s3.acl_mappings;
+  tier_ctx.multipart_min_part_size = rtier->get_rt().t.s3.multipart_min_part_size;
+  tier_ctx.multipart_sync_threshold = rtier->get_rt().t.s3.multipart_sync_threshold;
+  tier_ctx.storage_class = tier->get_storage_class();
+
+  ldpp_dout(dpp, 20) << "Restoring object(" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+
+  if (days && days == 0) {
+    ldpp_dout(dpp, 0) << "Days = 0 not valid; Not restoring object (" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+    return 0;
+  }
+
+  // Note: For non-versioned objects, below should have already been set by the callers-
+  // o.current should be false; this(obj)->instance should have version-id.
+
+  // set restore_status as RESTORE_ALREADY_IN_PROGRESS
+  ret = set_cloud_restore_status(dpp, y, RGWRestoreStatus::RestoreAlreadyInProgress);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << " Setting cloud restore status to RESTORE_ALREADY_IN_PROGRESS for the object(" << o.key << ") from the cloud endpoint(" << endpoint << ") failed" << dendl;
+    return ret;
+  }
+
+  /* Transition object to cloud end point.
+   * All restore related status and attrs are set as part of object download to
+   * avoid any races */
+  ret = store->getRados()->restore_obj_from_cloud(tier_ctx, *rados_ctx,
+                                bucket->get_info(), get_obj(), placement_rule,
+                                mtime, olh_epoch, days, dpp, y, flags & FLAG_LOG_OP);
+
+  if (ret < 0) { //failed to restore
+    ldpp_dout(dpp, 0) << "Restoring object(" << o.key << ") from the cloud endpoint(" << endpoint << ") failed" << dendl;
+    auto reset_ret = set_cloud_restore_status(dpp, y, RGWRestoreStatus::RestoreFailed);
+
+    rgw_placement_rule target_placement;
+    target_placement.inherit_from(tier_ctx.bucket_info.placement_rule);
+    target_placement.storage_class = tier->get_storage_class();
+
+    /* Reset HEAD object as CloudTiered */
+    reset_ret = write_cloud_tier(dpp, y, tier_ctx.o.versioned_epoch,
+			   tier, tier_ctx.is_multipart_upload,
+			   target_placement, tier_ctx.obj);
+
+    ldpp_dout(dpp, 0) << " Reset to cloud_tier of object(" << o.key << ") from the cloud endpoint(" << endpoint << ") failed" << dendl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 20) << "Sucessfully restored object(" << o.key << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+
+  return ret;
+}
+
 int RadosObject::transition_to_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
 			   rgw_bucket_dir_entry& o,
@@ -2624,6 +2712,22 @@ int RadosObject::transition_to_cloud(Bucket* bucket,
 			   target_placement, tier_ctx.obj);
 
   }
+
+  return ret;
+}
+
+int RadosObject::set_cloud_restore_status(const DoutPrefixProvider* dpp,
+				  optional_yield y,
+          rgw::sal::RGWRestoreStatus restore_status)
+{
+  int ret = 0;
+  set_atomic();
+ 
+  bufferlist bl;
+  using ceph::encode;
+  encode(restore_status, bl);
+
+  ret = modify_obj_attrs(RGW_ATTR_RESTORE_STATUS, bl, y, dpp);
 
   return ret;
 }
