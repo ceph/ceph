@@ -67,7 +67,11 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   allsubvolgrps: any[] = [];
   allsubvols: any[] = [];
-  fsPath: string = null;
+
+  selectedFsName: string = '';
+  selectedSubvolGroup: string = '';
+  selectedSubvol: string = '';
+  defaultSubVolGroup = '_nogroup';
 
   pathDataSource = (text$: Observable<string>) => {
     return text$.pipe(
@@ -132,6 +136,14 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.nfsForm.get('cluster_id').disable();
     } else {
       this.action = this.actionLabels.CREATE;
+      this.route.params.subscribe(
+        (params: { fs_name: string; subvolume_group: string; subvolume?: string }) => {
+          this.selectedFsName = params.fs_name;
+          this.selectedSubvolGroup = params.subvolume_group;
+          if (params.subvolume) this.selectedSubvol = params.subvolume;
+        }
+      );
+
       this.getData(promises);
     }
   }
@@ -153,40 +165,69 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.getSubVolGrp(fs_name);
   }
 
-  getSubVol() {
-    this.getPath();
+  async getSubVol() {
     const fs_name = this.nfsForm.getValue('fsal').fs_name;
     const subvolgrp = this.nfsForm.getValue('subvolume_group');
-    return this.subvolService.get(fs_name, subvolgrp).subscribe((data: any) => {
+    await this.setSubVolGrpPath();
+
+    (subvolgrp === this.defaultSubVolGroup
+      ? this.subvolService.get(fs_name)
+      : this.subvolService.get(fs_name, subvolgrp)
+    ).subscribe((data: any) => {
       this.allsubvols = data;
     });
   }
 
   getSubVolGrp(fs_name: string) {
-    return this.subvolgrpService.get(fs_name).subscribe((data: any) => {
+    this.subvolgrpService.get(fs_name).subscribe((data: any) => {
       this.allsubvolgrps = data;
     });
   }
 
-  getFsPath(volList: any[], value: string) {
-    const match = volList.find((vol) => vol.name === value);
-    if (match) {
-      return match.info.path;
-    }
+  setSubVolGrpPath(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const subvolGroup = this.nfsForm.getValue('subvolume_group');
+      const fs_name = this.nfsForm.getValue('fsal').fs_name;
+
+      if (subvolGroup === this.defaultSubVolGroup) {
+        this.updatePath('/volumes/' + this.defaultSubVolGroup);
+        resolve();
+      } else {
+        this.subvolgrpService
+          .info(fs_name, subvolGroup)
+          .pipe(map((data) => data['path']))
+          .subscribe(
+            (path) => {
+              this.updatePath(path);
+              resolve();
+            },
+            (error) => reject(error)
+          );
+      }
+    });
   }
 
-  getPath() {
-    const subvol = this.nfsForm.getValue('subvolume');
-    if (subvol === '') {
+  setSubVolPath(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const subvol = this.nfsForm.getValue('subvolume');
       const subvolGroup = this.nfsForm.getValue('subvolume_group');
-      this.fsPath = this.getFsPath(this.allsubvolgrps, subvolGroup);
-    } else {
-      this.fsPath = this.getFsPath(this.allsubvols, subvol);
-    }
-    this.nfsForm.patchValue({
-      path: this.fsPath
-    });
+      const fs_name = this.nfsForm.getValue('fsal').fs_name;
 
+      this.subvolService
+        .info(fs_name, subvol, subvolGroup === this.defaultSubVolGroup ? '' : subvolGroup)
+        .pipe(map((data) => data['path']))
+        .subscribe(
+          (path) => {
+            this.updatePath(path);
+            resolve();
+          },
+          (error) => reject(error)
+        );
+    });
+  }
+
+  updatePath(path: string) {
+    this.nfsForm.patchValue({ path: path });
     this.pathChangeHandler();
   }
 
@@ -317,8 +358,34 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
   }
 
+  resolveRouteParams() {
+    if (!_.isEmpty(this.selectedFsName)) {
+      this.nfsForm.patchValue({
+        fsal: {
+          fs_name: this.selectedFsName
+        }
+      });
+      this.volumeChangeHandler();
+    }
+    if (!_.isEmpty(this.selectedSubvolGroup)) {
+      this.nfsForm.patchValue({
+        subvolume_group: this.selectedSubvolGroup
+      });
+      this.getSubVol();
+    }
+    if (!_.isEmpty(this.selectedSubvol)) {
+      this.nfsForm.patchValue({
+        subvolume: this.selectedSubvol
+      });
+      this.setSubVolPath();
+    }
+  }
+
   resolveFilesystems(filesystems: any[]) {
     this.allFsNames = filesystems;
+    if (!this.isEdit) {
+      this.resolveRouteParams();
+    }
   }
 
   resolveRealms(realms: string[]) {

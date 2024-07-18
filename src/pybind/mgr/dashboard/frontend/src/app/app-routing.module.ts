@@ -407,7 +407,12 @@ const routes: Routes = [
             children: [
               { path: '', component: NfsListComponent },
               {
-                path: URLVerbs.CREATE,
+                path: `${URLVerbs.CREATE}/:fs_name/:subvolume_group`,
+                component: NfsFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `${URLVerbs.CREATE}`,
                 component: NfsFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
