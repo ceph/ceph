@@ -1021,6 +1021,13 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
           f->dump_string("module", p);
         }
         f->close_section();
+
+        f->open_array_section("force_disabled_modules");
+        for (auto& p : map.force_disabled_modules) {
+          f->dump_string("module", p);
+        }
+        f->close_section();
+
         f->open_array_section("enabled_modules");
         for (auto& p : map.modules) {
           if (map.get_always_on_modules().count(p) > 0)
@@ -1050,7 +1057,11 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 
       for (auto& p : map.get_always_on_modules()) {
         tbl << p;
-        tbl << "on (always on)";
+	if (map.force_disabled_modules.find(p) == map.force_disabled_modules.end()) {
+	  tbl << "on (always on)";
+	} else  {
+	  tbl << "off (always on but force-disabled)";
+	}
         tbl << TextTable::endrow;
       }
       for (auto& p : map.modules) {
@@ -1271,10 +1282,13 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = -EINVAL;
       goto out;
     }
-    if (pending_map.get_always_on_modules().count(module) > 0) {
+
+    if (pending_map.get_always_on_modules().count(module) > 0 &&
+        !pending_map.force_disabled_modules.contains(module)) {
       ss << "module '" << module << "' is already enabled (always-on)";
       goto out;
     }
+
     bool force = false;
     cmd_getval_compat_cephbool(cmdmap, "force", force);
     if (!pending_map.all_support_module(module) &&
@@ -1298,7 +1312,12 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       ss << "module '" << module << "' is already enabled";
       r = 0;
       goto out;
+    } else if (pending_map.force_disabled_modules.contains(module)) {
+      pending_map.force_disabled_modules.erase(module);
+      r = 0;
+      goto out;
     }
+
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
@@ -1308,8 +1327,9 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       goto out;
     }
     if (pending_map.get_always_on_modules().count(module) > 0) {
-      ss << "module '" << module << "' cannot be disabled (always-on)";
-      r = -EINVAL;
+      ss << "module '" << module << "' cannot be disabled (always-on), use " <<
+	 "'ceph mgr module force disable' command to disable an always-on module";
+      r = -EPERM;
       goto out;
     }
     if (!pending_map.module_enabled(module)) {
@@ -1322,6 +1342,50 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     }
     dout(8) << __func__ << " disabling module " << module << " from new " << dendl;
     pending_map.modules.erase(module);
+  } else if (prefix == "mgr module force disable") {
+    string mod;
+    cmd_getval(cmdmap, "module", mod);
+
+    bool confirmation_flag = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirmation_flag);
+
+    if (mod.empty()) {
+      ss << "Module name wasn't passed!";
+      r = -EINVAL;
+      goto out;
+    }
+
+    if (!pending_map.get_always_on_modules().contains(mod)) {
+      ss << "Always-on module named \"" << mod << "\" does not exist";
+      r = -EINVAL;
+      goto out;
+    } else if (pending_map.modules.contains(mod)) {
+      ss << "Module '" << mod << "' is not an always-on module, only always-on " <<
+	 "modules can be disabled through this command.";
+      r = -EINVAL;
+      goto out;
+    }
+
+    if (pending_map.force_disabled_modules.contains(mod)) {
+      ss << "Module \"" << mod << "\"is already disabled";
+      r = 0;
+      goto out;
+    }
+
+    if (!confirmation_flag) {
+      ss << "This command will disable operations and remove commands that "
+	 << "other Ceph utilities expect to be available. Do not continue "
+	 << "unless your cluster is already experiencing an event due to "
+	 << "which it is advised to disable this module as part of "
+	 << "troubleshooting. If you are sure that you wish to continue, "
+	 << "run again with --yes-i-really-mean-it";
+      r = -EPERM;
+      goto out;
+    }
+
+    dout(8) << __func__ << " force-disabling module '" << mod << "'" << dendl;
+    pending_map.force_disabled_modules.insert(mod);
+    pending_map.modules.erase(mod);
   } else {
     ss << "Command '" << prefix << "' not implemented!";
     r = -ENOSYS;
