@@ -4,11 +4,11 @@
 
 #include <atomic>
 #include <chrono>
+#include <compare>
 #include <iostream>
 #include <memory>
 #include <vector>
 
-#include "common/RefCountedObj.h"
 #include "common/ceph_atomic.h"
 #include "include/utime_fmt.h"
 #include "osd/osd_types.h"
@@ -27,143 +27,27 @@ namespace Scrub {
 
 enum class must_scrub_t { not_mandatory, mandatory };
 
-enum class qu_state_t {
-  not_registered,  // not a primary, thus not considered for scrubbing by this
-		   // OSD (also the temporary state when just created)
-  registered,	   // in either of the two queues ('to_scrub' or 'penalized')
-  unregistering	   // in the process of being unregistered. Will be finalized
-		   // under lock
-};
-
 struct scrub_schedule_t {
   utime_t scheduled_at{};
   utime_t deadline{0, 0};
   utime_t not_before{utime_t::max()};
+  // when compared - the 'not_before' is ignored, assuming
+  // we never compare jobs with different eligibility status.
+  std::partial_ordering operator<=>(const scrub_schedule_t& rhs) const
+  {
+    auto cmp1 = scheduled_at <=> rhs.scheduled_at;
+    if (cmp1 != 0) {
+      return cmp1;
+    }
+    return deadline <=> rhs.deadline;
+  };
+  bool operator==(const scrub_schedule_t& rhs) const = default;
 };
 
 struct sched_params_t {
   utime_t proposed_time{};
-  double min_interval{0.0};
-  double max_interval{0.0};
   must_scrub_t is_must{must_scrub_t::not_mandatory};
 };
-
-class ScrubJob final : public RefCountedObject {
- public:
-  /**
-   * a time scheduled for scrub, and a deadline: The scrub could be delayed
-   * if system load is too high (but not if after the deadline),or if trying
-   * to scrub out of scrub hours.
-   */
-  scrub_schedule_t schedule;
-
-  /// pg to be scrubbed
-  const spg_t pgid;
-
-  /// the OSD id (for the log)
-  const int whoami;
-
-  ceph::atomic<qu_state_t> state{qu_state_t::not_registered};
-
-  /**
-   * the old 'is_registered'. Set whenever the job is registered with the OSD,
-   * i.e. is in 'to_scrub'.
-   */
-  std::atomic_bool in_queues{false};
-
-  /// how the last attempt to scrub this PG ended
-  delay_cause_t last_issue{delay_cause_t::none};
-
-  /**
-   * 'updated' is a temporary flag, used to create a barrier after
-   * 'sched_time' and 'deadline' (or any other job entry) were modified by
-   * different task.
-   */
-  std::atomic_bool updated{false};
-
-  /**
-    * the scrubber is waiting for locked objects to be unlocked.
-    * Set after a grace period has passed.
-    */
-  bool blocked{false};
-  utime_t blocked_since{};
-
-  CephContext* cct;
-
-  bool high_priority{false};
-
-  ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
-
-  utime_t get_sched_time() const { return schedule.not_before; }
-
-  static std::string_view qu_state_text(qu_state_t st);
-
-  /**
-   * relatively low-cost(*) access to the scrub job's state, to be used in
-   * logging.
-   *  (*) not a low-cost access on x64 architecture
-   */
-  std::string_view state_desc() const
-  {
-    return qu_state_text(state.load(std::memory_order_relaxed));
-  }
-
-  /**
-   * 'reset_failure_penalty' is used to reset the 'not_before' jo attribute to
-   * the updated 'scheduled_at' time. This is used whenever the scrub-job
-   * schedule is updated, and the update is not a result of a scrub attempt
-   * failure.
-   */
-  void update_schedule(
-      const scrub_schedule_t& adjusted,
-      bool reset_failure_penalty);
-
-  /**
-   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
-   * would not be retried before 'delay' seconds have passed.
-   */
-  void delay_on_failure(
-      std::chrono::seconds delay,
-      delay_cause_t delay_cause,
-      utime_t scrub_clock_now);
-
-  void dump(ceph::Formatter* f) const;
-
-  /*
-   * as the atomic 'in_queues' appears in many log prints, accessing it for
-   * display-only should be made less expensive (on ARM. On x86 the _relaxed
-   * produces the same code as '_cs')
-   */
-  std::string_view registration_state() const
-  {
-    return in_queues.load(std::memory_order_relaxed) ? "in-queue"
-						     : "not-queued";
-  }
-
-  /**
-   * access the 'state' directly, for when a distinction between 'registered'
-   * and 'unregistering' is needed (both have in_queues() == true)
-   */
-  bool is_state_registered() const { return state == qu_state_t::registered; }
-
-  /**
-   * is this a high priority scrub job?
-   * High priority - (usually) a scrub that was initiated by the operator
-   */
-  bool is_high_priority() const { return high_priority; }
-
-  /**
-   * a text description of the "scheduling intentions" of this PG:
-   * are we already scheduled for a scrub/deep scrub? when?
-   */
-  std::string scheduling_state(utime_t now_is, bool is_deep_expected) const;
-
-  std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
-  const std::string log_msg_prefix;
-};
-
-using ScrubJobRef = ceph::ref_t<ScrubJob>;
-using ScrubQContainer = std::vector<ScrubJobRef>;
 
 /**
  *  A collection of the configuration parameters (pool & OSD) that affect
@@ -217,6 +101,147 @@ struct sched_conf_t {
   bool mandatory_on_invalid{true};
 };
 
+
+class ScrubJob {
+ public:
+  /**
+   * a time scheduled for scrub, and a deadline: The scrub could be delayed
+   * if system load is too high (but not if after the deadline),or if trying
+   * to scrub out of scrub hours.
+   */
+  scrub_schedule_t schedule;
+
+  /// pg to be scrubbed
+  spg_t pgid;
+
+  /// the OSD id (for the log)
+  int whoami;
+
+  /**
+   * Set whenever the PG scrubs are managed by the OSD (i.e. - from becoming
+   * an active Primary till the end of the interval).
+   */
+  bool registered{false};
+
+  /**
+   * there is a scrub target for this PG in the queue.
+   * \attn: temporary. Will be replaced with a pair of flags in the
+   * two level-specific scheduling targets.
+   */
+  bool target_queued{false};
+
+  /// how the last attempt to scrub this PG ended
+  delay_cause_t last_issue{delay_cause_t::none};
+
+  /**
+    * the scrubber is waiting for locked objects to be unlocked.
+    * Set after a grace period has passed.
+    */
+  bool blocked{false};
+  utime_t blocked_since{};
+
+  CephContext* cct;
+
+  bool high_priority{false};
+
+  ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
+
+  utime_t get_sched_time() const { return schedule.not_before; }
+
+  std::string_view state_desc() const
+  {
+    return registered ? (target_queued ? "queued" : "registered")
+		      : "not-registered";
+  }
+
+  /**
+   * Given a proposed time for the next scrub, and the relevant
+   * configuration, adjust_schedule() determines the actual target time,
+   * the deadline, and the 'not_before' time for the scrub.
+   * The new values are updated into the scrub-job.
+   *
+   * Specifically:
+   * - for high-priority scrubs: n.b. & deadline are set equal to the
+   *   (untouched) proposed target time.
+   * - for regular scrubs: the proposed time is adjusted (delayed) based
+   *   on the configuration; the deadline is set further out (if configured)
+   *   and the n.b. is reset to the target.
+   */
+  void adjust_schedule(
+    const Scrub::sched_params_t& suggested,
+    const Scrub::sched_conf_t& aconf,
+    utime_t scrub_clock_now,
+    Scrub::delay_ready_t modify_ready_targets);
+
+  /**
+   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
+   * would not be retried before 'delay' seconds have passed.
+   */
+  void delay_on_failure(
+      std::chrono::seconds delay,
+      delay_cause_t delay_cause,
+      utime_t scrub_clock_now);
+
+  /**
+   *  Recalculating any possible updates to the scrub schedule, following an
+   *  aborted scrub attempt.
+   *  Usually - we can use the same schedule that triggered the aborted scrub.
+   *  But we must take into account scenarios where "something" caused the
+   *  parameters prepared for the *next* scrub to show higher urgency or
+   *  priority. "Something" - as in an operator command requiring immediate
+   *  scrubbing, or a change in the pool/cluster configuration.
+   */
+  void merge_and_delay(
+      const scrub_schedule_t& aborted_schedule,
+      Scrub::delay_cause_t issue,
+      requested_scrub_t updated_flags,
+      utime_t scrub_clock_now);
+
+ /**
+   * recalculate the scheduling parameters for the periodic scrub targets.
+   * Used whenever the "external state" of the PG changes, e.g. when made
+   * primary - or indeed when the configuration changes.
+   *
+   * Does not modify ripe targets.
+   * (why? for example, a 'scrub pg' command following a 'deepscrub pg'
+   * would otherwise push the deep scrub to the future).
+   */
+  void on_periods_change(
+      const sched_params_t& suggested,
+      const Scrub::sched_conf_t& aconf,
+      utime_t scrub_clock_now) {}
+
+  void dump(ceph::Formatter* f) const;
+
+  bool is_registered() const { return registered; }
+
+  /**
+   * is this a high priority scrub job?
+   * High priority - (usually) a scrub that was initiated by the operator
+   */
+  bool is_high_priority() const { return high_priority; }
+
+  /**
+   * a text description of the "scheduling intentions" of this PG:
+   * are we already scheduled for a scrub/deep scrub? when?
+   */
+  std::string scheduling_state(utime_t now_is, bool is_deep_expected) const;
+
+  std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
+  std::string log_msg_prefix;
+
+  // the comparison operator is used to sort the scrub jobs in the queue.
+  // Note that it would not be needed in the next iteration of this code, as
+  // the queue would *not* hold the full ScrubJob objects, but rather -
+  // SchedTarget(s).
+  std::partial_ordering operator<=>(const ScrubJob& rhs) const
+  {
+    return schedule <=> rhs.schedule;
+  };
+};
+
+using ScrubQContainer = std::vector<std::unique_ptr<ScrubJob>>;
+
 }  // namespace Scrub
 
 namespace std {
@@ -224,44 +249,30 @@ std::ostream& operator<<(std::ostream& out, const Scrub::ScrubJob& pg);
 }  // namespace std
 
 namespace fmt {
-template <>
-struct formatter<Scrub::qu_state_t> : formatter<std::string_view> {
-  template <typename FormatContext>
-  auto format(const Scrub::qu_state_t& s, FormatContext& ctx)
-  {
-    auto out = ctx.out();
-    out = fmt::formatter<string_view>::format(
-	std::string{Scrub::ScrubJob::qu_state_text(s)}, ctx);
-    return out;
-  }
-};
 
 template <>
 struct formatter<Scrub::sched_params_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const Scrub::sched_params_t& pm, FormatContext& ctx)
+  auto format(const Scrub::sched_params_t& pm, FormatContext& ctx) const
   {
     return fmt::format_to(
-	ctx.out(), "(proposed:{:s} min/max:{:.3f}/{:.3f} must:{:2s})",
-        utime_t{pm.proposed_time}, pm.min_interval, pm.max_interval,
-        pm.is_must == Scrub::must_scrub_t::mandatory ? "true" : "false");
+	ctx.out(), "proposed:{:s},must:{:c}", pm.proposed_time,
+	pm.is_must == Scrub::must_scrub_t::mandatory ? 'y' : 'n');
   }
 };
-
 
 template <>
 struct formatter<Scrub::ScrubJob> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const Scrub::ScrubJob& sjob, FormatContext& ctx)
+  auto format(const Scrub::ScrubJob& sjob, FormatContext& ctx) const
   {
     return fmt::format_to(
-	ctx.out(), "pg[{}] @ nb:{:s} ({:s}) (dl:{:s}) - <{}> queue state:{:.7}",
+	ctx.out(), "pg[{}]:nb:{:s} / trg:{:s} / dl:{:s} <{}>",
 	sjob.pgid, sjob.schedule.not_before, sjob.schedule.scheduled_at,
-	sjob.schedule.deadline, sjob.registration_state(),
-	sjob.state.load(std::memory_order_relaxed));
+	sjob.schedule.deadline, sjob.state_desc());
   }
 };
 
@@ -269,14 +280,26 @@ template <>
 struct formatter<Scrub::sched_conf_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
-  auto format(const Scrub::sched_conf_t& cf, FormatContext& ctx)
+  auto format(const Scrub::sched_conf_t& cf, FormatContext& ctx) const
   {
     return fmt::format_to(
 	ctx.out(),
-	"periods: s:{}/{} d:{}/{} iv-ratio:{} deep-rand:{} on-inv:{}",
+	"periods:s:{}/{},d:{}/{},iv-ratio:{},deep-rand:{},on-inv:{}",
 	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
 	cf.max_deep, cf.interval_randomize_ratio, cf.deep_randomize_ratio,
 	cf.mandatory_on_invalid);
+  }
+};
+
+template <>
+struct formatter<Scrub::scrub_schedule_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const Scrub::scrub_schedule_t& sc, FormatContext& ctx) const
+  {
+    return fmt::format_to(
+	ctx.out(), "nb:{:s}(at:{:s},dl:{:s})", sc.not_before,
+        sc.scheduled_at, sc.deadline);
   }
 };
 }  // namespace fmt

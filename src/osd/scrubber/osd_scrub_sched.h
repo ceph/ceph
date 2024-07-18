@@ -4,77 +4,78 @@
 #pragma once
 // clang-format off
 /*
-┌───────────────────────┐
-│ OSD                   │
-│ OSDService            │
-│                       │
-│ ┌─────────────────────│
-│ │                     │
-│ │   OsdScrub          │
-│ │                    ─┼───┐
-│ │                     │   │
-└───────────────────────┘   │   Ownes & uses the following
-                            │   ScrubQueue interfaces:
-                            │
-                            │
-                            │   - resource management (*1)
-                            │
-                            │   - environment conditions (*2)
-                            │
-                            │   - scrub scheduling (*3)
-                            │
-                            │
-                            │
- ScrubQueue                 │
-┌───────────────────────────▼────────────┐
-│                                        │
-│                                        │
-│  ScrubQContainer    to_scrub <>────────┼────────┐
-│                                        │        │
-│                                        │        │
-│  OSD_wide resource counters            │        │
-│                                        │        │
-│                                        │        │
-│  "env scrub conditions" monitoring     │        │
-│                                        │        │
-│                                        │        │
-│                                        │        │
-│                                        │        │
-└─▲──────────────────────────────────────┘        │
-  │                                               │
-  │                                               │
-  │uses interface <4>                             │
-  │                                               │
-  │                                               │
-  │            ┌──────────────────────────────────┘
-  │            │                 shared ownership of jobs
-  │            │
-  │      ┌─────▼──────┐
-  │      │ScrubJob    │
-  │      │            ├┐
-  │      │            ││
-  │      │            │┼┐
-  │      │            │┼│
-  └──────┤            │┼┤◄──────┐
-         │            │┼│       │
-         │            │┼│       │
-         │            │┼│       │
-         └┬───────────┼┼│       │shared ownership
-          └─┼┼┼┼┼┼┼┼┼┼┼┼│       │
-            └───────────┘       │
-                                │
-                                │
-                                │
-                                │
-┌───────────────────────────────┼─┐
-│                               <>│
-│PgScrubber                       │
-│                                 │
-│                                 │
-│                                 │
-│                                 │
-│                                 │
-└─────────────────────────────────┘
+  ┌───────────────────────┐
+  │ OSD                   │
+  │ OSDService            │
+  │                       │
+  │ ┌─────────────────────┤
+  │ │                     │
+  │ │   OsdScrub          │
+  │ │                    ─┼───┐
+  │ │                     │   │
+  └─┴─────────────────────┘   │   Owns & uses the following
+                              │   ScrubQueue interfaces:
+                              │
+                              │
+                              │   - resource management (*1)
+                              │
+                              │   - environment conditions (*2)
+                              │
+                              │   - scrub scheduling (*3)
+                              │
+                              │
+                              │
+   ScrubQueue                 │
+  ┌───────────────────────────▼────────────┐
+  │                                        │
+  │                                        │
+  │  ScrubQContainer    to_scrub <>────────┼────────┐
+  │                                        │        │
+  │                                        │        │
+  │  OSD_wide resource counters            │        │
+  │                                        │        │
+  │                                        │        │
+  │  "env scrub conditions" monitoring     │        │
+  │                                        │        │
+  │                                        │        │
+  │                                        │        │
+  │                                        │        │
+  └─▲──────────────────────────────────────┘        │
+    │                                               │
+    │                                               │
+    │uses interface <4>                             │
+    │                                               │
+    │                                               │
+    │            ┌──────────────────────────────────┘
+    │            │
+    │            │
+    │      ┌─────▼──────┐
+    │      │Copy of     │
+    │      │job's       ├┐
+    │      │sched params││
+    │      │(*)         │┼┐
+    │      │            │┼┘◄────────────────────────┐
+    └──────┤            ││                          │
+           │            ││   (*) for now - a copy   │
+           │            ││       of the whole SJ    │
+           │            ││                          │
+           └┬───────────┼│                          │
+            └─┼┼┼┼┼┼┼┼┼┼┼│                          │
+              └──────────┘                          │
+                                                    │
+                                                    │                                                    │
+                                                    │
+  ┌─────────────────────────────────┐               │
+  │                               <>│               │
+  │PgScrubber                       │               │
+  │               ┌─────────────────┴───┐           │
+  │               │ScrubJob             │           │
+  │               │                     │           │
+  │               │     ┌───────────────┤           │
+  │               │     │Sched params   ├───────────┘
+  └───────────────┤     └───────────────┤
+                  │                     │
+                  └─────────────────────┘
 
 
 ScrubQueue interfaces (main functions):
@@ -99,14 +100,15 @@ ScrubQueue interfaces (main functions):
 
 <4> - manipulating a job's state:
 
-  - register_with_osd()
   - remove_from_osd_queue()
   - update_job()
 
  */
 // clang-format on
 
+#include <algorithm>
 #include <optional>
+
 #include "common/AsyncReserver.h"
 #include "utime.h"
 #include "osd/scrubber/scrub_job.h"
@@ -154,86 +156,51 @@ class ScrubQueue {
   friend class ScrubSchedTestWrapper; ///< unit-tests structure
   using sched_params_t = Scrub::sched_params_t;
 
-  /**
-   *  returns the list of all scrub targets that are ready to be scrubbed.
-   *  Note that the following changes are expected in the near future (as part
-   *  of the scheduling refactoring):
-   *  - only one target will be requested by the OsdScrub (the OSD's sub-object
-   *    that initiates scrubs);
-   *  - that target would name a PG X scrub type;
-   *
-   * @param restrictions: what types of scrub are allowed, given system status
-   *               & config. Some of the preconditions are calculated here.
-   */
-  std::vector<ScrubTargetId> ready_to_scrub(
-      Scrub::OSDRestrictions restrictions, // 4B! copy
-      utime_t scrub_tick);
 
   /**
    * remove the pg from set of PGs to be scanned for scrubbing.
    * To be used if we are no longer the PG's primary, or if the PG is removed.
    */
-  void remove_from_osd_queue(Scrub::ScrubJobRef sjob);
+  void remove_from_osd_queue(spg_t pgid);
+
+  /// A predicate over the entries in the queue
+  using EntryPred = std::function<bool(const Scrub::ScrubJob&)>;
 
   /**
-   * @return the list (not std::set!) of all scrub jobs registered
-   *   (apart from PGs in the process of being removed)
+   * the set of all PGs named by the entries in the queue (but only those
+   * entries that satisfy the predicate)
    */
-  Scrub::ScrubQContainer list_registered_jobs() const;
+  std::set<spg_t> get_pgs(const EntryPred&) const;
 
   /**
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
    * scrubbed by the OSD.
-   * The registration is active as long as the PG exists and the OSD is its
-   * primary.
-   *
-   * See update_job() for the handling of the 'suggested' parameter.
-   *
-   * locking: might lock jobs_lock
    */
-  void register_with_osd(Scrub::ScrubJobRef sjob, const sched_params_t& suggested);
-
-  /**
-   * modify a scrub-job's scheduled time and deadline
-   *
-   * There are 3 argument combinations to consider:
-   * - 'must' is asserted, and the suggested time is 'scrub_must_stamp':
-   *   the registration will be with "beginning of time" target, making the
-   *   scrub-job eligible to immediate scrub (given that external conditions
-   *   do not prevent scrubbing)
-   * - 'must' is asserted, and the suggested time is 'now':
-   *   This happens if our stats are unknown. The results are similar to the
-   *   previous scenario.
-   * - not a 'must': we take the suggested time as a basis, and add to it some
-   *   configuration / random delays.
-   *  ('must' is sched_params_t.is_must)
-   *
-   *  'reset_notbefore' is used to reset the 'not_before' time to the updated
-   *  'scheduled_at' time. This is used whenever the scrub-job schedule is
-   *  updated not as a result of a scrub attempt failure.
-   *
-   *  locking: not using the jobs_lock
-   */
-  void update_job(
-      Scrub::ScrubJobRef sjob,
-      const sched_params_t& suggested,
-      bool reset_notbefore);
-
-  void delay_on_failure(
-      Scrub::ScrubJobRef sjob,
-      std::chrono::seconds delay,
-      Scrub::delay_cause_t delay_cause,
-      utime_t now_is);
+  void enqueue_target(const Scrub::ScrubJob& sjob);
 
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
  public:
   void dump_scrubs(ceph::Formatter* f) const;
 
+  void for_each_job(
+      std::function<void(const Scrub::ScrubJob&)> fn,
+      int max_jobs) const;
+
   /// counting the number of PGs stuck while scrubbing, waiting for objects
   void mark_pg_scrub_blocked(spg_t blocked_pg);
   void clear_pg_scrub_blocked(spg_t blocked_pg);
   int get_blocked_pgs_count() const;
+
+  /**
+   * find the nearest scrub-job (later on - scrub target) that is ready to
+   * to be scrubbed (taking 'restrictions' into account).
+   * The selected entry in the queue is dequeued and returned.
+   * A nullptr is returned if no eligible entry is found.
+   */
+  std::unique_ptr<Scrub::ScrubJob> pop_ready_pg(
+      Scrub::OSDRestrictions restrictions,  // note: 4B in size! (copy)
+      utime_t time_now);
 
  private:
   CephContext* cct;
@@ -246,46 +213,13 @@ class ScrubQueue {
 #endif
 
   /**
-   *  jobs_lock protects the job containers and the relevant scrub-jobs state
-   *  variables. Specifically, the following are guaranteed:
-   *  - 'in_queues' is asserted only if the job is in one of the queues;
-   *  - a job will only be in state 'registered' if in one of the queues;
-   *  - no job will be in the two queues simultaneously;
+   *  jobs_lock protects the job container.
    *
    *  Note that PG locks should not be acquired while holding jobs_lock.
    */
   mutable ceph::mutex jobs_lock = ceph::make_mutex("ScrubQueue::jobs_lock");
 
   Scrub::ScrubQContainer to_scrub;   ///< scrub jobs (i.e. PGs) to scrub
-
-  static inline constexpr auto registered_job = [](const auto& jobref) -> bool {
-    return jobref->state == Scrub::qu_state_t::registered;
-  };
-
-  static inline constexpr auto invalid_state = [](const auto& jobref) -> bool {
-    return jobref->state == Scrub::qu_state_t::not_registered;
-  };
-
-  /**
-   * clear dead entries (unregistered, or belonging to removed PGs) from a
-   * queue. Job state is changed to match new status.
-   */
-  void rm_unregistered_jobs(Scrub::ScrubQContainer& group);
-
-  /**
-   * the set of all scrub jobs in 'group' which are ready to be scrubbed
-   * (ready = their scheduled time has passed).
-   * The scrub jobs in the new collection are sorted according to
-   * their scheduled time.
-   *
-   * Note that the returned container holds independent refs to the
-   * scrub jobs.
-   * Note also that OSDRestrictions is 1L size, thus copied.
-   */
-  Scrub::ScrubQContainer collect_ripe_jobs(
-      Scrub::ScrubQContainer& group,
-      Scrub::OSDRestrictions restrictions,
-      utime_t time_now);
 
   /**
    * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is
@@ -298,17 +232,6 @@ class ScrubQueue {
    * existence of such a situation in the scrub-queue log messages.
    */
   std::atomic_int_fast16_t blocked_scrubs_cnt{0};
-
-  /**
-   * If the scrub job was not explicitly requested, we postpone it by some
-   * random length of time.
-   * And if delaying the scrub - we calculate, based on pool parameters, a
-   * deadline we should scrub before.
-   *
-   * @return a pair of values: the determined scrub time, and the deadline
-   */
-  Scrub::scrub_schedule_t adjust_target_time(
-    const Scrub::sched_params_t& recomputed_params) const;
 
 protected: // used by the unit-tests
   /**

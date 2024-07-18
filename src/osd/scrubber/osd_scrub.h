@@ -77,50 +77,17 @@ class OsdScrub {
   void clear_pg_scrub_blocked(spg_t blocked_pg);
 
   /**
-   * modify a scrub-job's scheduled time and deadline
-   *
-   * There are 3 argument combinations to consider:
-   * - 'must' is asserted, and the suggested time is 'scrub_must_stamp':
-   *   the registration will be with "beginning of time" target, making the
-   *   scrub-job eligible to immediate scrub (given that external conditions
-   *   do not prevent scrubbing)
-   * - 'must' is asserted, and the suggested time is 'now':
-   *   This happens if our stats are unknown. The results are similar to the
-   *   previous scenario.
-   * - not a 'must': we take the suggested time as a basis, and add to it some
-   *   configuration / random delays.
-   *  ('must' is Scrub::sched_params_t.is_must)
-   *
-   *  'reset_notbefore' is used to reset the 'not_before' time to the updated
-   *  'scheduled_at' time. This is used whenever the scrub-job schedule is
-   *  updated not as a result of a scrub attempt failure.
-   *
-   *  locking: not using the jobs_lock
-   */
-  void update_job(
-      Scrub::ScrubJobRef sjob,
-      const Scrub::sched_params_t& suggested,
-      bool reset_notbefore);
-
-  /**
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
    * scrubbed by the OSD.
-   * The registration is active as long as the PG exists and the OSD is its
-   * primary.
-   *
-   * See update_job() for the handling of the 'suggested' parameter.
-   *
-   * locking: might lock jobs_lock
    */
-  void register_with_osd(
-      Scrub::ScrubJobRef sjob,
-      const Scrub::sched_params_t& suggested);
+  void enqueue_target(const Scrub::ScrubJob& sjob);
+
 
   /**
    * remove the pg from set of PGs to be scanned for scrubbing.
    * To be used if we are no longer the PG's primary, or if the PG is removed.
    */
-  void remove_from_osd_queue(Scrub::ScrubJobRef sjob);
+  void remove_from_osd_queue(spg_t pgid);
 
   /**
    * \returns std::chrono::milliseconds indicating how long to wait between
@@ -133,16 +100,6 @@ class OsdScrub {
   std::chrono::milliseconds scrub_sleep_time(
       utime_t t,
       bool high_priority_scrub) const;
-
-  /**
-   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
-   * would not be retried before 'delay' seconds have passed.
-   */
-  void delay_on_failure(
-      Scrub::ScrubJobRef sjob,
-      std::chrono::seconds delay,
-      Scrub::delay_cause_t delay_cause,
-      utime_t now_is);
 
 
   /**
@@ -196,7 +153,7 @@ class OsdScrub {
    *          initiated, and if not - why.
    */
   Scrub::schedule_result_t initiate_a_scrub(
-      spg_t pgid,
+      std::unique_ptr<Scrub::ScrubJob> candidate,
       Scrub::OSDRestrictions restrictions);
 
   /// resource reservation management
@@ -206,6 +163,9 @@ class OsdScrub {
   ScrubQueue m_queue;
 
   const std::string m_log_prefix{};
+
+  /// list all scrub queue entries
+  void debug_log_all_jobs() const;
 
   /// number of PGs stuck while scrubbing, waiting for objects
   int get_blocked_pgs_count() const;

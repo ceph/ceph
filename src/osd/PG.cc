@@ -1325,6 +1325,7 @@ unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsig
 
 
 Scrub::schedule_result_t PG::start_scrubbing(
+    std::unique_ptr<Scrub::ScrubJob> candidate,
     Scrub::OSDRestrictions osd_restrictions)
 {
   dout(10) << fmt::format(
@@ -1348,9 +1349,8 @@ Scrub::schedule_result_t PG::start_scrubbing(
        get_pgbackend()->auto_repair_supported());
 
   return m_scrubber->start_scrub_session(
-      osd_restrictions, pg_cond, m_planned_scrub);
+      std::move(candidate), osd_restrictions, pg_cond, m_planned_scrub);
 }
-
 
 double PG::next_deepscrub_interval() const
 {
@@ -1360,14 +1360,22 @@ double PG::next_deepscrub_interval() const
     deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
   return info.history.last_deep_scrub_stamp + deep_scrub_interval;
 }
-void PG::on_scrub_schedule_input_change()
+
+void PG::on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready)
 {
-  if (is_active() && is_primary()) {
-    dout(20) << __func__ << ": active/primary" << dendl;
+  if (is_active() && is_primary() && !is_scrub_queued_or_active()) {
+    dout(10) << fmt::format(
+		    "{}: active/primary. delay_ready={:c}", __func__,
+		    (delay_ready == Scrub::delay_ready_t::delay_ready) ? 't'
+								       : 'f')
+	     << dendl;
     ceph_assert(m_scrubber);
-    m_scrubber->update_scrub_job(m_planned_scrub);
+    m_scrubber->update_scrub_job(delay_ready);
   } else {
-    dout(20) << __func__ << ": inactive or non-primary" << dendl;
+    dout(10) << fmt::format(
+		    "{}: inactive, non-primary - or already scrubbing",
+		    __func__)
+	     << dendl;
   }
 }
 
@@ -2260,7 +2268,7 @@ void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at)
   // on_scrub_schedule_input_change() as pool.info contains scrub scheduling
   // parameters.
   if (pool.info.last_change >= range_starts_at) {
-    on_scrub_schedule_input_change();
+    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
   }
 }
 
