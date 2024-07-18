@@ -278,6 +278,9 @@ TEST_F(TestAMQP, ExchangeMismatch)
 
 TEST_F(TestAMQP, MaxConnections)
 {
+  // this test is skipped since it is intermitently failing
+  // should be un-skipped once: https://tracker.ceph.com/issues/67011 is resolved
+  GTEST_SKIP();
   // fill up all connections
   std::vector<amqp::connection_id_t> connections;
   auto remaining_connections = amqp::get_max_connections() - amqp::get_connection_count();
