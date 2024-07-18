@@ -297,6 +297,9 @@ public:
   // active version.
   std::map<uint32_t, std::set<std::string>> always_on_modules;
 
+  // Modules which are always-on but have been force-disabled by user.
+  std::set<std::string> force_disabled_modules;
+
   // Modules which are reported to exist
   std::vector<ModuleInfo> available_modules;
 
@@ -448,7 +451,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(13, 6, bl);
+    ENCODE_START(14, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -473,13 +476,14 @@ public:
     encode(clients_addrs, bl, features);
     encode(clients_names, bl, features);
     encode(flags, bl);
+    encode(force_disabled_modules, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(13, p);
+    DECODE_START(14, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -549,6 +553,11 @@ public:
     if (struct_v >= 13) {
       decode(flags, p);
     }
+
+    if (struct_v >= 14) {
+      decode(force_disabled_modules, p);
+    }
+
     DECODE_FINISH(p);
   }
 
@@ -603,6 +612,13 @@ public:
       f->close_section();
     }
     f->close_section(); // always_on_modules
+
+    f->open_object_section("force_disabled_modules");
+    for (auto& m : force_disabled_modules) {
+        f->dump_string("module", m);
+      }
+    f->close_section();
+
     f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
     f->open_array_section("active_clients");
     for (const auto& i : clients) {
