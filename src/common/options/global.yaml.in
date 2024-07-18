@@ -3439,6 +3439,15 @@ options:
   level: advanced
   default: true
   with_legacy: true
+- name: rocksdb_log_opendb
+  type: int
+  level: advanced
+  desc: Number of lines to print from DB::Open
+  long_desc: DB::Open produces excessive number of debug lines;
+    repeating almost the same for each column family.
+    This limits how many of those lines should print. -1 = unlimited.
+  default: 250
+  with_legacy: true
 - name: rocksdb_cache_size
   type: size
   level: advanced
