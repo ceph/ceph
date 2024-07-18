@@ -100,6 +100,10 @@ def test_remote_cache_api(r, client, obj):
     test_txt = 'hello world'
 
     response_put = obj.put(Body=test_txt)
+
+    # give second cluster a different local host value
+    exec_cmd('ceph config set client rgw_local_cache_address 127.0.0.1:8001')
+
     assert(response_put.get('ResponseMetadata').get('HTTPStatusCode') == 200)
 
     assert(os.path.exists('/tmp/rgw_d4n_datacache/D_bkt_test.txt_0_11') == True)
@@ -117,15 +121,15 @@ def test_remote_cache_api(r, client, obj):
     assert(data.get('creationTime') == '')
     assert(data.get('dirty') == '1')
     assert(data.get('objHosts') == '')
-
-    # Allow cleaning cycle to pass
+    
+    # allow cleaning cycle to pass
     time.sleep(20)
 
     log.debug(subprocess.check_output(['ls', '/tmp/rgw_d4n_datacache']).decode('latin-1'))
     assert(os.path.exists('/tmp/rgw_d4n_datacache/bkt_test.txt_0_11') == True)
     assert(os.path.exists('/tmp/rgw_d4n_datacache/RD_bkt_test.txt_0_11') == True)
 
-    # Check contents of both files
+    # check contents of both files
     out = subprocess.check_output(['cat', '/tmp/rgw_d4n_datacache/bkt_test.txt_0_11']).decode('latin-1')
     assert(out == "hello world")
 
