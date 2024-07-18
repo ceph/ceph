@@ -145,6 +145,7 @@ export class ActionLabelsI18n {
   DEACTIVATE: string;
   ATTACH: string;
   AUTHORIZE: string;
+  NFS_EXPORT: string;
 
   constructor() {
     /* Create a new item */
@@ -228,6 +229,8 @@ export class ActionLabelsI18n {
     this.DEACTIVATE = $localize`Deactivate`;
 
     this.ATTACH = $localize`Attach`;
+
+    this.NFS_EXPORT = $localize`Create NFS Export`;
   }
 }
 
