@@ -1068,7 +1068,6 @@ public:
       });
     };
     
-    CachedExtentRef n_fixed_kv_extent;
     if (e->get_type() == internal_node_t::TYPE) {
       auto lint = e->cast<internal_node_t>();
       return do_rewrite(*lint);
