@@ -43,6 +43,7 @@
 #include "rgw_tools.h"
 
 struct D3nDataCache;
+struct RGWLCCloudTierCtx;
 
 class RGWWatcher;
 class ACLOwner;
@@ -1238,6 +1239,17 @@ public:
                      const DoutPrefixProvider *dpp,
                      optional_yield y,
                      bool log_op = true);
+int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
+                             RGWObjectCtx& obj_ctx,
+                             RGWBucketInfo& dest_bucket_info,
+                             const rgw_obj& dest_obj,
+                             rgw_placement_rule& dest_placement,
+                             real_time& mtime,
+                             uint64_t olh_epoch,
+                             std::optional<uint64_t> days,
+                             const DoutPrefixProvider *dpp,
+                             optional_yield y,
+                             bool log_op = true);
 
   int check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);
 
