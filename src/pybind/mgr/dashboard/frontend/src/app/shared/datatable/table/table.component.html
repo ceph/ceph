@@ -370,3 +370,13 @@
     </cd-copy-2-clipboard-button>
   </span>
 </ng-template>
+
+<ng-template #copyTpl
+             let-value="value">
+  <span class="font-monospace">{{value}}</span>
+  <cd-copy-2-clipboard-button *ngIf="value"
+                              [source]="value"
+                              [byId]="false"
+                              [showIconOnly]="true">
+  </cd-copy-2-clipboard-button>
+</ng-template>
