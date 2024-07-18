@@ -15,13 +15,19 @@ An early build of this release was accidentally exposed and packaged as 18.2.3 b
 That 18.2.3 release should not be used. The official release was re-tagged as v18.2.4 to avoid
 further confusion.
 
+v18.2.4 container images, now based on CentOS 9, may be incompatible on older kernels (e.g., Ubuntu 18.04) due
+to differences in thread creation methods. Users upgrading to v18.2.4 container images with older OS versions
+may encounter crashes during `pthread_create`. For workarounds, refer to the related tracker. However, we recommend
+upgrading your OS to avoid this unsupported combination.
+Related tracker: https://tracker.ceph.com/issues/66989
+
 Notable Changes
 ---------------
 
 * RADOS: This release fixes a bug (https://tracker.ceph.com/issues/61948) where pre-reef clients were allowed
   to connect to the `pg-upmap-primary` (https://docs.ceph.com/en/reef/rados/operations/read-balancer/)
   interface despite users having set `require-min-compat-client=reef`, leading to an assert in the osds
-  and mons. You are susceptible to this bug in reef versions prior to 18.2.3 if 1) you are using an osdmap
+  and mons. You are susceptible to this bug in Reef versions prior to 18.2.4 if 1) you are using an osdmap
   generated via the offline osdmaptool with the `--read` option or 2) you have explicitly generated pg-upmap-primary
   mappings with the CLI command. Please note that the fix is minimal and does not address corner cases such as
   adding a mapping in the middle of an upgrade or in a partially upgraded cluster (related trackers linked
@@ -370,6 +376,7 @@ Changelog
 * python-common: fix osdspec_affinity check (`pr#56095 <https://github.com/ceph/ceph/pull/56095>`_, Guillaume Abrioux)
 * qa/cephadm: testing for extra daemon/container features (`pr#55957 <https://github.com/ceph/ceph/pull/55957>`_, Adam King)
 * qa/cephfs: improvements for name generators in test_volumes.py (`pr#54729 <https://github.com/ceph/ceph/pull/54729>`_, Rishabh Dave)
+* qa/distros: remove centos 8 from supported distros (`pr#57932 <https://github.com/ceph/ceph/pull/57932>`_, Guillaume Abrioux, Casey Bodley, Adam King, Laura Flores)
 * qa/suites/fs/nfs: use standard health ignorelist (`pr#56392 <https://github.com/ceph/ceph/pull/56392>`_, Patrick Donnelly)
 * qa/suites/fs/workload: enable snap_schedule early (`pr#56424 <https://github.com/ceph/ceph/pull/56424>`_, Patrick Donnelly)
 * qa/tasks/cephfs/test_misc: switch duration to timeout (`pr#55746 <https://github.com/ceph/ceph/pull/55746>`_, Xiubo Li)
@@ -388,6 +395,7 @@ Changelog
 * qa: Fix fs/full suite (`pr#55829 <https://github.com/ceph/ceph/pull/55829>`_, Kotresh HR)
 * qa: fix incorrectly using the wait_for_health() helper (`issue#57985 <http://tracker.ceph.com/issues/57985>`_, `pr#54237 <https://github.com/ceph/ceph/pull/54237>`_, Venky Shankar)
 * qa: fix rank_asok() to handle errors from asok commands (`pr#55302 <https://github.com/ceph/ceph/pull/55302>`_, Neeraj Pratap Singh)
+* qa: ignore container checkpoint/restore related selinux denials for centos9 (`issue#64616 <http://tracker.ceph.com/issues/64616>`_, `pr#56019 <https://github.com/ceph/ceph/pull/56019>`_, Venky Shankar)
 * qa: remove error string checks and check w/ return value (`pr#55943 <https://github.com/ceph/ceph/pull/55943>`_, Venky Shankar)
 * qa: remove vstart runner from radosgw_admin task (`pr#55097 <https://github.com/ceph/ceph/pull/55097>`_, Ali Maredia)
 * qa: run kernel_untar_build with newer tarball (`pr#54711 <https://github.com/ceph/ceph/pull/54711>`_, Milind Changire)
