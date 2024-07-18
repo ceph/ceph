@@ -79,4 +79,23 @@ describe('Multisite page', () => {
       );
     });
   });
+
+  describe('create, edit, delete pipe', () => {
+    beforeEach(() => {
+      multisite.getTab('Sync Policy').click();
+      multisite.getExpandCollapseElement().click();
+    });
+
+    it('should create pipe', () => {
+      multisite.createPipe('new-pipe', ['zone1-zg1-realm1'], ['zone3-zg2-realm1']);
+    });
+
+    it('should modify pipe zones', () => {
+      multisite.editPipe('new-pipe', 'zone2-zg1-realm1');
+    });
+
+    it('should delete pipe', () => {
+      multisite.deletePipe('new-pipe');
+    });
+  });
 });
