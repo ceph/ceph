@@ -15,13 +15,19 @@ An early build of this release was accidentally exposed and packaged as 18.2.3 b
 That 18.2.3 release should not be used. The official release was re-tagged as v18.2.4 to avoid
 further confusion.
 
+v18.2.4 container images, now based on CentOS 9, may be incompatible on older kernels (e.g., Ubuntu 18.04) due
+to differences in thread creation methods. Users upgrading to v18.2.4 container images on older OS versions
+may encounter crashes during pthread_create. For workarounds, refer to the related tracker. However, we recommend
+upgrading your OS to avoid this unsupported combination.
+Related tracker: https://tracker.ceph.com/issues/66989
+
 Notable Changes
 ---------------
 
 * RADOS: This release fixes a bug (https://tracker.ceph.com/issues/61948) where pre-reef clients were allowed
   to connect to the `pg-upmap-primary` (https://docs.ceph.com/en/reef/rados/operations/read-balancer/)
   interface despite users having set `require-min-compat-client=reef`, leading to an assert in the osds
-  and mons. You are susceptible to this bug in reef versions prior to 18.2.3 if 1) you are using an osdmap
+  and mons. You are susceptible to this bug in reef versions prior to 18.2.4 if 1) you are using an osdmap
   generated via the offline osdmaptool with the `--read` option or 2) you have explicitly generated pg-upmap-primary
   mappings with the CLI command. Please note that the fix is minimal and does not address corner cases such as
   adding a mapping in the middle of an upgrade or in a partially upgraded cluster (related trackers linked
