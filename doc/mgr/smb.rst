@@ -55,7 +55,7 @@ Create Cluster
 
 .. code:: bash
 
-    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>]
+    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>]
 
 Create a new logical cluster, identified by the cluster id value. The cluster
 create command must specify the authentication mode the cluster will use. This
@@ -78,6 +78,9 @@ domain_realm
 domain_join_user_pass
     A string in the form ``<username>%<password>`` that will be used to join
     Samba servers to the AD domain.
+define_user_pass
+    A string of the form ``<username>%<password>`` that will be used for
+    authentication in ``user`` auth_mode.
 custom_dns
     Optional. Can be specified multiple times. One or more IP Addresses that
     will be applied to the Samba containers to override the default DNS
@@ -357,7 +360,7 @@ custom_dns
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
-custom_smb_share_options
+custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
     *not* use this option unless you are prepared to debug the Samba instances
