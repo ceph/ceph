@@ -12,7 +12,9 @@ from typing import (
     cast,
 )
 
+import contextlib
 import logging
+import operator
 import time
 
 from ceph.deployment.service_spec import SMBSpec
@@ -21,6 +23,7 @@ from . import config_store, external, resources
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
+    ConfigNS,
     Intent,
     JoinSourceType,
     LoginAccess,
@@ -355,24 +358,33 @@ class ClusterConfigHandler:
             incoming = order_resources(inputs)
             for resource in incoming:
                 staging.stage(resource)
-            for resource in incoming:
-                results.append(
-                    self._check(resource, staging, create_only=create_only)
-                )
+            with _store_transaction(staging.destination_store):
+                for resource in incoming:
+                    results.append(
+                        self._check(
+                            resource, staging, create_only=create_only
+                        )
+                    )
         except ErrorResult as err:
             results.append(err)
         except Exception as err:
             log.exception("error updating resource")
-            result = ErrorResult(resource, msg=str(err))
+            msg = str(err)
+            if not msg:
+                # handle the case where the exception has no text
+                msg = f"error updating resource: {type(err)} (see logs for details)"
+            result = ErrorResult(resource, msg=msg)
             results.append(result)
         if results.success:
             log.debug(
                 'successfully updated %s resources. syncing changes to public stores',
                 len(list(results)),
             )
-            results = staging.save()
-            _prune_linked_entries(staging)
-            self._sync_modified(results)
+            with _store_transaction(staging.destination_store):
+                results = staging.save()
+                _prune_linked_entries(staging)
+            with _store_transaction(staging.destination_store):
+                self._sync_modified(results)
         return results
 
     def cluster_ids(self) -> List[str]:
@@ -394,13 +406,15 @@ class ClusterConfigHandler:
         return list(UsersAndGroupsEntry.ids(self.internal_store))
 
     def all_resources(self) -> List[SMBResource]:
-        return self._search_resources(_Matcher())
+        with _store_transaction(self.internal_store):
+            return self._search_resources(_Matcher())
 
     def matching_resources(self, names: List[str]) -> List[SMBResource]:
         matcher = _Matcher()
         for name in names:
             matcher.parse(name)
-        return self._search_resources(matcher)
+        with _store_transaction(self.internal_store):
+            return self._search_resources(matcher)
 
     def _search_resources(self, matcher: _Matcher) -> List[SMBResource]:
         log.debug("performing search with matcher: %s", matcher)
@@ -822,6 +836,58 @@ def _check_share(
         raise ErrorResult(
             share, msg="path is not a valid directory in volume"
         )
+    name_used_by = _share_name_in_use(staging, share)
+    if name_used_by:
+        raise ErrorResult(
+            share,
+            msg="share name already in use",
+            status={"conflicting_share_id": name_used_by},
+        )
+
+
+def _share_name_in_use(
+    staging: _Staging, share: resources.Share
+) -> Optional[str]:
+    """Returns the share_id value if the share's name is already in
+    use by a different share in the cluster. Returns None if no other
+    shares are using the name.
+    """
+    share_ids = (share.cluster_id, share.share_id)
+    share_ns = str(ConfigNS.SHARES)
+    # look for any duplicate names in the staging area.
+    # these items are already in memory
+    for ekey, res in staging.incoming.items():
+        if ekey[0] != share_ns:
+            continue  # not a share
+        assert isinstance(res, resources.Share)
+        if (res.cluster_id, res.share_id) == share_ids:
+            continue  # this share
+        if (res.cluster_id, res.name) == (share.cluster_id, share.name):
+            return res.share_id
+    # look for any duplicate names in the underyling store
+    found = config_store.find_in_store(
+        staging.destination_store,
+        share_ns,
+        {'cluster_id': share.cluster_id, 'name': share.name},
+    )
+    # remove any shares that are deleted in staging
+    found_curr = [
+        entry for entry in found if entry.full_key not in staging.deleted
+    ]
+    # remove self-share from list
+    id_pair = operator.itemgetter('cluster_id', 'share_id')
+    found_curr = [
+        entry for entry in found_curr if id_pair(entry.get()) != share_ids
+    ]
+    if not found_curr:
+        return None
+    if len(found_curr) != 1:
+        # this should not normally happen
+        log.warning(
+            'multiple shares with one name in cluster: %s',
+            ' '.join(s.get()['share_id'] for s in found_curr),
+        )
+    return found_curr[0].get()['share_id']
 
 
 def _check_join_auths(
@@ -1244,3 +1310,15 @@ def _cephx_data_entity(cluster_id: str) -> str:
     use for data access.
     """
     return f'client.smb.fs.cluster.{cluster_id}'
+
+
+@contextlib.contextmanager
+def _store_transaction(store: ConfigStore) -> Iterator[None]:
+    transaction = getattr(store, 'transaction', None)
+    if not transaction:
+        log.debug("No transaction support for store")
+        yield None
+        return
+    log.debug("Using store transaction")
+    with transaction():
+        yield None

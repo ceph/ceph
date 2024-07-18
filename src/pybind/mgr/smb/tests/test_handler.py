@@ -1533,3 +1533,214 @@ def test_remove_in_use_ug(thandler):
     rs = results.to_simplified()
     assert not results.success
     assert 'resource in use' in rs['results'][0]['msg']
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # no conflict
+        {
+            'to_apply': [
+                smb.resources.Share(
+                    cluster_id='c1',
+                    share_id='zeta',
+                    name='Zeta Zoom',
+                    cephfs=smb.resources.CephFSStorage(
+                        volume='cephfs',
+                        path='/zeta',
+                    ),
+                ),
+            ],
+        },
+        # no conflict, name used only in c1 not c2
+        {
+            'to_apply': [
+                smb.resources.Share(
+                    cluster_id='c2',
+                    share_id='max',
+                    name='Beta Max',
+                    cephfs=smb.resources.CephFSStorage(
+                        volume='cephfs',
+                        path='/max',
+                    ),
+                ),
+            ],
+        },
+        # conflict with share in store
+        {
+            'to_apply': [
+                smb.resources.Share(
+                    cluster_id='c1',
+                    share_id='zalpha',
+                    name='Alphabet Soup',
+                    cephfs=smb.resources.CephFSStorage(
+                        volume='cephfs',
+                        path='/zalpha',
+                    ),
+                ),
+            ],
+            'error_msg': 'share name already in use',
+            'conflicts': {'alpha'},
+        },
+        # conflict with new share
+        {
+            'to_apply': [
+                smb.resources.Share(
+                    cluster_id='c1',
+                    share_id='epsilon',
+                    name='Epsilon Eggs',
+                    cephfs=smb.resources.CephFSStorage(
+                        volume='cephfs',
+                        path='/eggs',
+                    ),
+                ),
+                smb.resources.Share(
+                    cluster_id='c1',
+                    share_id='eggs',
+                    name='Epsilon Eggs',
+                    cephfs=smb.resources.CephFSStorage(
+                        volume='cephfs',
+                        path='/eggs',
+                    ),
+                ),
+            ],
+            'error_msg': 'share name already in use',
+            'conflicts': {'eggs'},
+        },
+        # remove share, resue old name
+        {
+            'to_apply': [
+                smb.resources.RemovedShare(
+                    cluster_id='c1',
+                    share_id='beta',
+                ),
+                smb.resources.Share(
+                    cluster_id='c1',
+                    share_id='macks',
+                    name='Beta Max',
+                    cephfs=smb.resources.CephFSStorage(
+                        volume='cephfs',
+                        path='/macks',
+                    ),
+                ),
+            ],
+        },
+    ],
+)
+def test_share_name_in_use(thandler, params):
+    thandler.internal_store.overwrite(
+        {
+            'clusters.c1': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'c1',
+                'auth_mode': 'user',
+                'intent': 'present',
+                'user_group_settings': [
+                    {
+                        'source_type': 'resource',
+                        'ref': 'foo1',
+                    }
+                ],
+            },
+            'clusters.c2': {
+                'resource_type': 'ceph.smb.cluster',
+                'cluster_id': 'c2',
+                'auth_mode': 'user',
+                'intent': 'present',
+                'user_group_settings': [
+                    {
+                        'source_type': 'resource',
+                        'ref': 'foo1',
+                    }
+                ],
+            },
+            'users_and_groups.foo1': {
+                'resource_type': 'ceph.smb.usersgroups',
+                'users_groups_id': 'foo1',
+                'intent': 'present',
+                'values': {
+                    'users': [{"username": "foo"}],
+                    'groups': [],
+                },
+            },
+            'shares.c1.alpha': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'c1',
+                'share_id': 'alpha',
+                'intent': 'present',
+                'name': 'Alphabet Soup',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/alpha',
+                    'provider': 'samba-vfs',
+                },
+            },
+            'shares.c1.beta': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'c1',
+                'share_id': 'beta',
+                'intent': 'present',
+                'name': 'Beta Max',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/beta',
+                    'provider': 'samba-vfs',
+                },
+            },
+            'shares.c1.gamma': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'c1',
+                'share_id': 'gamma',
+                'intent': 'present',
+                'name': 'Gamma Raise',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/gamma',
+                    'provider': 'samba-vfs',
+                },
+            },
+            'shares.c2.soup': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'c2',
+                'share_id': 'soup',
+                'intent': 'present',
+                'name': 'Alphabet Soup',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/soup',
+                    'provider': 'samba-vfs',
+                },
+            },
+            'shares.c2.salad': {
+                'resource_type': 'ceph.smb.share',
+                'cluster_id': 'c2',
+                'share_id': 'salad',
+                'intent': 'present',
+                'name': 'Word Salad',
+                'readonly': False,
+                'browseable': True,
+                'cephfs': {
+                    'volume': 'cephfs',
+                    'path': '/salad',
+                    'provider': 'samba-vfs',
+                },
+            },
+        }
+    )
+
+    results = thandler.apply(params['to_apply'])
+    rs = results.to_simplified()
+    if not params.get('error_msg'):
+        assert results.success
+        return
+    assert not results.success
+    assert params['error_msg'] in rs['results'][0]['msg']
+    assert rs['results'][0]['conflicting_share_id'] in params['conflicts']
