@@ -43,6 +43,12 @@ bool ImageDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
+  // let io::ImageDispatch layer (IMAGE_DISPATCH_LAYER_CORE) handle
+  // native format
+  if (!m_format) {
+    return false;
+  }
+
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
   return m_format->read(aio_comp, io_context->get_read_snap(),
                         std::move(image_extents), std::move(read_result),
@@ -131,6 +137,12 @@ bool ImageDispatch<I>::list_snaps(
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
+
+  // let io::ImageDispatch layer (IMAGE_DISPATCH_LAYER_CORE) handle
+  // native format
+  if (!m_format) {
+    return false;
+  }
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
 
