@@ -16,7 +16,7 @@ std::ostream& operator<<(std::ostream& os, const aio_t& aio)
 }
 
 int aio_queue_t::submit_batch(aio_iter begin, aio_iter end, 
-			      uint16_t aios_size, void *priv, 
+			      void *priv,
 			      int *retries)
 {
   // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
@@ -25,33 +25,43 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   int r;
 
   aio_iter cur = begin;
-  struct aio_t *piocb[aios_size];
-  int left = 0;
-  while (cur != end) {
-    cur->priv = priv;
-    *(piocb+left) = &(*cur);
-    ++left;
-    ++cur;
-  }
-  ceph_assert(aios_size >= left);
-  int done = 0;
-  while (left > 0) {
 #if defined(HAVE_LIBAIO)
-    r = io_submit(ctx, std::min(left, max_iodepth), (struct iocb**)(piocb + done));
+  struct aio_t *piocb[max_iodepth];
+#endif
+  int done = 0;
+  int pushed = 0; //used for LIBAIO only
+  int pulled = 0;
+  while (cur != end || pushed < pulled) {
+#if defined(HAVE_LIBAIO)
+    while (cur != end && pulled < max_iodepth) {
+      cur->priv = priv;
+      piocb[pulled] = &(*cur);
+      ++pulled;
+      ++cur;
+    }
+    int toSubmit = pulled - pushed;
+    r = io_submit(ctx, toSubmit, (struct iocb**)(piocb + pushed));
+    if (r >= 0 && r < toSubmit) {
+      pushed += r;
+      done += r;
+      r = -EAGAIN;
+    }
 #elif defined(HAVE_POSIXAIO)
-    if (piocb[done]->n_aiocb == 1) {
+    cur->priv = priv;
+    if ((cur->n_aiocb == 1) {
       // TODO: consider batching multiple reads together with lio_listio
-      piocb[done]->aio.aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
-      piocb[done]->aio.aiocb.aio_sigevent.sigev_notify_kqueue = ctx;
-      piocb[done]->aio.aiocb.aio_sigevent.sigev_value.sival_ptr = piocb[done];
-      r = aio_read(&piocb[done]->aio.aiocb);
+      cur->aio.aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
+      cur->aio.aiocb.aio_sigevent.sigev_notify_kqueue = ctx;
+      cur->aio.aiocb.aio_sigevent.sigev_value.sival_ptr = &(*cur);
+      r = aio_write(&cur->aio.aiocb);
     } else {
       struct sigevent sev;
       sev.sigev_notify = SIGEV_KEVENT;
       sev.sigev_notify_kqueue = ctx;
-      sev.sigev_value.sival_ptr = piocb[done];
-      r = lio_listio(LIO_NOWAIT, &piocb[done]->aio.aiocbp, piocb[done]->n_aiocb, &sev);
+      sev.sigev_value.sival_ptr = &(*cur);
+      r = lio_listio(LIO_NOWAIT, &cur->aio.aiocbp, cur->n_aiocb, &sev);
     }
+    ++cur;
 #endif
     if (r < 0) {
       if (r == -EAGAIN && attempts-- > 0) {
@@ -64,9 +74,9 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     }
     ceph_assert(r > 0);
     done += r;
-    left -= r;
     attempts = 16;
     delay = 125;
+    pushed = pulled = 0;
   }
   return done;
 }
