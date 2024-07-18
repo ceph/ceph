@@ -9,9 +9,9 @@ overrides:
         osd objectstore: bluestore
         osd memory target: 1610612736 # reduced to 1.5_G
         bluestore block size: 96636764160
-        debug bluestore: 20
-        debug bluefs: 20
-        debug rocksdb: 10
+        debug bluestore: 5
+        debug bluefs: 5
+        debug rocksdb: 5
         bluestore fsck on mount: true
         # lower the full ratios since we can fill up a 100gb osd so quickly
         mon osd full ratio: .9
