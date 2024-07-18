@@ -1,0 +1,45 @@
+tasks:
+  - install:
+  - ceph:
+      wait-for-scrub: false
+      log-ignorelist:
+        - \(POOL_APP_NOT_ENABLED\)
+  - check-counter:
+      counters:
+        mgr:
+            - name: "finisher-balancer.complete_latency.avgcount"
+              min: 1
+            - name: "finisher-balancer.queue_len"
+              expected_val: 0
+            - name: "finisher-crash.complete_latency.avgcount"
+              min: 2
+            - name: "finisher-crash.queue_len"
+              expected_val: 0
+            - name: "finisher-devicehealth.complete_latency.avgcount"
+              min: 1
+            - name: "finisher-devicehealth.queue_len"
+              expected_val: 0
+            - name: "finisher-iostat.complete_latency.avgcount"
+              min: 1
+            - name: "finisher-iostat.queue_len"
+              expected_val: 0
+            - name: "finisher-pg_autoscaler.complete_latency.avgcount"
+              min: 1
+            - name: "finisher-pg_autoscaler.queue_len"
+              expected_val: 0
+            - name: "finisher-progress.complete_latency.avgcount"
+              min: 2
+            - name: "finisher-progress.queue_len"
+              expected_val: 0
+            - name: "finisher-status.complete_latency.avgcount"
+              min: 2
+            - name: "finisher-status.queue_len"
+              expected_val: 0
+            - name: "finisher-telemetry.complete_latency.avgcount"
+              min: 2
+            - name: "finisher-telemetry.queue_len"
+              expected_val: 0
+  - workunit:
+      clients:
+        client.0:
+          - mgr/test_per_module_finisher.sh

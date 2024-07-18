@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        lockdep: true
+    log-ignorelist:
+      - missing required features
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_admin
+        - tasks.cephfs.admin.test_fs_swap
