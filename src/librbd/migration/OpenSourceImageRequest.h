@@ -47,19 +47,26 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v
-   * OPEN_SOURCE
-   *    |
-   *    v
-   * GET_IMAGE_SIZE  * * * * * * *
-   *    |                        *
-   *    v                        v
-   * GET_SNAPSHOTS * * * * > CLOSE_IMAGE
-   *    |                        |
-   *    v                        |
-   * <finish> <------------------/
+   *                  <start>
+   *                     |
+   *                     v
+   *             PARSE_SOURCE_SPEC
+   *   (native)          |          (raw or qcow)
+   *     /--------------/ \-------------------\
+   *     |                                    |
+   *     v                                    v
+   * OPEN_NATIVE          * * * * * * * * OPEN_FORMAT
+   *     |               *                    |
+   *     |               *                    v
+   *     |               * * * * * * * GET_IMAGE_SIZE
+   *     |               *                    |
+   *     |               v                    v
+   *     |          CLOSE_IMAGE < * * * GET_SNAPSHOTS
+   *     |               |                    |
+   *     |/--------------/--------------------/
+   *     |
+   *     v
+   *  <finish>
    *
    * @endverbatim
    */
@@ -79,9 +86,12 @@ private:
   uint64_t m_image_size = 0;
   SnapInfos m_snap_infos;
 
-  void open_source(const json_spirit::mObject& source_spec_object,
+  void open_native(const json_spirit::mObject& source_spec_object,
                    bool import_only);
-  void handle_open_source(int r);
+  void handle_open_native(int r);
+
+  void open_format(const json_spirit::mObject& source_spec_object);
+  void handle_open_format(int r);
 
   void get_image_size();
   void handle_get_image_size(int r);

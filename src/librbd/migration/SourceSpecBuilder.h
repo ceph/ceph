@@ -30,7 +30,7 @@ public:
   SourceSpecBuilder(ImageCtxT* image_ctx) : m_image_ctx(image_ctx) {
   }
 
-  int build_format(const json_spirit::mObject& format_object, bool import_only,
+  int build_format(const json_spirit::mObject& format_object,
                    std::unique_ptr<FormatInterface>* format) const;
 
   int build_snapshot(const json_spirit::mObject& source_spec_object,
