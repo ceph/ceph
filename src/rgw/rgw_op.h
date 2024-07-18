@@ -509,6 +509,7 @@ public:
       RGWGetObj_Filter* cb);
 
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
+  virtual int get_cache_obj(optional_yield y); 
 };
 
 class RGWGetObj_CB : public RGWGetObj_Filter
