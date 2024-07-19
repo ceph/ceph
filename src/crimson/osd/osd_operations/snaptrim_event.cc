@@ -249,28 +249,6 @@ SnapTrimObjSubEvent::adjust_snaps(
 ) {
   head_obc->ssc->snapset.clone_snaps[coid.snap] =
     std::vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
-
-  // we still do a 'modify' event on this object just to trigger a
-  // snapmapper.update ... :(
-  obc->obs.oi.prior_version = obc->obs.oi.version;
-  obc->obs.oi.version = osd_op_p.at_version;
-  ceph::bufferlist bl;
-  encode(obc->obs.oi,
-    bl,
-    pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-  txn.setattr(
-    pg->get_collection_ref()->get_cid(),
-    ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
-    OI_ATTR,
-    bl);
-  add_log_entry(
-    pg_log_entry_t::MODIFY,
-    coid,
-    obc->obs.oi.prior_version,
-    0,
-    osd_reqid_t(),
-    obc->obs.oi.mtime,
-    0);
   return OpsExecuter::snap_map_modify(
     coid, new_snaps, pg->snap_mapper, pg->osdriver, txn);
 }
