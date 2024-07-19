@@ -125,7 +125,7 @@ int NVMeofGwMap::cfg_delete_gw(
     if (gws_states.first == gw_id) {
       auto& state = gws_states.second;
       for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
-	bool modified;
+	bool modified = false;
 	fsm_handle_gw_delete(
 	  gw_id, group_key,state_itr.second , state_itr.first, modified);
       }
