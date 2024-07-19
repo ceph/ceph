@@ -108,7 +108,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const bool is_rotational;
   const unsigned cutoff_priority;
   MonClient *monc;
-  PerfCounters *logger = nullptr;
+  PerfCounters *logger;
 
   /**
    * osd_bandwidth_cost_per_io
