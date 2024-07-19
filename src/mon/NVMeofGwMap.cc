@@ -119,35 +119,41 @@ int NVMeofGwMap::cfg_add_gw(
 int NVMeofGwMap::cfg_delete_gw(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key)
 {
-  int rc = 0;
-  for (auto& gws_states: created_gws[group_key]) {
+  auto giter = created_gws.find(group_key);
+  if (giter == created_gws.end()) {
+    return -EINVAL;
+  }
+  auto &group_gws = giter->second;
 
-    if (gws_states.first == gw_id) {
-      auto& state = gws_states.second;
-      for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
-	bool modified = false;
-	fsm_handle_gw_delete(
-	  gw_id, group_key,state_itr.second , state_itr.first, modified);
-      }
-      dout(10) << " Delete GW :"<< gw_id  << " ANA grpid: "
-	       << state.ana_grp_id  << dendl;
-      for (auto& itr: created_gws[group_key]) {
-        // Update state map and other maps
-	remove_grp_id(itr.first, group_key, state.ana_grp_id);
-	// of all created gateways. Removed key = anagrp
-      }
-      fsm_timers[group_key].erase(gw_id);
-      if (fsm_timers[group_key].size() == 0)
-	fsm_timers.erase(group_key);
+  auto gwiter = group_gws.find(gw_id);
+  if (gwiter == group_gws.end()) {
+    return -EINVAL;
+  }
+  auto &gw_to_remove = gwiter->second;
 
-      created_gws[group_key].erase(gw_id);
-      if (created_gws[group_key].size() == 0)
-	created_gws.erase(group_key);
-      return rc;
-    }
+  // Cancel any failover/back to/from this gw
+  for (auto &[ana_group_id, ana_state]: gw_to_remove.sm_state) {
+    bool modified = false;
+    fsm_handle_gw_delete(gw_id, group_key, ana_state, ana_group_id, modified);
+  }
+  dout(10) << " Delete GW :"<< gw_id  << " ANA grpid: "
+	   << gw_to_remove.ana_grp_id << dendl;
+
+  // Remove ana group owned by gw_id from other gateways in the group
+  for (auto &[id, gw_state]: group_gws) {
+    remove_grp_id(id, group_key, gw_state.ana_grp_id);
   }
 
-  return -EINVAL;
+  fsm_timers[group_key].erase(gw_id);
+  if (fsm_timers[group_key].size() == 0) {
+    fsm_timers.erase(group_key);
+  }
+
+  group_gws.erase(gw_id);
+  if (group_gws.size() == 0) {
+    created_gws.erase(group_key);
+  }
+  return 0;
 }
 
 int NVMeofGwMap::process_gw_map_gw_down(

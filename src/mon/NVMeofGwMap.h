@@ -74,6 +74,18 @@ public:
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
 
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+
+  /**
+   * cfg_delete_gw
+   *
+   * Remove gateway gw_id from group group_key
+   * - Resets ana group failover/back to/from gw_id
+   * - Clears NvmeAnaGrpId owned by gw_id from other gateways in the group
+   *
+   * @param [in] gw_id     id of gateway to add
+   * @param [in] group_key key for group containing <gw_id>
+   * @return -EINVAL if gw_id is not present in group, 0 otherwise
+   */
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
