@@ -3034,27 +3034,26 @@ bool OSDMonitor::preprocess_mark_me_dead(MonOpRequestRef op)
   int from = m->target_osd;
 
   // check permissions
-  if (check_source(op, m->fsid)) {
-    mon.no_reply(op);
-    return true;
-  }
+  if (check_source(op, m->fsid))
+    goto done;
 
   // first, verify the reporting host is valid
-  if (!m->get_orig_source().is_osd()) {
-    mon.no_reply(op);
-    return true;
-  }
+  if (!m->get_orig_source().is_osd())
+    goto done;
 
   if (!osdmap.exists(from) ||
       !osdmap.is_down(from)) {
     dout(5) << __func__ << " from nonexistent or up osd." << from
 	    << ", ignoring" << dendl;
     send_incremental(op, m->get_epoch()+1);
-    mon.no_reply(op);
-    return true;
+    goto done;
   }
 
   return false;
+
+ done:
+  mon.no_reply(op);
+  return true;
 }
 
 bool OSDMonitor::prepare_mark_me_dead(MonOpRequestRef op)
