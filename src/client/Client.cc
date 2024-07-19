@@ -18412,6 +18412,37 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
   return 0;
 }
 
+int Client::get_fscrypt_key_status(fscrypt_get_key_status_arg* arg) {
+  ceph_fscrypt_key_identifier kid;
+  int r = kid.init(arg->key_spec);
+  if (r < 0) {
+    return r;
+  }
+  unsigned int status = 0;
+  unsigned int status_flags = 0;
+  unsigned int user_count = 0;
+
+  FSCryptKeyHandlerRef kh;
+  r = fscrypt->get_key_store().find(kid, kh);
+
+  if (!kh){
+    status = FSCRYPT_KEY_STATUS_ABSENT;
+    goto out;
+  }
+
+  user_count = kh->get_users().size();
+
+  if (!kh->present) {
+      status = FSCRYPT_KEY_STATUS_INCOMPLETELY_REMOVED;
+  } else {
+    status = FSCRYPT_KEY_STATUS_PRESENT;
+  }
+out:
+  arg->status = status;
+  arg->status_flags = status_flags; //TODO: implement this
+  arg->user_count = user_count;
+  return 0;
+}
 
 // called before mount. 0 means infinite
 void Client::set_session_timeout(unsigned timeout)

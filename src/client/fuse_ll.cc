@@ -1118,29 +1118,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      ceph_fscrypt_key_identifier kid;
-      int r = kid.init(arg->key_spec);
-      if (r < 0) {
-        fuse_reply_err(req, -r);
-        break;
-      }
-
-      FSCryptKeyHandlerRef kh;
-      r = cfuse->client->fscrypt->get_key_store().find(kid, kh);
-      if (r < 0 && r != -ENOENT) {
-        fuse_reply_err(req, -r);
-        break;
-      }
-
-      bool found = (r == 0 && kh->get_key());
-
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GET_ENCRYPTION_KEY_STATUS found=" << found << dendl;
-
-      /* TODO: return correct info */
-      arg->status = (found ? FSCRYPT_KEY_STATUS_PRESENT : FSCRYPT_KEY_STATUS_ABSENT);
-      arg->status_flags = 0;//(found ? 0x1 : 0); /* FIXME */
-      //arg->status_flags = (found ? 0x1 : 0); /* FIXME */
-      arg->user_count = !!found; /* FIXME */
+      int r = cfuse->client->get_fscrypt_key_status(arg);
 
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
     }
