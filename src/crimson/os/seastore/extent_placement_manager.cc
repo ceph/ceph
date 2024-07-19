@@ -50,25 +50,27 @@ SegmentedOolWriter::write_record(
   auto ret = record_submitter.submit(
     std::move(record),
     with_atomic_roll_segment);
+  DEBUGT("{} start at {} with {} extents ...",
+         t, segment_allocator.get_name(),
+         ret.record_base_regardless_md,
+         extents.size());
+  paddr_t extent_addr = ret.record_base_regardless_md.offset;
+  for (auto& extent : extents) {
+    TRACET("{} extent will be written at {} -- {}",
+           t, segment_allocator.get_name(),
+           extent_addr, *extent);
+    t.update_delayed_ool_extent_addr(extent, extent_addr);
+    extent_addr = extent_addr.as_seg_paddr().add_offset(
+        extent->get_length());
+  }
   return std::move(ret.future
   ).safe_then([this, FNAME, &t,
-               record_base=ret.record_base_regardless_md,
-               extents=std::move(extents)
-              ](record_locator_t ret) mutable {
-    DEBUGT("{} finish with {}={} and {} extents",
-           t, segment_allocator.get_name(),
-           ret, record_base, extents.size());
-    paddr_t extent_addr = ret.record_block_base;
+               record_base=ret.record_base_regardless_md
+              ](record_locator_t ret) {
+    TRACET("{} finish {}=={}",
+           t, segment_allocator.get_name(), ret, record_base);
     // ool won't write metadata, so the paddrs must be equal
-    assert(record_base.offset == extent_addr);
-    for (auto& extent : extents) {
-      TRACET("{} ool extent written at {} -- {}",
-             t, segment_allocator.get_name(),
-             extent_addr, *extent);
-      t.update_delayed_ool_extent_addr(extent, extent_addr);
-      extent_addr = extent_addr.as_seg_paddr().add_offset(
-          extent->get_length());
-    }
+    assert(ret.record_block_base == record_base.offset);
   });
 }
 
