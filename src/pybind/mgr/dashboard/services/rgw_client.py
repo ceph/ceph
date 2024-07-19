@@ -1974,12 +1974,16 @@ class RgwMultisite:
 
     def create_sync_flow(self, group_id: str, flow_id: str, flow_type: str,
                          zones: Optional[List[str]] = None, bucket_name: str = '',
-                         source_zone: str = '', destination_zone: str = ''):
+                         source_zone: Optional[List[str]] = None,
+                         destination_zone: Optional[List[str]] = None):
         rgw_sync_policy_cmd = ['sync', 'group', 'flow', 'create', '--group-id', group_id,
                                '--flow-id', flow_id, '--flow-type', SyncFlowTypes[flow_type].value]
 
         if SyncFlowTypes[flow_type].value == 'directional':
-            rgw_sync_policy_cmd += ['--source-zone', source_zone, '--dest-zone', destination_zone]
+            if source_zone is not None:
+                rgw_sync_policy_cmd += ['--source-zone', ','.join(source_zone)]
+            if destination_zone is not None:
+                rgw_sync_policy_cmd += ['--dest-zone', ','.join(destination_zone)]
         else:
             if zones:
                 rgw_sync_policy_cmd += ['--zones', ','.join(zones)]
@@ -2021,7 +2025,9 @@ class RgwMultisite:
     def create_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_buckets: Optional[List[str]] = None, bucket_name: str = ''):
+                         source_bucket: str = '',
+                         destination_bucket: str = '',
+                         bucket_name: str = ''):
         rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'create',
                                '--group-id', group_id, '--pipe-id', pipe_id]
 
@@ -2034,8 +2040,11 @@ class RgwMultisite:
         if destination_zones:
             rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones)]
 
-        if destination_buckets:
-            rgw_sync_policy_cmd += ['--dest-bucket', ','.join(destination_buckets)]
+        if source_bucket:
+            rgw_sync_policy_cmd += ['--source-bucket', source_bucket]
+
+        if destination_bucket:
+            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
@@ -2048,7 +2057,7 @@ class RgwMultisite:
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_buckets: Optional[List[str]] = None, bucket_name: str = ''):
+                         destination_bucket: str = '', bucket_name: str = ''):
         rgw_sync_policy_cmd = ['sync', 'group', 'pipe', 'remove',
                                '--group-id', group_id, '--pipe-id', pipe_id]
 
@@ -2061,8 +2070,8 @@ class RgwMultisite:
         if destination_zones:
             rgw_sync_policy_cmd += ['--dest-zones', ','.join(destination_zones)]
 
-        if destination_buckets:
-            rgw_sync_policy_cmd += ['--dest-bucket', ','.join(destination_buckets)]
+        if destination_bucket:
+            rgw_sync_policy_cmd += ['--dest-bucket', destination_bucket]
 
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
@@ -2087,7 +2096,7 @@ class RgwMultisite:
                               zones=zone_names)
         # create a sync pipe with source and destination zones
         self.create_sync_pipe(_SYNC_GROUP_ID, _SYNC_PIPE_ID, source_zones=['*'],
-                              destination_zones=['*'], destination_buckets=['*'])
+                              destination_zones=['*'], source_bucket='*', destination_bucket='*')
         # period update --commit
         self.update_period()
 

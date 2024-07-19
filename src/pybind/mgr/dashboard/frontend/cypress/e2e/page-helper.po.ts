@@ -306,4 +306,33 @@ export abstract class PageHelper {
     // Waits for item to be removed from table
     getRow(name).should('not.exist');
   }
+
+  getNestedTableCell(
+    selector: string,
+    columnIndex: number,
+    exactContent: string,
+    partialMatch = false
+  ) {
+    this.waitDataTableToLoad();
+    this.clearTableSearchInput();
+    this.searchNestedTable(selector, exactContent);
+    if (partialMatch) {
+      return cy
+        .get(`${selector} datatable-body-row datatable-body-cell:nth-child(${columnIndex})`)
+        .should('contain', exactContent);
+    }
+    return cy
+      .get(`${selector}`)
+      .contains(
+        `datatable-body-row datatable-body-cell:nth-child(${columnIndex})`,
+        new RegExp(`^${exactContent}$`)
+      );
+  }
+
+  searchNestedTable(selector: string, text: string) {
+    this.waitDataTableToLoad();
+
+    this.setPageSize('10');
+    cy.get(`${selector} [aria-label=search]`).first().clear({ force: true }).type(text);
+  }
 }

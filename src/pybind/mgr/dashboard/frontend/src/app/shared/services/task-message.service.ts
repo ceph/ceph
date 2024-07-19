@@ -318,6 +318,32 @@ export class TaskMessageService {
       this.rbd_mirroring.pool_peer,
       () => ({})
     ),
+    'rgw/multisite/sync-policy/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.group_names.length > 1
+            ? 'selected policy groups'
+            : `policy group '${metadata.group_names[0]}'`
+        }`;
+      }
+    ),
+    'rgw/multisite/sync-flow/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.flow_ids.length > 1 ? 'selected Flow' : `Flow '${metadata.flow_ids[0]}'`
+        }`;
+      }
+    ),
+    'rgw/multisite/sync-pipe/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => {
+        return $localize`${
+          metadata.pipe_ids.length > 1 ? 'selected pipe' : `Pipe '${metadata.pipe_ids[0]}'`
+        }`;
+      }
+    ),
     // iSCSI target tasks
     'iscsi/target/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.iscsiTarget(metadata)
