@@ -33,13 +33,6 @@ public:
   bool is_rotational;
   unsigned cutoff_priority;
   MonClient *monc;
-  /*
-   * FIXME:
-   * init_perfcounter = false
-   * src/common: dead loop in PerfCountersCollectionImpl::add()
-   * when adding the same logger_ptr to logger_collection.
-   * see https://tracker.ceph.com/issues/66758.
-   */
   bool init_perfcounter;
   mClockScheduler q;
 
@@ -54,7 +47,7 @@ public:
     is_rotational(false),
     cutoff_priority(12),
     monc(nullptr),
-    init_perfcounter(false),
+    init_perfcounter(true),
     q(g_ceph_context, whoami, num_shards, shard_id, is_rotational,
       cutoff_priority, monc, init_perfcounter),
     client1(1001),
