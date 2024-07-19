@@ -185,7 +185,7 @@ if(NOT HAVE_CXX11_ATOMIC)
     " ${LIBATOMIC_LINK_FLAGS}")
 endif()
 
-option(WITH_RDMA "Enable RDMA in async messenger" OFF)
+option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
   find_package(verbs REQUIRED)
   set(HAVE_VERBS ${VERBS_FOUND})
