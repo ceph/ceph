@@ -9,22 +9,24 @@ import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
-import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form.component';
+
+import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form.component';
 import { FormHelper } from '~/testing/unit-test-helper';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 
-describe('NvmeofSubsystemsFormComponent', () => {
-  let component: NvmeofSubsystemsFormComponent;
-  let fixture: ComponentFixture<NvmeofSubsystemsFormComponent>;
+describe('NvmeofNamespacesFormComponent', () => {
+  let component: NvmeofNamespacesFormComponent;
+  let fixture: ComponentFixture<NvmeofNamespacesFormComponent>;
   let nvmeofService: NvmeofService;
   let form: CdFormGroup;
   let formHelper: FormHelper;
   const mockTimestamp = 1720693470789;
+  const mockSubsystemNQN = 'nqn.2021-11.com.example:subsystem';
 
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
     await TestBed.configureTestingModule({
-      declarations: [NvmeofSubsystemsFormComponent],
+      declarations: [NvmeofNamespacesFormComponent],
       providers: [NgbActiveModal],
       imports: [
         HttpClientTestingModule,
@@ -36,10 +38,10 @@ describe('NvmeofSubsystemsFormComponent', () => {
       ]
     }).compileComponents();
 
-    fixture = TestBed.createComponent(NvmeofSubsystemsFormComponent);
+    fixture = TestBed.createComponent(NvmeofNamespacesFormComponent);
     component = fixture.componentInstance;
     component.ngOnInit();
-    form = component.subsystemForm;
+    form = component.nsForm;
     formHelper = new FormHelper(form);
     fixture.detectChanges();
   });
@@ -50,42 +52,37 @@ describe('NvmeofSubsystemsFormComponent', () => {
 
   describe('should test form', () => {
     beforeEach(() => {
+      component.subsystemNQN = mockSubsystemNQN;
       nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'createSubsystem').and.stub();
+      spyOn(nvmeofService, 'createNamespace').and.stub();
     });
 
     it('should be creating request correctly', () => {
-      const expectedNqn = 'nqn.2001-07.com.ceph:' + mockTimestamp;
+      const image = 'nvme_ns_image:' + mockTimestamp;
       component.onSubmit();
-      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
-        nqn: expectedNqn,
-        max_namespaces: 256,
-        enable_ha: true
+      expect(nvmeofService.createNamespace).toHaveBeenCalledWith(mockSubsystemNQN, {
+        rbd_image_name: image,
+        rbd_pool: null,
+        size: 1073741824
       });
     });
 
-    it('should give error on invalid nqn', () => {
-      formHelper.setValue('nqn', 'nqn:2001-07.com.ceph:');
+    it('should give error on invalid image name', () => {
+      formHelper.setValue('image', '/ghfhdlk;kd;@');
       component.onSubmit();
-      formHelper.expectError('nqn', 'pattern');
+      formHelper.expectError('image', 'pattern');
     });
 
-    it('should give error on invalid max_namespaces', () => {
-      formHelper.setValue('max_namespaces', -56);
+    it('should give error on invalid image size', () => {
+      formHelper.setValue('image_size', -56);
       component.onSubmit();
-      formHelper.expectError('max_namespaces', 'pattern');
+      formHelper.expectError('image_size', 'pattern');
     });
 
-    it('should give error on max_namespaces greater than 256', () => {
-      formHelper.setValue('max_namespaces', 300);
+    it('should give error on 0 image size', () => {
+      formHelper.setValue('image_size', 0);
       component.onSubmit();
-      formHelper.expectError('max_namespaces', 'max');
-    });
-
-    it('should give error on max_namespaces lesser than 1', () => {
-      formHelper.setValue('max_namespaces', 0);
-      component.onSubmit();
-      formHelper.expectError('max_namespaces', 'min');
+      formHelper.expectError('image_size', 'min');
     });
   });
 });
