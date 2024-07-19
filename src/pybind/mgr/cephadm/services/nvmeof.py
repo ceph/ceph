@@ -103,7 +103,7 @@ class NvmeofService(CephService):
             # Notify monitor about this gateway creation
             cmd = {
                 'prefix': 'nvme-gw create',
-                'id': dd.daemon_id,
+                'id': f'{utils.name_to_config_section("nvmeof")}.{dd.daemon_id}',
                 'group': group,
                 'pool': pool
             }
@@ -201,7 +201,7 @@ class NvmeofService(CephService):
         # Notify monitor about this gateway deletion
         cmd = {
             'prefix': 'nvme-gw delete',
-            'id': daemon.daemon_id,
+            'id': f'{utils.name_to_config_section("nvmeof")}.{daemon.daemon_id}',
             'group': group,
             'pool': pool
         }
