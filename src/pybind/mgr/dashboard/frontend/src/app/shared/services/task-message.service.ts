@@ -354,13 +354,32 @@ export class TaskMessageService {
     'iscsi/target/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.iscsiTarget(metadata)
     ),
-    // NVME/TCP tasks
+    // nvmeof
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
     'nvmeof/subsystem/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
+    'nvmeof/listener/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nvmeofListener(metadata)
+    ),
+    'nvmeof/listener/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofListener(metadata)
+    ),
+    'nvmeof/subsystem/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.nvmeofSubsystem(metadata)
+    ),
+    'nvmeof/namespace/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.nvmeofNamespace(metadata)
+    ),
+    'nvmeof/namespace/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.nvmeofNamespace(metadata)
+    ),
+    'nvmeof/namespace/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofNamespace(metadata)
+    ),
+    // nfs
     'nfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nfs(metadata)
     ),
@@ -488,6 +507,17 @@ export class TaskMessageService {
 
   nvmeofSubsystem(metadata: any) {
     return $localize`subsystem '${metadata.nqn}'`;
+  }
+
+  nvmeofListener(metadata: any) {
+    return $localize`listener '${metadata.host_name} on subsystem ${metadata.nqn}`;
+  }
+
+  nvmeofNamespace(metadata: any) {
+    if (metadata?.nsid) {
+      return $localize`namespace ${metadata.nsid} for subsystem '${metadata.nqn}'`;
+    }
+    return $localize`namespace for subsystem '${metadata.nqn}'`;
   }
 
   nfs(metadata: any) {

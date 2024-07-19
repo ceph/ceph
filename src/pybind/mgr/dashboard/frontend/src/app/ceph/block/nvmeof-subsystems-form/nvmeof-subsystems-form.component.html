@@ -21,7 +21,7 @@
                    type="text"
                    formControlName="nqn">
               <cd-help-text>
-                The NVMe Qualified Name (NQN) is a unique and permanent name for the lifetime of the subsystem.
+                A unique and permanent name for the lifetime of the subsystem.
               </cd-help-text>
             <span class="invalid-feedback"
                   *ngIf="subsystemForm.showError('nqn', formDir, 'required')"
@@ -31,7 +31,7 @@
                   i18n>This NQN is already in use.</span>
             <span class="invalid-feedback"
                   *ngIf="subsystemForm.showError('nqn', formDir, 'pattern')"
-                  i18n>An NQN should follow the format of<br/>&lt;<code>nqn.$year-$month.$reverseDomainName:$definedName</code>".&gt;</span>
+                  i18n>Expected NQN format<br/>&lt;<code>nqn.$year-$month.$reverseDomainName:$utf8-string</code>".&gt; or <br/>&lt;<code>nqn.2014-08.org.nvmexpress:uuid:$UUID-string</code>".&gt;</span>
             <span class="invalid-feedback"
                   *ngIf="subsystemForm.showError('nqn', formDir, 'maxLength')"
                   i18n>An NQN should not be more than 223 bytes in length.</span>
