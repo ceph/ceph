@@ -1893,14 +1893,10 @@ struct IsPublicStatement
   bool operator() (const Statement &s) const {
     if (s.effect == Effect::Allow) {
       for (const auto& p : s.princ) {
-	if (p.is_wildcard()) {
-	  return s.eval_conditions(iam_all_env) == Effect::Allow;
-	}
+        if (p.is_wildcard()) {
+          return s.eval_conditions(iam_all_env) == Effect::Allow;
+        }
       }
-      // no princ should not contain fixed values
-      return std::none_of(s.noprinc.begin(), s.noprinc.end(), [](const rgw::auth::Principal& p) {
-								return p.is_wildcard();
-							      });
     }
     return false;
   }
