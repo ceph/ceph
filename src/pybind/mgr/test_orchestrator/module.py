@@ -304,3 +304,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert all([isinstance(h[0], str) for h in spec.placement.hosts])
         assert all([isinstance(h[1], str) or h[1] is None for h in spec.placement.hosts])
         return spec.one_line_str()
+
+    @handle_orch_error
+    def apply_mds(self, spec):
+        #type: (ServiceSpec) -> str
+
+        assert not spec.placement.hosts or len(spec.placement.hosts) == spec.placement.count
+        assert all([isinstance(h, str) for h in spec.placement.hosts])
+        return spec.one_line_str()
