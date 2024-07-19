@@ -190,6 +190,11 @@ public:
   }
 #endif
 private:
+  struct write_info_t {
+    paddr_t offset;
+    ceph::bufferptr bp;
+    RandomBlockManager* rbm;
+  };
   alloc_write_iertr::future<> do_write(
     Transaction& t,
     std::list<CachedExtentRef> &extent);

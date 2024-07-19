@@ -1008,13 +1008,15 @@ RandomBlockOolWriter::do_write(
   assert(!extents.empty());
   DEBUGT("start with {} allocated extents",
          t, extents.size());
-  return trans_intr::do_for_each(extents,
-    [this, &t, FNAME](auto& ex) {
+  std::vector<write_info_t> writes;
+  writes.reserve(extents.size());
+  for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
     assert(paddr.is_absolute());
     RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
     assert(rbm);
-    TRACE("extent {}, allocated addr {}", fmt::ptr(ex.get()), paddr);
+    TRACE("write extent {}, paddr {} ...",
+          fmt::ptr(ex.get()), paddr);
     auto& stats = t.get_ool_write_stats();
     stats.extents.num += 1;
     stats.extents.bytes += ex->get_length();
@@ -1038,29 +1040,33 @@ RandomBlockOolWriter::do_write(
       trans_stats.data_bytes += ex->get_length();
       w_stats.data_bytes += ex->get_length();
     }
-    return trans_intr::make_interruptible(
-      rbm->write(paddr + offset,
-	bp
-      ).handle_error(
-	alloc_write_ertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "Invalid error when writing record"}
-      )
-    ).si_then([this, &t, &ex, paddr, FNAME] {
-      TRACET("ool extent written at {} -- {}",
-	     t, paddr, *ex);
-      if (ex->is_initial_pending()) {
-	t.mark_allocated_extent_ool(ex);
-      } else if (can_inplace_rewrite(t, ex)) {
-        assert(ex->is_logical());
-	t.mark_inplace_rewrite_extent_ool(
-          ex->template cast<LogicalCachedExtent>());
-      } else {
-	ceph_assert("impossible");
-      }
-      return alloc_write_iertr::now();
-    });
-  });
+    writes.push_back(write_info_t{paddr + offset, std::move(bp), rbm});
+
+    if (ex->is_initial_pending()) {
+      t.mark_allocated_extent_ool(ex);
+    } else if (can_inplace_rewrite(t, ex)) {
+      assert(ex->is_logical());
+      t.mark_inplace_rewrite_extent_ool(
+        ex->template cast<LogicalCachedExtent>());
+    } else {
+      ceph_assert("impossible");
+    }
+  }
+
+  return trans_intr::make_interruptible(
+    seastar::do_with(std::move(writes),
+      [](auto& writes) {
+      return crimson::do_for_each(writes,
+        [](auto& info) {
+        return info.rbm->write(info.offset, info.bp
+        ).handle_error(
+          alloc_write_ertr::pass_further{},
+          crimson::ct_error::assert_all{
+            "Invalid error when writing record"}
+        );
+      });
+    })
+  );
 }
 
 }
