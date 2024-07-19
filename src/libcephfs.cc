@@ -2337,6 +2337,15 @@ extern "C" int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
   return cmount->get_client()->remove_fscrypt_key(kid, user);
 }
 
+extern "C" int ceph_get_fscrypt_key_status(struct ceph_mount_info *cmount,
+                                       struct fscrypt_get_key_status_arg *arg)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->get_fscrypt_key_status(arg);
+}
+
 extern "C" int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
                                           int fd, const struct fscrypt_policy_v2 *policy)
 {
