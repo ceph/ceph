@@ -701,11 +701,10 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
       return false;
     }
   } else if (w->kind == TokenKind::cond_key) {
-    auto& t = pp->policy.statements.back();
     if (l > 0 && *s == '$') {
       if (l >= 2 && *(s+1) == '{') {
         if (l > 0 && *(s+l-1) == '}') {
-          t.conditions.back().isruntime = true;
+          t->conditions.back().isruntime = true;
         } else {
 	  annotate(fmt::format("Invalid interpolation `{}`.",
 			       std::string_view{s, l}));
@@ -717,7 +716,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         return false;
       }
     }
-    t.conditions.back().vals.emplace_back(s, l);
+    t->conditions.back().vals.emplace_back(s, l);
 
     // Principals
 
@@ -753,6 +752,13 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
   if (is_action && !is_valid_action) {
     annotate(fmt::format("`{}` is not a valid action.",
 			 std::string_view{s, l}));
+    return false;
+  }
+
+  // NotPrincipal must be used with "Effect":"Deny". Using it with "Effect":"Allow" is not supported.
+  // cf. https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_notprincipal.html
+  if (t && t->effect == Effect::Allow && !t->noprinc.empty()) {
+    annotate("Allow with NotPrincipal is not allowed.");
     return false;
   }
 
