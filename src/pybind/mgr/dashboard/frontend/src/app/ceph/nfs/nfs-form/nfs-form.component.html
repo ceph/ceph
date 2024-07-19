@@ -113,7 +113,7 @@
         </div>
 
         <div class="form-group row"
-             *ngIf="storageBackend === 'CEPH'">
+             *ngIf="storageBackend === 'CEPH' && nfsForm.getValue('fsal').fs_name">
           <label class="cd-col-form-label"
                  for="subvolume_group"
                  i18n>Subvolume Group</label>
@@ -134,12 +134,13 @@
                       i18n>-- Select the CephFS subvolume group --</option>
               <option *ngFor="let subvol_grp of allsubvolgrps"
                       [value]="subvol_grp.name">{{ subvol_grp.name }}</option>
+              <option [value]="defaultSubVolGroup">{{ defaultSubVolGroup }}</option>
             </select>
           </div>
         </div>
 
       <div class="form-group row"
-           *ngIf="storageBackend === 'CEPH'">
+           *ngIf="storageBackend === 'CEPH' && nfsForm.getValue('fsal').fs_name">
         <label class="cd-col-form-label"
                for="subvolume"
                i18n>Subvolume</label>
@@ -148,7 +149,7 @@
                   formControlName="subvolume"
                   name="subvolume"
                   id="subvolume"
-                  (change)="getPath()">
+                  (change)="setSubVolPath()">
             <option *ngIf="allsubvols === null"
                     value=""
                     i18n>Loading...</option>

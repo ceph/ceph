@@ -33,6 +33,9 @@ import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-g
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
 import { HealthService } from '~/app/shared/api/health.service';
+import _ from 'lodash';
+
+const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -158,6 +161,18 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         icon: Icons.bars,
         disable: () => !this.selection?.hasSelection,
         click: () => this.showAttachInfo()
+      },
+      {
+        name: this.actionLabels.NFS_EXPORT,
+        permission: 'create',
+        icon: Icons.nfsExport,
+        routerLink: () => [
+          '/cephfs/nfs/create',
+          this.fsName,
+          _.isEmpty(this.activeGroupName) ? DEFAULT_SUBVOLUME_GROUP : this.activeGroupName,
+          { subvolume: this.selection?.first()?.name }
+        ],
+        disable: () => !this.selection?.hasSingleSelection
       },
       {
         name: this.actionLabels.REMOVE,

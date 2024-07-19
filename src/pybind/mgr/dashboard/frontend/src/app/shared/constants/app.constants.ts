@@ -146,6 +146,7 @@ export class ActionLabelsI18n {
   ATTACH: string;
   AUTHORIZE: string;
   EXPAND_CLUSTER: string;
+  NFS_EXPORT: string;
 
   constructor() {
     /* Create a new item */
@@ -230,6 +231,8 @@ export class ActionLabelsI18n {
 
     this.ATTACH = $localize`Attach`;
     this.EXPAND_CLUSTER = $localize`Expand Cluster`;
+
+    this.NFS_EXPORT = $localize`Create NFS Export`;
   }
 }
 
