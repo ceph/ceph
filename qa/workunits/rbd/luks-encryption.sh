@@ -43,12 +43,12 @@ function test_encryption_format() {
   sudo chmod 666 $LIBRBD_DEV
 
   # write via librbd && compare
-  dd if=/tmp/testdata1 of=$LIBRBD_DEV oflag=direct bs=1M
+  dd if=/tmp/testdata1 of=$LIBRBD_DEV conv=fsync bs=1M
   dd if=/dev/mapper/cryptsetupdev of=/tmp/cmpdata iflag=direct bs=4M count=4
   cmp -n 16MB /tmp/cmpdata /tmp/testdata1
 
   # write via cryptsetup && compare
-  dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev oflag=direct bs=1M
+  dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev conv=fsync bs=1M
   dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=4M count=4
   cmp -n 16MB /tmp/cmpdata /tmp/testdata2
 }
