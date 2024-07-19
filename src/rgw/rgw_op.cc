@@ -772,6 +772,12 @@ static void rgw_iam_add_crypt_attrs(rgw::IAM::Environment& e,
     rgw_add_to_iam_environment(e, s3_encrypt_attr, h->second);
   }
 
+  constexpr auto customer_algo_attr = "x-amz-server-side-encryption-customer-algorithm";
+  constexpr auto s3_customer_algo_attr = "s3:x-amz-server-side-encryption-customer-algorithm";
+  if (auto h = attrs.find(customer_algo_attr); h != attrs.end()) {
+    rgw_add_to_iam_environment(e, s3_customer_algo_attr, h->second);
+  }
+
   constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
   constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
   if (auto h = attrs.find(kms_attr); h != attrs.end()) {
