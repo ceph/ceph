@@ -12,7 +12,7 @@ import {
 } from 'rxjs/operators';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
-import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -32,7 +32,7 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
   action: string;
   resource: string;
   syncPolicyStatus = RgwMultisiteSyncPolicyStatus;
-
+  pageURL: string;
   bucketDataSource = (text$: Observable<string>) => {
     return text$.pipe(
       debounceTime(200),
@@ -51,11 +51,12 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
     private rgwBucketService: RgwBucketService
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/rgw/multisite/sync-policy/${URLVerbs.EDIT}`);
+    this.editing = this.router.url.includes('(modal:edit');
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`Sync Policy Group`;
     this.createForm();
     this.loadingReady();
+    this.pageURL = 'rgw/multisite/sync-policy';
   }
 
   ngOnInit(): void {
@@ -70,6 +71,7 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
             .subscribe((syncPolicy: any) => {
               this.loadingReady();
               if (syncPolicy) {
+                this.syncPolicyForm.get('bucket_name').disable();
                 this.syncPolicyForm.patchValue({
                   group_id: syncPolicy.id,
                   status: syncPolicy.status,
@@ -84,17 +86,17 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
     }
   }
 
+  goToListView() {
+    // passing state in order to return to same tab on details page
+    this.router.navigate([this.pageURL, { outlets: { modal: null }, state: { reload: true } }]);
+  }
+
   createForm() {
     this.syncPolicyForm = this.fb.group({
       group_id: ['', Validators.required],
       status: [`${this.syncPolicyStatus.ENABLED}`, Validators.required],
       bucket_name: ['', , this.bucketExistence(true)]
     });
-  }
-
-  goToListView() {
-    // passing state in order to return to same tab on details page
-    this.router.navigate(['/rgw/multisite'], { state: { activeId: 'syncPolicy' } });
   }
 
   submit() {
@@ -111,7 +113,7 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
 
     if (!this.editing) {
       // Add
-      this.rgwMultisiteService.createSyncPolicyGroup(this.syncPolicyForm.value).subscribe(
+      this.rgwMultisiteService.createSyncPolicyGroup(this.syncPolicyForm.getRawValue()).subscribe(
         () => {
           this.notificationService.show(
             NotificationType.success,
@@ -125,7 +127,7 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
         }
       );
     } else {
-      this.rgwMultisiteService.modifySyncPolicyGroup(this.syncPolicyForm.value).subscribe(
+      this.rgwMultisiteService.modifySyncPolicyGroup(this.syncPolicyForm.getRawValue()).subscribe(
         () => {
           this.notificationService.show(
             NotificationType.success,

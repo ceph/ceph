@@ -52,7 +52,7 @@ export class RgwMultisiteWizardComponent implements OnInit {
     public notificationService: NotificationService,
     private router: Router
   ) {
-    this.pageURL = 'rgw/multisite';
+    this.pageURL = 'rgw/multisite/configuration';
     this.currentStepSub = this.wizardStepsService
       .getCurrentStep()
       .subscribe((step: WizardStepModel) => {

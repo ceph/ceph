@@ -5,20 +5,12 @@ describe('Multisite page', () => {
 
   beforeEach(() => {
     cy.login();
-    multisite.navigateTo();
   });
 
-  describe('tabs and table tests', () => {
-    it('should show two tabs', () => {
-      multisite.getTabsCount().should('eq', 2);
-    });
-
-    it('should show Configuration tab as a first tab', () => {
-      multisite.getTabText(0).should('eq', 'Configuration');
-    });
-
-    it('should show sync policy tab as a second tab', () => {
-      multisite.getTabText(1).should('eq', 'Sync Policy');
+  describe('table tests', () => {
+    it('should show table on sync-policy page', () => {
+      multisite.navigateTo();
+      multisite.tableExist();
     });
   });
 
@@ -30,11 +22,12 @@ describe('Multisite page', () => {
     });
 
     it('should edit policy status', () => {
+      multisite.navigateTo();
       multisite.edit('test', 'Forbidden');
     });
 
     it('should delete policy', () => {
-      multisite.getTab('Sync Policy').click();
+      multisite.navigateTo();
       multisite.delete('test');
     });
   });
@@ -47,7 +40,7 @@ describe('Multisite page', () => {
     });
     describe('symmetrical Flow creation started', () => {
       beforeEach(() => {
-        multisite.getTab('Sync Policy').click();
+        multisite.navigateTo();
         multisite.getExpandCollapseElement().click();
       });
 
@@ -67,7 +60,7 @@ describe('Multisite page', () => {
 
   describe('create, edit & delete directional sync Flow', () => {
     beforeEach(() => {
-      multisite.getTab('Sync Policy').click();
+      multisite.navigateTo();
       multisite.getExpandCollapseElement().click();
     });
 
@@ -82,7 +75,7 @@ describe('Multisite page', () => {
 
   describe('create, edit, delete pipe', () => {
     beforeEach(() => {
-      multisite.getTab('Sync Policy').click();
+      multisite.navigateTo();
       multisite.getExpandCollapseElement().click();
     });
 

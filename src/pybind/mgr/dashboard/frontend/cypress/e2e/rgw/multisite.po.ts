@@ -2,9 +2,12 @@ import { PageHelper } from '../page-helper.po';
 
 const WAIT_TIMER = 1000;
 const pages = {
-  index: { url: '#/rgw/multisite', id: 'cd-rgw-multisite-details' },
-  create: { url: '#/rgw/multisite/sync-policy/create', id: 'cd-rgw-multisite-sync-policy-form' },
-  edit: { url: '#/rgw/multisite/sync-policy/edit', id: 'cd-rgw-multisite-sync-policy-form' }
+  index: { url: '#/rgw/multisite/sync-policy', id: 'cd-rgw-multisite-sync-policy' },
+  create: {
+    url: '#/rgw/multisite/sync-policy/(modal:create)',
+    id: 'cd-rgw-multisite-sync-policy-form'
+  },
+  edit: { url: '#/rgw/multisite/sync-policy/(modal:edit', id: 'cd-rgw-multisite-sync-policy-form' }
 };
 export class MultisitePageHelper extends PageHelper {
   pages = pages;
@@ -12,6 +15,11 @@ export class MultisitePageHelper extends PageHelper {
   columnIndex = {
     status: 4
   };
+
+  tableExist() {
+    cy.get('cd-rgw-multisite-sync-policy cd-table').should('exist');
+    cy.get('cd-rgw-multisite-sync-policy cd-table-actions').should('exist');
+  }
 
   @PageHelper.restrictTo(pages.create.url)
   create(group_id: string, status: string) {
@@ -28,7 +36,7 @@ export class MultisitePageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(group_id: string, status: string) {
-    cy.visit(`${pages.edit.url}/${group_id}`);
+    cy.visit(`${pages.edit.url}/${group_id})`);
 
     // Change the status field
     this.selectOption('status', status);
@@ -42,9 +50,6 @@ export class MultisitePageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   createSymmetricalFlow(flow_id: string, zones: string[]) {
-    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
-    this.getTab('Flow').should('exist');
-    this.getTab('Flow').click();
     cy.request({
       method: 'GET',
       url: '/api/rgw/daemon',
