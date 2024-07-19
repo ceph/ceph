@@ -90,6 +90,25 @@ public:
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
+
+  /**
+   * process_gw_map_gw_down
+   *
+   * Notifies NVMeofGwMap that <group_key>/<gw_id> is down, either due
+   * to receipt of an MNVMeofGwBeacon specifying that the sender is
+   * unavailable or due to NvmeofGwMon::tick noting that the grace period
+   * has expired.  Initiates the process of failing over any NvmeAnaGrpId's
+   * for which the gateway is currently responsible.
+   *
+   * Caller must ensure that <group_key>/<gw_id> is already present
+   * in the map.
+   *
+   * @param [in] gw_id          id of gateway to add
+   * @param [in] group_key      key for group containing <gw_id>
+   * @param [out] propose_pending set to true if map is mutated
+   * @return 0 on succes, -EINVAL if <group_key>/<gw_id> is not
+   *         present in map.
+   */
   int process_gw_map_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     bool &propose_pending);

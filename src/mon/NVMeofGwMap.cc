@@ -159,27 +159,33 @@ int NVMeofGwMap::cfg_delete_gw(
 int NVMeofGwMap::process_gw_map_gw_down(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool &propose_pending)
 {
-  int rc = 0;
-  auto& gws_states = created_gws[group_key];
-  auto  gw_state = gws_states.find(gw_id);
-  if (gw_state != gws_states.end()) {
-    dout(10) << "GW down " << gw_id << dendl;
-    auto& st = gw_state->second;
-    st.set_unavailable_state();
-    for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
-      fsm_handle_gw_down(
-	gw_id, group_key, state_itr.second,
-	state_itr.first, propose_pending);
-      state_itr.second = gw_states_per_group_t::GW_STANDBY_STATE;
-    }
-    propose_pending = true; // map should reflect that gw becames unavailable
-    if (propose_pending) validate_gw_map(group_key);
-  } else {
+  auto giter = created_gws.find(group_key);
+  if (giter == created_gws.end()) {
+    dout(1)  << __FUNCTION__ << "ERROR group_key was not found in the map "
+	     << group_key << dendl;
+    return -EINVAL;
+  }
+  auto &group_gws = giter->second;
+
+  auto gwiter = group_gws.find(gw_id);
+  if (gwiter == group_gws.end()) {
     dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map "
 	     << gw_id << dendl;
-    rc = -EINVAL;
+    return -EINVAL;
   }
-  return rc;
+  auto &gw_down = gwiter->second;
+
+  dout(10) << "GW down " << gw_id << dendl;
+  gw_down.set_unavailable_state();
+  for (auto &[ana_group_id, ana_state]: gw_down.sm_state) {
+    fsm_handle_gw_down(
+      gw_id, group_key, ana_state,
+      ana_group_id, propose_pending);
+    ana_state = gw_states_per_group_t::GW_STANDBY_STATE;
+  }
+  propose_pending = true; // map should reflect that gw becames unavailable
+  validate_gw_map(group_key);
+  return 0;
 }
 
 void NVMeofGwMap::process_gw_map_ka(
