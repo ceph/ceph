@@ -147,6 +147,9 @@
 %if 0%{?rhel} == 8
 %{!?gts_version: %global gts_version 11}
 %endif
+%if 0%{?rhel} == 9
+%{!?gts_version: %global gts_version 13}
+%endif
 %endif
 
 # gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
