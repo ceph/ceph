@@ -545,6 +545,7 @@ public:
     ObjectContextRef obc,
     const std::error_code e,
     ceph_tid_t rep_tid);
+  seastar::future<> clear_temp_objects();
 
 private:
 
