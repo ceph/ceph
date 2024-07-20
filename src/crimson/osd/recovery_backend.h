@@ -10,6 +10,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/object_context.h"
+#include "crimson/osd/pg_backend.h"
 #include "crimson/osd/shard_services.h"
 
 #include "messages/MOSDPGBackfill.h"
@@ -21,8 +22,6 @@
 namespace crimson::osd{
   class PG;
 }
-
-class PGBackend;
 
 class RecoveryBackend {
 public:
@@ -240,10 +239,15 @@ protected:
     const hobject_t& target,
     eversion_t version) const;
 
-  boost::container::flat_set<hobject_t> temp_contents;
-
   void add_temp_obj(const hobject_t &oid);
   void clear_temp_obj(const hobject_t &oid);
+  template <typename Func>
+  void for_each_temp_obj(Func &&f) {
+    backend->for_each_temp_obj(std::forward<Func>(f));
+  }
+  void clear_temp_objs() {
+    backend->clear_temp_objs();
+  }
 
   void clean_up(ceph::os::Transaction& t, std::string_view why);
   virtual seastar::future<> on_stop() = 0;
