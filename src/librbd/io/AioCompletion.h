@@ -40,7 +40,6 @@ namespace io {
 struct AioCompletion {
   typedef enum {
     AIO_STATE_PENDING = 0,
-    AIO_STATE_CALLBACK,
     AIO_STATE_COMPLETE,
   } aio_state_t;
 
@@ -180,8 +179,7 @@ struct AioCompletion {
 private:
   void queue_complete();
   void complete_external_callback();
-  void complete_event_socket();
-  void notify_callbacks_complete();
+  void mark_complete_and_notify();
 };
 
 class C_AioRequest : public Context {
