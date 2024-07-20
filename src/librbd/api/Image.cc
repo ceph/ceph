@@ -570,8 +570,8 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
     opts.set(RBD_IMAGE_OPTION_FORMAT, format);
   }
-  if (format == 1) {
-    lderr(cct) << "old format not supported for destination image" << dendl;
+  if (format != 2) {
+    lderr(cct) << "unsupported destination image format: " << format << dendl;
     return -EINVAL;
   }
   uint64_t stripe_unit = src->stripe_unit;
