@@ -95,10 +95,10 @@ namespace rgw::dedup {
       STEP_REMOVE_DUPLICATES
     };
 
-    void ack_notify(uint64_t notify_id, uint64_t cookie, int status);
     void run();
     int  setup(struct dedup_epoch_t*);
     void work_shards_barrier(work_shard_t num_work_shards);
+    void md5_shards_barrier(md5_shard_t num_md5_shards);
     void handle_pause_req(const char* caller);
     const char* dedup_step_name(dedup_step_t step);
     int  read_buckets();
@@ -216,7 +216,7 @@ namespace rgw::dedup {
                      bool                 is_shared_manifest_src);
 #endif
     int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);
-    int  init_rados_access_handles();
+    int  init_rados_access_handles(bool init_pool);
 
     // private data members
     rgw::sal::Driver* driver = nullptr;
@@ -244,7 +244,6 @@ namespace rgw::dedup {
 
     std::thread d_runner;
     std::mutex  d_cond_mutex;
-    std::mutex  d_pause_mutex;
     std::condition_variable d_cond;
   };
 

@@ -150,6 +150,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("domain_root", domain_root, obj);
   JSONDecoder::decode_json("control_pool", control_pool, obj);
+  JSONDecoder::decode_json("dedup_pool", dedup_pool, obj);
   JSONDecoder::decode_json("gc_pool", gc_pool, obj);
   JSONDecoder::decode_json("lc_pool", lc_pool, obj);
   JSONDecoder::decode_json("log_pool", log_pool, obj);
@@ -178,6 +179,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("name", name, f);
   encode_json("domain_root", domain_root, f);
   encode_json("control_pool", control_pool, f);
+  encode_json("dedup_pool", dedup_pool, f);
   encode_json("gc_pool", gc_pool, f);
   encode_json("lc_pool", lc_pool, f);
   encode_json("log_pool", log_pool, f);
@@ -237,6 +239,7 @@ void add_zone_pools(const RGWZoneParams& info,
 {
   pools.insert(info.domain_root);
   pools.insert(info.control_pool);
+  pools.insert(info.dedup_pool);
   pools.insert(info.gc_pool);
   pools.insert(info.log_pool);
   pools.insert(info.intent_log_pool);
@@ -808,6 +811,7 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
 {
   info.domain_root = fix_zone_pool_dup(pools, info.name, ".rgw.meta:root", info.domain_root);
   info.control_pool = fix_zone_pool_dup(pools, info.name, ".rgw.control", info.control_pool);
+  info.dedup_pool = fix_zone_pool_dup(pools, info.name, ".rgw.dedup", info.dedup_pool);
   info.gc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:gc", info.gc_pool);
   info.lc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:lc", info.lc_pool);
   info.log_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log", info.log_pool);
