@@ -84,12 +84,6 @@ private:
   void notify_update();
   void handle_notify_update(int r);
 
-  void unlink_group_snapshot(const cls::rbd::SnapshotNamespace& snap_namespace,
-                             const std::string& snap_name);
-  void handle_unlink_group_snapshot(
-      const cls::rbd::SnapshotNamespace& snap_namespace,
-      const std::string& snap_name, int r);
-
   void remove_snapshot(const cls::rbd::SnapshotNamespace& snap_namespace,
                        const std::string& snap_name);
   void handle_remove_snapshot(int r);
