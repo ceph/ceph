@@ -149,6 +149,11 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
+  rgw_dedup.cc
+  rgw_dedup_table.cc
+  rgw_dedup_store.cc
+  rgw_dedup_utils.cc
+  rgw_dedup_cluster.cc
   rgw_data_access.cc
   driver/rados/account.cc
   driver/rados/buckets.cc
@@ -279,6 +284,7 @@ target_link_libraries(rgw_common
     global
     cls_2pc_queue_client
     cls_cmpomap_client
+    cls_cmpxattr_client
     cls_lock_client
     cls_log_client
     cls_otp_client

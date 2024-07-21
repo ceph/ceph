@@ -52,10 +52,11 @@
 #include <optional>
 
 #include "cls/lock/cls_lock_client.h"
+#include "cls/cmpxattr/server.h"
 #include "include/compat.h"
 #include "include/util.h"
 #include "common/hobject.h"
-
+#include "common/ceph_crypto.h"
 #include "PoolDump.h"
 #include "RadosImport.h"
 
@@ -1871,6 +1872,44 @@ static std::string prettify(const std::string& s)
   }
 }
 
+static const char* s_urgent_msg_names[] = {
+  "URGENT_MSG_NONE",
+  "URGENT_MSG_ABORT",
+  "URGENT_MSG_PASUE",
+  "URGENT_MSG_RESUME",
+  "URGENT_MSG_SKIP",
+  "URGENT_MSG_INVALID"
+};
+
+const char* rados_get_urgent_msg_names(int msg) {
+  if (msg <= URGENT_MSG_RESUME && msg >= URGENT_MSG_NONE) {
+    return s_urgent_msg_names[msg];
+  }
+  else {
+    return s_urgent_msg_names[URGENT_MSG_INVALID];
+  }
+}
+
+//---------------------------------------------------------------------------
+static void ntl_display_progress(const named_time_lock_t &ntl)
+{
+  if (ntl.progress_b == NTL_ALL_OBJECTS) {
+    std::cout << "Token is marked completed! obj_count="
+	      << ntl.progress_a << std::endl;
+  }
+  else if (ntl.progress_a == 0 && ntl.progress_b == 0) {
+    std::cout << "Token was not started yet!" << std::endl;
+  }
+  else if (ntl.progress_b == 0) {
+    std::cout << "Token is incomplete: progress = "
+	      << ntl.progress_a <<  std::endl;
+  }
+  else {
+    std::cout << "Token is incomplete: progress = [" << ntl.progress_a
+	      << ", " << ntl.progress_b << "]" <<  std::endl;
+  }
+}
+
 /**********************************************
 
 **********************************************/
@@ -2442,9 +2481,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (wildcard) {
       io_ctx.set_namespace(all_nspaces);
     }
+
+    bool long_display = false;
+    if ((nargs.size() == 3) && (strcmp(nargs[2], "-l") == 0)) {
+      long_display = true;
+    }
+
     bool use_stdout = (!output && (nargs.size() < 2 || (strcmp(nargs[1], "-") == 0)));
     if (!use_stdout && !output) {
-      cerr << "Please use --output to specify the output file name" << std::endl;
+      if( (nargs.size() >= 2) && (strcmp(nargs[1], "-l") == 0)) {
+	cerr << "Please use ls - -l (long listing is only supported on stdout)" << std::endl;
+      }
+      else {
+	cerr << "Please use --output to specify the output file name" << std::endl;
+      }
       return 1;
     }
 
@@ -2481,16 +2531,28 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
               break;
 	    }
           }
+	  auto oid = detail::get_oid(i, use_striper);
+	  uint64_t size = 0;
+	  ret = 0;
+	  if (long_display) {
+	    time_t mtime;
+	    ret = detail::stat(io_ctx, oid, size, mtime, use_striper);
+	  }
 	  if (!formatter) {
 	    // Only include namespace in output when wildcard specified
 	    if (wildcard) {
 	      *outstream << i->get_nspace() << "\t";
 	    }
-	    *outstream << detail::get_oid(i, use_striper);
+	    *outstream << oid;
 	    if (i->get_locator().size()) {
 	      *outstream << "\t" << i->get_locator();
 	    }
-	    *outstream << std::endl;
+	    if (long_display && ret == 0) {
+	      *outstream << "::" << size << std::endl;
+	    }
+	    else {
+	      *outstream << std::endl;
+	    }
 	  } else {
 	    formatter->open_object_section("object");
 	    formatter->dump_string("namespace", i->get_nspace());
@@ -2759,13 +2821,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     else
       ret = 0;
 
-    if (attr_name == "refcount")  {
+    if (attr_name == "refcount") {
+      cout << "\nattribute_name=" << attr_name << std::endl;
       obj_refcount oref;
       auto p = bl.cbegin();
       decode(oref, p);
       for (auto itr = oref.refs.begin(); itr != oref.refs.end(); itr++) {
 	if (!itr->first.empty()) {
-	  cout << itr->first << "::" << itr->second << std::endl;
+	  cout << "::" << itr->first << "::" << std::endl;
 	}
 	else {
 	  cout << "wildcard reference::" << itr->second << std::endl;
@@ -2778,6 +2841,48 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	}
       }
     }
+    else if (attr_name == "user.rgw.shared_manifest")  {
+      cout << "\nattribute_name=" << attr_name << std::endl;
+      sha_digest_t<crypto::SHA1::digest_size> sha1;
+      auto p = bl.cbegin();
+      decode(sha1, p);
+      cout << sha1.to_str() << std::endl;
+    }
+    else if (attr_name == "epoch")  {
+      cout << "\nattribute_name=" << attr_name << std::endl;
+      utime_t epoch;
+      auto p = bl.cbegin();
+      decode(epoch, p);
+      utime_t elapsd = ceph_clock_now() - epoch;
+      cout << "Epoch time is " << epoch << "(time elapsd = "
+	   << elapsd.tv.tv_sec << " seconds)"<< std::endl;
+    }
+    else if (attr_name == "cluster_lock") {
+      cout << "\nattribute_name=" << attr_name << std::endl;
+      if (!obj_name) {
+	obj_name = nargs[1];
+      }
+      std::cout << obj_name << std::endl;
+      named_time_lock_t ntl;
+      try {
+	auto p = bl.cbegin();
+	decode(ntl, p);
+      }
+      catch (const buffer::error&) {
+	cout << "failed named_time_lock_t decode!" << std::endl;
+	return -1;
+      }
+      if (ntl.is_urgent_stop_msg()) {
+	const int32_t &msg = ntl.urgent_msg;
+	std::cout << "Worker Shard is marked for urgent message "
+		  << rados_get_urgent_msg_names(msg) << std::endl;
+      }
+      utime_t duration = ceph_clock_now() - ntl.lock_time;
+      cout << ntl.owner << "::duration = " << duration
+	   << "::max_lock_duration = " << ntl.max_lock_duration << "::Lock "
+	   << ((duration > ntl.max_lock_duration) ? "was expired" : "is valid") << std::endl;
+      ntl_display_progress(ntl);
+    }
     else {
       string s(bl.c_str(), bl.length());
       cout << s;
@@ -2787,7 +2892,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage(cerr);
       return 1;
     }
-
     string attr_name(nargs[obj_name ? 1 : 2]);
     if (!obj_name) {
       obj_name = nargs[1];

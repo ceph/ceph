@@ -43,6 +43,14 @@ extern "C" {
 
 #include "radosgw-admin/orphan.h"
 #include "radosgw-admin/sync_checkpoint.h"
+#include "tools/rbd/ArgumentTypes.h"
+#include "tools/rbd/Shell.h"
+#include "tools/rbd/Utils.h"
+#include "include/types.h"
+#include "include/stringify.h"
+#include "common/errno.h"
+#include "common/Formatter.h"
+#include "common/TextTable.h"
 
 #include "rgw_user.h"
 #include "rgw_otp.h"
@@ -73,7 +81,8 @@ extern "C" {
 #include "rgw_data_access.h"
 #include "rgw_account.h"
 #include "rgw_bucket_logging.h"
-
+#include "cls/cmpxattr/ops.h"
+#include "rgw_dedup_cluster.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -146,6 +155,13 @@ void usage()
   cout << "  user policy list attached        list attached managed policies\n";
   cout << "  caps add                         add user capabilities\n";
   cout << "  caps rm                          remove user capabilities\n";
+
+  cout << "  dedup stats                      Collcet & display dedup statistics\n";
+  cout << "  dedup abort                      Abort dedup\n";
+  cout << "  dedup restart                    Restart dedup\n";
+  cout << "  dedup pause                      Pause dedup\n";
+  cout << "  dedup resume                     Resume paused dedup\n";
+
   cout << "  subuser create                   create a new subuser\n" ;
   cout << "  subuser modify                   modify subuser\n";
   cout << "  subuser rm                       remove subuser\n";
@@ -733,6 +749,12 @@ enum class OPT {
   QUOTA_SET,
   QUOTA_ENABLE,
   QUOTA_DISABLE,
+  DEDUP_STATS,
+  DEDUP_ABORT,
+  DEDUP_RESTART,
+  DEDUP_RESTART_DRY,
+  DEDUP_PAUSE,
+  DEDUP_RESUME,
   GC_LIST,
   GC_PROCESS,
   LC_LIST,
@@ -978,6 +1000,12 @@ static SimpleCmd::Commands all_cmds = {
   { "ratelimit set", OPT::RATELIMIT_SET },
   { "ratelimit enable", OPT::RATELIMIT_ENABLE },
   { "ratelimit disable", OPT::RATELIMIT_DISABLE },
+  { "dedup stats", OPT::DEDUP_STATS },
+  { "dedup abort", OPT::DEDUP_ABORT },
+  { "dedup restart dry", OPT::DEDUP_RESTART_DRY },
+  { "dedup restart", OPT::DEDUP_RESTART },
+  { "dedup pause", OPT::DEDUP_PAUSE },
+  { "dedup resume", OPT::DEDUP_RESUME },
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
   { "lc list", OPT::LC_LIST },
@@ -4444,6 +4472,12 @@ int main(int argc, const char **argv)
 			 OPT::BI_LIST,
 			 OPT::OLH_GET,
 			 OPT::OLH_READLOG,
+			 OPT::DEDUP_STATS,
+			 OPT::DEDUP_ABORT,     // TBD - not READ-ONLY
+			 OPT::DEDUP_RESTART_DRY,
+			 OPT::DEDUP_RESTART,   // TBD - not READ-ONLY
+			 OPT::DEDUP_PAUSE,
+			 OPT::DEDUP_RESUME,
 			 OPT::GC_LIST,
 			 OPT::LC_LIST,
 			 OPT::ORPHANS_LIST_JOBS,
@@ -9093,6 +9127,59 @@ next:
       }
       RGWBucketAdminOp::remove_bucket(driver, bucket_op, null_yield, dpp(), bypass_gc, false);
     }
+  }
+
+  if (opt_cmd == OPT::DEDUP_STATS) {
+    std::cerr << "OPT::DEDUP_STATS" << std::endl;
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
+      ceph_abort("Bad Rados driver");
+    }
+    rgw::dedup::cluster::collect_all_shard_stats(store, dpp());
+  }
+
+  if (opt_cmd == OPT::DEDUP_ABORT) {
+    std::cerr << "OPT::DEDUP_ABORT" << std::endl;
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
+      ceph_abort("Bad Rados driver");
+    }
+    rgw::dedup::cluster::dedup_control(store, dpp(),
+				       cls::cmpxattr::URGENT_MSG_ABORT);
+  }
+
+  if (opt_cmd == OPT::DEDUP_RESTART_DRY || opt_cmd == OPT::DEDUP_RESTART) {
+    std::cerr << "OPT::DEDUP_RESTART" << std::endl;
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
+      ceph_abort("Bad Rados driver");
+    }
+    rgw::dedup::cluster::dedup_restart_scan(store, opt_cmd == OPT::DEDUP_RESTART_DRY, dpp());
+  }
+
+  if (opt_cmd == OPT::DEDUP_PAUSE) {
+    std::cerr << "OPT::DEDUP_PAUSE" << std::endl;
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
+      ceph_abort("Bad Rados driver");
+    }
+    rgw::dedup::cluster::dedup_control(store, dpp(),
+				       cls::cmpxattr::URGENT_MSG_PASUE);
+  }
+
+  if (opt_cmd == OPT::DEDUP_RESUME) {
+    std::cerr << "OPT::DEDUP_RESUME" << std::endl;
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
+      ceph_abort("Bad Rados driver");
+    }
+    rgw::dedup::cluster::dedup_control(store, dpp(),
+				       cls::cmpxattr::URGENT_MSG_RESUME);
   }
 
   if (opt_cmd == OPT::GC_LIST) {
