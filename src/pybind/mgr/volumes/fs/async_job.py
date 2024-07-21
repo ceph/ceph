@@ -49,7 +49,7 @@ class JobThread(threading.Thread):
                             for m in missing:
                                 self.async_job.jobs[m] = []
                                 self.async_job.q.append(m)
-                        vol_job = self.async_job.get_job()
+                        vol_job = self.async_job.get_job() if self.vc.mgr.has_fs_map else None
                         if vol_job:
                             break
                         self.async_job.cv.wait(timeout=timo)
