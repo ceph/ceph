@@ -110,7 +110,7 @@ inline auto repeat(AsyncAction action) {
         f.get_exception()
       );
     } else if (f.available()) {
-      if (auto done = f.get0()) {
+      if (auto done = f.get()) {
         return errorator_t::template make_ready_future<>();
       }
     } else {
@@ -750,9 +750,6 @@ private:
      */
     auto &&unsafe_get() {
       return seastar::future<ValueT>::get();
-    }
-    auto unsafe_get0() {
-      return seastar::future<ValueT>::get0();
     }
     void unsafe_wait() {
       seastar::future<ValueT>::wait();
