@@ -149,6 +149,10 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
+  rgw_dedup.cc
+  rgw_dedup_table.cc
+  rgw_dedup_store.cc
+  rgw_dedup_utils.cc
   rgw_data_access.cc
   driver/d4n/d4n_directory.cc
   driver/d4n/d4n_policy.cc

@@ -1,0 +1,102 @@
+#include "rgw_dedup_utils.h"
+
+namespace rgw::dedup {
+  // convert a hex-string to a 64bit integer (max 16 hex digits)
+  //---------------------------------------------------------------------------
+  uint64_t hex2int(const char *p, const char* p_end)
+  {
+    if (p_end - p <= (int)(sizeof(uint64_t) * 2)) {
+      uint64_t val = 0;
+      while (p < p_end) {
+	// get current character then increment
+	uint8_t byte = *p++;
+	// transform hex character to the 4bit equivalent number, using the ascii table indexes
+	if (byte >= '0' && byte <= '9') {
+	  byte = byte - '0';
+	}
+	else if (byte >= 'a' && byte <='f') {
+	  byte = byte - 'a' + 10;
+	}
+	else if (byte >= 'A' && byte <='F') {
+	  byte = byte - 'A' + 10;
+	}
+	else {
+	  // terminate on the first non hex char
+	  return val;
+	}
+	// shift 4 to make space for new digit, and add the 4 bits of the new digit
+	val = (val << 4) | (byte & 0xF);
+      }
+      return val;
+    }
+    else {
+      //derr << __func__ << "Value size too big: " << (p_end - p) << dendl;
+      return 0;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  uint16_t dec2int(const char *p, const char* p_end)
+  {
+    constexpr unsigned max_uint16_digits = 5; // 65536
+    if (p_end - p <= max_uint16_digits) {
+      uint16_t val = 0;
+      while (p < p_end) {
+	uint8_t byte = *p++;
+	if (byte >= '0' && byte <= '9') {
+	  val = val * 10 + (byte - '0');
+	}
+	else {
+	  // terminate on the first non hex char
+	  return val;
+	}
+      }
+      return val;
+    }
+    else {
+      //derr << __func__ << "Value size too big: " << (p_end - p) << dendl;
+      return 0;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  uint16_t get_num_parts(const std::string & etag)
+  {
+    // 16Bytes MD5 takes 32 chars + 2 chars for the "" signs
+    if (etag.length() <= 34) {
+      return 1;
+    }
+    // Amazon S3 multipart upload Maximum number = 10,000 (5 decimal digits)
+    // We need 1 extra byte for the '-' delimiter and 1 extra byte for '"' at the end
+    // 7 Bytes should suffice, but we roundup to 8 Bytes
+    constexpr unsigned max_part_len = 8;
+    std::string::size_type n = etag.find('-', etag.length() - max_part_len);
+    if (n != std::string::npos) {
+      // again, 1 extra byte for the '-' delimiter and 1 extra byte for '"' at the end
+      unsigned copy_size = etag.length() - (n + 1 + 1);
+      char buff[copy_size+1];
+      unsigned nbytes = etag.copy(buff, copy_size, n+1);
+      uint64_t num_parts = dec2int(buff, buff+nbytes);
+      return num_parts;
+    }
+    else {
+      //derr << "Bad MD5=" << etag << dendl;
+      return 1;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  void parse_etag_string(const std::string& etag, parsed_etag_t *parsed_etag)
+  {
+    char buff[64];
+    const uint16_t num_parts = get_num_parts(etag);
+    etag.copy(buff, 32, 1);
+    const uint64_t high      = hex2int(buff, buff+16);
+    const uint64_t low       = hex2int(buff+16, buff+32);
+
+    parsed_etag->md5_high  = high;      // High Bytes of the Object Data MD5
+    parsed_etag->md5_low   = low;       // Low  Bytes of the Object Data MD5
+    parsed_etag->num_parts = num_parts; // How many parts were used in multipart upload
+  }
+
+} //namespace rgw::dedup

@@ -536,6 +536,7 @@ namespace rgw {
 
     main.init_notification_endpoints();
     main.init_lua();
+    main.init_dedup();
 
     return 0;
   } /* RGWLib::init() */

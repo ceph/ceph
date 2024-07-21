@@ -23,6 +23,11 @@
 #include "common/ceph_crypto.h"
 #include "common/CDC.h"
 #include "common/FastCDC.h"
+//#include "rgw/rgw_zone_types.h"
+//#include "rgw/driver/rados/rgw_obj_manifest.h"
+
+
+#include "rgw_manifest.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -1781,9 +1786,55 @@ static int clean_intermediate_objs(const string &pool_name,
   }
   return 0;
 }
+#define RGW_ATTR_MANIFEST "user.rgw.manifest"
+//---------------------------------------------------------------------------
+[[maybe_unused]]static void print_attrset(std::map<std::string, bufferlist> &attrset)
+{
+  for (auto itr = attrset.begin(); itr != attrset.end(); ++itr) {
+    const std::string attr_name = itr->first;
+    const char* attr_val  = itr->second.c_str();
+
+    std::cout << __func__ << "::attr_name=" << attr_name;
+    if (itr->second.length() > 0) {
+      std::cout << ", len=" << itr->second.length() << ", attr_val=" << attr_val;
+    }
+    std::cout << std::endl;
+  }
+
+  auto src_itr = attrset.find(RGW_ATTR_MANIFEST);
+  if (src_itr == attrset.end()) {
+    cerr << "failed to get attribute: " << RGW_ATTR_MANIFEST << std::endl;
+    return;
+  }
+  RGWObjManifest manifest;
+  decode(manifest, src_itr->second);
+  std::cout << "obj_size:  " << manifest.get_obj_size()
+	    << "::head_size: " << manifest.get_head_size()
+	    << "::prefix: " << manifest.get_prefix() << std::endl;
+
+  std::cout << "bucket: " << manifest.get_obj().bucket << std::endl;
+  std::cout << "key: " << manifest.get_obj().key << std::endl;
+  std::cout << "tail_instance: " << manifest.get_tail_instance() << std::endl;
+  //std::map<uint64_t, RGWObjManifestPart> objs;
+  std::map<uint64_t, RGWObjManifestPart>& objs = manifest.get_explicit_objs();
+  for (auto itr = objs.begin(); itr != objs.end(); ++itr) {
+    uint64_t num = itr->first;
+    RGWObjManifestPart part = itr->second;
+    rgw_obj &loc = part.loc;          /* the object where the data is located */
+    rgw_bucket &bucket = loc.bucket;
+    rgw_obj_key &key   = loc.key;
+    uint64_t loc_ofs = part.loc_ofs;  /* the offset at that object where the data is located */
+    uint64_t size = part.size ;       /* the part size */
+    std::cout << num << "::" << loc_ofs << "::" << size << std::endl;
+    std::cout << "bucket: " << bucket << std::endl;
+    std::cout << "key: " << key << std::endl;
+  }
+}
 
 //---------------------------------------------------------------------------
-static int dedup_full_object(const string &pool_name, const string &oid)
+static int dedup_full_object(const string &pool_name,
+			     const string &src_oid,
+			     const string &dup_oid)
 {
   Rados rados;
   IoCtx itr_ioctx, obj_ioctx;
@@ -1791,26 +1842,53 @@ static int dedup_full_object(const string &pool_name, const string &oid)
     return -1;
   }
   bufferlist bl;
-  int ret = obj_ioctx.read_full(oid, bl);
+  int ret = obj_ioctx.read_full(src_oid, bl);
   if (unlikely(ret < 0)) {
-    cerr << "failed to read file: " << cpp_strerror(ret) << std::endl;
+    cerr << "failed to read src_oid: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
-  std::map<std::string, bufferlist> attrset;
-  ret = obj_ioctx.getxattrs(oid, attrset);
-  if (unlikely(ret < 0)) {
-    cerr << "failed to read xattrs: " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-  for (auto itr = attrset.begin(); itr != attrset.end(); ++itr) {
-    std::string attr_name = itr->first;
-    const char *attr_val  = itr->second.c_str();
+  std::cout << __func__ << "::src_oid len=" << bl.length() << std::endl;
 
-    std::cout << __func__ << "::attr_name=" << attr_name
-	      << ", attr_val=" << attr_val << std::endl;
+  std::map<std::string, bufferlist> attrset;
+  ret = obj_ioctx.getxattrs(src_oid, attrset);
+  if (unlikely(ret < 0)) {
+    cerr << "failed to read src_oid xattrs: " << cpp_strerror(ret) << std::endl;
+    return ret;
   }
+  print_attrset(attrset);
+  return 0;
+
+  ret = obj_ioctx.read_full(dup_oid, bl);
+  if (unlikely(ret < 0)) {
+    cerr << "failed to read dup_oid: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+  std::cout << __func__ << "::dup_oid len=" << bl.length() << std::endl;
+  
+  auto itr = attrset.find(RGW_ATTR_MANIFEST);
+  if (itr == attrset.end()) {
+    cerr << "failed to get attribute: " << RGW_ATTR_MANIFEST << std::endl;
+    return -1;
+  }
+#if 1
+  std::cout << "setxattr::attr_name=" << itr->first
+	    << ", attr_val.len()=" << itr->second.length() << std::endl;
+  ret = obj_ioctx.setxattr(dup_oid, itr->first.c_str(), itr->second);
+  if (unlikely(ret < 0)) {
+    cerr << "failed to set dup_oid xattrs: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+#endif
+
+
 #if 0
   ret = obj_ioctx.getxattr(oid, RGW_ATTR_ETAG, bl);
+
+  ret = obj_ioctx.trunc(dup_oid, 0);
+  if (unlikely(ret < 0)) {
+    cerr << "failed to trunc dup_oid: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
 
   RGW_ATTR_ETAG;
   RGW_ATTR_MANIFEST;
@@ -1970,8 +2048,10 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	  DEDUP_THRESHOLD_MAX << ") **" << std::endl;
 	usage_exit();
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--obj", (char*)NULL)) {
-      opts["oid"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--src_obj", (char*)NULL)) {
+      opts["src_oid"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--dup_obj", (char*)NULL)) {
+      opts["dup_oid"] = val;
     } else {
       if (val[0] == '-') {
 	cerr << "** Bad argument <" << val[0] << "> **" << std::endl;
@@ -2019,8 +2099,8 @@ int main(int argc, char **argv)
     list_intermediate_objs(params.pool_name, params.verbose);
   }
   else if (strncmp(args[0], "dedup", strlen("dedup")) == 0) {
-    cout << "dedup for " << opts["oid"] << " in pool " << params.pool_name << std::endl;
-    dedup_full_object(params.pool_name, opts["oid"]);
+    cout << "src_oid=" << opts["src_oid"] << ", dup_oid=" << opts["dup_oid"] << std::endl;
+    dedup_full_object(params.pool_name, opts["src_oid"], opts["dup_oid"]);
   }
   else if (strncmp(args[0], "clean", strlen("clean")) == 0) {
     bool clean_raw_fp = params.clean_raw_fp;

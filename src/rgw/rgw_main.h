@@ -28,6 +28,7 @@
 #include "rgw_realm_reloader.h"
 #include "rgw_ldap.h"
 #include "rgw_lua.h"
+#include "rgw_dedup.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_ratelimit.h"
 
@@ -54,6 +55,7 @@ public:
 namespace rgw {
 
 namespace lua { class Background; }
+namespace dedup{ class Background; }
 namespace sal { class ConfigStore; }
 
 class RGWLib;
@@ -70,6 +72,7 @@ class AppMain {
   OpsLogSink* olog = nullptr;
   RGWREST rest;
   std::unique_ptr<rgw::lua::Background> lua_background;
+  std::unique_ptr<rgw::dedup::Background> dedup_background;
   std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
   std::unique_ptr<rgw::dmclock::SchedulerCtx> sched_ctx;
   std::unique_ptr<ActiveRateLimiter> ratelimiter;
@@ -116,6 +119,7 @@ public:
   void init_tracepoints();
   void init_notification_endpoints();
   void init_lua();
+  void init_dedup();
 
   bool have_http() {
     return have_http_frontend;
