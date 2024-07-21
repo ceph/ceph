@@ -25,7 +25,6 @@
 
 //#define FULL_DEDUP_SUPPORT
 namespace rgw::dedup {
-  static constexpr const char* DEDUP_WATCH_OBJ = "DEDUP_WATCH_OBJ";
   using work_shard_t   = uint16_t;
   using md5_shard_t    = uint16_t;
 
@@ -86,29 +85,21 @@ namespace rgw::dedup {
     uint8_t flags;
   };
 
+  struct dedup_stats_t {
+    dedup_stats_t& operator+=(const dedup_stats_t& other);
+
+    uint64_t singleton_count = 0;
+    uint64_t unique_count = 0;
+    uint64_t duplicate_count = 0;
+    uint64_t dedup_bytes_estimate = 0;
+  };
+
+  std::ostream& operator<<(std::ostream &out, const dedup_stats_t& stats);
+  void encode(const dedup_stats_t& ds, ceph::bufferlist& bl);
+  void decode(dedup_stats_t& ds, ceph::bufferlist::const_iterator& bl);
+
   struct worker_stats_t {
-    worker_stats_t& operator +=(const worker_stats_t& other) {
-      this->ingress_obj += other.ingress_obj;
-      this->ingress_obj_bytes += other.ingress_obj_bytes;
-      this->egress_records += other.egress_records;
-      this->egress_blocks += other.egress_blocks;
-      this->egress_slabs += other.egress_slabs;
-      this->single_part_objs += other.single_part_objs;
-      this->multipart_objs += other.multipart_objs;
-      this->small_multipart_obj += other.small_multipart_obj;
-      this->default_storage_class_objs += other.default_storage_class_objs;
-      this->default_storage_class_objs_bytes += other.default_storage_class_objs_bytes;
-      this->non_default_storage_class_objs += other.non_default_storage_class_objs;
-      this->non_default_storage_class_objs_bytes += other.non_default_storage_class_objs_bytes;
-      this->ingress_corrupted_etag += other.ingress_corrupted_etag;
-      this->ingress_skip_too_small_bytes += other.ingress_skip_too_small_bytes;
-      this->ingress_skip_too_small += other.ingress_skip_too_small;
-      this->ingress_skip_too_small_64KB_bytes += other.ingress_skip_too_small_64KB_bytes;
-      this->ingress_skip_too_small_64KB += other.ingress_skip_too_small_64KB;
-
-      return *this;
-    }
-
+    worker_stats_t& operator +=(const worker_stats_t& other);
     void dump(Formatter *f) const;
 
     uint64_t ingress_obj = 0;
@@ -138,109 +129,16 @@ namespace rgw::dedup {
     utime_t  duration = {0, 0};
   };
   std::ostream& operator<<(std::ostream &out, const worker_stats_t &s);
+  void encode(const worker_stats_t& w, ceph::bufferlist& bl);
+  void decode(worker_stats_t& w, ceph::bufferlist::const_iterator& bl);
 
-  inline void encode(const worker_stats_t& w, ceph::bufferlist& bl)
-  {
-    ENCODE_START(1, 1, bl);
-    encode(w.ingress_obj, bl);
-    encode(w.ingress_obj_bytes, bl);
-    encode(w.egress_records, bl);
-    encode(w.egress_blocks, bl);
-    encode(w.egress_slabs, bl);
-
-    encode(w.single_part_objs, bl);
-    encode(w.multipart_objs, bl);
-    encode(w.small_multipart_obj, bl);
-
-    encode(w.default_storage_class_objs, bl);
-    encode(w.default_storage_class_objs_bytes, bl);
-    encode(w.non_default_storage_class_objs, bl);
-    encode(w.non_default_storage_class_objs_bytes, bl);
-
-    encode(w.ingress_corrupted_etag, bl);
-
-    encode(w.ingress_skip_too_small_bytes, bl);
-    encode(w.ingress_skip_too_small, bl);
-
-    encode(w.ingress_skip_too_small_64KB_bytes, bl);
-    encode(w.ingress_skip_too_small_64KB, bl);
-
-    encode(w.duration, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  inline void decode(worker_stats_t& w, ceph::bufferlist::const_iterator& bl)
-  {
-    DECODE_START(1, bl);
-    decode(w.ingress_obj, bl);
-    decode(w.ingress_obj_bytes, bl);
-    decode(w.egress_records, bl);
-    decode(w.egress_blocks, bl);
-    decode(w.egress_slabs, bl);
-    decode(w.single_part_objs, bl);
-    decode(w.multipart_objs, bl);
-    decode(w.small_multipart_obj, bl);
-    decode(w.default_storage_class_objs, bl);
-    decode(w.default_storage_class_objs_bytes, bl);
-    decode(w.non_default_storage_class_objs, bl);
-    decode(w.non_default_storage_class_objs_bytes, bl);
-    decode(w.ingress_corrupted_etag, bl);
-    decode(w.ingress_skip_too_small_bytes, bl);
-    decode(w.ingress_skip_too_small, bl);
-    decode(w.ingress_skip_too_small_64KB_bytes, bl);
-    decode(w.ingress_skip_too_small_64KB, bl);
-
-    decode(w.duration, bl);
-    DECODE_FINISH(bl);
-  }
 
   struct md5_stats_t {
-    md5_stats_t& operator +=(const md5_stats_t& other) {
-      this->ingress_failed_load_bucket    += other.ingress_failed_load_bucket;
-      this->ingress_failed_get_object     += other.ingress_failed_get_object;
-      this->ingress_failed_get_obj_attrs  += other.ingress_failed_get_obj_attrs;
-      this->ingress_corrupted_etag        += other.ingress_corrupted_etag;
-      this->ingress_corrupted_obj_attrs   += other.ingress_corrupted_obj_attrs;
-      this->ingress_skip_encrypted        += other.ingress_skip_encrypted;
-      this->ingress_skip_encrypted_bytes  += other.ingress_skip_encrypted_bytes;
-      this->ingress_skip_compressed       += other.ingress_skip_compressed;
-      this->ingress_skip_compressed_bytes += other.ingress_skip_compressed_bytes;
-      this->ingress_skip_changed_objs     += other.ingress_skip_changed_objs;
-      this->shared_manifest_dedup_bytes   += other.shared_manifest_dedup_bytes;
-
-      this->skipped_shared_manifest += other.skipped_shared_manifest;
-      this->skipped_singleton       += other.skipped_singleton;
-      this->skipped_singleton_bytes += other.skipped_singleton_bytes;
-      this->skipped_source_record   += other.skipped_source_record;
-      this->duplicate_records       += other.duplicate_records;
-      this->size_mismatch           += other.size_mismatch;
-      this->sha256_mismatch         += other.sha256_mismatch;
-      this->failed_src_load         += other.failed_src_load;
-      this->failed_rec_load         += other.failed_rec_load;
-      this->failed_block_load       += other.failed_block_load;
-
-      this->valid_sha256_attrs      += other.valid_sha256_attrs;
-      this->invalid_sha256_attrs    += other.invalid_sha256_attrs;
-      this->set_sha256_attrs        += other.set_sha256_attrs;
-      this->skip_sha256_cmp         += other.skip_sha256_cmp;
-
-      this->set_shared_manifest_src += other.set_shared_manifest_src;
-      this->loaded_objects          += other.loaded_objects;
-      this->processed_objects       += other.processed_objects;
-      this->singleton_count         += other.singleton_count;
-      this->duplicate_count         += other.duplicate_count;
-      this->dedup_bytes_estimate    += other.dedup_bytes_estimate;
-      this->unique_count            += other.unique_count;
-      this->deduped_objects         += other.deduped_objects;
-      this->deduped_objects_bytes   += other.deduped_objects_bytes;
-
-      this->failed_dedup            += other.failed_dedup;
-      this->failed_table_load       += other.failed_table_load;
-      this->failed_map_overflow     += other.failed_map_overflow;
-      return *this;
-    }
+    md5_stats_t& operator +=(const md5_stats_t& other);
     void dump(Formatter *f) const;
 
+    dedup_stats_t small_objs_stat;
+    dedup_stats_t big_objs_stat;
     uint64_t ingress_failed_load_bucket = 0;
     uint64_t ingress_failed_get_object = 0;
     uint64_t ingress_failed_get_obj_attrs = 0;
@@ -254,6 +152,7 @@ namespace rgw::dedup {
 
     uint64_t shared_manifest_dedup_bytes = 0;
     uint64_t skipped_shared_manifest = 0;
+    uint64_t skipped_purged_small = 0;
     uint64_t skipped_singleton = 0;
     uint64_t skipped_singleton_bytes = 0;
     uint64_t skipped_source_record = 0;
@@ -272,116 +171,20 @@ namespace rgw::dedup {
     uint64_t set_shared_manifest_src = 0;
     uint64_t loaded_objects = 0;
     uint64_t processed_objects = 0;
-    uint64_t singleton_count = 0;
-    uint64_t duplicate_count = 0;
     // counter is using on-disk size affected by block-size
-    uint64_t dedup_bytes_estimate = 0;
-    uint64_t unique_count = 0;
+    uint64_t dup_head_bytes_estimate = 0; //duplicate_head_bytes
     uint64_t deduped_objects = 0;
     // counter is using s3 byte size disregarding the on-disk size affected by block-size
     uint64_t deduped_objects_bytes = 0;
+    uint64_t dup_head_bytes = 0;
     uint64_t failed_dedup = 0;
     uint64_t failed_table_load = 0;
     uint64_t failed_map_overflow = 0;
     utime_t  duration = {0, 0};
   };
   std::ostream &operator<<(std::ostream &out, const md5_stats_t &s);
-  inline void encode(const md5_stats_t& m, ceph::bufferlist& bl)
-  {
-    ENCODE_START(1, 1, bl);
-
-    encode(m.ingress_failed_load_bucket, bl);
-    encode(m.ingress_failed_get_object, bl);
-    encode(m.ingress_failed_get_obj_attrs, bl);
-    encode(m.ingress_corrupted_etag, bl);
-    encode(m.ingress_corrupted_obj_attrs, bl);
-    encode(m.ingress_skip_encrypted, bl);
-    encode(m.ingress_skip_encrypted_bytes, bl);
-    encode(m.ingress_skip_compressed, bl);
-    encode(m.ingress_skip_compressed_bytes, bl);
-    encode(m.ingress_skip_changed_objs, bl);
-    encode(m.shared_manifest_dedup_bytes, bl);
-
-    encode(m.skipped_shared_manifest, bl);
-    encode(m.skipped_singleton, bl);
-    encode(m.skipped_singleton_bytes, bl);
-    encode(m.skipped_source_record, bl);
-    encode(m.duplicate_records, bl);
-    encode(m.size_mismatch, bl);
-    encode(m.sha256_mismatch, bl);
-    encode(m.failed_src_load, bl);
-    encode(m.failed_rec_load, bl);
-    encode(m.failed_block_load, bl);
-
-    encode(m.valid_sha256_attrs, bl);
-    encode(m.invalid_sha256_attrs, bl);
-    encode(m.set_sha256_attrs, bl);
-    encode(m.skip_sha256_cmp, bl);
-    encode(m.set_shared_manifest_src, bl);
-
-    encode(m.loaded_objects, bl);
-    encode(m.processed_objects, bl);
-    encode(m.singleton_count, bl);
-    encode(m.duplicate_count, bl);
-    encode(m.dedup_bytes_estimate, bl);
-    encode(m.unique_count, bl);
-    encode(m.deduped_objects, bl);
-    encode(m.deduped_objects_bytes, bl);
-    encode(m.failed_dedup, bl);
-    encode(m.failed_table_load, bl);
-    encode(m.failed_map_overflow, bl);
-
-    encode(m.duration, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  inline void decode(md5_stats_t& m, ceph::bufferlist::const_iterator& bl)
-  {
-    DECODE_START(1, bl);
-    decode(m.ingress_failed_load_bucket, bl);
-    decode(m.ingress_failed_get_object, bl);
-    decode(m.ingress_failed_get_obj_attrs, bl);
-    decode(m.ingress_corrupted_etag, bl);
-    decode(m.ingress_corrupted_obj_attrs, bl);
-    decode(m.ingress_skip_encrypted, bl);
-    decode(m.ingress_skip_encrypted_bytes, bl);
-    decode(m.ingress_skip_compressed, bl);
-    decode(m.ingress_skip_compressed_bytes, bl);
-    decode(m.ingress_skip_changed_objs, bl);
-    decode(m.shared_manifest_dedup_bytes, bl);
-
-    decode(m.skipped_shared_manifest, bl);
-    decode(m.skipped_singleton, bl);
-    decode(m.skipped_singleton_bytes, bl);
-    decode(m.skipped_source_record, bl);
-    decode(m.duplicate_records, bl);
-    decode(m.size_mismatch, bl);
-    decode(m.sha256_mismatch, bl);
-    decode(m.failed_src_load, bl);
-    decode(m.failed_rec_load, bl);
-    decode(m.failed_block_load, bl);
-
-    decode(m.valid_sha256_attrs, bl);
-    decode(m.invalid_sha256_attrs, bl);
-    decode(m.set_sha256_attrs, bl);
-    decode(m.skip_sha256_cmp, bl);
-    decode(m.set_shared_manifest_src, bl);
-
-    decode(m.loaded_objects, bl);
-    decode(m.processed_objects, bl);
-    decode(m.singleton_count, bl);
-    decode(m.duplicate_count, bl);
-    decode(m.dedup_bytes_estimate, bl);
-    decode(m.unique_count, bl);
-    decode(m.deduped_objects, bl);
-    decode(m.deduped_objects_bytes, bl);
-    decode(m.failed_dedup, bl);
-    decode(m.failed_table_load, bl);
-    decode(m.failed_map_overflow, bl);
-
-    decode(m.duration, bl);
-    DECODE_FINISH(bl);
-  }
+  void encode(const md5_stats_t& m, ceph::bufferlist& bl);
+  void decode(md5_stats_t& m, ceph::bufferlist::const_iterator& bl);
 
   struct parsed_etag_t {
     uint64_t md5_high;  // High Bytes of the Object Data MD5
