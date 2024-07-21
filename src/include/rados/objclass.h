@@ -150,7 +150,7 @@ extern int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
  * @param inbl
  */
 extern int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
-                            ceph::bufferlist *inbl);
+                            const ceph::bufferlist *inbl);
 
 /**
  * Get value corresponding to a key from the map.
