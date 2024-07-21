@@ -32,8 +32,6 @@
 
 namespace rgw::dedup {
 
-  rgw_pool pool(DEDUP_POOL_NAME);
-
   //---------------------------------------------------------------------------
   disk_record_t::disk_record_t(const rgw::sal::Bucket *p_bucket,
                                const std::string      &obj_name,
