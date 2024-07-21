@@ -49,6 +49,14 @@ namespace rgw::dedup {
       }
 
       const key_t &key = hash_tab[tab_idx].key;
+      // This is an approximation only since size is stored in 4KB resolution
+      uint64_t byte_size_approx = disk_blocks_to_byte_size(key.size_4k_units);
+      if (!key.multipart_object() && (byte_size_approx <= head_object_size)) {
+        hash_tab[tab_idx].val.clear_flags();
+        redistributed_clear++;
+        continue;
+      }
+
       uint32_t key_idx = key.hash() % entries_count;
       if (key_idx != tab_idx) {
         uint64_t count = 1;
@@ -195,31 +203,50 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void dedup_table_t::count_duplicates(uint64_t *p_singleton_count,
-                                       uint64_t *p_unique_count,
-                                       uint64_t *p_duplicate_count,
-                                       uint64_t *p_duplicate_bytes_approx)
+  void dedup_table_t::count_duplicates(dedup_stats_t *p_small_objs,
+                                       dedup_stats_t *p_big_objs,
+                                       uint64_t *p_duplicate_head_bytes)
   {
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
       if (!hash_tab[tab_idx].val.is_occupied()) {
         continue;
       }
 
+      const key_t &key = hash_tab[tab_idx].key;
+      // This is an approximation only since size is stored in 4KB resolution
+      uint64_t byte_size_approx = disk_blocks_to_byte_size(key.size_4k_units);
+      uint32_t duplicate_count = (hash_tab[tab_idx].val.count -1);
+
+      // skip small single part objects which we can't dedup
+      if (!key.multipart_object() && (byte_size_approx <= head_object_size)) {
+        if (hash_tab[tab_idx].val.is_singleton()) {
+          p_small_objs->singleton_count++;
+        }
+        else {
+          p_small_objs->duplicate_count += duplicate_count;
+          p_small_objs->unique_count ++;
+          p_small_objs->dedup_bytes_estimate += (duplicate_count * byte_size_approx);
+        }
+        continue;
+      }
+
       if (hash_tab[tab_idx].val.is_singleton()) {
-        (*p_singleton_count)++;
+        p_big_objs->singleton_count++;
       }
       else {
         ceph_assert(hash_tab[tab_idx].val.count > 1);
-        uint32_t duplicate_count = (hash_tab[tab_idx].val.count -1);
-        key_t &key = hash_tab[tab_idx].key;
-        // This is an approximation only since size is stored in 4KB resolution
-        uint64_t byte_size_approx = disk_blocks_to_byte_size(key.size_4k_units);
         uint64_t dup_bytes_approx = calc_deduped_bytes(head_object_size,
                                                        key.num_parts,
                                                        byte_size_approx);
-        (*p_duplicate_bytes_approx) += (duplicate_count * dup_bytes_approx);
-        (*p_duplicate_count) += duplicate_count;
-        (*p_unique_count) ++;
+        p_big_objs->dedup_bytes_estimate += (duplicate_count * dup_bytes_approx);
+        p_big_objs->duplicate_count += duplicate_count;
+        p_big_objs->unique_count ++;
+
+        if (!key.multipart_object()) {
+          // single part objects duplicate the head object when dedup is used
+          uint64_t dup_head_bytes = duplicate_count * head_object_size;
+          *p_duplicate_head_bytes += dup_head_bytes;
+        }
       }
     }
   }
