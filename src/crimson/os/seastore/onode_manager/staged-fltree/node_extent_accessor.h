@@ -166,14 +166,14 @@ class DeltaRecorderT final: public DeltaRecorder {
       }
       case node_delta_op_t::UPDATE_CHILD_ADDR: {
         SUBDEBUG(seastore_onode, "decoding UPDATE_CHILD_ADDR ...");
-        laddr_t new_addr;
+        laddr_t new_addr = L_ADDR_NULL;
         ceph::decode(new_addr, delta);
         node_offset_t update_offset;
         ceph::decode(update_offset, delta);
         auto p_addr = reinterpret_cast<laddr_packed_t*>(
             mut.get_write() + update_offset);
         SUBDEBUG(seastore_onode,
-            "apply {:#x} to offset {:#x} ...",
+            "apply {} to offset {:#x} ...",
             new_addr, update_offset);
         layout_t::update_child_addr(mut, new_addr, p_addr);
         break;
@@ -198,9 +198,10 @@ class DeltaRecorderT final: public DeltaRecorder {
         auto p_header_ = reinterpret_cast<const value_header_t*>(p_header);
         SUBDEBUG(seastore_onode, "update {} at {:#x} ...", *p_header_, value_header_offset);
         auto payload_mut = p_header_->get_payload_mutable(mut);
-        auto value_addr = node.get_laddr() + payload_mut.get_node_offset();
         get_value_replayer(p_header_->magic)->apply_value_delta(
-            delta, payload_mut, value_addr);
+            delta, payload_mut,
+            node.get_laddr(),
+            payload_mut.get_node_offset());
         break;
       }
       default:
@@ -252,7 +253,7 @@ class DeltaRecorderT final: public DeltaRecorder {
   value_input_t decode_value(ceph::bufferlist::const_iterator& delta) const {
     if constexpr (std::is_same_v<value_input_t, laddr_t>) {
       // NODE_TYPE == node_type_t::INTERNAL
-      laddr_t value;
+      laddr_t value = L_ADDR_NULL;
       ceph::decode(value, delta);
       return value;
     } else if constexpr (std::is_same_v<value_input_t, value_config_t>) {
@@ -526,12 +527,12 @@ class NodeExtentAccessorT {
       crimson::ct_error::input_output_error::assert_failure(
           [FNAME, c, alloc_size, l_to_discard = extent->get_laddr()] {
         SUBERRORT(seastore_onode,
-            "EIO during allocate -- node_size={}, to_discard={:x}",
+            "EIO during allocate -- node_size={}, to_discard={}",
             c.t, alloc_size, l_to_discard);
       })
     ).si_then([this, c, FNAME] (auto fresh_extent) {
       SUBDEBUGT(seastore_onode,
-          "update addr from {:#x} to {:#x} ...",
+          "update addr from {} to {} ...",
           c.t, extent->get_laddr(), fresh_extent->get_laddr());
       assert(fresh_extent);
       assert(fresh_extent->is_initial_pending());
@@ -555,14 +556,14 @@ class NodeExtentAccessorT {
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
-              "EIO during retire -- to_disgard={:x}, fresh={:x}",
+              "EIO during retire -- to_disgard={}, fresh={}",
               c.t, l_to_discard, l_fresh);
         }),
         crimson::ct_error::enoent::assert_failure(
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
-              "ENOENT during retire -- to_disgard={:x}, fresh={:x}",
+              "ENOENT during retire -- to_disgard={}, fresh={}",
               c.t, l_to_discard, l_fresh);
         })
       );
@@ -582,11 +583,11 @@ class NodeExtentAccessorT {
       eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::assert_failure(
           [FNAME, c, addr] {
-        SUBERRORT(seastore_onode, "EIO -- addr={:x}", c.t, addr);
+        SUBERRORT(seastore_onode, "EIO -- addr={}", c.t, addr);
       }),
       crimson::ct_error::enoent::assert_failure(
           [FNAME, c, addr] {
-        SUBERRORT(seastore_onode, "ENOENT -- addr={:x}", c.t, addr);
+        SUBERRORT(seastore_onode, "ENOENT -- addr={}", c.t, addr);
       })
 #ifndef NDEBUG
     ).si_then([c] {

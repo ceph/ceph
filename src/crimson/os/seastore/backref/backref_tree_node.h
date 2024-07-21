@@ -10,14 +10,33 @@ namespace crimson::os::seastore::backref {
 using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
 using backref_node_meta_le_t = fixed_kv_node_meta_le_t<paddr_t>;
 
-constexpr size_t INTERNAL_NODE_CAPACITY = 254;
-constexpr size_t LEAF_NODE_CAPACITY = 169;
+/**
+ * Layout (4k):
+ *   checksum   :                              4b
+ *   size       : uint32_t[1]                  4b
+ *   meta       : backref_node_meta_le_t[3]    (1*24)b
+ *   keys       : paddr_t[169]                 (169*8)b
+ *   values     : laddr_t[169]                 (169*16)b
+ *                                             = 4088
+ */
+constexpr size_t INTERNAL_NODE_CAPACITY = 169;
+
+/**
+ * Layout (4k):
+ *   checksum   :                              4b
+ *   size       : uint32_t[1]                  4b
+ *   meta       : backref_node_meta_le_t[3]    (1*24)b
+ *   keys       : paddr_t[127]                 (127*8)b
+ *   values     : backref_map_val_t[127]       (127*24)b
+ *                                             = 4096
+ */
+constexpr size_t LEAF_NODE_CAPACITY = 127;
 
 using BackrefNode = FixedKVNode<paddr_t>;
 
 struct backref_map_val_t {
-  extent_len_t len = 0;	///< length of extents
-  laddr_t laddr = 0;	///< logical address of extents
+  extent_len_t len = 0;	        ///< length of extents
+  laddr_t laddr = L_ADDR_NULL;  ///< logical address of extents
   extent_types_t type = extent_types_t::ROOT;
 
   backref_map_val_t() = default;
@@ -36,7 +55,7 @@ std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
 
 struct backref_map_val_le_t {
   extent_len_le_t len = init_extent_len_le(0);
-  laddr_le_t laddr = laddr_le_t(0);
+  laddr_le_t laddr = laddr_le_t(L_ADDR_NULL);
   extent_types_le_t type = 0;
 
   backref_map_val_le_t() = default;

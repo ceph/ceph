@@ -27,20 +27,21 @@ seastar::future<> TMDriver::write(
         "write",
         [this, offset, &ptr](auto& t)
       {
-        return tm->remove(t, offset
+	auto laddr = laddr_t::get_hint_from_offset(offset);
+        return tm->remove(t, laddr
         ).discard_result().handle_error_interruptible(
           crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
           crimson::ct_error::pass_further_all{}
-        ).si_then([this, offset, &t, &ptr] {
+        ).si_then([this, laddr, &t, &ptr] {
           logger().debug("dec_ref complete");
-          return tm->alloc_data_extents<TestBlock>(t, offset, ptr.length());
+          return tm->alloc_data_extents<TestBlock>(t, laddr, ptr.length());
         }).si_then([this, offset, &t, &ptr](auto extents) mutable {
 	  boost::ignore_unused(offset);  // avoid clang warning;
 	  auto off = offset;
 	  auto left = ptr.length();
 	  size_t written = 0;
 	  for (auto &ext : extents) {
-	    assert(ext->get_laddr() == (size_t)off);
+	    assert(ext->get_laddr().get_original_offset() == (size_t)off);
 	    assert(ext->get_bptr().length() <= left);
 	    ptr.copy_out(written, ext->get_length(), ext->get_bptr().c_str());
 	    off += ext->get_length();
@@ -59,15 +60,16 @@ seastar::future<> TMDriver::write(
 
 TMDriver::read_extents_ret TMDriver::read_extents(
   Transaction &t,
-  laddr_t offset,
+  off_t offset,
   extent_len_t length)
 {
   return seastar::do_with(
     lba_pin_list_t(),
     lextent_list_t<TestBlock>(),
     [this, &t, offset, length](auto &pins, auto &ret) {
+      auto laddr = laddr_t::get_hint_from_offset(offset);
       return tm->get_pins(
-	t, offset, length
+	t, laddr, length
       ).si_then([this, &t, &pins, &ret](auto _pins) {
 	_pins.swap(pins);
 	logger().debug("read_extents: mappings {}", pins);
@@ -115,10 +117,11 @@ seastar::future<bufferlist> TMDriver::read(
       ).si_then([=, &blret](auto ext_list) {
         size_t cur = offset;
         for (auto &i: ext_list) {
-          if (cur != i.first) {
-            assert(cur < i.first);
-            blret.append_zero(i.first - cur);
-            cur = i.first;
+	  auto offset = i.first.get_original_offset();
+          if (cur != offset) {
+            assert(cur < offset);
+            blret.append_zero(offset - cur);
+            cur = offset;
           }
           blret.append(i.second->get_bptr());
           cur += i.second->get_bptr().length();

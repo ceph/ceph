@@ -111,7 +111,7 @@ struct NodeLayoutReplayableT {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       assert(node_stage.keys() != 0);
       position_t last_pos;
-      laddr_t last_value;
+      laddr_t last_value = L_ADDR_NULL;
       {
         const laddr_packed_t* p_last_value;
         stage_t::template get_largest_slot<true, false, true>(
