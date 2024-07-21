@@ -66,6 +66,7 @@
 #include "rgw_asio_frontend.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_lua.h"
+#include "rgw_dedup.h"
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
@@ -529,6 +530,9 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     if (env.lua.background) {
       rgw_pauser->add_pauser(env.lua.background);
     }
+    if (env.dedup.background) {
+      rgw_pauser->add_pauser(env.dedup.background);
+    }
     need_context_pool();
     reloader = std::make_unique<RGWRealmReloader>(
       env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
@@ -555,7 +559,6 @@ void rgw::AppMain::init_lua()
   rgw::sal::Driver* driver = env.driver;
   int r{0};
   std::string install_dir;
-
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   r = rgw::lua::install_packages(dpp, driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
@@ -580,13 +583,35 @@ void rgw::AppMain::init_lua()
   }
 } /* init_lua */
 
+void rgw::AppMain::init_dedup()
+{
+  rgw::sal::Driver* driver = env.driver;
+  if (driver->get_name() == "rados") { /* Supported for only RadosStore */
+    try {
+      env.dedup.background = nullptr;
+      dedup_background = std::make_unique<rgw::dedup::Background>(driver, dpp->get_cct());
+      dedup_background->start();
+      // TBD: do we really need to store in env.dedup.background ?
+      env.dedup.background = dedup_background.get();
+      ceph_assert(dedup_background);
+      env.dedup.background->watch_reload(dpp);
+    }
+    catch (const std::runtime_error&) {
+      ldpp_dout(dpp, 0) << __func__ << "::failed creae dedup background job::" << dendl;
+    }
+  }
+}
+
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
-    if (g_conf().get_val<bool>("rgw_lua_enable"))
-      static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->
-          unwatch_reload(dpp);
+    if (g_conf().get_val<bool>("rgw_lua_enable")) {
+      static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
+    }
+    if (env.dedup.background) {
+      (env.dedup.background)->unwatch_reload(dpp);
+    }
   }
 
   for (auto& fe : fes) {
@@ -598,6 +623,10 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 
   if (lua_background) {
     lua_background->shutdown();
+  }
+
+  if (dedup_background) {
+    dedup_background->shutdown();
   }
 
   // Do this before closing storage so requests don't try to call into

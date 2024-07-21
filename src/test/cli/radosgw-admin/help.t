@@ -16,6 +16,11 @@
     user policy list attached        list attached managed policies
     caps add                         add user capabilities
     caps rm                          remove user capabilities
+    dedup stats                      Collcet & display dedup statistics
+    dedup abort                      Abort dedup
+    dedup restart                    Restart dedup (--dry-run for a dry-run)
+    dedup pause                      Pause dedup
+    dedup resume                     Resume paused dedup
     subuser create                   create a new subuser
     subuser modify                   modify subuser
     subuser rm                       remove subuser
@@ -265,6 +270,7 @@
      --url=<url>                       url for pushing/pulling period/realm
      --epoch=<number>                  period epoch
      --commit                          commit the period during 'period update'
+     --dry-run                         dry run only, no changes will be made
      --staging                         get staging period info
      --master                          set as master
      --master-zone=<id>                master zone id

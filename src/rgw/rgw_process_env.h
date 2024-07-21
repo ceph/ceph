@@ -18,6 +18,9 @@ namespace rgw::auth {
 namespace rgw::lua {
   class Background;
 }
+namespace rgw::dedup {
+  class Background;
+}
 namespace rgw::sal {
   class ConfigStore;
   class Driver;
@@ -36,8 +39,13 @@ struct RGWLuaProcessEnv {
   std::unique_ptr<rgw::sal::LuaManager> manager;
 };
 
+struct RGWDedupEnv {
+  rgw::dedup::Background* background = nullptr;
+};
+
 struct RGWProcessEnv {
   RGWLuaProcessEnv lua;
+  RGWDedupEnv dedup;
   rgw::sal::ConfigStore* cfgstore = nullptr;
   rgw::sal::Driver* driver = nullptr;
   rgw::SiteConfig* site = nullptr;
