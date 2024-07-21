@@ -1,0 +1,10 @@
+[DEFAULT]
+port = 8000
+host = localhost
+
+[s3 main]
+access_key = 0555b35654ad1656d804
+secret_key = h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==
+display_name = M. Tester
+user_id = testid
+email = tester@ceph.com
