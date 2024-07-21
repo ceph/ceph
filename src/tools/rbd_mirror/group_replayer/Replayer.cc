@@ -596,7 +596,32 @@ void Replayer<I>::handle_mirror_snapshot_complete(
     on_finish->complete(0);
     return;
   }
-  unlink_group_snapshots(remote_group_snap_id);
+
+  // remove mirror_peer_uuids from remote snap
+  auto itr = std::find_if(
+      m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
+      [remote_group_snap_id](const cls::rbd::GroupSnapshot &s) {
+      return s.id == remote_group_snap_id;
+      });
+
+  ceph_assert(itr != m_remote_group_snaps.end());
+  auto rns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+      &itr->snapshot_namespace);
+  if (rns != nullptr) {
+    rns->mirror_peer_uuids.clear();
+    auto comp = create_rados_callback(
+        new LambdaContext([this, remote_group_snap_id](int r) {
+          unlink_group_snapshots(remote_group_snap_id);
+        }));
+
+    librados::ObjectWriteOperation op;
+    librbd::cls_client::group_snap_set(&op, *itr);
+    int r = m_remote_io_ctx.aio_operate(
+        librbd::util::group_header_name(m_remote_group_id), comp, &op);
+    ceph_assert(r == 0);
+    comp->release();
+  }
+
   on_finish->complete(0);
 }
 
