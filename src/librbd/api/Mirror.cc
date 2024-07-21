@@ -22,6 +22,7 @@
 #include "librbd/api/Namespace.h"
 #include "librbd/api/Utils.h"
 #include "librbd/group/ListSnapshotsRequest.h"
+#include "librbd/group/UnlinkPeerGroupRequest.h"
 #include "librbd/mirror/DemoteRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -3036,6 +3037,13 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     util::notify_unquiesce(image_ctxs, quiesce_requests);
   }
 
+  if (!ret_code) {
+    C_SaferCond cond;
+    auto req = group::UnlinkPeerGroupRequest<I>::create(
+        group_ioctx, group_id, &image_ctxs, &cond);
+    req->send();
+    cond.wait();
+  }
   close_images(&image_ctxs);
 
   return ret_code;
@@ -3192,6 +3200,13 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
     util::notify_unquiesce(image_ctxs, quiesce_requests);
   }
 
+  if (!ret_code) {
+    C_SaferCond cond;
+    auto req = group::UnlinkPeerGroupRequest<I>::create(
+        group_ioctx, group_id, &image_ctxs, &cond);
+    req->send();
+    cond.wait();
+  }
   close_images(&image_ctxs);
 
   return ret_code;
@@ -3388,6 +3403,13 @@ int Mirror<I>::group_snapshot_create(IoCtx& group_ioctx, const char *group_name,
     util::notify_unquiesce(image_ctxs, quiesce_requests);
   }
 
+  if (!ret_code) {
+    C_SaferCond cond;
+    auto req = group::UnlinkPeerGroupRequest<I>::create(
+        group_ioctx, group_id, &image_ctxs, &cond);
+    req->send();
+    cond.wait();
+  }
   close_images(&image_ctxs);
 
   return ret_code;
@@ -3496,6 +3518,13 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
     util::notify_unquiesce(image_ctxs, quiesce_requests);
   }
 
+  if (!ret_code) {
+    C_SaferCond cond;
+    auto req = group::UnlinkPeerGroupRequest<I>::create(
+        group_ioctx, group_id, &image_ctxs, &cond);
+    req->send();
+    cond.wait();
+  }
   close_images(&image_ctxs);
 
   if (!ret_code) {
@@ -3628,6 +3657,13 @@ int Mirror<I>::group_image_remove(IoCtx &group_ioctx,
     util::notify_unquiesce(image_ctxs, quiesce_requests);
   }
 
+  if (!ret_code) {
+    C_SaferCond cond;
+    auto req = group::UnlinkPeerGroupRequest<I>::create(
+        group_ioctx, group_id, &image_ctxs, &cond);
+    req->send();
+    cond.wait();
+  }
   close_images(&image_ctxs);
 
   if (!ret_code) {
