@@ -44,6 +44,8 @@ extern int cls_getxattr(cls_method_context_t hctx, const char *name,
                                  char **outdata, int *outdatalen);
 extern int cls_setxattr(cls_method_context_t hctx, const char *name,
                                  const char *value, int val_len);
+extern int cls_rmxattr(cls_method_context_t hctx, const char *name);
+
 /** This will fill in the passed origin pointer with the origin of the
  * request which activated your class call. */
 extern int cls_get_request_origin(cls_method_context_t hctx,
