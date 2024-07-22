@@ -6572,17 +6572,29 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       ACLOwner owner;
       if (iter = attrs.find(RGW_ATTR_ACL); iter != attrs.end()) {
         (void) decode_policy(dpp, iter->second, &owner);
+      } else if (iter = state->attrset.find(RGW_ATTR_ACL);
+                 iter != state->attrset.end()) {
+        (void) decode_policy(dpp, iter->second, &owner);
       }
       std::string etag;
       if (iter = attrs.find(RGW_ATTR_ETAG); iter != attrs.end()) {
+        etag = rgw_bl_str(iter->second);
+      } else if (iter = state->attrset.find(RGW_ATTR_ETAG);
+                 iter != state->attrset.end()) {
         etag = rgw_bl_str(iter->second);
       }
       std::string content_type;
       if (iter = attrs.find(RGW_ATTR_CONTENT_TYPE); iter != attrs.end()) {
         content_type = rgw_bl_str(iter->second);
+      } else if (iter = state->attrset.find(RGW_ATTR_CONTENT_TYPE);
+                 iter != state->attrset.end()) {
+        content_type = rgw_bl_str(iter->second);
       }
       string storage_class;
       if (iter = attrs.find(RGW_ATTR_STORAGE_CLASS); iter != attrs.end()) {
+        storage_class = rgw_bl_str(iter->second);
+      } else if (iter = state->attrset.find(RGW_ATTR_STORAGE_CLASS);
+                 iter != state->attrset.end()) {
         storage_class = rgw_bl_str(iter->second);
       }
       uint64_t epoch = ioctx.get_last_version();
