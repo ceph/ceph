@@ -59,7 +59,7 @@ add_executable(unittest_lruset
   test_lruset.cc
   )
 add_ceph_unittest(unittest_lruset)
-target_link_libraries(unittest_lruset)
+target_link_libraries(unittest_lruset ceph-common)
 
 # unittest_histogram
 add_executable(unittest_histogram
