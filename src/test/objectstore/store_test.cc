@@ -162,22 +162,28 @@ bool sorted(const vector<ghobject_t> &in) {
   return true;
 }
 
-class StoreTest : public StoreTestFixture,
-                  public ::testing::WithParamInterface<const char*> {
+class StoreTestBase : public StoreTestFixture {
 public:
-  StoreTest()
-    : StoreTestFixture(GetParam())
-  {}
-  void doCompressionTest();
+  StoreTestBase(const std::string& store_name)
+    : StoreTestFixture(store_name) {}
   void doSyntheticTest(
-    int initial_object_count,
-    int num_ops,
+    int initial_object_count, int num_ops,
     uint64_t max_obj, uint64_t max_wr, uint64_t align);
   // a variant of test that keeps amount of active objects stable
   void doSyntheticLimitedTest(
-    int initial_object_count,
-    int num_ops,
+    int initial_object_count, int num_ops,
     uint64_t max_obj, uint64_t max_wr, uint64_t align);
+
+};
+
+
+class StoreTest : public StoreTestBase,
+                  public ::testing::WithParamInterface<const char*> {
+public:
+  StoreTest()
+    : StoreTestBase(GetParam())
+  {}
+  void doCompressionTest();
 };
 
 class StoreTestDeferredSetup : public StoreTest {
@@ -189,10 +195,7 @@ protected:
   void DeferredSetup() {
     StoreTest::SetUp();
   }
-
-public:
 };
-
 
 class StoreTestSpecificAUSize : public StoreTestDeferredSetup {
 
@@ -202,6 +205,29 @@ public:
     SetVal(g_conf(), "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
   }
+};
+
+struct MatrixArg
+{
+  std::string param;
+  std::string value;
+};
+
+using MatrixRow = std::vector<MatrixArg>;
+
+void PrintTo(const MatrixArg& arg, std::ostream* os) {
+  *os << arg.value;
+}
+
+class MatrixTest :
+  public StoreTestBase,
+  public ::testing::WithParamInterface<MatrixRow>
+{
+public:
+  typedef void(MatrixTest::*TestRunner)(void);
+  MatrixTest()
+    : StoreTestBase("bluestore")
+  {}
 
   void SyntheticTest() {
     doSyntheticTest(start_object_count, num_ops, max_size, max_write, alignment);
@@ -211,34 +237,22 @@ public:
     doSyntheticLimitedTest(start_object_count, num_ops, max_size, max_write, alignment);
   }
 
+  void SetUp() override {
+    const MatrixRow row = GetParam();
+    for (auto& i: row) {
+      matrix_set(i.param.c_str(), i.value.c_str());
+      cout << "  " << i.param << " = " << i.value << std::endl;
+    }
+    g_ceph_context->_conf.apply_changes(nullptr);
+    StoreTestBase::SetUp();
+  }
+
 private:
-  // bluestore matrix testing
   uint64_t max_write = 40 * 1024;
   uint64_t max_size = 400 * 1024;
   uint64_t alignment = 0;
   uint64_t num_ops = 10000;
   uint64_t start_object_count = 1000;
-
-protected:
-  string matrix_get(const char *k) {
-    if (string(k) == "max_write") {
-      return stringify(max_write);
-    } else if (string(k) == "max_size") {
-      return stringify(max_size);
-    } else if (string(k) == "alignment") {
-      return stringify(alignment);
-    } else if (string(k) == "num_ops") {
-      return stringify(num_ops);
-    } else if (string(k) == "start_object_count") {
-      return stringify(start_object_count);
-    } else {
-      char *buf;
-      g_conf().get_val(k, &buf, -1);
-      string v = buf;
-      free(buf);
-      return v;
-    }
-  }
 
   void matrix_set(const char *k, const char *v) {
     if (string(k) == "max_write") {
@@ -256,52 +270,29 @@ protected:
     }
   }
 
-  void do_matrix_choose(const char *matrix[][10],
-		        int i, int pos, int num,
-                        MatrixTest fn) {
-    if (matrix[i][0]) {
-      int count;
-      for (count = 0; matrix[i][count+1]; ++count) ;
-      for (int j = 1; matrix[i][j]; ++j) {
-        matrix_set(matrix[i][0], matrix[i][j]);
-        do_matrix_choose(matrix,
-                         i + 1,
-                         pos * count + j - 1, 
-                         num * count, 
-                         fn);
-      }
-    } else {
-      cout << "---------------------- " << (pos + 1) << " / " << num
-	   << " ----------------------" << std::endl;
-      for (unsigned k=0; matrix[k][0]; ++k) {
-        cout << "  " << matrix[k][0] << " = " << matrix_get(matrix[k][0])
-	     << std::endl;
-      }
-      g_ceph_context->_conf.apply_changes(nullptr);
-      (this->*fn)();
+public:
+  static std::vector<MatrixRow> Expand(
+    std::vector<std::vector<std::string>> input) {
+    std::vector<MatrixRow> result;
+    uint32_t s = 1;
+    for (auto& i : input) {
+      s *= i.size() - 1;
     }
-  }
-
-  void do_matrix(const char *matrix[][10],
-                 MatrixTest fn) {
-
-    if (strcmp(matrix[0][0], "bluestore_min_alloc_size") == 0) {
-      int count;
-      for (count = 0; matrix[0][count+1]; ++count) ;
-      for (size_t j = 1; matrix[0][j]; ++j) {
-        if (j > 1) {
-          TearDown();
-        }
-        StartDeferred(strtoll(matrix[0][j], NULL, 10));
-        do_matrix_choose(matrix, 1, j - 1, count, fn);
+    for (uint32_t i = 0; i < s; i++) {
+      result.emplace_back();
+      MatrixRow &row = result.back();
+      uint32_t j = i;
+      for (auto &mrow : input) {
+        uint32_t mselections = mrow.size() - 1;
+        uint32_t mchoice = j % mselections;
+        j = j / mselections;
+        row.emplace_back(MatrixArg{mrow[0], mrow[mchoice + 1]});
       }
-    } else {
-      StartDeferred(0);
-      do_matrix_choose(matrix, 0, 0, 1, fn);
     }
+    return result;
   }
-
 };
+
 
 class StoreTestOmapUpgrade : public StoreTestDeferredSetup {
 protected:
@@ -5183,7 +5174,7 @@ public:
 };
 
 
-void StoreTest::doSyntheticTest(
+void StoreTestBase::doSyntheticTest(
   int initial_object_count,
   int num_ops,
   uint64_t max_obj, uint64_t max_wr, uint64_t align)
@@ -5240,7 +5231,7 @@ void StoreTest::doSyntheticTest(
   test_obj.shutdown();
 }
 
-void StoreTest::doSyntheticLimitedTest(
+void StoreTestBase::doSyntheticLimitedTest(
   int initial_object_count,
   int num_ops,
   uint64_t max_obj, uint64_t max_wr, uint64_t align)
@@ -5301,70 +5292,79 @@ TEST_P(StoreTest, Synthetic) {
   doSyntheticTest(1000, 10000, 400*1024, 40*1024, 0);
 }
 
-#if defined(WITH_BLUESTORE)
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixSharding) {
-  if (string(GetParam()) != "bluestore")
-    return;
-  
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", 0 }, // must be the first!
-    { "num_ops", "50000", 0 },
-    { "max_write", "65536", 0 },
-    { "max_size", "262144", 0 },
-    { "alignment", "4096", 0 },
-    { "bluestore_max_blob_size", "65536", 0 },
-    { "bluestore_extent_map_shard_min_size", "60", 0 },
-    { "bluestore_extent_map_shard_max_size", "300", 0 },
-    { "bluestore_extent_map_shard_target_size", "150", 0 },
-    { "bluestore_default_buffered_read", "true", 0 },
-    { "bluestore_default_buffered_write", "true", 0 },
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticTest);
-}
+class SyntheticMatrixSharding: public MatrixTest {};
+TEST_P(SyntheticMatrixSharding, Test)
+{
+  SyntheticTest();
+};
 
-TEST_P(StoreTestSpecificAUSize, SyntheticLimited) {
-  if (string(GetParam()) != "bluestore")
-    return;
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixSharding,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "4096" }, // must be the first!
+    { "num_ops", "50000" },
+    { "max_write", "65536" },
+    { "max_size", "262144" },
+    { "alignment", "4096" },
+    { "bluestore_max_blob_size", "65536" },
+    { "bluestore_extent_map_shard_min_size", "60" },
+    { "bluestore_extent_map_shard_max_size", "300" },
+    { "bluestore_extent_map_shard_target_size", "150" },
+    { "bluestore_default_buffered_read", "true" },
+    { "bluestore_default_buffered_write", "true" }
+  }))
+);
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "65536", "4096", 0 }, // must be the first!
-    { "num_ops", "10000", 0 },
-    { "max_write", "65536", 0 },
-    { "max_size", "262144", 0 },
-    { "alignment", "4096", 0 },
-    { "start_object_count", "1000", "200", "50", 0 },
-    { "bluestore_max_blob_size", "65536", 0 },
-    { "bluestore_default_buffered_read", "true", 0 },
-    { "bluestore_default_buffered_write", "true", 0 },
-    { "bluestore_compression_mode", "force", "none", 0},
-    { "bluestore_prefer_deferred_size", "32768", "0", 0},
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticLimitedTest);
-}
+class SyntheticMatrixLimited : public MatrixTest {};
+TEST_P(SyntheticMatrixLimited, Test)
+{
+  SyntheticLimitedTest();
+};
 
-TEST_P(StoreTestSpecificAUSize, SyntheticShardingLimited) {
-  if (string(GetParam()) != "bluestore")
-    return;
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixLimited,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "65536", "4096" },
+    { "num_ops", "10000" },
+    { "max_write", "65536" },
+    { "max_size", "262144" },
+    { "alignment", "4096" },
+    { "start_object_count", "1000", "200", "50" },
+    { "bluestore_max_blob_size", "65536" },
+    { "bluestore_default_buffered_read", "true" },
+    { "bluestore_default_buffered_write", "true" },
+    { "bluestore_compression_mode", "force", "none" },
+    { "bluestore_prefer_deferred_size", "32768", "0" }
+  }))
+);
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "65536", "4096", 0 }, // must be the first!
-    { "num_ops", "10000", 0 },
-    { "max_write", "65536", 0 },
-    { "max_size", "262144", 0 },
-    { "alignment", "4096", 0 },
-    { "start_object_count", "1000", "200", "50", 0 },
-    { "bluestore_max_blob_size", "65536", 0 },
-    { "bluestore_extent_map_shard_min_size", "60", 0 },
-    { "bluestore_extent_map_shard_max_size", "300", 0 },
-    { "bluestore_extent_map_shard_target_size", "150", 0 },
-    { "bluestore_default_buffered_read", "true", 0 },
-    { "bluestore_default_buffered_write", "true", 0 },
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticLimitedTest);
-}
+class SyntheticMatrixShardingLimited : public MatrixTest {};
+TEST_P(SyntheticMatrixShardingLimited, Test)
+{
+  SyntheticLimitedTest();
+};
+
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixShardingLimited,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "65536", "4096" },
+    { "num_ops", "10000" },
+    { "max_write", "65536" },
+    { "max_size", "262144" },
+    { "alignment", "4096" },
+    { "start_object_count", "1000", "200", "50" },
+    { "bluestore_max_blob_size", "65536" },
+    { "bluestore_extent_map_shard_min_size", "60" },
+    { "bluestore_extent_map_shard_max_size", "300" },
+    { "bluestore_extent_map_shard_target_size", "150" },
+    { "bluestore_default_buffered_read", "true" },
+    { "bluestore_default_buffered_write", "true" }
+  }))
+);
+
 
 TEST_P(StoreTestSpecificAUSize, ZipperPatternSharded) {
   if(string(GetParam()) != "bluestore")
@@ -5409,114 +5409,131 @@ TEST_P(StoreTestSpecificAUSize, ZipperPatternSharded) {
   }
 }
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCsumAlgorithm) {
-  if (string(GetParam()) != "bluestore")
-    return;
+class SyntheticMatrixCsumAlgorithm: public MatrixTest {};
+TEST_P(SyntheticMatrixCsumAlgorithm, Test)
+{
+  SyntheticTest();
+};
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "65536", 0 }, // must be the first!
-    { "max_write", "65536", 0 },
-    { "max_size", "1048576", 0 },
-    { "alignment", "16", 0 },
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixCsumAlgorithm,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "65536" }, // must be the first!
+    { "max_write", "65536" },
+    { "max_size", "1048576" },
+    { "alignment", "16" },
     { "bluestore_csum_type", "crc32c", "crc32c_16", "crc32c_8", "xxhash32",
-      "xxhash64", "none", 0 },
-    { "bluestore_default_buffered_write", "false", 0 },
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticTest);
-}
+      "xxhash64", "none" },
+    { "bluestore_default_buffered_write", "false" }
+  }))
+);
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCsumVsCompression) {
-  if (string(GetParam()) != "bluestore")
-    return;
+class SyntheticMatrixCsumVsCompression: public MatrixTest {};
+TEST_P(SyntheticMatrixCsumVsCompression, Test)
+{
+  SyntheticTest();
+};
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "16384", 0 }, //to be the first!
-    { "max_write", "131072", 0 },
-    { "max_size", "262144", 0 },
-    { "alignment", "512", 0 },
-    { "bluestore_compression_mode", "force", 0},
-    { "bluestore_compression_algorithm", "snappy", "zlib", 0 },
-    { "bluestore_csum_type", "crc32c", 0 },
-    { "bluestore_default_buffered_read", "true", "false", 0 },
-    { "bluestore_default_buffered_write", "true", "false", 0 },
-    { "bluestore_sync_submit_transaction", "false", 0 },
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticTest);
-}
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixCsumVsCompression,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "4096", "16384" }, //to be the first!
+    { "max_write", "131072" },
+    { "max_size", "262144" },
+    { "alignment", "512" },
+    { "bluestore_compression_mode", "force" },
+    { "bluestore_compression_algorithm", "snappy", "zlib" },
+    { "bluestore_csum_type", "crc32c" },
+    { "bluestore_default_buffered_read", "true", "false" },
+    { "bluestore_default_buffered_write", "true", "false" },
+    { "bluestore_sync_submit_transaction", "false" }
+  }))
+);
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCompression) {
-  if (string(GetParam()) != "bluestore")
-    return;
+class SyntheticMatrixCompression: public MatrixTest {};
+TEST_P(SyntheticMatrixCompression, Test)
+{
+  SyntheticTest();
+};
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
-    { "max_write", "1048576", 0 },
-    { "max_size", "4194304", 0 },
-    { "alignment", "65536", 0 },
-    { "bluestore_compression_mode", "force", "aggressive", "passive", "none", 0},
-    { "bluestore_default_buffered_write", "false", 0 },
-    { "bluestore_sync_submit_transaction", "true", 0 },
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticTest);
-}
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixCompression,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "4096", "65536" },
+    { "max_write", "1048576" },
+    { "max_size", "4194304" },
+    { "alignment", "65536" },
+    { "bluestore_compression_mode", "force", "aggressive", "passive", "none" },
+    { "bluestore_default_buffered_write", "false" },
+    { "bluestore_sync_submit_transaction", "true" }
+  }))
+);
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixCompressionAlgorithm) {
-  if (string(GetParam()) != "bluestore")
-    return;
+class SyntheticMatrixCompressionAlgorithm: public MatrixTest {};
+TEST_P(SyntheticMatrixCompressionAlgorithm, Test)
+{
+  SyntheticTest();
+};
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
-    { "max_write", "1048576", 0 },
-    { "max_size", "4194304", 0 },
-    { "alignment", "65536", 0 },
-    { "bluestore_compression_algorithm", "zlib", "snappy", 0 },
-    { "bluestore_compression_mode", "force", 0 },
-    { "bluestore_default_buffered_write", "false", 0 },
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticTest);
-}
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixCompressionAlgorithm,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "4096", "65536" },
+    { "max_write", "1048576" },
+    { "max_size", "4194304" },
+    { "alignment", "65536" },
+    { "bluestore_compression_algorithm", "zlib", "snappy" },
+    { "bluestore_compression_mode", "force" },
+    { "bluestore_default_buffered_write", "false" }
+  }))
+);
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixNoCsum) {
-  if (string(GetParam()) != "bluestore")
-    return;
+class SyntheticMatrixNoCsum: public MatrixTest {};
+TEST_P(SyntheticMatrixNoCsum, Test)
+{
+  SyntheticTest();
+};
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
-    { "max_write", "65536", 0 },
-    { "max_size", "1048576", 0 },
-    { "alignment", "512", 0 },
-    { "bluestore_max_blob_size", "262144", 0 },
-    { "bluestore_compression_mode", "force", "none", 0},
-    { "bluestore_csum_type", "none", 0},
-    { "bluestore_default_buffered_read", "true", "false", 0 },
-    { "bluestore_default_buffered_write", "true", 0 },
-    { "bluestore_sync_submit_transaction", "true", "false", 0 },
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticTest);
-}
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixNoCsum,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "4096", "65536" },
+    { "max_write", "65536" },
+    { "max_size", "1048576" },
+    { "alignment", "512" },
+    { "bluestore_max_blob_size", "262144" },
+    { "bluestore_compression_mode", "force", "none" },
+    { "bluestore_csum_type", "none" },
+    { "bluestore_default_buffered_read", "true", "false" },
+    { "bluestore_default_buffered_write", "true" },
+    { "bluestore_sync_submit_transaction", "true", "false" }
+  }))
+);
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferDeferred) {
-  if (string(GetParam()) != "bluestore")
-    return;
+class SyntheticMatrixPreferDeferred: public MatrixTest {};
+TEST_P(SyntheticMatrixPreferDeferred, Test)
+{
+  SyntheticTest();
+};
 
-  const char *m[][10] = {
-    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
-    { "max_write", "65536", 0 },
-    { "max_size", "1048576", 0 },
-    { "alignment", "512", 0 },
-    { "bluestore_max_blob_size", "262144", 0 },
-    { "bluestore_compression_mode", "force", "none", 0},
-    { "bluestore_prefer_deferred_size", "32768", "0", 0},
-    { 0 },
-  };
-  do_matrix(m, &StoreTestSpecificAUSize::SyntheticTest);
-}
-#endif // WITH_BLUESTORE
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  SyntheticMatrixPreferDeferred,
+  ::testing::ValuesIn(MatrixTest::Expand({
+    { "bluestore_min_alloc_size", "4096", "65536" },
+    { "max_write", "65536" },
+    { "max_size", "1048576" },
+    { "alignment", "512" },
+    { "bluestore_max_blob_size", "262144" },
+    { "bluestore_compression_mode", "force", "none" },
+    { "bluestore_prefer_deferred_size", "32768", "0" }
+  }))
+);
 
 TEST_P(StoreTest, AttrSynthetic) {
   MixedGenerator gen(447);
