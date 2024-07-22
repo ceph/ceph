@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 
 from tasks.ceph_test_case import CephTestCase
 
@@ -65,6 +66,7 @@ class CephFSTestCase(CephTestCase):
     mount_a = None
     mount_b = None
     recovery_mount = None
+    last_active_mgr = None
 
     # Declarative test requirements: subclasses should override these to indicate
     # their special needs.  If not met, tests will be skipped.
@@ -206,7 +208,16 @@ class CephFSTestCase(CephTestCase):
 
         self.configs_set = set()
 
+        if self.last_active_mgr:
+            self.mon_manager.revive_mgr(self.last_active_mgr)
+            self.mon_manager.wait_for_mgr_available()
+            time.sleep(60)
+            self.last_active_mgr = None
+
     def tearDown(self):
+        self.last_active_mgr = self.mon_manager.get_mgr_dump()['active_name']
+        self.mon_manager.raw_cluster_cmd('mgr', 'fail', self.last_active_mgr)
+
         self.mds_cluster.clear_firewall()
         for m in self.mounts:
             m.teardown()
