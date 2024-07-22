@@ -44,6 +44,7 @@ HEALTH_MINIMAL_SCHEMA = ({
                 'failed': ([int], ''),
                 'metadata_pool': (int, ''),
                 'epoch': (int, ''),
+                'btime': (str, ''),
                 'stopped': ([int], ''),
                 'max_mds': (int, ''),
                 'compat': ({

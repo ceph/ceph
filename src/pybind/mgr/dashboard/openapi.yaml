@@ -4932,6 +4932,9 @@ paths:
                                 balancer:
                                   description: ''
                                   type: string
+                                btime:
+                                  description: ''
+                                  type: string
                                 compat:
                                   description: ''
                                   properties:
@@ -5051,6 +5054,7 @@ paths:
                               - failed
                               - metadata_pool
                               - epoch
+                              - btime
                               - stopped
                               - max_mds
                               - compat
