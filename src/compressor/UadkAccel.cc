@@ -28,7 +28,6 @@ using std::string;
 #define PROCESS_NOT_FINISH    6
 #define UADK_MIN_BUFFER       (32*1024)
 #define UADK_MAX_BUFFER       (8*1024*1024)
-#define UADK_DEFAULT_WIN_SIZE 15
 #define UADK_PF_SIZE          1024
 
 static ostream&
@@ -272,12 +271,11 @@ int UadkAccel::uadk_do_compress(handle_t h_sess, const unsigned char* in, unsign
   return ret;
 }
 
-int UadkAccel::compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message)
+int UadkAccel::compress(const bufferlist &in, bufferlist &out)
 {
   handle_t h_comp_sess = create_comp_session();
   unsigned int begin = 1;
   unsigned int out_len = 0;
-  compressor_message = UADK_DEFAULT_WIN_SIZE;
   for (ceph::bufferlist::buffers_t::const_iterator i = in.buffers().begin(); i != in.buffers().end();) {
     const unsigned char* c_in = (unsigned char*) (*i).c_str();
     unsigned int len = (*i).length();
@@ -369,8 +367,7 @@ unsigned int cal_approx_ratio(unsigned int n, unsigned m)
   return x + 1;
 }
 
-int UadkAccel::decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst,
-		                     std::optional<int32_t> compressor_message)
+int UadkAccel::decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst)
 {
   handle_t h_decomp_sess = create_decomp_session();
   unsigned int begin = 1;
@@ -416,12 +413,6 @@ int UadkAccel::decompress(bufferlist::const_iterator &p, size_t compressed_len, 
 
   free_decomp_session(h_decomp_sess);
   return 0;
-}
-
-int UadkAccel::decompress(const bufferlist &in, bufferlist &out, std::optional<int32_t> compressor_message)
-{
-  auto i = in.begin();
-  return decompress(i, in.length(), out, compressor_message);
 }
 
 void UadkAccel::destroy()

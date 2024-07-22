@@ -29,9 +29,8 @@ class UadkAccel {
       bool init();
       void destroy();
 
-      int compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message);
-      int decompress(const bufferlist &in, bufferlist &out, std::optional<int32_t> compressor_message);
-      int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst, std::optional<int32_t> compressor_message);
+      int compress(const bufferlist &in, bufferlist &out);
+      int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst);
   private:
       int uadk_do_compress(handle_t h_sess, const unsigned char *in, unsigned int &inlen, unsigned char *out, unsigned int &outlen, bool last_packet);
       int uadk_do_decompress(handle_t h_sess, const unsigned char *in, unsigned int &inlen, unsigned char *out, unsigned int &outlen);

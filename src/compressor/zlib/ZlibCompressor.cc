@@ -205,12 +205,8 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, std::optiona
     return qat_accel.compress(in, out, compressor_message);
 #endif
 #ifdef HAVE_UADK
-  if (uadk_enabled) {
-    int uadk_ret = uadk_accel.compress(in, out, compressor_message);
-    if (uadk_ret == 0) {
-      return uadk_ret;
-    }
-  }
+  if (uadk_enabled)
+    return uadk_accel.compress(in, out);
 #endif
 #if (__x86_64__ && defined(HAVE_NASM_X64_AVX2)) || defined(__aarch64__)
   if (isal_enabled)
@@ -230,12 +226,8 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
     return qat_accel.decompress(p, compressed_size, out, compressor_message);
 #endif
 #ifdef HAVE_UADK
-  if (uadk_enabled && (!compressor_message || *compressor_message == ZLIB_DEFAULT_WIN_SIZE)) {
-    int uadk_ret = uadk_accel.decompress(p, compressed_size, out, compressor_message);
-    if (uadk_ret == 0) {
-      return uadk_ret;
-    }
-  }
+  if (uadk_enabled && (!compressor_message || *compressor_message == ZLIB_DEFAULT_WIN_SIZE))
+    return uadk_accel.decompress(p, compressed_size, out);
 #endif
 
   int ret;
@@ -293,14 +285,6 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
 
 int ZlibCompressor::decompress(const bufferlist &in, bufferlist &out, std::optional<int32_t> compressor_message)
 {
-#ifdef HAVE_UADK
-  if (uadk_enabled) {
-    int uadk_ret = uadk_accel.decompress(in, out, compressor_message);
-    if (uadk_ret == 0) {
-      return uadk_ret;
-    }
-  }
-#endif
   auto i = std::cbegin(in);
   return decompress(i, in.length(), out, compressor_message);
 }
