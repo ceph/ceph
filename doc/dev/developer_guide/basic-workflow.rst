@@ -416,6 +416,10 @@ Teuthology test suites can take hours (and even days in some cases) to
 complete, so batching tests reduces contention for resources and saves a lot of
 time.
 
+If your code change has any effect on upgrades, add the
+``needs-upgrade-testing`` label. This indicates that an upgrade testing suite
+should be scheduled.
+
 To request access to the Sepia lab, start `here
 <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
 
