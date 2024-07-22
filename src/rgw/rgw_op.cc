@@ -7156,10 +7156,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   auto group = ceph::async::spawn_throttle{y, max_aio};
 
   for (const auto& key : multi_delete->objects) {
-    boost::asio::spawn(group.get_executor(),
-                       [this, &key] (boost::asio::yield_context yield) {
-                         handle_individual_object(key, yield);
-                       }, group);
+    group.spawn([this, &key] (boost::asio::yield_context yield) {
+                  handle_individual_object(key, yield);
+                });
 
     rgw_flush_formatter(s, s->formatter);
   }
