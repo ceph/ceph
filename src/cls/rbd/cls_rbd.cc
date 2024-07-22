@@ -7484,7 +7484,6 @@ int group_snap_set(cls_method_context_t hctx,
     }
 
     uint64_t max_order = 0;
-
     r = read_key(hctx, group::RBD_GROUP_SNAP_MAX_ORDER_KEY, &max_order);
     if (r < 0 && r != -ENOENT) {
       return r;
@@ -7499,6 +7498,7 @@ int group_snap_set(cls_method_context_t hctx,
               cpp_strerror(r).c_str());
       return r;
     }
+
     r = cls_cxx_map_set_val(hctx, order_key, &bl);
     if (r < 0) {
       CLS_ERR("error setting key: %s : %s", order_key.c_str(),
@@ -7637,6 +7637,60 @@ int group_snap_list(cls_method_context_t hctx,
 
   encode(group_snaps, *out);
 
+  return 0;
+}
+
+int group_snap_list_order(cls_method_context_t hctx,
+                          bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "group_snap_list_order");
+
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    auto iter = in->cbegin();
+    decode(start_after, iter);
+    decode(max_return, iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::map<std::string, uint64_t> group_snaps_order;
+  int max_read = RBD_MAX_KEYS_READ;
+  bool more;
+  std::string last_read = group::snap_order_key(start_after);
+  std::map<std::string, bufferlist> vals;
+
+  do {
+    int r = cls_cxx_map_get_vals(hctx, last_read,
+                                 group::RBD_GROUP_SNAP_ORDER_KEY_PREFIX,
+                                 max_read, &vals, &more);
+    if (r < 0) {
+      CLS_ERR("error getting snapshot orders: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto it = vals.begin();
+         it != vals.end() && group_snaps_order.size() < max_return; ++it) {
+      std::string snap_id = group::snap_id_from_order_key(it->first);
+      auto iter = it->second.cbegin();
+      uint64_t order;
+      try {
+        decode(order, iter);
+      } catch (const ceph::buffer::error &err) {
+        CLS_ERR("error decoding snapshot order: %s", snap_id.c_str());
+        return -EIO;
+      }
+      group_snaps_order[snap_id] = order;
+    }
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    } else {
+      ceph_assert(!more);
+    }
+  } while (more && (group_snaps_order.size() < max_return));
+
+  encode(group_snaps_order, *out);
   return 0;
 }
 
@@ -8266,6 +8320,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_group_snap_remove;
   cls_method_handle_t h_group_snap_get_by_id;
   cls_method_handle_t h_group_snap_list;
+  cls_method_handle_t h_group_snap_list_order;
   cls_method_handle_t h_trash_add;
   cls_method_handle_t h_trash_remove;
   cls_method_handle_t h_trash_list;
@@ -8649,6 +8704,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "group_snap_list",
 			  CLS_METHOD_RD,
 			  group_snap_list, &h_group_snap_list);
+  cls_register_cxx_method(h_class, "group_snap_list_order",
+			  CLS_METHOD_RD,
+			  group_snap_list_order, &h_group_snap_list_order);
 
   /* rbd_trash object methods */
   cls_register_cxx_method(h_class, "trash_add",

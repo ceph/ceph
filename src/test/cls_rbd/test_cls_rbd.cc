@@ -2692,18 +2692,56 @@ TEST_F(TestClsRbd, group_snap_list) {
   ASSERT_EQ(0, ioctx.create(group_id, true));
 
   string snap_id1 = "snap_id1";
-  cls::rbd::GroupSnapshot snap1 = {snap_id1, "test_snapshot1", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  cls::rbd::GroupSnapshot snap1 = {snap_id1, "test_snapshot1",
+				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap1));
 
+  string snap_id0 = "snap_id0";
+  cls::rbd::GroupSnapshot snap0 = {snap_id0, "test_snapshot0",
+				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap0));
+
   string snap_id2 = "snap_id2";
-  cls::rbd::GroupSnapshot snap2 = {snap_id2, "test_snapshot2", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  cls::rbd::GroupSnapshot snap2 = {snap_id2, "test_snapshot2",
+				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
   ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap2));
 
   std::vector<cls::rbd::GroupSnapshot> snapshots;
-  ASSERT_EQ(0, group_snap_list(&ioctx, group_id, cls::rbd::GroupSnapshot(), 10, &snapshots));
-  ASSERT_EQ(2U, snapshots.size());
-  ASSERT_EQ(snap_id1, snapshots[0].id);
-  ASSERT_EQ(snap_id2, snapshots[1].id);
+  ASSERT_EQ(0, group_snap_list(&ioctx, group_id, cls::rbd::GroupSnapshot(),
+                               10, &snapshots));
+  ASSERT_EQ(3U, snapshots.size());
+
+  ASSERT_EQ(snap_id0, snapshots[0].id);
+  ASSERT_EQ(snap_id1, snapshots[1].id);
+  ASSERT_EQ(snap_id2, snapshots[2].id);
+
+  std::map<std::string, uint64_t> snap_orders;
+  ASSERT_EQ(0, group_snap_list_order(&ioctx, group_id, "", 10, &snap_orders));
+  ASSERT_EQ(3U, snap_orders.size());
+
+  ASSERT_EQ(1, snap_orders[snap_id1]);
+  ASSERT_EQ(2, snap_orders[snap_id0]);
+  ASSERT_EQ(3, snap_orders[snap_id2]);
+
+  ASSERT_EQ(0, group_snap_remove(&ioctx, group_id, snap_id2));
+
+  ASSERT_EQ(0, group_snap_list_order(&ioctx, group_id, "", 10, &snap_orders));
+  ASSERT_EQ(2U, snap_orders.size());
+
+  ASSERT_EQ(1, snap_orders[snap_id1]);
+  ASSERT_EQ(2, snap_orders[snap_id0]);
+
+  string snap_id4 = "snap_id4";
+  cls::rbd::GroupSnapshot snap4 = {snap_id4, "test_snapshot4",
+				   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap4));
+
+  ASSERT_EQ(0, group_snap_list_order(&ioctx, group_id, "", 10, &snap_orders));
+  ASSERT_EQ(3U, snap_orders.size());
+
+  ASSERT_EQ(1, snap_orders[snap_id1]);
+  ASSERT_EQ(2, snap_orders[snap_id0]);
+  ASSERT_EQ(4, snap_orders[snap_id4]);
 }
 
 static std::string hexify(int v) {
