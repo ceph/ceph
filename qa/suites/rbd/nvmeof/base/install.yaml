@@ -1,0 +1,13 @@
+use_shaman: True
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+    # get state before nvmeof deployment
+    - ceph orch status
+    - ceph orch ps
+    - ceph orch host ls
+    - ceph orch device ls
+    - ceph osd lspools
+
