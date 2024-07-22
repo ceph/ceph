@@ -8,7 +8,7 @@ target_link_libraries(unittest_mgr_mgrcap global)
 # unittest_mgr_ttlcache
 add_executable(unittest_mgr_ttlcache test_ttlcache.cc)
 add_ceph_unittest(unittest_mgr_ttlcache)
-target_link_libraries(unittest_mgr_ttlcache
+target_link_libraries(unittest_mgr_ttlcache ceph-common
   Python3::Python ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
 #scripts
