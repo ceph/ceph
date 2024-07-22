@@ -198,7 +198,7 @@ public:
   }
 
   void mark_delayed_extent_ool(CachedExtentRef& ref) {
-    written_ool_block_list.push_back(ref);
+    ool_block_list.push_back(ref);
   }
 
   void update_delayed_ool_extent_addr(LogicalCachedExtentRef& ref,
@@ -214,13 +214,13 @@ public:
   void mark_allocated_extent_ool(CachedExtentRef& ref) {
     assert(ref->get_paddr().is_absolute());
     assert(!ref->is_inline());
-    written_ool_block_list.push_back(ref);
+    ool_block_list.push_back(ref);
   }
 
   void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef ref) {
     assert(ref->get_paddr().is_absolute());
     assert(!ref->is_inline());
-    written_inplace_ool_block_list.push_back(ref);
+    inplace_ool_block_list.push_back(ref);
   }
 
   void add_inplace_rewrite_extent(CachedExtentRef ref) {
@@ -332,7 +332,7 @@ public:
 
   template <typename F>
   auto for_each_finalized_fresh_block(F &&f) const {
-    std::for_each(written_ool_block_list.begin(), written_ool_block_list.end(), f);
+    std::for_each(ool_block_list.begin(), ool_block_list.end(), f);
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
   }
 
@@ -410,8 +410,8 @@ public:
     num_allocated_invalid_extents = 0;
     delayed_alloc_list.clear();
     inline_block_list.clear();
-    written_ool_block_list.clear();
-    written_inplace_ool_block_list.clear();
+    ool_block_list.clear();
+    inplace_ool_block_list.clear();
     pre_alloc_list.clear();
     pre_inplace_rewrite_list.clear();
     retired_set.clear();
@@ -555,7 +555,7 @@ private:
    * Contains a reference (without a refcount) to every extent mutated
    * as part of *this.  No contained extent may be referenced outside
    * of *this.  Every contained extent will be in one of inline_block_list,
-   * written_ool_block_list or/and pre_alloc_list, mutated_block_list,
+   * ool_block_list or/and pre_alloc_list, mutated_block_list,
    * or delayed_alloc_list.
    */
   ExtentIndex write_set;
@@ -566,20 +566,23 @@ private:
   io_stat_t fresh_block_stats;
   uint64_t num_delayed_invalid_extents = 0;
   uint64_t num_allocated_invalid_extents = 0;
-  /// fresh blocks with delayed allocation, may become inline or ool below
+  /// fresh blocks with delayed allocation,
+  /// may become inline_block_list or ool_block_list below
   std::list<CachedExtentRef> delayed_alloc_list;
   /// fresh blocks with pre-allocated addresses with RBM,
-  /// should be released upon conflicts, will be added to ool below
+  /// should be released upon conflicts,
+  /// will be added to ool_block_list below
   std::list<CachedExtentRef> pre_alloc_list;
-  /// dirty blocks for inplace rewrite with RBM, will be added to inplace ool below
+  /// dirty blocks for inplace rewrite with RBM,
+  /// will be added to inplace inplace_ool_block_list below
   std::list<LogicalCachedExtentRef> pre_inplace_rewrite_list;
 
   /// fresh blocks that will be committed with inline journal record
   std::list<CachedExtentRef> inline_block_list;
   /// fresh blocks that will be committed with out-of-line record
-  std::list<CachedExtentRef> written_ool_block_list;
+  std::list<CachedExtentRef> ool_block_list;
   /// dirty blocks that will be committed out-of-line with inplace rewrite
-  std::list<LogicalCachedExtentRef> written_inplace_ool_block_list;
+  std::list<LogicalCachedExtentRef> inplace_ool_block_list;
 
   /// list of mutated blocks, holds refcounts, subset of write_set
   std::list<CachedExtentRef> mutated_block_list;
