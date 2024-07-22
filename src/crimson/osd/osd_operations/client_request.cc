@@ -23,10 +23,18 @@ namespace crimson::osd {
 void ClientRequest::Orderer::requeue(Ref<PG> pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::requeue);
-  for (auto &req: list) {
-    DEBUGDPP("requeueing {}", *pg, req);
-    req.reset_instance_handle();
-    std::ignore = req.with_pg_process(pg);
+  std::list<ClientRequest*> to_requeue;
+  for (auto &req : list) {
+    to_requeue.emplace_back(&req);
+  }
+  // Client requests might be destroyed in the following
+  // iteration leading to short lived dangling pointers
+  // to those requests, but this doesn't hurt as we won't
+  // dereference those dangling pointers.
+  for (auto req: to_requeue) {
+    DEBUGDPP("requeueing {}", *pg, *req);
+    req->reset_instance_handle();
+    std::ignore = req->with_pg_process(pg);
   }
 }
 
