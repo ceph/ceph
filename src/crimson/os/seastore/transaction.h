@@ -304,18 +304,6 @@ public:
     return inline_block_list;
   }
 
-  const auto &get_mutated_block_list() {
-    return mutated_block_list;
-  }
-
-  const auto &get_existing_block_list() {
-    return existing_block_list;
-  }
-
-  const auto &get_retired_set() {
-    return retired_set;
-  }
-
   bool is_retired(paddr_t paddr, extent_len_t len) {
     auto iter = retired_set.lower_bound(paddr);
     if (iter == retired_set.end()) {
