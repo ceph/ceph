@@ -415,6 +415,10 @@ need testing to be merged into a single branch and tested all at the same time.
 Since teuthology suites can take hours (even days in some cases) to run, this
 can save a lot of time.
 
+If your code change has any effect on upgrades, add the
+``needs-upgrade-testing`` label. This indicates that an upgrade testing suite
+should be scheduled.
+
 To request access to the Sepia lab, start `here
 <https://wiki.sepia.ceph.com/doku.php?id=vpnaccess>`_.
 
