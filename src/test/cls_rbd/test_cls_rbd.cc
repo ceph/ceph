@@ -2676,10 +2676,10 @@ TEST_F(TestClsRbd, group_snap_set) {
 
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
+  ASSERT_EQ(3U, keys.size());
 
   auto it = keys.begin();
-  ASSERT_EQ(2U, keys.size());
-
+  ASSERT_EQ("snap_max_order", *it++);
   ASSERT_EQ("snap_order_" + snap.id, *it++);
   ASSERT_EQ("snapshot_" + snap.id, *it);
 }
@@ -2785,10 +2785,10 @@ TEST_F(TestClsRbd, group_snap_remove) {
 
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
+  ASSERT_EQ(3U, keys.size());
 
   auto it = keys.begin();
-  ASSERT_EQ(2U, keys.size());
-
+  ASSERT_EQ("snap_max_order", *it++);
   ASSERT_EQ("snap_order_" + snap.id, *it++);
   ASSERT_EQ("snapshot_" + snap.id, *it);
 
@@ -2798,7 +2798,8 @@ TEST_F(TestClsRbd, group_snap_remove) {
 
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
 
-  ASSERT_EQ(0U, keys.size());
+  ASSERT_EQ(1U, keys.size());
+  ASSERT_EQ("snap_max_order", *keys.begin());
 }
 
 TEST_F(TestClsRbd, group_snap_remove_without_order) {
@@ -2818,13 +2819,19 @@ TEST_F(TestClsRbd, group_snap_remove_without_order) {
   ASSERT_EQ(0, ioctx.omap_rm_keys(group_id, keys));
 
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
-  ASSERT_EQ(1U, keys.size());
+  ASSERT_EQ(2U, keys.size());
 
   auto it = keys.begin();
+  ASSERT_EQ("snap_max_order", *it++);
   ASSERT_EQ("snapshot_" + snap.id, *it);
 
   // Remove the snapshot
   ASSERT_EQ(0, group_snap_remove(&ioctx, group_id, snap_id));
+
+  ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
+  ASSERT_EQ(1U, keys.size());
+
+  ASSERT_EQ("snap_max_order", *keys.begin());
 }
 
 TEST_F(TestClsRbd, group_snap_get_by_id) {
