@@ -1726,6 +1726,22 @@ int RadosStore::list_account_topics(const DoutPrefixProvider* dpp,
                                 listing.topics, listing.next_marker);
 }
 
+int RadosStore::add_persistent_topic(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     const std::string& topic_queue)
+{
+  return rgw::notify::add_persistent_topic(
+      dpp, getRados()->get_notif_pool_ctx(), topic_queue, y);
+}
+
+int RadosStore::remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        const std::string& topic_queue)
+{
+  return rgw::notify::remove_persistent_topic(
+      dpp, getRados()->get_notif_pool_ctx(), topic_queue, y);
+}
+
 int RadosStore::remove_bucket_mapping_from_topics(
     const rgw_pubsub_bucket_topics& bucket_topics,
     const std::string& bucket_key,

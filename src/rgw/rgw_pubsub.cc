@@ -1108,7 +1108,7 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
   const rgw_pubsub_dest& dest = topic.dest;
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
-    ret = rgw::notify::remove_persistent_topic(dest.persistent_queue, y);
+    ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
           "persistent topic: " << cpp_strerror(ret) << dendl;
@@ -1155,7 +1155,7 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
 
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
-    ret = rgw::notify::remove_persistent_topic(dest.persistent_queue, y);
+    ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
           "persistent topic: " << cpp_strerror(ret) << dendl;

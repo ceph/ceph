@@ -319,6 +319,12 @@ class RadosStore : public StoreDriver {
                             std::string_view marker,
                             uint32_t max_items,
                             TopicList& listing) override;
+    int add_persistent_topic(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const std::string& topic_queue) override;
+    int remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                const std::string& topic_queue) override;
     int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                     const std::string& bucket_key,
                                     bool add_mapping,
