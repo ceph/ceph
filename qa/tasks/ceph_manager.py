@@ -569,23 +569,45 @@ class OSDThrasher(Thrasher):
 
     def out_host(self, host=None):
         """
-        Make all osds on a host out
+        Make all OSDs on a host out if the host has more than min_in OSDs.
         :param host: Host to be marked.
         """
-        # check that all osd remotes have a valid console
+        # Check that all OSD remotes have a valid console
         osds = self.ceph_manager.ctx.cluster.only(teuthology.is_type('osd', self.ceph_manager.cluster))
-        if host is None:
-            host = random.choice(list(osds.remotes.keys()))
-        self.log("Removing all osds in host %s" % (host,))
+        all_hosts = list(osds.remotes.keys())
+        min_in = self.minin
+        
+        if host is not None:
+            all_hosts = [host] if host in all_hosts else []
 
-        for role in osds.remotes[host]:
-            if not role.startswith("osd."):
-                continue
-            osdid = int(role.split('.')[1])
-            if self.in_osds.count(osdid) == 0:
-                continue
-            self.out_osd(osdid)
+        random.shuffle(all_hosts)  # Shuffle the list to pick hosts randomly
+        
+        for host in all_hosts:
+            self.log("Checking the number of in OSDs in host %s" % (host,))
 
+            # Count the number of in OSDs in the host
+            in_host_osd_count = 0
+            for role in osds.remotes[host]:
+                if role.startswith("osd."):
+                    osdid = int(role.split('.')[1])
+                    if osdid in self.in_osds:
+                        in_host_osd_count += 1
+
+            # Check taking out that host will cause the number 
+            # of in OSDs to be less than min_in
+            if len(self.in_osds) - in_host_osd_count >= min_in:
+                self.log("Removing all OSDs in host %s" % (host,))
+                # Proceed to take out OSDs
+                for role in osds.remotes[host]:
+                    if role.startswith("osd."):
+                        osdid = int(role.split('.')[1])
+                        if osdid in self.in_osds:
+                            self.out_osd(osdid)
+                return
+            else:
+                self.log("Host %s can't be trashed as it will left %d OSDs in" % (host, len(self.in_osds) - in_host_osd_count))
+
+        self.log("No suitable host found to thrash")
 
     def out_osd(self, osd=None):
         """
@@ -1254,7 +1276,6 @@ class OSDThrasher(Thrasher):
                  (minin, minout, minlive, mindead, chance_down))
         actions = []
         if thrash_hosts:
-            self.log("check thrash_hosts")
             if len(self.in_osds) > minin:
                 self.log("check thrash_hosts: in_osds > minin")
                 actions.append((self.out_host, 1.0,))

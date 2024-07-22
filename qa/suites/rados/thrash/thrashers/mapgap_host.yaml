@@ -1,0 +1,31 @@
+overrides:
+  ceph:
+    log-ignorelist:
+    - but it is still running
+    - objects unfound and apparently lost
+    - osd_map_cache_size
+    conf:
+      mon:
+        mon min osdmap epochs: 50
+        paxos service trim min: 10
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
+      osd:
+        osd map cache size: 1
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        osd scrub during recovery: false
+        osd max backfills: 6
+        osd beacon report interval: 30
+tasks:
+- thrashosds:
+    timeout: 1800
+    min_in: 2
+    thrash_hosts: true
+    chance_pgnum_grow: 0.25
+    chance_pgnum_shrink: 0.25
+    chance_pgpnum_fix: 0.25
+    chance_test_map_discontinuity: 2
+    map_discontinuity_sleep_time: 200
