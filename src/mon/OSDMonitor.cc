@@ -12996,7 +12996,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
-      goto reply_no_propose;
+      goto reply;
     }
 
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
@@ -13011,7 +13011,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!p->is_unmanaged_snaps_mode() && !p->is_pool_snaps_mode()) {
       ss << "pool " << poolstr << " invalid snaps mode";
       err = -EINVAL;
-      goto reply_no_propose;
+      goto reply;
     }
 
     int64_t lower_snapid_bound =
@@ -13023,7 +13023,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (lower_snapid_bound > upper_snapid_bound) {
       ss << "error, lower bound can't be higher than higher bound";
       err = -ENOENT;
-      goto reply_no_propose;
+      goto reply;
     }
 
     bool dry_run = false;
@@ -13081,7 +13081,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (dry_run) {
       err = 0;
-      goto reply_no_propose;
+      goto reply;
     }
     pp->set_snap_epoch(pending_inc.epoch);
     getline(ss, rs);
