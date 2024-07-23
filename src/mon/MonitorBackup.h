@@ -49,6 +49,7 @@ class MonitorBackupManager : public Thread {
   void backup_loop();
   void do_backup();
   void do_cleanup();
+  bool check_free_space();
 protected:
   void *entry() override;
   
@@ -57,7 +58,7 @@ public:
     m_cct(cct),
     mon(monitor),
     m_lock(ceph::make_mutex("mon::BackupManager::m_lock")) {
-      create("MonitorBackupManager::thread");
+      create("mon::backups");
   }
 
   void tick() {
@@ -71,7 +72,7 @@ public:
   uint64_t backup() {
     m_lock.lock();
     m_do_backup = true;
-    uint64_t rv = m_last_job_id++;
+    uint64_t rv = ++m_last_job_id;
     m_lock.unlock();
     m_wakeup.Put();
     return rv;
@@ -80,8 +81,8 @@ public:
   /// Start a new backup
   uint64_t cleanup() {
     m_lock.lock();
-    m_do_backup = true;
-    uint64_t rv = m_last_job_id++;
+    m_do_cleanup = true;
+    uint64_t rv = ++m_last_job_id;
     m_lock.unlock();
     m_wakeup.Put();
     return rv;

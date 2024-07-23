@@ -34,6 +34,7 @@ public:
 
   struct BackupStats {
     bool error;
+    uint64_t id;
     utime_t timestamp;
     std::string msg;
     uint64_t size;
@@ -401,7 +402,7 @@ public:
   }
 
   /// creates a kv database backup in directory path. Returns true on success
-  virtual BackupStats backup(const std::string& path) { return BackupStats{}; }
+  virtual BackupStats backup(const std::string& path, bool full) { return BackupStats{}; }
 
   /// cleanup old backups. Returns true on success
   virtual BackupCleanupStats backup_cleanup(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily) { return BackupCleanupStats{}; }
