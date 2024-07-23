@@ -8810,7 +8810,7 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp,
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = cls_bucket_head(dpp, bucket_info, idx_layout, shard_id, headers, &bucket_instance_ids);
+  int r = svc.bi_rados->cls_bucket_head(dpp, bucket_info, idx_layout, shard_id, &headers, &bucket_instance_ids, null_yield);
   if (r < 0) {
     return r;
   }
@@ -10413,33 +10413,6 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   ldout_bitx(bitx, dpp, 10) << "EXITING " << __func__ << dendl_bitx;
   return 0;
 } // RGWRados::check_disk_state
-
-int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
-{
-  librados::IoCtx index_pool;
-  map<int, string> oids;
-  map<int, struct rgw_cls_list_ret> list_results;
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &oids, bucket_instance_ids);
-  if (r < 0) {
-    ldpp_dout(dpp, 20) << "cls_bucket_head: open_bucket_index() returned "
-                   << r << dendl;
-    return r;
-  }
-
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0) {
-    ldpp_dout(dpp, 20) << "cls_bucket_head: CLSRGWIssueGetDirHeader() returned "
-                   << r << dendl;
-    return r;
-  }
-
-  map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
-  for(; iter != list_results.end(); ++iter) {
-    headers.push_back(std::move(iter->second.dir.header));
-  }
-  return 0;
-}
 
 int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
                                     const rgw::bucket_index_layout_generation& idx_layout, int shard_id,

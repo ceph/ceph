@@ -1510,11 +1510,6 @@ public:
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
 				RGWBucketListNameFilter force_check_filter = {});
-  int cls_bucket_head(const DoutPrefixProvider *dpp,
-		      const RGWBucketInfo& bucket_info,
-		      const rgw::bucket_index_layout_generation& idx_layout,
-		      int shard_id, std::vector<rgw_bucket_dir_header>& headers,
-		      std::map<int, std::string> *bucket_instance_ids = NULL);
   int cls_bucket_head_async(const DoutPrefixProvider *dpp,
 			    const RGWBucketInfo& bucket_info,
 			    const rgw::bucket_index_layout_generation& idx_layout,

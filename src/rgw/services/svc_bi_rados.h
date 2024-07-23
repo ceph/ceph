@@ -66,14 +66,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               uint64_t gen_id, const std::string& obj_key,
                               std::string* bucket_obj, int* shard_id);
 
-  int cls_bucket_head(const DoutPrefixProvider *dpp,
-		      const RGWBucketInfo& bucket_info,
-                      const rgw::bucket_index_layout_generation& idx_layout,
-                      int shard_id,
-                      std::vector<rgw_bucket_dir_header> *headers,
-                      std::map<int, std::string> *bucket_instance_ids,
-                      optional_yield y);
-
 public:
 
   librados::Rados* rados{nullptr};
@@ -130,6 +122,14 @@ public:
                   const rgw::bucket_index_layout_generation& idx_layout) override;
 
   /* RADOS specific */
+
+  int cls_bucket_head(const DoutPrefixProvider *dpp,
+		      const RGWBucketInfo& bucket_info,
+                      const rgw::bucket_index_layout_generation& idx_layout,
+                      int shard_id,
+                      std::vector<rgw_bucket_dir_header> *headers,
+                      std::map<int, std::string> *bucket_instance_ids,
+                      optional_yield y);
 
   int read_stats(const DoutPrefixProvider *dpp,
                  const RGWBucketInfo& bucket_info,
