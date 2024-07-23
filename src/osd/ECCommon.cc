@@ -327,15 +327,14 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
 {
   const auto [left_chunk_index, right_chunk_index] =
     sinfo.offset_length_to_data_chunk_indices(offset, length);
-  for(uint64_t i = left_chunk_index; i < right_chunk_index; i++) {
-    auto raw_chunk = i % sinfo.get_data_chunk_count();
+  const auto distance =
+    std::min(right_chunk_index - left_chunk_index,
+             sinfo.get_data_chunk_count());
+  for(uint64_t i = 0; i < distance; i++) {
+    auto raw_chunk = (left_chunk_index + i) % sinfo.get_data_chunk_count();
     auto chunk = chunk_mapping.size() > raw_chunk ?
       chunk_mapping[raw_chunk] : static_cast<int>(raw_chunk);
-    if (auto [_, inserted] = want_to_read->insert(chunk); !inserted) {
-      // aready processed all chunks
-      ceph_assert(want_to_read->size() == sinfo.get_data_chunk_count());
-      break;
-    }
+    want_to_read->insert(chunk);
   }
 }
 
