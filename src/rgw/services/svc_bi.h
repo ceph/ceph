@@ -29,13 +29,11 @@ public:
   RGWSI_BucketIndex(CephContext *cct) : RGWServiceInstance(cct) {}
   virtual ~RGWSI_BucketIndex() {}
 
-  virtual int init_index(const DoutPrefixProvider *dpp,
-                         RGWBucketInfo& bucket_info,
+  virtual int init_index(const DoutPrefixProvider *dpp, optional_yield y,
+                         const RGWBucketInfo& bucket_info,
                          const rgw::bucket_index_layout_generation& idx_layout,
                          bool judge_support_logrecord = false) = 0;
-  virtual int clean_index(const DoutPrefixProvider *dpp,
-                          RGWBucketInfo& bucket_info,
-                          const rgw::bucket_index_layout_generation& idx_layout) = 0;
+  virtual int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout) = 0;
 
   virtual int read_stats(const DoutPrefixProvider *dpp,
                          const RGWBucketInfo& bucket_info,

@@ -432,19 +432,19 @@ static int init_target_index(rgw::sal::RadosStore* store,
                              const rgw::bucket_index_layout_generation& index,
                              ReshardFaultInjector& fault,
                              bool& support_logrecord,
-                             const DoutPrefixProvider* dpp)
+                             const DoutPrefixProvider* dpp, optional_yield y)
 {
 
   int ret = 0;
   if (ret = fault.check("init_index");
       ret == 0) { // no fault injected, initialize index
-    ret = store->svc()->bi->init_index(dpp, bucket_info, index, true);
+    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, true);
   }
   if (ret == -EOPNOTSUPP) {
     ldpp_dout(dpp, 0) << "WARNING: " << "init_index() does not supported logrecord, "
                       << "falling back to block reshard mode." << dendl;
     support_logrecord = false;
-    ret = store->svc()->bi->init_index(dpp, bucket_info, index, false);
+    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, false);
   } else if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to initialize "
        "target index shard objects: " << cpp_strerror(ret) << dendl;
@@ -512,7 +512,8 @@ static int init_target_layout(rgw::sal::RadosStore* store,
   }
 
   // create the index shard objects
-  int ret = init_target_index(store, bucket_info, target, fault, support_logrecord, dpp);
+  int ret = init_target_index(store, bucket_info, target, fault,
+                              support_logrecord, dpp, y);
   if (ret < 0) {
     return ret;
   }

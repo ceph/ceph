@@ -1,18 +1,22 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <concepts>
 #include <fmt/format.h>
 
 #include "svc_bi_rados.h"
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
 
+#include "rgw_aio_throttle.h"
 #include "rgw_asio_thread.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
 #include "rgw_datalog.h"
 
 #include "cls/rgw/cls_rgw_client.h"
+
+#include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -315,16 +319,17 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
 }
 
 int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
-                                        RGWBucketInfo& bucket_info,
+                                        optional_yield y,
+                                        const RGWBucketInfo& bucket_info,
                                         const rgw::bucket_index_layout_generation& idx_layout,
                                         bool judge_support_logrecord)
 {
-  librados::IoCtx index_pool;
+  librados::IoCtx ioctx;
 
   string dir_oid = dir_oid_prefix;
-  int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
-  if (r < 0) {
-    return r;
+  int ret = open_bucket_index_pool(dpp, bucket_info, &ioctx);
+  if (ret < 0) {
+    return ret;
   }
 
   dir_oid.append(bucket_info.bucket.bucket_id);
@@ -332,16 +337,61 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  if (judge_support_logrecord) {
-    return CLSRGWIssueBucketIndexInit2(index_pool,
-                                       bucket_objs,
-                                       cct->_conf->rgw_bucket_index_max_aio)();
-  } else {
-    return CLSRGWIssueBucketIndexInit(index_pool,
-                                      bucket_objs,
-                                      cct->_conf->rgw_bucket_index_max_aio)();
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  // ignore EEXIST errors from exclusive create
+  constexpr auto is_error = [] (int r) { return r < 0 && r != -EEXIST; };
+  constexpr std::string_view error_message =
+      "failed to init index object";
+
+  // track all completions so we can roll back on error
+  rgw::AioResultList completed;
+
+  for (const auto& [_, oid] : bucket_objs) {
+    librados::ObjectWriteOperation op;
+    op.create(true);
+    cls_rgw_bucket_init_index(op);
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    ret = rgw::check_for_errors(c, is_error, dpp, error_message);
+
+    completed.splice(completed.end(), c);
+
+    if (ret < 0) {
+      break;
+    }
   }
+
+  auto c = aio->drain();
+  if (ret == 0) {
+    // check for errors from drain()
+    ret = rgw::check_for_errors(c, is_error, dpp, error_message);
+    if (ret == 0) {
+      return 0;
+    }
+  }
+  completed.splice(completed.end(), c);
+
+  // on error, delete any objects that were successfully created
+  for (const rgw::AioResult& e : completed) {
+    if (e.result < 0) {
+      continue;
+    }
+
+    librados::ObjectWriteOperation op;
+    op.remove();
+
+    std::ignore = aio->get(e.obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+  }
+  std::ignore = aio->drain();
+
+  return ret;
 }
 
 int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
