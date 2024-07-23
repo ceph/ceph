@@ -5,7 +5,7 @@ overrides:
         debug ms: 1
         debug client: 20
       mds:
-        debug ms: 1
+        debug ms: 2
         debug mds: 20
 tasks:
 - check-counter:
