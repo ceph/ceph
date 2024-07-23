@@ -16,7 +16,7 @@ releases:
     target_eol: 2025-08-01
     releases:
       - version: 18.2.4
-        released: 2024-07-17
+        released: 2024-07-23
       - version: 18.2.2
         released: 2024-03-11
       - version: 18.2.1
