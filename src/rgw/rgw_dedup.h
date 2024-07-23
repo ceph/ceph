@@ -12,6 +12,7 @@ using namespace std;
 namespace rgw::dedup {
   class disk_block_array_t;
   struct disk_record_t;
+  struct key_t;
   //Interval between each execution of the script is set to 5 seconds
   static inline constexpr int INIT_EXECUTE_INTERVAL = 5;
   const work_shard_t MAX_WORK_SHARD = 2;
@@ -52,38 +53,40 @@ namespace rgw::dedup {
 			      ceph::real_time last_scan_time,
 			      work_shard_t    worker_id,
 			      uint64_t       *p_obj_count /* IN-OUT */);
-    int  list_bucket(const std::string &bucket_name,
-		     ceph::real_time last_scan_time,
-		     uint64_t *p_obj_count /* IN-OUT */);
     int  read_bucket_stats(rgw::sal::Bucket *bucket, const std::string &bucket_name);
-    int  process_bucket_entries(rgw::sal::Bucket *bucket, const std::string &bucket_name,
-				const rgw::sal::Bucket::ListResults &results,
-				const ceph::real_time &last_scan_time);
-#if 0
-    int build_dedup_table(md5_shard_t md5_shard, work_shard_t work_shard);
-    int dedup_objects(md5_shard_t md5_shard, work_shard_t work_shard);
-#else
-    int run_dedup_step(dedup_step_t step, md5_shard_t md5_shard, work_shard_t work_shard);
-#endif
-    int add_disk_record(rgw::sal::Bucket* p_bucket,
-			work_shard_t      worker_id,
-			rgw::sal::Object* p_obj,
-			uint64_t          obj_size);
+    int run_dedup_step(dedup_step_t step,
+		       md5_shard_t md5_shard,
+		       work_shard_t work_shard,
+		       uint32_t *p_rec_count);
+
+    int add_disk_record(const rgw::sal::Bucket *p_bucket,
+			const rgw::sal::Object *p_obj,
+			work_shard_t            worker_id,
+			uint64_t                obj_size);
 
     //void calc_object_key(uint64_t object_size, bufferlist &etag_bl, struct Key *p_key);
     int try_deduping_record(const disk_record_t *p_rec,
 			    disk_block_id_t      block_id,
+			    record_id_t          rec_id,
 			    md5_shard_t          md5_shard);
-    int add_record_to_dedup_table(const struct disk_record_t *p_rec, disk_block_id_t block_id);
+    int add_record_to_dedup_table(const struct disk_record_t *p_rec,
+				  disk_block_id_t block_id,
+				  record_id_t rec_id);
     int inc_ref_count_by_manifest(const string   &ref_tag, RGWObjManifest &manifest);
     int rollback_ref_by_manifest(const string &ref_tag, RGWObjManifest &manifest);
     int free_tail_objs_by_manifest(const string &ref_tag, RGWObjManifest &tgt_manifest);
+#if 0
     int dedup_object(const string     &src_bucket_name,
 		     const string     &src_obj_name,
 		     rgw::sal::Bucket *tgt_bucket,
 		     rgw::sal::Object *tgt_obj,
 		     uint64_t          tgt_size,
 		     bufferlist       &tgt_etag_bl);
+#endif
+    int dedup_object(const disk_record_t *p_src_rec,
+		     const disk_record_t *p_tgt_rec,
+		     const struct key_t  *p_key);
+
     void init_rados_access_handles();
 
     rgw::sal::Driver* driver = nullptr;

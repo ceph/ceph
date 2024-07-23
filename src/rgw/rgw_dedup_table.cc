@@ -109,7 +109,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int dedup_table_t::add_entry(key_t *p_key, disk_block_id_t block_id, bool shared_manifest, bool valid_sha256)
+  int dedup_table_t::add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
+			       bool shared_manifest, bool valid_sha256)
   {
     if (occupied_count < entries_count) {
       occupied_count++;
@@ -119,7 +120,7 @@ namespace rgw::dedup {
       return -1;
     }
 
-    value_t val(block_id, shared_manifest, valid_sha256);
+    value_t val(block_id, rec_id, shared_manifest, valid_sha256);
     const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
     if (!hash_tab[idx].val.is_occupied()) {
@@ -140,17 +141,42 @@ namespace rgw::dedup {
     }
     return 0;
   }
-
+  
   //---------------------------------------------------------------------------
-  int dedup_table_t::get_block_id(const key_t *p_key, disk_block_id_t *p_block_id)
+  int dedup_table_t::set_shared_manifest_mode(const key_t *p_key,
+					      disk_block_id_t block_id,
+					      record_id_t rec_id)
   {
     const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
-    if (!hash_tab[idx].val.is_occupied()) {
+    value_t &val = hash_tab[idx].val;
+    if (val.is_occupied()) {
+      if (val.block_idx == block_id && val.rec_id == rec_id) {
+	val.set_shared_manifest();
+	return 0;
+      }
+    }
+
+    return -1;
+  }
+
+  //---------------------------------------------------------------------------
+  int dedup_table_t::get_block_id(const key_t *p_key,
+				  disk_block_id_t *p_block_id,
+				  record_id_t *p_rec_id,
+				  bool *p_shared_manifest)
+  {
+    const std::lock_guard<std::mutex> lock(table_mtx);
+    uint32_t idx = find_entry(p_key);
+    const value_t &val = hash_tab[idx].val;
+    if (!val.is_occupied()) {
       return -1;
     }
 
-    *p_block_id = hash_tab[idx].val.block_idx;
+    *p_block_id = val.block_idx;
+    *p_rec_id   = val.rec_id;
+    *p_shared_manifest = val.is_shared_manifest();
+
     return 0;
   }
 
@@ -228,7 +254,7 @@ int main()
   work_shard_t work_shard = 3;
   for (unsigned i = 0; i < MAX_ENTRIES; i++) {
     disk_block_id_t block_id(worker_id, std::rand());
-    tab.add_entry(key_tab+i, block_id, false, false);
+    tab.add_entry(key_tab+i, block_id, 0, false, false);
   }
   double avg = (double)total / MAX_ENTRIES;
   std::cout << "Insert::num entries=" << MAX_ENTRIES << ", total=" << total

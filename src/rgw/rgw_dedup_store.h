@@ -34,6 +34,7 @@ namespace rgw::dedup {
   using md5_shard_t    = uint8_t;
   using slab_id_t      = uint16_t;
   using block_offset_t = uint8_t;
+  using record_id_t    = uint8_t;
   struct __attribute__ ((packed)) disk_block_id_t
   {
   public:
@@ -41,7 +42,7 @@ namespace rgw::dedup {
       block_id = 0;
     }
 
-    disk_block_id_t(work_shard_t work_shard_id, uint32_t seq_number) {
+    disk_block_id_t(work_shard_t work_shard_id, uint32_t seq_number/*, record_id_t rec_id = 0*/) {
       ceph_assert((SEQ_NUMBER_MASK & seq_number) == seq_number);
       block_id = (uint32_t)work_shard_id << OBJ_SHARD_SHIFT | seq_number;
     }
@@ -121,6 +122,7 @@ namespace rgw::dedup {
       uint16_t    flags;
       uint16_t    num_parts;       // For multipart upload (AWS MAX-PART is 10,000)
       uint32_t    size_4k_units;   // 4KB units max out at 16TB (AWS MAX-SIZE is 5TB)
+
       uint64_t    md5_high;        // High Bytes of the Object Data MD5
       uint64_t    md5_low;         // Low  Bytes of the Object Data MD5
       uint64_t    version;
@@ -128,10 +130,13 @@ namespace rgw::dedup {
       // all zeros for Dedicated-Manifest-Object
       uint64_t    sha256[4];	 // 4 * 8 Bytes of SHA256
 
-      uint16_t    headobj_name_len;
       uint16_t    manifest_len;
+      uint16_t    obj_name_len;
+      uint16_t    bucket_name_len;
+      uint16_t    pad16;
     }s;
-    std::string headobj_name;
+    std::string obj_name;
+    std::string bucket_name;
     bufferlist  manifest_bl;
   };
 
@@ -141,7 +146,7 @@ namespace rgw::dedup {
   static constexpr unsigned LAST_BLOCK_MAGIC = 0xCAD7;
   static constexpr unsigned AVG_REC_SIZE = 400;
   //static constexpr unsigned MAX_REC_IN_BLOCK = DISK_BLOCK_SIZE / AVG_REC_SIZE;
-  static constexpr unsigned MAX_REC_IN_BLOCK = 1;
+  static constexpr unsigned MAX_REC_IN_BLOCK = 3;
   struct  __attribute__ ((packed)) disk_block_header_t {
     void deserialize();
     int verify(disk_block_id_t block_id, const DoutPrefixProvider* dpp);
@@ -166,6 +171,7 @@ namespace rgw::dedup {
   int load_record(rgw::sal::RadosStore       *store,
 		  disk_record_t              *p_rec, /* OUT */
 		  disk_block_id_t             block_id,
+		  record_id_t                 rec_id,
 		  md5_shard_t                 md5_shard,
 		  const struct key_t         *p_key,
 		  const DoutPrefixProvider   *dpp);
@@ -200,20 +206,22 @@ namespace rgw::dedup {
       return d_md5_shard;
     }
 
-    int add_record(rgw::sal::RadosStore* store,
-		   RGWRados *rados,
-		   rgw::sal::Object* p_obj,
-		   const parsed_etag_t *p_parsed_etag,
-		   uint64_t obj_size);
+    int add_record(rgw::sal::RadosStore   *store,
+		   RGWRados               *rados,
+		   const rgw::sal::Bucket *p_bucket,
+		   const rgw::sal::Object *p_obj,
+		   const parsed_etag_t    *p_parsed_etag,
+		   uint64_t                obj_size);
     int flush_disk_records(rgw::sal::RadosStore *store, RGWRados *rados);
 
   private:
     inline const disk_block_t* last_block() { return &d_arr[DISK_BLOCK_COUNT-1]; }
     int flush(rgw::sal::RadosStore* store);
-    int fill_disk_record(disk_record_t       *p_rec,
-			 rgw::sal::Object    *p_obj,
-			 const parsed_etag_t *p_parsed_etag,
-			 uint64_t             obj_size);
+    int fill_disk_record(disk_record_t          *p_rec,
+			 const rgw::sal::Bucket *p_bucket,
+			 const rgw::sal::Object *p_obj,
+			 const parsed_etag_t    *p_parsed_etag,
+			 uint64_t                obj_size);
     void reset() {
       p_curr_block = d_arr;
       p_curr_block->init(d_worker_id, d_seq_number);

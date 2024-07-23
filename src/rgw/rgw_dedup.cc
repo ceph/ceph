@@ -393,7 +393,7 @@ namespace rgw::dedup {
 
     return ret;
   }
-
+#if 0
   //---------------------------------------------------------------------------
   int Background::dedup_object(const string     &src_bucket_name,
 			       const string     &src_obj_name,
@@ -506,12 +506,12 @@ namespace rgw::dedup {
     //ldpp_dout(dpp, 1) << "dedup::copy " << src_bucket_name << "::" << src_obj_name << " to " << tgt_bucket->get_name() << "::" << tgt_obj->get_name() << dendl;
     return 0;
   }
-
+#endif
   //---------------------------------------------------------------------------
-  int Background::add_disk_record(rgw::sal::Bucket* p_bucket,
-				  work_shard_t      worker_id,
-				  rgw::sal::Object* p_obj,
-				  uint64_t          obj_size)
+  int Background::add_disk_record(const rgw::sal::Bucket *p_bucket,
+				  const rgw::sal::Object *p_obj,
+				  work_shard_t            worker_id,
+				  uint64_t                obj_size)
   {
     parsed_etag_t parsed_etag;
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
@@ -527,7 +527,7 @@ namespace rgw::dedup {
     md5_shard_t md5_shard = parsed_etag.md5_low % MAX_MD5_SHARD;
     auto p_disk = p_disk_arr[md5_shard][worker_id];
     if (p_disk) {
-      int ret = p_disk->add_record(store, rados, p_obj, &parsed_etag, obj_size);
+      int ret = p_disk->add_record(store, rados, p_bucket, p_obj, &parsed_etag, obj_size);
       if (unlikely(ret != 0)) {
 	return ret;
       }
@@ -541,13 +541,72 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::add_record_to_dedup_table(const disk_record_t *p_rec, disk_block_id_t block_id)
+  int Background::add_record_to_dedup_table(const disk_record_t *p_rec,
+					    disk_block_id_t block_id,
+					    record_id_t rec_id)
   {
     key_t key(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.size_4k_units,
 	      p_rec->s.num_parts);
     bool valid_sha256 = p_rec->s.flags & RGW_DEDUP_FLAG_SHA256;
     bool shared_manifest = p_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST;
-    return d_table.add_entry(&key, block_id, shared_manifest, valid_sha256);
+    return d_table.add_entry(&key, block_id, rec_id, shared_manifest, valid_sha256);
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::dedup_object(const disk_record_t *p_src_rec,
+			       const disk_record_t *p_tgt_rec,
+			       const key_t *p_key)
+  {
+    RGWObjManifest src_manifest;
+    try {
+      auto bl_iter = p_src_rec->manifest_bl.cbegin();
+      decode(src_manifest, bl_iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: unable to decode manifest" << dendl;
+      return -1;
+    }
+
+    RGWObjManifest tgt_manifest;
+    try {
+      auto bl_iter = p_tgt_rec->manifest_bl.cbegin();
+      decode(src_manifest, bl_iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: unable to decode manifest" << dendl;
+      return -1;
+    }
+
+    // TBD: need to read target object attributes (RGW_ATTR_TAIL_TAG/RGW_ATTR_TAG)
+    string ref_tag = rgw_obj::calc_refcount_tag_hash(p_tgt_rec->bucket_name,
+						     p_tgt_rec->obj_name);
+    int ret = inc_ref_count_by_manifest(ref_tag, src_manifest);
+    if (ret == 0) {
+      // TBD:: WE need to update attribute atomicly using a CLS
+      // First verify TGT objects state(MD5/SHA256/versionm/timestamp)
+      // If all looks fine overwrite manifest and return status
+      // If return status shows success we will free tail-objects on TGT
+      // CLS_MODIFY_MANIFEST(src_manifest, tgt_manifest, p_key, version/timestamp);
+#if 1
+      unique_ptr<rgw::sal::Bucket> tgt_bucket;
+      const string tgt_tenant_name, tgt_bucket_id;
+      rgw_bucket b{tgt_tenant_name, p_tgt_rec->bucket_name, tgt_bucket_id};
+      ret = driver->load_bucket(dpp, b, &tgt_bucket, null_yield);
+      if (unlikely(ret != 0)) {
+	derr << __func__ << "::ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+	return -ret;
+      }
+      unique_ptr<rgw::sal::Object> tgt_obj = tgt_bucket->get_object(p_tgt_rec->obj_name);
+      //if () {}
+      // TBD3 - remove the const or use cast
+      bufferlist src_manifest_bl = p_src_rec->manifest_bl;
+      tgt_obj->modify_obj_attrs(RGW_ATTR_MANIFEST, src_manifest_bl, null_yield, dpp);
+#endif
+      // free tail objects based on TGT manifest
+      free_tail_objs_by_manifest(ref_tag, tgt_manifest);
+    }
+
+    // do we need to set compression on the head object or is it set on tail?
+    // RGW_ATTR_COMPRESSION
+    return ret;
   }
 
   //---------------------------------------------------------------------------
@@ -558,39 +617,55 @@ namespace rgw::dedup {
   // If the record block-index matches the hashtable entry -> skip it (it is the SRC object)
   // All other entries are Dedicated-Manifest-Objects with a valid SRC object
   //
-  int Background::try_deduping_record(const disk_record_t *p_rec,
+  int Background::try_deduping_record(const disk_record_t *p_tgt_rec,
 				      disk_block_id_t      block_id,
+				      record_id_t          rec_id,
 				      md5_shard_t          md5_shard)
   {
-    if (p_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
+    if (p_tgt_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
       // record holds a shared_manifest object so can't be a dedup target
       return 0;
     }
 
-    disk_block_id_t source_block_id;
-    key_t key(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.size_4k_units, p_rec->s.num_parts);
-    int ret = d_table.get_block_id(&key, &source_block_id);
+    disk_block_id_t src_block_id;
+    record_id_t src_rec_id;
+    bool is_shared_manifest;
+    key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, p_tgt_rec->s.size_4k_units, p_tgt_rec->s.num_parts);
+    int ret = d_table.get_block_id(&key, &src_block_id, &src_rec_id, &is_shared_manifest);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
       return 0;
     }
 
-    if (block_id == source_block_id) {
+    if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
-
-      // TBD:: There are multiple records in every block -> need to add record id!!
       return 0;
     }
 
     // This records is a dedup target with source record on source_block_id
-    disk_record_t source_rec;
-    ret = load_record(store, &source_rec, source_block_id, md5_shard, &key, dpp);
+    disk_record_t src_rec;
+    ret = load_record(store, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
+    if (ret == 0) {
+      ret = dedup_object(&src_rec, p_tgt_rec, &key);
 
+      // mark the SRC object as a providor of a shared manifest
+      if (!is_shared_manifest) {
+	// set the shared manifest flag in the dedup table
+	d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
+
+	// TBD:
+	// Set Shared-Manifest attribute in the SRC-OBJ
+      }
+
+    }
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int Background::run_dedup_step(dedup_step_t step, md5_shard_t md5_shard, work_shard_t worker_id)
+  int Background::run_dedup_step(dedup_step_t step,
+				 md5_shard_t md5_shard,
+				 work_shard_t worker_id,
+				 uint32_t *p_rec_count /* IN-OUT */)
   {
     const int MAX_OBJ_LOAD_FAILURE = 3;
     bool      has_more = true;
@@ -617,13 +692,13 @@ namespace rgw::dedup {
       }
       auto bl_itr = bl.cbegin();
       for (uint32_t block_num = 0; block_num < DISK_BLOCK_COUNT; block_num++, seq_number++) {
+	disk_block_id_t disk_block_id(worker_id, seq_number);
 	const char *p = nullptr;
 	size_t n = bl_itr.get_ptr_and_advance(sizeof(disk_block_t), &p);
 	if (n == sizeof(disk_block_t)) {
 	  disk_block_t *p_disk_block = (disk_block_t*)p;
 	  disk_block_header_t *p_header = p_disk_block->get_header();
 	  p_header->deserialize();
-	  disk_block_id_t disk_block_id(worker_id, seq_number);
 	  if (p_header->verify(disk_block_id, dpp) != 0) {
 	    return -1;
 	  }
@@ -632,17 +707,17 @@ namespace rgw::dedup {
 	    unsigned offset = p_header->rec_offsets[rec_id];
 	    // We deserialize the record inside the CTOR
 	    disk_record_t rec(p + offset);
-
 	    if (step == STEP_BUILD_TABLE) {
-	      add_record_to_dedup_table(&rec, disk_block_id_t(worker_id, seq_number));
+	      add_record_to_dedup_table(&rec, disk_block_id, rec_id);
 	    }
 	    else if (step == STEP_REMOVE_DUPLICATES) {
-	      try_deduping_record(&rec, disk_block_id_t(worker_id, seq_number), md5_shard);
+	      try_deduping_record(&rec, disk_block_id, rec_id, md5_shard);
 	    }
 	    else {
 	      ceph_abort("unexpected step");
 	    }
 	  }
+	  *p_rec_count += p_header->rec_count;
 	  has_more = (p_header->offset == BLOCK_MAGIC);
 	  ceph_assert(p_header->offset == BLOCK_MAGIC || p_header->offset == LAST_BLOCK_MAGIC);
 	  if (!has_more) {
@@ -666,57 +741,6 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) <<__func__ << "::dedup::singleton_count=" << singleton_count
 			<< ", duplicate_count=" << duplicate_count << dendl;
     }
-    return 0;
-  }
-
-  //---------------------------------------------------------------------------
-  int Background::process_bucket_entries(rgw::sal::Bucket*                    bucket,
-					 const string                        &bucket_name,
-					 const rgw::sal::Bucket::ListResults &results,
-					 const ceph::real_time               &last_scan_time)
-  {
-    ldpp_dout(dpp, 1) <<__func__ << "::dedup::" << bucket_name << dendl;
-    unsigned count = 0;
-    for (const rgw_bucket_dir_entry& entry : results.objs) {
-      count++;
-      unique_ptr<rgw::sal::Object> obj = bucket->get_object(entry.key);
-      if (unlikely(!obj)) {
-	derr << "ERROR: failed bucket->get_object(" << entry.key << ")" << dendl;
-	return 1;
-      }
-      int ret = obj->get_obj_attrs(null_yield, dpp);
-      if (unlikely(ret < 0)) {
-	derr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
-	return 1;
-      }
-      uint64_t size = obj->get_obj_size();
-#if 0
-      if (size <= 4*1024*1024) {
-	// dedup only useful for objects bigger than 4MB
-	continue;
-      }
-#endif
-      ceph::real_time mtime = obj->get_mtime();
-      //ldpp_dout(dpp, 1) <<__func__ << "::entry.key=" << entry.key << "::size=" << size << dendl;
-      // check if object was modified since last scan
-      if (mtime < last_scan_time) {
-	continue;
-      }
-
-      if (obj->get_attrs().find(RGW_ATTR_CRYPT_MODE) != obj->get_attrs().end()) {
-	ldpp_dout(dpp, 1) <<__func__ << "::Skipping encrypted object " << entry.key << dendl;
-	continue;
-      }
-
-      // TBD: We should be able to support RGW_ATTR_COMPRESSION when all copies are compressed
-      if (obj->get_attrs().find(RGW_ATTR_COMPRESSION) != obj->get_attrs().end()) {
-	ldpp_dout(dpp, 1) <<__func__ << "::Skipping compressed object " << entry.key << dendl;
-	continue;
-      }
-
-      add_disk_record(bucket, 0, obj.get(), size);
-    }
-    ldpp_dout(dpp, 1)  << __func__ << "::dedup::" << count << " objects were handled" << dendl;
     return 0;
   }
 
@@ -762,7 +786,7 @@ namespace rgw::dedup {
       return 0;
     }
 
-    return add_disk_record(bucket, worker_id, obj.get(), size);
+    return add_disk_record(bucket, obj.get(), worker_id, size);
   }
 
   //---------------------------------------------------------------------------
@@ -877,59 +901,6 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::list_bucket(const string   &bucket_name,
-			      ceph::real_time last_scan_time,
-			      uint64_t *p_obj_count /* IN-OUT */)
-  {
-    unique_ptr<rgw::sal::Bucket> bucket;
-    const string tenant_name, bucket_id;
-    rgw_bucket b{tenant_name, bucket_name, bucket_id};
-    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
-    if (unlikely(ret != 0)) {
-      derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
-      return -ret;
-    }
-    //read_bucket_stats(std::move(bucket), bucket_name);
-
-    utime_t ut(bucket->get_modification_time());
-    if (bucket_set[bucket_name].modification_time == ut) {
-      return 0;
-    }
-    bucket_set[bucket_name].modification_time = ut;
-    rgw::sal::Bucket::ListParams params;
-    rgw::sal::Bucket::ListResults results;
-    params.enforce_ns      = false;
-    params.list_versions   = true;
-    params.allow_unordered = true;
-#if 0
-    // how to shard bucket list ???
-    params.delim = ??;
-    params.shard_id = ??;
-#endif
-    //ldpp_dout(dpp, 1) << __func__ << "::" << bucket_name << dendl;
-    bool has_more = true;
-    int max = 100;
-    while (has_more) {
-      ret = bucket->list(dpp, params, max, results, null_yield);
-      if (unlikely(ret < 0)) {
-	derr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << dendl;
-	return -ret;
-      }
-#if 0
-      ldpp_dout(dpp, 1) <<__func__ << "::results.objs.size()=" << results.objs.size()
-			<< ", results.is_truncated=" << results.is_truncated
-			<< ", marker=" << params.marker << dendl;
-#endif
-      has_more = results.is_truncated;
-      //has_more = false;
-      *p_obj_count += results.objs.size();
-      process_bucket_entries(bucket.get(), bucket_name, results, last_scan_time);
-    }
-
-    return 0;
-  }
-
-  //---------------------------------------------------------------------------
   int Background::scan_bucket_list(bool deep_scan, ceph::real_time last_scan_time)
   {
     static bool first_time = true;
@@ -978,22 +949,24 @@ namespace rgw::dedup {
     }
 
     if (deep_scan && obj_count) {
+      uint32_t rec_count = 0;
       ldpp_dout(dpp, 0) <<__func__ << "::scanned objects count = " << obj_count << dendl;
       for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
 	for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
 	  //build_dedup_table(md5_shard, worker_id);
-	  run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id);
+	  run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, &rec_count);
 	}
       }
-
+      ldpp_dout(dpp, 0) <<__func__ << "::BUILD_TABLE::scanned records count = " << rec_count << dendl;
       d_table.remove_singletons_and_redistribute_keys();
-
+      rec_count = 0;
       for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
 	for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
 	  //dedup_objects(md5_shard, worker_id);
-	  run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id);
+	  run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, &rec_count);
 	}
       }
+      ldpp_dout(dpp, 0) <<__func__ << "::REMOVE_DUPLICATES::scanned records count = " << rec_count << dendl;
     }
     return ret;
   }

@@ -14,6 +14,7 @@ namespace rgw::dedup {
   static constexpr uint8_t RGW_DEDUP_FLAG_OCCUPIED        = 0x08;
   static constexpr uint8_t RGW_DEDUP_FLAG_PG_VER          = 0x10;
 
+  // 22 Bytes key
   struct key_t {
     key_t() { ;}
     key_t(uint64_t _md5_high,
@@ -52,23 +53,32 @@ namespace rgw::dedup {
     dedup_table_t(uint32_t entries_count, const DoutPrefixProvider* _dpp);
     ~dedup_table_t();
     uint32_t find_entry(const key_t *p_key);
-    int add_entry(key_t *p_key, disk_block_id_t block_id, bool shared_manifest, bool has_sha256);
-    int  get_block_id(const key_t *p_key, disk_block_id_t *p_block_id);
+    int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
+		  bool shared_manifest, bool has_sha256);
+    int  get_block_id(const key_t *p_key,
+		      disk_block_id_t *p_block_id,
+		      record_id_t *p_rec_id,
+		      bool *p_shared_manifest);
+    int set_shared_manifest_mode(const key_t *p_key,
+				 disk_block_id_t block_id,
+				 record_id_t rec_id);
     void count_duplicates(uint32_t *p_singleton_count, uint32_t *p_duplicate_count);
     void remove_singletons_and_redistribute_keys();
     void print_redistribute_stats();
     void stat_counters_reset();
 
   private:
+    // 6 Bytes Value
     struct value_t {
       value_t() {
-	// TBD: set 0xFFFFFFFF or 0x0 as NULL-Block-IDX
-	//value_t(0xFFFFFFFF, false, false);
+	this->block_idx = 0xFFFFFFFF;
+	this->rec_id = 0xFF;
+	this->flags = 0;
       }
 
-      value_t(disk_block_id_t block_id, bool shared_manifest, bool valid_sha256) {
+      value_t(disk_block_id_t block_id, record_id_t rec_id, bool shared_manifest, bool valid_sha256) {
 	this->block_idx = block_id;
-	this->pad8 = 0;
+	this->rec_id = rec_id;
 	this->flags = (RGW_DEDUP_FLAG_SINGLETON | RGW_DEDUP_FLAG_OCCUPIED);
 	if (shared_manifest) {
 	  set_shared_manifest();
@@ -113,7 +123,7 @@ namespace rgw::dedup {
       }
 
       uint8_t  flags;
-      uint8_t  pad8;
+      record_id_t rec_id;
       disk_block_id_t block_idx;
     } __attribute__((__packed__));
 

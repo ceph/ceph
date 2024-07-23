@@ -34,12 +34,17 @@ namespace rgw::dedup {
       this->s.sha256[i] = CEPHTOH_64(p_rec->s.sha256[i]);
     }
 
-    this->s.headobj_name_len = CEPHTOH_16(p_rec->s.headobj_name_len);
-    this->s.manifest_len     = CEPHTOH_16(p_rec->s.manifest_len);
+    this->s.obj_name_len    = CEPHTOH_16(p_rec->s.obj_name_len);
+    this->s.bucket_name_len = CEPHTOH_16(p_rec->s.bucket_name_len);
+    this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
 
     const char *p = buff + sizeof(this->s);
-    this->headobj_name = std::string(p, this->s.headobj_name_len);
-    p += p_rec->s.headobj_name_len;
+    this->obj_name = std::string(p, this->s.obj_name_len);
+    p += p_rec->s.obj_name_len;
+
+    this->bucket_name = std::string(p, this->s.bucket_name_len);
+    p += p_rec->s.bucket_name_len;
+
     manifest_bl.append(p, this->s.manifest_len);
   }
 
@@ -59,13 +64,19 @@ namespace rgw::dedup {
       p_rec->s.sha256[i] = HTOCEPH_64(this->s.sha256[i]);
     }
 
-    p_rec->s.headobj_name_len = HTOCEPH_16(this->headobj_name.length());
-    p_rec->s.manifest_len     = HTOCEPH_16(manifest_bl.length());
+    p_rec->s.obj_name_len    = HTOCEPH_16(this->obj_name.length());
+    p_rec->s.bucket_name_len = HTOCEPH_16(this->bucket_name.length());
+    p_rec->s.manifest_len    = HTOCEPH_16(manifest_bl.length());
 
     char *p = buff + sizeof(this->s);
-    unsigned len = this->headobj_name.length();
-    std::memcpy(p, this->headobj_name.data(), len);
+    unsigned len = this->obj_name.length();
+    std::memcpy(p, this->obj_name.data(), len);
     p += len;
+
+    len = this->bucket_name.length();
+    std::memcpy(p, this->bucket_name.data(), len);
+    p += len;
+
     const std::string & manifest = this->manifest_bl.to_str();
     len = manifest.length();
     std::memcpy(p, manifest.data(), len);
@@ -76,22 +87,25 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   bool disk_record_t::operator==(const disk_record_t &other) const
   {
-    unsigned len = offsetof(packed_rec_t, headobj_name_len);
-    return (this->manifest_bl  == other.manifest_bl  &&
-	    this->headobj_name == other.headobj_name &&
+    unsigned len = offsetof(packed_rec_t, obj_name_len);
+    return (this->obj_name    == other.obj_name    &&
+	    this->bucket_name == other.bucket_name &&
+	    this->manifest_bl == other.manifest_bl &&
 	    memcmp((char*)&this->s.flags, (char*)&other.s.flags, len) == 0);
   }
 
   //---------------------------------------------------------------------------
   size_t disk_record_t::length() const
   {
-    return (sizeof(this->s) + headobj_name.length() + manifest_bl.length());
+    return (sizeof(this->s) + obj_name.length() + bucket_name.length() +
+	    manifest_bl.length());
   }
 
   //---------------------------------------------------------------------------
   std::ostream &operator<<(std::ostream &stream, const disk_record_t & rec)
   {
-    stream << rec.headobj_name << "::" << rec.s.headobj_name_len << "\n";
+    stream << rec.obj_name << "::" << rec.s.obj_name_len << "\n";
+    stream << rec.bucket_name << "::" << rec.s.bucket_name_len << "\n";
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << 4*rec.s.size_4k_units <<" KiB"  << "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
@@ -172,7 +186,10 @@ namespace rgw::dedup {
   void disk_block_t::close_block(const DoutPrefixProvider* dpp, bool has_more)
   {
     disk_block_header_t *p_header = get_header();
-    //ldpp_dout(dpp, 1)  << __func__ << "::offset=" << p_header->offset << ", rec_count=" << p_header->rec_count << ", has_more=" << has_more << dendl;
+    if (!has_more) {
+      ldpp_dout(dpp, 1)  << __func__ << "::rec_count=" << p_header->rec_count
+			 << ", has_more=" << (has_more? "TRUE" : "FALSE") << dendl;
+    }
     memset(data + p_header->offset, 0, (DISK_BLOCK_SIZE - p_header->offset));
     if (has_more) {
       p_header->offset = HTOCEPH_16(BLOCK_MAGIC);
@@ -202,55 +219,59 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::fill_disk_record(disk_record_t       *p_rec,
-					   rgw::sal::Object    *p_obj,
-					   const parsed_etag_t *p_parsed_etag,
-					   uint64_t             obj_size)
+  int disk_block_array_t::fill_disk_record(disk_record_t          *p_rec,
+					   const rgw::sal::Bucket *p_bucket,
+					   const rgw::sal::Object *p_obj,
+					   const parsed_etag_t    *p_parsed_etag,
+					   uint64_t                obj_size)
   {
     p_rec->s.flags         = 0;
     p_rec->s.version       = 0;
     p_rec->s.size_4k_units = uint32_t(obj_size/(4*1024));
-    p_rec->headobj_name    = p_obj->get_name();
-    p_rec->s.headobj_name_len = p_rec->headobj_name.length();
+    p_rec->obj_name    = p_obj->get_name();
+    p_rec->s.obj_name_len = p_rec->obj_name.length();
+    p_rec->bucket_name    = p_bucket->get_name();
+    p_rec->s.bucket_name_len = p_rec->bucket_name.length();
 
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
-#if 1
     p_rec->s.md5_high  = p_parsed_etag->md5_high;
     p_rec->s.md5_low   = p_parsed_etag->md5_low;
     p_rec->s.num_parts = p_parsed_etag->num_parts;
-#else
-    auto itr = attrs.find(RGW_ATTR_ETAG);
-    if (itr != attrs.end()) {
-      parsed_etag_t parsed_etag;
-      parse_etag_string(itr->second.to_str(), &parsed_etag);
-      p_rec->s.md5_high  = parsed_etag.md5_high;
-      p_rec->s.md5_low   = parsed_etag.md5_low;
-      p_rec->s.num_parts = parsed_etag.num_parts;
-    }
-    else {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: no etag" << dendl;
-      return -1;
-    }
-#endif
+
+    // clear bufferlist first
+    p_rec->manifest_bl.clear();
+    ceph_assert(p_rec->manifest_bl.length() == 0);
+
     auto itr = attrs.find(RGW_ATTR_MANIFEST);
     if (itr != attrs.end()) {
-      p_rec->manifest_bl = itr->second;
-      p_rec->s.manifest_len = p_rec->manifest_bl.length();
-      // verify that we got a valid manifest
+      const bufferlist &bl = itr->second;
       RGWObjManifest manifest;
       try {
-	auto bl_iter = p_rec->manifest_bl.cbegin();
+	auto bl_iter = bl.cbegin();
 	decode(manifest, bl_iter);
       } catch (buffer::error& err) {
 	ldpp_dout(dpp, 1)  << __func__
 			   << "::ERROR: unable to decode manifest" << dendl;
 	return -1;
       }
+      // force explicit tail_placement as the dedup could be on another bucket
+      const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
+      if (tail_placement.bucket.name.empty()) {
+	//ldpp_dout(dpp, 1) << "dedup::updating tail placement" << dendl;
+	rgw_bucket b{"", p_bucket->get_name(), ""};
+	manifest.set_tail_placement(tail_placement.placement_rule, b);
+	encode(manifest, p_rec->manifest_bl);
+      }
+      else {
+	p_rec->manifest_bl = bl;
+      }
+      p_rec->s.manifest_len = p_rec->manifest_bl.length();
     }
     else {
       ldpp_dout(dpp, 1)  << __func__ << "::ERROR: no manifest" << dendl;
       return -1;
     }
+
 #if 0
     // optional attributes:
     itr = attrs.find(RGW_ATTR_PG_VER);
@@ -269,6 +290,7 @@ namespace rgw::dedup {
       }
     }
 #endif
+
     itr = attrs.find(RGW_ATTR_SHA256);
     if (itr != attrs.end()) {
       char buff[4*HEX_UNIT_SIZE];
@@ -386,6 +408,7 @@ namespace rgw::dedup {
   int load_record(rgw::sal::RadosStore       *store,
 		  disk_record_t              *p_rec, /* OUT */
 		  disk_block_id_t             block_id,
+		  record_id_t                 rec_id,
 		  md5_shard_t                 md5_shard,
 		  const struct key_t         *p_key,
 		  const DoutPrefixProvider   *dpp)
@@ -424,30 +447,19 @@ namespace rgw::dedup {
       if (p_header->verify(block_id, dpp) != 0) {
 	return -1;
       }
-      bool found = false;
-      for (unsigned rec_id = 0; rec_id < p_header->rec_count; rec_id++) {
-	unsigned offset = p_header->rec_offsets[rec_id];
-	// We deserialize the record inside the CTOR
-	disk_record_t rec(p + offset);
-#if 1
-	struct key_t key(rec.s.md5_high, rec.s.md5_low, rec.s.size_4k_units, rec.s.num_parts);
-	if (key == *p_key) {
-	  if (rec.s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
-	    *p_rec = rec;
-	    return 0;
-	  }
-	  found = true;
-	  // TBD: search for a better key!!
-	  *p_rec = rec;
-	}
-#endif
-      }
-      if (found) {
-	// TBD: copy record data
+
+      unsigned offset = p_header->rec_offsets[rec_id];
+      // We deserialize the record inside the CTOR
+      disk_record_t rec(p + offset);
+      struct key_t key(rec.s.md5_high, rec.s.md5_low, rec.s.size_4k_units, rec.s.num_parts);
+      if (key == *p_key) {
+	*p_rec = rec;
 	return 0;
       }
       else {
-	ldpp_dout(dpp, 0) << __func__ << "::record was not found in block " << block_id << dendl;
+	ldpp_dout(dpp, 0) << __func__ << "::Bad record in block=" << block_id
+			  << ", rec_id=" << rec_id << dendl;
+	return -1;
       }
     }
     else {
@@ -538,22 +550,19 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::add_record(rgw::sal::RadosStore *store,
-				     RGWRados             *rados,
-				     rgw::sal::Object     *p_obj,
-				     const parsed_etag_t  *p_parsed_etag,
-				     uint64_t              obj_size)
+  int disk_block_array_t::add_record(rgw::sal::RadosStore   *store,
+				     RGWRados               *rados,
+				     const rgw::sal::Bucket *p_bucket,
+				     const rgw::sal::Object *p_obj,
+				     const parsed_etag_t    *p_parsed_etag,
+				     uint64_t                obj_size)
   {
     disk_record_t rec;
-    int ret = fill_disk_record(&rec, p_obj, p_parsed_etag, obj_size);
+    int ret = fill_disk_record(&rec, p_bucket, p_obj, p_parsed_etag, obj_size);
     if (unlikely(ret != 0)) {
       return ret;
     }
-#if 0
-    //display_record(dpp, rados, rec);
-    ldpp_dout(dpp, 0)  << __func__ << "::oid=" << rec.headobj_name << ", MD5="
-		       << std::hex << rec.s.md5_high << rec.s.md5_low << std::dec << dendl;
-#endif
+
     // first, try and add the record to the current open block
     if (p_curr_block->add_record(&rec, dpp) == 0) {
       return 0;
