@@ -11,7 +11,7 @@ overrides:
         rgw local cache address: "127.0.0.1:8000"
         rgw remote cache address: "127.0.0.1:8001"
         rgw d4n backend address: "127.0.0.1:8000"
-      c1.client.0: 
+      c1.client: 
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
@@ -21,7 +21,7 @@ overrides:
         rgw remote cache address: "127.0.0.1:8001"
         rgw d4n backend address: "127.0.0.1:8000"
         d4n writecache enabled: true
-      c2.client.0:
+      c2.client:
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
