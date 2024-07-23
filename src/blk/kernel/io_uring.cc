@@ -244,7 +244,7 @@ void ioring_queue_t::shutdown()
 }
 
 int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
-                                 uint16_t aios_size, void *priv,
+                                 void *priv,
                                  int *retries)
 {
   ceph_assert(0);
