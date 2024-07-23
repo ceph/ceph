@@ -261,6 +261,21 @@ TEST_F(cls_rgw, index_remove_object)
 	     total_size);
 }
 
+static int set_tag_timeout(librados::IoCtx& ioctx,
+                           std::map<int, std::string>& bucket_objs,
+                           uint64_t timeout)
+{
+  for (const auto& [_, oid] : bucket_objs) {
+    librados::ObjectWriteOperation op;
+    cls_rgw_bucket_set_tag_timeout(op, timeout);
+
+    if (int r = ioctx.operate(oid, &op); r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
 TEST_F(cls_rgw, index_suggest)
 {
   string bucket_oid = str_int("suggest", 1);
@@ -347,7 +362,7 @@ TEST_F(cls_rgw, index_suggest)
 
   map<int, string> bucket_objs;
   bucket_objs[0] = bucket_oid;
-  int r = CLSRGWIssueSetTagTimeout(ioctx, bucket_objs, 8 /* max aio */, 1)();
+  int r = set_tag_timeout(ioctx, bucket_objs, 1);
   ASSERT_EQ(0, r);
 
   sleep(1);

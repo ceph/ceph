@@ -561,7 +561,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   }
 
   // use a quicker/shorter tag timeout during this process
-  bucket->set_tag_timeout(dpp, BUCKET_TAG_QUICK_TIMEOUT);
+  bucket->set_tag_timeout(dpp, y, BUCKET_TAG_QUICK_TIMEOUT);
 
   rgw::sal::Bucket::ListResults results;
   results.is_truncated = true;
@@ -589,7 +589,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   formatter->close_section();
 
   // restore normal tag timeout for bucket
-  bucket->set_tag_timeout(dpp, 0);
+  bucket->set_tag_timeout(dpp, y, 0);
 
   return 0;
 }

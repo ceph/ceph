@@ -942,9 +942,10 @@ int FilterBucket::rebuild_index(const DoutPrefixProvider *dpp)
   return next->rebuild_index(dpp);
 }
 
-int FilterBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+int FilterBucket::set_tag_timeout(const DoutPrefixProvider *dpp,
+                                optional_yield y, uint64_t timeout)
 {
-  return next->set_tag_timeout(dpp, timeout);
+  return next->set_tag_timeout(dpp, y, timeout);
 }
 
 int FilterBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)

@@ -550,3 +550,46 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
 
   return 0;
 }
+
+int RGWSI_BucketIndex_RADOS::set_tag_timeout(const DoutPrefixProvider* dpp,
+                                             optional_yield y,
+                                             const RGWBucketInfo& bucket_info,
+                                             const rgw::bucket_index_layout_generation& layout,
+                                             uint64_t timeout)
+{
+  librados::IoCtx ioctx;
+  map<int, string> bucket_objs;
+  int ret = open_bucket_index(dpp, bucket_info, std::nullopt, layout, &ioctx, &bucket_objs, nullptr);
+  if (ret < 0)
+    return ret;
+
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  constexpr auto is_error = [] (int r) { return r < 0; };
+  constexpr std::string_view error_message =
+      "failed to set tag timeout for index object";
+
+  for (const auto& [_, oid] : bucket_objs) {
+    librados::ObjectWriteOperation op;
+    cls_rgw_bucket_set_tag_timeout(op, timeout);
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    int r = rgw::check_for_errors(c, is_error, dpp, error_message);
+    if (ret == 0) {
+      ret = r;
+    }
+  }
+
+  auto c = aio->drain();
+  int r = rgw::check_for_errors(c, is_error, dpp, error_message);
+  if (r < 0) {
+    return r;
+  }
+  return ret;
+}

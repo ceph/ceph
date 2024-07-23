@@ -319,7 +319,8 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout)
+  int DBBucket::set_tag_timeout(const DoutPrefixProvider *dpp,
+                                optional_yield y, uint64_t timeout)
   {
     /* XXX: CHECK: set tag timeout for all the bucket objects? */
     return 0;

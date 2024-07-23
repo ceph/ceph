@@ -303,16 +303,8 @@ public:
 }; // class CLSRGWConcurrentIO
 
 
-class CLSRGWIssueSetTagTimeout : public CLSRGWConcurrentIO {
-  uint64_t tag_timeout;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueSetTagTimeout(librados::IoCtx& ioc, std::map<int, std::string>& _bucket_objs,
-                     uint32_t _max_aio, uint64_t _tag_timeout) :
-    CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), tag_timeout(_tag_timeout) {}
-  virtual ~CLSRGWIssueSetTagTimeout() override {}
-};
+void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
+                                    uint64_t timeout);
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  bool absolute,

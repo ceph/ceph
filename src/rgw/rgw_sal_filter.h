@@ -623,7 +623,8 @@ public:
 			  std::map<RGWObjCategory, RGWStorageStats>&
 			  calculated_stats) override;
   virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
-  virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
+  virtual int set_tag_timeout(const DoutPrefixProvider *dpp,
+                              optional_yield y, uint64_t timeout) override;
   virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual bool empty() const override { return next->empty(); }
   virtual const std::string& get_name() const override { return next->get_name(); }

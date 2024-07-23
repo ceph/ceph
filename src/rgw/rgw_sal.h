@@ -923,7 +923,8 @@ class Bucket {
     /** Rebuild the bucket index.  May be removed from API */
     virtual int rebuild_index(const DoutPrefixProvider *dpp) = 0;
     /** Set a timeout on the check_index() call.  May be removed from API */
-    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
+    virtual int set_tag_timeout(const DoutPrefixProvider *dpp,
+                                optional_yield y, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
     virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
 

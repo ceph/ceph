@@ -166,4 +166,9 @@ public:
                         librados::IoCtx* index_pool,
                         std::map<int, std::string> *bucket_objs,
                         std::map<int, std::string> *bucket_instance_ids);
+
+  int set_tag_timeout(const DoutPrefixProvider* dpp, optional_yield y,
+                      const RGWBucketInfo& bucket_info,
+                      const rgw::bucket_index_layout_generation& idx_layout,
+                      uint64_t timeout);
 };
