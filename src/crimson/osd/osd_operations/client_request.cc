@@ -337,7 +337,6 @@ ClientRequest::process_op(
 
     std::set<snapid_t> snaps = snaps_need_to_recover();
     if (!snaps.empty()) {
-      // call with_obc() in order, but wait concurrently for loading.
       auto with_obc = pg->obc_loader.with_obc<RWState::RWREAD>(
         m->get_hobj().get_head(),
         [&snaps, &ihref, pg, this](auto head, auto) {
@@ -350,6 +349,16 @@ ClientRequest::process_op(
     }
   }
 
+  /**
+   * The previous stage of recover_missing is a concurrent phase.
+   * Checking for already_complete requests must done exclusively.
+   * Since get_obc is also an exclusive stage, we can merge both stages into
+   * a single stage and avoid stage switching overhead.
+   */
+  DEBUGDPP("{}.{}: entering check_already_complete_get_obc",
+	   *pg, *this, this_instance_id);
+  co_await ihref.enter_stage<interruptor>(
+    client_pp(*pg).check_already_complete_get_obc, *this);
   DEBUGDPP("{}.{}: checking already_complete",
 	   *pg, *this, this_instance_id);
   auto completed = co_await pg->already_complete(m->get_reqid());
@@ -368,11 +377,7 @@ ClientRequest::process_op(
     co_return;
   }
 
-  DEBUGDPP("{}.{}: not completed, entering get_obc stage",
-	   *pg, *this, this_instance_id);
-  co_await ihref.enter_stage<interruptor>(client_pp(*pg).get_obc, *this);
-
-  DEBUGDPP("{}.{}: entered get_obc stage, about to wait_scrub",
+  DEBUGDPP("{}.{}: not completed, about to wait_scrub",
 	   *pg, *this, this_instance_id);
   co_await ihref.enter_blocker(
     *this, pg->scrubber, &decltype(pg->scrubber)::wait_scrub,
