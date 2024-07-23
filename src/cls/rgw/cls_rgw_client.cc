@@ -717,16 +717,6 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
   o.exec(RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates);
 }
 
-int CLSRGWIssueGetDirHeader::issue_op(const int shard_id, const string& oid)
-{
-  cls_rgw_obj_key empty_key;
-  string empty_prefix;
-  string empty_delimiter;
-  return issue_bucket_list_op(io_ctx, shard_id, oid,
-			      empty_key, empty_prefix, empty_delimiter,
-			      0, false, &manager, &result[shard_id]);
-}
-
 static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)
 {
   bufferlist in;
@@ -751,6 +741,24 @@ static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const int shard_id, const
 int CLSRGWIssueBucketBILogStop::issue_op(const int shard_id, const string& oid)
 {
   return issue_bi_log_stop(io_ctx, shard_id, oid, &manager);
+}
+
+void cls_rgw_get_dir_header(librados::ObjectReadOperation& op,
+                            bufferlist& out)
+{
+  op.omap_get_header(&out, nullptr);
+}
+
+int cls_rgw_get_dir_header_decode(const bufferlist& out,
+                                  rgw_bucket_dir_header& header)
+{
+  try {
+    auto p = out.cbegin();
+    decode(header, p);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+  return 0;
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {

@@ -517,17 +517,6 @@ public:
   virtual ~CLSRGWIssueBucketRebuild() override {}
 };
 
-class CLSRGWIssueGetDirHeader : public CLSRGWConcurrentIO {
-  std::map<int, rgw_cls_list_ret>& result;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, std::map<int, std::string>& oids, std::map<int, rgw_cls_list_ret>& dir_headers,
-                          uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(dir_headers) {}
-  virtual ~CLSRGWIssueGetDirHeader() override {}
-};
-
 class CLSRGWIssueSetBucketResharding : public CLSRGWConcurrentIO {
   cls_rgw_bucket_instance_entry entry;
 protected:
@@ -556,6 +545,11 @@ public:
     CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
   virtual ~CLSRGWIssueBucketBILogStop() override {}
 };
+
+void cls_rgw_get_dir_header(librados::ObjectReadOperation& op,
+                            bufferlist& bl);
+int cls_rgw_get_dir_header_decode(const bufferlist& bl,
+                                  rgw_bucket_dir_header& header);
 
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, const std::string& oid,
                                  boost::intrusive_ptr<RGWGetDirHeader_CB> cb);

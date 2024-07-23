@@ -294,28 +294,63 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
                                              map<int, string> *bucket_instance_ids,
                                              optional_yield y)
 {
-  librados::IoCtx index_pool;
+  librados::IoCtx ioctx;
   map<int, string> oids;
-  int r = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &oids, bucket_instance_ids);
-  if (r < 0)
-    return r;
+  int ret = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &ioctx, &oids, bucket_instance_ids);
+  if (ret < 0)
+    return ret;
 
-  map<int, struct rgw_cls_list_ret> list_results;
-  for (auto& iter : oids) {
-    list_results.emplace(iter.first, rgw_cls_list_ret());
+  std::vector<bufferlist> buffers;
+  buffers.resize(oids.size());
+
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  constexpr auto is_error = [] (int r) { return r < 0; };
+  constexpr std::string_view error_message =
+      "failed to read header for index object";
+
+  auto bl = buffers.begin();
+  for (auto oid = oids.cbegin();
+       bl != buffers.end() && oid != oids.cend();
+       ++bl, ++oid) {
+    librados::ObjectReadOperation op;
+    cls_rgw_get_dir_header(op, *bl);
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid->second;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    ret = rgw::check_for_errors(c, is_error, dpp, error_message);
+    if (ret < 0) {
+      break;
+    }
   }
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results,
-			      cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0)
+  auto c = aio->drain();
+  int r = rgw::check_for_errors(c, is_error, dpp, error_message);
+  if (r < 0) {
     return r;
-
-  map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
-  for(; iter != list_results.end(); ++iter) {
-    headers->push_back(std::move(iter->second.dir.header));
   }
-  return 0;
+  if (ret < 0) {
+    return ret;
+  }
+
+  headers->resize(buffers.size());
+  bl = buffers.begin();
+  for (auto header = headers->begin();
+       header != headers->end() && bl != buffers.end();
+       ++header, ++bl) {
+    ret = cls_rgw_get_dir_header_decode(*bl, *header);
+    if (ret < 0) {
+      ldpp_dout(dpp, 4) << "failed to decode index shard header" << dendl;
+      return ret;
+    }
+  }
+
+  return ret;
 }
 
 int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
