@@ -17,6 +17,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <thread>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 #include <gtest/gtest.h>
@@ -240,4 +241,29 @@ TEST(YieldWaiterPtr, wait_error)
   }
 }
 
+void invoke_callback(int expected_reply, std::function<void(int)> cb) {
+  auto t = std::thread([cb, expected_reply] {
+      cb(expected_reply);
+  }); 
+  t.detach();
+}
+
+TEST(YieldWaiterInt, mt_wait_complete)
+{
+  boost::asio::io_context io_context;
+  int reply;
+  const int expected_reply = 42; 
+  boost::asio::spawn(io_context,
+      [&reply](boost::asio::yield_context yield) {
+        yield_waiter<int> waiter;
+        boost::asio::defer(yield.get_executor(),[&waiter] {
+            invoke_callback(expected_reply, [&waiter](int r) {waiter.complete(boost::system::error_code{}, r);});
+          });
+        reply = waiter.async_wait(yield);
+      }, rethrow);
+  io_context.run(); 
+  EXPECT_EQ(reply, expected_reply);
+}
+
 } // namespace ceph::async
+
