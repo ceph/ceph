@@ -421,7 +421,7 @@ static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
   }
 
   // delete its shard objects (ignore errors)
-  store->svc()->bi->clean_index(dpp, info, info.layout.current_index);
+  store->svc()->bi->clean_index(dpp, y, info, info.layout.current_index);
   // delete the bucket instance metadata
   return store->ctl()->bucket->remove_bucket_instance_info(bucket, info, y, dpp);
 }
@@ -459,7 +459,7 @@ static int init_target_index(rgw::sal::RadosStore* store,
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to disable "
           "bucket sync on the target index shard objects: "
           << cpp_strerror(ret) << dendl;
-      store->svc()->bi->clean_index(dpp, bucket_info, index);
+      store->svc()->bi->clean_index(dpp, y, bucket_info, index);
       return ret;
     }
   }
@@ -505,7 +505,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     ldpp_dout(dpp, 10) << __func__ << " removing existing target index "
         "objects from a previous reshard attempt" << dendl;
     // delete its existing shard objects (ignore errors)
-    store->svc()->bi->clean_index(dpp, bucket_info, *bucket_info.layout.target_index);
+    store->svc()->bi->clean_index(dpp, y, bucket_info, *bucket_info.layout.target_index);
     // don't reuse this same generation in the new target layout, in case
     // something is still trying to operate on its shard objects
     target.gen = bucket_info.layout.target_index->gen + 1;
@@ -574,7 +574,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     bucket_info.layout = std::move(prev);  // restore in-memory layout
 
     // delete the target shard objects (ignore errors)
-    store->svc()->bi->clean_index(dpp, bucket_info, target);
+    store->svc()->bi->clean_index(dpp, y, bucket_info, target);
     return ret;
   }
 
@@ -592,7 +592,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
   auto prev = bucket_info.layout; // make a copy for cleanup
 
   // remove target index shard objects
-  int ret = store->svc()->bi->clean_index(dpp, bucket_info, *prev.target_index);
+  int ret = store->svc()->bi->clean_index(dpp, y, bucket_info, *prev.target_index);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to remove "
         "target index with: " << cpp_strerror(ret) << dendl;
@@ -947,7 +947,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
       });
   if (log == logs.end()) {
     // delete the index objects (ignore errors)
-    store->svc()->bi->clean_index(dpp, bucket_info, prev.current_index);
+    store->svc()->bi->clean_index(dpp, y, bucket_info, prev.current_index);
   }
   return 0;
 } // commit_reshard

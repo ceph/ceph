@@ -198,16 +198,6 @@ void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
   o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
 }
 
-static bool issue_bucket_index_clean_op(librados::IoCtx& io_ctx,
-					const int shard_id,
-					const string& oid,
-					BucketIndexAioManager *manager) {
-  bufferlist in;
-  librados::ObjectWriteOperation op;
-  op.remove();
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
 static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
 					    const int shard_id,
 					    const string& oid,
@@ -220,11 +210,6 @@ static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
   ObjectWriteOperation op;
   op.exec(RGW_CLASS, RGW_BUCKET_SET_TAG_TIMEOUT, in);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketIndexClean::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bucket_index_clean_op(io_ctx, shard_id, oid, &manager);
 }
 
 int CLSRGWIssueSetTagTimeout::issue_op(const int shard_id, const string& oid)

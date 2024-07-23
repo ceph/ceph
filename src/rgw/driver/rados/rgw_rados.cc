@@ -2385,7 +2385,7 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
       /* only remove it if it's a different bucket instance */
       if (orig_info.bucket.bucket_id != bucket.bucket_id) {
         if (zone_placement) {
-          r = svc.bi->clean_index(dpp, info, info.layout.current_index);
+          r = svc.bi->clean_index(dpp, y, info, info.layout.current_index);
           if (r < 0) {
             ldpp_dout(dpp, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
           }
@@ -5173,13 +5173,8 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
  */
 int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty)
 {
-  const rgw_bucket& bucket = bucket_info.bucket;
-  librados::IoCtx index_pool;
-  map<int, string> bucket_objs;
-  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
-  if (r < 0)
-    return r;
-  
+  int r = 0;
+
   if (check_empty) {
     r = check_bucket_empty(dpp, bucket_info, y);
     if (r < 0) {
@@ -5193,7 +5188,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     RGWBucketEntryPoint ep;
     r = ctl.bucket->read_bucket_entrypoint_info(bucket_info.bucket,
                                                 &ep,
-						null_yield,
+						y,
                                                 dpp,
                                                 RGWBucketCtl::Bucket::GetParams()
                                                 .set_objv_tracker(&objv_tracker));
@@ -5221,18 +5216,15 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   }
 
   /* if the bucket is not synced we can remove the meta file */
-  if (!svc.zone->is_syncing_bucket_meta(bucket)) {
+  if (!svc.zone->is_syncing_bucket_meta(bucket_info.bucket)) {
     RGWObjVersionTracker objv_tracker;
-    r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
+    r = ctl.bucket->remove_bucket_instance_info(bucket_info.bucket, bucket_info, y, dpp);
     if (r < 0) {
       return r;
     }
 
    /* remove bucket index objects asynchronously by best effort */
-    maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-    (void) CLSRGWIssueBucketIndexClean(index_pool,
-				       bucket_objs,
-				       cct->_conf->rgw_bucket_index_max_aio)();
+    (void) svc.bi_rados->clean_index(dpp, y, bucket_info, bucket_info.layout.current_index);
   }
 
   return 0;

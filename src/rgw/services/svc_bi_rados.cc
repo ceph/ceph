@@ -394,14 +394,17 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
+int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
+                                         optional_yield y,
+                                         const RGWBucketInfo& bucket_info,
+                                         const rgw::bucket_index_layout_generation& idx_layout)
 {
-  librados::IoCtx index_pool;
+  librados::IoCtx ioctx;
 
   std::string dir_oid = dir_oid_prefix;
-  int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
-  if (r < 0) {
-    return r;
+  int ret = open_bucket_index_pool(dpp, bucket_info, &ioctx);
+  if (ret < 0) {
+    return ret;
   }
 
   dir_oid.append(bucket_info.bucket.bucket_id);
@@ -410,10 +413,36 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucke
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards,
                            idx_layout.gen, &bucket_objs);
 
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  return CLSRGWIssueBucketIndexClean(index_pool,
-				     bucket_objs,
-				     cct->_conf->rgw_bucket_index_max_aio)();
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  // ignore ENOENT errors
+  constexpr auto is_error = [] (int r) { return r < 0 && r != -ENOENT; };
+  constexpr std::string_view error_message =
+      "failed to remove index object";
+
+  for (const auto& [_, oid] : bucket_objs) {
+    librados::ObjectWriteOperation op;
+    op.remove();
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    int r = rgw::check_for_errors(c, is_error, dpp, error_message);
+    if (ret == 0) {
+      ret = r;
+    }
+  }
+
+  auto c = aio->drain();
+  int r = rgw::check_for_errors(c, is_error, dpp, error_message);
+  if (r < 0) {
+    return r;
+  }
+  return ret;
 }
 
 int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
