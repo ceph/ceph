@@ -331,7 +331,7 @@ TransactionManager::update_lba_mappings(
     std::list<LogicalCachedExtentRef>(),
     std::list<CachedExtentRef>(),
     [this, &t, &pre_allocated_extents](auto &lextents, auto &pextents) {
-    auto chksum_func = [&lextents, &pextents](auto &extent) {
+    auto chksum_func = [&lextents, &pextents, this](auto &extent) {
       if (!extent->is_valid() ||
           !extent->is_fully_loaded() ||
           // EXIST_MUTATION_PENDING extents' crc will be calculated when
@@ -343,10 +343,20 @@ TransactionManager::update_lba_mappings(
         // for rewritten extents, last_committed_crc should have been set
         // because the crc of the original extent may be reused.
         // also see rewrite_logical_extent()
-        if (!extent->get_last_committed_crc()) {
-          extent->set_last_committed_crc(extent->calc_crc32c());
-        }
-        assert(extent->calc_crc32c() == extent->get_last_committed_crc());
+	if (!extent->get_last_committed_crc()) {
+	  if (get_checksum_needed(extent->get_paddr())) {
+	    extent->set_last_committed_crc(extent->calc_crc32c());
+	  } else {
+	    extent->set_last_committed_crc(CRC_NULL);
+	  }
+	}
+#ifndef NDEBUG
+	if (get_checksum_needed(extent->get_paddr())) {
+	  assert(extent->get_last_committed_crc() == extent->calc_crc32c());
+	} else {
+	  assert(extent->get_last_committed_crc() == CRC_NULL);
+	}
+#endif
         lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
       } else {
         pextents.emplace_back(extent);
@@ -367,15 +377,20 @@ TransactionManager::update_lba_mappings(
 
     return lba_manager->update_mappings(
       t, lextents
-    ).si_then([&pextents] {
+    ).si_then([&pextents, this] {
       for (auto &extent : pextents) {
         assert(!extent->is_logical() && extent->is_valid());
         // for non-logical extents, we update its last_committed_crc
         // and in-extent checksum fields
         // For pre-allocated fresh physical extents, update in-extent crc.
-        auto crc = extent->calc_crc32c();
-        extent->set_last_committed_crc(crc);
-        extent->update_in_extent_chksum_field(crc);
+	checksum_t crc;
+	if (get_checksum_needed(extent->get_paddr())) {
+	  crc = extent->calc_crc32c();
+	} else {
+	  crc = CRC_NULL;
+	}
+	extent->set_last_committed_crc(crc);
+	extent->update_in_extent_chksum_field(crc);
       }
     });
   });
@@ -516,7 +531,13 @@ TransactionManager::rewrite_logical_extent(
 
     DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
-    assert(lextent->get_last_committed_crc() == lextent->calc_crc32c());
+#ifndef NDEBUG
+    if (get_checksum_needed(lextent->get_paddr())) {
+      assert(lextent->get_last_committed_crc() == lextent->calc_crc32c());
+    } else {
+      assert(lextent->get_last_committed_crc() == CRC_NULL);
+    }
+#endif
     nlextent->set_last_committed_crc(lextent->get_last_committed_crc());
     /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
      * extents since we're going to do it again once we either do the ool write

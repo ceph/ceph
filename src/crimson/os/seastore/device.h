@@ -137,6 +137,10 @@ public:
 
   virtual secondary_device_set_t& get_secondary_devices() = 0;
 
+  virtual bool is_end_to_end_data_protection() const {
+    return false;
+  }
+
   using close_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   virtual close_ertr::future<> close() = 0;

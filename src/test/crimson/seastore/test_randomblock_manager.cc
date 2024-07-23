@@ -78,8 +78,8 @@ struct rbm_test_t :
     return device->mkfs(config).unsafe_get();
   }
 
-  auto read_rbm_header() {
-    return device->read_rbm_header(RBM_START_ADDRESS).unsafe_get();
+  auto read_rbm_superblock() {
+    return device->read_rbm_superblock(RBM_START_ADDRESS).unsafe_get();
   }
 
   auto open() {
@@ -120,14 +120,14 @@ struct rbm_test_t :
 TEST_F(rbm_test_t, mkfs_test)
 {
  run_async([this] {
-   auto super = read_rbm_header();
+   auto super = read_rbm_superblock();
    ASSERT_TRUE(
        super.block_size == block_size &&
        super.size == size
    );
    config.spec.id = DEVICE_ID_NULL;
    mkfs();
-   super = read_rbm_header();
+   super = read_rbm_superblock();
    ASSERT_TRUE(
        super.config.spec.id == DEVICE_ID_NULL &&
        super.size == size 

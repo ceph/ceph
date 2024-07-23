@@ -186,6 +186,10 @@ public:
     return get_journal_end();
   }
 
+  bool is_checksum_needed() final {
+    return cjs.is_checksum_needed();
+  }
+
   // Test interfaces
   
   CircularJournalSpace& get_cjs() {

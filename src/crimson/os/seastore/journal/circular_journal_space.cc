@@ -152,16 +152,18 @@ ceph::bufferlist CircularJournalSpace::encode_header()
 {
   bufferlist bl;
   encode(header, bl);
-  auto header_crc_filler = bl.append_hole(sizeof(checksum_t));
-  auto bliter = bl.cbegin();
-  auto header_crc = bliter.crc32c(
-    ceph::encoded_sizeof_bounded<cbj_header_t>(),
-    -1);
-  ceph_le32 header_crc_le;
-  header_crc_le = header_crc;
-  header_crc_filler.copy_in(
-    sizeof(checksum_t),
-    reinterpret_cast<const char *>(&header_crc_le));
+  if (!device->is_end_to_end_data_protection()) {
+    auto header_crc_filler = bl.append_hole(sizeof(checksum_t));
+    auto bliter = bl.cbegin();
+    auto header_crc = bliter.crc32c(
+      ceph::encoded_sizeof_bounded<cbj_header_t>(),
+      -1);
+    ceph_le32 header_crc_le;
+    header_crc_le = header_crc;
+    header_crc_filler.copy_in(
+      sizeof(checksum_t),
+      reinterpret_cast<const char *>(&header_crc_le));
+  }
   return bl;
 }
 
@@ -193,7 +195,7 @@ CircularJournalSpace::read_header()
 			device->get_block_size()));
   DEBUG("reading {}", device->get_shard_journal_start());
   return device->read(device->get_shard_journal_start(), bptr
-  ).safe_then([bptr, FNAME]() mutable
+  ).safe_then([bptr, FNAME, this]() mutable
     -> read_header_ret {
     bufferlist bl;
     bl.append(bptr);
@@ -205,18 +207,20 @@ CircularJournalSpace::read_header()
       ERROR("unable to read header block");
       return crimson::ct_error::enoent::make();
     }
-    auto bliter = bl.cbegin();
-    auto test_crc = bliter.crc32c(
-      ceph::encoded_sizeof_bounded<cbj_header_t>(),
-      -1);
-    ceph_le32 recorded_crc_le;
-    decode(recorded_crc_le, bliter);
-    uint32_t recorded_crc = recorded_crc_le;
-    if (test_crc != recorded_crc) {
-      ERROR("error, header crc mismatch.");
-      return read_header_ret(
-	read_header_ertr::ready_future_marker{},
-	std::nullopt);
+    if (!device->is_end_to_end_data_protection()) {
+      auto bliter = bl.cbegin();
+      auto test_crc = bliter.crc32c(
+	ceph::encoded_sizeof_bounded<cbj_header_t>(),
+	-1);
+      ceph_le32 recorded_crc_le;
+      decode(recorded_crc_le, bliter);
+      uint32_t recorded_crc = recorded_crc_le;
+      if (test_crc != recorded_crc) {
+	ERROR("error, header crc mismatch.");
+	return read_header_ret(
+	  read_header_ertr::ready_future_marker{},
+	  std::nullopt);
+      }
     }
     return read_header_ret(
       read_header_ertr::ready_future_marker{},

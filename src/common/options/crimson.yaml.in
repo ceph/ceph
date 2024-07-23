@@ -154,3 +154,10 @@ options:
   level: dev
   desc: overwrite the existing data block based on delta if the overwrite size is equal to or less than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
   default: 0
+- name: seastore_disable_end_to_end_data_protection 
+  type: bool
+  level: dev
+  desc: When false, upon mkfs, try to discover whether the nvme device supports
+        internal checksum feature without using sever CPU then enable if available,
+        set to true to disable unconditionally.
+  default: true
