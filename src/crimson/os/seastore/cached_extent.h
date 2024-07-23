@@ -112,6 +112,9 @@ struct trans_spec_view_t {
   // if the extent is pending, contains the id of the owning transaction;
   // TRANS_ID_NULL otherwise
   transaction_id_t pending_for_transaction = TRANS_ID_NULL;
+  trans_spec_view_t() = default;
+  trans_spec_view_t(transaction_id_t id) : pending_for_transaction(id) {}
+  virtual ~trans_spec_view_t() = default;
 
   struct cmp_t {
     bool operator()(
@@ -307,7 +310,7 @@ public:
     return true;
   }
 
-  void rewrite(CachedExtent &e, extent_len_t o) {
+  void rewrite(Transaction &t, CachedExtent &e, extent_len_t o) {
     assert(is_initial_pending());
     if (!e.is_pending()) {
       prior_instance = &e;
@@ -321,7 +324,7 @@ public:
       get_bptr().c_str());
     set_modify_time(e.get_modify_time());
     set_last_committed_crc(e.get_last_committed_crc());
-    on_rewrite(e, o);
+    on_rewrite(t, e, o);
   }
 
   /**
@@ -330,7 +333,7 @@ public:
    * Called when this extent is rewriting another one.
    *
    */
-  virtual void on_rewrite(CachedExtent &, extent_len_t) = 0;
+  virtual void on_rewrite(Transaction &, CachedExtent &, extent_len_t) = 0;
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
@@ -1118,6 +1121,10 @@ public:
   virtual val_t get_val() const = 0;
   virtual key_t get_key() const = 0;
   virtual PhysicalNodeMappingRef<key_t, val_t> duplicate() const = 0;
+  virtual PhysicalNodeMappingRef<key_t, val_t> refresh_with_pending_parent() {
+    ceph_abort("impossible");
+    return {};
+  }
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
   virtual uint16_t get_pos() const = 0;
@@ -1151,6 +1158,7 @@ public:
   bool is_zero_reserved() const {
     return !get_val().is_real();
   }
+  virtual bool is_parent_viewable() const = 0;
   virtual bool is_parent_valid() const = 0;
   virtual bool parent_modified() const {
     ceph_abort("impossible");
@@ -1221,7 +1229,7 @@ public:
     return false;
   }
 
-  void on_rewrite(CachedExtent&, extent_len_t) final {}
+  void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
 
   std::ostream &print_detail(std::ostream &out) const final {
     return out << ", RetiredExtentPlaceholder";
@@ -1308,7 +1316,7 @@ public:
     : ChildableCachedExtent(std::forward<T>(t)...)
   {}
 
-  void on_rewrite(CachedExtent &extent, extent_len_t off) final {
+  void on_rewrite(Transaction&, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
     set_laddr(lextent.get_laddr() + off);

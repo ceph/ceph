@@ -163,18 +163,26 @@ public:
 
   bool parent_modified() const final {
     ceph_assert(parent);
-    ceph_assert(is_parent_valid());
+    ceph_assert(is_parent_viewable());
     auto &p = static_cast<LBALeafNode&>(*parent);
     return p.modified_since(parent_modifications);
   }
 
   void maybe_fix_pos() final {
-    assert(is_parent_valid());
+    assert(is_parent_viewable());
     if (!parent_modified()) {
       return;
     }
     auto &p = static_cast<LBALeafNode&>(*parent);
     p.maybe_fix_mapping_pos(*this);
+  }
+
+  LBAMappingRef refresh_with_pending_parent() final {
+    assert(is_parent_valid() && !is_parent_viewable());
+    auto &p = static_cast<LBALeafNode&>(*parent);
+    auto &viewable_p = static_cast<LBALeafNode&>(
+      *p.find_pending_version(ctx.trans, get_key()));
+    return viewable_p.get_mapping(ctx, get_key());
   }
 protected:
   std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(

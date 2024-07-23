@@ -183,12 +183,17 @@ public:
     LBAMappingRef pin)
   {
     auto fut = base_iertr::make_ready_future<LBAMappingRef>();
-    if (!pin->is_parent_valid()) {
-      fut = get_pin(t, pin->get_key()
-      ).handle_error_interruptible(
-	crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
-	crimson::ct_error::input_output_error::pass_further{}
-      );
+    if (!pin->is_parent_viewable()) {
+      if (pin->is_parent_valid()) {
+	pin = pin->refresh_with_pending_parent();
+	fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
+      } else {
+	fut = get_pin(t, pin->get_key()
+	).handle_error_interruptible(
+	  crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
+	  crimson::ct_error::input_output_error::pass_further{}
+	);
+      }
     } else {
       pin->maybe_fix_pos();
       fut = base_iertr::make_ready_future<LBAMappingRef>(std::move(pin));
@@ -211,7 +216,7 @@ public:
     Transaction &t,
     LBAMappingRef pin)
   {
-    ceph_assert(pin->is_parent_valid());
+    ceph_assert(pin->is_parent_viewable());
     // checking the lba child must be atomic with creating
     // and linking the absent child
     auto v = pin->get_logical_extent(t);
@@ -475,16 +480,20 @@ public:
       // The according extent might be stable or pending.
       auto fut = base_iertr::now();
       if (!pin->is_indirect()) {
-	if (!pin->is_parent_valid()) {
-	  fut = get_pin(t, pin->get_key()
-	  ).si_then([&pin](auto npin) {
-	    assert(npin);
-	    pin = std::move(npin);
-	    return seastar::now();
-	  }).handle_error_interruptible(
-	    crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
-	    crimson::ct_error::input_output_error::pass_further{}
-	  );
+	if (!pin->is_parent_viewable()) {
+	  if (pin->is_parent_valid()) {
+	    pin = pin->refresh_with_pending_parent();
+	  } else {
+	    fut = get_pin(t, pin->get_key()
+	    ).si_then([&pin](auto npin) {
+	      assert(npin);
+	      pin = std::move(npin);
+	      return seastar::now();
+	    }).handle_error_interruptible(
+	      crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
+	      crimson::ct_error::input_output_error::pass_further{}
+	    );
+	  }
 	} else {
 	  pin->maybe_fix_pos();
 	}
