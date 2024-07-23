@@ -43,13 +43,26 @@ struct nvme_identify_command_t {
   static const uint8_t CNS_CONTROLLER = 0x01;
 };
 
+struct nvme_format_nvm_command_t {
+  uint32_t common_dw[10];
+
+  uint8_t lbaf : 4;
+  uint8_t mset : 1;
+  uint8_t pi : 3;
+  uint8_t pil : 1;
+  
+  static const uint8_t PROTECT_INFORMATION_TYPE_2 = 2;
+};
+
 struct nvme_admin_command_t {
   union {
     nvme_passthru_cmd common;
     nvme_identify_command_t identify;
+    nvme_format_nvm_command_t format;
   };
 
   static const uint8_t OPCODE_IDENTIFY = 0x06;
+  static const uint8_t OPCODE_FORMAT_NVM = 0x80;
 };
 
 // Optional Admin Command Support (OACS)
@@ -111,22 +124,32 @@ struct lbaf_t {
   uint32_t reserved : 6;
 };
 
+struct flbas_t {
+  uint8_t lba_index : 4;
+  uint8_t ms_transferred :1;
+  uint8_t reserved : 3;
+};
+
 struct nvme_identify_namespace_data_t {
   union {
     struct {
       uint8_t unused[24];   // [23:0]
       nsfeat_t nsfeat;      // [24]
-      uint8_t unused2[3];   // [27:25]
+      uint8_t nlbaf;      // [25]
+      flbas_t flbas;      // [26]
+      uint8_t unused2;   // [27]
       dpc_t dpc;            // [28]
       dps_t dps;            // [29]
       uint8_t unused3[34];  // [63:30]
       uint16_t npwg;        // [65:64]
       uint16_t npwa;        // [67:66]
       uint8_t unused4[60];  // [127:68]
-      lbaf_t lbaf0;         // [131:128]
+      lbaf_t lbaf[64];         // [383:128]
     };
     uint8_t raw[4096];
   };
+  // meta size value to use device-level checksum
+  static const uint8_t METASIZE_FOR_CHECKSUM_OFFLOAD = 8; 
 };
 
 struct nvme_rw_command_t {
@@ -147,6 +170,11 @@ struct nvme_rw_command_t {
   uint32_t dspec : 16;
 
   static const uint32_t DTYPE_STREAM = 1;
+
+  static const uint8_t PROTECT_INFORMATION_ACTION_ENABLE = 1;
+  static const uint8_t PROTECT_INFORMATION_CHECK_GUARD = 4;
+  static const uint8_t PROTECT_INFORMATION_CHECK_APPLICATION_TAG = 2;
+  static const uint8_t PROTECT_INFORMATION_CHECK_LOGICAL_REFERENCE_TAG = 1;
 };
 
 struct nvme_io_command_t {
@@ -155,7 +183,7 @@ struct nvme_io_command_t {
     nvme_rw_command_t rw;
   };
   static const uint8_t OPCODE_WRITE = 0x01;
-  static const uint8_t OPCODE_READ = 0x01;
+  static const uint8_t OPCODE_READ = 0x02;
 };
 
 /*
@@ -201,6 +229,9 @@ public:
     uint64_t offset,
     bufferptr &bptr) final;
 
+  read_ertr::future<> nvme_read(
+    uint64_t offset, size_t len, void *buffer_ptr);
+
   close_ertr::future<> close() override;
 
   discard_ertr::future<> discard(
@@ -209,12 +240,17 @@ public:
 
   mount_ret mount() final;
 
+  nvme_command_ertr::future<> initialize_nvme_features() final;
+
   mkfs_ret mkfs(device_config_t config) final;
 
   write_ertr::future<> writev(
     uint64_t offset,
     ceph::bufferlist bl,
     uint16_t stream = 0) final;
+
+  write_ertr::future<> nvme_write(
+    uint64_t offset, size_t len, void *buffer_ptr);
 
   stat_device_ret stat_device() final {
     return seastar::file_stat(device_path, seastar::follow_symlink::yes
@@ -231,7 +267,7 @@ public:
 	  ).safe_then([stat] (auto id_namespace_data) mutable {
 	    // LBA format provides LBA size which is power of 2. LBA is the
 	    // minimum size of read and write.
-	    stat.block_size = (1 << id_namespace_data.lbaf0.lbads);
+	    stat.block_size = (1 << id_namespace_data.lbaf[0].lbads);
 	    if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
 	      stat.block_size = RBM_SUPERBLOCK_SIZE;
 	    } 
@@ -286,7 +322,7 @@ public:
    * protection is enabled, checksum is calculated on every write and used to
    * verify data on every read.
    */
-   bool is_data_protection_enabled() const { return data_protection_enabled; }
+  nvme_command_ertr::future<> try_enable_end_to_end_protection();
 
   /*
    * Data Health
@@ -321,7 +357,6 @@ public:
     nvme_io_command_t& io_cmd);
 
   bool support_multistream = false;
-  uint8_t data_protection_type = 0;
 
   /*
    * Predictable Latency
@@ -352,7 +387,7 @@ private:
   uint64_t write_alignment = 4096;
   uint32_t atomic_write_unit = 4096;
 
-  bool data_protection_enabled = false;
+  int namespace_id; // TODO: multi namespaces
   std::string device_path;
   seastar::sharded<NVMeBlockDevice> shard_devices;
 };
