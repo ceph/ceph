@@ -58,7 +58,7 @@ class OSDPerfQuery(MgrModule):
         'key_descriptor': [
             {'type': 'pool_id', 'regex': '^(.+)$'},
             {'type': 'object_name',
-             'regex': '^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
+             'regex': r'^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
         ],
         'performance_counter_descriptors': [
             'bytes', 'write_ops', 'read_ops', 'write_bytes', 'read_bytes',
