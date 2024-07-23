@@ -1033,7 +1033,7 @@ RandomBlockOolWriter::do_write(
       rbm->write(paddr + offset,
 	bp
       ).handle_error(
-	alloc_write_iertr::pass_further{},
+	alloc_write_ertr::pass_further{},
 	crimson::ct_error::assert_all{
 	  "Invalid error when writing record"}
       )
