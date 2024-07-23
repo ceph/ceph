@@ -1130,18 +1130,34 @@ options:
   flags:
   - runtime
   with_legacy: true
-- name: mon_backup_keep_last
+- name: mon_backup_always_full
+  type: bool
+  level: advanced
+  desc: Always create full backups. Otherwise only externally triggered and every 5th backup is automatically full.
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
+- name: mon_backup_min_avail
   type: int
+  level: advanced
+  desc: Only start backups if available disk space is above percentage
+  default: 5
+  services:
+  - mon
+- name: mon_backup_keep_last
+  type: uint
   level: advanced
   desc: keep last N backups
   fmt_desc: Keep the last backups of the monitor database
-  default: 5
+  default: 6
   services:
   - mon
   flags:
   - no_mon_update
 - name: mon_backup_keep_hourly
-  type: int
+  type: uint
   level: advanced
   desc: keep N hourly backups
   fmt_desc: Keep the hourly backups of the monitor database
@@ -1151,7 +1167,7 @@ options:
   flags:
   - no_mon_update
 - name: mon_backup_keep_daily
-  type: int
+  type: uint
   level: advanced
   desc: keep last daily backups
   fmt_desc: Keep a one backup of every specified days
@@ -1161,10 +1177,19 @@ options:
   flags:
   - no_mon_update
 - name: mon_backup_interval
-  type: int
+  type: uint
   level: advanced
   desc: automatic backups very N minutes
   fmt_desc: Trigger backups every N minutes
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_cleanup_interval
+  type: uint
+  level: advanced
+  desc: trigger backup cleanup very N minutes
+  fmt_desc: Trigger backup cleanup every N minutes
   services:
   - mon
   flags:

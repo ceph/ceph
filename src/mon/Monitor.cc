@@ -483,7 +483,8 @@ int Monitor::do_admin_command(
     out << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb")
 	<< " in " << duration << " seconds";
   } else if (command == "backup") {
-    r = backup();
+    // externally requested backups are always full ones
+    r = backup(true);
   } else if (command == "backup_cleanup") {
     r = backup_cleanup();
   } else {
@@ -505,13 +506,15 @@ abort:
   return r;
 }
 
-int Monitor::backup()
+int Monitor::backup(bool full)
 {
   if(!backup_manager) {
     return -EIO;
   }
-  dout(1) << "triggering backup" << dendl;
+  
   std::string backup_path = g_conf().get_val<string>("mon_backup_path");
+  full |= g_conf().get_val<bool>("mon_backup_always_full");
+  dout(1) << "triggering backup full=" << full << dendl;
   if (backup_path.empty()) {
     logger->inc(l_mon_backup_failed);
     dout(1) << "backup failed: no backup_path configured" << dendl;
@@ -534,10 +537,11 @@ int Monitor::backup_cleanup()
     return -EIO;
   }
   dout(1) << "triggering backup_cleanup" << dendl;
-  logger->inc(l_mon_backup_started);
+  logger->inc(l_mon_backup_cleanup_started);
   std::string backup_path = g_conf().get_val<string>("mon_backup_path");
   if (backup_path.empty()) {
     dout(1) << "backup_cleanup failed: no backup_path configured" << dendl;
+    logger->inc(l_mon_backup_cleanup_failed);
     return -ENOTDIR;
   }
   uint32_t jobid = backup_manager->cleanup();
@@ -795,36 +799,44 @@ int Monitor::preinit()
         "ewon", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost",
         "elst", PerfCountersBuilder::PRIO_INTERESTING);
-    pcb.add_u64_counter(l_mon_backup_started, "backup_started", "Mon backups started",
-        "bak", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64_counter(l_mon_backup_success, "backup_success", "Mon backups finished successfully",
-        "baks", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64_counter(l_mon_backup_failed, "backup_failed", "Mon backups failed",
-        "bakf", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_time_avg(l_mon_backup_duration, "backup_duration", "Mon backup duration",
-        "bakd", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_time(l_mon_backup_last_success, "backup_last_success", "Last successfull mon backup",
-        "bakst", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_time(l_mon_backup_last_failed, "backup_last_failed", "Last failed mon backup",
-        "bakst", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64_counter(l_mon_backup_last_size, "backup_last_size", "Last backup size",
-        "bakls", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64_counter(l_mon_backup_last_files, "backup_last_files", "Last backup file numbers",
-        "baklf", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64_counter(l_mon_backup_cleanup_success, "backup_cleanup_success", "Mon backup cleanup finished successfully",
-        "baks", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64_counter(l_mon_backup_cleanup_failed, "backup_failed", "Mon backup cleanup failed",
-        "bakf", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64(l_mon_backup_cleanup_size, "backup_cleanup_size", "Size of backups removed",
-        "bakrc", PerfCountersBuilder::PRIO_INTERESTING);
-    pcb.add_u64(l_mon_backup_cleanup_kept, "backup_cleanup_kept", "Number of backups kept after cleanup",
-        "bakrc", PerfCountersBuilder::PRIO_INTERESTING);
-    pcb.add_time_avg(l_mon_backup_cleanup_duration, "backup_duration", "Mon backup cleanup duration",
-        "bakd", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64(l_mon_backup_running, "backup_running", "Mon backup process is running",
-        "bakr", PerfCountersBuilder::PRIO_USEFUL);
-    pcb.add_u64(l_mon_backup_cleanup_running, "backup_running", "Mon backup cleanup is running",
-        "bakrc", PerfCountersBuilder::PRIO_USEFUL);
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_started, "backup_started", "Mon backups started",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_success, "backup_success", "Mon backups finished successfully",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_failed, "backup_failed", "Mon backups failed",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time_avg(l_mon_backup_duration, "backup_duration", "Mon backup duration",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time(l_mon_backup_last_success, "backup_last_success", "Last successfull mon backup",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_last_success_id, "backup_last_success_id", "Last successfull mon backup id",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_time(l_mon_backup_last_failed, "backup_last_failed", "Last failed mon backup",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_last_size, "backup_last_size", "Last backup size",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_last_files, "backup_last_files", "Last backup file numbers",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_started, "backup_cleanup_started", "Mon backup cleanup started",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_running, "backup_cleanup_running", "Mon backup cleanup is running",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_cleanup_success, "backup_cleanup_success", "Mon backup cleanup finished successfully",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_cleanup_failed, "backup_cleanup_failed", "Mon backup cleanup failed",
+        nullptr, PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64(l_mon_backup_cleanup_size, "backup_cleanup_size", "Size of backups removed",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_kept, "backup_cleanup_kept", "Number of backups kept after cleanup",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_time_avg(l_mon_backup_cleanup_duration, "backup_cleanup_duration", "Mon backup cleanup duration",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_freed, "backup_cleanup_freed", "Mon backup cleanup freed size in bytes",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64(l_mon_backup_cleanup_deleted, "backup_cleanup_deleted", "Mon backup cleanup deleted backups",
+        nullptr, PerfCountersBuilder::PRIO_INTERESTING);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
