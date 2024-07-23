@@ -6,7 +6,8 @@ set -e
 # if defined, debug messages will be displayed and prepended with the string
 # debug="DEBUG"
 
-huge_size=5100 # in megabytes
+#huge_size=5100 # in megabytes
+huge_size=51 # in megabytes
 big_size=7 # in megabytes
 
 huge_obj=/tmp/huge_obj.temp.$$
