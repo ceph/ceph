@@ -238,15 +238,20 @@ struct ECCommon {
     bool fast_read,
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
+  struct shard_read_t {
+    extent_set extents;
+    std::vector<std::pair<int, int>> subchunk;
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const shard_read_t &rhs);
+
   struct read_request_t {
     const std::list<ec_align_t> to_read;
-    std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
+    std::map<pg_shard_t, shard_read_t> shard_reads;
     bool want_attrs;
     read_request_t(
       const std::list<ec_align_t> &to_read,
-      const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
       bool want_attrs)
-      : to_read(to_read), need(need), want_attrs(want_attrs) {}
+      : to_read(to_read), want_attrs(want_attrs) {}
   };
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
@@ -489,7 +494,7 @@ struct ECCommon {
       const std::set<int> &want,      ///< [in] desired shards
       bool for_recovery,         ///< [in] true if we may use non-acting replicas
       bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
+      read_request_t *read_request ///< [out] shard_reads, corresponding subchunks / other sub reads to read
       ); ///< @return error code, 0 on success
 
     void schedule_recovery_work();
