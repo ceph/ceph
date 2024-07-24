@@ -1,0 +1,84 @@
+<ng-template #emptyCluster>
+  <ng-container class="container h-75"
+                *ngIf="managedByConfig$ | async as managedByConfig">
+    <div class="row h-100 justify-content-center align-items-center">
+      <div class="blank-page">
+        <i class="mx-auto d-block"
+           [ngClass]="[icons.large, icons.wrench]">
+        </i>
+      <div class="mt-4 text-center">
+        <h4 class="mt-3">This cluster is already managed by cluster -
+          <a target="_blank"
+             [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
+            {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
+            <i class="fa fa-external-link"></i>
+          </a>
+        </h4>
+      </div>
+      </div>
+    </div>
+  </ng-container>
+</ng-template>
+
+<ng-container *ngIf="managedByConfig$ | async as managedByConfig">
+  <div *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0; else emptyCluster">
+    <nav ngbNav
+         #nav="ngbNav"
+         class="nav-tabs">
+      <ng-container ngbNavItem>
+        <a ngbNavLink
+           i18n>Clusters List</a>
+        <ng-template ngbNavContent>
+          <cd-table #table
+                    [data]="data"
+                    [columns]="columns"
+                    columnMode="flex"
+                    selectionType="single"
+                    [maxLimit]="25"
+                    (updateSelection)="updateSelection($event)">
+            <div class="table-actions btn-toolbar">
+              <cd-table-actions [permission]="permissions.user"
+                                [selection]="selection"
+                                class="btn-group"
+                                id="cluster-actions"
+                                [tableActions]="tableActions">
+              </cd-table-actions>
+            </div>
+          </cd-table>
+        </ng-template>
+      </ng-container>
+    </nav>
+    <div [ngbNavOutlet]="nav"></div>
+  </div>
+</ng-container>
+
+<ng-template #urlTpl
+             let-row="row">
+  <a target="_blank"
+     [href]="row.url">
+      {{ row?.url?.endsWith('/') ? row?.url?.slice(0, -1) : row.url }}
+    <i class="fa fa-external-link"></i>
+  </a>
+</ng-template>
+
+<ng-template #durationTpl
+             let-column="column"
+             let-value="value"
+             let-row="row">
+  <span *ngIf="row.remainingTimeWithoutSeconds > 0 && row.cluster_alias !== 'local-cluster'">
+    <i *ngIf="row.remainingDays < 8"
+       i18n-title
+       title="Cluster's token is about to expire"
+       [class.icon-danger-color]="row.remainingDays < 2"
+       [class.icon-warning-color]="row.remainingDays < 8"
+       class="{{ icons.warning }}"></i>
+    <span title="{{ value | cdDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
+  </span>
+  <span *ngIf="row.remainingTimeWithoutSeconds <= 0 && row.remainingDays <=0 && row.cluster_alias !== 'local-cluster'">
+    <i i18n-title
+       title="Cluster's token has expired"
+       class="{{ icons.danger }}"></i>
+    <span class="text-danger">Token expired</span>
+  </span>
+  <span *ngIf="row.cluster_alias === 'local-cluster'">N/A</span>
+</ng-template>
