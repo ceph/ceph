@@ -9,6 +9,8 @@ overrides:
     conf:
       global:
         osd heartbeat grace: 80
+        # see https://tracker.ceph.com/issues/62992
+        osd op thread timeout: 150
       mon:
         mon osd crush smoke test: false
       osd:

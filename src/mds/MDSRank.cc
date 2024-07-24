@@ -602,7 +602,7 @@ MDSRank::~MDSRank()
 void MDSRankDispatcher::init()
 {
   objecter->init();
-  messenger->add_dispatcher_head(objecter);
+  messenger->add_dispatcher_tail(objecter); // the default priority
 
   objecter->start();
 
@@ -792,7 +792,7 @@ void MDSRankDispatcher::tick()
       uint64_t pq_total = 0;
       size_t pq_in_flight = 0;
       if (!purge_queue.drain(&pq_progress, &pq_total, &pq_in_flight)) {
-        dout(7) << "shutdown_pass=true, but still waiting for purge queue"
+        dout(5) << "shutdown_pass=true, but still waiting for purge queue"
                 << dendl;
         // This takes unbounded time, so we must indicate progress
         // to the administrator: we do it in a slightly imperfect way
@@ -802,13 +802,13 @@ void MDSRankDispatcher::tick()
           << std::dec << pq_progress << "/" << pq_total << " " << pq_in_flight
           << " files purging" << ")";
       } else {
-        dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to "
+        dout(5) << "shutdown_pass=true, finished w/ shutdown, moving to "
                    "down:stopped" << dendl;
         stopping_done();
       }
     }
     else {
-      dout(7) << "shutdown_pass=false" << dendl;
+      dout(5) << "shutdown_pass=false" << dendl;
     }
   }
 
@@ -2110,7 +2110,7 @@ void MDSRank::active_start()
 
   dout(10) << __func__ << ": initializing metrics handler" << dendl;
   metrics_handler.init();
-  messenger->add_dispatcher_tail(&metrics_handler);
+  messenger->add_dispatcher_tail(&metrics_handler, Dispatcher::PRIORITY_HIGH);
 
   // metric aggregation is solely done by rank 0
   if (is_rank0()) {
@@ -2735,7 +2735,12 @@ void MDSRankDispatcher::handle_asok_command(
     r = config_client(client_id, !got_value, option, value, *css);
   } else if (command == "scrub start" ||
 	     command == "scrub_start") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;
@@ -2761,7 +2766,12 @@ void MDSRankDispatcher::handle_asok_command(
 	}));
     return;
   } else if (command == "scrub abort") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;
@@ -2783,7 +2793,12 @@ void MDSRankDispatcher::handle_asok_command(
 	}));
     return;
   } else if (command == "scrub pause") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;
@@ -2805,7 +2820,12 @@ void MDSRankDispatcher::handle_asok_command(
 	}));
     return;
   } else if (command == "scrub resume") {
-    if (whoami != 0) {
+    if (!is_active()) {
+      *css << "MDS is not active";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    else if (whoami != 0) {
       *css << "Not rank 0";
       r = -CEPHFS_EXDEV;
       goto out;

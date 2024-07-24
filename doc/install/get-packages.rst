@@ -254,8 +254,8 @@ There's no need to add another package repository manually.
 openEuler
 ^^^^^^^^^
 
-There are two major versions supported in normal openEuler repositories. They are ceph 12.2.8 in openEuler-20.03-LTS series and ceph 16.2.7 in openEuler-22.03-LTS series. There’s no need to add another package repository manually.
-You can install ceph just by executing the following:
+There are two Ceph releases supported in normal openEuler repositories. They are Ceph 12.2.8 in the openEuler-20.03-LTS series and Ceph 16.2.7 in the openEuler-22.03-LTS series. There’s no need to add another package repository manually.
+You can install Ceph by executing the following:
 
 .. prompt:: bash $
 

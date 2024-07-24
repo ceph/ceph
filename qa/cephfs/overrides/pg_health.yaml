@@ -1,0 +1,11 @@
+# PG_DEGRADED warnings are not generally indicative of a bug.  Any acting set
+# changes (such as those caused by the upmap balancer to improve OSD space
+# usage balance) can cause objects to become degraded transiently.
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - PG_AVAILABILITY
+      - PG_DEGRADED
+      - Reduced data availability
+      - Degraded data redundancy

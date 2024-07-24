@@ -522,6 +522,16 @@ Since this migration can take a considerable amount of time to complete, we
 recommend that you begin the process well in advance of any update to Reef or
 to later releases.
 
+OSD_UNREACHABLE
+_______________
+
+Registered v1/v2 public address of one or more OSD(s) is/are out of the
+defined `public_network` subnet, which will prevent these unreachable OSDs
+from communicating with ceph clients properly.
+
+Even though these unreachable OSDs are in up state, rados clients
+will hang till TCP timeout before erroring out due to this inconsistency.
+
 POOL_FULL
 _________
 
@@ -952,7 +962,7 @@ or ``snaptrim_error`` flag set, which indicates that an earlier data scrub
 operation found a problem, or (2) have the *repair* flag set, which means that
 a repair for such an inconsistency is currently in progress.
 
-For more information, see :doc:`pg-repair`.
+For more information, see :doc:`../troubleshooting/troubleshooting-pg`.
 
 OSD_SCRUB_ERRORS
 ________________
@@ -960,7 +970,7 @@ ________________
 Recent OSD scrubs have discovered inconsistencies. This alert is generally
 paired with *PG_DAMAGED* (see above).
 
-For more information, see :doc:`pg-repair`.
+For more information, see :doc:`../troubleshooting/troubleshooting-pg`.
 
 OSD_TOO_MANY_REPAIRS
 ____________________

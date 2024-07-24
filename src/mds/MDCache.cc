@@ -306,6 +306,7 @@ void MDCache::remove_inode(CInode *o)
     inode_map.erase(o->ino());
   } else {
     o->item_caps.remove_myself();
+    o->item_to_flush.remove_myself();
     snap_inode_map.erase(o->vino());
   }
 
@@ -6860,7 +6861,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
   uint64_t limit = cache_memory_limit;
   expiremap expiremap;
 
-  dout(7) << "trim bytes_used=" << bytes2str(used)
+  dout(5) << "trim bytes_used=" << bytes2str(used)
           << " limit=" << bytes2str(limit)
           << " reservation=" << cache_reservation
           << "% count=" << count << dendl;
@@ -7869,10 +7870,10 @@ void MDCache::shutdown_start()
 
 bool MDCache::shutdown_pass()
 {
-  dout(7) << "shutdown_pass" << dendl;
+  dout(5) << "shutdown_pass" << dendl;
 
   if (mds->is_stopped()) {
-    dout(7) << " already shut down" << dendl;
+    dout(5) << " already shut down" << dendl;
     show_cache();
     show_subtrees();
     return true;
@@ -7888,7 +7889,7 @@ bool MDCache::shutdown_pass()
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
   if (!subtrees.empty() && mds->get_nodeid() != 0) {
-    dout(7) << "looking for subtrees to export" << dendl;
+    dout(5) << "looking for subtrees to export" << dendl;
     std::vector<CDir*> ls;
     for (auto& [dir, bounds] : subtrees) {
       dout(10) << "  examining " << *dir << " bounds " << bounds << dendl;
@@ -7912,19 +7913,19 @@ bool MDCache::shutdown_pass()
       mds_rank_t dest = dir->get_inode()->authority().first;
       if (dest > 0 && !mds->mdsmap->is_active(dest))
 	dest = 0;
-      dout(7) << "sending " << *dir << " back to mds." << dest << dendl;
+      dout(5) << "sending " << *dir << " back to mds." << dest << dendl;
       migrator->export_dir_nicely(dir, dest);
     }
   }
 
   if (!strays_all_exported) {
-    dout(7) << "waiting for strays to migrate" << dendl;
+    dout(5) << "waiting for strays to migrate" << dendl;
     return false;
   }
 
   if (num_auth_subtree > 0) {
     ceph_assert(mds->get_nodeid() > 0);
-    dout(7) << "still have " << num_auth_subtree << " auth subtrees" << dendl;
+    dout(5) << "still have " << num_auth_subtree << " auth subtrees" << dendl;
     show_subtrees();
     return false;
   }
@@ -7950,7 +7951,7 @@ bool MDCache::shutdown_pass()
   }
   mds->mdlog->trim_all();
   if (mds->mdlog->get_num_segments() > 1) {
-    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
+    dout(5) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
   }
 
@@ -7970,7 +7971,7 @@ bool MDCache::shutdown_pass()
 
   // subtrees map not empty yet?
   if (subtrees.size() > (mydir ? 1 : 0)) {
-    dout(7) << "still have " << num_subtrees() << " subtrees" << dendl;
+    dout(5) << "still have " << num_subtrees() << " subtrees" << dendl;
     show_subtrees();
     migrator->show_importing();
     migrator->show_exporting();
@@ -7983,19 +7984,19 @@ bool MDCache::shutdown_pass()
 
   // replicas may dirty scatter locks
   if (myin && myin->is_replicated()) {
-    dout(7) << "still have replicated objects" << dendl;
+    dout(5) << "still have replicated objects" << dendl;
     return false;
   }
 
   if ((myin && myin->get_num_auth_pins()) ||
       (mydir && (mydir->get_auth_pins() || mydir->get_dir_auth_pins()))) {
-    dout(7) << "still have auth pinned objects" << dendl;
+    dout(5) << "still have auth pinned objects" << dendl;
     return false;
   }
 
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
-    dout(7) << "capping the mdlog" << dendl;
+    dout(5) << "capping the mdlog" << dendl;
     mds->mdlog->cap();
   }
   
@@ -8020,14 +8021,14 @@ bool MDCache::shutdown_pass()
 
   // filer active?
   if (mds->objecter->is_active()) {
-    dout(7) << "objecter still active" << dendl;
+    dout(5) << "objecter still active" << dendl;
     mds->objecter->dump_active();
     return false;
   }
 
   // trim what we can from the cache
   if (lru.lru_get_size() > 0 || bottom_lru.lru_get_size() > 0) {
-    dout(7) << "there's still stuff in the cache: " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size()  << dendl;
+    dout(5) << "there's still stuff in the cache: " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size()  << dendl;
     show_cache();
     //dump();
     return false;
@@ -8036,7 +8037,7 @@ bool MDCache::shutdown_pass()
   // make mydir subtree go away
   if (mydir) {
     if (mydir->get_num_ref() > 1) { // subtree pin
-      dout(7) << "there's still reference to mydir " << *mydir << dendl;
+      dout(5) << "there's still reference to mydir " << *mydir << dendl;
       show_cache();
       return false;
     }
@@ -12514,6 +12515,9 @@ void MDCache::force_readonly()
   mds->mdlog->flush();
 }
 
+void MDCache::maybe_fragment(CDir *dir) {
+  mds->balancer->maybe_fragment(dir, false);
+}
 
 // ==============================================================
 // debug crap
@@ -13483,6 +13487,13 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   }
 }
 
+bool MDCache::is_ready_to_trim_cache(void)
+{
+  // null rejoin_done means rejoin has finished and all the rejoin acks
+  // have been well received.
+  return is_open() && !rejoin_done;
+}
+
 void MDCache::upkeep_main(void)
 {
   std::unique_lock lock(upkeep_mutex);
@@ -13503,7 +13514,7 @@ void MDCache::upkeep_main(void)
         if (active_with_clients) {
           trim_client_leases();
         }
-        if (is_open() || mds->is_standby_replay()) {
+        if (is_ready_to_trim_cache() || mds->is_standby_replay()) {
           trim();
         }
         if (active_with_clients) {

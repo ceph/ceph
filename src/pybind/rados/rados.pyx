@@ -1057,10 +1057,10 @@ Rados object in state %s." % self.state)
         # NOTE(sileht): looks weird but test_monmap_dump pass int
             target = str(target)
 
-        target = cstr(target, 'target', opt=True)
+        target_raw = cstr(target, 'target', opt=True)
 
         cdef:
-            char *_target = opt_str(target)
+            char *_target = opt_str(target_raw)
             char **_cmd = to_bytes_array(cmds)
             size_t _cmdlen = len(cmds)
 
@@ -1073,7 +1073,7 @@ Rados object in state %s." % self.state)
             size_t _outs_len
 
         try:
-            if target:
+            if target_raw:
                 with nogil:
                     ret = rados_mon_command_target(self.cluster, _target,
                                                 <const char **>_cmd, _cmdlen,
@@ -1158,10 +1158,10 @@ Rados object in state %s." % self.state)
         self.require_state("connected")
 
         cmds = [cstr(cmd, 'cmd')]
-        target = cstr(target, 'target', opt=True)
+        target_raw = cstr(target, 'target', opt=True)
 
         cdef:
-            char *_target = opt_str(target)
+            char *_target = opt_str(target_raw)
 
             char **_cmd = to_bytes_array(cmds)
             size_t _cmdlen = len(cmds)
@@ -1175,7 +1175,7 @@ Rados object in state %s." % self.state)
             size_t _outs_len
 
         try:
-            if target is not None:
+            if target_raw is not None:
                 with nogil:
                     ret = rados_mgr_command_target(self.cluster,
 		                            <const char*>_target,
@@ -3796,9 +3796,9 @@ returned %d, but should return zero on success." % (self.name, ret))
         :para max_return: list no more than max_return key/value pairs
         :returns: an iterator over the requested omap values, return value from this action
         """
-        start_after = cstr(start_after, 'start_after') if start_after else None
+        start_after_raw = cstr(start_after, 'start_after') if start_after else None
         cdef:
-            char *_start_after = opt_str(start_after)
+            char *_start_after = opt_str(start_after_raw)
             ReadOp _read_op = read_op
             rados_omap_iter_t iter_addr = NULL
             int _max_return = max_return

@@ -2,7 +2,7 @@
 Bucket Policies
 ===============
 
-.. versionadded:: Luminous
+*Bucket policies were added in the Luminous release of Ceph.*
 
 The Ceph Object Gateway supports a subset of the Amazon S3 policy
 language applied to buckets.
@@ -36,58 +36,82 @@ For example, one may use s3cmd to set or delete a policy thus::
 Limitations
 ===========
 
-Currently, we support only the following actions:
+.. note:: This list of S3 actions is accurate only for the Reef release of
+   Ceph. If you are using a different release of Ceph, the list of supported S3
+   actions will be different.
 
-- s3:AbortMultipartUpload
-- s3:CreateBucket
-- s3:DeleteBucketPolicy
-- s3:DeleteBucket
-- s3:DeleteBucketWebsite
-- s3:DeleteObject
-- s3:DeleteObjectVersion
-- s3:DeleteReplicationConfiguration
-- s3:GetAccelerateConfiguration
-- s3:GetBucketAcl
-- s3:GetBucketCORS
-- s3:GetBucketLocation
-- s3:GetBucketLogging
-- s3:GetBucketNotification
-- s3:GetBucketPolicy
-- s3:GetBucketRequestPayment
-- s3:GetBucketTagging
-- s3:GetBucketVersioning
-- s3:GetBucketWebsite
-- s3:GetLifecycleConfiguration
-- s3:GetObjectAcl
-- s3:GetObject
-- s3:GetObjectTorrent
-- s3:GetObjectVersionAcl
-- s3:GetObjectVersion
-- s3:GetObjectVersionTorrent
-- s3:GetReplicationConfiguration
-- s3:IPAddress
-- s3:NotIpAddress
-- s3:ListAllMyBuckets
-- s3:ListBucketMultipartUploads
-- s3:ListBucket
-- s3:ListBucketVersions
-- s3:ListMultipartUploadParts
-- s3:PutAccelerateConfiguration
-- s3:PutBucketAcl
-- s3:PutBucketCORS
-- s3:PutBucketLogging
-- s3:PutBucketNotification
-- s3:PutBucketPolicy
-- s3:PutBucketRequestPayment
-- s3:PutBucketTagging
-- s3:PutBucketVersioning
-- s3:PutBucketWebsite
-- s3:PutLifecycleConfiguration
-- s3:PutObjectAcl
-- s3:PutObject
-- s3:PutObjectVersionAcl
-- s3:PutReplicationConfiguration
-- s3:RestoreObject
+In Reef only the following actions are supported:
+
+- ``s3GetObject``
+- ``s3GetObjectVersion``
+- ``s3PutObject``
+- ``s3GetObjectAcl``
+- ``s3GetObjectVersionAcl``
+- ``s3PutObjectAcl``
+- ``s3PutObjectVersionAcl``
+- ``s3DeleteObject``
+- ``s3DeleteObjectVersion``
+- ``s3ListMultipartUploadParts``
+- ``s3AbortMultipartUpload``
+- ``s3GetObjectTorrent``
+- ``s3GetObjectVersionTorrent``
+- ``s3RestoreObject``
+- ``s3CreateBucket``
+- ``s3DeleteBucket``
+- ``s3ListBucket``
+- ``s3ListBucketVersions``
+- ``s3ListAllMyBuckets``
+- ``s3ListBucketMultipartUploads``
+- ``s3GetAccelerateConfiguration``
+- ``s3PutAccelerateConfiguration``
+- ``s3GetBucketAcl``
+- ``s3PutBucketAcl``
+- ``s3GetBucketCORS``
+- ``s3PutBucketCORS``
+- ``s3GetBucketVersioning``
+- ``s3PutBucketVersioning``
+- ``s3GetBucketRequestPayment``
+- ``s3PutBucketRequestPayment``
+- ``s3GetBucketLocation``
+- ``s3GetBucketPolicy``
+- ``s3DeleteBucketPolicy``
+- ``s3PutBucketPolicy``
+- ``s3GetBucketNotification``
+- ``s3PutBucketNotification``
+- ``s3GetBucketLogging``
+- ``s3PutBucketLogging``
+- ``s3GetBucketTagging``
+- ``s3PutBucketTagging``
+- ``s3GetBucketWebsite``
+- ``s3PutBucketWebsite``
+- ``s3DeleteBucketWebsite``
+- ``s3GetLifecycleConfiguration``
+- ``s3PutLifecycleConfiguration``
+- ``s3PutReplicationConfiguration``
+- ``s3GetReplicationConfiguration``
+- ``s3DeleteReplicationConfiguration``
+- ``s3GetObjectTagging``
+- ``s3PutObjectTagging``
+- ``s3DeleteObjectTagging``
+- ``s3GetObjectVersionTagging``
+- ``s3PutObjectVersionTagging``
+- ``s3DeleteObjectVersionTagging``
+- ``s3PutBucketObjectLockConfiguration``
+- ``s3GetBucketObjectLockConfiguration``
+- ``s3PutObjectRetention``
+- ``s3GetObjectRetention``
+- ``s3PutObjectLegalHold``
+- ``s3GetObjectLegalHold``
+- ``s3BypassGovernanceRetention``
+- ``s3GetBucketPolicyStatus``
+- ``s3PutPublicAccessBlock``
+- ``s3GetPublicAccessBlock``
+- ``s3DeletePublicAccessBlock``
+- ``s3GetBucketPublicAccessBlock``
+- ``s3PutBucketPublicAccessBlock``
+- ``s3DeleteBucketPublicAccessBlock``
+- ``s3GetBucketEncryption``
+- ``s3PutBucketEncryption``
 
 We do not yet support setting policies on users, groups, or roles.
 
@@ -124,7 +148,8 @@ For all requests, condition keys we support are:
 
 We support certain s3 condition keys for bucket and object requests.
 
-.. versionadded:: Mimic
+*Support for the following bucket-related operations was added in the Mimic
+release of Ceph.*
 
 Bucket Related Operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -23,7 +23,7 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
-| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* ] ...
+| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* \| *swap* ] ...
 
 | **ceph** **fsid**
 
@@ -392,6 +392,15 @@ given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
 Usage::
 
     ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+
+Subcommand ``swap`` swaps the names of two Ceph file system and updates
+application tags on the pool of the file systems accordingly. Optionally,
+FSIDs of the filesystems can also be swapped along with names by passing
+``--swap-fscids``.
+
+Usage::
+
+    ceph fs swap <fs1-name> <fs1-id> <fs2-name> <fs2-id> [--swap-fscids] {--yes-i-really-meant-it}
 
 fsid
 ----
@@ -1541,13 +1550,13 @@ Usage::
 Options
 =======
 
-.. option:: -i infile
+.. option:: -i infile, --in-file=infile
 
    will specify an input file to be passed along as a payload with the
    command to the monitor cluster. This is only used for specific
    monitor commands.
 
-.. option:: -o outfile
+.. option:: -o outfile, --out-file=outfile
 
    will write any payload returned by the monitor cluster with its
    reply to outfile.  Only specific monitor commands (e.g. osd getmap)

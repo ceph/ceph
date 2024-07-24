@@ -9,7 +9,7 @@ These are exciting times in the Ceph community! Get involved!
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 |Channel               | Description                                     | Contact Info                                  |
 +======================+=================================================+===============================================+
-| **Blog**             | Check the Ceph Blog_ periodically to keep track | http://ceph.com/community/blog/               |
+| **Blog**             | Check the Ceph Blog_ periodically to keep track | https://ceph.com/community/blog/              |
 |                      | of Ceph progress and important announcements.   |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Planet Ceph**      | Check the blog aggregation on Planet Ceph for   | https://old.ceph.com/category/planet/         |
@@ -38,14 +38,14 @@ These are exciting times in the Ceph community! Get involved!
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **User List**        | Ask and answer user-related questions by        |                                               |
 |                      | subscribing to the email list at                | - `User Subscribe`_                           |
-|                      | ceph-users@ceph.io. You can opt out of the email| - `User Unsubscribe`_                         |
-|                      | list at any time by unsubscribing. A simple     | - `User Archives`_                            |
+|                      | ceph-users@ceph.io. You can opt out of the email| - `User Archives`_                            |
+|                      | list at any time by unsubscribing. A simple     |                                               |
 |                      | email is all it takes!                          |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Devel List**       | Keep in touch with developer activity by        |                                               |
 |                      | subscribing to the email list at dev@ceph.io.   | - `Devel Subscribe`_                          |
-|                      | You can opt out of the email list at any time by| - `Devel Unsubscribe`_                        |
-|                      | unsubscribing. A simple email is all it takes!  | - `Devel Archives`_                           |
+|                      | You can opt out of the email list at any time by| - `Devel Archives`_                           |
+|                      | unsubscribing. A simple email is all it takes!  |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Kernel Client**    | Linux kernel-related traffic, including kernel  | - `Kernel Client Subscribe`_                  |
 |                      | patches and discussion of implementation details| - `Kernel Client Unsubscribe`_                |
@@ -66,13 +66,13 @@ These are exciting times in the Ceph community! Get involved!
 |                      | opt out of the email list at any time by        | - `Community Unsubscribe`_                    |
 |                      | unsubscribing. A simple email is all it takes!  | - `Mailing list archives`_                    |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
-| **Bug Tracker**      | You can help keep Ceph production worthy by     | http://tracker.ceph.com/projects/ceph         |
+| **Bug Tracker**      | You can help keep Ceph production worthy by     | https://tracker.ceph.com/projects/ceph        |
 |                      | filing and tracking bugs, and providing feature |                                               |
 |                      | requests using the Bug Tracker_.                |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Source Code**      | If you would like to participate in             |                                               |
-|                      | development, bug fixing, or if you just want    | - http://github.com/ceph/ceph                 |
-|                      | the very latest code for Ceph, you can get it   | - http://download.ceph.com/tarballs/          |
+|                      | development, bug fixing, or if you just want    | - https://github.com/ceph/ceph                |
+|                      | the very latest code for Ceph, you can get it   | - https://download.ceph.com/tarballs/         |
 |                      | at http://github.com. See `Ceph Source Code`_   |                                               |
 |                      | for details on cloning from github.             |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
@@ -81,12 +81,10 @@ These are exciting times in the Ceph community! Get involved!
 
 
 
-.. _Devel Subscribe: mailto:dev-request@ceph.io?body=subscribe
-.. _Devel Unsubscribe: mailto:dev-request@ceph.io?body=unsubscribe
+.. _Devel Subscribe: https://lists.ceph.io/postorius/lists/dev.ceph.io/
 .. _Kernel Client Subscribe: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
 .. _Kernel Client Unsubscribe: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
-.. _User Subscribe: mailto:ceph-users-request@ceph.io?body=subscribe
-.. _User Unsubscribe: mailto:ceph-users-request@ceph.io?body=unsubscribe
+.. _User Subscribe: https://lists.ceph.io/postorius/lists/ceph-users.ceph.io/ 
 .. _Community Subscribe: mailto:ceph-community-join@lists.ceph.com
 .. _Community Unsubscribe: mailto:ceph-community-leave@lists.ceph.com
 .. _Commit Subscribe: mailto:ceph-commit-join@lists.ceph.com

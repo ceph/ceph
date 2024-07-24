@@ -16,6 +16,8 @@ from threading import Event
 
 from cephadm.service_discovery import ServiceDiscovery
 
+from ceph.deployment.service_spec import PrometheusSpec
+
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
     Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, \
@@ -2938,7 +2940,7 @@ Then run the following:
             )
             daemons.append(sd)
 
-        @ forall_hosts
+        @forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = self.cephadm_services[daemon_type].prepare_create(*args)
             with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
@@ -2983,6 +2985,38 @@ Then run the following:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
         return 'prometheus credentials updated correctly'
+
+    @handle_orch_error
+    def set_prometheus_target(self, url: str) -> str:
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if url not in prometheus_spec.targets:
+            prometheus_spec.targets.append(url)
+        else:
+            return f"Target '{url}' already exists.\n"
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+        for daemon in daemons:
+            self.daemon_action(action='redeploy', daemon_name=daemon.daemon_name)
+        return 'prometheus multi-cluster targets updated'
+
+    @handle_orch_error
+    def remove_prometheus_target(self, url: str) -> str:
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if url in prometheus_spec.targets:
+            prometheus_spec.targets.remove(url)
+        else:
+            return f"Target '{url}' does not exist.\n"
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+        for daemon in daemons:
+            self.daemon_action(action='redeploy', daemon_name=daemon.daemon_name)
+        return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:
@@ -3224,7 +3258,7 @@ Then run the following:
                         (f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {max(5, host_count)}.'))
             elif spec.service_type != 'osd':
                 if spec.placement.count > (max_count * host_count):
-                    raise OrchestratorError((f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {host_count*max_count} ({host_count}x{max_count}).'
+                    raise OrchestratorError((f'The maximum number of {spec.service_type} daemons allowed with {host_count} hosts is {host_count * max_count} ({host_count}x{max_count}).'
                                              + ' This limit can be adjusted by changing the mgr/cephadm/max_count_per_host config option'))
 
         if spec.placement.count_per_host is not None and spec.placement.count_per_host > max_count and spec.service_type != 'osd':

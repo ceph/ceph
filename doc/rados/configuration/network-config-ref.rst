@@ -56,7 +56,7 @@ Recommendations - Networks`_ for additional details.
 IP Tables
 =========
 
-By default, daemons `bind`_ to ports within the ``6800:7300`` range. You may
+By default, daemons `bind`_ to ports within the ``6800:7568`` range. You may
 configure this range at your discretion. Before configuring your IP tables,
 check the default ``iptables`` configuration.
 
@@ -96,7 +96,7 @@ A :term:`Ceph Metadata Server` or :term:`Ceph Manager` listens on the first
 available port on the public network beginning at port 6800. Note that this 
 behavior is not deterministic, so if you are running more than one OSD or MDS
 on the same host, or if you restart the daemons within a short window of time,
-the daemons will bind to higher ports. You should open the entire 6800-7300
+the daemons will bind to higher ports. You should open the entire 6800-7568
 range by default.  When you add the rule using the example below, make sure
 you replace ``{iface}`` with the public network interface (e.g., ``eth0``,
 ``eth1``, etc.), ``{ip-address}`` with the IP address of the public network
@@ -106,7 +106,7 @@ For example:
 
 .. prompt:: bash $
 
-   sudo iptables -A INPUT -i {iface} -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
+   sudo iptables -A INPUT -i {iface} -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7568 -j ACCEPT
 
 
 OSD IP Tables
@@ -136,7 +136,7 @@ Each Ceph OSD Daemon on a Ceph Node may use up to four ports:
               \---------------/
 
 When a daemon fails and restarts without letting go of the port, the restarted
-daemon will bind to a new port. You should open the entire 6800-7300 port range
+daemon will bind to a new port. You should open the entire 6800-7568 port range
 to handle this possibility.
 
 If you set up separate public and cluster networks, you must add rules for both
@@ -149,7 +149,7 @@ public or cluster network. For example:
 
 .. prompt:: bash $
 
-   sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
+   sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7568 -j ACCEPT
 
 .. tip:: If you run Ceph Metadata Servers on the same Ceph Node as the 
    Ceph OSD Daemons, you can consolidate the public network configuration step. 
@@ -214,28 +214,6 @@ following option to the ``[global]`` section of your Ceph configuration file.
 We prefer that the cluster network is **NOT** reachable from the public network
 or the Internet for added security.
 
-IPv4/IPv6 Dual Stack Mode
--------------------------
-
-If you want to run in an IPv4/IPv6 dual stack mode and want to define your public and/or
-cluster networks, then you need to specify both your IPv4 and IPv6 networks for each:
-
-.. code-block:: ini
-
-	[global]
-		# ... elided configuration
-		public_network = {IPv4 public-network/netmask}, {IPv6 public-network/netmask}
-
-This is so that Ceph can find a valid IP address for both address families.
-
-If you want just an IPv4 or an IPv6 stack environment, then make sure you set the `ms bind`
-options correctly.
-
-.. note::
-   Binding to IPv4 is enabled by default, so if you just add the option to bind to IPv6
-   you'll actually put yourself into dual stack mode. If you want just IPv6, then disable IPv4 and
-   enable IPv6. See `Bind`_ below.
-
 Ceph Daemons
 ============
 
@@ -295,6 +273,7 @@ and subnets for the public network. You may specifically assign static IP
 addresses or override ``public_network`` settings using the ``public_addr``
 setting for a specific daemon.
 
+.. confval:: public_network_interface
 .. confval:: public_network
 .. confval:: public_addr
 
@@ -307,6 +286,7 @@ specifically assign static IP  addresses or override ``cluster_network``
 settings using the ``cluster_addr`` setting for specific OSD daemons.
 
 
+.. confval:: cluster_network_interface 
 .. confval:: cluster_network
 .. confval:: cluster_addr
 
@@ -314,7 +294,7 @@ Bind
 ----
 
 Bind settings set the default port ranges Ceph OSD and MDS daemons use. The
-default range is ``6800:7300``. Ensure that your `IP Tables`_ configuration
+default range is ``6800:7568``. Ensure that your `IP Tables`_ configuration
 allows you to use the configured port range.
 
 You may also enable Ceph daemons to bind to IPv6 addresses instead of IPv4

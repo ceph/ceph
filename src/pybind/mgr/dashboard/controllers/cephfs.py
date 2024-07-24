@@ -826,6 +826,15 @@ class CephFSSubvolumeGroups(RESTController):
                         f'Failed to get info for subvolume group {group["name"]}: {err}'
                     )
                 group['info'] = json.loads(out)
+
+                error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_getpath',
+                                                  None, {'vol_name': vol_name,
+                                                         'group_name': group['name']})
+                if error_code != 0:
+                    raise DashboardException(
+                        f'Failed to get path for subvolume group {group["name"]}: {err}'
+                    )
+                group['info']['path'] = out
         return subvolume_groups
 
     @RESTController.Resource('GET')
@@ -835,8 +844,17 @@ class CephFSSubvolumeGroups(RESTController):
         if error_code != 0:
             raise DashboardException(
                 f'Failed to get info for subvolume group {group_name}: {err}'
+
             )
-        return json.loads(out)
+        group = json.loads(out)
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_getpath', None, {
+            'vol_name': vol_name, 'group_name': group_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get path for subvolume group {group_name}: {err}'
+            )
+        group['path'] = out
+        return group
 
     def create(self, vol_name: str, group_name: str, **kwargs):
         error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_create', None, {

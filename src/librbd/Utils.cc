@@ -59,6 +59,7 @@ librados::AioCompletion *create_rados_callback(Context *on_finish) {
   return create_rados_callback<Context, &Context::complete>(on_finish);
 }
 
+// also used for group and group snapshot ids
 std::string generate_image_id(librados::IoCtx &ioctx) {
   librados::Rados rados(ioctx);
 

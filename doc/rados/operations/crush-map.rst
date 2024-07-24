@@ -514,6 +514,16 @@ For details on this command's parameters, see the following:
    :Required: No
    :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
+Renaming a bucket
+-----------------
+
+To rename a bucket while maintaining its position in the CRUSH map hierarchy,
+run a command of the following form:
+
+.. prompt:: bash #
+
+   ceph osd crush rename-bucket {oldname} {newname}
+
 Removing a Bucket
 -----------------
 

@@ -2475,6 +2475,31 @@ void Server::trim_completed_request_list(ceph_tid_t tid, Session *session)
   }
 }
 
+void Server::set_reply_extra_bl(const cref_t<MClientRequest> &req, inodeno_t ino, bufferlist& extra_bl)
+{
+  Session *session = mds->get_session(req);
+
+  if (session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
+    openc_response_t ocresp;
+
+    dout(10) << "adding created_ino and delegated_inos" << dendl;
+    ocresp.created_ino = ino;
+
+    if (delegate_inos_pct && !req->is_queued_for_replay()) {
+      // Try to delegate some prealloc_inos to the client, if it's down to half the max
+      unsigned frac = 100 / delegate_inos_pct;
+      if (session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
+	session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
+    }
+
+    encode(ocresp, extra_bl);
+  } else if (req->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+    dout(10) << "adding ino to reply to indicate inode was created" << dendl;
+    // add the file created flag onto the reply if create_flags features is supported
+    encode(ino, extra_bl);
+  }
+}
+
 void Server::handle_client_request(const cref_t<MClientRequest> &req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
@@ -2535,7 +2560,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
         auto reply = make_message<MClientReply>(*req, 0);
 	if (created != inodeno_t()) {
 	  bufferlist extra;
-	  encode(created, extra);
+	  set_reply_extra_bl(req, created, extra);
 	  reply->set_extra_bl(extra);
 	}
         mds->send_message_client(reply, session);
@@ -2755,10 +2780,18 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
     // funky.
   case CEPH_MDS_OP_CREATE:
-    if (mdr->has_completed)
+    if (mdr->has_completed) {
+      inodeno_t created;
+
+      ceph_assert(mdr->session);
+      mdr->session->have_completed_request(req->get_reqid().tid, &created);
+      ceph_assert(created != inodeno_t());
+
+      set_reply_extra_bl(req, created, mdr->reply_extra_bl);
       handle_client_open(mdr);  // already created.. just open
-    else
+    } else {
       handle_client_openc(mdr);
+    }
     break;
 
   case CEPH_MDS_OP_OPEN:
@@ -3381,7 +3414,7 @@ bool Server::check_dir_max_entries(MDRequestRef &mdr, CDir *in)
                    in->inode->get_projected_inode()->dirstat.nsubdirs;
   if (dir_max_entries && size >= dir_max_entries) {
     dout(10) << "entries per dir " << *in << " size exceeds " << dir_max_entries << " (ENOSPC)" << dendl;
-    respond_to_request(mdr, -ENOSPC);
+    respond_to_request(mdr, -CEPHFS_ENOSPC);
     return false;
   }
   return true;
@@ -4597,7 +4630,7 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_skip_replaying_inotable);
+    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
 
     dn->pop_projected_linkage();
 
@@ -4776,25 +4809,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, newi);
 
-  if (mdr->session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
-    openc_response_t	ocresp;
-
-    dout(10) << "adding created_ino and delegated_inos" << dendl;
-    ocresp.created_ino = _inode->ino;
-
-    if (delegate_inos_pct && !req->is_queued_for_replay()) {
-      // Try to delegate some prealloc_inos to the client, if it's down to half the max
-      unsigned frac = 100 / delegate_inos_pct;
-      if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
-	mdr->session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
-    }
-
-    encode(ocresp, mdr->reply_extra_bl);
-  } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
-    dout(10) << "adding ino to reply to indicate inode was created" << dendl;
-    // add the file created flag onto the reply if create_flags features is supported
-    encode(newi->ino(), mdr->reply_extra_bl);
-  }
+  set_reply_extra_bl(req, _inode->ino, mdr->reply_extra_bl);
 
   journal_and_reply(mdr, newi, dn, le, fin);
 
@@ -5991,6 +6006,7 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
                                 file_layout_t *layout)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
+  bool is_rmxattr = (req->get_op() == CEPH_MDS_OP_RMXATTR);
   epoch_t epoch;
   int r;
 
@@ -6000,7 +6016,12 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
     });
 
   if (r == -CEPHFS_ENOENT) {
+    if (is_rmxattr) {
+      r = -CEPHFS_EINVAL;
 
+      respond_to_request(mdr, r);
+      return r;
+    }
     // we don't have the specified pool, make sure our map
     // is newer than or as new as the client.
     epoch_t req_epoch = req->get_osdmap_epoch();
@@ -6037,14 +6058,15 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
   return 0;
 }
 
-void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
+void Server::handle_client_setvxattr(MDRequestRef& mdr, CInode *cur)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
+  bool is_rmxattr = (req->get_op() == CEPH_MDS_OP_RMXATTR);
   MutationImpl::LockOpVec lov;
   string name(req->get_path2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
-  dout(10) << "handle_set_vxattr " << name
+  dout(10) << "handle_client_setvxattr " << name
            << " val " << value.length()
            << " bytes on " << *cur
            << dendl;
@@ -6086,17 +6108,42 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     else
       layout = mdcache->default_file_layout;
 
-    rest = name.substr(name.find("layout"));
-    if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
-      return;
+    if (is_rmxattr && name == "ceph.dir.layout") {
+      lov.add_xlock(&cur->policylock);
+      if (!mds->locker->acquire_locks(mdr, lov)) {
+        return;
+      }
+      if (!cur->get_projected_inode()->has_layout()) {
+        respond_to_request(mdr, 0);
+        return;
+      }
+      auto pi = cur->project_inode(mdr);
 
-    auto pi = cur->project_inode(mdr);
-    pi.inode->layout = layout;
+      if (cur->is_root()) {
+	  pi.inode->layout = mdcache->default_file_layout;
+      } else {
+	pi.inode->clear_layout();
+	pi.inode->version = cur->pre_dirty();
+      }
+      pip = pi.inode.get();
+    } else {
+      rest = name.substr(name.find("layout"));
+      if (check_layout_vxattr(mdr, rest, value, &layout) < 0)
+	return;
+
+      auto pi = cur->project_inode(mdr);
+      pi.inode->layout = layout;
+      pip = pi.inode.get();
+    }
+
     mdr->no_early_reply = true;
-    pip = pi.inode.get();
   } else if (name.compare(0, 16, "ceph.file.layout") == 0) {
     if (!cur->is_file()) {
       respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+    if (!cur->get_projected_inode()->has_layout()) {
+      respond_to_request(mdr, 0);
       return;
     }
     if (cur->get_projected_inode()->size ||
@@ -6131,6 +6178,13 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     }
 
     quota_info_t quota = cur->get_projected_inode()->quota;
+    if (is_rmxattr) {
+      if (!quota.is_enabled()) {
+        respond_to_request(mdr, 0);
+        return;
+      }
+      value = "0";
+    }
 
     rest = name.substr(name.find("quota"));
     int r = parse_quota_vxattr(rest, value, &quota);
@@ -6169,6 +6223,14 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
 
     bool val;
     try {
+      if (is_rmxattr) {
+        const auto srnode = cur->get_projected_srnode();
+	if (!srnode->is_subvolume()) {
+	  respond_to_request(mdr, 0);
+	  return;
+	}
+        value = "0";
+      }
       val = boost::lexical_cast<bool>(value);
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
@@ -6246,6 +6308,13 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
 
     mds_rank_t rank;
     try {
+      if (is_rmxattr) {
+	if (cur->get_projected_inode()->export_pin == -1) {
+          respond_to_request(mdr, 0);
+          return;
+	}
+        value = "-1";
+      }
       rank = boost::lexical_cast<mds_rank_t>(value);
       if (rank < 0) rank = MDS_RANK_NONE;
       else if (rank >= MAX_MDS) {
@@ -6272,6 +6341,13 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
 
     double val;
     try {
+      if (is_rmxattr) {
+	if (cur->get_projected_inode()->export_ephemeral_random_pin == 0.0) {
+	  respond_to_request(mdr, 0);
+          return;
+	}
+        value = "0";
+      }
       val = boost::lexical_cast<double>(value);
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse float for " << name << dendl;
@@ -6301,6 +6377,13 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
 
     bool val;
     try {
+      if (is_rmxattr) {
+	if (cur->get_projected_inode()->export_ephemeral_distributed_pin == 0) {
+          respond_to_request(mdr, 0);
+          return;
+	}
+        value = "0";
+      }
       val = boost::lexical_cast<bool>(value);
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
@@ -6339,62 +6422,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
 								   false, false, adjust_realm));
   return;
-}
-
-void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur)
-{
-  const cref_t<MClientRequest> &req = mdr->client_request;
-  string name(req->get_path2());
-
-  dout(10) << __func__ << " " << name << " on " << *cur << dendl;
-
-  if (name == "ceph.dir.layout") {
-    if (!cur->is_dir()) {
-      respond_to_request(mdr, -CEPHFS_ENODATA);
-      return;
-    }
-    if (cur->is_root()) {
-      dout(10) << "can't remove layout policy on the root directory" << dendl;
-      respond_to_request(mdr, -CEPHFS_EINVAL);
-      return;
-    }
-
-    if (!cur->get_projected_inode()->has_layout()) {
-      respond_to_request(mdr, -CEPHFS_ENODATA);
-      return;
-    }
-
-    MutationImpl::LockOpVec lov;
-    lov.add_xlock(&cur->policylock);
-    if (!mds->locker->acquire_locks(mdr, lov))
-      return;
-
-    auto pi = cur->project_inode(mdr);
-    pi.inode->clear_layout();
-    pi.inode->version = cur->pre_dirty();
-
-    // log + wait
-    mdr->ls = mdlog->get_current_segment();
-    EUpdate *le = new EUpdate(mdlog, "remove dir layout vxattr");
-    mdlog->start_entry(le);
-    le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-    mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
-    mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-
-    mdr->no_early_reply = true;
-    journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
-    return;
-  } else if (name == "ceph.dir.layout.pool_namespace"
-          || name == "ceph.file.layout.pool_namespace") {
-    // Namespace is the only layout field that has a meaningful
-    // null/none value (empty string, means default layout).  Is equivalent
-    // to a setxattr with empty string: pass through the empty payload of
-    // the rmxattr request to do this.
-    handle_set_vxattr(mdr, cur);
-    return;
-  }
-
-  respond_to_request(mdr, -CEPHFS_ENODATA);
 }
 
 const Server::XattrHandler Server::xattr_handlers[] = {
@@ -6587,7 +6614,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     if (!cur)
       return;
 
-    handle_set_vxattr(mdr, cur);
+    handle_client_setvxattr(mdr, cur);
     return;
   }
 
@@ -6685,7 +6712,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
     if (!cur)
       return;
 
-    handle_remove_vxattr(mdr, cur);
+    handle_client_setvxattr(mdr, cur);
     return;
   }
 
@@ -6915,7 +6942,7 @@ public:
     ceph_assert(r == 0);
 
     // crash current MDS and the replacing MDS will test the journal
-    ceph_assert(!g_conf()->mds_kill_skip_replaying_inotable);
+    ceph_assert(!g_conf()->mds_kill_after_journal_logs_flushed);
 
     // link the inode
     dn->pop_projected_linkage();
@@ -7215,7 +7242,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   mds->balancer->maybe_fragment(dir, false);
 
   // flush the journal as soon as possible
-  if (g_conf()->mds_kill_skip_replaying_inotable) {
+  if (g_conf()->mds_kill_after_journal_logs_flushed) {
     mdlog->flush();
   }
 }

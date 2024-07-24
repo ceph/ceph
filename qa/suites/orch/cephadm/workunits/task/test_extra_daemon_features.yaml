@@ -7,6 +7,12 @@ roles:
   - mon.b
   - mgr.b
   - osd.1
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
 tasks:
 - install:
 - cephadm:

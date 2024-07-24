@@ -177,6 +177,40 @@ done
 
         self._check_task_status_na()
 
+    def test_scrub_when_mds_is_inactive(self):
+        test_dir = "scrub_control_test_path"
+        abs_test_path = f"/{test_dir}"
+
+        self.create_scrub_data(test_dir)
+
+        # allow standby-replay
+        self.fs.set_max_mds(1)
+        self.fs.set_allow_standby_replay(True)
+        status = self.fs.wait_for_daemons()
+        sr_mds_id = self.fs.get_daemon_names('up:standby-replay', status=status)[0]
+
+        # start the scrub and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 
+                              'start', abs_test_path, 'recursive')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+        # pause and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 'pause')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        
+        # abort and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 'abort')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        
+        # resume and verify
+        with self.assertRaises(CommandFailedError) as ce:
+            self.run_ceph_cmd('tell', f'mds.{sr_mds_id}', 'scrub', 'resume')
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+
 class TestScrubChecks(CephFSTestCase):
     """
     Run flush and scrub commands on the specified files in the filesystem. This
@@ -199,6 +233,8 @@ class TestScrubChecks(CephFSTestCase):
 
     MDSS_REQUIRED = 1
     CLIENTS_REQUIRED = 1
+    def get_dsplits(self, dir_ino):
+        return self.fs.rank_asok(['dump', 'inode', str(dir_ino)])['dirfragtree']['splits']
 
     def test_scrub_checks(self):
         self._checks(0)
@@ -361,6 +397,86 @@ class TestScrubChecks(CephFSTestCase):
 
         # fragstat should be fixed
         self.mount_a.run_shell(["rmdir", test_dir])
+
+    def test_scrub_merge_dirfrags(self):
+        """
+        That a directory is merged during scrub.
+        """
+
+        test_path = "testdir"
+        abs_test_path = f"/{test_path}"
+        split_size = 20
+        merge_size = 5
+        split_bits = 1
+        self.config_set('mds', 'mds_bal_split_size', split_size)
+        self.config_set('mds', 'mds_bal_merge_size', merge_size)
+        self.config_set('mds', 'mds_bal_split_bits', split_bits)
+
+        self.mount_a.run_shell(["mkdir", test_path])
+        dir_ino=self.mount_a.path_to_ino(test_path)
+
+        self.assertEqual(len(self.get_dsplits(dir_ino)), 0)
+        self.mount_a.create_n_files(f"{test_path}/file", split_size * 2)
+
+        self.mount_a.umount_wait()
+
+        self.fs.flush()
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        split_size = 100
+        merge_size = 30
+        self.config_set('mds', 'mds_bal_split_size', split_size)
+        self.config_set('mds', 'mds_bal_merge_size', merge_size)
+
+        #Assert to ensure split is present
+        self.assertGreater(len(self.get_dsplits(dir_ino)), 0)
+        out_json = self.fs.run_scrub(["start", abs_test_path, "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        #Wait until no splits to confirm merge by scrub
+        self.wait_until_true(
+            lambda: len(self.get_dsplits(dir_ino)) == 0,
+            timeout=30
+        )
+
+    def test_scrub_split_dirfrags(self):
+        """
+        That a directory is split during scrub.
+        """
+
+        test_path = "testdir"
+        abs_test_path = f"/{test_path}"
+        split_size = 20
+        merge_size = 5
+        split_bits = 1
+
+        self.mount_a.run_shell(["mkdir", test_path])
+        dir_ino=self.mount_a.path_to_ino(test_path)
+
+        self.assertEqual(len(self.get_dsplits(dir_ino)), 0)
+        self.mount_a.create_n_files(f"{test_path}/file", split_size + 1)
+
+        self.mount_a.umount_wait()
+
+        self.fs.flush()
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        self.config_set('mds', 'mds_bal_split_size', split_size)
+        self.config_set('mds', 'mds_bal_merge_size', merge_size)
+        self.config_set('mds', 'mds_bal_split_bits', split_bits)
+
+        #Assert to ensure no splits are present
+        self.assertEqual(len(self.get_dsplits(dir_ino)), 0)
+        out_json = self.fs.run_scrub(["start", abs_test_path, "recursive"])
+        self.assertNotEqual(out_json, None)
+
+        #Wait until split is present to confirm split by scrub
+        self.wait_until_true(
+            lambda: len(self.get_dsplits(dir_ino)) > 0,
+            timeout=30
+        )
 
     def test_stray_evaluation_with_scrub(self):
         """

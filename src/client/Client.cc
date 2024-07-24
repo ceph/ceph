@@ -1698,7 +1698,6 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
-    req->resend_mds = -1;
     ldout(cct, 10) << __func__ << " resend_mds specified as mds." << mds << dendl;
     goto out;
   }
@@ -2054,6 +2053,7 @@ int Client::make_request(MetaRequest *request,
 
     // wait for signal
     ldout(cct, 20) << "awaiting reply|forward|kick on " << &caller_cond << dendl;
+    request->resend_mds = -1; /* reset for retries */
     request->kick = false;
     std::unique_lock l{client_lock, std::adopt_lock};
     caller_cond.wait(l, [request] {
@@ -6955,11 +6955,13 @@ void Client::_unmount(bool abort)
 
 void Client::unmount()
 {
+  ldout(cct, 2) << __func__ << dendl;
   _unmount(false);
 }
 
 void Client::abort_conn()
 {
+  ldout(cct, 2) << __func__ << dendl;
   _unmount(true);
 }
 

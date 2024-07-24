@@ -158,6 +158,7 @@ public:
   void force_clients_readonly();
 
   // -- requests --
+  void set_reply_extra_bl(const cref_t<MClientRequest> &req, inodeno_t ino, bufferlist& extra_bl);
   void trim_completed_request_list(ceph_tid_t tid, Session *session);
   void handle_client_request(const cref_t<MClientRequest> &m);
   void handle_client_reply(const cref_t<MClientReply> &m);
@@ -230,8 +231,7 @@ public:
                           std::string name,
                           std::string value,
                           file_layout_t *layout);
-  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
-  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_client_setvxattr(MDRequestRef& mdr, CInode *cur);
   void handle_client_getvxattr(MDRequestRef& mdr);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);

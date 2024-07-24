@@ -269,6 +269,8 @@ class MDCache {
   bool is_readonly() { return readonly; }
   void force_readonly();
 
+  void maybe_fragment(CDir* dir);
+
   static file_layout_t gen_default_file_layout(const MDSMap &mdsmap);
   static file_layout_t gen_default_log_layout(const MDSMap &mdsmap);
 
@@ -1350,6 +1352,8 @@ class MDCache {
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
   void upkeep_main(void);
+
+  bool is_ready_to_trim_cache(void);
 
   uint64_t cache_memory_limit;
   double cache_reservation;

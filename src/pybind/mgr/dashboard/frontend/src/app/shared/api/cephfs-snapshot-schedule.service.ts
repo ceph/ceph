@@ -73,13 +73,14 @@ export class CephfsSnapshotScheduleService {
     path: string,
     fs: string,
     interval: number,
-    frequency: RepeatFrequency
+    frequency: RepeatFrequency,
+    isSubvolume = false
   ): Observable<boolean> {
     return this.getSnapshotScheduleList(path, fs, false).pipe(
       map((response) => {
-        const index = response.findIndex(
-          (x) => x.path === path && x.schedule === `${interval}${frequency}`
-        );
+        const index = response
+          .filter((x) => (isSubvolume ? x.path.startsWith(path) : x.path === path))
+          .findIndex((x) => x.schedule === `${interval}${frequency}`);
         return index > -1;
       }),
       catchError(() => {
@@ -149,7 +150,7 @@ export class CephfsSnapshotScheduleService {
             retentionCopy: this.parseRetentionCopy(snapItem?.retention),
             retention: Object.values(snapItem?.retention || [])?.length
               ? Object.entries(snapItem.retention)
-                  ?.map?.(([frequency, interval]) => `${interval}${frequency.toLocaleUpperCase()}`)
+                  ?.map?.(([frequency, interval]) => `${interval}${frequency}`)
                   .join(' ')
               : '-'
           })),

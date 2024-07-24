@@ -134,7 +134,7 @@ def mkdir_p(path, chown=True):
     A `mkdir -p` that defaults to chown the path to the ceph user
     """
     try:
-        os.mkdir(path)
+        os.makedirs(path)
     except OSError as e:
         if e.errno == errno.EEXIST:
             pass

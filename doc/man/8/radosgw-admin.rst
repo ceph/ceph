@@ -336,7 +336,7 @@ as follows:
   List placement active set.
 
 :command:`policy`
-  Display bucket/object policy.
+  Display bucket/object policies (e.g. permissions/ACLs etc.).
 
 :command:`log list`
   List log objects.
@@ -360,6 +360,9 @@ as follows:
 
 :command:`gc process`
   Manually process garbage.
+
+:command:`lc get`
+  Get lifecycle config for a bucket.
 
 :command:`lc list`
   List all bucket lifecycle progress.

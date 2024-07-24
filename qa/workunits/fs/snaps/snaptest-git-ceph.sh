@@ -2,6 +2,10 @@
 
 set -e
 
+# increase the cache size
+sudo git config --global http.sslVerify false
+sudo git config --global http.postBuffer 1048576000
+
 # try it again if the clone is slow and the second time
 retried=false
 trap -- 'retry' EXIT

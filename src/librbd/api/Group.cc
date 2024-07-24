@@ -53,17 +53,6 @@ snap_t get_group_snap_id(I* ictx,
   return CEPH_NOSNAP;
 }
 
-string generate_uuid(librados::IoCtx& io_ctx)
-{
-  Rados rados(io_ctx);
-  uint64_t bid = rados.get_instance_id();
-
-  uint32_t extra = rand() % 0xFFFFFFFF;
-  std::ostringstream bid_ss;
-  bid_ss << std::hex << bid << std::hex << extra;
-  return bid_ss.str();
-}
-
 int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 		    std::vector<cls::rbd::GroupSnapshot> *cls_snaps)
 {
@@ -320,7 +309,6 @@ finish:
 int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
                                   const cls::rbd::GroupSnapshot& group_snap,
                                   const std::string& group_id,
-                                  const std::string& group_header_oid,
                                   ProgressContext& pctx) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   std::vector<C_SaferCond*> on_finishes;
@@ -523,21 +511,20 @@ int Group<I>::create(librados::IoCtx& io_ctx, const char *group_name)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
 
-  string id = generate_uuid(io_ctx);
-
   ldout(cct, 2) << "adding group to directory..." << dendl;
 
+  std::string group_id = util::generate_image_id(io_ctx);
   int r = cls_client::group_dir_add(&io_ctx, RBD_GROUP_DIRECTORY, group_name,
-                                    id);
+                                    group_id);
   if (r < 0) {
     lderr(cct) << "error adding group to directory: "
 	       << cpp_strerror(r)
 	       << dendl;
     return r;
   }
-  string header_oid = util::group_header_name(id);
 
-  r = io_ctx.create(header_oid, true);
+  std::string group_header_oid = util::group_header_name(group_id);
+  r = io_ctx.create(group_header_oid, true);
   if (r < 0) {
     lderr(cct) << "error creating group header: " << cpp_strerror(r) << dendl;
     goto err_remove_from_dir;
@@ -547,7 +534,7 @@ int Group<I>::create(librados::IoCtx& io_ctx, const char *group_name)
 
 err_remove_from_dir:
   int remove_r = cls_client::group_dir_remove(&io_ctx, RBD_GROUP_DIRECTORY,
-					      group_name, id);
+					      group_name, group_id);
   if (remove_r < 0) {
     lderr(cct) << "error cleaning up group from rbd_directory "
 	       << "object after creation failed: " << cpp_strerror(remove_r)
@@ -929,7 +916,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 
   string group_header_oid = util::group_header_name(group_id);
 
-  group_snap.id = generate_uuid(group_ioctx);
+  group_snap.id = util::generate_image_id(group_ioctx);
   group_snap.name = string(snap_name);
   group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE;
   group_snap.snaps = image_snaps;
@@ -1275,9 +1262,36 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
     return -ENOENT;
   }
 
-  string group_header_oid = util::group_header_name(group_id);
-  r = group_snap_rollback_by_record(group_ioctx, *group_snap, group_id,
-                                    group_header_oid, pctx);
+  if (group_snap->state != cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+    lderr(cct) << "group snapshot is not complete" << dendl;
+    return -EINVAL;
+  }
+
+  std::vector<cls::rbd::GroupImageSpec> rollback_images;
+  for (const auto& snap : group_snap->snaps) {
+    rollback_images.emplace_back(snap.image_id, snap.pool);
+  }
+
+  std::vector<cls::rbd::GroupImageStatus> images;
+  r = group_image_list(group_ioctx, group_name, &images);
+  if (r < 0) {
+    return r;
+  }
+
+  std::vector<cls::rbd::GroupImageSpec> current_images;
+  for (const auto& image : images) {
+    if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED) {
+      current_images.push_back(image.spec);
+    }
+  }
+
+  if (rollback_images != current_images) {
+    lderr(cct) << "group snapshot membership does not match group membership"
+               << dendl;
+    return -EINVAL;
+  }
+
+  r = group_snap_rollback_by_record(group_ioctx, *group_snap, group_id, pctx);
   return r;
 }
 

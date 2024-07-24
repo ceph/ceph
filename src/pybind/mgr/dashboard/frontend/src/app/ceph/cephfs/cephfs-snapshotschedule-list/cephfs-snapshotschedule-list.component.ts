@@ -300,8 +300,7 @@ export class CephfsSnapshotscheduleListComponent
         const interval = r.substring(0, r.length - 1);
         return `${interval}-${frequency}`;
       })
-      ?.join('|')
-      ?.toLocaleLowerCase();
+      ?.join('|');
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,

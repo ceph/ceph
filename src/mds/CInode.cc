@@ -322,6 +322,7 @@ CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l) :
     item_dirty_dirfrag_dir(this),
     item_dirty_dirfrag_nest(this),
     item_dirty_dirfrag_dirfragtree(this),
+    item_to_flush(this),
     pop(c->decayrate),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
@@ -994,6 +995,19 @@ bool CInode::is_ancestor_of(const CInode *other, std::unordered_map<CInode const
   for (auto& in : my_visited) {
     (*visited)[in] = false;
   }
+  return false;
+}
+
+bool CInode::is_any_ancestor_inode_a_replica() {
+  CDentry *pdn = get_parent_dn();
+  while (pdn) {
+    CInode *diri = pdn->get_dir()->get_inode();
+    if (!diri->is_auth()) {
+      return true;
+    }
+    pdn = diri->get_parent_dn();
+  }
+
   return false;
 }
 
@@ -4790,7 +4804,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
           dout(20) << "divergent backtraces are acceptable when dn "
                       "is being purged or has been renamed or moved to a "
                       "different directory " << *in << dendl;
-        }
+        } else if (in->is_any_ancestor_inode_a_replica()) {
+          results->backtrace.passed = true;
+          dout(20) << "divergent backtraces are acceptable when some "
+	              "ancestor inodes are replicas " << *in << dendl;
+	}
       } else {
         results->backtrace.passed = true;
       }

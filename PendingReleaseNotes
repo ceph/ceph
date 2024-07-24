@@ -1,3 +1,12 @@
+>=18.2.4
+--------
+
+* RBD: `RBD_IMAGE_OPTION_CLONE_FORMAT` option has been exposed in Python
+  bindings via `clone_format` optional parameter to `clone`, `deep_copy` and
+  `migration_prepare` methods.
+* RBD: `RBD_IMAGE_OPTION_FLATTEN` option has been exposed in Python bindings via
+  `flatten` optional parameter to `deep_copy` and `migration_prepare` methods.
+
 >=18.2.2
 --------
 
@@ -11,9 +20,19 @@
   `pool_is_in_selfmanaged_snaps_mode`.
 * RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
   so it can be run for images in the trash.
+* RADOS: For bug 62338 (https://tracker.ceph.com/issues/62338), we did not choose
+  to condition the fix on a server flag in order to simplify backporting.  As
+  a result, in rare cases it may be possible for a PG to flip between two acting
+  sets while an upgrade to a version with the fix is in progress.  If you observe
+  this behavior, you should be able to work around it by completing the upgrade or
+  by disabling async recovery by setting osd_async_recovery_min_cost to a very
+  large value on all OSDs until the upgrade is complete:
+  ``ceph config set osd osd_async_recovery_min_cost 1099511627776``
 
 >=19.0.0
 
+* The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
+  python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
   multi-site. Previously, the replicas of such objects were corrupted on decryption.
   A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
@@ -91,6 +110,13 @@
   of the system.
 * CephFS: Full support for subvolumes and subvolume groups is now available
   for snap_schedule Manager module.
+* CephFS: Two FS names can now be swapped, optionally along with their IDs,
+  using "ceph fs swap" command. The function of this API is to facilitate
+  file system swaps for disaster recovery. In particular, it avoids situations
+  where a named file system is temporarily missing which would prompt a higher
+  level storage operator (like Rook) to recreate the missing file system.
+  See https://docs.ceph.com/en/latest/cephfs/administration/#file-systems
+  docs for more information.
 
 * CephFS: The `subvolume snapshot clone` command now depends on the config option
   `snapshot_clone_no_wait` which is used to reject the clone operation when
@@ -107,6 +133,21 @@
   cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
   and the new feature bit for more information.
 
+* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+  Previously one had to use setxattr to restore the default in order to "remove".
+  You may now properly use removexattr to remove. You can also now remove layout
+  on root inode, which then will restore layout to default layout.
+
+* cls_cxx_gather is marked as deprecated.
+* CephFS: cephfs-journal-tool is guarded against running on an online file system.
+  The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
+  'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
+  commands require '--yes-i-really-really-mean-it'.
+
+* CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
+  confirmation flag when some MDSs exhibit health warning MDS_TRIM or
+  MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
+  further delays in recovery.
 
 >=18.0.0
 
@@ -290,11 +331,20 @@
   than the number mentioned against the config tunable `mds_max_snaps_per_dir`
   so that a new snapshot can be created and retained during the next schedule
   run.
+* cephfs: Running the command "ceph fs authorize" for an existing entity now
+  upgrades the entity's capabilities instead of printing an error. It can now
+  also change read/write permissions in a capability that the entity already
+  holds. If the capability passed by user is same as one of the capabilities
+  that the entity already holds, idempotency is maintained.
 * `ceph config dump --format <json|xml>` output will display the localized
   option names instead of its normalized version. For e.g.,
   "mgr/prometheus/x/server_port" will be displayed instead of
   "mgr/prometheus/server_port". This matches the output of the non pretty-print
   formatted version of the command.
+* CEPHFS: MDS config option name "mds_kill_skip_replaying_inotable" is a bit
+  confusing with "mds_inject_skip_replaying_inotable", therefore renaming it to
+  "mds_kill_after_journal_logs_flushed"
+
 
 >=17.2.1
 

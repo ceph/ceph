@@ -1,3 +1,5 @@
+.. _Perf Counters: 
+
 ===============
  Perf counters
 ===============
@@ -200,8 +202,12 @@ The actual dump is similar to the schema, except that average values are grouped
    }
  }
 
+.. _Labeled Perf Counters:
+
 Labeled Perf Counters
 ---------------------
+
+.. note:: Labeled perf counters were introduced in the Reef release of Ceph.
 
 A Ceph daemon has the ability to emit a set of perf counter instances with varying labels. These counters are intended for visualizing specific metrics in 3rd party tools like Prometheus and Grafana.
 

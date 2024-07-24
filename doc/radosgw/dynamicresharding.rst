@@ -45,21 +45,12 @@ multisite environment. For information on dynamic resharding, see
 Configuration
 =============
 
-Enable/Disable dynamic bucket index resharding:
-
-- ``rgw_dynamic_resharding``:  true/false, default: true
-
-Configuration options that control the resharding process:
-
-- ``rgw_max_objs_per_shard``: maximum number of objects per bucket index shard before resharding is triggered, default: 100000
-
-- ``rgw_max_dynamic_shards``: maximum number of bucket index shards that dynamic resharding can increase to, default: 1999
-
-- ``rgw_reshard_bucket_lock_duration``: duration, in seconds, that writes to the bucket are locked during resharding, default: 360 (i.e., 6 minutes)
-
-- ``rgw_reshard_thread_interval``: maximum time, in seconds, between rounds of resharding queue processing, default: 600 seconds (i.e., 10 minutes)
-
-- ``rgw_reshard_num_logs``: number of shards for the resharding queue, default: 16
+.. confval:: rgw_dynamic_resharding
+.. confval:: rgw_max_objs_per_shard
+.. confval:: rgw_max_dynamic_shards
+.. confval:: rgw_reshard_bucket_lock_duration
+.. confval:: rgw_reshard_thread_interval
+.. confval:: rgw_reshard_num_logs
 
 Admin commands
 ==============

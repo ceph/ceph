@@ -38,7 +38,7 @@ clusters and up to about fourteen cores on single OSDs in isolation. So cores
 per OSD are no longer as pressing a concern as they were. When selecting
 hardware, select for IOPS per core.
 
-.. tip:: When we speak of CPU _cores_, we mean _threads_ when hyperthreading
+.. tip:: When we speak of CPU *cores*, we mean *threads* when hyperthreading
 	 is enabled.  Hyperthreading is usually beneficial for Ceph servers.
 
 Monitor nodes and Manager nodes do not have heavy CPU demands and require only
@@ -447,10 +447,11 @@ Additional Considerations
 Ceph operators typically provision  multiple OSDs per host, but you should
 ensure that the aggregate throughput of your OSD drives doesn't exceed the
 network bandwidth required to service a client's read and write operations.
-You should also each host's percentage of the cluster's overall capacity. If
-the percentage located on a particular host is large and the host fails, it
-can lead to problems such as recovery causing OSDs to exceed the ``full ratio``,
-which in turn causes Ceph to halt operations to prevent data loss.
+You should also consider each host's percentage of the cluster's overall
+capacity. If the percentage located on a particular host is large and the host
+fails, it can lead to problems such as recovery causing OSDs to exceed the
+``full ratio``, which in turn causes Ceph to halt operations to prevent data
+loss.
 
 When you run multiple OSDs per host, you also need to ensure that the kernel
 is up to date. See `OS Recommendations`_ for notes on ``glibc`` and
@@ -539,7 +540,7 @@ Minimum Hardware Recommendations
 
 Ceph can run on inexpensive commodity hardware. Small production clusters
 and development clusters can run successfully with modest hardware.  As
-we noted above: when we speak of CPU _cores_, we mean _threads_ when
+we noted above: when we speak of CPU *cores*, we mean *threads* when
 hyperthreading (HT) is enabled.  Each modern physical x64 CPU core typically
 provides two logical CPU threads; other CPU architectures may vary.
 

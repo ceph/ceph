@@ -287,8 +287,8 @@ class RgwBucket(RgwRESTController):
                                              retention_period_days,
                                              retention_period_years)
 
-    def _get_policy(self, bucket: str):
-        rgw_client = RgwClient.admin_instance()
+    def _get_policy(self, bucket: str, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
         return rgw_client.get_bucket_policy(bucket)
 
     def _set_policy(self, bucket_name: str, policy: str, daemon_name, owner):
@@ -359,7 +359,7 @@ class RgwBucket(RgwRESTController):
         result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
-        result['bucket_policy'] = self._get_policy(bucket_name)
+        result['bucket_policy'] = self._get_policy(bucket_name, daemon_name, result['owner'])
         result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
 
         # Append the locking configuration.
