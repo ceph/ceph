@@ -43,7 +43,7 @@ seastar::future<> RecoverySubRequest::with_pg(
     });
   }, [](std::exception_ptr) {
     return seastar::now();
-  }, pgref).finally([this, opref=std::move(opref), pgref] {
+  }, pgref, pgref->get_osdmap_epoch()).finally([this, opref=std::move(opref), pgref] {
     logger().debug("{}: exit", *this);
     track_event<CompletionEvent>();
     handle.exit();
