@@ -648,6 +648,17 @@ class DaosObject : public StoreObject {
                                   CephContext* cct, bool update_object,
                                   const DoutPrefixProvider* dpp,
                                   optional_yield y) override;
+  virtual int restore_obj_from_cloud(Bucket* bucket,
+			   rgw::sal::PlacementTier* tier,
+			   rgw_placement_rule& placement_rule,
+			   rgw_bucket_dir_entry& o,
+			   CephContext* cct,
+			   real_time& mtime,
+			   uint64_t olh_epoch,
+         std::optional<uint64_t> days,
+			   const DoutPrefixProvider* dpp,
+			   optional_yield y,
+         uint32_t flags) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1,
                                      rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider* dpp, optional_yield y,

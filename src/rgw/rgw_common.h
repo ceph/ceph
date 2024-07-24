@@ -118,6 +118,12 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_SOURCE_ZONE    RGW_ATTR_PREFIX "source_zone"
 #define RGW_ATTR_TAGS           RGW_ATTR_PREFIX RGW_AMZ_PREFIX "tagging"
 
+#define RGW_ATTR_CLOUDTIER_STORAGE_CLASS  RGW_ATTR_PREFIX "cloudtier_storage_class"
+#define RGW_ATTR_RESTORE_STATUS   RGW_ATTR_PREFIX "restore-status"
+#define RGW_ATTR_RESTORE_TYPE   RGW_ATTR_PREFIX "restore-type"
+#define RGW_ATTR_RESTORE_TIME   RGW_ATTR_PREFIX "restored-at"
+#define RGW_ATTR_RESTORE_EXPIRY_DATE   RGW_ATTR_PREFIX "restore-expiry-date"
+
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
 
