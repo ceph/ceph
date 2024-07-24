@@ -34,7 +34,7 @@ import os
 import re
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
-from redminelib.exceptions import ResourceAttrError
+from redminelib.exceptions import ResourceAttrError, ValidationError
 
 redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
@@ -239,16 +239,26 @@ def update_relations(r, issue, dry_run):
         if dry_run:
             logging.info(url(issue) + " add backport to " + release)
             continue
-        other = r.issue.create(project_id=issue['project']['id'],
-                               tracker_id=backport_tracker_id,
-                               subject=subject,
-                               priority_id=issue['priority']['id'],
-                               assigned_to_id=assigned_to_id,
-                               target_version=None,
-                               custom_fields=[{
-                                   "id": release_id,
-                                   "value": release,
-                               }])
+        create_args = {
+            "project_id": issue['project']['id'],
+            "tracker_id": backport_tracker_id,
+            "subject": subject,
+            "priority_id": issue['priority']['id'],
+            "assigned_to_id": assigned_to_id,
+            "target_version": None,
+            "custom_fields": [
+                {
+                    "id": release_id,
+                    "value": release,
+                }
+            ]
+        }
+        try:
+            other = r.issue.create(**create_args)
+        except ValidationError as e:
+            # try without an assignee
+            del create_args['assigned_to_id']
+            other = r.issue.create(**create_args)
         logging.debug("Rate-limiting to avoid seeming like a spammer")
         time.sleep(delay_seconds)
         r.issue_relation.create(issue_id=issue['id'],
