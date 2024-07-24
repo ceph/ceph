@@ -256,7 +256,7 @@ def update_relations(r, issue, dry_run):
         try:
             other = r.issue.create(**create_args)
         except ValidationError as e:
-            # try without an assignee
+            logging.info("Retrying backport issue creation for {issue['id']} to {release} without an assignee due to failure: {e}")
             del create_args['assigned_to_id']
             other = r.issue.create(**create_args)
         logging.debug("Rate-limiting to avoid seeming like a spammer")
