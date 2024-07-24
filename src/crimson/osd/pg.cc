@@ -26,6 +26,7 @@
 
 #include "os/Transaction.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
@@ -1400,7 +1401,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   LOG_PREFIX(PG::handle_rep_op);
   DEBUGDPP("{}", *this, *req);
   if (can_discard_replica_op(*req)) {
-    return seastar::now();
+    co_return;
   }
 
   ceph::os::Transaction txn;
@@ -1418,17 +1419,22 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
                 txn,
                 false);
   DEBUGDPP("{} do_transaction", *this, *req);
-  return interruptor::make_interruptible(shard_services.get_store().do_transaction(
-	coll_ref, std::move(txn))).then_interruptible(
-      [req, lcod=peering_state.get_info().last_complete, this] {
-      peering_state.update_last_complete_ondisk(lcod);
-      const auto map_epoch = get_osdmap_epoch();
-      auto reply = crimson::make_message<MOSDRepOpReply>(
-        req.get(), pg_whoami, 0,
-	map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
-      reply->set_last_complete_ondisk(lcod);
-      return shard_services.send_to_osd(req->from.osd, std::move(reply), map_epoch);
-    });
+  co_await interruptor::make_interruptible(
+    shard_services.get_store().do_transaction(coll_ref, std::move(txn))
+  );
+
+  const auto &lcod = peering_state.get_info().last_complete;
+  peering_state.update_last_complete_ondisk(lcod);
+  const auto map_epoch = get_osdmap_epoch();
+  auto reply = crimson::make_message<MOSDRepOpReply>(
+    req.get(), pg_whoami, 0,
+    map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+  reply->set_last_complete_ondisk(lcod);
+  co_await interruptor::make_interruptible(
+    shard_services.send_to_osd(req->from.osd, std::move(reply), map_epoch)
+  );
+  co_return;
+}
 }
 
 void PG::log_operation(
