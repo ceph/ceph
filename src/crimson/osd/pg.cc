@@ -1439,7 +1439,8 @@ void PG::update_stats(const pg_stat_t &stat) {
 
 PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 {
-  logger().debug("{}: {}", __func__, *req);
+  LOG_PREFIX(PG::handle_rep_op);
+  DEBUGDPP("{}", *this, *req);
   if (can_discard_replica_op(*req)) {
     return seastar::now();
   }
@@ -1458,7 +1459,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
                 !txn.empty(),
                 txn,
                 false);
-  logger().debug("PG::handle_rep_op: do_transaction...");
+  DEBUGDPP("{} do_transaction", *this, *req);
   return interruptor::make_interruptible(shard_services.get_store().do_transaction(
 	coll_ref, std::move(txn))).then_interruptible(
       [req, lcod=peering_state.get_info().last_complete, this] {
