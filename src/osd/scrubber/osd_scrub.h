@@ -80,8 +80,13 @@ class OsdScrub {
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
    * scrubbed by the OSD.
    */
-  void enqueue_target(const Scrub::ScrubJob& sjob);
+  void enqueue_scrub_job(const Scrub::ScrubJob& sjob);
 
+  /**
+   * copy the scheduling element (the SchedEntry sub-object) part of
+   * the SchedTarget to the queue.
+   */
+  void enqueue_target(const Scrub::SchedTarget& trgt);
 
   /**
    * remove the pg from set of PGs to be scanned for scrubbing.
@@ -153,7 +158,7 @@ class OsdScrub {
    *          initiated, and if not - why.
    */
   Scrub::schedule_result_t initiate_a_scrub(
-      std::unique_ptr<Scrub::ScrubJob> candidate,
+      const Scrub::SchedEntry& candidate,
       Scrub::OSDRestrictions restrictions);
 
   /// resource reservation management

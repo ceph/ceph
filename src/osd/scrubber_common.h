@@ -24,6 +24,7 @@ namespace Scrub {
   class ReplicaReservations;
   struct ReplicaActive;
   class ScrubJob;
+  struct SchedEntry;
 }
 
 /// reservation-related data sent by the primary to the replicas,
@@ -485,11 +486,8 @@ struct ScrubPgIF {
 
   /**
    * attempt to initiate a scrub session.
-   * @param candidate the scrub job to start. Later on - this will be the
-   *   specific queue entry (that carries the information about the level,
-   *   priority, etc. of the scrub that should be initiated on this PG).
-   *   This parameter is saved by the scrubber for the whole duration of
-   *   the scrub session (to be used if the scrub is aborted).
+   * param s_or_d: the scrub level to start. This identifies the specific
+   *   target to be scrubbed.
    * @param osd_restrictions limitations on the types of scrubs that can
    *   be initiated on this OSD at this time.
    * @param preconds the PG state re scrubbing at the time of the request,
@@ -501,7 +499,7 @@ struct ScrubPgIF {
    *   external reasons.
    */
   virtual Scrub::schedule_result_t start_scrub_session(
-      std::unique_ptr<Scrub::ScrubJob> candidate,
+      scrub_level_t s_or_d,
       Scrub::OSDRestrictions osd_restrictions,
       Scrub::ScrubPGPreconds pg_cond,
       const requested_scrub_t& requested_flags) = 0;

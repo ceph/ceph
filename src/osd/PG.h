@@ -701,7 +701,7 @@ public:
   bool get_must_scrub() const;
 
   Scrub::schedule_result_t start_scrubbing(
-    std::unique_ptr<Scrub::ScrubJob> candidate,
+    const Scrub::SchedEntry& candidate,
     Scrub::OSDRestrictions osd_restrictions);
 
   unsigned int scrub_requeue_priority(

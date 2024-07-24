@@ -1325,12 +1325,12 @@ unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsig
 
 
 Scrub::schedule_result_t PG::start_scrubbing(
-    std::unique_ptr<Scrub::ScrubJob> candidate,
+    const Scrub::SchedEntry& candidate,
     Scrub::OSDRestrictions osd_restrictions)
 {
   dout(10) << fmt::format(
-		  "{}: {}+{} (env restrictions:{})", __func__,
-		  (is_active() ? "<active>" : "<not-active>"),
+		  "{}: scrubbing {}. {}+{} (env restrictions:{})", __func__,
+		  candidate, (is_active() ? "<active>" : "<not-active>"),
 		  (is_clean() ? "<clean>" : "<not-clean>"), osd_restrictions)
 	   << dendl;
   ceph_assert(ceph_mutex_is_locked(_lock));
@@ -1349,7 +1349,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
        get_pgbackend()->auto_repair_supported());
 
   return m_scrubber->start_scrub_session(
-      std::move(candidate), osd_restrictions, pg_cond, m_planned_scrub);
+      candidate.level, osd_restrictions, pg_cond, m_planned_scrub);
 }
 
 double PG::next_deepscrub_interval() const
