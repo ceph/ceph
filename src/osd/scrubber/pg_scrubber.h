@@ -188,7 +188,7 @@ class PgScrubber : public ScrubPgIF,
   [[nodiscard]] bool is_reserving() const final;
 
   Scrub::schedule_result_t start_scrub_session(
-      std::unique_ptr<Scrub::ScrubJob> candidate,
+      scrub_level_t s_or_d,
       Scrub::OSDRestrictions osd_restrictions,
       Scrub::ScrubPGPreconds pg_cond,
       const requested_scrub_t& requested_flags) final;
@@ -570,9 +570,12 @@ class PgScrubber : public ScrubPgIF,
   /**
    * move the 'not before' to a later time (with a delay amount that is
    * based on the delay cause). Also saves the cause.
-   * Pushes the updated scrub-job into the OSD's queue.
+   * Pushes the updated scheduling entry into the OSD's queue.
    */
-  void requeue_penalized(Scrub::delay_cause_t cause);
+  void requeue_penalized(
+      scrub_level_t s_or_d,
+      Scrub::delay_cause_t cause,
+      utime_t scrub_clock_now);
 
   // -----     methods used to verify the relevance of incoming events:
 
@@ -732,14 +735,9 @@ class PgScrubber : public ScrubPgIF,
    */
   bool m_queued_or_active{false};
 
-  /**
-   * A copy of the specific scheduling target (either shallow_target or
-   * deep_target in the scrub_job) that was selected for this active scrub
-   * session.
-   * \ATTN: in this initial step - a copy of the whole scrub-job is passed
-   * around. Later on this would be just a part of a Scrub::SchedTarget
-   */
-  std::unique_ptr<Scrub::ScrubJob> m_active_target;
+  /// A copy of the specific scheduling target (either shallow_target or
+  /// deep_target in the scrub_job) that was selected for this active scrub
+  std::optional<Scrub::SchedTarget> m_active_target;
 
   eversion_t m_subset_last_update{};
 
