@@ -325,11 +325,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
     shard_read.subchunk = subchunk;
 
     for (auto &&read : read_request->to_read) {
-      /* This hopping between the old "pair" convention and the new "ec_align_t" convention is inefficient. We should
-       * think about moving ec_align_t to ECUtil and migrating some of these methods to the ec_align struct.
-       */
-      auto p = make_pair(read.offset, read.size);
-      pair<uint64_t, uint64_t> chunk_off_len = sinfo.chunk_aligned_offset_len_to_chunk(p);
+      pair<uint64_t, uint64_t> chunk_off_len = sinfo.chunk_aligned_offset_len_to_chunk(read.offset, read.size);
       shard_read.extents.insert(chunk_off_len.first, chunk_off_len.second);
     }
   }
@@ -700,12 +696,8 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
     read_request.shard_reads[shard].subchunk = subchunk;
 
     for (auto &read : to_read) {
-      /* This hopping between the old "pair" convention and the new "ec_align_t" convention is inefficient. We should
-       * think about moving ec_align_t to ECUtil and migrating some of these methods to the ec_align struct.
-       */
-      auto p = std::make_pair(read.offset, read.size);
-      std::pair<uint64_t, uint64_t> chunk_off_len = sinfo.chunk_aligned_offset_len_to_chunk(p);
-      read_request.shard_reads[shard].extents.insert(chunk_off_len.first, chunk_off_len.second);
+      auto aligned_read = sinfo.chunk_aligned_offset_len_to_chunk(read.offset, read.size);
+      read_request.shard_reads[shard].extents.insert(aligned_read.first, aligned_read.second);
     }
   }
 

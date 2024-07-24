@@ -82,7 +82,7 @@ public:
     return (offset / chunk_size) * stripe_width;
   }
   std::pair<uint64_t, uint64_t> chunk_aligned_offset_len_to_chunk(
-    std::pair<uint64_t, uint64_t> in) const;
+    uint64_t off, uint64_t len) const;
   std::pair<uint64_t, uint64_t> offset_len_to_stripe_bounds(
     std::pair<uint64_t, uint64_t> in) const {
     uint64_t off = logical_to_prev_stripe_offset(in.first);

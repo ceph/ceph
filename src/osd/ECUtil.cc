@@ -12,11 +12,11 @@ using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
 std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::chunk_aligned_offset_len_to_chunk(
-  std::pair<uint64_t, uint64_t> in) const {
+  uint64_t off, uint64_t len) const {
   pair<uint64_t, uint64_t> tmp = offset_len_to_stripe_bounds(in);
   return std::make_pair(
-    chunk_aligned_logical_offset_to_chunk_offset(tmp.first),
-    chunk_aligned_logical_size_to_chunk_size(tmp.second));
+    chunk_aligned_logical_offset_to_chunk_offset(off),
+    chunk_aligned_logical_size_to_chunk_size(len));
 }
 
 int ECUtil::decode(
