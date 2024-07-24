@@ -189,23 +189,11 @@ struct RecoveryMessages {
       ECCommon::read_request_t> recovery_reads;
   map<hobject_t, set<int>> want_to_read;
 
-  void recovery_read(
-    const hobject_t &hoid, uint64_t off, uint64_t len,
-    set<int> &&_want_to_read,
-    const map<pg_shard_t, vector<pair<int, int>>> &need,
-    bool attrs)
+  void recovery_read(const hobject_t &hoid, set<int> &&_want_to_read, const ECCommon::read_request_t &read_request)
   {
-    list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(ECCommon::ec_align_t{off, len, 0});
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
-    recovery_reads.insert(
-      make_pair(
-	hoid,
-	ECCommon::read_request_t(
-	  to_read,
-	  need,
-	  attrs)));
+    recovery_reads.insert(make_pair(hoid, read_request));
   }
 
   map<pg_shard_t, vector<PushOp> > pushes;
@@ -591,9 +579,11 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 	encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
       }
 
-      map<pg_shard_t, vector<pair<int, int>>> to_read;
+      list<ECCommon::ec_align_t> to_read;
+      to_read.emplace_back(ECCommon::ec_align_t{op.recovery_progress.data_recovered_to, amount, 0});
+      ECCommon::read_request_t read_request(to_read, op.recovery_progress.first && !op.obc);
       int r = read_pipeline.get_min_avail_to_read_shards(
-	op.hoid, want, true, false, &to_read);
+	op.hoid, want, true, false, &read_request);
       if (r != 0) {
 	// we must have lost a recovery source
 	ceph_assert(!op.recovery_progress.first);
@@ -606,11 +596,8 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       }
       m->recovery_read(
 	op.hoid,
-	op.recovery_progress.data_recovered_to,
-	amount,
 	std::move(want),
-	to_read,
-	op.recovery_progress.first && !op.obc);
+	read_request);
       op.extent_requested = make_pair(
 	from,
 	amount);
@@ -1323,7 +1310,7 @@ void ECBackend::handle_sub_read_reply(
 	  }
 	}
 	// avoid re-read for completed object as we may send remaining reads for uncopmpleted objects
-	rop.to_read.at(iter->first).need.clear();
+	rop.to_read.at(iter->first).shard_reads.clear();
 	rop.to_read.at(iter->first).want_attrs = false;
 	++is_complete;
       }

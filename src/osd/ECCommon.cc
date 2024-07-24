@@ -90,10 +90,17 @@ ostream &operator<<(ostream &lhs, const ECCommon::ec_extent_t &rhs)
 	     << rhs.emap;
 }
 
+ostream &operator<<(ostream &lhs, const ECCommon::shard_read_t &rhs)
+{
+  return lhs << "shard_read_t(extents=[" << rhs.extents << "]"
+	     << ", subchunk=" << rhs.subchunk
+	     << ")";
+}
+
 ostream &operator<<(ostream &lhs, const ECCommon::read_request_t &rhs)
 {
   return lhs << "read_request_t(to_read=[" << rhs.to_read << "]"
-	     << ", need=" << rhs.need
+	     << ", shard_reads=" << rhs.shard_reads
 	     << ", want_attrs=" << rhs.want_attrs
 	     << ")";
 }
@@ -283,7 +290,7 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   const set<int> &want,
   bool for_recovery,
   bool do_redundant_reads,
-  map<pg_shard_t, vector<pair<int, int>>> *to_read)
+  read_request_t *read_request)
 {
   // Make sure we don't do redundant reads for recovery
   ceph_assert(!for_recovery || !do_redundant_reads);
@@ -307,12 +314,24 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
       }
   } 
 
-  if (!to_read)
+  if (!read_request)
     return 0;
 
-  for (auto &&i:need) {
-    ceph_assert(shards.count(shard_id_t(i.first)));
-    to_read->insert(make_pair(shards[shard_id_t(i.first)], i.second));
+  for (auto &&[shard_index, subchunk] : need) {
+    shard_id_t shard_id(shard_index);
+    ceph_assert(shards.count(shard_id));
+    pg_shard_t pg_shard = shards[shard_id];
+    auto &shard_read = read_request->shard_reads[pg_shard];
+    shard_read.subchunk = subchunk;
+
+    for (auto &&read : read_request->to_read) {
+      /* This hopping between the old "pair" convention and the new "ec_align_t" convention is inefficient. We should
+       * think about moving ec_align_t to ECUtil and migrating some of these methods to the ec_align struct.
+       */
+      auto p = make_pair(read.offset, read.size);
+      pair<uint64_t, uint64_t> chunk_off_len = sinfo.chunk_aligned_offset_len_to_chunk(p);
+      shard_read.extents.push_back(ec_align_t(chunk_off_len.first, chunk_off_len.second, read.flags));
+    }
   }
   return 0;
 }
@@ -436,36 +455,24 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
   dout(10) << __func__ << ": starting read " << op << dendl;
 
   map<pg_shard_t, ECSubRead> messages;
-  for (map<hobject_t, read_request_t>::iterator i = op.to_read.begin();
-       i != op.to_read.end();
-       ++i) {
-    bool need_attrs = i->second.want_attrs;
+  for (auto &&[hoid, read_request] : op.to_read) {
+    bool need_attrs = read_request.want_attrs;
 
-    for (auto j = i->second.need.begin();
-	 j != i->second.need.end();
-	 ++j) {
+    for (auto &&[shard, shard_read] : read_request.shard_reads) {
       if (need_attrs) {
-	messages[j->first].attrs_to_read.insert(i->first);
+	messages[shard].attrs_to_read.insert(hoid);
 	need_attrs = false;
       }
-      messages[j->first].subchunks[i->first] = j->second;
-      op.obj_to_source[i->first].insert(j->first);
-      op.source_to_obj[j->first].insert(i->first);
+      messages[shard].subchunks[hoid] = shard_read.subchunk;
+      op.obj_to_source[hoid].insert(shard);
+      op.source_to_obj[shard].insert(hoid);
     }
-    for (const auto& read : i->second.to_read) {
-      auto p = make_pair(read.offset, read.size);
-      pair<uint64_t, uint64_t> chunk_off_len = sinfo.chunk_aligned_offset_len_to_chunk(p);
-      for (auto k = i->second.need.begin();
-	   k != i->second.need.end();
-	   ++k) {
-	messages[k->first].to_read[i->first].push_back(
-	  boost::make_tuple(
-	    chunk_off_len.first,
-	    chunk_off_len.second,
-	    read.flags));
+    for (auto &&[shard, shard_read] : read_request.shard_reads) {
+      for (auto &&extent: shard_read.extents) {
+	messages[shard].to_read[hoid].push_back(boost::make_tuple(extent.offset, extent.size, extent.flags));
       }
-      ceph_assert(!need_attrs);
     }
+    ceph_assert(!need_attrs);
   }
 
   std::vector<std::pair<int, Message*>> m;
@@ -620,13 +627,15 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
     } else {
       get_want_to_read_shards(&want_to_read);
     }
-    map<pg_shard_t, vector<pair<int, int>>> shards;
+
+    read_request_t read_request(to_read.second, false);
+    map<pg_shard_t, shard_read_t> shard_reads;
     int r = get_min_avail_to_read_shards(
       to_read.first,
       want_to_read,
       false,
       fast_read,
-      &shards);
+      &read_request);
     ceph_assert(r == 0);
 
     int subchunk_size =
@@ -635,13 +644,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
              << " subchunk_size=" << subchunk_size
              << " chunk_size=" << sinfo.get_chunk_size() << dendl;
 
-    for_read_op.insert(
-      make_pair(
-	to_read.first,
-	read_request_t(
-	  to_read.second,
-	  shards,
-	  false)));
+    for_read_op.insert(make_pair(to_read.first, read_request));
     obj_want_to_read.insert(make_pair(to_read.first, want_to_read));
   }
 
@@ -681,13 +684,23 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
     dout(10) << __func__ << " want attrs again" << dendl;
   }
 
+  read_request_t read_request(to_read, want_attrs);
+  for (auto &&[shard, subchunk] : shards) {
+    read_request.shard_reads[shard].subchunk = subchunk;
+
+    for (auto &read : to_read) {
+      /* This hopping between the old "pair" convention and the new "ec_align_t" convention is inefficient. We should
+       * think about moving ec_align_t to ECUtil and migrating some of these methods to the ec_align struct.
+       */
+      auto p = std::make_pair(read.offset, read.size);
+      std::pair<uint64_t, uint64_t> chunk_off_len = sinfo.chunk_aligned_offset_len_to_chunk(p);
+      read_request.shard_reads[shard].extents.push_back(
+	ec_align_t(chunk_off_len.first, chunk_off_len.second, read.flags));
+    }
+  }
+
   rop.to_read.erase(hoid);
-  rop.to_read.insert(make_pair(
-      hoid,
-      read_request_t(
-	to_read,
-	shards,
-	want_attrs)));
+  rop.to_read.insert(make_pair(hoid, read_request));
   return 0;
 }
 
