@@ -37,6 +37,7 @@ import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { Router } from '@angular/router';
+import { RgwMultisiteSyncPolicyComponent } from '../rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 
 @Component({
   selector: 'cd-rgw-multisite-details',
@@ -47,6 +48,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   private sub = new Subscription();
 
   @ViewChild('tree') tree: TreeComponent;
+  @ViewChild(RgwMultisiteSyncPolicyComponent) syncPolicyComp: RgwMultisiteSyncPolicyComponent;
 
   messages = {
     noDefaultRealm: $localize`Please create a default realm first to enable this feature`,
@@ -116,10 +118,6 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     private notificationService: NotificationService
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
-    const activeId = this.router.getCurrentNavigation()?.extras?.state?.activeId;
-    if (activeId) {
-      this.activeId = activeId;
-    }
   }
 
   openModal(entity: any, edit = false) {
@@ -592,20 +590,5 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         fnWaitUntilReconnected();
       }
     );
-  }
-
-  onNavChange(event: any) {
-    if (event.nextId == 'configuration') {
-      this.metadata = null;
-      /*
-        It is a known issue with angular2-tree package when tree is hidden (for example inside tab or modal),
-        it is not rendered when it becomes visible. Solution is to call this.tree.sizeChanged() which recalculates
-        the rendered nodes according to the actual viewport size. (https://angular2-tree.readme.io/docs/common-issues)
-      */
-      setTimeout(() => {
-        this.tree.sizeChanged();
-        this.onUpdateData();
-      }, 200);
-    }
   }
 }
