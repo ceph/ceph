@@ -181,6 +181,26 @@ scrape_configs:
 {% endif %}
 {% endif %}
 
+{% if smb_sd_url %}
+  - job_name: 'smb'
+{% if security_enabled %}
+    honor_labels: true
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
+    http_sd_configs:
+    - url: {{ smb_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
+      tls_config:
+        ca_file: root_cert.pem
+{% else %}
+    http_sd_configs:
+    - url: {{ smb_sd_url }}
+{% endif %}
+{% endif %}
+
 {% if not security_enabled %}
   - job_name: 'federate'
     scrape_interval: 15s
