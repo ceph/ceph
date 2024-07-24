@@ -225,12 +225,12 @@ namespace rgw::dedup {
 					   const parsed_etag_t    *p_parsed_etag,
 					   uint64_t                obj_size)
   {
-    p_rec->s.flags         = 0;
-    p_rec->s.version       = 0;
-    p_rec->s.size_4k_units = uint32_t(obj_size/(4*1024));
-    p_rec->obj_name    = p_obj->get_name();
-    p_rec->s.obj_name_len = p_rec->obj_name.length();
-    p_rec->bucket_name    = p_bucket->get_name();
+    p_rec->s.flags           = 0;
+    p_rec->s.version         = 0;
+    p_rec->s.size_4k_units   = uint32_t(obj_size/(4*1024));
+    p_rec->obj_name          = p_obj->get_name();
+    p_rec->s.obj_name_len    = p_rec->obj_name.length();
+    p_rec->bucket_name       = p_bucket->get_name();
     p_rec->s.bucket_name_len = p_rec->bucket_name.length();
 
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();

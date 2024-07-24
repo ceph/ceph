@@ -124,8 +124,8 @@ namespace rgw::dedup {
     const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
     if (!hash_tab[idx].val.is_occupied()) {
-      hash_tab[idx].key  = *p_key;
-      hash_tab[idx].val  = val;
+      hash_tab[idx].key = *p_key;
+      hash_tab[idx].val = val;
     }
     else {
       ceph_assert(hash_tab[idx].key == *p_key);

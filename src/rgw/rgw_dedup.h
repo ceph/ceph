@@ -115,6 +115,20 @@ namespace rgw::dedup {
       utime_t  modification_time;
     };
     std::unordered_map<std::string, bucket_state_t> bucket_set;
-  };
+    struct stats_t {
+      uint64_t ingress_obj = 0;
+      uint64_t egress_slabs = 0;
+      uint64_t records_inserts = 0;
+      uint64_t records_searched = 0;
 
+      uint64_t skipped_shared_manifest = 0;
+      uint64_t skipped_singleton = 0;
+      uint64_t skipped_source_record = 0;
+      uint64_t skipped_duplicate = 0;
+      uint64_t deduped_objects = 0;
+      uint64_t set_shared_manifest = 0;
+    }stats;
+    friend std::ostream &operator<<(std::ostream &out, const Background::stats_t &s);
+  };
+  std::ostream &operator<<(std::ostream &out, const Background::stats_t &s);
 } //namespace rgw::dedup

@@ -26,6 +26,7 @@
 #include "cls/rgw/cls_rgw_const.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
+#include "cls/cmpomap/client.h"
 #include "osd/osd_types.h"
 #include "common/ceph_crypto.h"
 
@@ -527,6 +528,7 @@ namespace rgw::dedup {
     md5_shard_t md5_shard = parsed_etag.md5_low % MAX_MD5_SHARD;
     auto p_disk = p_disk_arr[md5_shard][worker_id];
     if (p_disk) {
+      stats.records_inserts++;
       int ret = p_disk->add_record(store, rados, p_bucket, p_obj, &parsed_etag, obj_size);
       if (unlikely(ret != 0)) {
 	return ret;
@@ -553,6 +555,75 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  [[maybe_unused]]static int get_ioctx1(const DoutPrefixProvider* const dpp,
+				       rgw::sal::Driver* driver,
+				       RGWRados* rados,
+				       const std::string &bucket_name,
+				       const std::string& obj_name,
+				       librados::IoCtx *p_ioctx)
+  {
+    unique_ptr<rgw::sal::Bucket> bucket;
+    rgw_bucket b{"", bucket_name, ""};
+    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+    if (unlikely(ret != 0)) {
+      derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+
+    rgw_pool data_pool;
+    rgw_obj obj{bucket->get_key(), obj_name};
+    if (!rados->get_obj_data_pool(bucket->get_placement_rule(), obj, &data_pool)) {
+      ldpp_dout(dpp, 1) << "failed to get data pool for bucket '"
+			<< bucket->get_name() <<"' when writing logging object" << dendl;
+      return -EIO;
+    }
+    ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), data_pool, *p_ioctx);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "failed to get IO context for logging object from data pool:"
+			<< data_pool.to_str() << dendl;
+      return -EIO;
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  [[maybe_unused]]static int get_ioctx2(const DoutPrefixProvider* const dpp,
+				       rgw::sal::Driver* driver,
+				       rgw::sal::RadosStore *store,
+				       const std::string &bucket_name,
+				       const std::string &oid,
+				       librados::IoCtx *p_ioctx)
+  {
+    unique_ptr<rgw::sal::Bucket> bucket;
+    rgw_bucket b{"", bucket_name, ""};
+    int ret = driver->load_bucket(dpp, b, &bucket, null_yield);
+    if (unlikely(ret != 0)) {
+      derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
+      return -ret;
+    }
+
+    const std::string bucket_id = bucket->get_key().get_key();
+    RGWBucketInfo bucket_info;
+    ret = store->getRados()->get_bucket_instance_info(bucket_id, bucket_info, nullptr,
+						      nullptr, null_yield, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ << ":: ERROR: get_bucket_instance_info() returned ret="
+			<< ret << dendl;
+      return -1;
+    }
+
+    rgw_obj obj(b, oid);
+    ret = store->get_obj_head_ioctx(dpp, bucket_info, obj, p_ioctx);
+    if (ret < 0) {
+      cerr << "ERROR: get_obj_head_ioctx() returned ret=" << ret << std::endl;
+      return ret;
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
   int Background::dedup_object(const disk_record_t *p_src_rec,
 			       const disk_record_t *p_tgt_rec,
 			       const key_t *p_key)
@@ -562,44 +633,60 @@ namespace rgw::dedup {
       auto bl_iter = p_src_rec->manifest_bl.cbegin();
       decode(src_manifest, bl_iter);
     } catch (buffer::error& err) {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: unable to decode manifest" << dendl;
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest" << dendl;
       return -1;
     }
 
     RGWObjManifest tgt_manifest;
     try {
       auto bl_iter = p_tgt_rec->manifest_bl.cbegin();
-      decode(src_manifest, bl_iter);
+      decode(tgt_manifest, bl_iter);
     } catch (buffer::error& err) {
-      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: unable to decode manifest" << dendl;
+      ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad tgt manifest" << dendl;
       return -1;
     }
 
+    ldpp_dout(dpp, 0) << __func__ << "::DEDUP From: "
+		      << p_src_rec->bucket_name << "/" << p_src_rec->obj_name << " -> "
+      		      << p_tgt_rec->bucket_name << "/" << p_tgt_rec->obj_name << dendl;
     // TBD: need to read target object attributes (RGW_ATTR_TAIL_TAG/RGW_ATTR_TAG)
     string ref_tag = rgw_obj::calc_refcount_tag_hash(p_tgt_rec->bucket_name,
 						     p_tgt_rec->obj_name);
+
     int ret = inc_ref_count_by_manifest(ref_tag, src_manifest);
     if (ret == 0) {
-      // TBD:: WE need to update attribute atomicly using a CLS
-      // First verify TGT objects state(MD5/SHA256/versionm/timestamp)
-      // If all looks fine overwrite manifest and return status
-      // If return status shows success we will free tail-objects on TGT
-      // CLS_MODIFY_MANIFEST(src_manifest, tgt_manifest, p_key, version/timestamp);
-#if 1
-      unique_ptr<rgw::sal::Bucket> tgt_bucket;
-      const string tgt_tenant_name, tgt_bucket_id;
-      rgw_bucket b{tgt_tenant_name, p_tgt_rec->bucket_name, tgt_bucket_id};
-      ret = driver->load_bucket(dpp, b, &tgt_bucket, null_yield);
-      if (unlikely(ret != 0)) {
-	derr << __func__ << "::ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
-	return -ret;
-      }
-      unique_ptr<rgw::sal::Object> tgt_obj = tgt_bucket->get_object(p_tgt_rec->obj_name);
-      //if () {}
-      // TBD3 - remove the const or use cast
+      librados::ObjectWriteOperation op;
+      using namespace ::cls::cmpomap;
+      ComparisonMap cmap = {{RGW_ATTR_MANIFEST, p_tgt_rec->manifest_bl}};
+      // TBD - remove the const or use cast
       bufferlist src_manifest_bl = p_src_rec->manifest_bl;
-      tgt_obj->modify_obj_attrs(RGW_ATTR_MANIFEST, src_manifest_bl, null_yield, dpp);
-#endif
+      ret = cmp_set_vals(op, Mode::String, Op::EQ, cmap, src_manifest_bl);
+      if (unlikely(ret != 0)) {
+	ldpp_dout(dpp, 0) << __func__ << "::ERR: failed cmp_set_vals()" << dendl;
+	// TBD: rollback ref_count on SRC
+	return -1;
+      }
+      const std::string &oid = p_tgt_rec->obj_name;
+
+      librados::IoCtx ioctx;
+      ret = get_ioctx1(dpp, driver, rados, p_tgt_rec->bucket_name, oid, &ioctx);
+      if (unlikely(ret != 0)) {
+	ldpp_dout(dpp, 0) << __func__ << "::ERR: failed get_ioctx1()" << dendl;
+	// TBD: rollback ref_count on SRC
+	return -1;
+      }
+
+      //ret = get_ioctx(dpp, driver, store, p_tgt_rec->bucket_name, oid, &ioctx);
+      ldpp_dout(dpp, 0) << __func__ << "::send CLS" << dendl;
+      ret = ioctx.operate(oid, &op);
+      //ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, null_yield);
+      if (ret < 0) {
+	ldpp_dout(dpp, 0) << __func__ << "::failed rgw_rados_operate() ret="
+			  << ret << dendl;
+	// TBD: rollback ref_count on SRC
+	return ret;
+      }
+
       // free tail objects based on TGT manifest
       free_tail_objs_by_manifest(ref_tag, tgt_manifest);
     }
@@ -624,6 +711,7 @@ namespace rgw::dedup {
   {
     if (p_tgt_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
       // record holds a shared_manifest object so can't be a dedup target
+      stats.skipped_shared_manifest++;
       return 0;
     }
 
@@ -634,29 +722,45 @@ namespace rgw::dedup {
     int ret = d_table.get_block_id(&key, &src_block_id, &src_rec_id, &is_shared_manifest);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
+      stats.skipped_singleton++;
       return 0;
     }
 
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
+      stats.skipped_source_record++;
       return 0;
     }
 
+    stats.records_searched++;
     // This records is a dedup target with source record on source_block_id
     disk_record_t src_rec;
     ret = load_record(store, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
     if (ret == 0) {
-      ret = dedup_object(&src_rec, p_tgt_rec, &key);
+      // TBD: Can we check OID? Is there any other unique id???
 
-      // mark the SRC object as a providor of a shared manifest
-      if (!is_shared_manifest) {
-	// set the shared manifest flag in the dedup table
-	d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
-
-	// TBD:
-	// Set Shared-Manifest attribute in the SRC-OBJ
+      // verify that SRC and TGT records don't refer to the same physical object
+      // This could happen in theory if we read the same objects twice
+      if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
+	stats.skipped_duplicate++;
+	ldpp_dout(dpp, 0) << __func__ << "::WARN: Duplicate records for object=" << src_rec.obj_name << dendl;
+	return 0;
       }
 
+      ret = dedup_object(&src_rec, p_tgt_rec, &key);
+      if (ret == 0) {
+	stats.deduped_objects++;
+
+	// mark the SRC object as a providor of a shared manifest
+	if (!is_shared_manifest) {
+	  stats.set_shared_manifest++;
+	  // set the shared manifest flag in the dedup table
+	  d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
+
+	  // TBD:
+	  // Set Shared-Manifest attribute in the SRC-OBJ
+	}
+      }
     }
     return ret;
   }
@@ -820,7 +924,6 @@ namespace rgw::dedup {
 	return ret;
       }
 
-      *p_obj_count += result.dir.m.size();
       obj_count += result.dir.m.size();
       for (auto& entry : result.dir.m) {
 	const rgw_bucket_dir_entry& dirent = entry.second;
@@ -833,10 +936,14 @@ namespace rgw::dedup {
 	  continue;
 	}
 	marker = dirent.key;
+	stats.ingress_obj++;
 	ret = process_single_entry(bucket, dirent, worker_id, last_scan_time);
       }
       // TBD: advance marker only once here!
-      if (!result.is_truncated) {
+      if (result.is_truncated) {
+	//marker = result.marker
+      }
+      else {
 	// if we reached the end of the shard read next shard
 	ldpp_dout(dpp, 0) << __func__ << "::" << bucket->get_name() << "::curr_shard=" << current_shard
 			  << ", next shard=" << current_shard + MAX_WORK_SHARD << dendl;
@@ -844,6 +951,7 @@ namespace rgw::dedup {
 	marker = rgw_obj_index_key(); // reset marker to empty index
       }
     }
+    *p_obj_count += obj_count;
     ldpp_dout(dpp, 0) << __func__ << "::Finished processing Bucket " << bucket->get_name()
 		      << ", num_shards=" << num_shards << ", obj_count=" << obj_count << dendl;
     return 0;
@@ -892,11 +1000,7 @@ namespace rgw::dedup {
     if (ret < 0) {
       return ret;
     }
-#if 0
-    const uint32_t num_shards = oids.size();
-    ldpp_dout(dpp, 0) << __func__ << "::bucket_name=" << bucket_name
-		      << ", worker_id=" << (uint32_t)worker_id << ", num_shards=" << num_shards << dendl;
-#endif
+
     return process_bucket_shards(bucket.get(), oids, ioctx, worker_id, last_scan_time, p_obj_count);
   }
 
@@ -967,6 +1071,7 @@ namespace rgw::dedup {
 	}
       }
       ldpp_dout(dpp, 0) <<__func__ << "::REMOVE_DUPLICATES::scanned records count = " << rec_count << dendl;
+      ldpp_dout(dpp, 0) << "stat counters:\n" << stats << dendl;
     }
     return ret;
   }
@@ -1017,4 +1122,32 @@ namespace rgw::dedup {
 
     ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;
   }
+
+  //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const Background::stats_t &s)
+  {
+    out << "Ingress Objs count      = " << s.ingress_obj << "\n";
+    out << "Egress Slabs count      = " << s.egress_slabs << "\n";
+    out << "Insert Records count    = " << s.records_inserts << "\n";
+    out << "Searched Records count  = " << s.records_searched << "\n\n";
+
+    uint64_t skipped_total = s.skipped_source_record + s.skipped_singleton + s.skipped_shared_manifest;
+    out << "Skipped shared_manifest = " << s.skipped_shared_manifest << "\n";
+    out << "Skipped singleton       = " << s.skipped_singleton << "\n";
+    out << "Skipped source record   = " << s.skipped_source_record << "\n";
+    out << "================================\n";
+    out << "Skipped total           = " << skipped_total << "\n\n";
+    if (skipped_total + s.records_searched != s.records_inserts) {
+      out << "\n\n***ERR:(Skipped total + Searched Records) != Insert Records!!***\n\n\n";
+    }
+    out << "Deduped Objects         = " << s.deduped_objects << "\n";
+    out << "Set Shared-Manifest     = " << s.set_shared_manifest << "\n";
+
+    if (unlikely(s.skipped_duplicate)) {
+      out << "\n\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n\n\n";
+    }
+
+    return out;
+  }
+
 }; //namespace rgw::dedup
