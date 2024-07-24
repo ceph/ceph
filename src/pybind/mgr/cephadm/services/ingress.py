@@ -87,6 +87,11 @@ class IngressService(CephService):
         backend_spec = self.mgr.spec_store[spec.backend_service].spec
         daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
         deps = [d.name() for d in daemons]
+        for attr in ['ssl_cert', 'ssl_key']:
+            ssl_cert_key = getattr(spec, attr, None)
+            if ssl_cert_key:
+                assert isinstance(ssl_cert_key, str)
+                deps.append(str(utils.md5_hash(ssl_cert_key)))
 
         # generate password?
         pw_key = f'{spec.service_name()}/monitor_password'

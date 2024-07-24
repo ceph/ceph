@@ -3029,6 +3029,11 @@ Then run the following:
             assert ingress_spec.backend_service
             daemons = self.cache.get_daemons_by_service(ingress_spec.backend_service)
             deps = [d.name() for d in daemons]
+            for attr in ['ssl_cert', 'ssl_key']:
+                ssl_cert_key = getattr(ingress_spec, attr, None)
+                if ssl_cert_key:
+                    assert isinstance(ssl_cert_key, str)
+                    deps.append(str(utils.md5_hash(ssl_cert_key)))
         elif daemon_type == 'keepalived':
             # because cephadm creates new daemon instances whenever
             # port or ip changes, identifying daemons by name is
