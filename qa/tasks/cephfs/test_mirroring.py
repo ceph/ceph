@@ -549,7 +549,8 @@ class TestMirroring(CephFSTestCase):
 
         # create a bunch of files in a directory to snap
         self.mount_a.run_shell(["mkdir", "d0"])
-        self.mount_a.create_n_files('d0/file', 50, sync=True)
+        for i in range(50):
+            self.mount_a.write_n_mb(os.path.join('d0', f'file.{i}'), 1)
 
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
@@ -567,17 +568,20 @@ class TestMirroring(CephFSTestCase):
                                "client.mirror_remote@ceph", '/d0', 'snap0', 1)
         self.verify_snapshot('d0', 'snap0')
 
-        # check snaps_synced
+        # check perf counters
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         second = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(second["counters"]["snaps_synced"], first["counters"]["snaps_synced"])
+        self.assertGreater(second["counters"]["last_synced_start"], first["counters"]["last_synced_start"])
+        self.assertGreater(second["counters"]["last_synced_end"], second["counters"]["last_synced_start"])
+        self.assertGreater(second["counters"]["last_synced_duration"], 0)
+        self.assertEquals(second["counters"]["last_synced_bytes"], 52428800) # last_synced_bytes = 50 files of 1MB size each
 
         # some more IO
-        self.mount_a.run_shell(["mkdir", "d0/d00"])
-        self.mount_a.run_shell(["mkdir", "d0/d01"])
+        for i in range(75):
+            self.mount_a.write_n_mb(os.path.join('d0', f'more_file.{i}'), 1)
 
-        self.mount_a.create_n_files('d0/d00/more_file', 20, sync=True)
-        self.mount_a.create_n_files('d0/d01/some_more_file', 75, sync=True)
+        time.sleep(60)
 
         # take another snapshot
         self.mount_a.run_shell(["mkdir", "d0/.snap/snap1"])
@@ -587,10 +591,14 @@ class TestMirroring(CephFSTestCase):
                                "client.mirror_remote@ceph", '/d0', 'snap1', 2)
         self.verify_snapshot('d0', 'snap1')
 
-        # check snaps_synced
+        # check perf counters
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         third = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(third["counters"]["snaps_synced"], second["counters"]["snaps_synced"])
+        self.assertGreater(third["counters"]["last_synced_start"], second["counters"]["last_synced_end"])
+        self.assertGreater(third["counters"]["last_synced_end"], third["counters"]["last_synced_start"])
+        self.assertGreater(third["counters"]["last_synced_duration"], 0)
+        self.assertEquals(third["counters"]["last_synced_bytes"], 78643200) # last_synced_bytes = 75 files of 1MB size each
 
         # delete a snapshot
         self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
