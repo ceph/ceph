@@ -336,6 +336,7 @@ void RGWOp_RemoteD4N_Put::execute(optional_yield y) {
   block.size = len;
 
   ldpp_dout(s, 5) << __func__ << "(): Updating directory entry for " << block.cacheObj.objName << dendl;
+  ldpp_dout(s, 5) << __func__ << "(): Adding " << s->get_cct()->_conf->rgw_local_cache_address << " to the hosts list" << dendl;
   op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_block_dir()->update_field(&block, "blockHosts", s->get_cct()->_conf->rgw_local_cache_address, y);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: can't update directory entry: " << cpp_strerror(op_ret) << dendl;
