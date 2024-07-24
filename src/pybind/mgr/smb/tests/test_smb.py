@@ -421,7 +421,8 @@ def test_share_dump_config(tmodule):
                     'browseable': 'Yes',
                     'kernel share modes': 'no',
                     'x:ceph:id': 'foo.s1',
-                    'vfs objects': 'ceph',
+                    'vfs objects': 'acl_xattr ceph',
+                    'acl_xattr:security_acl_name': 'user.NTACL',
                     'ceph:config_file': '/etc/ceph/ceph.conf',
                     'ceph:filesystem': 'cephfs',
                     'ceph:user_id': 'smb.fs.cluster.foo',
@@ -434,7 +435,8 @@ def test_share_dump_config(tmodule):
                     'browseable': 'Yes',
                     'kernel share modes': 'no',
                     'x:ceph:id': 'foo.stwo',
-                    'vfs objects': 'ceph',
+                    'vfs objects': 'acl_xattr ceph',
+                    'acl_xattr:security_acl_name': 'user.NTACL',
                     'ceph:config_file': '/etc/ceph/ceph.conf',
                     'ceph:filesystem': 'cephfs',
                     'ceph:user_id': 'smb.fs.cluster.foo',
@@ -444,7 +446,6 @@ def test_share_dump_config(tmodule):
         'globals': {
             'default': {
                 'options': {
-                    'server min protocol': 'SMB2',
                     'load printers': 'No',
                     'printing': 'bsd',
                     'printcap name': '/dev/null',
