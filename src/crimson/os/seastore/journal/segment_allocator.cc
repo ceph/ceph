@@ -93,6 +93,7 @@ SegmentAllocator::do_open(bool is_mkfs)
       alloc_tail = JOURNAL_SEQ_NULL;
     }
     auto header = segment_header_t{
+      timepoint_to_mod(seastar::lowres_system_clock::now()),
       new_segment_seq,
       segment_id,
       dirty_tail,

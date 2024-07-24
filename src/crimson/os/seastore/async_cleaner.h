@@ -43,6 +43,7 @@ struct segment_info_t {
 
   sea_time_point modify_time = NULL_TIME;
 
+  // Might be unavailable(0), see mount() -> init_modify_time()
   std::size_t num_extents = 0;
 
   segment_off_t written_to = 0;
@@ -74,6 +75,13 @@ struct segment_info_t {
   void set_empty();
 
   void set_closed();
+
+  void init_modify_time(sea_time_point _modify_time) {
+    ceph_assert(modify_time == NULL_TIME);
+    ceph_assert(num_extents == 0);
+    ceph_assert(_modify_time != NULL_TIME);
+    modify_time = _modify_time;
+  }
 
   void update_modify_time(sea_time_point _modify_time, std::size_t _num_extents) {
     ceph_assert(!is_closed());
@@ -225,6 +233,15 @@ public:
   void mark_closed(segment_id_t);
 
   void update_written_to(segment_type_t, paddr_t);
+
+  void init_modify_time(
+      segment_id_t id, sea_time_point tp) {
+    if (tp == NULL_TIME) {
+      return;
+    }
+
+    segments[id].init_modify_time(tp);
+  }
 
   void update_modify_time(
       segment_id_t id, sea_time_point tp, std::size_t num) {

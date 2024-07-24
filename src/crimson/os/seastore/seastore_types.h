@@ -1799,6 +1799,8 @@ using segment_nonce_t = uint32_t;
  * 4) Replay from the latest tails
  */
 struct segment_header_t {
+  mod_time_point_t modify_time;
+
   segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
 
@@ -1817,6 +1819,7 @@ struct segment_header_t {
 
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
+    denc(v.modify_time, p);
     denc(v.segment_seq, p);
     denc(v.physical_segment_id, p);
     denc(v.dirty_tail, p);
