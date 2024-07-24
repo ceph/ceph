@@ -85,18 +85,23 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     }
   }
 
-  pg.log_operation(
-    std::move(log_entries),
-    osd_op_p.pg_trim_to,
-    osd_op_p.at_version,
-    osd_op_p.min_last_complete_ondisk,
-    true,
-    txn,
-    false);
-
-  auto all_completed = interruptor::make_interruptible(
-    shard_services.get_store().do_transaction(coll, std::move(txn))
-  ).then_interruptible([FNAME, this,
+  auto all_completed = pg.update_snap_map(
+    log_entries,
+    txn
+  ).then_interruptible([FNAME, this, log_entries=std::move(log_entries),
+			osd_op_p=std::move(osd_op_p), txn=std::move(txn)
+		       ]() mutable {
+    pg.log_operation(
+      std::move(log_entries),
+      osd_op_p.pg_trim_to,
+      osd_op_p.at_version,
+      osd_op_p.min_last_complete_ondisk,
+      true,
+      txn,
+      false);
+    return interruptor::make_interruptible(
+      shard_services.get_store().do_transaction(coll, std::move(txn)));
+  }).then_interruptible([FNAME, this,
 			peers=pending_txn->second.weak_from_this()] {
     if (!peers) {
       // for now, only actingset_changed can cause peers
