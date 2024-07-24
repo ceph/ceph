@@ -272,6 +272,7 @@ private:
     OSDriver& osdriver,
     ceph::os::Transaction& txn);
 
+public:
   static interruptible_future<> snap_map_remove(
     const hobject_t& soid,
     SnapMapper& snap_mapper,
@@ -290,6 +291,7 @@ private:
     OSDriver& osdriver,
     ceph::os::Transaction& txn);
 
+private:
   // this gizmo could be wrapped in std::optional for the sake of lazy
   // initialization. we don't need it for ops that doesn't have effect
   // TODO: verify the init overhead of chunked_fifo
@@ -534,14 +536,17 @@ OpsExecuter::flush_changes_n_do_ops_effects(
       if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
         ceph_assert(log_rit->version == osd_op_params->at_version);
       }
-      auto [submitted, all_completed] =
-        std::forward<MutFunc>(mut_func)(std::move(txn),
-                                        std::move(obc),
-                                        std::move(*osd_op_params),
-                                        std::move(log_entries));
-      return interruptor::make_ready_future<rep_op_fut_tuple>(
-	std::move(submitted),
-	osd_op_ierrorator::future<>(std::move(all_completed)));
+      return std::forward<MutFunc>(mut_func)(std::move(txn),
+					     std::move(obc),
+					     std::move(*osd_op_params),
+					     std::move(log_entries)
+      ).then_interruptible([](auto p) {
+	auto &submitted = std::get<0>(p);
+	auto &all_completed = std::get<1>(p);
+	return interruptor::make_ready_future<rep_op_fut_tuple>(
+	  std::move(submitted),
+	  osd_op_ierrorator::future<>(std::move(all_completed)));
+      });
     });
   }
   apply_stats();

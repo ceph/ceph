@@ -894,8 +894,9 @@ void PG::mutate_object(
   }
 }
 
-std::tuple<PG::interruptible_future<>,
-           PG::interruptible_future<>>
+PG::interruptible_future<
+  std::tuple<PG::interruptible_future<>,
+             PG::interruptible_future<>>>
 PG::submit_transaction(
   ObjectContextRef&& obc,
   ceph::os::Transaction&& txn,
@@ -903,9 +904,10 @@ PG::submit_transaction(
   std::vector<pg_log_entry_t>&& log_entries)
 {
   if (__builtin_expect(stopping, false)) {
-    return {seastar::make_exception_future<>(
-              crimson::common::system_shutdown_exception()),
-            seastar::now()};
+    co_return std::make_tuple(
+        interruptor::make_interruptible(seastar::make_exception_future<>(
+          crimson::common::system_shutdown_exception())),
+        interruptor::now());
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
@@ -917,7 +919,7 @@ PG::submit_transaction(
   ceph_assert(log_entries.rbegin()->version >= projected_last_update);
   projected_last_update = log_entries.rbegin()->version;
 
-  auto [submitted, all_completed] = backend->submit_transaction(
+  auto [submitted, all_completed] = co_await backend->submit_transaction(
       peering_state.get_acting_recovery_backfill(),
       obc->obs.oi.soid,
       std::move(txn),
@@ -925,16 +927,19 @@ PG::submit_transaction(
       peering_state.get_last_peering_reset(),
       map_epoch,
       std::move(log_entries));
-  return std::make_tuple(std::move(submitted), all_completed.then_interruptible(
-    [this, last_complete=peering_state.get_info().last_complete,
+  co_return std::make_tuple(
+    std::move(submitted),
+    all_completed.then_interruptible(
+      [this, last_complete=peering_state.get_info().last_complete,
       at_version=osd_op_p.at_version](auto acked) {
-    for (const auto& peer : acked) {
-      peering_state.update_peer_last_complete_ondisk(
-        peer.shard, peer.last_complete_ondisk);
-    }
-    peering_state.complete_write(at_version, last_complete);
-    return seastar::now();
-  }));
+      for (const auto& peer : acked) {
+        peering_state.update_peer_last_complete_ondisk(
+          peer.shard, peer.last_complete_ondisk);
+      }
+      peering_state.complete_write(at_version, last_complete);
+      return seastar::now();
+    })
+  );
 }
 
 PG::interruptible_future<> PG::repair_object(
@@ -1453,6 +1458,11 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   std::vector<pg_log_entry_t> log_entries;
   decode(log_entries, p);
   update_stats(req->pg_stats);
+
+  co_await update_snap_map(
+    log_entries,
+    txn);
+
   log_operation(std::move(log_entries),
                 req->pg_trim_to,
                 req->version,
@@ -1477,6 +1487,54 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   );
   co_return;
 }
+
+PG::interruptible_future<> PG::update_snap_map(
+  const std::vector<pg_log_entry_t> &log_entries,
+  ObjectStore::Transaction& t)
+{
+  LOG_PREFIX(PG::update_snap_map);
+  for (auto i = log_entries.cbegin(); i != log_entries.cend(); ++i) {
+    OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+    if (i->soid.snap < CEPH_MAXSNAP) {
+      if (i->is_delete()) {
+	co_await OpsExecuter::snap_map_remove(
+	  i->soid,
+	  snap_mapper,
+	  osdriver,
+	  t);
+      } else if (i->is_update()) {
+	ceph_assert(i->snaps.length() > 0);
+	vector<snapid_t> snaps;
+	bufferlist snapbl = i->snaps;
+	auto p = snapbl.cbegin();
+	try {
+	  decode(snaps, p);
+	} catch (...) {
+	  ERRORDPP("Failed to decode snaps on {}", *this, *i);
+	  snaps.clear();
+	}
+	set<snapid_t> _snaps(snaps.begin(), snaps.end());
+	
+	if (i->is_clone() || i->is_promote()) {
+	  co_await OpsExecuter::snap_map_clone(
+	    i->soid,
+	    _snaps,
+	    snap_mapper,
+	    osdriver,
+	    t);
+	} else if (i->is_modify()) {
+	  co_await OpsExecuter::snap_map_modify(
+	    i->soid,
+	    _snaps,
+	    snap_mapper,
+	    osdriver,
+	    t);
+	} else {
+	  ceph_assert(i->is_clean());
+	}
+      }
+    }
+  }
 }
 
 void PG::log_operation(

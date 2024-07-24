@@ -5,6 +5,7 @@
 
 #include "messages/MOSDRepOpReply.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/log.h"
 #include "crimson/os/futurized_store.h"
@@ -38,13 +39,16 @@ ReplicatedBackend::_read(const hobject_t& hoid,
 ReplicatedBackend::rep_op_fut_t
 ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
                                       const hobject_t& hoid,
-                                      ceph::os::Transaction&& txn,
-                                      osd_op_params_t&& osd_op_p,
+                                      ceph::os::Transaction&& t,
+                                      osd_op_params_t&& opp,
                                       epoch_t min_epoch, epoch_t map_epoch,
-				      std::vector<pg_log_entry_t>&& log_entries)
+				      std::vector<pg_log_entry_t>&& logv)
 {
   LOG_PREFIX(ReplicatedBackend::submit_transaction);
   DEBUGDPP("object {}", dpp, hoid);
+  auto log_entries = std::move(logv);
+  auto txn = std::move(t);
+  auto osd_op_p = std::move(opp);
 
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
@@ -89,6 +93,8 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
     }
   }
 
+  co_await pg.update_snap_map(log_entries, txn);
+
   pg.log_operation(
     std::move(log_entries),
     osd_op_p.pg_trim_to,
@@ -99,8 +105,8 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
     false);
 
   auto all_completed = interruptor::make_interruptible(
-    shard_services.get_store().do_transaction(coll, std::move(txn))
-  ).then_interruptible([FNAME, this,
+      shard_services.get_store().do_transaction(coll, std::move(txn))
+   ).then_interruptible([FNAME, this,
 			peers=pending_txn->second.weak_from_this()] {
     if (!peers) {
       // for now, only actingset_changed can cause peers
@@ -117,13 +123,14 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
   }).then_interruptible([pending_txn, this] {
     auto acked_peers = std::move(pending_txn->second.acked_peers);
     pending_trans.erase(pending_txn);
-    return seastar::make_ready_future<crimson::osd::acked_peers_t>(std::move(acked_peers));
+    return seastar::make_ready_future<
+      crimson::osd::acked_peers_t>(std::move(acked_peers));
   });
 
   auto sends_complete = seastar::when_all_succeed(
     sends->begin(), sends->end()
   ).finally([sends=std::move(sends)] {});
-  return {std::move(sends_complete), std::move(all_completed)};
+  co_return std::make_tuple(std::move(sends_complete), std::move(all_completed));
 }
 
 void ReplicatedBackend::on_actingset_changed(bool same_primary)

@@ -409,20 +409,25 @@ SnapTrimObjSubEvent::start()
 	  logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
 	  return remove_or_update(
 	    clone_obc, head_obc
-	  ).safe_then_interruptible([clone_obc, this](auto&& txn) mutable {
-	    auto [submitted, all_completed] = pg->submit_transaction(
+	  ).safe_then_interruptible(
+	    [clone_obc, this](auto&& txn) mutable {
+	    return pg->submit_transaction(
 	      std::move(clone_obc),
 	      std::move(txn),
 	      std::move(osd_op_p),
-	      std::move(log_entries));
-	    return submitted.then_interruptible(
-	      [this, all_completed=std::move(all_completed)]() mutable {
-		return enter_stage<interruptor>(
-		  client_pp().wait_repop
-		).then_interruptible([all_completed=std::move(all_completed)]() mutable{
-		  return std::move(all_completed);
+	      std::move(log_entries)
+	    ).then_interruptible([this](auto p) {
+	      auto &submitted = std::get<0>(p);
+	      auto &all_completed = std::get<1>(p);
+	      return submitted.then_interruptible(
+		[this, all_completed=std::move(all_completed)]() mutable {
+		  return enter_stage<interruptor>(
+		    client_pp().wait_repop
+		  ).then_interruptible([all_completed=std::move(all_completed)]() mutable{
+		    return std::move(all_completed);
+		  });
 		});
-	      });
+	    });
 	  });
 	});
     },

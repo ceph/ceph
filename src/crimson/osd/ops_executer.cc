@@ -1020,14 +1020,6 @@ OpsExecuter::flush_clone_metadata(
   update_clone_overlap();
   if (cloning_ctx) {
     std::move(*cloning_ctx).apply_to(log_entries, *obc);
-    const auto& coid = log_entries.front().soid;
-    const auto& cloned_snaps = obc->ssc->snapset.clone_snaps[coid.snap];
-    maybe_snap_mapped = snap_map_clone(
-      coid,
-      std::set<snapid_t>{std::begin(cloned_snaps), std::end(cloned_snaps)},
-      snap_mapper,
-      osdriver,
-      txn);
   }
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context
