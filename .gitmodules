@@ -79,3 +79,10 @@
 	path = src/nvmeof/gateway
 	url = https://github.com/ceph/ceph-nvmeof.git
 	fetchRecurseSubmodules = false
+	shallow = true
+[submodule "src/breakpad"]
+	path = src/breakpad
+	url = https://chromium.googlesource.com/breakpad/breakpad
+[submodule "src/lss"]
+	path = src/lss
+	url = https://chromium.googlesource.com/linux-syscall-support
