@@ -144,7 +144,7 @@ public:
     { /* anon block */
       /* in this case, we are being called from a context which holds
        * A partition lock, and this may be still in use */
-      lock_guard{mtx};
+      auto lock = lock_guard{mtx};
       if (! deleted()) {
 	flags |= FLAG_DELETED;
 	bc->recycle_count++;
