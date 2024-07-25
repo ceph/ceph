@@ -7070,6 +7070,9 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
       !dn->get_dir()->get_inode()->is_stray())
     return true;
 
+  if (!dn->batcp_ops.empty())
+    return true;
+
   // adjust the dir state
   // NOTE: we can safely remove a clean, null dentry without effecting
   //       directory completeness.
@@ -7182,6 +7185,9 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap& expirema
 {
   dout(15) << "trim_inode " << *in << dendl;
   ceph_assert(in->get_num_ref() == 0);
+
+  if (!in->batcp_ops.empty())
+    return true;
 
   if (in->is_dir()) {
     // If replica inode's dirfragtreelock is not readable, it's likely
