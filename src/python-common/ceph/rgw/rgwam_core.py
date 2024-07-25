@@ -818,7 +818,7 @@ class RGWAM:
 
         zonegroup = period.get_master_zonegroup()
         if not zonegroup:
-            raise RGWAMException('Cannot find master zonegroup of realm {realm_name}')
+            raise RGWAMException(f'Cannot find master zonegroup of realm {realm_name}')
 
         zone = self.create_zone(realm, zonegroup, rgw_spec.rgw_zone,
                                 False,  # secondary zone
