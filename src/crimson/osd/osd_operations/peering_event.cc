@@ -89,20 +89,25 @@ seastar::future<> PeeringEvent<T>::with_pg(
     }).then_interruptible([this, pg](auto) {
       return this->template enter_stage<interruptor>(peering_pp(*pg).process);
     }).then_interruptible([this, pg, &shard_services] {
-      return pg->do_peering_event(evt, ctx
-      ).then_interruptible([this] {
+      /* The DeleteSome event invokes PeeringListener::do_delete_work, which
+       * needs to return (without a future) the object to start with on the next
+       * call.  As a consequence, crimson's do_delete_work implementation needs
+       * to use get() for the object listing.  To support that, we wrap
+       * PG::do_peering_event with interruptor::async here.
+       *
+       * Otherwise, it's not ok to yield during peering event handler. Doing so
+       * allows other continuations to observe PeeringState in the middle
+       * of, for instance, a map advance.  The interface *does not* support such
+       * usage.  DeleteSome happens not to trigger that problem so it's ok for
+       * now, but we'll want to remove that as well.
+       * https://tracker.ceph.com/issues/66708
+       */
+      return interruptor::async([this, pg, &shard_services] {
+	pg->do_peering_event(evt, ctx);
+	complete_rctx(shard_services, pg).get();
+      }).then_interruptible([this] {
 	return that()->get_handle().complete();
-      }).then_interruptible([this, pg, &shard_services] {
-	return complete_rctx(shard_services, pg);
       });
-    }).then_interruptible([pg, &shard_services]()
-			  -> typename T::template interruptible_future<> {
-      if (!pg->get_need_up_thru()) {
-	return seastar::now();
-      }
-      return shard_services.send_alive(pg->get_same_interval_since());
-    }).then_interruptible([&shard_services] {
-      return shard_services.send_pg_temp();
     });
   }, [this](std::exception_ptr ep) {
     LOG_PREFIX(PeeringEvent<T>::with_pg);
@@ -128,9 +133,7 @@ PeeringEvent<T>::complete_rctx(ShardServices &shard_services, Ref<PG> pg)
   using interruptor = typename T::interruptor;
   LOG_PREFIX(PeeringEvent<T>::complete_rctx);
   DEBUGI("{}: submitting ctx", *this);
-  return shard_services.dispatch_context(
-    pg->get_collection_ref(),
-    std::move(ctx));
+  return pg->complete_rctx(std::move(ctx));
 }
 
 ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
