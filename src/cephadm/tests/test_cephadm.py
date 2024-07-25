@@ -402,6 +402,7 @@ class TestCephAdm(object):
             'cephadm.read_configuration_source', dest=lambda c: {}
         )
         funkypatch.patch('cephadm.fetch_custom_config_files')
+        funkypatch.patch('os.mkdir')
 
         ctx = _cephadm.CephadmContext()
         ctx.name = 'mon.test'
