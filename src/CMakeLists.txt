@@ -325,6 +325,43 @@ if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+## breakpad
+set(breakpad_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/breakpad)
+set(lss_SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/lss)
+
+add_custom_target(breakpad_lss_symlink)
+add_custom_command(
+    TARGET breakpad_lss_symlink
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${lss_SOURCE_DIR} ${breakpad_SOURCE_DIR}/src/third_party/lss
+    COMMENT "Creating symbolic link lss -> breakpad third party"
+)
+ExternalProject_Add(
+    breakpad_project
+    SOURCE_DIR "${breakpad_SOURCE_DIR}"
+    CONFIGURE_COMMAND
+    /bin/sh -cx "cd ${breakpad_SOURCE_DIR} && ./configure"
+    BUILD_COMMAND
+    /bin/sh -cx "cd ${breakpad_SOURCE_DIR} && make"
+    INSTALL_COMMAND ""
+    UPDATE_DISCONNECTED ON
+    BUILD_IN_SOURCE ON
+    DEPENDS breakpad_lss_symlink
+    BUILD_BYPRODUCTS "${breakpad_SOURCE_DIR}/src/libbreakpad.a;${breakpad_SOURCE_DIR}/src/client/linux/libbreakpad_client.a"
+)
+
+add_library(libbreakpad STATIC IMPORTED GLOBAL)
+set_property(TARGET libbreakpad PROPERTY IMPORTED_LOCATION ${breakpad_SOURCE_DIR}/src/libbreakpad.a)
+add_library(libbreakpad_client STATIC IMPORTED GLOBAL)
+set_property(TARGET libbreakpad_client PROPERTY IMPORTED_LOCATION ${breakpad_SOURCE_DIR}/src/client/linux/libbreakpad_client.a)
+
+include_directories(SYSTEM "${breakpad_SOURCE_DIR}/src")
+add_dependencies(libbreakpad breakpad_project)
+add_dependencies(libbreakpad_client breakpad_project)
+
+add_library(breakpad INTERFACE)
+target_link_libraries(breakpad INTERFACE libbreakpad libbreakpad_client)
+
+
 if(WITH_JAEGER)
   find_package(thrift 0.13.0 REQUIRED)
   include(BuildOpentelemetry)
@@ -481,6 +518,9 @@ if(WITH_JAEGER)
   target_link_libraries(common-objs jaeger_base)
 endif()
 
+add_dependencies(common-objs breakpad_project)
+target_link_libraries(common-objs breakpad)
+
 CHECK_C_COMPILER_FLAG("-fvar-tracking-assignments" HAS_VTA)
 add_subdirectory(auth)
 add_subdirectory(common)
@@ -542,6 +582,8 @@ if(WITH_JAEGER)
   list(APPEND ceph_common_deps jaeger_base)
 endif()
 
+list(APPEND ceph_common_deps breakpad)
+
 if(WIN32)
   list(APPEND ceph_common_deps ws2_32 mswsock iphlpapi bcrypt)
   list(APPEND ceph_common_deps dlfcn_win32)
@@ -578,6 +620,8 @@ if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
 endif()
 
+add_dependencies(common breakpad_project)
+
 if (WIN32)
   # Statically building ceph-common on Windows fails. We're temporarily
   # reverting this: 22fefb2338cfc4fcb03ece3cbf77aa964a7f17f2
@@ -596,6 +640,8 @@ target_link_libraries(ceph-common legacy-option-headers)
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
 endif()
+
+add_dependencies(ceph-common breakpad_project)
 
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
