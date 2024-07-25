@@ -243,8 +243,13 @@ inline BlueStore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_l
     auto bblob = it->blob->get_blob();
     if (!bblob.is_mutable()) continue;
     if (bblob.has_csum()) {
-      uint32_t mask = mapmust_begin | mapmust_end;
+      uint32_t mask = (mapmust_begin - it->blob_start()) |
+        (mapmust_end - it->blob_start());
       if (p2phase(mask, bblob.get_csum_chunk_size()) != 0) continue;
+    }
+    if (bblob.has_unused()) {
+      // very difficult to expand blob with unused (our unused logic is ekhm)
+      if (it->blob_end() <= mapmust_end) continue;
     }
     return it;
   } while (it != map.begin());
@@ -267,12 +272,16 @@ inline BlueStore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_r
     auto bblob = it->blob->get_blob();
     if (!bblob.is_mutable()) continue;
     if (bblob.has_csum()) {
-      uint32_t mask = mapmust_begin | mapmust_end;
+      uint32_t mask = (mapmust_begin - it->blob_start()) |
+        (mapmust_end - it->blob_start());
       if (p2phase(mask, bblob.get_csum_chunk_size()) != 0) continue;
+    }
+    if (bblob.has_unused()) {
+      // very difficult to expand blob with unused (our unused logic is ekhm)
+      if (it->blob_end() <= mapmust_end) continue;
     }
     return it;
     break;
-    //++it;
   };
   return map.end();
 }
