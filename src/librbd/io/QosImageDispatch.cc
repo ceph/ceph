@@ -129,7 +129,8 @@ bool QosImageDispatch<I>::read(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (m_qos_exclude_ops & RBD_IO_OPERATION_READ) {
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_READ ||
+      m_qos_enabled_flag == 0) {
     return false;
   }
 
@@ -152,7 +153,8 @@ bool QosImageDispatch<I>::write(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE) {
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE ||
+      m_qos_enabled_flag == 0) {
     return false;
   }
 
@@ -175,7 +177,8 @@ bool QosImageDispatch<I>::discard(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (m_qos_exclude_ops & RBD_IO_OPERATION_DISCARD) {
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_DISCARD ||
+      m_qos_enabled_flag == 0) {
     return false;
   }
 
@@ -198,7 +201,8 @@ bool QosImageDispatch<I>::write_same(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE_SAME) {
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_WRITE_SAME ||
+      m_qos_enabled_flag == 0) {
     return false;
   }
 
@@ -222,7 +226,8 @@ bool QosImageDispatch<I>::compare_and_write(
   ldout(cct, 20) << "tid=" << tid << ", image_extents=" << image_extents
                  << dendl;
 
-  if (m_qos_exclude_ops & RBD_IO_OPERATION_COMPARE_AND_WRITE) {
+  if (m_qos_exclude_ops & RBD_IO_OPERATION_COMPARE_AND_WRITE ||
+      m_qos_enabled_flag == 0) {
     return false;
   }
 
@@ -258,12 +263,12 @@ void QosImageDispatch<I>::handle_finished(int r, uint64_t tid) {
 }
 
 template <typename I>
-bool QosImageDispatch<I>::set_throttle_flag(
-    std::atomic<uint32_t>* image_dispatch_flags, uint32_t flag) {
+bool QosImageDispatch<I>::set_throttle_flags(
+    std::atomic<uint32_t>* image_dispatch_flags, uint32_t flags) {
   uint32_t expected = image_dispatch_flags->load();
   uint32_t desired;
   do {
-    desired = expected | flag;
+    desired = expected | flags;
   } while (!image_dispatch_flags->compare_exchange_weak(expected, desired));
 
   return ((desired & IMAGE_DISPATCH_FLAG_QOS_MASK) ==
@@ -278,7 +283,7 @@ bool QosImageDispatch<I>::needs_throttle(
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   auto extent_length = get_extent_length(image_extents);
-  bool all_qos_flags_set = false;
+  uint32_t flags_to_set = 0;
 
   if (!read_op) {
     m_flush_tracker->start_io(tid);
@@ -292,7 +297,7 @@ bool QosImageDispatch<I>::needs_throttle(
   auto qos_enabled_flag = m_qos_enabled_flag;
   for (auto [flag, throttle] : m_throttles) {
     if ((qos_enabled_flag & flag) == 0) {
-      all_qos_flags_set = set_throttle_flag(image_dispatch_flags, flag);
+      flags_to_set |= flag;
       continue;
     }
 
@@ -302,12 +307,16 @@ bool QosImageDispatch<I>::needs_throttle(
                       Tag{image_dispatch_flags, on_dispatched}, flag)) {
       ldout(cct, 15) << "on_dispatched=" << on_dispatched << ", "
                      << "flag=" << flag << dendl;
-      all_qos_flags_set = false;
     } else {
-      all_qos_flags_set = set_throttle_flag(image_dispatch_flags, flag);
+      flags_to_set |= flag;
     }
   }
-  return !all_qos_flags_set;
+
+  // flags_to_set should never be zero because a single op cannot
+  // activate all throttles (and m_throttles cannot be empty)
+  ceph_assert(flags_to_set != 0);
+
+  return !set_throttle_flags(image_dispatch_flags, flags_to_set);
 }
 
 template <typename I>
@@ -316,7 +325,7 @@ void QosImageDispatch<I>::handle_throttle_ready(Tag&& tag, uint64_t flag) {
   ldout(cct, 15) << "on_dispatched=" << tag.on_dispatched << ", "
                  << "flag=" << flag << dendl;
 
-  if (set_throttle_flag(tag.image_dispatch_flags, flag)) {
+  if (set_throttle_flags(tag.image_dispatch_flags, flag)) {
     // timer_lock is held -- so dispatch from outside the timer thread
     m_image_ctx->asio_engine->post(tag.on_dispatched, 0);
   }

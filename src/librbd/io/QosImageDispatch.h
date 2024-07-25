@@ -117,8 +117,8 @@ private:
 
   void handle_finished(int r, uint64_t tid);
 
-  bool set_throttle_flag(std::atomic<uint32_t>* image_dispatch_flags,
-                         uint32_t flag);
+  bool set_throttle_flags(std::atomic<uint32_t>* image_dispatch_flags,
+                          uint32_t flags);
   bool needs_throttle(bool read_op, const Extents& image_extents, uint64_t tid,
                       std::atomic<uint32_t>* image_dispatch_flags,
                       DispatchResult* dispatch_result, Context** on_finish,
