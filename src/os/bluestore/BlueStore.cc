@@ -6583,7 +6583,7 @@ int BlueStore::_read_bdev_label(
   dout(10) << __func__ << " position=0x" << std::hex << disk_position << std::dec << dendl;
   ceph_assert(bdev);
   bufferlist bl;
-  unique_ptr<char> buf(new char[BDEV_LABEL_BLOCK_SIZE]);
+  unique_ptr<char[]> buf(new char[BDEV_LABEL_BLOCK_SIZE]);
   uint64_t dev_size = bdev->get_size();
   if (dev_size < disk_position + BDEV_LABEL_BLOCK_SIZE) {
     dout(10) << __func__ << " position=0x" << std::hex << disk_position
