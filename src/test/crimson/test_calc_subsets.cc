@@ -190,6 +190,7 @@ TEST(clone_subsets, overlap)
   ss.clones.push_back(snapid_t(2));
   pg_missing_t missing;
   pg_missing_item item;
+  item.clean_regions.mark_fully_dirty();
   missing.add(clone, std::move(item));
   hobject_t last_backfill{object_t{"foo1"}, "foo1", CEPH_NOSNAP, 42, 0, "nspace"};
 
