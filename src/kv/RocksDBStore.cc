@@ -2236,6 +2236,35 @@ KeyValueDB::BackupCleanupStats RocksDBStore::backup_cleanup(const std::string& p
   return rv;
 }
 
+std::vector<KeyValueDB::BackupStats> RocksDBStore::list_backups(CephContext *cct, const std::string& backup_location) {
+  std::vector<KeyValueDB::BackupStats> rv;
+  rocksdb::BackupEngine* backup_engine;
+  rocksdb::Status s = rocksdb::BackupEngine::Open(
+    rocksdb::BackupEngineOptions(backup_location),
+    rocksdb::Env::Default(),
+    &backup_engine);
+
+  if (!backup_engine || !s.ok()) {
+    // cleaning backups when folder is not available is minor problem
+    ldout(cct, 10) << __func__ << "can't list backups: " << s.ToString() << dendl;
+    return rv;
+  }
+
+  std::vector<rocksdb::BackupInfo> backup_infos;
+  backup_engine->GetBackupInfo(&backup_infos);
+  for (size_t i = 0; i < backup_infos.size(); i++)
+  {
+    rocksdb::BackupInfo bi = backup_infos[i];
+    KeyValueDB::BackupStats br;
+    br.id = bi.backup_id;
+    br.timestamp = utime_t(bi.timestamp, 0);
+    br.size = bi.size;
+    br.number_files = bi.number_files;
+    rv.push_back(br);
+  }
+  return rv;
+}
+
 
 void RocksDBStore::compact()
 {
