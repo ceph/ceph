@@ -382,3 +382,142 @@ def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
     assert cephadm_module.cert_mgr.get_cert('grafana_cert', host='host2')
     assert cephadm_module.cert_mgr.get_key('grafana_key', host='host1')
     assert cephadm_module.cert_mgr.get_key('grafana_key', host='host2')
+
+
+@pytest.mark.parametrize(
+    "nvmeof_spec_store_entries, should_migrate_specs, expected_alloc_policies, expected_alloc_values",
+    [
+        (
+            [
+                {'spec': {
+                    'service_type': 'nvmeof',
+                    'service_name': 'nvmeof.foo',
+                    'service_id': 'foo',
+                    'placement': {
+                        'hosts': ['host1']
+                    },
+                    'spec': {
+                        'pool': 'foo',
+                    },
+                },
+                    'created': datetime_to_str(datetime_now())},
+                {'spec': {
+                    'service_type': 'nvmeof',
+                    'service_name': 'nvmeof.bar',
+                    'service_id': 'bar',
+                    'placement': {
+                        'hosts': ['host2']
+                    },
+                    'spec': {
+                        'pool': 'bar',
+                        'bdevs_per_cluster': 32,
+                    },
+                },
+                    'created': datetime_to_str(datetime_now())}
+            ],
+            [False, True], ['cluster_connections', 'cluster_connections'], [32, 32]),
+        (
+            [
+                {'spec':
+                    {
+                        'service_type': 'nvmeof',
+                        'service_name': 'nvmeof.foo',
+                        'service_id': 'foo',
+                        'placement': {
+                            'hosts': ['host1']
+                        },
+                        'spec': {
+                            'pool': 'foo',
+                            'bdevs_per_cluster': 17,
+                        },
+                    },
+                 'created': datetime_to_str(datetime_now())},
+                {'spec':
+                    {
+                        'service_type': 'nvmeof',
+                        'service_name': 'nvmeof.bar',
+                        'service_id': 'bar',
+                        'placement': {
+                            'hosts': ['host2']
+                        },
+                        'spec': {
+                            'pool': 'bar',
+                            'bdevs_per_cluster': 32,
+                        },
+                    },
+                 'created': datetime_to_str(datetime_now())},
+                {'spec':
+                    {
+                        'service_type': 'nvmeof',
+                        'service_name': 'nvmeof.testing_testing',
+                        'service_id': 'testing_testing',
+                        'placement': {
+                            'label': 'baz'
+                        },
+                        'spec': {
+                            'pool': 'baz',
+                            'bdevs_per_cluster': 64,
+                        },
+                    },
+                 'created': datetime_to_str(datetime_now())}
+            ], [False, True, False], ['bdevs_per_cluster', 'cluster_connections', 'bdevs_per_cluster'], [17, 32, 64]
+        ),
+    ]
+)
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_nvmeof_spec(
+    cephadm_module: CephadmOrchestrator,
+    nvmeof_spec_store_entries,
+    should_migrate_specs,
+    expected_alloc_policies,
+    expected_alloc_values
+):
+    with with_host(cephadm_module, 'host1'):
+        for spec in nvmeof_spec_store_entries:
+            cephadm_module.set_store(
+                SPEC_STORE_PREFIX + spec['spec']['service_name'],
+                json.dumps(spec, sort_keys=True),
+            )
+
+        # make sure nvmeof_migration_queue is populated accordingly
+        cephadm_module.migration_current = 1
+        cephadm_module.spec_store.load()
+        ls = json.loads(cephadm_module.get_store('nvmeof_migration_queue'))
+        assert all([s['spec']['service_type'] == 'nvmeof' for s in ls])
+        # shortcut nvmeof_migration_queue loading by directly assigning
+        # ls output to nvmeof_migration_queue list
+        cephadm_module.migration.nvmeof_migration_queue = ls
+
+        # skip other migrations and go directly to 7_8 migration (nvmeof spec)
+        cephadm_module.migration_current = 7
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        print(cephadm_module.spec_store.all_specs)
+
+        for i in range(len(nvmeof_spec_store_entries)):
+            nvmeof_spec_store_entry = nvmeof_spec_store_entries[i]
+            should_migrate = should_migrate_specs[i]
+            expected_alloc_policy = expected_alloc_policies[i]
+            expected_alloc_value = expected_alloc_values[i]
+
+            service_name = nvmeof_spec_store_entry['spec']['service_name']
+            service_id = nvmeof_spec_store_entry['spec']['service_id']
+            placement = nvmeof_spec_store_entry['spec']['placement']
+            pool = nvmeof_spec_store_entry['spec']['spec']['pool']
+
+            if should_migrate:
+                assert service_name in cephadm_module.spec_store.all_specs
+                nvmeof_spec = cephadm_module.spec_store.all_specs[service_name]
+                nvmeof_spec_json = nvmeof_spec.to_json()
+                assert nvmeof_spec_json['service_type'] == 'nvmeof'
+                assert nvmeof_spec_json['service_id'] == service_id
+                assert nvmeof_spec_json['service_name'] == service_name
+                assert nvmeof_spec_json['placement'] == placement
+                assert nvmeof_spec_json['spec']['pool'] == pool
+                assert nvmeof_spec_json['spec'][expected_alloc_policy] == expected_alloc_value
+            else:
+                nvmeof_spec = cephadm_module.spec_store.all_specs[service_name]
+                nvmeof_spec_json = nvmeof_spec.to_json()
+                assert nvmeof_spec_json['spec']['pool'] == pool
+                assert nvmeof_spec_json['spec'][expected_alloc_policy] == expected_alloc_value
