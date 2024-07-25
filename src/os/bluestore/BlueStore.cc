@@ -17362,11 +17362,15 @@ int BlueStore::_do_write_v2(
   if (length == 0) {
     return 0;
   }
+  WriteContext wctx;
+  _choose_write_options(c, o, fadvise_flags, &wctx);
+  if (wctx.compress) {
+    // if we have compression, skip to write_v1
+    return _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+  }
   if (bl.length() != length) {
     bl.splice(length, bl.length() - length);
   }
-  WriteContext wctx;
-  _choose_write_options(c, o, fadvise_flags, &wctx);
   o->extent_map.fault_range(db, offset, length);
   BlueStore::Writer wr(this, txc, &wctx, o);
   wr.do_write(offset, bl);
