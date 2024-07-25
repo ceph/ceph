@@ -60,6 +60,10 @@ Exclusive locking is mostly transparent to the user:
    exclusive lock. This is exposed by the ``--exclusive`` option for ``rbd
    device map`` command.
 
+.. note::
+   The ``exclusive-lock`` feature is incompatible with RBD advisory locks
+   (the ``rbd lock add`` and ``rbd lock rm`` commands).
+
 
 Blocklisting
 ============
