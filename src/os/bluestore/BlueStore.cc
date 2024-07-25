@@ -9149,7 +9149,12 @@ int BlueStore::_mount()
       return r;
     }
   }
-  use_write_v2 =   cct->_conf.get_val<bool>("bluestore_write_v2");
+  use_write_v2 = cct->_conf.get_val<bool>("bluestore_write_v2");
+  if (cct->_conf.get_val<bool>("bluestore_write_v2_random")) {
+    srand(time(NULL));
+    use_write_v2 = rand() % 2;
+    cct->_conf.set_val("bluestore_write_v2", std::to_string(use_write_v2));
+  }
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
