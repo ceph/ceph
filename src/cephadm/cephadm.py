@@ -2878,6 +2878,10 @@ def command_bootstrap(ctx):
 
     cli(['config', 'set', 'mgr', 'mgr/cephadm/container_init', str(ctx.container_init), '--force'])
 
+    if ctx.no_cgroups_split:
+        logger.info('Setting mgr/cephadm/cgroups_split to false')
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/cgroups_split', 'false', '--force'])
+
     if not ctx.skip_dashboard:
         prepare_dashboard(ctx, uid, gid, cli, wait_for_mgr_restart)
 
