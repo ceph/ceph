@@ -155,7 +155,6 @@ public:
   const rocksdb::Comparator* get_comparator() const {
     return comparator;
   }
-  static bool restore_backup(CephContext *cct, const std::string &path, const std::string &backup_location, const std::string& version);
 
 private:
   static void sharding_def_to_columns(const std::vector<ColumnFamily>& sharding_def,
@@ -213,7 +212,8 @@ public:
 
   KeyValueDB::BackupStats backup(const std::string& path, bool full) override;
   struct KeyValueDB::BackupCleanupStats backup_cleanup(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily);
-  bool restore_backup(CephContext *cct, const std::string &path, const std::ostream &backup_location, const std::string& version);
+  static bool restore_backup(CephContext *cct, const std::string &path, const std::string &backup_location, const std::string& version);
+  static std::vector<BackupStats> list_backups(CephContext *cct, const std::string& backup_location);
 
   void compact() override;
 

@@ -223,7 +223,9 @@ static void usage()
        << "  --restore-backup <directory>\n"
        << "        restore the backup from location and exit\n"
        << "  --backup-version <version>\n"
-       << "        defaults to -1 which, is the last valid backup\n"
+       << "        defaults to -1, which is the last valid backup\n"
+       << "  --list-backups <directory>"
+       << "        list available backups\n"
        << std::endl;
   generic_server_usage();
 }
@@ -262,7 +264,7 @@ int main(int argc, const char **argv)
   bool compact = false;
   bool force_sync = false;
   bool yes_really = false;
-  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc, restore_backup_location, restore_backup_version("-1");
+  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc, restore_backup_location, list_backup_location, restore_backup_version("-1");
 
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -333,6 +335,8 @@ int main(int argc, const char **argv)
       inject_monmap = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
       extract_monmap = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--list-backups", (char*)NULL)) {
+      list_backup_location = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--restore-backup", (char*)NULL)) {
       restore_backup_location = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--backup-version", (char*)NULL)) {
@@ -362,7 +366,22 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  // -- restore --
+  // -- list backups --
+  if (list_backup_location.length()) {
+    cerr << "list backup from location '" << list_backup_location << "'" << std::endl << std::endl;
+    std::vector<KeyValueDB::BackupStats> backup_infos = MonitorDBStore::list_backups(cct.get(), g_conf()->mon_data, list_backup_location);
+    cerr << "ID:\tTime:\t\t\t\tSize:" << std::endl;
+    for (size_t i = 0; i < backup_infos.size(); i++)
+    {
+      KeyValueDB::BackupStats bi = backup_infos[i];
+      cerr << bi.id
+           << "\t"; bi.timestamp.asctime(cerr)
+           << "\t" << bi.size << " bytes" << std::endl;
+    }
+    exit(0);
+  }
+
+  // -- restore backup --
   if (restore_backup_location.length()) {
     cerr << "restoring backup from location '" << restore_backup_location << "' to '"
          << g_conf()->mon_data << "'" << std::endl;
