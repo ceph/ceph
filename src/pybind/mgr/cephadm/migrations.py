@@ -3,7 +3,13 @@ import re
 import logging
 from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec
+from ceph.deployment.service_spec import (
+    PlacementSpec,
+    ServiceSpec,
+    HostPlacementSpec,
+    RGWSpec,
+    NvmeofServiceSpec,
+)
 from cephadm.schedule import HostAssignment
 from cephadm.utils import SpecialHostLabels
 import rados
@@ -14,7 +20,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 7
+LAST_MIGRATION = 8
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +46,9 @@ class Migrations:
 
         r = mgr.get_store('rgw_migration_queue')
         self.rgw_migration_queue = json.loads(r) if r else []
+
+        n = mgr.get_store('nvmeof_migration_queue')
+        self.nvmeof_migration_queue = json.loads(n) if n else []
 
         # for some migrations, we don't need to do anything except for
         # incrementing migration_current.
@@ -108,6 +117,10 @@ class Migrations:
         if self.mgr.migration_current == 6:
             if self.migrate_6_7():
                 self.set(7)
+
+        if self.mgr.migration_current == 7:
+            if self.migrate_7_8():
+                self.set(8)
 
     def migrate_0_1(self) -> bool:
         """
@@ -467,6 +480,51 @@ class Migrations:
         # and appeared to just be generated at daemon deploy time if secure_monitoring_stack
         # was set to true. Therefore we have nothing to migrate for those daemons
         return True
+
+    def migrate_nvmeof_spec(self, spec: Dict[Any, Any], migration_counter: int) -> Optional[NvmeofServiceSpec]:
+        """ Add value for group parameter to nvmeof spec """
+        new_spec = spec.copy()
+        # Note: each spec must have a different group name so we append
+        # the value of a counter to the end
+        new_spec['spec']['group'] = f'default{str(migration_counter + 1)}'
+        return NvmeofServiceSpec.from_json(new_spec)
+
+    def nvmeof_spec_needs_migration(self, spec: Dict[Any, Any]) -> bool:
+        spec = spec.get('spec', None)
+        return (bool(spec) and spec.get('group', None) is None)
+
+    def migrate_7_8(self) -> bool:
+        """
+        Add a default value for the "group" parameter to nvmeof specs that don't have one
+        """
+        self.mgr.log.debug(f'Starting nvmeof migration (queue length is {len(self.nvmeof_migration_queue)})')
+        migrated_spec_counter = 0
+        for s in self.nvmeof_migration_queue:
+            spec = s['spec']
+            if self.nvmeof_spec_needs_migration(spec):
+                nvmeof_spec = self.migrate_nvmeof_spec(spec, migrated_spec_counter)
+                if nvmeof_spec is not None:
+                    logger.info(f"Added group 'default{migrated_spec_counter + 1}' to nvmeof spec {spec}")
+                    self.mgr.spec_store.save(nvmeof_spec)
+                    migrated_spec_counter += 1
+            else:
+                logger.info(f"No Migration is needed for nvmeof spec: {spec}")
+        self.nvmeof_migration_queue = []
+        return True
+
+
+def queue_migrate_nvmeof_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
+    """
+    group has become a required field for nvmeof specs and has been added
+    to spec validation. We need to assign a default group to nvmeof specs
+    that don't have one
+    """
+    service_id = spec_dict['spec']['service_id']
+    queued = mgr.get_store('nvmeof_migration_queue') or '[]'
+    ls = json.loads(queued)
+    ls.append(spec_dict)
+    mgr.set_store('nvmeof_migration_queue', json.dumps(ls))
+    mgr.log.info(f'Queued nvmeof.{service_id} for migration')
 
 
 def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
