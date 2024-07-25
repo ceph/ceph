@@ -11,7 +11,7 @@
   <div ngbDropdownMenu>
     <button ngbDropdownItem
             disabled
-            i18n>Signed in as <strong>{{ username }}</strong></button>
+            i18n>Logged in as <strong>{{ username }}</strong></button>
     <hr class="dropdown-divider" />
     <button ngbDropdownItem
             *ngIf="!sso"
@@ -22,7 +22,7 @@
     <button ngbDropdownItem
             (click)="logout()">
       <i [ngClass]="[icons.signOut]"></i>
-      <span i18n>Sign out</span>
+      <span i18n>Log out</span>
     </button>
   </div>
 </div>
