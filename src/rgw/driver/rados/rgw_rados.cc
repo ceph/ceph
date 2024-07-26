@@ -9645,14 +9645,13 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   auto& ioctx = index_pool;
   std::map<int, rgw_cls_list_ret> shard_list_results;
   cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
-  maybe_warn_about_blocking(dpp); // TODO: use AioTrottle
-  r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
-			    num_entries_per_shard,
-			    list_versions, shard_oids, shard_list_results,
-			    cct->_conf->rgw_bucket_index_max_aio)();
+  r = svc.bi_rados->list_objects(dpp, y, ioctx, shard_oids,
+                                 start_after_key, prefix, delimiter,
+                                 num_entries_per_shard, list_versions,
+                                 shard_list_results);
   if (r < 0) {
     ldpp_dout(dpp, 0) << __func__ <<
-      ": CLSRGWIssueBucketList for " << bucket_info.bucket <<
+      ": list_objects for " << bucket_info.bucket <<
       " failed" << dendl;
     return r;
   }
@@ -10056,7 +10055,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	}
       } else { // r == -ENOENT
 	// in the case of -ENOENT, make sure we're advancing marker
-	// for possible next call to CLSRGWIssueBucketList
+	// for possible next call to list_objects
 	marker = dirent.key;
       }
     } // entry for loop

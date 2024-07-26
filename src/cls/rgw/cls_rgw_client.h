@@ -369,54 +369,6 @@ int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const std::string& oid, cons
                            uint64_t start_epoch, uint64_t end_epoch);
 #endif
 
-
-/**
- * Std::list the bucket with the starting object and filter prefix.
- * NOTE: this method do listing requests for each bucket index shards identified by
- *       the keys of the *list_results* std::map, which means the std::map should be populated
- *       by the caller to fill with each bucket index object id.
- *
- * io_ctx        - IO context for rados.
- * start_obj     - marker for the listing.
- * filter_prefix - filter prefix.
- * num_entries   - number of entries to request for each object (note the total
- *                 amount of entries returned depends on the number of shardings).
- * list_results  - the std::list results keyed by bucket index object id.
- * max_aio       - the maximum number of AIO (for throttling).
- *
- * Return 0 on success, a failure code otherwise.
-*/
-
-class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
-  cls_rgw_obj_key start_obj;
-  std::string filter_prefix;
-  std::string delimiter;
-  uint32_t num_entries;
-  bool list_versions;
-  std::map<int, rgw_cls_list_ret>& result; // request_id -> return value
-
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  void reset_container(std::map<int, std::string>& objs) override;
-
-public:
-  CLSRGWIssueBucketList(librados::IoCtx& io_ctx,
-			const cls_rgw_obj_key& _start_obj,
-                        const std::string& _filter_prefix,
-			const std::string& _delimiter,
-			uint32_t _num_entries,
-                        bool _list_versions,
-                        std::map<int, std::string>& oids, // shard_id -> shard_oid
-			// shard_id -> return value
-                        std::map<int, rgw_cls_list_ret>& list_results,
-                        uint32_t max_aio) :
-  CLSRGWConcurrentIO(io_ctx, oids, max_aio),
-    start_obj(_start_obj), filter_prefix(_filter_prefix), delimiter(_delimiter),
-    num_entries(_num_entries), list_versions(_list_versions),
-    result(list_results)
-  {}
-};
-
 void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const cls_rgw_obj_key& start_obj,
                             const std::string& filter_prefix,

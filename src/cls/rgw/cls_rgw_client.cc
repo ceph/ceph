@@ -290,54 +290,6 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
 	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
 }
 
-static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
-				 const int shard_id,
-				 const std::string& oid,
-				 const cls_rgw_obj_key& start_obj,
-				 const std::string& filter_prefix,
-				 const std::string& delimiter,
-				 uint32_t num_entries,
-				 bool list_versions,
-				 BucketIndexAioManager *manager,
-				 rgw_cls_list_ret *pdata)
-{
-  librados::ObjectReadOperation op;
-  cls_rgw_bucket_list_op(op,
-			 start_obj, filter_prefix, delimiter,
-                         num_entries, list_versions, pdata);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketList::issue_op(const int shard_id, const string& oid)
-{
-  // set the marker depending on whether we've already queried this
-  // shard and gotten a RGWBIAdvanceAndRetryError (defined
-  // constant) return value; if we have use the marker in the return
-  // to advance the search, otherwise use the marker passed in by the
-  // caller
-  cls_rgw_obj_key marker;
-  auto iter = result.find(shard_id);
-  if (iter != result.end()) {
-    marker = iter->second.marker;
-  } else {
-    marker = start_obj;
-  }
-
-  return issue_bucket_list_op(io_ctx, shard_id, oid,
-			      marker, filter_prefix, delimiter,
-			      num_entries, list_versions, &manager,
-			      &result[shard_id]);
-}
-
-
-void CLSRGWIssueBucketList::reset_container(std::map<int, std::string>& objs)
-{
-  objs_container.swap(objs);
-  iter = objs_container.begin();
-  objs.clear();
-}
-
-
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
 {
   bufferlist in;

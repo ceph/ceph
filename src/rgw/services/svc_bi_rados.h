@@ -22,6 +22,7 @@
 
 #include "svc_bi.h"
 #include "svc_tier_rados.h"
+#include "cls/rgw/cls_rgw_ops.h"
 
 struct rgw_bucket_dir_header;
 
@@ -171,4 +172,15 @@ public:
                       const RGWBucketInfo& bucket_info,
                       const rgw::bucket_index_layout_generation& idx_layout,
                       uint64_t timeout);
+
+  int list_objects(const DoutPrefixProvider* dpp,
+                   optional_yield y,
+                   librados::IoCtx& ioctx,
+                   const std::map<int, std::string>& shard_oids,
+                   const cls_rgw_obj_key& start_obj,
+                   const std::string& filter_prefix,
+                   const std::string& delimiter,
+                   uint32_t num_entries,
+                   bool list_versions,
+                   std::map<int, rgw_cls_list_ret>& list_results);
 };
