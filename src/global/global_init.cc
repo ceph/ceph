@@ -26,6 +26,8 @@
 #include "extblkdev/ExtBlkDevPlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include <client/linux/handler/minidump_descriptor.h>
+#include <google_breakpad/common/minidump_format.h>
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 #include "include/compat.h"
@@ -178,6 +180,15 @@ void global_pre_init(
   g_conf().complain_about_parse_error(g_ceph_context);
 }
 
+static bool dumpCallback(
+    const google_breakpad::MinidumpDescriptor& descriptor, void* context,
+    bool succeeded) {
+  char buf[1024];
+  snprintf(buf, sizeof(buf), "minidump created in path %s", descriptor.path());
+  dout_emergency(buf);
+  return succeeded;
+}
+
 boost::intrusive_ptr<CephContext>
 global_init(const std::map<std::string,std::string> *defaults,
 	    std::vector < const char* >& args,
@@ -215,6 +226,13 @@ global_init(const std::map<std::string,std::string> *defaults,
   if (g_conf()->fatal_signal_handlers) {
     install_standard_sighandlers();
   }
+
+  if (g_conf()->breakpad) {
+    google_breakpad::MinidumpDescriptor descriptor(g_conf()->crash_dir);
+    g_ceph_context->_ex_handler.reset(
+	new google_breakpad::ExceptionHandler(descriptor, nullptr, dumpCallback, nullptr, true, -1));
+  }
+
   ceph::register_assert_context(g_ceph_context);
 
   if (g_conf()->log_flush_on_exit)
