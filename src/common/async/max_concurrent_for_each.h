@@ -60,10 +60,9 @@ void max_concurrent_for_each(Iterator begin,
   }
   auto throttle = spawn_throttle{y, max_concurrent, on_error};
   for (Iterator i = begin; i != end; ++i) {
-    boost::asio::spawn(throttle.get_executor(),
-                       [&func, &val = *i] (boost::asio::yield_context yield) {
-                         func(val, yield);
-                       }, throttle);
+    throttle.spawn([&func, &val = *i] (boost::asio::yield_context yield) {
+        func(val, yield);
+      });
   }
   throttle.wait();
 }

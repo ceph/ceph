@@ -81,7 +81,7 @@ TEST(YieldGroupSync, spawn_wait)
   };
 
   auto throttle = spawn_throttle{null_yield, 2};
-  asio::spawn(throttle.get_executor(), cr, throttle);
+  throttle.spawn(cr);
   throttle.wait();
 
   EXPECT_EQ(1, completed);
@@ -90,7 +90,7 @@ TEST(YieldGroupSync, spawn_wait)
 TEST(YieldGroupSync, spawn_shutdown)
 {
   auto throttle = spawn_throttle{null_yield, 2};
-  asio::spawn(throttle.get_executor(), wait_for(1s), throttle);
+  throttle.spawn(wait_for(1s));
 }
 
 TEST(YieldGroupSync, spawn_cancel_wait)
@@ -103,7 +103,7 @@ TEST(YieldGroupSync, spawn_cancel_wait)
   };
 
   auto throttle = spawn_throttle{null_yield, 2};
-  asio::spawn(throttle.get_executor(), cr, throttle);
+  throttle.spawn(cr);
   throttle.cancel();
   EXPECT_THROW(throttle.wait(), boost::system::system_error);
 
@@ -120,10 +120,10 @@ TEST(YieldGroupSync, spawn_cancel_wait_spawn_wait)
   };
 
   auto throttle = spawn_throttle{null_yield, 2};
-  asio::spawn(throttle.get_executor(), cr, throttle);
+  throttle.spawn(cr);
   throttle.cancel();
   EXPECT_THROW(throttle.wait(), boost::system::system_error);
-  asio::spawn(throttle.get_executor(), cr, throttle);
+  throttle.spawn(cr);
   throttle.wait();
 
   EXPECT_EQ(1, completed);
@@ -148,10 +148,10 @@ TEST(YieldGroupSync, spawn_over_limit)
   };
 
   auto throttle = spawn_throttle{null_yield, 2};
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle); // blocks
-  asio::spawn(throttle.get_executor(), cr, throttle); // blocks
+  throttle.spawn(cr);
+  throttle.spawn(cr);
+  throttle.spawn(cr); // blocks
+  throttle.spawn(cr); // blocks
   throttle.wait(); // blocks
 
   EXPECT_EQ(0, concurrent);
@@ -173,10 +173,10 @@ TEST(YieldGroupSync, spawn_cancel_on_error_none)
   };
 
   auto throttle = spawn_throttle{null_yield, 4, cancel_on_error::none};
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), err, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle);
+  throttle.spawn(cr);
+  throttle.spawn(cr);
+  throttle.spawn(err);
+  throttle.spawn(cr);
   EXPECT_THROW(throttle.wait(), std::logic_error);
 
   EXPECT_EQ(3, completed);
@@ -196,10 +196,10 @@ TEST(YieldGroupSync, spawn_cancel_on_error_after)
   };
 
   auto throttle = spawn_throttle{null_yield, 4, cancel_on_error::after};
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), err, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle);
+  throttle.spawn(cr);
+  throttle.spawn(cr);
+  throttle.spawn(err);
+  throttle.spawn(cr);
   EXPECT_THROW(throttle.wait(), std::logic_error);
 
   EXPECT_EQ(2, completed);
@@ -219,10 +219,10 @@ TEST(YieldGroupSync, spawn_cancel_on_error_all)
   };
 
   auto throttle = spawn_throttle{null_yield, 4, cancel_on_error::all};
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle);
-  asio::spawn(throttle.get_executor(), err, throttle);
-  asio::spawn(throttle.get_executor(), cr, throttle);
+  throttle.spawn(cr);
+  throttle.spawn(cr);
+  throttle.spawn(err);
+  throttle.spawn(cr);
   EXPECT_THROW(throttle.wait(), std::logic_error);
 
   EXPECT_EQ(0, completed);
@@ -247,7 +247,7 @@ TEST(YieldGroupAsync, spawn_wait)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 2};
-      asio::spawn(yield, wait_on(waiter), throttle);
+      throttle.spawn(wait_on(waiter));
       throttle.wait(); // blocks
     }, rethrow);
 
@@ -273,10 +273,10 @@ TEST(YieldGroupAsync, spawn_over_limit)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 2};
-      asio::spawn(yield, wait_on(waiter1), throttle);
-      asio::spawn(yield, wait_on(waiter2), throttle);
-      asio::spawn(yield, wait_on(waiter3), throttle); // blocks
-      asio::spawn(yield, wait_on(waiter4), throttle); // blocks
+      throttle.spawn(wait_on(waiter1));
+      throttle.spawn(wait_on(waiter2));
+      throttle.spawn(wait_on(waiter3)); // blocks
+      throttle.spawn(wait_on(waiter4)); // blocks
       throttle.wait(); // blocks
     }, rethrow);
 
@@ -320,7 +320,7 @@ TEST(YieldGroupAsync, spawn_shutdown)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 2};
-      asio::spawn(yield, wait_on(waiter1), throttle);
+      throttle.spawn(wait_on(waiter1));
       waiter2.async_wait(yield); // blocks
       // shut down while there's an outstanding child but throttle is not
       // waiting on spawn() or wait()
@@ -340,8 +340,8 @@ TEST(YieldGroupAsync, spawn_throttled_shutdown)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter1), throttle);
-      asio::spawn(yield, wait_on(waiter2), throttle); // blocks
+      throttle.spawn(wait_on(waiter1));
+      throttle.spawn(wait_on(waiter2)); // blocks
       // shut down while we're throttled on the second spawn
     }, rethrow);
 
@@ -358,7 +358,7 @@ TEST(YieldGroupAsync, spawn_wait_shutdown)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter), throttle);
+      throttle.spawn(wait_on(waiter));
       throttle.wait(); // blocks
       // shut down while we're wait()ing
     }, rethrow);
@@ -378,8 +378,8 @@ TEST(YieldGroupAsync, spawn_throttled_error)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter1), throttle);
-      asio::spawn(yield, wait_on(waiter2), throttle); // blocks
+      throttle.spawn(wait_on(waiter1));
+      throttle.spawn(wait_on(waiter2)); // blocks
     }, capture(result));
 
   ctx.poll();
@@ -413,8 +413,8 @@ TEST(YieldGroupAsync, spawn_throttled_signal)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter1), throttle);
-      asio::spawn(yield, wait_on(waiter2), throttle); // blocks
+      throttle.spawn(wait_on(waiter1));
+      throttle.spawn(wait_on(waiter2)); // blocks
     }, capture(signal, result));
 
   ctx.poll();
@@ -446,7 +446,7 @@ TEST(YieldGroupAsync, spawn_wait_error)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter), throttle);
+      throttle.spawn(wait_on(waiter));
       throttle.wait(); // blocks
     }, capture(result));
 
@@ -479,7 +479,7 @@ TEST(YieldGroupAsync, spawn_wait_signal)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter), throttle);
+      throttle.spawn(wait_on(waiter));
       throttle.wait(); // blocks
     }, capture(signal, result));
 
@@ -511,7 +511,7 @@ TEST(YieldGroupAsync, spawn_cancel_wait)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 2};
-      asio::spawn(yield, wait_on(waiter), throttle);
+      throttle.spawn(wait_on(waiter));
       throttle.cancel();
       throttle.wait();
     }, capture(result));
@@ -539,9 +539,9 @@ TEST(YieldGroupAsync, spawn_cancel_on_error_none)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 4, cancel_on_error::none};
-      asio::spawn(yield, wait_on(waiter1), throttle);
-      asio::spawn(yield, wait_on(waiter2), throttle);
-      asio::spawn(yield, wait_on(waiter3), throttle);
+      throttle.spawn(wait_on(waiter1));
+      throttle.spawn(wait_on(waiter2));
+      throttle.spawn(wait_on(waiter3));
       throttle.wait(); // blocks
     }, capture(result));
 
@@ -586,9 +586,9 @@ TEST(YieldGroupAsync, spawn_cancel_on_error_after)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 4, cancel_on_error::after};
-      asio::spawn(yield, wait_on(waiter1), throttle);
-      asio::spawn(yield, wait_on(waiter2), throttle);
-      asio::spawn(yield, wait_on(waiter3), throttle);
+      throttle.spawn(wait_on(waiter1));
+      throttle.spawn(wait_on(waiter2));
+      throttle.spawn(wait_on(waiter3));
       throttle.wait(); // blocks
     }, capture(result));
 
@@ -629,9 +629,9 @@ TEST(YieldGroupAsync, spawn_cancel_on_error_all)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 4, cancel_on_error::all};
-      asio::spawn(yield, wait_on(waiter1), throttle);
-      asio::spawn(yield, wait_on(waiter2), throttle);
-      asio::spawn(yield, wait_on(waiter3), throttle);
+      throttle.spawn(wait_on(waiter1));
+      throttle.spawn(wait_on(waiter2));
+      throttle.spawn(wait_on(waiter3));
       throttle.wait(); // blocks
     }, capture(result));
 
@@ -665,9 +665,9 @@ TEST(YieldGroupAsync, spawn_wait_spawn_wait)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter1), throttle);
+      throttle.spawn(wait_on(waiter1));
       throttle.wait(); // blocks
-      asio::spawn(yield, wait_on(waiter2), throttle);
+      throttle.spawn(wait_on(waiter2));
       throttle.wait(); // blocks
     }, rethrow);
 
@@ -698,10 +698,10 @@ TEST(YieldGroupAsync, spawn_cancel_wait_spawn_wait)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter1), throttle);
+      throttle.spawn(wait_on(waiter1));
       throttle.cancel();
       EXPECT_THROW(throttle.wait(), boost::system::system_error);
-      asio::spawn(yield, wait_on(waiter2), throttle);
+      throttle.spawn(wait_on(waiter2));
       throttle.wait(); // blocks
     }, rethrow);
 
@@ -723,9 +723,9 @@ TEST(YieldGroupAsync, spawn_error_wait_spawn_wait)
 
   asio::spawn(ctx, [&] (asio::yield_context yield) {
       auto throttle = spawn_throttle{yield, 1};
-      asio::spawn(yield, wait_on(waiter1), throttle);
+      throttle.spawn(wait_on(waiter1));
       EXPECT_THROW(throttle.wait(), boost::system::system_error);
-      asio::spawn(yield, wait_on(waiter2), throttle);
+      throttle.spawn(wait_on(waiter2));
       throttle.wait(); // blocks
     }, rethrow);
 
