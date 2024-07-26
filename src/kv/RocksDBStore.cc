@@ -2151,7 +2151,7 @@ KeyValueDB::BackupCleanupStats RocksDBStore::backup_cleanup(const std::string& p
     &backup_engine);
   if (!backup_engine || !s.ok()) {
     // cleaning backups when folder is not available is minor problem
-    ldout(cct, 10) << __func__ << "can't clean bauckups: " << s.ToString() << dendl;
+    ldout(cct, 10) << __func__ << "can't clean backups: " << s.ToString() << dendl;
     rv.error = true;
     return rv;
   }

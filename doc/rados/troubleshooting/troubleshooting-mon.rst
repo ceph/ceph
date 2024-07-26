@@ -529,6 +529,25 @@ or::
 
   Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.foo/store.db/1234567.ldb
 
+Recovery using mon backup
+-------------------------
+
+If you enabled :term:`Monitor Backup` in the configuration file, you will find backups in the specified location.
+To list available backups run:
+
+.. code-block:: bash
+  ceph-mon -i [num] --list-backups /path/to/backups
+
+To restore a backup version, run following command:
+
+.. code-block:: bash
+  ceph-mon -i [num] --restore-backup /path/to/backups --backup-version <version>
+
+You can skip the `--backup-version` argument, which will use the latest version automatically.
+The cluster will recover from that point on by applying missing `osdmap` versions stored on the osds.
+Auth accounts and other none osd related entries are lost.
+
+
 Recovery using healthy monitor(s)
 ---------------------------------
 
