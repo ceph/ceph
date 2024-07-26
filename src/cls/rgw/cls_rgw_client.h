@@ -600,13 +600,11 @@ void cls_rgw_usage_log_add(librados::ObjectWriteOperation& op, rgw_usage_log_inf
 void cls_rgw_gc_set_entry(librados::ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info);
 void cls_rgw_gc_defer_entry(librados::ObjectWriteOperation& op, uint32_t expiration_secs, const std::string& tag);
 void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const std::vector<std::string>& tags);
-
-// these overloads which call io_ctx.operate() should not be called in the rgw.
-// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
-#ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_rgw_gc_list(librados::IoCtx& io_ctx, std::string& oid, std::string& marker, uint32_t max, bool expired_only,
-                    std::list<cls_rgw_gc_obj_info>& entries, bool *truncated, std::string& next_marker);
-#endif
+void cls_rgw_gc_list(librados::ObjectReadOperation& op, const std::string& marker,
+                     uint32_t max, bool expired_only, bufferlist& bl);
+int cls_rgw_gc_list_decode(const bufferlist& bl,
+                           std::list<cls_rgw_gc_obj_info>& entries,
+                           bool *truncated, std::string& next_marker);
 
 /* lifecycle */
 // these overloads which call io_ctx.operate() should not be called in the rgw.
