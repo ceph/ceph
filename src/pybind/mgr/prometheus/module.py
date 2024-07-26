@@ -1,6 +1,5 @@
 import cherrypy
 from collections import defaultdict
-from pkg_resources import packaging  # type: ignore
 import json
 import math
 import os
@@ -8,6 +7,8 @@ import re
 import threading
 import time
 import enum
+from packaging import version  # type: ignore
+
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
 from rbd import RBD
@@ -32,7 +33,7 @@ DEFAULT_PORT = 9283
 # ipv6 isn't yet configured / supported and CherryPy throws an uncaught
 # exception.
 if cherrypy is not None:
-    Version = packaging.version.Version
+    Version = version.Version
     v = Version(cherrypy.__version__)
     # the issue was fixed in 3.2.3. it's present in 3.2.2 (current version on
     # centos:7) and back to at least 3.0.0.

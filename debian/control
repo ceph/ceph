@@ -305,6 +305,7 @@ Depends: ${misc:Depends},
          ${shlibs:Depends},
          python3-dateutil,
          python3-openssl,
+         python3-packaging,
 Replaces: ceph-mgr (<< 15.1.0)
 Breaks: ceph-mgr (<< 15.1.0)
 Description: ceph manager modules which are always enabled
