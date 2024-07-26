@@ -3764,9 +3764,7 @@ paths:
       tags:
       - Cluster
     post:
-      description: "\n        Add a ceph user with its defined capabilities.\n   \
-        \     :param user_entity: Entity to change\n        :param capabilities: List\
-        \ of capabilities to add to user_entity\n        "
+      description: "Add a Ceph user, with its defined capabilities."
       parameters: []
       requestBody:
         content:
