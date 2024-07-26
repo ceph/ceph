@@ -336,8 +336,8 @@ TEST_F(TestMockMigrationRawFormat, Read) {
     &ctx2, m_image_ctx, io::AIO_TYPE_READ);
   bufferlist bl;
   io::ReadResult read_result{&bl};
-  ASSERT_TRUE(mock_raw_format.read(aio_comp, CEPH_NOSNAP, {{123, 123}},
-                                   std::move(read_result), 0, 0, {}));
+  mock_raw_format.read(aio_comp, CEPH_NOSNAP, {{123, 123}},
+                       std::move(read_result), 0, 0, {});
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl, bl);
 
