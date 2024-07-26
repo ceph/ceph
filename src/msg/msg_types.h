@@ -229,7 +229,9 @@ static inline void decode(sockaddr_storage& a,
 /*
  * an entity's network address.
  * includes a random value that prevents it from being reused.
- * thus identifies a particular process instance.
+ * thus identifies a particular process instance with the exception
+ * of `NONCE_WILDCARD` which is used by an entity establishing
+ * a connection to monitors.
  *
  * This also happens to work to support cidr ranges, in which
  * case the nonce contains the netmask. It's great!
@@ -253,6 +255,9 @@ struct entity_addr_t {
     default: return "???";
     }
   };
+  static const __u32 NONCE_WILDCARD = 0;
+  /// returns a random value except NONCE_WILDCARD
+  static __u32 get_random_nonce();
 
   __u32 type;
   __u32 nonce;
@@ -287,6 +292,7 @@ struct entity_addr_t {
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
+  bool is_nonce_wildcard() const { return get_nonce() == NONCE_WILDCARD; }
 
   int get_family() const {
     return u.sa.sa_family;
