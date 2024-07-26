@@ -34,6 +34,7 @@
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
 #include "msg/msg_types.h"
+#include "breakpad/src/client/linux/handler/exception_handler.h"
 #if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/perf_counters_collection.h"
@@ -142,6 +143,7 @@ public:
 
   ConfigProxy _conf;
   ceph::logging::Log *_log;
+  std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
 
   /* init ceph::crypto */
   void init_crypto();
