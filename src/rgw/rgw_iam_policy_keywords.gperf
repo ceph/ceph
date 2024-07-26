@@ -103,6 +103,7 @@ Null, TokenKind::cond_op, TokenID::Null, (uint64_t) Type::null, true, true
 #s3:x-amz-grant-full-control, TokenKind::cond_key, TokenID::s3x_amz_grant_permission, (uint64_t) Type::boolean, true, false
 #s3:x-amz-copy-source, TokenKind::cond_key, TokenID::s3x_amz_copy_source, (uint64_t) Type::string, true, false
 #s3:x-amz-server-side-encryption, TokenKind::cond_key, TokenID::s3x_amz_server_side_encryption, (uint64_t) Type::boolean, true, false
+#s3:x-amz-server-side-encryption-customer-algorithm, TokenKind::cond_key, TokenID::s3x_amz_server_side_encryption_customer_algorithm, (uint64_t) Type::boolean, true, false
 #s3:x-amz-server-side-encryption-aws-kms-key-id, TokenKind::cond_key, TokenID::s3x_amz_server_side_encryption_aws_kms_key_id, (uint64_t) Type::arn, true, false
 #s3:x-amz-metadata-directive, TokenKind::cond_key, TokenID::s3x_amz_metadata_directive, (uint64_t) Type::string, true, false
 #s3:x-amz-storage-class, TokenKind::cond_key, TokenID::s3x_amz_storage_class, (uint64_t) Type::string, true, false
