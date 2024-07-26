@@ -1,28 +1,26 @@
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
-
-import { NvmeofListenersListComponent } from './nvmeof-listeners-list.component';
 import { HttpClientModule } from '@angular/common/http';
 import { RouterTestingModule } from '@angular/router/testing';
+
+import { of } from 'rxjs';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { of } from 'rxjs';
 
-const mockListeners = [
+import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list.component';
+
+const mockInitiators = [
   {
-    host_name: 'ceph-node-02',
-    trtype: 'TCP',
-    traddr: '192.168.100.102',
-    adrfam: 0,
-    trsvcid: 4421
+    nqn: '*'
   }
 ];
 
 class MockNvmeOfService {
-  listListeners() {
-    return of(mockListeners);
+  getInitiators() {
+    return of(mockInitiators);
   }
 }
 
@@ -36,13 +34,13 @@ class MockModalService {}
 
 class MockTaskWrapperService {}
 
-describe('NvmeofListenersListComponent', () => {
-  let component: NvmeofListenersListComponent;
-  let fixture: ComponentFixture<NvmeofListenersListComponent>;
+describe('NvmeofInitiatorsListComponent', () => {
+  let component: NvmeofInitiatorsListComponent;
+  let fixture: ComponentFixture<NvmeofInitiatorsListComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [NvmeofListenersListComponent],
+      declarations: [NvmeofInitiatorsListComponent],
       imports: [HttpClientModule, RouterTestingModule, SharedModule],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
@@ -52,7 +50,7 @@ describe('NvmeofListenersListComponent', () => {
       ]
     }).compileComponents();
 
-    fixture = TestBed.createComponent(NvmeofListenersListComponent);
+    fixture = TestBed.createComponent(NvmeofInitiatorsListComponent);
     component = fixture.componentInstance;
     component.ngOnInit();
     fixture.detectChanges();
@@ -62,9 +60,9 @@ describe('NvmeofListenersListComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should retrieve listeners', fakeAsync(() => {
-    component.listListeners();
+  it('should retrieve initiators', fakeAsync(() => {
+    component.listInitiators();
     tick();
-    expect(component.listeners).toEqual(mockListeners);
+    expect(component.initiators).toEqual(mockInitiators);
   }));
 });

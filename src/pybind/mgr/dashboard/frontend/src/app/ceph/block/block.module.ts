@@ -47,6 +47,8 @@ import { NvmeofListenersFormComponent } from './nvmeof-listeners-form/nvmeof-lis
 import { NvmeofListenersListComponent } from './nvmeof-listeners-list/nvmeof-listeners-list.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list/nvmeof-namespaces-list.component';
 import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form/nvmeof-namespaces-form.component';
+import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list/nvmeof-initiators-list.component';
+import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-initiators-form.component';
 
 @NgModule({
   imports: [
@@ -95,7 +97,9 @@ import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form/nvmeof-n
     NvmeofListenersFormComponent,
     NvmeofListenersListComponent,
     NvmeofNamespacesListComponent,
-    NvmeofNamespacesFormComponent
+    NvmeofNamespacesFormComponent,
+    NvmeofInitiatorsListComponent,
+    NvmeofInitiatorsFormComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
@@ -249,15 +253,11 @@ const routes: Routes = [
             component: NvmeofSubsystemsFormComponent,
             outlet: 'modal'
           },
-          {
-            path: `${URLVerbs.EDIT}/:subsystem_nqn/:max_ns`,
-            component: NvmeofSubsystemsFormComponent,
-            outlet: 'modal'
-          },
           // listeners
           {
             path: `${URLVerbs.CREATE}/:subsystem_nqn/listener`,
-            component: NvmeofListenersFormComponent
+            component: NvmeofListenersFormComponent,
+            outlet: 'modal'
           },
           // namespaces
           {
@@ -268,6 +268,12 @@ const routes: Routes = [
           {
             path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
             component: NvmeofNamespacesFormComponent,
+            outlet: 'modal'
+          },
+          // initiators
+          {
+            path: `${URLVerbs.ADD}/:subsystem_nqn/initiator`,
+            component: NvmeofInitiatorsFormComponent,
             outlet: 'modal'
           }
         ]

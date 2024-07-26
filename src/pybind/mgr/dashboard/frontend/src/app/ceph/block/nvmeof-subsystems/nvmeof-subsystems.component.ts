@@ -66,6 +66,24 @@ export class NvmeofSubsystemsComponent extends ListWithDetails implements OnInit
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },
       {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () =>
+          this.router.navigate([
+            BASE_URL,
+            {
+              outlets: {
+                modal: [
+                  URLVerbs.EDIT,
+                  this.selection.first().nqn,
+                  this.selection.first().max_namespaces
+                ]
+              }
+            }
+          ])
+      },
+      {
         name: this.actionLabels.DELETE,
         permission: 'delete',
         icon: Icons.destroy,
