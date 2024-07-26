@@ -314,8 +314,14 @@ void RGWCreateRole::execute(optional_yield y)
 
   op_ret = role->create(s, true, role_id, y);
   if (op_ret == -EEXIST) {
-    op_ret = -ERR_ROLE_EXISTS;
-    return;
+    if (site.is_meta_master()) {
+      op_ret = -ERR_ROLE_EXISTS;
+      return;
+    }
+    // the forwarded request succeeded on the metadata master. if we get
+    // EEXIST now, it's probably because metadata sync raced to replicate
+    // this first
+    op_ret = 0;
   }
 
   if (op_ret == 0) {
