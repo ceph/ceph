@@ -32,7 +32,8 @@ describe('Multisite page', () => {
     });
   });
 
-  describe('create, edit & delete symmetrical sync Flow', () => {
+  // @TODO: <skipping tests as need to setup multisite configuration to test flow and pipe>
+  describe.skip('create, edit & delete symmetrical sync Flow', () => {
     it('Preparing...(creating sync group policy)', () => {
       multisite.navigateTo('create');
       multisite.create('test', 'Enabled');
@@ -58,7 +59,7 @@ describe('Multisite page', () => {
     });
   });
 
-  describe('create, edit & delete directional sync Flow', () => {
+  describe.skip('create, edit & delete directional sync Flow', () => {
     beforeEach(() => {
       multisite.navigateTo();
       multisite.getExpandCollapseElement().click();
@@ -73,7 +74,7 @@ describe('Multisite page', () => {
     });
   });
 
-  describe('create, edit, delete pipe', () => {
+  describe.skip('create, edit, delete pipe', () => {
     beforeEach(() => {
       multisite.navigateTo();
       multisite.getExpandCollapseElement().click();
