@@ -1438,7 +1438,7 @@ void QCOWFormat<I>::get_image_size(uint64_t snap_id, uint64_t* size,
 }
 
 template <typename I>
-bool QCOWFormat<I>::read(
+void QCOWFormat<I>::read(
     io::AioCompletion* aio_comp, uint64_t snap_id, io::Extents&& image_extents,
     io::ReadResult&& read_result, int op_flags, int read_flags,
     const ZTracer::Trace &parent_trace) {
@@ -1453,7 +1453,7 @@ bool QCOWFormat<I>::read(
     auto snapshot_it = m_snapshots.find(snap_id);
     if (snapshot_it == m_snapshots.end()) {
       aio_comp->fail(-ENOENT);
-      return true;
+      return;
     }
 
     auto& snapshot = snapshot_it->second;
@@ -1466,8 +1466,6 @@ bool QCOWFormat<I>::read(
   auto read_request = new ReadRequest(this, aio_comp, l1_table,
                                       std::move(image_extents));
   read_request->send();
-
-  return true;
 }
 
 template <typename I>
