@@ -1418,3 +1418,55 @@ TEST_F(cls_rgw, reshardlog_list)
   ASSERT_FALSE(is_truncated);
   ASSERT_EQ(2u, entries.size());
 }
+
+void reshardlog_entries(librados::IoCtx& ioctx, const std::string& oid, uint32_t num_entries)
+{
+  map<int, struct rgw_cls_list_ret> results;
+  map<int, string> oids;
+  oids[0] = oid;
+  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
+
+  uint32_t entries = 0;
+  map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
+  for (; iter != results.end(); ++iter) {
+    entries += (iter->second).dir.header.reshardlog_entries;
+  }
+  ASSERT_EQ(entries, num_entries);
+}
+
+TEST_F(cls_rgw, reshardlog_num)
+{
+  string bucket_oid = str_int("reshard2", 0);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  cls_rgw_obj_key obj1 = str_int("obj1", 0);
+  string tag = str_int("tag-prepare", 0);
+  string loc = str_int("loc", 0);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj1, loc);
+  rgw_bucket_dir_entry_meta meta;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, obj1, meta);
+
+  // do not record logs
+  reshardlog_entries(ioctx, bucket_oid, 0u);
+
+  // set reshard status to IN_LOGRECORD
+  cls_rgw_bucket_instance_entry entry;
+  entry.reshard_status = cls_rgw_reshard_status::IN_LOGRECORD;
+  set_reshard_status(ioctx, bucket_oid, entry);
+
+  // record a log in prepare not add reshardlog_entry
+  cls_rgw_obj_key obj2 = str_int("obj2", 0);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj2, loc);
+  reshardlog_entries(ioctx, bucket_oid, 0u);
+  // record a log in complete add reshardlog_entry
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, obj2, meta);
+  reshardlog_entries(ioctx, bucket_oid, 1u);
+
+  // record a log in deleting obj not add reshardlog_entry
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj1, loc);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 1, obj1, meta);
+  reshardlog_entries(ioctx, bucket_oid, 1u);
+}

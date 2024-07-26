@@ -2730,6 +2730,17 @@ options:
   - rgw
   see_also:
   - rgw_reshard_progress_judge_interval
+- name: rgw_reshardlog_threshold
+  type: uint
+  level: dev
+  desc: threshold for a shard to record log before blocking writes
+  default: 30000
+  with_legacy: true
+  services:
+  - rgw
+  - osd
+  see_also:
+  - rgw_reshard_progress_judge_interval
 - name: rgw_debug_inject_set_olh_err
   type: uint
   level: dev

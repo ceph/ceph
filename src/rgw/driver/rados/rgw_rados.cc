@@ -7801,7 +7801,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       return ret;
     }
 
-    if (!entry.resharding_in_progress()) {
+    if (!entry.resharding()) {
       ret = fetch_new_bucket_info("get_bucket_resharding_succeeded");
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<

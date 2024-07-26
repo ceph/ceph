@@ -828,11 +828,13 @@ struct rgw_bucket_dir_header {
   std::string max_marker;
   cls_rgw_bucket_instance_entry new_instance;
   bool syncstopped;
+  uint32_t reshardlog_entries;
 
-  rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false) {}
+  rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
+                            reshardlog_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 2, bl);
+    ENCODE_START(8, 2, bl);
     encode(stats, bl);
     encode(tag_timeout, bl);
     encode(ver, bl);
@@ -840,10 +842,11 @@ struct rgw_bucket_dir_header {
     encode(max_marker, bl);
     encode(new_instance, bl);
     encode(syncstopped,bl);
+    encode(reshardlog_entries, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
     decode(stats, bl);
     if (struct_v > 2) {
       decode(tag_timeout, bl);
@@ -866,6 +869,11 @@ struct rgw_bucket_dir_header {
     }
     if (struct_v >= 7) {
       decode(syncstopped,bl);
+    }
+    if (struct_v >= 8) {
+      decode(reshardlog_entries, bl);
+    } else {
+      reshardlog_entries = 0;
     }
     DECODE_FINISH(bl);
   }

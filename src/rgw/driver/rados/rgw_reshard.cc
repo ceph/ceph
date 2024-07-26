@@ -1357,6 +1357,7 @@ int RGWBucketReshard::execute(int num_shards,
     return ret;
   }
 
+  auto current_num_shards = rgw::num_shards(bucket_info.layout.current_index);
   ret = commit_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
   if (ret < 0) {
     return ret;
@@ -1364,7 +1365,7 @@ int RGWBucketReshard::execute(int num_shards,
 
   ldpp_dout(dpp, 1) << __func__ << " INFO: reshard of bucket \"" <<
     bucket_info.bucket.name << "\" from " <<
-    rgw::num_shards(bucket_info.layout.current_index) << " shards to " << num_shards <<
+    current_num_shards << " shards to " << num_shards <<
     " shards completed successfully" << dendl;
 
   return 0;

@@ -697,6 +697,7 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
   }
   f->close_section();
   ::encode_json("new_instance", new_instance, f);
+  f->dump_int("reshardlog_entries", reshardlog_entries);
 }
 
 void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
