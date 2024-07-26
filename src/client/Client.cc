@@ -5848,6 +5848,11 @@ int Client::mds_check_access(std::string& path, const UserPerm& perms, int mask)
     }
   }
 
+  // drop any leading /
+  while (path.length() && path[0] == '/') {
+    path = path.substr(1);
+  }
+
   for (auto& s: cap_auths) {
     ldout(cct, 20) << __func__ << " auth match path " << s.match.path << " r: " << s.readable
                    << " w: " << s.writeable << dendl;
@@ -7920,6 +7925,10 @@ bool Client::make_absolute_path_string(Inode *in, std::string& path)
     return false;
   }
 
+  // Make sure this function returns path with single leading '/'
+  if (path.length() && path[0] == '/' && path[1] == '/')
+    path = path.substr(1);
+
   return true;
 }
 
@@ -7954,8 +7963,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     std::string path;
     if (make_absolute_path_string(in, path)) {
       ldout(cct, 20) << " absolute path: " << path << dendl;
-      if (path.length())
-        path = path.substr(1);    // drop leading /
       res = mds_check_access(path, perms, MAY_WRITE);
       if (res) {
         goto out;
@@ -10052,8 +10059,6 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     std::string path;
     if (make_absolute_path_string(in, path)) {
       ldout(cct, 20) << __func__ << " absolute path: " << path << dendl;
-      if (path.length())
-        path = path.substr(1);    // drop leading /
       result = mds_check_access(path, perms, mask);
       if (result) {
         return result;
