@@ -373,9 +373,6 @@ export class TaskMessageService {
     'nvmeof/listener/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofListener(metadata)
     ),
-    'nvmeof/subsystem/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
-      this.nvmeofSubsystem(metadata)
-    ),
     'nvmeof/namespace/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofNamespace(metadata)
     ),
@@ -384,6 +381,12 @@ export class TaskMessageService {
     ),
     'nvmeof/namespace/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nvmeofNamespace(metadata)
+    ),
+    'nvmeof/initiator/add': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.nvmeofInitiator(metadata)
+    ),
+    'nvmeof/initiator/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.nvmeofInitiator(metadata)
     ),
     // nfs
     'nfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
@@ -516,7 +519,7 @@ export class TaskMessageService {
   }
 
   nvmeofListener(metadata: any) {
-    return $localize`listener '${metadata.host_name} on subsystem ${metadata.nqn}`;
+    return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
   }
 
   nvmeofNamespace(metadata: any) {
@@ -524,6 +527,10 @@ export class TaskMessageService {
       return $localize`namespace ${metadata.nsid} for subsystem '${metadata.nqn}'`;
     }
     return $localize`namespace for subsystem '${metadata.nqn}'`;
+  }
+
+  nvmeofInitiator(metadata: any) {
+    return $localize`initiator${metadata?.plural ? 's' : ''} for subsystem ${metadata.nqn}`;
   }
 
   nfs(metadata: any) {

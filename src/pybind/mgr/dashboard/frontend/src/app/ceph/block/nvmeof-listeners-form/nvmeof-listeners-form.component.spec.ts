@@ -7,13 +7,11 @@ import { ToastrModule } from 'ngx-toastr';
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
-import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { NvmeofListenersFormComponent } from './nvmeof-listeners-form.component';
 
 describe('NvmeofListenersFormComponent', () => {
   let component: NvmeofListenersFormComponent;
   let fixture: ComponentFixture<NvmeofListenersFormComponent>;
-  let nvmeofService: NvmeofService;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
@@ -37,12 +35,5 @@ describe('NvmeofListenersFormComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-  });
-
-  describe('should test form', () => {
-    beforeEach(() => {
-      nvmeofService = TestBed.inject(NvmeofService);
-      spyOn(nvmeofService, 'createListener').and.stub();
-    });
   });
 });
