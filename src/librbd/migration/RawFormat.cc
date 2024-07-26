@@ -108,8 +108,8 @@ void RawFormat<I>::handle_open(int r, Context* on_finish) {
       snapshot->close(gather_ctx->new_sub());
     }
 
-    m_image_ctx->state->close(new LambdaContext(
-      [r, on_finish=gather_ctx->new_sub()](int _) { on_finish->complete(r); }));
+    auto ctx = gather_ctx->new_sub();
+    ctx->complete(r);
 
     gather_ctx->activate();
     return;

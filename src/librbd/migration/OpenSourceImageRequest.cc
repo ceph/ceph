@@ -143,8 +143,7 @@ void OpenSourceImageRequest<I>::open_format(
   if (r < 0) {
     lderr(m_cct) << "failed to build migration format handler: "
                  << cpp_strerror(r) << dendl;
-    (*m_src_image_ctx)->state->close();
-    finish(r);
+    close_image(r);
     return;
   }
 
@@ -161,7 +160,7 @@ void OpenSourceImageRequest<I>::handle_open_format(int r) {
   if (r < 0) {
     lderr(m_cct) << "failed to open migration format: " << cpp_strerror(r)
                  << dendl;
-    finish(r);
+    close_image(r);
     return;
   }
 
