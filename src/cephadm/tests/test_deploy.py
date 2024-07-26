@@ -558,7 +558,7 @@ def test_deploy_smb_container(cephadm_fs, funkypatch):
     with open(basedir / 'unit.run') as f:
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
-    assert runfile_lines[-1].endswith('quay.io/essembee/samba-server:latest --samba-debug-level=6 run smbd')
+    assert runfile_lines[-1].endswith('quay.io/essembee/samba-server:latest run smbd')
     assert f'-v {basedir}/etc-samba-container:/etc/samba/container:z' in runfile_lines[-1]
     assert f'-v {basedir}/lib-samba:/var/lib/samba:z' in runfile_lines[-1]
     assert '-e SAMBA_CONTAINER_ID=smb1' in runfile_lines[-1]
