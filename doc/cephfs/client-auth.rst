@@ -28,10 +28,10 @@ This restriction impacts *only* the filesystem hierarchy, or, in other words,
 the metadata tree that is managed by the MDS. Clients will still be able to
 access the underlying file data in RADOS directly. To segregate clients fully,
 isolate untrusted clients in their own RADOS namespace. You can place a
-client's filesystem subtree in a particular namespace using `file layouts`_ and
-then restrict their RADOS access to that namespace using `OSD capabilities`_
+client's filesystem subtree in a particular namespace using :ref:`file
+layouts<file-layouts>` and then restrict their RADOS access to that namespace
+using `OSD capabilities`_
 
-.. _file layouts: ./file-layouts
 .. _OSD capabilities: ../rados/operations/user-management/#authorization-capabilities
 
 Syntax
