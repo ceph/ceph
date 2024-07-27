@@ -216,19 +216,3 @@ void RGWMetadataLog::read_clear_modified(set<int> &modified)
   modified.swap(modified_shards);
   modified_shards.clear();
 }
-
-void RGWMetadataLogInfo::dump(Formatter *f) const
-{
-  encode_json("marker", marker, f);
-  utime_t ut(last_update);
-  encode_json("last_update", ut, f);
-}
-
-void RGWMetadataLogInfo::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("marker", marker, obj);
-  utime_t ut;
-  JSONDecoder::decode_json("last_update", ut, obj);
-  last_update = ut.to_real_time();
-}
-
