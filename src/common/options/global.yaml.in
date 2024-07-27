@@ -801,6 +801,8 @@ options:
   level: advanced
   desc: Set the number of instances in the queue
   default: 2
+  min: 2
+  max: 1024
 - name: plugin_crypto_accelerator
   type: str
   level: advanced

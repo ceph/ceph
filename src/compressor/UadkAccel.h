@@ -36,8 +36,7 @@ class UadkAccel {
       int uadk_do_decompress(handle_t h_sess, const unsigned char *in, unsigned int &inlen, unsigned char *out, unsigned int &outlen);
       handle_t create_comp_session();
       handle_t create_decomp_session();
-      void free_comp_session(handle_t h_sess);
-      void free_decomp_session(handle_t h_sess);
+      void free_session(handle_t h_sess);
 };
 
 #endif

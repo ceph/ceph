@@ -11,7 +11,7 @@
  */
 
 #include <atomic>
-#include <pthread.h>
+#include <mutex>
 #include "unistd.h"
 #include "common/debug.h"
 #include "UadkAccel.h"
@@ -28,7 +28,6 @@ using std::string;
 #define PROCESS_NOT_FINISH    6
 #define UADK_MIN_BUFFER       (32*1024)
 #define UADK_MAX_BUFFER       (8*1024*1024)
-#define UADK_PF_SIZE          1024
 
 static ostream&
 _prefix(std::ostream* _dout)
@@ -36,9 +35,9 @@ _prefix(std::ostream* _dout)
   return *_dout << "UadkAccel: ";
 }
 
-static std::atomic<bool> init_called = { false };
+static std::atomic<bool> init_called = false;
 static std::atomic<size_t> uadk_compressor_thread_num = 0;
-std::mutex uadk_lock;
+static std::mutex uadk_lock;
 
 struct UadkEngine {
   struct wd_ctx_config ctx_cfg;
@@ -46,24 +45,13 @@ struct UadkEngine {
   int numa_id;
 } engine;
 
-// helper function, can be reserved for custom scheduling policy, in here, munged to 0 if ret is postive.
+// helper function, can be reserved for custom scheduling policy, in here, munged to 0 if ret is positive.
 static int lib_poll_func(__u32 pos, __u32 expect, __u32 *count)
 {
   int ret = wd_comp_poll_ctx(pos, expect, count);
   if (ret < 0)
     return ret;
   return 0;
-}
-
-static int get_uadk_ctx_num()
-{
-  int ctx_num = g_ceph_context->_conf.get_val<uint64_t>("uadk_wd_sync_ctx_num");
-  if (ctx_num > UADK_PF_SIZE) {
-    ctx_num = UADK_PF_SIZE;
-  } else {
-    ctx_num = std::max(ctx_num, 2);
-  }
-  return ctx_num;
 }
 
 static int uadk_init()
@@ -86,12 +74,12 @@ static int uadk_init()
   struct uacce_dev *uadk_dev = wd_get_accel_dev("zlib");
   if (uadk_dev == nullptr) {
     derr << __func__ << ": cannot get uadk device " << dendl;
-    ret = -ECANCELED;
     wd_sched_rr_release(engine.sched);
-    return ret;
+    engine.sched = nullptr;
+    return -ECANCELED;
   }
   engine.numa_id = uadk_dev->numa_id;
-  uint64_t cmprs_ctx_num = get_uadk_ctx_num();
+  uint64_t cmprs_ctx_num = g_ceph_context->_conf.get_val<uint64_t>("uadk_wd_sync_ctx_num");
   engine.ctx_cfg.ctx_num = cmprs_ctx_num;
   engine.ctx_cfg.ctxs = new wd_ctx[cmprs_ctx_num];
 
@@ -206,7 +194,7 @@ handle_t UadkAccel::create_comp_session()
   return h_comp_sess;
 }
 
-void UadkAccel::free_comp_session(handle_t h_comp_sess)
+void UadkAccel::free_session(handle_t h_comp_sess)
 {
   if (h_comp_sess) {
     wd_comp_free_sess(h_comp_sess);
@@ -231,14 +219,6 @@ handle_t UadkAccel::create_decomp_session()
   return h_decomp_sess;
 }
 
-void UadkAccel::free_decomp_session(handle_t h_decomp_sess)
-{
-  if (h_decomp_sess) {
-    wd_comp_free_sess(h_decomp_sess);
-    h_decomp_sess = 0;
-  }
-}
-
 int UadkAccel::uadk_do_compress(handle_t h_sess, const unsigned char* in, unsigned int &inlen,
 		                           unsigned char *out, unsigned int &outlen, bool last_packet)
 {
@@ -251,11 +231,7 @@ int UadkAccel::uadk_do_compress(handle_t h_sess, const unsigned char* in, unsign
   req.dst_len = outlen;
   req.data_fmt = WD_FLAT_BUF;
   req.cb = nullptr;
-  if (last_packet)
-    req.last = 1;
-  else
-    req.last = 0;
-
+  req.last = last_packet;
   int ret = wd_do_comp_strm(h_sess, &req);
   if (ret == 0) {
     if (inlen > req.src_len) {
@@ -283,7 +259,7 @@ int UadkAccel::compress(const bufferlist &in, bufferlist &out)
     int ret = 0;
     ++i;
 
-    bool last_ptr = (i == in.buffers().end()) ? true : false;
+    bool last_ptr = (i == in.buffers().end());
 
     do {
       if (len * 2 < UADK_MIN_BUFFER) {
@@ -295,6 +271,7 @@ int UadkAccel::compress(const bufferlist &in, bufferlist &out)
       unsigned char* c_out = (unsigned char*)ptr.c_str() + begin;
       in_len = std::min<size_t>(UADK_MAX_BUFFER, in_len);
       if (begin) {
+        // put a compressor variation mark in front of compressed stream, not used at the moment
         ptr.c_str()[0] = 0;
 	out_len -= begin;
       }
@@ -305,7 +282,7 @@ int UadkAccel::compress(const bufferlist &in, bufferlist &out)
       if (ret < 0) {
         derr << __func__ << ": UADK deflation failed."
 	     << "(" << ret << ")" << dendl;
-	free_comp_session(h_comp_sess);
+	free_session(h_comp_sess);
 	return ret;
       }
 
@@ -318,7 +295,7 @@ int UadkAccel::compress(const bufferlist &in, bufferlist &out)
     } while (ret == NEED_MORE_OUT_BUFFER || len > 0);
   }
 
-  free_comp_session(h_comp_sess);
+  free_session(h_comp_sess);
   return 0;
 }
 
@@ -399,7 +376,7 @@ int UadkAccel::decompress(bufferlist::const_iterator &p, size_t compressed_len, 
       ret = uadk_do_decompress(h_decomp_sess, in, in_len, out, out_len);
       if (ret < 0) {
         derr << __func__ << ": UADK inflation failed.(ret=" << ret << ")" << dendl;
-	free_decomp_session(h_decomp_sess);
+	free_session(h_decomp_sess);
 	return ret;
       }
 
@@ -411,7 +388,7 @@ int UadkAccel::decompress(bufferlist::const_iterator &p, size_t compressed_len, 
     } while (ret == NEED_MORE_OUT_BUFFER || (ret == PROCESS_NOT_FINISH && remaining ==0) || len > 0);
   }
 
-  free_decomp_session(h_decomp_sess);
+  free_session(h_decomp_sess);
   return 0;
 }
 
