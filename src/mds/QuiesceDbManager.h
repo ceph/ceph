@@ -227,7 +227,7 @@ class QuiesceDbManager {
     // the database.
     struct Db {
       QuiesceTimePoint time_zero;
-      epoch_t epoch;
+      epoch_t epoch = 0;
       QuiesceSetVersion set_version = 0;
       using Sets = std::unordered_map<QuiesceSetId, QuiesceSet>;
       Sets sets;
@@ -281,7 +281,7 @@ class QuiesceDbManager {
     std::unordered_map<RequestContext*, int> done_requests;
 
     void* quiesce_db_thread_main();
-    bool db_thread_has_work() const;
+    virtual bool db_thread_has_work() const;
 
     using IsMemberBool = bool;
     using ShouldExitBool = bool;

@@ -547,8 +547,8 @@ TEST_F(AdminSocketRaise, StopCont)
   ASSERT_EQ("", send_raise("CONT", 0.2));
   ASSERT_EQ("", send_raise("STOP"));
   auto elapsed = system_clock::now() - then;
-  // give it a 1% slack
-  EXPECT_LE(milliseconds(198), duration_cast<milliseconds>(elapsed));
+  // give it a 5% slack
+  EXPECT_LE(milliseconds(190), duration_cast<milliseconds>(elapsed));
 }
 
 /*

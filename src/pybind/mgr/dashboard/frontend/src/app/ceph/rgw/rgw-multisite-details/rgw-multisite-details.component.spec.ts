@@ -8,6 +8,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details.component';
 import { RouterTestingModule } from '@angular/router/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { NgbNavModule, NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 describe('RgwMultisiteDetailsComponent', () => {
   let component: RgwMultisiteDetailsComponent;
@@ -21,8 +22,10 @@ describe('RgwMultisiteDetailsComponent', () => {
       TreeModule,
       SharedModule,
       ToastrModule.forRoot(),
-      RouterTestingModule
-    ]
+      RouterTestingModule,
+      NgbNavModule
+    ],
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
@@ -38,6 +41,6 @@ describe('RgwMultisiteDetailsComponent', () => {
 
   it('should display right title', () => {
     const span = debugElement.nativeElement.querySelector('.card-header');
-    expect(span.textContent).toBe('Topology Viewer');
+    expect(span.textContent.trim()).toBe('Topology Viewer');
   });
 });

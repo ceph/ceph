@@ -26,50 +26,6 @@
 
 namespace rgw::notify {
 
-struct event_entry_t {
-  rgw_pubsub_s3_event event;
-  std::string push_endpoint;
-  std::string push_endpoint_args;
-  std::string arn_topic;
-  ceph::coarse_real_time creation_time;
-  uint32_t time_to_live = DEFAULT_GLOBAL_VALUE;
-  uint32_t max_retries = DEFAULT_GLOBAL_VALUE;
-  uint32_t retry_sleep_duration = DEFAULT_GLOBAL_VALUE;
-  
-  void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
-    encode(event, bl);
-    encode(push_endpoint, bl);
-    encode(push_endpoint_args, bl);
-    encode(arn_topic, bl);
-    encode(creation_time, bl);
-    encode(time_to_live, bl);
-    encode(max_retries, bl);
-    encode(retry_sleep_duration, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
-    decode(event, bl);
-    decode(push_endpoint, bl);
-    decode(push_endpoint_args, bl);
-    decode(arn_topic, bl);
-    if (struct_v > 1) {
-      decode(creation_time, bl);
-    } else {
-      creation_time = ceph::coarse_real_clock::zero();
-    }
-    if (struct_v > 2) {
-      decode(time_to_live, bl);
-      decode(max_retries, bl);
-      decode(retry_sleep_duration, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(event_entry_t)
-
 static inline std::ostream& operator<<(std::ostream& out,
                                        const event_entry_t& e) {
   std::string host;
@@ -239,8 +195,13 @@ private:
 
   // processing of a specific entry
   // return whether processing was successful (true) or not (false)
-  EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
-                                      const cls_queue_entry& entry, boost::asio::yield_context yield) {
+  EntryProcessingResult process_entry(
+      const ConfigProxy& conf,
+      persistency_tracker& entry_persistency_tracker,
+      const cls_queue_entry& entry,
+      RGWPubSubEndpoint* const push_endpoint,
+      const rgw_pubsub_topic& topic,
+      boost::asio::yield_context yield) {
     event_entry_t event_entry;
     auto iter = entry.data.cbegin();
     try {
@@ -253,7 +214,12 @@ private:
     if (event_entry.creation_time == ceph::coarse_real_clock::zero()) {
       return EntryProcessingResult::Migrating;
     }
-
+    // overwrite the event entry values from the topics object fetched.
+    event_entry.event.opaque_data = topic.opaque_data;
+    event_entry.arn_topic = topic.dest.arn_topic;
+    event_entry.time_to_live = topic.dest.time_to_live;
+    event_entry.max_retries = topic.dest.max_retries;
+    event_entry.retry_sleep_duration = topic.dest.retry_sleep_duration;
     const auto topic_persistency_ttl = event_entry.time_to_live != DEFAULT_GLOBAL_VALUE ?
         event_entry.time_to_live : conf->rgw_topic_persistency_time_to_live;
     const auto topic_persistency_max_retries = event_entry.max_retries != DEFAULT_GLOBAL_VALUE ?
@@ -282,31 +248,19 @@ private:
                         << " retry_number: "
                         << entry_persistency_tracker.retires_num
                         << " current time: " << time_now << dendl;
-    try {
-      // TODO move endpoint creation to queue level
-      const auto push_endpoint = RGWPubSubEndpoint::create(event_entry.push_endpoint, event_entry.arn_topic,
-          RGWHTTPArgs(event_entry.push_endpoint_args, this), 
-          cct);
-      ldpp_dout(this, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
-        " for entry: " << entry.marker << dendl;
-      const auto ret = push_endpoint->send(event_entry.event, yield);
-      if (ret < 0) {
-        ldpp_dout(this, 5) << "WARNING: push entry marker: " << entry.marker
-                           << " failed. error: " << ret
-                           << " (will retry) for event with " << event_entry
-                           << dendl;
-        return EntryProcessingResult::Failure;
-      } else {
-        ldpp_dout(this, 5) << "INFO: push entry marker: " << entry.marker
-                           << " ok for event with " << event_entry << dendl;
-        if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
-        return EntryProcessingResult::Successful;
-      }
-    } catch (const RGWPubSubEndpoint::configuration_error& e) {
-      ldpp_dout(this, 5) << "WARNING: failed to create push endpoint: " 
-          << event_entry.push_endpoint << " for entry: " << entry.marker << ". error: " << e.what() << " (will retry) " << dendl;
+    const auto ret = push_endpoint->send(this, event_entry.event, yield);
+    if (ret < 0) {
+      ldpp_dout(this, 5) << "WARNING: push entry marker: " << entry.marker
+                         << " failed. error: " << ret
+                         << " (will retry) for event with " << event_entry
+                         << dendl;
       return EntryProcessingResult::Failure;
     }
+    ldpp_dout(this, 5) << "INFO: push entry marker: " << entry.marker
+                       << " ok for event with " << event_entry << dendl;
+    if (perfcounter)
+      perfcounter->inc(l_rgw_pubsub_push_ok);
+    return EntryProcessingResult::Successful;
   }
 
   // clean stale reservation from queue
@@ -367,6 +321,42 @@ private:
       return 0;
     }
     return ret;
+  }
+
+  int get_topic_info(const std::string& queue_name,
+                     const cls_queue_entry& queue_entry,
+                     rgw_pubsub_topic& topic,
+                     boost::asio::yield_context yield) {
+    std::string queue_topic_tenant;
+    std::string queue_topic_name;
+    parse_topic_metadata_key(queue_name, queue_topic_tenant, queue_topic_name);
+    rgw_pubsub_topic topic_info;
+    RGWPubSub ps(&rados_store, queue_topic_tenant, site);
+    int ret = ps.get_topic(this, queue_topic_name, topic_info, yield, nullptr);
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "WARNING: failed to fetch topic: "
+                         << queue_topic_name << " error: " << ret
+                         << ". using cached topic attributes!" << dendl;
+      event_entry_t event_entry;
+      auto iter = queue_entry.data.cbegin();
+      try {
+        decode(event_entry, iter);
+      } catch (buffer::error& err) {
+        ldpp_dout(this, 1) << "ERROR: failed to decode entry. error: "
+                           << err.what() << dendl;
+        return -EIO;
+      }
+      topic_info.dest.push_endpoint = event_entry.push_endpoint;
+      topic_info.dest.push_endpoint_args = event_entry.push_endpoint_args;
+      topic_info.dest.arn_topic = event_entry.arn_topic;
+      topic_info.dest.arn_topic = event_entry.arn_topic;
+      topic_info.dest.time_to_live = event_entry.time_to_live;
+      topic_info.dest.max_retries = event_entry.max_retries;
+      topic_info.dest.retry_sleep_duration = event_entry.retry_sleep_duration;
+      topic_info.opaque_data = event_entry.event.opaque_data;
+    }
+    topic = std::move(topic_info);
+    return 0;
   }
 
   // processing of a specific queue
@@ -448,7 +438,25 @@ private:
       // log when queue is not idle
       ldpp_dout(this, 20) << "INFO: found: " << total_entries << " entries in: " << queue_name <<
         ". end marker is: " << end_marker << dendl;
-      
+      rgw_pubsub_topic topic_info;
+      if (get_topic_info(queue_name, entries.front(), topic_info, yield) < 0) {
+        continue;
+      }
+      RGWPubSubEndpoint::Ptr push_endpoint;
+      try {
+        push_endpoint = RGWPubSubEndpoint::create(
+            topic_info.dest.push_endpoint, topic_info.dest.arn_topic,
+            RGWHTTPArgs(topic_info.dest.push_endpoint_args, this), cct);
+        ldpp_dout(this, 20)
+            << "INFO: push endpoint created: " << topic_info.dest.push_endpoint
+            << dendl;
+      } catch (const RGWPubSubEndpoint::configuration_error& e) {
+        ldpp_dout(this, 5) << "WARNING: failed to create push endpoint: "
+                           << topic_info.dest.push_endpoint
+                           << ". error: " << e.what()
+                           << " (will retry sending events) " << dendl;
+        continue;
+      }
       is_idle = false;
       auto has_error = false;
       auto remove_entries = false;
@@ -463,11 +471,16 @@ private:
 
         entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
         boost::asio::spawn(yield, std::allocator_arg, make_stack_allocator(),
-          [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
-           &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](boost::asio::yield_context yield) {
+          [this, &notifs_persistency_tracker, &queue_name, entry_idx,
+           total_entries, &end_marker, &remove_entries, &has_error, &waiter,
+           &entry, &needs_migration_vector,
+           push_endpoint = push_endpoint.get(),
+           &topic_info](boost::asio::yield_context yield) {
             const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
-            auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
+            auto result =
+                process_entry(this->get_cct()->_conf, persistency_tracker,
+                              entry, push_endpoint, topic_info, yield);
             if (result == EntryProcessingResult::Successful || result == EntryProcessingResult::Expired
                 || result == EntryProcessingResult::Migrating) {
               ldpp_dout(this, 20) << "INFO: processing of entry: " << entry.marker
@@ -767,9 +780,11 @@ public:
           throw err;
         }
       });
-      const auto rc = ceph_pthread_setname(workers.back().native_handle(), 
-        (WORKER_THREAD_NAME+std::to_string(worker_id)).c_str());
-      ceph_assert(rc == 0);
+      const auto thread_name = WORKER_THREAD_NAME+std::to_string(worker_id);
+      if (const auto rc = ceph_pthread_setname(workers.back().native_handle(), thread_name.c_str()); rc != 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to set notification manager thread name to: " << thread_name
+          << ". error: " << rc << dendl;
+      }
     }
     ldpp_dout(this, 10) << "INfO: started notification manager with: " << worker_count << " workers" << dendl;
   }
@@ -1111,7 +1126,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           // either the topic is deleted but the corresponding notification
           // still exist or in v2 mode the notification could have synced first
           // but topic is not synced yet.
-          return 0;
+          continue;
         }
         ldpp_dout(res.dpp, 1)
             << "WARN: Using the stored topic from bucket notification struct."
@@ -1251,7 +1266,7 @@ int publish_commit(rgw::sal::Object* obj,
 	  dpp->get_cct());
         ldpp_dout(res.dpp, 20) << "INFO: push endpoint created: "
 			       << topic.cfg.dest.push_endpoint << dendl;
-        const auto ret = push_endpoint->send(event_entry.event, res.yield);
+        const auto ret = push_endpoint->send(dpp, event_entry.event, res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1)
               << "ERROR: failed to push sync notification event with error: "

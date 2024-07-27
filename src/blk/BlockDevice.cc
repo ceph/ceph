@@ -42,6 +42,7 @@
 #define dout_prefix *_dout << "bdev "
 
 using std::string;
+using ceph::mono_clock;
 
 
 blk_access_mode_t buffermode(bool buffered) 
@@ -191,3 +192,39 @@ bool BlockDevice::is_valid_io(uint64_t off, uint64_t len) const {
   }
   return ret;
 }
+
+size_t BlockDevice::trim_stalled_read_event_queue(mono_clock::time_point cur_time) {
+  std::lock_guard lock(stalled_read_event_queue_lock);
+  auto warn_duration = std::chrono::seconds(cct->_conf->bdev_stalled_read_warn_lifetime);
+  while (!stalled_read_event_queue.empty() && 
+    ((stalled_read_event_queue.front() < cur_time - warn_duration) ||
+      (stalled_read_event_queue.size() > cct->_conf->bdev_stalled_read_warn_threshold))) {
+      stalled_read_event_queue.pop();
+  }
+  return stalled_read_event_queue.size();
+}
+
+void BlockDevice::add_stalled_read_event() {
+  if (!cct->_conf->bdev_stalled_read_warn_threshold) {
+    return;
+  }
+  auto cur_time = mono_clock::now();
+  {
+    std::lock_guard lock(stalled_read_event_queue_lock);
+    stalled_read_event_queue.push(cur_time);
+  }
+  trim_stalled_read_event_queue(cur_time);
+}
+
+void BlockDevice::collect_alerts(osd_alert_list_t& alerts, const std::string& device_name) {
+  if (cct->_conf->bdev_stalled_read_warn_threshold) {
+    size_t qsize = trim_stalled_read_event_queue(mono_clock::now());
+    if (qsize >= cct->_conf->bdev_stalled_read_warn_threshold) {
+      std::ostringstream ss;
+      ss << "observed stalled read indications in "
+        << device_name << " device";
+      alerts.emplace(device_name + "_DEVICE_STALLED_READ_ALERT", ss.str());
+    }
+  }
+}
+

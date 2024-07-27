@@ -269,7 +269,7 @@ class LazyFIFO {
       // FIFO supports multiple clients by design, so it's safe to
       // race to create them.
       std::unique_ptr<rgw::cls::fifo::FIFO> fifo_tmp;
-      auto r = rgw::cls::fifo::FIFO::create(dpp, ioctx, oid, &fifo, y);
+      auto r = rgw::cls::fifo::FIFO::create(dpp, ioctx, oid, &fifo_tmp, y);
       if (r) {
 	return r;
       }

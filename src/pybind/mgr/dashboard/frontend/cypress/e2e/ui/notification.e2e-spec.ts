@@ -9,7 +9,7 @@ describe('Notification page', () => {
   before(() => {
     cy.login();
     pools.navigateTo('create');
-    pools.create(poolName, 8);
+    pools.create(poolName, 8, ['rbd']);
     pools.edit_pool_pg(poolName, 4, false);
   });
 

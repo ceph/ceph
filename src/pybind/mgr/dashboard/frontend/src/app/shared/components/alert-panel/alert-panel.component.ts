@@ -1,4 +1,13 @@
-import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnInit,
+  Output,
+  TemplateRef,
+  ViewChild
+} from '@angular/core';
+import { NotificationContent, NotificationType } from 'carbon-components-angular';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 
@@ -8,6 +17,11 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   styleUrls: ['./alert-panel.component.scss']
 })
 export class AlertPanelComponent implements OnInit {
+  @ViewChild('content', { static: true })
+  alertContent: TemplateRef<any>;
+  @ViewChild('closeTpl', { static: true })
+  closeTpl: TemplateRef<any>;
+
   @Input()
   title = '';
   @Input()
@@ -36,7 +50,18 @@ export class AlertPanelComponent implements OnInit {
 
   icons = Icons;
 
+  notificationContent: NotificationContent;
+
   ngOnInit() {
+    const type: NotificationType = this.type === 'danger' ? 'error' : this.type;
+    this.notificationContent = {
+      type: type,
+      template: this.alertContent,
+      actionsTemplate: this.closeTpl,
+      showClose: false,
+      title: this.title
+    };
+
     switch (this.type) {
       case 'warning':
         this.title = this.title || $localize`Warning`;

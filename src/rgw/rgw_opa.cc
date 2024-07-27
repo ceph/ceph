@@ -71,7 +71,7 @@ int rgw_opa_authorize(RGWOp *& op,
   req.set_send_length(ss.str().length());
 
   /* send request */
-  ret = req.process(null_yield);
+  ret = req.process(op, s->yield);
   if (ret < 0) {
     ldpp_dout(op, 2) << "OPA process error:" << bl.c_str() << dendl;
     return ret;

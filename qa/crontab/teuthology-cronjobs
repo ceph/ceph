@@ -74,7 +74,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 951
 08 20 * * 1        $CW $SS     64 --ceph main --suite       orch -p 950
 16 20 * * 2        $CW $SS    128 --ceph main --suite        rbd -p 950
-24 20 * * 3        $CW $SS    512 --ceph main --suite         fs -p 950
+24 20 1 * *        $CW $SS    512 --ceph main --suite         fs -p 700
 32 20 * * 4        $CW $SS      4 --ceph main --suite powercycle -p 950
 40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 950
 48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing

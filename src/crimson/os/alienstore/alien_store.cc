@@ -128,8 +128,12 @@ seastar::future<> AlienStore::stop()
     return seastar::now();
   }
   return tp->submit([this] {
-    for (auto [cid, ch]: coll_map) {
-      static_cast<AlienCollection*>(ch.get())->collection.reset();
+    {
+      std::lock_guard l(coll_map_lock);
+      for (auto [cid, ch]: coll_map) {
+	static_cast<AlienCollection*>(ch.get())->collection.reset();
+      }
+      coll_map.clear();
     }
     store.reset();
     cct.reset();
@@ -233,23 +237,9 @@ seastar::future<CollectionRef> AlienStore::create_new_collection(const coll_t& c
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this, cid] {
-    return store->create_new_collection(cid);
-  }).then([this, cid] (ObjectStore::CollectionHandle c) {
-    CollectionRef ch;
-    auto cp = coll_map.find(c->cid);
-    if (cp == coll_map.end()) {
-      ch = new AlienCollection(c);
-      coll_map[c->cid] = ch;
-    } else {
-      ch = cp->second;
-      auto ach = static_cast<AlienCollection*>(ch.get());
-      if (ach->collection != c) {
-        ach->collection = c;
-      }
-    }
-    return seastar::make_ready_future<CollectionRef>(ch);
+    ObjectStore::CollectionHandle c = store->create_new_collection(cid);
+    return get_alien_coll_ref(std::move(c));
   });
-
 }
 
 seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
@@ -257,24 +247,12 @@ seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
   logger().debug("{}", __func__);
   assert(tp);
   return tp->submit([this, cid] {
-    return store->open_collection(cid);
-  }).then([this] (ObjectStore::CollectionHandle c) {
+    ObjectStore::CollectionHandle c = store->open_collection(cid);
     if (!c) {
-      return seastar::make_ready_future<CollectionRef>();
-    }
-    CollectionRef ch;
-    auto cp = coll_map.find(c->cid);
-    if (cp == coll_map.end()){
-      ch = new AlienCollection(c);
-      coll_map[c->cid] = ch;
+      return CollectionRef{};
     } else {
-      ch = cp->second;
-      auto ach = static_cast<AlienCollection*>(ch.get());
-      if (ach->collection != c){
-        ach->collection = c;
-      }
+      return get_alien_coll_ref(std::move(c));
     }
-    return seastar::make_ready_future<CollectionRef>(ch);
   });
 }
 
@@ -655,6 +633,23 @@ AlienStore::read_errorator::future<std::map<uint64_t, uint64_t>> AlienStore::fie
       }
     });
   });
+}
+
+CollectionRef AlienStore::get_alien_coll_ref(ObjectStore::CollectionHandle c) {
+  std::lock_guard l(coll_map_lock);
+  CollectionRef ch;
+  auto cp = coll_map.find(c->cid);
+  if (cp == coll_map.end()) {
+    ch = new AlienCollection(c);
+    coll_map[c->cid] = ch;
+  } else {
+    ch = cp->second;
+    auto ach = static_cast<AlienCollection*>(ch.get());
+    if (ach->collection != c) {
+      ach->collection = c;
+    }
+  }
+  return ch;
 }
 
 }

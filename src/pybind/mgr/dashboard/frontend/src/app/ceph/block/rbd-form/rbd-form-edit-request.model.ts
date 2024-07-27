@@ -12,4 +12,5 @@ export class RbdFormEditRequestModel {
   force?: boolean;
   schedule_interval: string;
   remove_scheduling? = false;
+  image_mirror_mode?: string;
 }

@@ -7,7 +7,7 @@ import {
   TemplateRef,
   ViewChild
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -31,6 +31,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { DriveGroup } from '../osd/osd-form/drive-group.model';
+import { Location } from '@angular/common';
 
 @Component({
   selector: 'cd-create-cluster',
@@ -68,7 +69,9 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
     private clusterService: ClusterService,
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
-    private osdService: OsdService
+    private osdService: OsdService,
+    private route: ActivatedRoute,
+    private location: Location
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.currentStepSub = this.wizardStepsService
@@ -80,6 +83,14 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.route.queryParams.subscribe((params) => {
+      // reading 'welcome' value true/false to toggle expand-cluster wizand view and welcome view
+      const showWelcomeScreen = params['welcome'];
+      if (showWelcomeScreen) {
+        this.startClusterCreation = showWelcomeScreen;
+      }
+    });
+
     this.osdService.getDeploymentOptions().subscribe((options) => {
       this.deploymentOption = options;
       this.selectedOption = { option: options.recommended_option, encrypted: false };
@@ -91,7 +102,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   }
 
   createCluster() {
-    this.startClusterCreation = true;
+    this.startClusterCreation = false;
   }
 
   skipClusterCreation() {
@@ -220,7 +231,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
     if (!this.wizardStepsService.isFirstStep()) {
       this.wizardStepsService.moveToPreviousStep();
     } else {
-      this.router.navigate(['/dashboard']);
+      this.location.back();
     }
   }
 
@@ -244,5 +255,6 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.currentStepSub.unsubscribe();
+    this.osdService.selectedFormValues = null;
   }
 }

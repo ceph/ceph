@@ -202,7 +202,7 @@ public:
     librbd::ImageOptions clone_opts;
     clone_opts.set(RBD_IMAGE_OPTION_FEATURES, ictx->features);
     EXPECT_EQ(0, librbd::clone(m_local_io_ctx, m_local_image_id.c_str(),
-                               nullptr, "snap1", m_local_io_ctx,
+                               nullptr, CEPH_NOSNAP, "snap1", m_local_io_ctx,
                                clone_id.c_str(), "clone1", clone_opts,
                                GLOBAL_CLONE_IMAGE_ID, m_remote_mirror_uuid));
 

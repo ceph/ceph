@@ -1182,7 +1182,7 @@ MotrObject::~MotrObject() {
 //    return read_op.prepare(dpp);
 //  }
 
-int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
+int MotrObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
 {
   // TODO: implement
   ldpp_dout(dpp, 20) <<__func__<< ": MotrObject::set_obj_attrs()" << dendl;
@@ -1238,7 +1238,7 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, op
   }
   set_atomic();
   state.attrset[attr_name] = attr_val;
-  return set_obj_attrs(dpp, &state.attrset, nullptr, y);
+  return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -1249,7 +1249,7 @@ int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr
 
   set_atomic();
   rmattr[attr_name] = bl;
-  return set_obj_attrs(dpp, nullptr, &rmattr, y);
+  return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
 }
 
 bool MotrObject::is_expired() {
@@ -2762,9 +2762,13 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
       bool part_compressed = (part->cs_info.compression_type != "none");
       if ((handled_parts > 0) &&
           ((part_compressed != compressed) ||
-            (cs_info.compression_type != part->cs_info.compression_type))) {
-          ldpp_dout(dpp, 0) << "ERROR: compression type was changed during multipart upload ("
-                           << cs_info.compression_type << ">>" << part->cs_info.compression_type << ")" << dendl;
+           (cs_info.compression_type != obj_part.cs_info.compression_type) ||
+           (cs_info.compressor_message.has_value() &&
+           (cs_info.compressor_message != obj_part.cs_info.compressor_message)))) {
+          ldpp_dout(dpp, 0) << "ERROR: compression type or compressor message was changed during multipart upload ("
+                           << cs_info.compression_type << ">>" << part->cs_info.compression_type << "),"
+                           << cs_info.compressor_message << ">>" << obj_part.cs_info.compressor_message << ")"
+                           << dendl;
           rc = -ERR_INVALID_PART;
           return rc;
       }
@@ -2784,8 +2788,11 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
           cs_info.blocks.push_back(cb);
           new_ofs = cb.new_ofs + cb.len;
         }
-        if (!compressed)
+        if (!compressed) {
           cs_info.compression_type = part->cs_info.compression_type;
+          if (obj_part.cs_info.compressor_message.has_value())
+            cs_info.compressor_message = obj_part.cs_info.compressor_message;
+        }
         cs_info.orig_size += part->cs_info.orig_size;
         compressed = true;
       }

@@ -1,23 +1,24 @@
-<div ngbDropdown
-     placement="bottom-right"
-     *ngIf="userPermission.read">
-  <a ngbDropdownToggle
-     class="dropdown-toggle"
-     i18n-title
-     title="Dashboard Settings"
-     role="button">
-    <i [ngClass]="[icons.deepCheck]"></i>
-    <span i18n
-          class="d-md-none">Dashboard Settings</span>
-  </a>
-  <div ngbDropdownMenu>
-    <button ngbDropdownItem
-            *ngIf="userPermission.read"
+<cds-overflow-menu [customTrigger]="customTrigger"
+                   [offset]="{y:0, x:-80}">
+  <li class="cds--overflow-menu-options__option mb-2">
+    <button *ngIf="userPermission.read"
             routerLink="/user-management"
+            class="cds--overflow-menu-options__btn"
             i18n>User management</button>
-    <button ngbDropdownItem
-            *ngIf="configOptPermission.read"
+  </li>
+  <li class="cds--overflow-menu-options__option mb-2">
+    <button *ngIf="configOptPermission.read"
             routerLink="/telemetry"
+            class="cds--overflow-menu-options__btn"
             i18n>Telemetry configuration</button>
-  </div>
-</div>
+  </li>
+</cds-overflow-menu>
+
+<ng-template #customTrigger>
+  <svg cdsIcon="settings"
+       size="20"
+       title="user"
+       *ngIf="userPermission.read"></svg>
+  <span i18n
+        class="d-md-none">Dashboard Settings</span>
+</ng-template>

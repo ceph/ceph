@@ -25,6 +25,7 @@
 
 #include "rgw_asio_client.h"
 #include "rgw_asio_frontend.h"
+#include "rgw_asio_thread.h"
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 #include <boost/asio/ssl.hpp>
@@ -323,7 +324,7 @@ void handle_connection(boost::asio::io_context& context,
     // if we failed before reading the entire message, discard any remaining
     // bytes before reading the next
     while (!expect_continue && !parser.is_done()) {
-      static std::array<char, 1024> discard_buffer;
+      static std::array<char, 1024*1024> discard_buffer;
 
       auto& body = parser.get().body();
       body.size = discard_buffer.size();
@@ -1100,7 +1101,7 @@ void AsioFrontend::join()
 
 void AsioFrontend::pause()
 {
-  ldout(ctx(), 4) << "frontend pausing connections..." << dendl;
+  ldout(ctx(), 4) << "frontend pausing, closing connections..." << dendl;
 
   // cancel pending calls to accept(), but don't close the sockets
   boost::system::error_code ec;
@@ -1108,7 +1109,10 @@ void AsioFrontend::pause()
     l.acceptor.cancel(ec);
   }
 
-  // pause and wait for outstanding requests to complete
+  // close all connections so outstanding requests fail quickly
+  connections.close(ec);
+
+  // pause and wait until outstanding requests complete
   pause_mutex.lock(ec);
 
   if (ec) {

@@ -112,6 +112,9 @@ struct trans_spec_view_t {
   // if the extent is pending, contains the id of the owning transaction;
   // TRANS_ID_NULL otherwise
   transaction_id_t pending_for_transaction = TRANS_ID_NULL;
+  trans_spec_view_t() = default;
+  trans_spec_view_t(transaction_id_t id) : pending_for_transaction(id) {}
+  virtual ~trans_spec_view_t() = default;
 
   struct cmp_t {
     bool operator()(
@@ -307,7 +310,7 @@ public:
     return true;
   }
 
-  void rewrite(CachedExtent &e, extent_len_t o) {
+  void rewrite(Transaction &t, CachedExtent &e, extent_len_t o) {
     assert(is_initial_pending());
     if (!e.is_pending()) {
       prior_instance = &e;
@@ -321,7 +324,7 @@ public:
       get_bptr().c_str());
     set_modify_time(e.get_modify_time());
     set_last_committed_crc(e.get_last_committed_crc());
-    on_rewrite(e, o);
+    on_rewrite(t, e, o);
   }
 
   /**
@@ -330,7 +333,7 @@ public:
    * Called when this extent is rewriting another one.
    *
    */
-  virtual void on_rewrite(CachedExtent &, extent_len_t) = 0;
+  virtual void on_rewrite(Transaction &, CachedExtent &, extent_len_t) = 0;
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
@@ -651,6 +654,7 @@ private:
   friend struct paddr_cmp;
   friend struct ref_paddr_cmp;
   friend class ExtentIndex;
+  friend struct trans_retired_extent_link_t;
 
   /// Pointer to containing index (or null)
   ExtentIndex *parent_index = nullptr;
@@ -735,6 +739,7 @@ private:
 
 protected:
   trans_view_set_t mutation_pendings;
+  trans_view_set_t retired_transactions;
 
   CachedExtent(CachedExtent &&other) = delete;
   CachedExtent(ceph::bufferptr &&_ptr) : ptr(std::move(_ptr)) {
@@ -884,17 +889,54 @@ struct paddr_cmp {
   }
 };
 
+// trans_retired_extent_link_t is used to link stable extents with
+// the transactions that retired them. With this link, we can find
+// out whether an extent has been retired by a specific transaction
+// in a way that's more efficient than searching through the transaction's
+// retired_set (Transaction::is_retired())
+struct trans_retired_extent_link_t {
+  CachedExtentRef extent;
+  // We use trans_spec_view_t instead of transaction_id_t, so that,
+  // when a transaction is deleted or reset, we can efficiently remove
+  // that transaction from the extents' extent-transaction link set.
+  // Otherwise, we have to search through each extent's "retired_transactions"
+  // to remove the transaction
+  trans_spec_view_t trans_view;
+  trans_retired_extent_link_t(CachedExtentRef extent, transaction_id_t id)
+    : extent(extent), trans_view{id}
+  {
+    assert(extent->is_stable());
+    extent->retired_transactions.insert(trans_view);
+  }
+};
+
 /// Compare extent refs by paddr
 struct ref_paddr_cmp {
   using is_transparent = paddr_t;
-  bool operator()(const CachedExtentRef &lhs, const CachedExtentRef &rhs) const {
-    return lhs->poffset < rhs->poffset;
+  bool operator()(
+    const trans_retired_extent_link_t &lhs,
+    const trans_retired_extent_link_t &rhs) const {
+    return lhs.extent->poffset < rhs.extent->poffset;
   }
-  bool operator()(const paddr_t &lhs, const CachedExtentRef &rhs) const {
-    return lhs < rhs->poffset;
+  bool operator()(
+    const paddr_t &lhs,
+    const trans_retired_extent_link_t &rhs) const {
+    return lhs < rhs.extent->poffset;
   }
-  bool operator()(const CachedExtentRef &lhs, const paddr_t &rhs) const {
-    return lhs->poffset < rhs;
+  bool operator()(
+    const trans_retired_extent_link_t &lhs,
+    const paddr_t &rhs) const {
+    return lhs.extent->poffset < rhs;
+  }
+  bool operator()(
+    const CachedExtentRef &lhs,
+    const trans_retired_extent_link_t &rhs) const {
+    return lhs->poffset < rhs.extent->poffset;
+  }
+  bool operator()(
+    const trans_retired_extent_link_t &lhs,
+    const CachedExtentRef &rhs) const {
+    return lhs.extent->poffset < rhs->poffset;
   }
 };
 
@@ -910,7 +952,7 @@ class addr_extent_set_base_t
 
 using pextent_set_t = addr_extent_set_base_t<
   paddr_t,
-  CachedExtentRef,
+  trans_retired_extent_link_t,
   ref_paddr_cmp
   >;
 
@@ -1079,6 +1121,10 @@ public:
   virtual val_t get_val() const = 0;
   virtual key_t get_key() const = 0;
   virtual PhysicalNodeMappingRef<key_t, val_t> duplicate() const = 0;
+  virtual PhysicalNodeMappingRef<key_t, val_t> refresh_with_pending_parent() {
+    ceph_abort("impossible");
+    return {};
+  }
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
   virtual uint16_t get_pos() const = 0;
@@ -1111,6 +1157,16 @@ public:
   virtual bool is_clone() const = 0;
   bool is_zero_reserved() const {
     return !get_val().is_real();
+  }
+  virtual bool is_parent_viewable() const = 0;
+  virtual bool is_parent_valid() const = 0;
+  virtual bool parent_modified() const {
+    ceph_abort("impossible");
+    return false;
+  };
+
+  virtual void maybe_fix_pos() {
+    ceph_abort("impossible");
   }
 
   virtual ~PhysicalNodeMapping() {}
@@ -1173,7 +1229,7 @@ public:
     return false;
   }
 
-  void on_rewrite(CachedExtent&, extent_len_t) final {}
+  void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
 
   std::ostream &print_detail(std::ostream &out) const final {
     return out << ", RetiredExtentPlaceholder";
@@ -1260,7 +1316,7 @@ public:
     : ChildableCachedExtent(std::forward<T>(t)...)
   {}
 
-  void on_rewrite(CachedExtent &extent, extent_len_t off) final {
+  void on_rewrite(Transaction&, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
     set_laddr(lextent.get_laddr() + off);

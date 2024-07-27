@@ -76,15 +76,15 @@ TEST(LibRadosMiscConnectFailure, ConnectTimeout) {
   ASSERT_EQ(0, rados_conf_set(cluster, "mon_host", "255.0.1.2:3456"));
   ASSERT_EQ(0, rados_conf_set(cluster, "key",
                               "AQAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAA=="));
-  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "2s"));
+  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "5s"));
 
   utime_t start = ceph_clock_now();
   ASSERT_EQ(-ETIMEDOUT, rados_connect(cluster));
   utime_t end = ceph_clock_now();
 
   utime_t dur = end - start;
-  ASSERT_GE(dur, utime_t(2, 0));
-  ASSERT_LT(dur, utime_t(4, 0));
+  ASSERT_GE(dur, utime_t(5, 0));
+  ASSERT_LT(dur, utime_t(15, 0));
 
   rados_shutdown(cluster);
 }

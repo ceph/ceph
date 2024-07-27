@@ -473,7 +473,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
   ibv_send_wr iswr[tx_buffers.size()];
   uint32_t current_swr = 0;
   ibv_send_wr* pre_wr = NULL;
-  uint32_t num = 0; 
 
   // FIPS zeroization audit 20191115: these memsets are not security related.
   memset(iswr, 0, sizeof(iswr));
@@ -492,7 +491,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     iswr[current_swr].opcode = IBV_WR_SEND;
     iswr[current_swr].send_flags = IBV_SEND_SIGNALED;
 
-    num++;
     worker->perf_logger->inc(l_msgr_rdma_tx_bytes, isge[current_sge].length);
     if (pre_wr)
       pre_wr->next = &iswr[current_swr];

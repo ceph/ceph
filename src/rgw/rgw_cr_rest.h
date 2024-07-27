@@ -90,14 +90,13 @@ public:
 
 
 
-  virtual int wait_result() {
-    return http_op->wait(result, null_yield);
+  virtual int wait_result(const DoutPrefixProvider* dpp) {
+    return http_op->wait(dpp, result, null_yield);
   }
 
   int request_complete() override {
-    int ret;
-
-    ret = wait_result();
+    auto dpp = NoDoutPrefix{cct, ceph_subsys_rgw};
+    int ret = wait_result(&dpp);
 
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
@@ -138,8 +137,8 @@ class RGWReadRESTResourceCR : public RGWReadRawRESTResourceCR {
     : RGWReadRawRESTResourceCR(_cct, _conn, _http_manager, _path, params, hdrs), result(_result)
   {}
 
-  int wait_result() override {
-    return http_op->wait(result, null_yield);
+  int wait_result(const DoutPrefixProvider* dpp) override {
+    return http_op->wait(dpp, result, null_yield);
   }
 
 };
@@ -207,12 +206,13 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   }
 
   int request_complete() override {
+    auto dpp = NoDoutPrefix{cct, ceph_subsys_rgw};
     int ret;
     if (result || err_result) {
-      ret = http_op->wait(result, null_yield, err_result);
+      ret = http_op->wait(&dpp, result, null_yield, err_result);
     } else {
       bufferlist bl;
-      ret = http_op->wait(&bl, null_yield);
+      ret = http_op->wait(&dpp, &bl, null_yield);
     }
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
@@ -366,9 +366,9 @@ public:
   }
 
   int request_complete() override {
-    int ret;
+    auto dpp = NoDoutPrefix{cct, ceph_subsys_rgw};
     bufferlist bl;
-    ret = http_op->wait(&bl, null_yield);
+    int ret = http_op->wait(&dpp, &bl, null_yield);
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()
@@ -517,6 +517,7 @@ public:
 
 class RGWStreamWriteHTTPResourceCRF : public RGWStreamWriteResourceCRF {
 protected:
+  CephContext *cct;
   RGWCoroutinesEnv *env;
   RGWCoroutine *caller;
   RGWHTTPManager *http_manager;
@@ -546,10 +547,13 @@ public:
   RGWStreamWriteHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
-                               RGWHTTPManager *_http_manager) : env(_env),
-                                                               caller(_caller),
-                                                               http_manager(_http_manager),
-                                                               write_drain_notify_cb(this) {}
+                               RGWHTTPManager *_http_manager)
+    : cct(_cct),
+      env(_env),
+      caller(_caller),
+      http_manager(_http_manager),
+      write_drain_notify_cb(this)
+  {}
   virtual ~RGWStreamWriteHTTPResourceCRF();
 
   int init() override {

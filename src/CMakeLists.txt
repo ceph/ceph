@@ -70,6 +70,10 @@ configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   @ONLY)
+configure_file(
+  ${CMAKE_SOURCE_DIR}/src/ceph_release.h.in.cmake
+  ${CMAKE_BINARY_DIR}/src/include/ceph_release.h
+  @ONLY)
 
 add_definitions(
   -DHAVE_CONFIG_H
@@ -195,6 +199,9 @@ CHECK_C_COMPILER_FLAG("-D_GLIBCXX_ASSERTIONS" HAS_GLIBCXX_ASSERTIONS)
 if(HAS_GLIBCXX_ASSERTIONS AND CMAKE_BUILD_TYPE STREQUAL Debug)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-D_GLIBCXX_ASSERTIONS>)
 endif()
+
+# add BLAKE3 before we clobber CMAKE_ASM_COMPILER
+add_subdirectory(BLAKE3/c EXCLUDE_FROM_ALL)
 
 include(SIMDExt)
 if(HAVE_INTEL)
@@ -380,7 +387,7 @@ if(WITH_SEASTAR)
   set(Seastar_API_LEVEL "6" CACHE STRING "" FORCE)
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_IO_URING OFF CACHE BOOL "" FORCE)
-  set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
+  set(Seastar_DEPRECATED_OSTREAM_FORMATTERS OFF CACHE BOOL "" FORCE)
   if(Seastar_DPDK)
     find_package(dpdk QUIET)
     if(NOT DPDK_FOUND)

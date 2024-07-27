@@ -535,10 +535,11 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
 
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
                                    const cls_rgw_obj_key& key, const string& op_tag,
-                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, const rgw_zone_set& zones_trace)
+                                   const string& olh_tag, uint64_t olh_epoch, bool log_op,
+                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace)
 {
   librados::ObjectWriteOperation op;
-  cls_rgw_bucket_unlink_instance(op, key, op_tag, olh_tag, olh_epoch, log_op, zones_trace);
+  cls_rgw_bucket_unlink_instance(op, key, op_tag, olh_tag, olh_epoch, log_op, bilog_flags, zones_trace);
   int r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
@@ -548,7 +549,8 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
 
 void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const string& op_tag,
-                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, const rgw_zone_set& zones_trace)
+                                   const string& olh_tag, uint64_t olh_epoch, bool log_op,
+                                   uint16_t bilog_flags, const rgw_zone_set& zones_trace)
 {
   bufferlist in, out;
   rgw_cls_unlink_instance_op call;
@@ -558,6 +560,7 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
   call.olh_tag = olh_tag;
   call.log_op = log_op;
   call.zones_trace = zones_trace;
+  call.bilog_flags = bilog_flags;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BUCKET_UNLINK_INSTANCE, in);
 }
@@ -899,19 +902,22 @@ void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, 
   op.exec(RGW_CLASS, RGW_GC_DEFER_ENTRY, in);
 }
 
-int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
-                    list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+void cls_rgw_gc_list(ObjectReadOperation& op, const string& marker,
+                     uint32_t max, bool expired_only, bufferlist& out)
 {
-  bufferlist in, out;
+  bufferlist in;
   cls_rgw_gc_list_op call;
   call.marker = marker;
   call.max = max;
   call.expired_only = expired_only;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_GC_LIST, in, out);
-  if (r < 0)
-    return r;
+  op.exec(RGW_CLASS, RGW_GC_LIST, in, &out, nullptr);
+}
 
+int cls_rgw_gc_list_decode(const bufferlist& out,
+                           std::list<cls_rgw_gc_obj_info>& entries,
+                           bool *truncated, std::string& next_marker)
+{
   cls_rgw_gc_list_ret ret;
   try {
     auto iter = out.cbegin();
@@ -925,7 +931,7 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
   if (truncated)
     *truncated = ret.truncated;
   next_marker = std::move(ret.next_marker);
-  return r;
+  return 0;
 }
 
 void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const vector<string>& tags)

@@ -298,3 +298,12 @@ class CephFS(object):
             rfiles = int(self.cfs.getxattr(path, 'ceph.dir.rfiles'))
             rsubdirs = int(self.cfs.getxattr(path, 'ceph.dir.rsubdirs'))
         return {'bytes': rbytes, 'files': rfiles, 'subdirs': rsubdirs}
+
+    def rename_path(self, src_path, dst_path) -> None:
+        """
+        Rename a file or directory.
+        :param src: the path to the existing file or directory.
+        :param dst: the new name of the file or directory.
+        """
+        logger.info("Renaming: from %s to %s", src_path, dst_path)
+        self.cfs.rename(src_path, dst_path)

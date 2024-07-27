@@ -4,12 +4,12 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Collection,
+    ContextManager,
     Dict,
     Iterator,
     List,
     Optional,
     Tuple,
-    TypeVar,
 )
 
 import sys
@@ -18,7 +18,7 @@ from ceph.deployment.service_spec import SMBSpec
 
 # this uses a version check as opposed to a try/except because this
 # form makes mypy happy and try/except doesn't.
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 8):  # pragma: no cover
     from typing import Protocol
 elif TYPE_CHECKING:  # pragma: no cover
     # typing_extensions will not be available for the real mgr server
@@ -29,7 +29,7 @@ else:  # pragma: no cover
         pass
 
 
-if sys.version_info >= (3, 11):
+if sys.version_info >= (3, 11):  # pragma: no cover
     from typing import Self
 elif TYPE_CHECKING:  # pragma: no cover
     # typing_extensions will not be available for the real mgr server
@@ -49,6 +49,7 @@ class Simplifiable(Protocol):
 
 
 EntryKey = Tuple[str, str]
+FindParams = Dict[str, Any]
 
 
 class ConfigEntry(Protocol):
@@ -78,13 +79,8 @@ class ConfigEntry(Protocol):
         ...  # pragma: no cover
 
 
-class ConfigStore(Protocol):
-    """A protocol for describing a configuration data store capable of
-    retaining and tracking configuration entry objects.
-    """
-
-    def __getitem__(self, key: EntryKey) -> ConfigEntry:
-        ...  # pragma: no cover
+class ConfigStoreListing(Protocol):
+    """A protocol for describing the content-listing methods of a config store."""
 
     def namespaces(self) -> Collection[str]:
         ...  # pragma: no cover
@@ -95,7 +91,45 @@ class ConfigStore(Protocol):
     def __iter__(self) -> Iterator[EntryKey]:
         ...  # pragma: no cover
 
+
+class ConfigStore(ConfigStoreListing, Protocol):
+    """A protocol for describing a configuration data store capable of
+    retaining and tracking configuration entry objects.
+    """
+
+    def __getitem__(self, key: EntryKey) -> ConfigEntry:
+        ...  # pragma: no cover
+
     def remove(self, ns: EntryKey) -> bool:
+        ...  # pragma: no cover
+
+
+class FindingConfigStore(ConfigStore, Protocol):
+    """A protocol for a config store that can more efficiently find
+    items within the the store.
+    """
+
+    def find_entries(
+        self, ns: str, params: FindParams
+    ) -> Collection[ConfigEntry]:
+        """Find entries in the store matching the given params.
+        Params is a dict that will be compared to the same keys/attributes of
+        the objects being searched. Only exact matches will be returned.
+        """
+        ...  # pragma: no cover
+
+
+class TransactingConfigStore(ConfigStore, Protocol):
+    """A protocol for a config store that supports transactions.
+    Using the transactions can make using the store more robust or
+    efficient.
+    """
+
+    def transaction(self) -> ContextManager[None]:
+        """Return a context manager that wraps a transaction. What exactly
+        this means depends on the store. Typically this would wrap a database
+        transaction.
+        """
         ...  # pragma: no cover
 
 
@@ -151,27 +185,3 @@ class AccessAuthorizer(Protocol):
         self, volume: str, entity: str, caps: str = ''
     ) -> None:
         ...  # pragma: no cover
-
-
-T = TypeVar('T')
-
-
-# TODO: move to a utils.py
-def one(lst: List[T]) -> T:
-    if len(lst) != 1:
-        raise ValueError("list does not contain exactly one element")
-    return lst[0]
-
-
-class IsNoneError(ValueError):
-    pass
-
-
-def checked(v: Optional[T]) -> T:
-    """Ensures the provided value is not a None or raises a IsNoneError.
-    Intended use is similar to an `assert v is not None` but more usable in
-    one-liners and list/dict/etc comprehensions.
-    """
-    if v is None:
-        raise IsNoneError('value is None')
-    return v

@@ -953,10 +953,12 @@ public:
 	      NULL_GENERATION,
               t.get_trans_id());
 
+    auto extent = ext->template cast<T>();
+    extent->set_laddr(remap_laddr);
     t.add_fresh_extent(ext);
     SUBTRACET(seastore_cache, "allocated {} {}B, hint={}, has ptr? {} -- {}",
-      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *ext);
-    return ext;
+      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
+    return extent;
   }
 
   /**
@@ -1649,7 +1651,7 @@ private:
       extent->get_length(),
       extent->get_bptr()
     ).safe_then(
-      [extent=std::move(extent)]() mutable {
+      [extent=std::move(extent), this]() mutable {
         LOG_PREFIX(Cache::read_extent);
 	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
 	  extent->state = CachedExtent::extent_state_t::CLEAN;
@@ -1660,7 +1662,11 @@ private:
 	if (extent->is_valid()) {
 	  // crc will be checked against LBA leaf entry for logical extents,
 	  // or check against in-extent crc for physical extents.
-	  extent->last_committed_crc = extent->calc_crc32c();
+	  if (epm.get_checksum_needed(extent->get_paddr())) {
+	    extent->last_committed_crc = extent->calc_crc32c();
+	  } else {
+	    extent->last_committed_crc = CRC_NULL;
+	  }
 	  extent->on_clean_read();
 	}
         extent->complete_io();

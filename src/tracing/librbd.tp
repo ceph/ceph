@@ -1386,20 +1386,20 @@ TRACEPOINT_EVENT(librbd, aio_compare_and_write_exit,
 TRACEPOINT_EVENT(librbd, clone_enter,
     TP_ARGS(
         const char*, parent_pool_name,
-        uint64_t, parent_id,
+        uint64_t, parent_pool_id,
         const char*, parent_name,
         const char*, parent_snap_name,
         const char*, child_pool_name,
-        uint64_t, child_id,
+        uint64_t, child_pool_id,
         const char*, child_name,
         uint64_t, features),
     TP_FIELDS(
         ctf_string(parent_pool_name, parent_pool_name)
-        ctf_integer(uint64_t, parent_id, parent_id)
+        ctf_integer(uint64_t, parent_pool_id, parent_pool_id)
         ctf_string(parent_name, parent_name)
         ctf_string(parent_snap_name, parent_snap_name)
         ctf_string(child_pool_name, child_pool_name)
-        ctf_integer(uint64_t, child_id, child_id)
+        ctf_integer(uint64_t, child_pool_id, child_pool_id)
         ctf_string(child_name, child_name)
         ctf_integer(uint64_t, features, features)
     )
@@ -1418,22 +1418,22 @@ TRACEPOINT_EVENT(librbd, clone_exit,
 TRACEPOINT_EVENT(librbd, clone2_enter,
     TP_ARGS(
         const char*, parent_pool_name,
-        uint64_t, parent_id,
+        uint64_t, parent_pool_id,
         const char*, parent_name,
         const char*, parent_snap_name,
         const char*, child_pool_name,
-        uint64_t, child_id,
+        uint64_t, child_pool_id,
         const char*, child_name,
         uint64_t, features,
         uint64_t, stripe_unit,
         int, stripe_count),
     TP_FIELDS(
         ctf_string(parent_pool_name, parent_pool_name)
-        ctf_integer(uint64_t, parent_id, parent_id)
+        ctf_integer(uint64_t, parent_pool_id, parent_pool_id)
         ctf_string(parent_name, parent_name)
         ctf_string(parent_snap_name, parent_snap_name)
         ctf_string(child_pool_name, child_pool_name)
-        ctf_integer(uint64_t, child_id, child_id)
+        ctf_integer(uint64_t, child_pool_id, child_pool_id)
         ctf_string(child_name, child_name)
         ctf_integer(uint64_t, features, features)
         ctf_integer(uint64_t, stripe_unit, stripe_unit)
@@ -1454,26 +1454,56 @@ TRACEPOINT_EVENT(librbd, clone2_exit,
 TRACEPOINT_EVENT(librbd, clone3_enter,
     TP_ARGS(
         const char*, parent_pool_name,
-        uint64_t, parent_id,
+        uint64_t, parent_pool_id,
         const char*, parent_name,
         const char*, parent_snap_name,
         const char*, child_pool_name,
-        uint64_t, child_id,
+        uint64_t, child_pool_id,
         const char*, child_name,
 	void*, opts),
     TP_FIELDS(
         ctf_string(parent_pool_name, parent_pool_name)
-        ctf_integer(uint64_t, parent_id, parent_id)
+        ctf_integer(uint64_t, parent_pool_id, parent_pool_id)
         ctf_string(parent_name, parent_name)
         ctf_string(parent_snap_name, parent_snap_name)
         ctf_string(child_pool_name, child_pool_name)
-        ctf_integer(uint64_t, child_id, child_id)
+        ctf_integer(uint64_t, child_pool_id, child_pool_id)
         ctf_string(child_name, child_name)
 	ctf_integer_hex(void*, opts, opts)
     )
 )
 
 TRACEPOINT_EVENT(librbd, clone3_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, clone4_enter,
+    TP_ARGS(
+        const char*, parent_pool_name,
+        uint64_t, parent_pool_id,
+        const char*, parent_name,
+        uint64_t, parent_snap_id,
+        const char*, child_pool_name,
+        uint64_t, child_pool_id,
+        const char*, child_name,
+        void*, opts),
+    TP_FIELDS(
+        ctf_string(parent_pool_name, parent_pool_name)
+        ctf_integer(uint64_t, parent_pool_id, parent_pool_id)
+        ctf_string(parent_name, parent_name)
+        ctf_integer(uint64_t, parent_snap_id, parent_snap_id)
+        ctf_string(child_pool_name, child_pool_name)
+        ctf_integer(uint64_t, child_pool_id, child_pool_id)
+        ctf_string(child_name, child_name)
+        ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, clone4_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(

@@ -8,6 +8,7 @@ if(HAVE_QATZIP AND HAVE_QAT)
                         QAT::qat
                         QAT::usdm
                         QAT::zip
+                        legacy-option-headers
                        )
 endif()
 

@@ -212,7 +212,7 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
 
   token_req.set_url(token_url);
 
-  const int ret = token_req.process(y);
+  const int ret = token_req.process(dpp, y);
 
   /* Detect rejection earlier than during the token parsing step. */
   if (token_req.get_http_status() ==
@@ -290,7 +290,7 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
   token_req.set_url(token_url);
 
   ldpp_dout(dpp, 20) << "Requesting secret from barbican url=" << token_url << dendl;
-  const int ret = token_req.process(y);
+  const int ret = token_req.process(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;

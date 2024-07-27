@@ -407,7 +407,7 @@ void Striper::StripedReadResult::add_partial_result(
 		 << " to " << buffer_extents << dendl;
   for (auto& be : buffer_extents) {
     auto& r = partial[be.first];
-    size_t actual = std::min<uint64_t>(bl.length(), be.second);
+    size_t actual = std::min<uint64_t>(bl.length(), be.second); //NOLINT(bugprone-use-after-move)
     if (buffer_extents.size() == 1) {
       r.first = std::move(bl);
     } else {

@@ -12,13 +12,12 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
+import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
 
 @Component({
   selector: 'cd-rgw-config-modal',
   templateUrl: './rgw-config-modal.component.html',
-  styleUrls: ['./rgw-config-modal.component.scss'],
-  providers: [RgwBucketEncryptionModel]
+  styleUrls: ['./rgw-config-modal.component.scss']
 })
 export class RgwConfigModalComponent implements OnInit {
   readonly vaultAddress = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{4}$/;
@@ -32,21 +31,75 @@ export class RgwConfigModalComponent implements OnInit {
   authMethods: string[];
   secretEngines: string[];
 
+  selectedEncryptionConfigValues: any = {};
+  allEncryptionConfigValues: any = [];
+  editing = false;
+  action: string;
+
   constructor(
     private formBuilder: CdFormBuilder,
     public activeModal: NgbActiveModal,
     private router: Router,
     public actionLabels: ActionLabelsI18n,
     private rgwBucketService: RgwBucketService,
-    private rgwEncryptionModal: RgwBucketEncryptionModel,
     private notificationService: NotificationService
   ) {
     this.createForm();
   }
   ngOnInit(): void {
-    this.kmsProviders = this.rgwEncryptionModal.kmsProviders;
-    this.authMethods = this.rgwEncryptionModal.authMethods;
-    this.secretEngines = this.rgwEncryptionModal.secretEngines;
+    this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
+    this.authMethods = rgwBucketEncryptionModel.authMethods;
+    this.secretEngines = rgwBucketEncryptionModel.secretEngines;
+    if (this.editing && this.selectedEncryptionConfigValues) {
+      const patchValues = {
+        address: this.selectedEncryptionConfigValues['addr'],
+        encryptionType:
+          rgwBucketEncryptionModel[this.selectedEncryptionConfigValues['encryption_type']],
+        kms_provider: this.selectedEncryptionConfigValues['backend'],
+        auth_method: this.selectedEncryptionConfigValues['auth'],
+        secret_engine: this.selectedEncryptionConfigValues['secret_engine'],
+        secret_path: this.selectedEncryptionConfigValues['prefix'],
+        namespace: this.selectedEncryptionConfigValues['namespace']
+      };
+      this.configForm.patchValue(patchValues);
+      this.configForm.get('kms_provider').disable();
+    }
+    this.checkKmsProviders();
+  }
+
+  checkKmsProviders() {
+    this.kmsProviders = rgwBucketEncryptionModel.kmsProviders;
+    if (
+      this.allEncryptionConfigValues &&
+      this.allEncryptionConfigValues.hasOwnProperty('SSE_KMS') &&
+      !this.editing
+    ) {
+      const sseKmsBackends = this.allEncryptionConfigValues['SSE_KMS'].map(
+        (config: any) => config.backend
+      );
+      if (this.configForm.get('encryptionType').value === rgwBucketEncryptionModel.SSE_KMS) {
+        this.kmsProviders = this.kmsProviders.filter(
+          (provider) => !sseKmsBackends.includes(provider)
+        );
+      }
+    }
+    if (
+      this.allEncryptionConfigValues &&
+      this.allEncryptionConfigValues.hasOwnProperty('SSE_S3') &&
+      !this.editing
+    ) {
+      const sseS3Backends = this.allEncryptionConfigValues['SSE_S3'].map(
+        (config: any) => config.backend
+      );
+      if (this.configForm.get('encryptionType').value === rgwBucketEncryptionModel.SSE_S3) {
+        this.kmsProviders = this.kmsProviders.filter(
+          (provider) => !sseS3Backends.includes(provider)
+        );
+      }
+    }
+    if (this.kmsProviders.length > 0 && !this.kmsProviders.includes('vault')) {
+      this.configForm.get('kms_provider').setValue('');
+    }
   }
 
   createForm() {
@@ -98,7 +151,7 @@ export class RgwConfigModalComponent implements OnInit {
   }
 
   onSubmit() {
-    const values = this.configForm.value;
+    const values = this.configForm.getRawValue();
     this.rgwBucketService
       .setEncryptionConfig(
         values['encryptionType'],

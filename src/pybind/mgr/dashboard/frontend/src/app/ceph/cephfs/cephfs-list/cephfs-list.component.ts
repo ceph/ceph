@@ -27,7 +27,7 @@ import { map, switchMap } from 'rxjs/operators';
 import { HealthService } from '~/app/shared/api/health.service';
 import { CephfsAuthModalComponent } from '~/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component';
 
-const BASE_URL = 'cephfs';
+const BASE_URL = 'cephfs/fs';
 
 @Component({
   selector: 'cd-cephfs-list',

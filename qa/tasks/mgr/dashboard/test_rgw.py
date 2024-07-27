@@ -66,31 +66,6 @@ class RgwTestCase(DashboardTestCase):
         return self._get('/api/rgw/user/{}?stats={}'.format(uid, stats))
 
 
-class RgwApiCredentialsTest(RgwTestCase):
-
-    AUTH_ROLES = ['rgw-manager']
-
-    def test_invalid_credentials(self):
-        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'invalid')
-        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'invalid')
-        resp = self._get('/api/rgw/user')
-        self.assertStatus(404)
-        self.assertIn('detail', resp)
-        self.assertIn('component', resp)
-        self.assertIn('Error connecting to Object Gateway', resp['detail'])
-        self.assertEqual(resp['component'], 'rgw')
-
-    def test_success(self):
-        # Set the default credentials.
-        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
-        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
-        data = self._get('/ui-api/rgw/status')
-        self.assertStatus(200)
-        self.assertIn('available', data)
-        self.assertIn('message', data)
-        self.assertTrue(data['available'])
-
-
 class RgwSiteTest(RgwTestCase):
 
     AUTH_ROLES = ['rgw-manager']
@@ -124,9 +99,14 @@ class RgwBucketTest(RgwTestCase):
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwBucketTest, cls).setUpClass()
+        # Create an MFA user
+        cls._radosgw_admin_cmd([
+            'user', 'create', '--uid', 'mfa-test-user', '--display-name', 'mfa-user',
+            '--system', '--access-key', 'mfa-access', '--secret', 'mfa-secret'
+        ])
         # Create MFA TOTP token for test user.
         cls._radosgw_admin_cmd([
-            'mfa', 'create', '--uid', 'teuth-test-user', '--totp-serial', cls._mfa_token_serial,
+            'mfa', 'create', '--uid', 'mfa-test-user', '--totp-serial', cls._mfa_token_serial,
             '--totp-seed', cls._mfa_token_seed, '--totp-seed-type', 'base32',
             '--totp-seconds', str(cls._mfa_token_time_step), '--totp-window', '1'
         ])
@@ -231,7 +211,7 @@ class RgwBucketTest(RgwTestCase):
             '/api/rgw/bucket/teuth-test-bucket',
             params={
                 'bucket_id': data['id'],
-                'uid': 'teuth-test-user',
+                'uid': 'mfa-test-user',
                 'versioning_state': 'Enabled'
             })
         self.assertStatus(200)
@@ -242,7 +222,7 @@ class RgwBucketTest(RgwTestCase):
             'bid': JLeaf(str),
             'tenant': JLeaf(str)
         }, allow_unknown=True))
-        self.assertEqual(data['owner'], 'teuth-test-user')
+        self.assertEqual(data['owner'], 'mfa-test-user')
         self.assertEqual(data['versioning'], 'Enabled')
 
         # Update bucket: enable MFA Delete.
@@ -250,7 +230,7 @@ class RgwBucketTest(RgwTestCase):
             '/api/rgw/bucket/teuth-test-bucket',
             params={
                 'bucket_id': data['id'],
-                'uid': 'teuth-test-user',
+                'uid': 'mfa-test-user',
                 'versioning_state': 'Enabled',
                 'mfa_delete': 'Enabled',
                 'mfa_token_serial': self._mfa_token_serial,
@@ -268,7 +248,7 @@ class RgwBucketTest(RgwTestCase):
             '/api/rgw/bucket/teuth-test-bucket',
             params={
                 'bucket_id': data['id'],
-                'uid': 'teuth-test-user',
+                'uid': 'mfa-test-user',
                 'versioning_state': 'Suspended',
                 'mfa_delete': 'Disabled',
                 'mfa_token_serial': self._mfa_token_serial,
@@ -388,7 +368,7 @@ class RgwBucketTest(RgwTestCase):
         self._post('/api/rgw/bucket',
                    params={
                        'bucket': 'teuth-test-bucket',
-                       'uid': 'teuth-test-user',
+                       'uid': 'mfa-test-user',
                        'zonegroup': 'default',
                        'placement_target': 'default-placement',
                        'lock_enabled': 'true',
@@ -417,7 +397,7 @@ class RgwBucketTest(RgwTestCase):
         self._put('/api/rgw/bucket/teuth-test-bucket',
                   params={
                       'bucket_id': data['id'],
-                      'uid': 'teuth-test-user',
+                      'uid': 'mfa-test-user',
                       'lock_mode': 'COMPLIANCE',
                       'lock_retention_period_days': '15',
                       'lock_retention_period_years': '0'
@@ -434,7 +414,7 @@ class RgwBucketTest(RgwTestCase):
         self._put('/api/rgw/bucket/teuth-test-bucket',
                   params={
                       'bucket_id': data['id'],
-                      'uid': 'teuth-test-user',
+                      'uid': 'mfa-test-user',
                       'versioning_state': 'Suspended'
                   })
         self.assertStatus(409)
@@ -866,3 +846,28 @@ class RgwUserSubuserTest(RgwTestCase):
         key = self.find_object_in_list(
             'user', 'teuth-test-user:teuth-test-subuser', data['keys'])
         self.assertIsInstance(key, object)
+
+
+class RgwApiCredentialsTest(RgwTestCase):
+
+    AUTH_ROLES = ['rgw-manager']
+
+    def test_invalid_credentials(self):
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'invalid')
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'invalid')
+        resp = self._get('/api/rgw/user')
+        self.assertStatus(404)
+        self.assertIn('detail', resp)
+        self.assertIn('component', resp)
+        self.assertIn('Error connecting to Object Gateway', resp['detail'])
+        self.assertEqual(resp['component'], 'rgw')
+
+    def test_success(self):
+        # Set the default credentials.
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-secret-key'], 'admin')
+        self._ceph_cmd_with_secret(['dashboard', 'set-rgw-api-access-key'], 'admin')
+        data = self._get('/ui-api/rgw/status')
+        self.assertStatus(200)
+        self.assertIn('available', data)
+        self.assertIn('message', data)
+        self.assertTrue(data['available'])

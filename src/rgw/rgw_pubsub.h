@@ -672,12 +672,56 @@ public:
 };
 
 namespace rgw::notify {
-
   // Denotes that the topic has not overridden the global configurations for (time_to_live / max_retries / retry_sleep_duration)
   // defaults: (rgw_topic_persistency_time_to_live / rgw_topic_persistency_max_retries / rgw_topic_persistency_sleep_duration)
   constexpr uint32_t DEFAULT_GLOBAL_VALUE = UINT32_MAX;
   // Used in case the topic is using the default global value for dumping in a formatter
   constexpr static const std::string_view DEFAULT_CONFIG{"None"};
+  struct event_entry_t {
+    rgw_pubsub_s3_event event;
+    std::string push_endpoint;
+    std::string push_endpoint_args;
+    std::string arn_topic;
+    ceph::coarse_real_time creation_time;
+    uint32_t time_to_live = DEFAULT_GLOBAL_VALUE;
+    uint32_t max_retries = DEFAULT_GLOBAL_VALUE;
+    uint32_t retry_sleep_duration = DEFAULT_GLOBAL_VALUE;
+    
+    void encode(bufferlist& bl) const {
+      ENCODE_START(3, 1, bl);
+      encode(event, bl);
+      encode(push_endpoint, bl);
+      encode(push_endpoint_args, bl);
+      encode(arn_topic, bl);
+      encode(creation_time, bl);
+      encode(time_to_live, bl);
+      encode(max_retries, bl);
+      encode(retry_sleep_duration, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(3, bl);
+      decode(event, bl);
+      decode(push_endpoint, bl);
+      decode(push_endpoint_args, bl);
+      decode(arn_topic, bl);
+      if (struct_v > 1) {
+        decode(creation_time, bl);
+      } else {
+        creation_time = ceph::coarse_real_clock::zero();
+      }
+      if (struct_v > 2) {
+        decode(time_to_live, bl);
+        decode(max_retries, bl);
+        decode(retry_sleep_duration, bl);
+      }
+      DECODE_FINISH(bl);
+    }
+
+    void dump(Formatter *f) const;
+  };
+  WRITE_CLASS_ENCODER(event_entry_t)
 }
 
 std::string topic_to_unique(const std::string& topic,

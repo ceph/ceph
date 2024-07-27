@@ -15,6 +15,12 @@ import {
 import { ClickOutsideModule } from 'ng-click-outside';
 import { NgChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
+import {
+  UIShellModule,
+  ButtonModule,
+  NotificationModule,
+  IconModule
+} from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
@@ -76,7 +82,11 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
     SimplebarAngularModule,
     RouterModule,
     NgbDatepickerModule,
-    NgbTimepickerModule
+    NgbTimepickerModule,
+    UIShellModule,
+    ButtonModule,
+    NotificationModule,
+    IconModule
   ],
   declarations: [
     SparklineComponent,

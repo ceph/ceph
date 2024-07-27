@@ -919,6 +919,40 @@ def test_versioned_object_incremental_sync():
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+def test_null_version_id_delete():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a non-versioned bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+    obj = 'obj'
+
+    # upload an initial object
+    key1 = new_key(zone, bucket, obj)
+    key1.set_contents_from_string('')
+    log.debug('created initial version id=%s', key1.version_id)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # enable versioning
+    bucket.configure_versioning(True)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # re-upload the object as a new version
+    key2 = new_key(zone, bucket, obj)
+    key2.set_contents_from_string('')
+    log.debug('created new version id=%s', key2.version_id)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    bucket.delete_key(obj, version_id='null')
+
+    bucket.delete_key(obj, version_id=key2.version_id)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 def test_concurrent_versioned_object_incremental_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1928,6 +1962,35 @@ def test_role_delete_sync():
                       zone.iam_conn.get_role, RoleName=role_name)
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
+
+def test_replication_status():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone = zonegroup_conns.rw_zones[0]
+
+    bucket = zone.conn.create_bucket(gen_bucket_name())
+    obj_name = "a"
+    k = new_key(zone, bucket.name, obj_name)
+    k.set_contents_from_string('foo')
+    zonegroup_meta_checkpoint(zonegroup)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    head_res = zone.head_object(bucket.name, obj_name)
+    log.info("checking if object has PENDING ReplicationStatus")
+    assert(head_res["ReplicationStatus"] == "PENDING")
+
+    bilog_autotrim(zone.zone)
+    zonegroup_data_checkpoint(zonegroup_conns)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    head_res = zone.head_object(bucket.name, obj_name)
+    log.info("checking if object has COMPLETED ReplicationStatus")
+    assert(head_res["ReplicationStatus"] == "COMPLETED")
+
+    log.info("checking that ReplicationStatus update did not write a bilog")
+    bilog = bilog_list(zone.zone, bucket.name)
+    assert(len(bilog) == 0)
+
 def test_object_acl():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1958,6 +2021,7 @@ def test_object_acl():
     bucket2 = get_bucket(secondary, bucket.name)
     after_set_acl = bucket2.get_acl(k)
     assert(len(after_set_acl.acl.grants) == 2) # read grant added on AllUsers
+
 
 @attr('fails_with_rgw')
 @attr('data_sync_init')
@@ -3501,3 +3565,73 @@ def test_account_metadata_sync():
             check_users_eq(source_conn, target_conn)
             check_groups_eq(source_conn, target_conn)
             check_oidc_providers_eq(source_conn, target_conn)
+
+   
+@attr('copy_object')
+def test_copy_object_same_bucket():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+
+    objname = 'dummy'
+
+    # upload a dummy object and wait for sync.
+    k = new_key(primary, bucket, objname)
+    k.set_contents_from_string('foo')
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_data_checkpoint(zonegroup_conns)
+    log.debug('created object=%s', objname)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # copy object on primary zone
+    primary.s3_client.copy_object(Bucket=bucket.name,
+        CopySource=bucket.name + '/'+ objname,
+        Key= objname + '-copy1')
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # copy object on secondary zone
+    secondary.s3_client.copy_object(Bucket=bucket.name,
+        Key= objname + '-copy2', 
+        CopySource=bucket.name + '/'+ objname)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+@attr('copy_object')
+def test_copy_object_different_bucket():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    source_bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', source_bucket.name)
+
+    objname = 'dummy'
+
+    # upload a dummy object and wait for sync.
+    k = new_key(primary, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    zonegroup_bucket_checkpoint(zonegroup_conns, source_bucket.name)
+    
+    # create destination bucket
+    dest_bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', dest_bucket.name)
+    
+    zonegroup_meta_checkpoint(zonegroup)
+            
+    # copy object on primary zone
+    primary.s3_client.copy_object(Bucket = dest_bucket.name,
+        Key = objname + '-copy',
+        CopySource = source_bucket.name + '/' + objname)
+    
+    zonegroup_bucket_checkpoint(zonegroup_conns, dest_bucket.name)
+    

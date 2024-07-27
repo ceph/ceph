@@ -1,0 +1,44 @@
+
+# {{ cephadm_managed }}
+worker_rlimit_nofile 8192;
+
+events {
+    worker_connections 4096;
+}
+
+http {
+{% if dashboard_endpoints %}
+    upstream dashboard_servers {
+     {% for ep in dashboard_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if grafana_endpoints %}
+    upstream grafana_servers {
+     {% for ep in grafana_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if prometheus_endpoints %}
+    upstream prometheus_servers {
+     {% for ep in prometheus_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if alertmanager_endpoints %}
+    upstream alertmanager_servers {
+     {% for ep in alertmanager_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+    include /etc/nginx_external_server.conf;
+    include /etc/nginx_internal_server.conf;
+}

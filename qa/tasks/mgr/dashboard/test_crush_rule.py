@@ -82,3 +82,16 @@ class CrushRuleTest(DashboardTestCase):
             'nodes': JList(JObj({}, allow_unknown=True)),
             'roots': JList(int)
         }))
+
+    @DashboardTestCase.RunAs('test', 'test', ['pool-manager', 'cluster-manager'])
+    def test_create_erasure_with_ssd(self):
+        data = self._get('/api/osd/0')
+        self.assertStatus(200)
+        device_class = data['osd_metadata']['default_device_class']
+        self.create_and_delete_rule({
+            'pool_type': 'erasure',
+            'name': 'some_erasure_crush_rule',
+            'profile': 'default',
+            'failure_domain': 'osd',
+            'device_class': device_class
+        })

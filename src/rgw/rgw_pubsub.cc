@@ -378,6 +378,23 @@ void rgw_pubsub_s3_event::dump(Formatter *f) const {
   encode_json("opaqueData", opaque_data, f);
 }
 
+namespace rgw::notify {
+    void event_entry_t::dump(Formatter *f) const {
+      Formatter::ObjectSection s(*f, "entry");
+      {
+        Formatter::ObjectSection sub_s(*f, "event");
+        event.dump(f);
+      }
+      encode_json("pushEndpoint", push_endpoint, f);
+      encode_json("pushEndpointArgs", push_endpoint_args, f);
+      encode_json("topic", arn_topic, f);
+      encode_json("creationTime", creation_time, f);
+      encode_json("TTL", time_to_live, f);
+      encode_json("maxRetries", max_retries, f);
+      encode_json("retrySleepDuration", retry_sleep_duration, f);
+    }
+}
+
 void rgw_pubsub_topic::dump(Formatter *f) const
 {
   encode_json("owner", owner, f);
@@ -1081,21 +1098,23 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
                        << dendl;
     return 0;
   }
-  ret = driver->remove_topic_v2(name, tenant, objv_tracker, y, dpp);
-  if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to remove topic info: ret=" << ret
-                      << dendl;
-    return ret;
-  }
 
   const rgw_pubsub_dest& dest = topic.dest;
   if (!dest.push_endpoint.empty() && dest.persistent &&
       !dest.persistent_queue.empty()) {
     ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
     if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
+      ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for "
           "persistent topic: " << cpp_strerror(ret) << dendl;
-    } // not fatal
+      return ret;
+    }
+  }
+
+  ret = driver->remove_topic_v2(name, tenant, objv_tracker, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove topic info: ret=" << ret
+                      << dendl;
+    return ret;
   }
   return 0;
 }
@@ -1127,22 +1146,21 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
   if (t == topics.topics.end()) {
     return -ENOENT;
   }
-  const rgw_pubsub_dest dest = std::move(t->second.dest);
+  if (!t->second.dest.push_endpoint.empty() && t->second.dest.persistent &&
+      !t->second.dest.persistent_queue.empty()) {
+    ret = driver->remove_persistent_topic(dpp, y, t->second.dest.persistent_queue);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for "
+          "persistent topic: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  }
   topics.topics.erase(t);
 
   ret = write_topics_v1(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to remove topics info: ret=" << ret << dendl;
     return ret;
-  }
-
-  if (!dest.push_endpoint.empty() && dest.persistent &&
-      !dest.persistent_queue.empty()) {
-    ret = driver->remove_persistent_topic(dpp, y, dest.persistent_queue);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
-          "persistent topic: " << cpp_strerror(ret) << dendl;
-    } // not fatal
   }
   return 0;
 }

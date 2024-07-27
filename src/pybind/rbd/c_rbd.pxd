@@ -86,6 +86,10 @@ cdef extern from "rbd/librbd.h" nogil:
         char *group_name
         char *group_snap_name
 
+    ctypedef struct rbd_snap_trash_namespace_t:
+        rbd_snap_namespace_type_t original_namespace_type;
+        char *original_name;
+
     ctypedef enum rbd_snap_mirror_state_t:
         _RBD_SNAP_MIRROR_STATE_PRIMARY "RBD_SNAP_MIRROR_STATE_PRIMARY"
         _RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED "RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED"
@@ -220,9 +224,18 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_GROUP_SNAP_STATE_INCOMPLETE "RBD_GROUP_SNAP_STATE_INCOMPLETE"
         _RBD_GROUP_SNAP_STATE_COMPLETE "RBD_GROUP_SNAP_STATE_COMPLETE"
 
-    ctypedef struct rbd_group_snap_info_t:
+    ctypedef struct rbd_group_image_snap_info_t:
+        char *image_name
+        int64_t pool_id
+        uint64_t snap_id
+
+    ctypedef struct rbd_group_snap_info2_t:
+        char *id
         char *name
+        char *image_snap_name
         rbd_group_snap_state_t state
+        size_t image_snaps_count
+        rbd_group_image_snap_info_t *image_snaps
 
     ctypedef enum rbd_image_migration_state_t:
         _RBD_IMAGE_MIGRATION_STATE_UNKNOWN "RBD_IMAGE_MIGRATION_STATE_UNKNOWN"
@@ -328,6 +341,9 @@ cdef extern from "rbd/librbd.h" nogil:
                     rbd_image_options_t opts)
     int rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
                    const char *p_snapname, rados_ioctx_t c_ioctx,
+                   const char *c_name, rbd_image_options_t c_opts)
+    int rbd_clone4(rados_ioctx_t p_ioctx, const char *p_name,
+                   uint64_t p_snap_id, rados_ioctx_t c_ioctx,
                    const char *c_name, rbd_image_options_t c_opts)
     int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
                                  librbd_progress_fn_t cb, void *cbdata)
@@ -546,8 +562,11 @@ cdef extern from "rbd/librbd.h" nogil:
                                      size_t snap_group_namespace_size)
     void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_spec,
                                           size_t snap_group_namespace_size)
-    int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
-                                     char *original_name, size_t max_length)
+    int rbd_snap_get_trash_namespace2(rbd_image_t image, uint64_t snap_id,
+                                      rbd_snap_trash_namespace_t *trash_snap,
+                                      size_t trash_snap_size)
+    void rbd_snap_trash_namespace_cleanup(rbd_snap_trash_namespace_t *trash_snap,
+                                          size_t trash_snap_size)
     int rbd_snap_get_mirror_namespace(
         rbd_image_t image, uint64_t snap_id,
         rbd_snap_mirror_namespace_t *mirror_ns,
@@ -662,6 +681,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
+    int rbd_group_get_id(rados_ioctx_t p, const char *group_name,
+                         char *group_id, size_t *size)
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)
@@ -688,14 +709,18 @@ cdef extern from "rbd/librbd.h" nogil:
                               const char *old_snap_name,
                               const char *new_snap_name)
 
-    int rbd_group_snap_list(rados_ioctx_t group_p,
-                            const char *group_name,
-                            rbd_group_snap_info_t *snaps,
-                            size_t group_snap_info_size,
-                            size_t *snaps_size)
+    int rbd_group_snap_get_info(rados_ioctx_t group_p, const char *group_name,
+                                const char *snap_name,
+                                rbd_group_snap_info2_t *group_snap)
+    void rbd_group_snap_get_info_cleanup(rbd_group_snap_info2_t *group_snap)
 
-    void rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
-                                     size_t group_snap_info_size, size_t len)
+    int rbd_group_snap_list2(rados_ioctx_t group_p,
+                             const char *group_name,
+                             rbd_group_snap_info2_t *snaps,
+                             size_t *snaps_size)
+    void rbd_group_snap_list2_cleanup(rbd_group_snap_info2_t *snaps,
+                                      size_t len)
+
     int rbd_group_snap_rollback(rados_ioctx_t group_p, const char *group_name,
                                 const char *snap_name)
 

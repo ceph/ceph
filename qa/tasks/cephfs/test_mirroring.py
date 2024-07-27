@@ -275,7 +275,8 @@ class TestMirroring(CephFSTestCase):
         """return the rados addr used by cephfs-mirror instance"""
         res = self.mirror_daemon_command(f'mirror status for fs: {fs_name}',
                                          'fs', 'mirror', 'status', f'{fs_name}@{fs_id}')
-        return res['rados_inst']
+        if 'rados_inst' in res:
+            return res['rados_inst']
 
     def mirror_daemon_command(self, cmd_label, *args):
         asok_path = self.get_daemon_admin_socket()
@@ -491,6 +492,7 @@ class TestMirroring(CephFSTestCase):
 
         # fetch rados address for blacklist check
         rados_inst = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+        self.assertTrue(rados_inst)
 
         # simulate non-responding mirror daemon by sending SIGSTOP
         pid = self.get_mirror_daemon_pid()
@@ -509,9 +511,16 @@ class TestMirroring(CephFSTestCase):
         # check if the rados addr is blocklisted
         self.assertTrue(self.mds_cluster.is_addr_blocklisted(rados_inst))
 
-        # wait enough so that the mirror daemon restarts blocklisted instances
-        time.sleep(40)
-        rados_inst_new = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+        # wait for restart, which is after 30 seconds timeout (cephfs_mirror_restart_mirror_on_blocklist_interval)
+        time.sleep(60)
+
+        # get the new rados_inst
+        rados_inst_new = ""
+        with safe_while(sleep=2, tries=20, action='wait for mirror status rados_inst') as proceed:
+            while proceed():
+                rados_inst_new = self.get_mirror_rados_addr(self.primary_fs_name, self.primary_fs_id)
+                if rados_inst_new:
+                    break
 
         # and we should get a new rados instance
         self.assertTrue(rados_inst != rados_inst_new)

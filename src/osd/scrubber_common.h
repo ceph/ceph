@@ -23,6 +23,7 @@ using ScrubTimePoint = ScrubClock::time_point;
 namespace Scrub {
   class ReplicaReservations;
   struct ReplicaActive;
+  class ScrubJob;
 }
 
 /// reservation-related data sent by the primary to the replicas,
@@ -90,19 +91,53 @@ struct OSDRestrictions {
 };
 static_assert(sizeof(Scrub::OSDRestrictions) <= sizeof(uint32_t));
 
+/// concise passing of PG state affecting scrub to the
+/// scrubber at the initiation of a scrub
+struct ScrubPGPreconds {
+  bool allow_shallow{true};
+  bool allow_deep{true};
+  bool has_deep_errors{false};
+  bool can_autorepair{false};
+};
+static_assert(sizeof(Scrub::ScrubPGPreconds) <= sizeof(uint32_t));
+
+/// possible outcome when trying to select a PG and scrub it
+enum class schedule_result_t {
+  scrub_initiated,	    // successfully started a scrub
+  target_specific_failure,  // failed to scrub this specific target
+  osd_wide_failure	    // failed to scrub any target
+};
+
+/// rescheduling param: should we delay jobs already ready to execute?
+enum class delay_ready_t : bool { delay_ready = true, no_delay = false };
+
 }  // namespace Scrub
 
 namespace fmt {
+template <>
+struct formatter<Scrub::ScrubPGPreconds> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const Scrub::ScrubPGPreconds& conds, FormatContext& ctx) const
+  {
+    return fmt::format_to(
+	ctx.out(), "allowed(shallow/deep):{:1}/{:1},deep-err:{:1},can-autorepair:{:1}",
+	conds.allow_shallow, conds.allow_deep, conds.has_deep_errors,
+	conds.can_autorepair);
+  }
+};
+
 template <>
 struct formatter<Scrub::OSDRestrictions> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx)
+  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const
   {
     return fmt::format_to(
       ctx.out(),
-      "priority-only:{} overdue-only:{} load:{} time:{} repair-only:{}",
+      "priority-only:{},overdue-only:{},load:{},time:{},repair-only:{}",
         conds.high_priority_only,
         conds.only_deadlined,
         conds.load_is_low ? "ok" : "high",
@@ -389,6 +424,29 @@ struct ScrubPgIF {
 
   virtual void replica_scrub_op(OpRequestRef op) = 0;
 
+  /**
+   * attempt to initiate a scrub session.
+   * @param candidate the scrub job to start. Later on - this will be the
+   *   specific queue entry (that carries the information about the level,
+   *   priority, etc. of the scrub that should be initiated on this PG).
+   *   This parameter is saved by the scrubber for the whole duration of
+   *   the scrub session (to be used if the scrub is aborted).
+   * @param osd_restrictions limitations on the types of scrubs that can
+   *   be initiated on this OSD at this time.
+   * @param preconds the PG state re scrubbing at the time of the request,
+   *   affecting scrub parameters.
+   * @param requested_flags the set of flags that determine the scrub type
+   *   and attributes (to be removed in the next iteration).
+   * @return the result of the scrub initiation attempt. A success,
+   *   or either a failure due to the specific PG, or a failure due to
+   *   external reasons.
+   */
+  virtual Scrub::schedule_result_t start_scrub_session(
+      std::unique_ptr<Scrub::ScrubJob> candidate,
+      Scrub::OSDRestrictions osd_restrictions,
+      Scrub::ScrubPGPreconds pg_cond,
+      const requested_scrub_t& requested_flags) = 0;
+
   virtual void set_op_parameters(const requested_scrub_t&) = 0;
 
   /// stop any active scrubbing (on interval end) and unregister from
@@ -405,9 +463,6 @@ struct ScrubPgIF {
   virtual void handle_query_state(ceph::Formatter* f) = 0;
 
   virtual pg_scrubbing_status_t get_schedule() const = 0;
-
-  /// notify the scrubber about a scrub failure
-  virtual void penalize_next_scrub(Scrub::delay_cause_t cause) = 0;
 
   // // perform 'scrub'/'deep_scrub' asok commands
 
@@ -496,7 +551,7 @@ struct ScrubPgIF {
    * This function assumes that the queue registration status is up-to-date,
    * i.e. the OSD "knows our name" if-f we are the Primary.
    */
-  virtual void update_scrub_job(const requested_scrub_t& request_flags) = 0;
+  virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
 
   /**
    * route incoming replica-reservations requests/responses to the

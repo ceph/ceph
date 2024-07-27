@@ -3,8 +3,7 @@
 
 #define CEPH_GIT_VER @CEPH_GIT_VER@
 #define CEPH_GIT_NICE_VER "@CEPH_GIT_NICE_VER@"
-#define CEPH_RELEASE @CEPH_RELEASE@
-#define CEPH_RELEASE_NAME "@CEPH_RELEASE_NAME@"
-#define CEPH_RELEASE_TYPE "@CEPH_RELEASE_TYPE@"
+
+#include "ceph_release.h"
 
 #endif

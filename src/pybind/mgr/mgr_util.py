@@ -1,7 +1,7 @@
 import os
 
 if 'UNITTEST' in os.environ:
-    import tests
+    import tests  # noqa
 
 import bcrypt
 import cephfs
@@ -13,7 +13,7 @@ import time
 import logging
 import sys
 from ipaddress import ip_address
-from threading import Lock, Condition, Event
+from threading import Lock, Condition
 from typing import no_type_check, NewType
 import urllib
 from functools import wraps
@@ -70,6 +70,7 @@ class CephfsConnectionException(Exception):
     def __str__(self) -> str:
         return "{0} ({1})".format(self.errno, self.error_str)
 
+
 class RTimer(Timer):
     """
     recurring timer variant of Timer
@@ -84,6 +85,7 @@ class RTimer(Timer):
         except Exception as e:
             logger.error("task exception: %s", e)
             raise
+
 
 @contextlib.contextmanager
 def lock_timeout_log(lock: Lock, timeout: int = 5) -> Iterator[None]:
@@ -145,7 +147,7 @@ class CephfsConnectionPool(object):
             fs_id = None
             try:
                 fs_id = self.get_fs_id()
-            except:
+            except:  # noqa
                 # the filesystem does not exist now -- connection is not valid.
                 pass
             logger.debug("self.fs_id={0}, fs_id={1}".format(self.fs_id, fs_id))
@@ -333,7 +335,6 @@ class CephfsClient(Generic[Module_T]):
         return fs_list
 
 
-
 @contextlib.contextmanager
 def open_filesystem(fsc: CephfsClient, fs_name: str) -> Generator["cephfs.LibCephFS", None, None]:
     """
@@ -516,7 +517,7 @@ def create_self_signed_cert(organisation: str = 'Ceph',
 
     :param organisation: String representing the Organisation(O) RDN (default='Ceph')
     :param common_name: String representing the Common Name(CN) RDN (default='mgr')
-    :param dname: Optional dictionary containing RDNs to use for crt/key generation 
+    :param dname: Optional dictionary containing RDNs to use for crt/key generation
 
     :return: ssl crt and key in utf-8 format
 
@@ -600,10 +601,11 @@ def verify_cacrt(cert_fname):
         raise ServerConfigException(
             'Invalid certificate {}: {}'.format(cert_fname, str(e)))
 
-def get_cert_issuer_info(crt: str) -> Tuple[Optional[str],Optional[str]]:
+
+def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
     """Basic validation of a ca cert"""
 
-    from OpenSSL import crypto, SSL
+    from OpenSSL import crypto, SSL  # noqa
     try:
         crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
         (org_name, cn) = (None, None)
@@ -617,6 +619,7 @@ def get_cert_issuer_info(crt: str) -> Tuple[Optional[str],Optional[str]]:
         return (org_name, cn)
     except (ValueError, crypto.Error) as e:
         raise ServerConfigException(f'Invalid certificate key: {e}')
+
 
 def verify_tls(crt, key):
     # type: (str, str) -> None
@@ -646,7 +649,6 @@ def verify_tls(crt, key):
         logger.warning('Private key and certificate do not match up: {}'.format(str(e)))
     except SSL.Error as e:
         raise ServerConfigException(f'Invalid cert/key pair: {e}')
-
 
 
 def verify_tls_files(cert_fname, pkey_fname):
@@ -716,6 +718,7 @@ def get_most_recent_rate(rates: Optional[List[Tuple[float, float]]]) -> float:
         return 0.0
     return rates[-1][1]
 
+
 def get_time_series_rates(data: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
     """ Rates from time series data
 
@@ -743,6 +746,7 @@ def get_time_series_rates(data: List[Tuple[float, float]]) -> List[Tuple[float, 
         return []
     return [(data2[0], _derivative(data1, data2) if data1 is not None else 0.0) for data1, data2 in
             _pairwise(data)]
+
 
 def name_to_config_section(name: str) -> ConfEntity:
     """
@@ -840,12 +844,12 @@ def to_pretty_timedelta(n: datetime.timedelta) -> str:
     if n < datetime.timedelta(hours=48):
         return str(int(n.total_seconds()) // 3600) + 'h'
     if n < datetime.timedelta(days=14):
-        return str(int(n.total_seconds()) // (3600*24)) + 'd'
-    if n < datetime.timedelta(days=7*12):
-        return str(int(n.total_seconds()) // (3600*24*7)) + 'w'
-    if n < datetime.timedelta(days=365*2):
-        return str(int(n.total_seconds()) // (3600*24*30)) + 'M'
-    return str(int(n.total_seconds()) // (3600*24*365)) + 'y'
+        return str(int(n.total_seconds()) // (3600 * 24)) + 'd'
+    if n < datetime.timedelta(days=7 * 12):
+        return str(int(n.total_seconds()) // (3600 * 24 * 7)) + 'w'
+    if n < datetime.timedelta(days=365 * 2):
+        return str(int(n.total_seconds()) // (3600 * 24 * 30)) + 'M'
+    return str(int(n.total_seconds()) // (3600 * 24 * 365)) + 'y'
 
 
 def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]], Callable[..., T]]:

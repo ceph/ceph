@@ -8,9 +8,16 @@
 
 .container-fluid {
   overflow: auto;
+  padding-bottom: 48px;
   position: absolute;
+  top: 48px;
 }
 
 .rgw-dashboard {
   background-color: vv.$body-bg-alt;
+}
+
+.cd-alert-container {
+  display: flex;
+  flex-direction: column;
 }

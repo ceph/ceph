@@ -129,6 +129,10 @@
  * to any guidelines regarding deprecating commands.
  */
 
+#define DEFAULT_GOODCHARS "[A-Za-z0-9-_.]"
+#define FS_NAME_GOODCHARS DEFAULT_GOODCHARS
+#define CLASS_GOODCHARS DEFAULT_GOODCHARS
+
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r")
 COMMAND("pg repeer name=pgid,type=CephPgid", "force a PG to repeer",
@@ -162,6 +166,10 @@ COMMAND("auth add "
 	"name=caps,type=CephString,n=N,req=false",
 	"add auth info for <entity> from input file, or random key if no "
         "input is given, and/or any caps specified in the command",
+	"auth", "rwx")
+COMMAND("auth rotate "
+	"name=entity,type=CephString",
+	"rotate entity key",
 	"auth", "rwx")
 COMMAND("auth get-or-create-key "
 	"name=entity,type=CephString "
@@ -292,8 +300,10 @@ COMMAND("versions",
  * MDS commands (MDSMonitor.cc)
  */
 
-#define FS_NAME_GOODCHARS "[A-Za-z0-9-_.]"
 COMMAND_WITH_FLAG("mds stat", "show MDS status", "mds", "r", FLAG(HIDDEN))
+COMMAND("mds last-seen name=id,type=CephString,req=true",
+	"fetch metadata for mds <id>",
+	"mds", "r")
 COMMAND("fs dump "
 	"name=epoch,type=CephInt,req=false,range=0",
 	"dump all CephFS status, optionally from epoch", "mds", "r")
@@ -617,7 +627,7 @@ COMMAND_WITH_FLAG("osd crush rule list", "list crush rules", "osd", "r",
 		  FLAG(DEPRECATED))
 COMMAND("osd crush rule ls", "list crush rules", "osd", "r")
 COMMAND("osd crush rule ls-by-class "
-        "name=class,type=CephString,goodchars=[A-Za-z0-9-_.]",
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS,
         "list all crush rules that reference the same <class>",
         "osd", "r")
 COMMAND("osd crush rule dump "
@@ -661,16 +671,16 @@ COMMAND("osd crush set-all-straw-buckets-to-straw2",
         "convert all CRUSH current straw buckets to use the straw2 algorithm",
 	"osd", "rw")
 COMMAND("osd crush class create "
-        "name=class,type=CephString,goodchars=[A-Za-z0-9-_]",
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS,
         "create crush device class <class>",
         "osd", "rw")
 COMMAND("osd crush class rm "
-        "name=class,type=CephString,goodchars=[A-Za-z0-9-_]",
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS,
         "remove crush device class <class>",
         "osd", "rw")
 COMMAND("osd crush set-device-class "
-        "name=class,type=CephString "
-	"name=ids,type=CephString,n=N",
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS
+	" name=ids,type=CephString,n=N",
 	"set the <class> of the osd(s) <id> [<id>...],"
         "or use <all|any> to set all.",
 	"osd", "rw")
@@ -760,7 +770,7 @@ COMMAND("osd crush rule create-replicated "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
 	"name=root,type=CephString,goodchars=[A-Za-z0-9-_.] "
 	"name=type,type=CephString,goodchars=[A-Za-z0-9-_.] "
-	"name=class,type=CephString,goodchars=[A-Za-z0-9-_.],req=false",
+	"name=class,type=CephString,goodchars=" CLASS_GOODCHARS ",req=false",
 	"create crush rule <name> for replicated pool to start from <root>, replicate across buckets of type <type>, use devices of type <class> (ssd or hdd)",
 	"osd", "rw")
 COMMAND("osd crush rule create-erasure "
@@ -787,7 +797,7 @@ COMMAND("osd crush class ls",
 	"list all crush device classes",
 	"osd", "r")
 COMMAND("osd crush class ls-osd "
-        "name=class,type=CephString,goodchars=[A-Za-z0-9-_]",
+        "name=class,type=CephString,goodchars=" CLASS_GOODCHARS,
         "list all osds belonging to the specific <class>",
         "osd", "r")
 COMMAND("osd crush get-device-class "
@@ -853,7 +863,8 @@ COMMAND("osd unpause", "unpause osd", "osd", "rw")
 COMMAND("osd erasure-code-profile set "
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
 	"name=profile,type=CephString,n=N,req=false "
-	"name=force,type=CephBool,req=false",
+	"name=force,type=CephBool,req=false "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)",
 	"osd", "rw")
 COMMAND("osd erasure-code-profile get "

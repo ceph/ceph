@@ -27,7 +27,7 @@ export enum Icons {
   right = 'fa fa-arrow-right', // Mark in
   down = 'fa fa-arrow-down', // Mark Down
   erase = 'fa fa-eraser', // Purge  color: bd.$white;
-
+  expand = 'fa fa-expand', // Expand cluster
   user = 'fa fa-user', // User, Initiators
   users = 'fa fa-users', // Users, Groups
   share = 'fa fa-share-alt', // share
@@ -84,6 +84,7 @@ export enum Icons {
   eye = 'fa fa-eye', // Observability
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
+  nfsExport = 'fa fa-server', // NFS export
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

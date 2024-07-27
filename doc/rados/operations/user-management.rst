@@ -744,6 +744,20 @@ You may also :ref:`Modify user capabilities<modify-user-capabilities>` directly 
 results to a keyring file, and then import the keyring into your main
 ``ceph.keyring`` file.
 
+
+Key rotation
+------------
+
+To rotate the secret for an entity, use:
+
+.. prompt:: bash #
+
+    ceph auth rotate <entity>
+
+This avoids the need to delete and recreate the entity when its key is
+compromised, lost, or scheduled for rotation.
+
+
 Command Line Usage
 ==================
 

@@ -411,11 +411,16 @@ seastar::future<> OSD::start()
             shard_stats[seastar::this_shard_id()] = stats;
           }).then([this, FNAME] {
             std::ostringstream oss;
+            double agg_ru = 0;
+            int cnt = 0;
             for (const auto &stats : shard_stats) {
+              agg_ru += stats.reactor_utilization;
+              ++cnt;
               oss << int(stats.reactor_utilization);
               oss << ",";
             }
-            INFO("reactor_utilizations: {}", oss.str());
+            INFO("reactor_utilizations: {}({})",
+                 int(agg_ru/cnt), oss.str());
           });
         });
         gate.dispatch_in_background("stats_store", *this, [this] {
@@ -1178,6 +1183,13 @@ seastar::future<> OSD::committed_osd_maps(
       }
       if (should_restart()) {
         return restart();
+      } else if (!pg_shard_manager.is_stopping()) {
+        /* 
+         * TODO: Missing start_waiting_for_healthy() counterpart.
+         * Only subscribe to the next map until implemented.
+         * See https://tracker.ceph.com/issues/66832 
+        */
+	return get_shard_services().osdmap_subscribe(osdmap->get_epoch() + 1, false);
       } else {
         return seastar::now();
       }

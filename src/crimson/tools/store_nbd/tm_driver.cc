@@ -139,11 +139,13 @@ seastar::future<bufferlist> TMDriver::read(
 
 void TMDriver::init()
 {
+  shard_stats = {};
+
   std::vector<Device*> sec_devices;
 #ifndef NDEBUG
-  tm = make_transaction_manager(device.get(), sec_devices, true);
+  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, true);
 #else
-  tm = make_transaction_manager(device.get(), sec_devices, false);
+  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, false);
 #endif
 }
 

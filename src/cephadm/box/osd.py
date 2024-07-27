@@ -5,7 +5,6 @@ import re
 from typing import Dict
 
 from util import (
-    BoxType,
     Config,
     Target,
     ensure_inside_container,

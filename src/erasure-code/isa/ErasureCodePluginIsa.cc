@@ -77,6 +77,10 @@ const char *__erasure_code_version()
 int __erasure_code_init(char *plugin_name, char *directory)
 {
   auto& instance = ceph::ErasureCodePluginRegistry::instance();
-
-  return instance.add(plugin_name, new ErasureCodePluginIsa());
+  auto plugin = std::make_unique<ErasureCodePluginIsa>();
+  int r = instance.add(plugin_name, plugin.get());
+  if (r == 0) {
+    plugin.release();  
+  }
+  return r;
 }

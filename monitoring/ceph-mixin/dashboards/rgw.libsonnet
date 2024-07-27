@@ -112,6 +112,45 @@ local g = import 'grafonnet/grafana.libsonnet';
         8,
         7
       ),
+      $.timeSeriesPanel(
+        lineInterpolation='linear',
+        lineWidth=1,
+        drawStyle='line',
+        axisPlacement='auto',
+        title='Replication(Time) Delta per shard',
+        datasource='$datasource',
+        gridPosition={ h: 7, w: 16, x: 8, y: 7 },
+        fillOpacity=0,
+        pointSize=5,
+        showPoints='auto',
+        unit='s',
+        displayMode='table',
+        showLegend=true,
+        placement='right',
+        tooltip={ mode: 'multi', sort: 'desc' },
+        stackingMode='none',
+        spanNulls=false,
+        decimals=2,
+        thresholdsMode='absolute',
+        sortBy='Last *',
+        sortDesc=true
+      )
+      .addCalcs(['lastNotNull'])
+      .addThresholds([
+        { color: 'green', value: null },
+        { color: 'red', value: 80 },
+      ])
+      .addTargets(
+        [
+          $.addTargetSchema(
+            expr='rate(ceph_rgw_sync_delta_sync_delta[$__rate_interval])',
+            datasource='$datasource',
+            instant=false,
+            legendFormat='{{instance_id}} - {{shard_id}}',
+            range=true,
+          ),
+        ]
+      ),
     ]),
   'radosgw-overview.json':
     local RgwOverviewPanel(

@@ -50,3 +50,14 @@ export class SystemKey {
   access_key: string;
   secret_key: string;
 }
+
+export enum RgwMultisiteSyncPolicyStatus {
+  ENABLED = 'enabled',
+  FORBIDDEN = 'forbidden',
+  ALLOWED = 'allowed'
+}
+
+export enum FlowType {
+  directional = 'directional',
+  symmetrical = 'symmetrical'
+}

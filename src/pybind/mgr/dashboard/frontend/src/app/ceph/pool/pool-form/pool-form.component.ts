@@ -86,6 +86,8 @@ export class PoolFormComponent extends CdForm implements OnInit {
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   crushRuleMaxSize = 10;
   DEFAULT_RATIO = 0.875;
+  isApplicationsSelected = true;
+  msrCrush: boolean = false;
 
   private modalSubscription: Subscription;
 
@@ -199,6 +201,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       this.listenToChanges();
       this.setComplexValidators();
     });
+    this.erasureProfileChange();
   }
 
   private initInfo(info: PoolFormInfo) {
@@ -860,12 +863,20 @@ export class PoolFormComponent extends CdForm implements OnInit {
       if (apps.includes('rbd')) {
         pool['rbd_mirroring'] = this.form.getValue('rbdMirroring');
       }
+      this.isApplicationsSelected = true;
+    } else {
+      this.isApplicationsSelected = false;
     }
 
     // Only collect configuration data for replicated pools, as QoS cannot be configured on EC
     // pools. EC data pools inherit their settings from the corresponding replicated metadata pool.
     if (this.isReplicated && !_.isEmpty(this.currentConfigurationValues)) {
       pool['configuration'] = this.currentConfigurationValues;
+    }
+
+    if (!this.isApplicationsSelected) {
+      this.form.setErrors({ cdSubmitButton: true });
+      return;
     }
 
     this.triggerApiTask(pool);
@@ -933,5 +944,13 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   appSelection() {
     this.form.get('name').updateValueAndValidity({ emitEvent: false, onlySelf: true });
+  }
+
+  erasureProfileChange() {
+    const profile = this.form.get('erasureProfile').value;
+    if (profile) {
+      this.msrCrush =
+        profile['crush-num-failure-domains'] > 0 || profile['crush-osds-per-failure-domain'] > 0;
+    }
   }
 }

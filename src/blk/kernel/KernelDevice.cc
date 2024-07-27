@@ -344,11 +344,11 @@ void KernelDevice::close()
   extblkdev::release_device(ebd_impl);
 
   for (int i = 0; i < WRITE_LIFE_MAX; i++) {
-    assert(fd_directs[i] >= 0);
+    ceph_assert(fd_directs[i] >= 0);
     VOID_TEMP_FAILURE_RETRY(::close(fd_directs[i]));
     fd_directs[i] = -1;
 
-    assert(fd_buffereds[i] >= 0);
+    ceph_assert(fd_buffereds[i] >= 0);
     VOID_TEMP_FAILURE_RETRY(::close(fd_buffereds[i]));
     fd_buffereds[i] = -1;
   }
@@ -925,10 +925,8 @@ void KernelDevice::aio_submit(IOContext *ioc)
 
   void *priv = static_cast<void*>(ioc);
   int r, retries = 0;
-  // num of pending aios should not overflow when passed to submit_batch()
-  assert(pending <= std::numeric_limits<uint16_t>::max());
   r = io_queue->submit_batch(ioc->running_aios.begin(), e,
-			     pending, priv, &retries);
+			     priv, &retries);
 
   if (retries)
     derr << __func__ << " retries " << retries << dendl;
@@ -1131,8 +1129,8 @@ int KernelDevice::_discard(uint64_t offset, uint64_t len)
     return 0;
   }
   dout(10) << __func__
-	   << " 0x" << std::hex << offset << "~" << len << std::dec
-	   << dendl;
+           << " 0x" << std::hex << offset << "~" << len << std::dec
+           << dendl;
   r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
   return r;
 }
@@ -1325,6 +1323,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	 << " since " << start1 << ", timeout is "
 	 << age
 	 << "s" << dendl;
+    add_stalled_read_event();
   }
   if (r < 0) {
     if (ioc->allow_eio && is_expected_ioerr(-errno)) {
@@ -1398,6 +1397,7 @@ int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 	 << " since " << start1 << ", timeout is "
 	 << age
 	 << "s" << dendl;
+    add_stalled_read_event();
   }
 
   if (r < 0) {
@@ -1461,6 +1461,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
            << " (buffered) since " << start1 << ", timeout is "
 	   << age
 	   << "s" << dendl;
+      add_stalled_read_event();
     }
   } else {
     //direct and aligned read
@@ -1471,6 +1472,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
            << " (direct) since " << start1 << ", timeout is "
 	   << age
 	   << "s" << dendl;
+      add_stalled_read_event();
     }
     if (r < 0) {
       r = -errno;

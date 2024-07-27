@@ -1222,13 +1222,13 @@ class LoggingResultTemplate(object):
 
     def startTest(self, test):
         log.info("Starting test: {0}".format(self.getDescription(test)))
-        test.started_at = datetime.datetime.utcnow()
+        test.started_at = datetime.datetime.now(datetime.timezone.utc)
         return super(LoggingResultTemplate, self).startTest(test)
 
     def stopTest(self, test):
         log.info("Stopped test: {0} in {1}s".format(
             self.getDescription(test),
-            (datetime.datetime.utcnow() - test.started_at).total_seconds()
+            (datetime.datetime.now(datetime.timezone.utc) - test.started_at).total_seconds()
         ))
 
     def addSkip(self, test, reason):
@@ -1261,7 +1261,7 @@ def launch_individually(overall_suite):
     if opt_rotate_logs:
         logrotate = LogRotate()
 
-    started_at = datetime.datetime.utcnow()
+    started_at = datetime.datetime.now(datetime.timezone.utc)
     for suite_, case in enumerate_methods(overall_suite):
         # don't run logrotate beforehand since some ceph daemons might be
         # down and pre/post-rotate scripts in logrotate.conf might fail.
@@ -1279,7 +1279,7 @@ def launch_individually(overall_suite):
                 no_of_tests_failed += 1
 
         no_of_tests_execed += 1
-    time_elapsed = (datetime.datetime.utcnow() - started_at).total_seconds()
+    time_elapsed = (datetime.datetime.now(datetime.timezone.utc) - started_at).total_seconds()
 
     if result.wasSuccessful():
         log.info('')

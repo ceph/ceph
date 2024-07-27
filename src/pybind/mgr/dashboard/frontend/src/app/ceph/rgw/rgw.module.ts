@@ -1,13 +1,20 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, TitleCasePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
-import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
+import {
+  NgbNavModule,
+  NgbPopoverModule,
+  NgbTooltipModule,
+  NgbTypeaheadModule
+} from '@ng-bootstrap/ng-bootstrap';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
+import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -45,13 +52,24 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
+import { NfsListComponent } from '../nfs/nfs-list/nfs-list.component';
+import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
+import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
+import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
+import { RgwConfigurationPageComponent } from './rgw-configuration-page/rgw-configuration-page.component';
+import { RgwConfigDetailsComponent } from './rgw-config-details/rgw-config-details.component';
+import { RgwMultisiteWizardComponent } from './rgw-multisite-wizard/rgw-multisite-wizard.component';
+import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-policy-details/rgw-multisite-sync-policy-details.component';
+import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
+import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
+import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
 
 @NgModule({
   imports: [
     CommonModule,
     SharedModule,
     FormsModule,
-    ReactiveFormsModule,
+    ReactiveFormsModule.withConfig({ callSetDisabledState: 'whenDisabledForLegacyCode' }),
     PerformanceCounterModule,
     NgbNavModule,
     RouterModule,
@@ -60,7 +78,8 @@ import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.com
     NgxPipeFunctionModule,
     TreeModule,
     DataTableModule,
-    DashboardV3Module
+    DashboardV3Module,
+    NgbTypeaheadModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -102,8 +121,18 @@ import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.com
     RgwSyncPrimaryZoneComponent,
     RgwSyncMetadataInfoComponent,
     RgwSyncDataInfoComponent,
-    BucketTagModalComponent
-  ]
+    BucketTagModalComponent,
+    RgwMultisiteSyncPolicyComponent,
+    RgwMultisiteSyncPolicyFormComponent,
+    RgwConfigDetailsComponent,
+    RgwConfigurationPageComponent,
+    RgwMultisiteWizardComponent,
+    RgwMultisiteSyncPolicyDetailsComponent,
+    RgwMultisiteSyncFlowModalComponent,
+    RgwMultisiteSyncPipeModalComponent,
+    RgwMultisiteTabsComponent
+  ],
+  providers: [TitleCasePipe]
 })
 export class RgwModule {}
 
@@ -193,7 +222,73 @@ const routes: Routes = [
   {
     path: 'multisite',
     data: { breadcrumbs: 'Multi-site' },
-    children: [{ path: '', component: RgwMultisiteDetailsComponent }]
+    children: [
+      { path: '', redirectTo: 'configuration', pathMatch: 'full' },
+      {
+        path: 'configuration',
+        component: RgwMultisiteDetailsComponent,
+        children: [
+          {
+            path: 'setup-multisite-replication',
+            component: RgwMultisiteWizardComponent,
+            outlet: 'modal'
+          }
+        ]
+      },
+      {
+        path: 'sync-policy',
+        component: RgwMultisiteSyncPolicyComponent,
+        children: [
+          {
+            path: `${URLVerbs.CREATE}`,
+            component: RgwMultisiteSyncPolicyFormComponent,
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:groupName`,
+            component: RgwMultisiteSyncPolicyFormComponent,
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:groupName/:bucketName`,
+            component: RgwMultisiteSyncPolicyFormComponent,
+            outlet: 'modal'
+          }
+        ]
+      }
+    ]
+  },
+  {
+    path: 'nfs',
+    canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'nfs-ganesha',
+        redirectTo: 'error',
+        section: 'nfs-ganesha',
+        section_info: 'NFS GANESHA',
+        header: 'NFS-Ganesha is not configured'
+      },
+      breadcrumbs: 'NFS'
+    },
+    children: [
+      { path: '', component: NfsListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
+  },
+  {
+    path: 'configuration',
+    data: { breadcrumbs: 'Configuration' },
+    children: [{ path: '', component: RgwConfigurationPageComponent }]
   }
 ];
 

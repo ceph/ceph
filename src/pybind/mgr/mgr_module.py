@@ -1,7 +1,22 @@
 import ceph_module  # noqa
 
-from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
-    Mapping, NamedTuple, Sequence, Union, Set, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Set,
+    TYPE_CHECKING,
+    Tuple,
+    Union,
+    cast,
+)
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -17,6 +32,7 @@ import json
 import subprocess
 import threading
 from collections import defaultdict
+from contextlib import contextmanager
 from enum import IntEnum, Enum
 import os
 import rados
@@ -84,6 +100,7 @@ PG_STATES = [
 NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 NFS_POOL_NAME = '.nfs'
 
+
 class CephReleases(IntEnum):
     argonaut = 1
     bobtail = 2
@@ -105,6 +122,7 @@ class CephReleases(IntEnum):
     reef = 18
     squid = 19
     maximum = 20
+
 
 class NotifyType(str, Enum):
     mon_map = 'mon_map'
@@ -165,8 +183,19 @@ class HandleCommandResult(NamedTuple):
     stderr: str = ""            # Typically used for error messages.
 
 
-class MonCommandFailed(RuntimeError): pass
-class MgrDBNotReady(RuntimeError): pass
+class MonCommandFailed(RuntimeError):
+    pass
+
+
+class MgrDBNotReady(RuntimeError):
+    pass
+
+
+class MgrDBNotAllowed(MgrDBNotReady):
+    """A more specific subclass of MgrDBNotReady raised when mgr_pool option
+    disabled.
+    """
+    pass
 
 
 class OSDMap(ceph_module.BasePyOSDMap):
@@ -355,6 +384,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
 HandlerFuncType = Callable[..., Tuple[int, str, str]]
 
+
 def _extract_target_func(
     f: HandlerFuncType
 ) -> Tuple[HandlerFuncType, Dict[str, Any]]:
@@ -531,16 +561,23 @@ def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerF
                 # Delete new line separator at EOF (it may have been added by a text editor).
                 kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
             if not kwargs['inbuf'] or not kwargs['inbuf'].strip():
-                return -errno.EINVAL, '', f'{ERROR_MSG_EMPTY_INPUT_FILE}: Please add {desc} to '\
-                                           'the file'
+                return (
+                    -errno.EINVAL,
+                    '',
+                    f'{ERROR_MSG_EMPTY_INPUT_FILE}: Please add {desc} to '
+                    'the file'
+                )
             return func(*args, **kwargs)
         check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
         return check
     return CheckFileInput
 
+
 # If the mgr loses its lock on the database because e.g. the pgs were
 # transiently down, then close it and allow it to be reopened.
 MAX_DBCLEANUP_RETRIES = 3
+
+
 def MgrModuleRecoverDB(func: Callable) -> Callable:
     @functools.wraps(func)
     def check(self: MgrModule, *args: Any, **kwargs: Any) -> Any:
@@ -550,15 +587,16 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
                 return func(self, *args, **kwargs)
             except sqlite3.DatabaseError as e:
                 self.log.error(f"Caught fatal database error: {e}")
-                retries = retries+1
+                retries = retries + 1
                 if retries > MAX_DBCLEANUP_RETRIES:
                     raise
-                self.log.debug(f"attempting reopen of database")
+                self.log.debug("attempting reopen of database")
                 self.close_db()
-                self.open_db();
+                self.open_db()
                 # allow retry of func(...)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
+
 
 def CLIRequiresDB(func: HandlerFuncType) -> HandlerFuncType:
     @functools.wraps(func)
@@ -568,6 +606,7 @@ def CLIRequiresDB(func: HandlerFuncType) -> HandlerFuncType:
         return func(self, *args, **kwargs)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
+
 
 def _get_localized_key(prefix: str, key: str) -> str:
     return '{}/{}'.format(prefix, key)
@@ -584,11 +623,13 @@ if TYPE_CHECKING:
 # common/options.h: value_t
 OptionValue = Optional[Union[bool, int, float, str]]
 
+
 class OptionLevel(IntEnum):
     BASIC = 0
     ADVANCED = 1
     DEV = 2
     UNKNOWN = 3
+
 
 class Option(Dict):
     """
@@ -744,9 +785,9 @@ class MgrModuleLoggingMixin(object):
         # remove existing handlers:
         rm_handlers = [
             h for h in self._root_logger.handlers
-            if (isinstance(h, CPlusPlusHandler) or
-                isinstance(h, FileHandler) or
-                isinstance(h, ClusterLogHandler))]
+            if (isinstance(h, CPlusPlusHandler)
+                or isinstance(h, FileHandler)
+                or isinstance(h, ClusterLogHandler))]
         for h in rm_handlers:
             self._root_logger.removeHandler(h)
         self.log_to_file = False
@@ -972,7 +1013,7 @@ class API:
         class DecoratorClass:
             _ATTR_TOKEN = f'__ATTR_{attr.upper()}__'
 
-            def __init__(self, value: Any=default) -> None:
+            def __init__(self, value: Any = default) -> None:
                 self.value = value
 
             def __call__(self, func: Callable) -> Any:
@@ -997,8 +1038,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     # Database Schema
-    SCHEMA = None # type: Optional[List[str]]
-    SCHEMA_VERSIONED = None # type: Optional[List[List[str]]]
+    SCHEMA = None  # type: Optional[List[str]]
+    SCHEMA_VERSIONED = None  # type: Optional[List[List[str]]]
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -1058,7 +1099,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # for backwards compatibility
         self._logger = self.getLogger()
 
-        self._db = None # type: Optional[sqlite3.Connection]
+        self._db = None  # type: Optional[sqlite3.Connection]
 
         self._version = self._ceph_get_version()
 
@@ -1184,15 +1225,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def create_skeleton_schema(self, db: sqlite3.Connection) -> None:
         SQL = [
-        """
-        CREATE TABLE IF NOT EXISTS MgrModuleKV (
-          key TEXT PRIMARY KEY,
-          value NOT NULL
-        ) WITHOUT ROWID;
-        """,
-        """
-        INSERT OR IGNORE INTO MgrModuleKV (key, value) VALUES ('__version', 0);
-        """,
+            """
+            CREATE TABLE IF NOT EXISTS MgrModuleKV (
+              key TEXT PRIMARY KEY,
+              value NOT NULL
+            ) WITHOUT ROWID;
+            """,
+            """
+            INSERT OR IGNORE INTO MgrModuleKV (key, value) VALUES ('__version', 0);
+            """,
         ]
 
         for sql in SQL:
@@ -1289,12 +1330,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def open_db(self) -> Optional[sqlite3.Connection]:
         if not self.pool_exists(self.MGR_POOL_NAME):
             if not self.have_enough_osds():
+                self.log.warning('not enough osds to create mgr pool')
                 return None
             self.create_mgr_pool()
-        uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph";
+        uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph"
         self.log.debug(f"using uri {uri}")
         try:
-            db = sqlite3.connect(uri, check_same_thread=False, uri=True, autocommit=False) # type: ignore[call-arg]
+            db = sqlite3.connect(uri, check_same_thread=False, uri=True, autocommit=False)  # type: ignore[call-arg]
         except TypeError:
             db = sqlite3.connect(uri, check_same_thread=False, uri=True, isolation_level=None)
         # if libcephsqlite reconnects, update the addrv for blocklist
@@ -1322,11 +1364,28 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return self._db
         db_allowed = self.get_ceph_option("mgr_pool")
         if not db_allowed:
-            raise MgrDBNotReady();
+            raise MgrDBNotAllowed()
         self._db = self.open_db()
         if self._db is None:
-            raise MgrDBNotReady();
+            raise MgrDBNotReady()
         return self._db
+
+    @contextmanager
+    def exclusive_db_access(self) -> Iterator[sqlite3.Connection]:
+        """Context manager that grants exclusive access to the manager module sqlite3
+        db connection, while establishing a new db transaction.
+        """
+        with self._db_lock, self.db:
+            yield self.db
+
+    @contextmanager
+    def exclusive_db_cursor(self) -> Iterator[sqlite3.Cursor]:
+        """Context manager that yields a db cursor after getting exclusive
+        access to the manager module sqlite3 connection and a new db
+        transaction.
+        """
+        with self.exclusive_db_access() as db:
+            yield db.cursor()
 
     @property
     def release_name(self) -> str:
@@ -1439,7 +1498,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        obj =  self._ceph_get(data_name)
+        obj = self._ceph_get(data_name)
         if isinstance(obj, bytes):
             obj = json.loads(obj)
 
@@ -1761,11 +1820,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return r
 
     def get_quiesce_leader_gid(self, fscid: str) -> Optional[int]:
-        leader_gid : Optional[int] = None
+        leader_gid: Optional[int] = None
         for fs in self.get("fs_map")['filesystems']:
             if fscid != fs["id"]:
                 continue
-            
+
             # quiesce leader is the lowest rank
             # with the highest state
             mdsmap = fs["mdsmap"]
@@ -1802,7 +1861,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             command: str,
             tag: str,
             inbuf: Optional[str] = None,
-            *, # kw-only args go below
+            *,  # kw-only args go below
             one_shot: bool = False) -> None:
         """
         Called by the plugin to send a command to the mon
@@ -2138,10 +2197,19 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     @profile_method()
-    def get_unlabeled_perf_counters(self, prio_limit: int = PRIO_USEFUL,
-                              services: Sequence[str] = ("mds", "mon", "osd",
-                                                         "rbd-mirror", "cephfs-mirror", "rgw",
-                                                         "tcmu-runner")) -> Dict[str, dict]:
+    def get_unlabeled_perf_counters(
+        self,
+        prio_limit: int = PRIO_USEFUL,
+        services: Sequence[str] = (
+            "mds",
+            "mon",
+            "osd",
+            "rbd-mirror",
+            "cephfs-mirror",
+            "rgw",
+            "tcmu-runner",
+        ),
+    ) -> Dict[str, dict]:
         """
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.
@@ -2397,7 +2465,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_remove_mds_perf_query(query_id)
 
     @API.expose
-
     def reregister_mds_perf_queries(self) -> None:
         """
         Re-register MDS perf queries.
@@ -2435,11 +2502,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                               stdout_as_json: bool = True) -> Tuple[int, Union[str, dict], str]:
         try:
             cmd = [
-                    'radosgw-admin',
-                    '-c', str(self.get_ceph_conf_path()),
-                    '-k', str(self.get_ceph_option('keyring')),
-                    '-n', f'mgr.{self.get_mgr_id()}',
-                ] + args
+                'radosgw-admin',
+                '-c', str(self.get_ceph_conf_path()),
+                '-k', str(self.get_ceph_option('keyring')),
+                '-n', f'mgr.{self.get_mgr_id()}',
+            ] + args
             self.log.debug('Executing %s', str(cmd))
             result = subprocess.run(  # pylint: disable=subprocess-run-check
                 cmd,

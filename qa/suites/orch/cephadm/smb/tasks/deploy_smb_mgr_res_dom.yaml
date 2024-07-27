@@ -17,6 +17,7 @@ tasks:
 - cephadm.deploy_samba_ad_dc:
     role: host.b
 - cephadm:
+    single_host_defaults: true
 
 - cephadm.shell:
     host.a:

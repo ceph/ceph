@@ -453,7 +453,7 @@ describe('RbdFormComponent', () => {
       });
 
       it('should verify only snapshot is disabled for pools that are in pool mirror mode', () => {
-        component.poolMirrorMode = 'pool';
+        component.currentPoolMirrorMode = 'pool';
         fixture.detectChanges();
         const journal = fixture.debugElement.query(By.css('#journal')).nativeElement;
         const snapshot = fixture.debugElement.query(By.css('#snapshot')).nativeElement;

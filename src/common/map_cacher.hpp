@@ -85,6 +85,10 @@ private:
 public:
   MapCacher(StoreDriver<K, V> *driver) : driver(driver) {}
 
+  void reset() {
+    in_progress.reset();
+  }
+
   /// Fetch first key/value std::pair after specified key
   int get_next(
     K key,               ///< [in] key after which to get next

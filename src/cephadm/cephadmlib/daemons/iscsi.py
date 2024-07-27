@@ -119,22 +119,31 @@ class CephIscsi(ContainerDaemonForm):
     @staticmethod
     def get_version(ctx, container_id):
         # type: (CephadmContext, str) -> Optional[str]
-        version = None
-        out, err, code = call(
-            ctx,
-            [
-                ctx.container_engine.path,
-                'exec',
-                container_id,
-                '/usr/bin/python3',
-                '-c',
-                "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)",
-            ],
-            verbosity=CallVerbosity.QUIET,
+        def python(s: str) -> Tuple[str, str, int]:
+            return call(
+                ctx,
+                [
+                    ctx.container_engine.path,
+                    'exec',
+                    container_id,
+                    '/usr/bin/python3',
+                    '-c',
+                    s,
+                ],
+                verbosity=CallVerbosity.QUIET,
+            )
+
+        out, _, code = python(
+            "from importlib.metadata import version; print(version('ceph_iscsi'))"
         )
         if code == 0:
-            version = out.strip()
-        return version
+            return out.strip()
+        out, _, code = python(
+            "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"
+        )
+        if code == 0:
+            return out.strip()
+        return None
 
     def validate(self):
         # type: () -> None

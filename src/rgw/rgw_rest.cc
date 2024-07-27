@@ -397,6 +397,10 @@ void dump_content_length(req_state* const s, const uint64_t len)
 
 static void dump_chunked_encoding(req_state* const s)
 {
+  // omit transfer-encoding for HEAD requests so ChunkingFilter doesn't
+  // try to write the final chunk
+  if(s->op == OP_HEAD)
+    return;
   try {
     RESTFUL_IO(s)->send_chunked_transfer_encoding();
   } catch (rgw::io::Exception& e) {
@@ -2164,6 +2168,11 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
       << " s->info.domain=" << s->info.domain
       << " s->info.request_uri=" << s->info.request_uri
       << dendl;
+  } else if (s3website_enabled && api_priority_s3website > api_priority_s3) {
+    // If the Host header is missing, but the s3website API is enabled and has
+    // a higher priority than the regular S3 API, then we should still treat
+    // the request as a website request.
+    s->prot_flags |= RGW_REST_WEBSITE;
   }
 
   if (s->info.domain.empty()) {

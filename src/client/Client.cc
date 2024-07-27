@@ -9405,6 +9405,12 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     int r = _getattr(dn->inode, mask, dirp->perms);
     if (r < 0)
       return r;
+
+    /* fix https://tracker.ceph.com/issues/56288 */
+    if (dirp->inode->dir == NULL) {
+      ldout(cct, 0) << " dir is closed, so we should return" << dendl;
+      return -CEPHFS_EAGAIN;
+    }
     
     // the content of readdir_cache may change after _getattr(), so pd may be invalid iterator    
     pd = dir->readdir_cache.begin() + idx;
@@ -13868,7 +13874,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
 
   int xattr_flags = 0;
   if (!value)
-    xattr_flags |= CEPH_XATTR_REMOVE;
+    xattr_flags |= CEPH_XATTR_REMOVE | CEPH_XATTR_REMOVE2;
   if (flags & XATTR_CREATE)
     xattr_flags |= CEPH_XATTR_CREATE;
   if (flags & XATTR_REPLACE)
@@ -13926,6 +13932,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
       mode_t new_mode = in->mode;
       if (value) {
 	int ret = posix_acl_equiv_mode(value, size, &new_mode);
+	ldout(cct, 3) << __func__ << "(" << in->ino << ", \"" << name << "\") = " << ret << dendl;
 	if (ret < 0)
 	  return ret;
 	if (ret == 0) {
@@ -13974,6 +13981,11 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	!(in->snaprealm && in->snaprealm->ino == in->ino))
       ret = -CEPHFS_EOPNOTSUPP;
   }
+
+  if ((!strcmp(name, ACL_EA_ACCESS) ||
+      !strcmp(name, ACL_EA_DEFAULT)) &&
+      ret == -CEPHFS_ENODATA)
+    ret = 0;
 
   return ret;
 }
@@ -14063,7 +14075,7 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << dendl;
+  ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << " value " << !!value << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;

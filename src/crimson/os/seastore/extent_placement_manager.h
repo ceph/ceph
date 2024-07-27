@@ -137,12 +137,16 @@ public:
   }
 
   writer_stats_t get_stats() const final {
-    // TODO: collect stats
-    return {};
+    writer_stats_t ret = w_stats;
+    ret.minus(last_w_stats);
+    last_w_stats = w_stats;
+    return ret;
   }
 
   using open_ertr = ExtentOolWriter::open_ertr;
   open_ertr::future<> open() final {
+    w_stats = {};
+    last_w_stats = {};
     return open_ertr::now();
   }
 
@@ -192,6 +196,8 @@ private:
 
   RBMCleaner* rb_cleaner;
   seastar::gate write_guard;
+  writer_stats_t w_stats;
+  mutable writer_stats_t last_w_stats;
 };
 
 struct cleaner_usage_t {
@@ -543,6 +549,15 @@ public:
 
   seastar::future<> run_background_work_until_halt() {
     return background_process.run_until_halt();
+  }
+
+  bool get_checksum_needed(paddr_t addr) {
+    // checksum offloading only for blocks physically stored in the device
+    if (addr.is_fake()) {
+      return true;
+    }
+    assert(addr.is_absolute());
+    return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
   }
 
 private:

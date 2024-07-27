@@ -154,6 +154,7 @@ crimson:
   - src/crimson/**
   - src/test/crimson/**
   - qa/suites/crimson-rados/**
+  - src/seastar/**
 
 dashboard:
   - src/pybind/mgr/dashboard/**
@@ -322,3 +323,8 @@ telemetry:
   - qa/workunits/test_telemetry_quincy_x.sh
   - src/pybind/mgr/telemetry/**
   - src/telemetry/**
+
+script:
+  - src/script/**
+  - admin/**
+  - doc/scripts/**

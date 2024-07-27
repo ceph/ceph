@@ -21,6 +21,13 @@ which is configured by the *mon_dns_srv_name* configuration directive.
 
 .. confval:: mon_dns_srv_name
 
+.. note:: Instead of using a DNS search domain, it is possible to manually
+   designate the search domain by passing the search domain's name followed by
+   an underscore to ``mon_dns_srv_name``. The syntax for this is
+   ``<service-name>_<upper-level-domain>``. For example, passing
+   ``ceph-mon_example.com`` will direct Ceph to look for the ``SRV`` record at
+   ``_ceph-mon._tcp.example.com``.
+
 Example
 -------
 When the DNS search domain is set to *example.com* a DNS zone file might contain the following elements.

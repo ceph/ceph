@@ -14,7 +14,7 @@ export class PoolPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.create.url)
-  create(name: string, placement_groups: number, ...apps: string[]) {
+  create(name: string, placement_groups: number, apps: string[], mirroring = false) {
     cy.get('input[name=name]').clear().type(name);
 
     this.isPowerOf2(placement_groups);
@@ -25,15 +25,19 @@ export class PoolPageHelper extends PageHelper {
     this.selectOption('pgAutoscaleMode', 'off'); // To show pgNum field
     cy.get('input[name=pgNum]').clear().type(`${placement_groups}`);
     this.setApplications(apps);
-    cy.get('#rbdMirroring').check({ force: true });
+    if (mirroring) {
+      cy.get('#rbdMirroring').check({ force: true });
+    }
     cy.get('cd-submit-button').click();
   }
 
-  edit_pool_pg(name: string, new_pg: number, wait = true) {
+  edit_pool_pg(name: string, new_pg: number, wait = true, mirroring = false) {
     this.isPowerOf2(new_pg);
     this.navigateEdit(name);
 
-    cy.get('#rbdMirroring').should('be.checked');
+    if (mirroring) {
+      cy.get('#rbdMirroring').should('be.checked');
+    }
 
     cy.get('input[name=pgNum]').clear().type(`${new_pg}`);
     cy.get('cd-submit-button').click();

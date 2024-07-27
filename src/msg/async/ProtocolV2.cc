@@ -551,7 +551,7 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
     return -EILSEQ;
   }
 
-  ldout(cct, 5) << __func__ << " sending message m=" << m
+  ldout(cct, 2) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
 
   m->trace.event("async writing message");

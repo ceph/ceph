@@ -193,7 +193,7 @@ you need. For example, the following command upgrades to a development build:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --image quay.io/ceph-ci/ceph:recent-git-branch-name
+  ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:recent-git-branch-name
 
 For more information about available container images, see :ref:`containers`.
 

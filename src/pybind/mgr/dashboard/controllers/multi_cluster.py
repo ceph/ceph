@@ -5,6 +5,7 @@ import json
 import re
 import tempfile
 import time
+from typing import Any, Dict
 from urllib.parse import urlparse
 
 import requests
@@ -230,7 +231,7 @@ class MultiCluster(RESTController):
 
     @Endpoint('PUT')
     @UpdatePermission
-    def set_config(self, config: object):
+    def set_config(self, config: Dict[str, Any]):
         multicluster_config = self.load_multi_cluster_config()
         multicluster_config.update({'current_url': config['url']})
         multicluster_config.update({'current_user': config['user']})
@@ -267,12 +268,13 @@ class MultiCluster(RESTController):
     @Endpoint('PUT')
     @UpdatePermission
     # pylint: disable=unused-variable
-    def edit_cluster(self, url, cluster_alias, username, verify=False, ssl_certificate=None):
+    def edit_cluster(self, name, url, cluster_alias, username, verify=False, ssl_certificate=None):
         multicluster_config = self.load_multi_cluster_config()
         if "config" in multicluster_config:
             for key, cluster_details in multicluster_config["config"].items():
                 for cluster in cluster_details:
-                    if cluster["url"] == url and cluster["user"] == username:
+                    if cluster["name"] == name and cluster["user"] == username:
+                        cluster['url'] = url
                         cluster['cluster_alias'] = cluster_alias
                         cluster['ssl_verify'] = verify
                         cluster['ssl_certificate'] = ssl_certificate if verify else ''

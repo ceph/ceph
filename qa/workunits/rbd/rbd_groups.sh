@@ -25,7 +25,7 @@ list_groups()
 check_group_exists()
 {
     local group_name=$1
-    list_groups | grep $group_name
+    list_groups | grep -w $group_name
 }
 
 remove_group()
@@ -165,7 +165,7 @@ check_snapshot_in_group()
 {
     local group_name=$1
     local snap_name=$2
-    list_snapshots $group_name | grep $snap_name
+    list_snapshots $group_name | grep -w $snap_name
 }
 
 check_snapshots_count_in_group()
@@ -182,12 +182,43 @@ check_snapshot_not_in_group()
 {
     local group_name=$1
     local snap_name=$2
-    for v in $(list_snapshots $group_name | awk '{print $1}'); do
-        if [ "$v" = "$snap_name" ]; then
-            return 1
-        fi
-    done
-    return 0
+
+    check_group_exists $group_name || return 1
+    ! check_snapshot_in_group $group_name $snap_name
+}
+
+check_snap_id_in_list_snapshots()
+{
+    local group_name=$1
+    local snap_name=$2
+
+    local snap_id_in_info=$(
+        rbd group snap info $group_name@$snap_name --format=json |
+        jq -r '.id')
+    [[ -n "$snap_id_in_info" ]] || return 1
+
+    local snap_id_in_list=$(
+        rbd group snap ls $group_name --format=json |
+        jq --arg snap_name $snap_name -r '
+            .[] | select(.snapshot == $snap_name) | .id')
+    test "$snap_id_in_list" = "$snap_id_in_info"
+}
+
+check_snapshot_info()
+{
+    local group_name=$1
+    local snap_name=$2
+    local image_count=$3
+
+    local snap_info=$(rbd group snap info $group_name@$snap_name --format=json)
+    local actual_snap_name=$(jq -r ".name" <<< "$snap_info")
+    test "$actual_snap_name" = "$snap_name" || return 1
+
+    local snap_state=$(jq -r ".state" <<< "$snap_info")
+    test "$snap_state" = "complete" || return 1
+
+    local actual_image_count=$(jq '.images | length' <<< "$snap_info")
+    test "$actual_image_count" = "$image_count"
 }
 
 echo "TEST: create remove consistency group"
@@ -217,23 +248,24 @@ echo "PASSED"
 echo "TEST: create remove snapshots of consistency group"
 image="test_image"
 group="test_consistency_group"
-snap="group_snap"
-new_snap="new_group_snap"
-sec_snap="group_snap2"
+snaps=("group_snap1" "group_snap2" "group_snap3" "group_snap4")
 create_image $image
 create_group $group
+create_snapshot $group ${snaps[0]}
+check_snapshot_info $group ${snaps[0]} 0
 add_image_to_group $image $group
-create_snapshot $group $snap
-check_snapshot_in_group $group $snap
-rename_snapshot $group $snap $new_snap
-check_snapshot_not_in_group $group $snap
-create_snapshot $group $sec_snap
-check_snapshot_in_group $group $sec_snap
-rollback_snapshot $group $new_snap
-remove_snapshot $group $new_snap
-check_snapshot_not_in_group $group $new_snap
-remove_snapshot $group $sec_snap
-check_snapshot_not_in_group $group $sec_snap
+create_snapshot $group ${snaps[1]}
+check_snapshot_info $group ${snaps[1]} 1
+rename_snapshot $group ${snaps[1]} ${snaps[2]}
+check_snapshot_info $group ${snaps[2]} 1
+check_snapshot_not_in_group $group ${snaps[1]}
+create_snapshot $group ${snaps[3]}
+check_snapshot_in_group $group ${snaps[3]}
+rollback_snapshot $group ${snaps[2]}
+remove_snapshot $group ${snaps[2]}
+check_snapshot_not_in_group $group ${snaps[2]}
+remove_snapshot $group ${snaps[3]}
+check_snapshot_not_in_group $group ${snaps[3]}
 remove_group $group
 remove_image $image
 echo "PASSED"
@@ -247,6 +279,7 @@ create_group $group
 add_image_to_group $image $group
 create_snapshots $group $snap 10
 check_snapshots_count_in_group $group $snap 10
+check_snap_id_in_list_snapshots $group ${snap}1
 remove_snapshots $group $snap 10
 create_snapshots $group $snap 100
 check_snapshots_count_in_group $group $snap 100

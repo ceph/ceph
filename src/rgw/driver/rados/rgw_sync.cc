@@ -505,7 +505,7 @@ public:
           return io_block(0);
         }
         yield {
-          op_ret = http_op->wait(shard_info, null_yield);
+          op_ret = http_op->wait(dpp, shard_info, null_yield);
           http_op->put();
         }
 
@@ -586,7 +586,7 @@ public:
   }
 
   int request_complete() override {
-    int ret = http_op->wait(result, null_yield);
+    int ret = http_op->wait(sync_env->dpp, result, null_yield);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(sync_env->dpp, 5) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
@@ -1089,7 +1089,7 @@ public:
           return io_block(0);
         }
         yield {
-          op_ret = http_op->wait(pbl, null_yield);
+          op_ret = http_op->wait(dpp, pbl, null_yield);
           http_op->put();
         }
 
@@ -1481,6 +1481,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   bool done_with_period = false;
 
   int total_entries = 0;
+  string old_mdlog_marker;
 
   RGWSyncTraceNodeRef tn;
 public:
@@ -1832,6 +1833,7 @@ public:
 	if (mdlog_marker <= max_marker || !truncated) {
 	  /* we're at the tip, try to bring more entries */
           ldpp_dout(sync_env->dpp, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
+          old_mdlog_marker = mdlog_marker;
           yield call(new RGWCloneMetaLogCoroutine(sync_env, mdlog,
                                                   period, shard_id,
                                                   mdlog_marker, &mdlog_marker));
@@ -1902,7 +1904,8 @@ public:
           tn->log(10, SSTR(*this << ": done with period"));
           break;
         }
-	if (mdlog_marker == max_marker && can_adjust_marker) {
+	if (mdlog_marker == old_mdlog_marker && can_adjust_marker) {
+          tn->log(20, SSTR("mdlog_marker=" << mdlog_marker << " old_mdlog_marker=" << old_mdlog_marker));
           tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 	  yield wait(utime_t(cct->_conf->rgw_meta_sync_poll_interval, 0));
 	}
@@ -2544,7 +2547,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request(const DoutPrefixProvider *
 
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 {
-  op_ret = http_op->wait(&data, null_yield);
+  op_ret = http_op->wait(sync_env->dpp, &data, null_yield);
   if (op_ret < 0 && op_ret != -EIO) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
     ldpp_dout(sync_env->dpp, 5) << "failed to wait for op, ret=" << op_ret << dendl;

@@ -7,6 +7,7 @@
 
 #include "rgw_zone.h"
 #include "driver/rados/rgw_bucket.h"
+#include "rgw_asio_thread.h"
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -32,7 +33,7 @@ const string reshard_lock_name = "reshard_process";
 const string bucket_instance_lock_name = "bucket_instance_lock";
 
 // key reduction values; NB maybe expose some in options
-constexpr uint64_t min_objs_per_shard = 10000;
+constexpr uint64_t default_min_objs_per_shard = 10000;
 constexpr uint32_t min_dynamic_shards = 11;
 
 /* All primes up to 2000 used to attempt to make dynamic sharding use
@@ -95,9 +96,7 @@ void RGWBucketReshard::calculate_preferred_shards(
   const DoutPrefixProvider* dpp,
   const uint32_t max_dynamic_shards,
   const uint64_t max_objs_per_shard,
-//  const uint64_t min_objs_per_shard,
   const bool is_multisite,
-//  const uint64_t min_dynamic_shards, FIX THIS!!!!!!
   const uint64_t num_objs,
   const uint32_t current_num_shards,
   bool& need_resharding,
@@ -108,6 +107,11 @@ void RGWBucketReshard::calculate_preferred_shards(
   // to reduce number of reshards in multisite, increase number of shards more aggressively
   constexpr uint32_t multisite_multiplier = 8;
   const char* verb = "n/a";
+
+  // in case admin lowers max_objs_per_shard, we need to avoid thrashing
+  const uint64_t min_objs_per_shard =
+    std::min(default_min_objs_per_shard,
+	     (uint64_t) std::ceil(max_objs_per_shard / 100.0));
 
   if (current_num_shards < max_dynamic_shards &&
       num_objs > current_num_shards * max_objs_per_shard) {
@@ -414,7 +418,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
                               RGWBucketInfo& bucket_info,
 			      std::map<std::string, bufferlist>& bucket_attrs,
                               ReshardFaultInjector& fault,
-                              uint32_t new_num_shards,
+                              const uint32_t new_num_shards,
                               const DoutPrefixProvider* dpp, optional_yield y)
 {
   auto prev = bucket_info.layout; // make a copy for cleanup
@@ -590,7 +594,7 @@ static int init_reshard(rgw::sal::RadosStore* store,
                         RGWBucketInfo& bucket_info,
 			std::map<std::string, bufferlist>& bucket_attrs,
                         ReshardFaultInjector& fault,
-                        uint32_t new_num_shards,
+                        const uint32_t new_num_shards,
                         const DoutPrefixProvider *dpp, optional_yield y)
 {
   if (new_num_shards == 0) {
@@ -616,6 +620,7 @@ static int init_reshard(rgw::sal::RadosStore* store,
     revert_target_layout(store, bucket_info, bucket_attrs, fault, dpp, y);
     return ret;
   }
+
   return 0;
 } // init_reshard
 
@@ -883,7 +888,7 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
 
 int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& current,
                                  const rgw::bucket_index_layout_generation& target,
-                                 int max_entries,
+                                 int max_op_entries, // max num to process per op
 				 bool verbose,
 				 ostream *out,
 				 Formatter *formatter,
@@ -897,9 +902,9 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
   /* update bucket info -- in progress*/
   list<rgw_cls_bi_entry> entries;
 
-  if (max_entries < 0) {
+  if (max_op_entries <= 0) {
     ldpp_dout(dpp, 0) << __func__ <<
-      ": can't reshard, negative max_entries" << dendl;
+      ": can't reshard, non-positive max_op_entries" << dendl;
     return -EINVAL;
   }
 
@@ -925,7 +930,9 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     const std::string null_object_filter; // empty string since we're not filtering by object
     while (is_truncated) {
       entries.clear();
-      int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter, marker, max_entries, &entries, &is_truncated, y);
+      int ret = store->getRados()->bi_list(
+	dpp, bucket_info, i, null_object_filter, marker, max_op_entries,
+	&entries, &is_truncated, y);
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
             << i << ", skipping" << dendl;
@@ -1031,7 +1038,7 @@ int RGWBucketReshard::get_status(const DoutPrefixProvider *dpp, list<cls_rgw_buc
 
 int RGWBucketReshard::execute(int num_shards,
                               ReshardFaultInjector& fault,
-                              int max_op_entries,
+                              int max_op_entries,  // max num to process per op
 			      const cls_rgw_reshard_initiator initiator,
                               const DoutPrefixProvider *dpp,
 			      optional_yield y,
@@ -1261,7 +1268,7 @@ int RGWReshard::clear_bucket_resharding(const DoutPrefixProvider *dpp, const str
   return 0;
 }
 
-int RGWReshardWait::wait(optional_yield y)
+int RGWReshardWait::wait(const DoutPrefixProvider* dpp, optional_yield y)
 {
   std::unique_lock lock(mutex);
 
@@ -1285,6 +1292,7 @@ int RGWReshardWait::wait(optional_yield y)
     waiters.erase(waiters.iterator_to(waiter));
     return -ec.value();
   }
+  maybe_warn_about_blocking(dpp);
 
   cond.wait_for(lock, duration);
 
@@ -1307,7 +1315,7 @@ void RGWReshardWait::stop()
 }
 
 int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
-                              int max_entries,
+                              int max_op_entries, // max num to process per op
 			      const DoutPrefixProvider* dpp,
 			      optional_yield y)
 {
@@ -1460,7 +1468,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
   RGWBucketReshard br(store, bucket_info, bucket_attrs, nullptr);
 
   ReshardFaultInjector f; // no fault injected
-  ret = br.execute(entry.new_num_shards, f, max_entries, entry.initiator,
+  ret = br.execute(entry.new_num_shards, f, max_op_entries, entry.initiator,
 		   dpp, y, false, nullptr, nullptr, this);
   if (ret < 0) {
     ldpp_dout(dpp, 0) <<  __func__ <<
@@ -1479,10 +1487,14 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 
 int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp, optional_yield y)
 {
-  string marker;
-  bool truncated = true;
+  std::string marker;
+  bool is_truncated = true;
 
-  constexpr uint32_t max_entries = 1000;
+  // This is the number to request per op, whether it's reshard queue
+  // entries or bucket index entries. Should not be confused with the
+  // number of entries we allow in a bucket index shard. This value is
+  // passed in and used deeper into the call chain as well.
+  constexpr uint32_t max_op_entries = 1000;
 
   string logshard_oid;
   get_logshard_oid(logshard_num, &logshard_oid);
@@ -1498,15 +1510,15 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   
   do {
     std::list<cls_rgw_reshard_entry> entries;
-    ret = list(dpp, logshard_num, marker, max_entries, entries, &truncated);
+    ret = list(dpp, logshard_num, marker, max_op_entries, entries, &is_truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<
 	logshard_oid << dendl;
       continue;
     }
 
-    for(auto& entry : entries) { // logshard entries
-      process_entry(entry, max_entries, dpp, y);
+    for(const auto& entry : entries) { // logshard entries
+      process_entry(entry, max_op_entries, dpp, y);
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
@@ -1518,7 +1530,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
       entry.get_key(&marker);
     } // entry for loop
-  } while (truncated);
+  } while (is_truncated);
 
   logshard_lock.unlock();
   return 0;
@@ -1590,8 +1602,9 @@ void *RGWReshard::ReshardWorker::entry() {
     utime_t start = ceph_clock_now();
     reshard->process_all_logshards(this, null_yield);
 
-    if (reshard->going_down())
+    if (reshard->going_down()) {
       break;
+    }
 
     utime_t end = ceph_clock_now();
     utime_t elapsed = end - start;

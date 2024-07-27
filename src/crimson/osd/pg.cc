@@ -244,6 +244,40 @@ void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
     std::chrono::duration_cast<seastar::lowres_clock::duration>(delay));
 }
 
+PG::interruptible_future<> PG::find_unfound(epoch_t epoch_started)
+{
+  if (!have_unfound()) {
+    return interruptor::now();
+  }
+  PeeringCtx rctx;
+  if (!peering_state.discover_all_missing(rctx)) {
+    if (peering_state.state_test(PG_STATE_BACKFILLING)) {
+      logger().debug(
+        "{} {} no luck, giving up on this pg for now (in backfill)",
+        *this, __func__);
+      std::ignore = get_shard_services().start_operation<LocalPeeringEvent>(
+        this,
+        get_pg_whoami(),
+        get_pgid(),
+        epoch_started,
+        epoch_started,
+        PeeringState::UnfoundBackfill());
+    } else if (peering_state.state_test(PG_STATE_RECOVERING)) {
+      logger().debug(
+        "{} {} no luck, giving up on this pg for now (in recovery)",
+        *this, __func__);
+      std::ignore = get_shard_services().start_operation<LocalPeeringEvent>(
+        this,
+        get_pg_whoami(),
+        get_pgid(),
+        epoch_started,
+        epoch_started,
+        PeeringState::UnfoundRecovery());
+    }
+  }
+  return get_shard_services().dispatch_context(get_collection_ref(), std::move(rctx));
+}
+
 void PG::recheck_readable()
 {
   bool changed = false;
@@ -544,7 +578,7 @@ void PG::on_active_actmap()
     }, [this](std::exception_ptr eptr) {
       logger().debug("{}: snap trimming interrupted", *this);
       ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
-    }, pg_ref).finally([pg_ref, this] {
+    }, pg_ref, pg_ref->get_osdmap_epoch()).finally([pg_ref, this] {
       publish_stats_to_osd();
     });
   } else {
@@ -704,61 +738,49 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore::Shard* store)
   });
 }
 
-PG::interruptible_future<> PG::do_peering_event(
+void PG::do_peering_event(
   PGPeeringEvent& evt, PeeringCtx &rctx)
 {
   if (peering_state.pg_has_reset_since(evt.get_epoch_requested()) ||
       peering_state.pg_has_reset_since(evt.get_epoch_sent())) {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
-    return interruptor::now();
   } else {
     logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
-    // all peering event handling needs to be run in a dedicated seastar::thread,
-    // so that event processing can involve I/O reqs freely, for example: PG::on_removal,
-    // PG::on_new_interval
-    return interruptor::async([this, &evt, &rctx] {
-      peering_state.handle_event(
-        evt.get_event(),
-        &rctx);
-      peering_state.write_if_dirty(rctx.transaction);
-    });
+    peering_state.handle_event(
+      evt.get_event(),
+      &rctx);
+    peering_state.write_if_dirty(rctx.transaction);
   }
 }
 
-seastar::future<> PG::handle_advance_map(
+void PG::handle_advance_map(
   cached_map_t next_map, PeeringCtx &rctx)
 {
-  return seastar::async([this, next_map=std::move(next_map), &rctx] {
-    vector<int> newup, newacting;
-    int up_primary, acting_primary;
-    next_map->pg_to_up_acting_osds(
-      pgid.pgid,
-      &newup, &up_primary,
-      &newacting, &acting_primary);
-    peering_state.advance_map(
-      next_map,
-      peering_state.get_osdmap(),
-      newup,
-      up_primary,
-      newacting,
-      acting_primary,
-      rctx);
-    osdmap_gate.got_map(next_map->get_epoch());
-  });
+  vector<int> newup, newacting;
+  int up_primary, acting_primary;
+  next_map->pg_to_up_acting_osds(
+    pgid.pgid,
+    &newup, &up_primary,
+    &newacting, &acting_primary);
+  peering_state.advance_map(
+    next_map,
+    peering_state.get_osdmap(),
+    newup,
+    up_primary,
+    newacting,
+    acting_primary,
+    rctx);
+  osdmap_gate.got_map(next_map->get_epoch());
 }
 
-seastar::future<> PG::handle_activate_map(PeeringCtx &rctx)
+void PG::handle_activate_map(PeeringCtx &rctx)
 {
-  return seastar::async([this, &rctx] {
-    peering_state.activate_map(rctx);
-  });
+  peering_state.activate_map(rctx);
 }
 
-seastar::future<> PG::handle_initialize(PeeringCtx &rctx)
+void PG::handle_initialize(PeeringCtx &rctx)
 {
-  return seastar::async([this, &rctx] {
-    peering_state.handle_event(PeeringState::Initialize{}, &rctx);
-  });
+  peering_state.handle_event(PeeringState::Initialize{}, &rctx);
 }
 
 void PG::init_collection_pool_opts()
@@ -1592,6 +1614,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   // is save and in time.
   peering_state.state_clear(PG_STATE_SNAPTRIM);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+  snap_mapper.reset_backend();
 }
 
 void PG::context_registry_on_change() {

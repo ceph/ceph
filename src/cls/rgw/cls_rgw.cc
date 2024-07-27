@@ -1887,9 +1887,6 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   cls_rgw_obj_key dest_key = op.key;
-  if (dest_key.instance == "null") {
-    dest_key.instance.clear();
-  }
 
   BIVerObjEntry obj(hctx, dest_key);
   BIOLHEntry olh(hctx, dest_key);

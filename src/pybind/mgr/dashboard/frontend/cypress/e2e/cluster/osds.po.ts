@@ -15,6 +15,11 @@ export class OSDsPageHelper extends PageHelper {
 
   create(deviceType: 'hdd' | 'ssd', hostname?: string, expandCluster = false) {
     cy.get('[aria-label="toggle advanced mode"]').click();
+    cy.get('[aria-label="toggle advanced mode"]').then(($button) => {
+      if ($button.hasClass('collapsed')) {
+        cy.wrap($button).click();
+      }
+    });
     // Click Primary devices Add button
     cy.get('cd-osd-devices-selection-groups[name="Primary"]').as('primaryGroups');
     cy.get('@primaryGroups').find('button').click();

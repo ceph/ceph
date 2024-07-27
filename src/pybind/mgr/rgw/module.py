@@ -101,7 +101,14 @@ def check_orchestrator(func: FuncT) -> FuncT:
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
-    MODULE_OPTIONS: List[Option] = []
+    MODULE_OPTIONS: List[Option] = [
+        Option(
+            'secondary_zone_period_retry_limit',
+            type='int',
+            default=5,
+            desc='RGW module period update retry limit for secondary site'
+        ),
+    ]
 
     # These are "native" Ceph options that this module cares about.
     NATIVE_OPTIONS: List[Option] = []
@@ -114,6 +121,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         # ensure config options members are initialized; see config_notify()
         self.config_notify()
+
+        if TYPE_CHECKING:
+            self.secondary_zone_period_retry_limit = 5
 
         with self.lock:
             self.inited = True
@@ -310,10 +320,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                              inbuf: Optional[str] = None) -> HandleCommandResult:
         """Bootstrap new rgw zone that syncs with zone on another cluster in the same realm"""
 
-        created_zones = self.rgw_zone_create(zone_name, realm_token, port, placement,
-                                             start_radosgw, zone_endpoints, inbuf)
-
-        return HandleCommandResult(retval=0, stdout=f"Zones {', '.join(created_zones)} created successfully")
+        try:
+            created_zones = self.rgw_zone_create(zone_name, realm_token, port, placement,
+                                                 start_radosgw, zone_endpoints, self.secondary_zone_period_retry_limit, inbuf)
+            return HandleCommandResult(retval=0, stdout=f"Zones {', '.join(created_zones)} created successfully")
+        except RGWAMException as e:
+            return HandleCommandResult(retval=e.retcode, stderr=f'Failed to create zone: {str(e)}')
 
     def rgw_zone_create(self,
                         zone_name: Optional[str] = None,
@@ -322,13 +334,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         placement: Optional[Union[str, Dict[str, Any]]] = None,
                         start_radosgw: Optional[bool] = True,
                         zone_endpoints: Optional[str] = None,
-                        inbuf: Optional[str] = None) -> Any:
+                        secondary_zone_period_retry_limit: Optional[int] = None,
+                        inbuf: Optional[str] = None) -> List[str]:
 
         if inbuf:
             try:
                 rgw_specs = self._parse_rgw_specs(inbuf)
             except RGWSpecParsingError as e:
-                return HandleCommandResult(retval=-errno.EINVAL, stderr=f'{e}')
+                raise RGWAMException(str(e))
         elif (zone_name and realm_token):
             token = RealmToken.from_base64_str(realm_token)
             if isinstance(placement, dict):
@@ -343,18 +356,19 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                  zone_endpoints=zone_endpoints)]
         else:
             err_msg = 'Invalid arguments: either pass a spec with -i or provide the zone_name and realm_token.'
-            return HandleCommandResult(retval=-errno.EINVAL, stdout='', stderr=err_msg)
+            raise RGWAMException(err_msg)
 
         try:
             created_zones = []
             for rgw_spec in rgw_specs:
-                RGWAM(self.env).zone_create(rgw_spec, start_radosgw)
+                RGWAM(self.env).zone_create(rgw_spec, start_radosgw, secondary_zone_period_retry_limit)
                 if rgw_spec.rgw_zone is not None:
                     created_zones.append(rgw_spec.rgw_zone)
                     return created_zones
         except RGWAMException as e:
-            self.log.error('cmd run exception: (%d) %s' % (e.retcode, e.message))
-            return HandleCommandResult(retval=e.retcode, stdout=e.stdout, stderr=e.stderr)
+            err_msg = 'cmd run exception: (%d) %s' % (e.retcode, e.message)
+            self.log.error(err_msg)
+            raise e
         return created_zones
 
     @CLICommand('rgw realm reconcile', perm='rw')

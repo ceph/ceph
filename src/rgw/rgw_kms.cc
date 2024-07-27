@@ -221,9 +221,9 @@ protected:
       return -ENOENT;
     }
 
-    if (token_st.st_mode & (S_IRWXG | S_IRWXO)) {
+    if (token_st.st_mode & (S_IWGRP | S_IXGRP | S_IRWXO)) {
       ldpp_dout(dpp, 0) << "ERROR: Vault token file '" << token_file << "' permissions are "
-                    << "too open, it must not be accessible by other users" << dendl;
+                    << "too open, the maximum allowed is 0740" << dendl;
       return -EACCES;
     }
 
@@ -257,7 +257,7 @@ protected:
     int res;
     string vault_token = "";
     if (RGW_SSE_KMS_VAULT_AUTH_TOKEN == kctx.auth()){
-      ldpp_dout(dpp, 0) << "Loading Vault Token from filesystem" << dendl;
+      ldpp_dout(dpp, 20) << "Loading Vault Token from filesystem" << dendl;
       res = load_token_from_file(dpp, &vault_token);
       if (res < 0){
         return res;
@@ -306,7 +306,7 @@ protected:
       secret_req.set_client_key(kctx.ssl_clientkey());
     }
 
-    res = secret_req.process(y);
+    res = secret_req.process(dpp, y);
 
     // map 401 to EACCES instead of EPERM
     if (secret_req.get_http_status() ==
@@ -782,8 +782,8 @@ private:
 protected:
 	KmipGetTheKey(CephContext *cct) : cct(cct) {}
 	KmipGetTheKey& keyid_to_keyname(std::string_view key_id);
-	KmipGetTheKey& get_uniqueid_for_keyname(optional_yield y);
-	int get_key_for_uniqueid(optional_yield y, std::string &);
+	KmipGetTheKey& get_uniqueid_for_keyname(const DoutPrefixProvider* dpp, optional_yield y);
+	int get_key_for_uniqueid(const DoutPrefixProvider* dpp, optional_yield y, std::string &);
 	friend KmipSecretEngine;
 };
 
@@ -808,12 +808,13 @@ KmipGetTheKey::keyid_to_keyname(std::string_view key_id)
 }
 
 KmipGetTheKey&
-KmipGetTheKey::get_uniqueid_for_keyname(optional_yield y)
+KmipGetTheKey::get_uniqueid_for_keyname(const DoutPrefixProvider* dpp,
+                                        optional_yield y)
 {
 	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::LOCATE);
 
 	secret_req.name = work.data();
-	ret = secret_req.process(y);
+	ret = secret_req.process(dpp, y);
 	if (ret < 0) {
 		failed = true;
 	} else if (!secret_req.outlist->string_count) {
@@ -834,12 +835,13 @@ KmipGetTheKey::get_uniqueid_for_keyname(optional_yield y)
 }
 
 int
-KmipGetTheKey::get_key_for_uniqueid(optional_yield y, std::string& actual_key)
+KmipGetTheKey::get_key_for_uniqueid(const DoutPrefixProvider* dpp,
+                                    optional_yield y, std::string& actual_key)
 {
 	if (failed) return ret;
 	RGWKMIPTransceiver secret_req(cct, RGWKMIPTransceiver::GET);
 	secret_req.unique_id = work.data();
-	ret = secret_req.process(y);
+	ret = secret_req.process(dpp, y);
 	if (ret < 0) {
 		failed = true;
 	} else {
@@ -866,8 +868,8 @@ public:
 	int r;
 	r = KmipGetTheKey{cct}
 		.keyid_to_keyname(key_id)
-		.get_uniqueid_for_keyname(y)
-		.get_key_for_uniqueid(y, actual_key);
+		.get_uniqueid_for_keyname(dpp, y)
+		.get_key_for_uniqueid(dpp, y, actual_key);
 	return r;
   }
 };
@@ -937,7 +939,7 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
   secret_req.append_header("Accept", "application/octet-stream");
   secret_req.append_header("X-Auth-Token", barbican_token);
 
-  res = secret_req.process(y);
+  res = secret_req.process(dpp, y);
   // map 401 to EACCES instead of EPERM
   if (secret_req.get_http_status() ==
       RGWHTTPTransceiver::HTTP_STATUS_UNAUTHORIZED) {

@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { TimerService } from '../services/timer.service';
-import { filter } from 'rxjs/operators';
+import { filter, first } from 'rxjs/operators';
 import { SummaryService } from '../services/summary.service';
 import { Router } from '@angular/router';
 
@@ -48,7 +48,7 @@ export class MultiClusterService {
 
   startClusterTokenStatusPolling() {
     let clustersTokenMap = new Map<string, { token: string; user: string }>();
-    const dataSubscription = this.subscribe((resp: any) => {
+    const dataSubscription = this.subscribeOnce((resp: any) => {
       const clustersConfig = resp['config'];
       let tempMap = new Map<string, { token: string; user: string }>();
       if (clustersConfig) {
@@ -92,11 +92,20 @@ export class MultiClusterService {
   }
 
   refreshTokenStatus() {
-    this.subscribe((resp: any) => {
+    this.subscribeOnce((resp: any) => {
       const clustersConfig = resp['config'];
       let tempMap = this.getTempMap(clustersConfig);
       return this.checkTokenStatus(tempMap).subscribe(this.getClusterTokenStatusObserver());
     });
+  }
+
+  subscribeOnce(next: (data: any) => void, error?: (error: any) => void) {
+    return this.msData$
+      .pipe(
+        filter((value) => !!value),
+        first()
+      )
+      .subscribe(next, error);
   }
 
   subscribe(next: (data: any) => void, error?: (error: any) => void) {
@@ -116,6 +125,7 @@ export class MultiClusterService {
   }
 
   editCluster(
+    name: string,
     url: any,
     clusterAlias: string,
     username: string,
@@ -123,6 +133,7 @@ export class MultiClusterService {
     ssl_certificate = ''
   ) {
     return this.http.put('api/multi-cluster/edit_cluster', {
+      name: name,
       url,
       cluster_alias: clusterAlias,
       username: username,

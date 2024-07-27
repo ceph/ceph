@@ -1,43 +1,50 @@
-<ngb-alert type="{{ bootstrapClass }}"
-           [dismissible]="dismissible"
-           (closed)="onClose()"
-           [ngClass]="spacingClass">
-  <table>
-    <ng-container *ngIf="size === 'normal'; else slim">
-      <tr>
-        <td *ngIf="showIcon"
-            rowspan="2"
-            class="alert-panel-icon">
-          <i [ngClass]="[icons.large3x]"
-             class="alert-{{ bootstrapClass }} {{ typeIcon }}"
-             aria-hidden="true"></i>
-        </td>
-        <td *ngIf="showTitle"
-            class="alert-panel-title">{{ title }}</td>
-      </tr>
-      <tr>
-        <td class="alert-panel-text">
-          <ng-container *ngTemplateOutlet="content"></ng-container>
-        </td>
-      </tr>
-    </ng-container>
-    <ng-template #slim>
-      <tr>
-        <td *ngIf="showIcon"
-            class="alert-panel-icon">
-          <i class="alert-{{ bootstrapClass }} {{ typeIcon }}"
-             aria-hidden="true"></i>
-        </td>
-        <td *ngIf="showTitle"
-            class="alert-panel-title">{{ title }}</td>
-        <td class="alert-panel-text">
-          <ng-container *ngTemplateOutlet="content"></ng-container>
-        </td>
-      </tr>
-    </ng-template>
-  </table>
-</ngb-alert>
+<cds-actionable-notification
+      class="mb-1"
+      [notificationObj]="notificationContent"
+      *ngIf="size === 'slim'; else normal">
+</cds-actionable-notification>
+
+<ng-template #normal>
+  <ngb-alert type="{{ bootstrapClass }}"
+             [dismissible]="dismissible"
+             (closed)="onClose()"
+             [ngClass]="spacingClass">
+    <table>
+      <ng-container *ngIf="size === 'normal'">
+        <tr>
+          <td *ngIf="showIcon"
+              rowspan="2"
+              class="alert-panel-icon">
+            <i [ngClass]="[icons.large3x]"
+               class="alert-{{ bootstrapClass }} {{ typeIcon }}"
+               aria-hidden="true"></i>
+          </td>
+          <td *ngIf="showTitle"
+              class="alert-panel-title">{{ title }}</td>
+        </tr>
+        <tr>
+          <td class="alert-panel-text">
+            <ng-container *ngTemplateOutlet="content"></ng-container>
+          </td>
+        </tr>
+      </ng-container>
+    </table>
+  </ngb-alert>
+</ng-template>
 
 <ng-template #content>
   <ng-content></ng-content>
+</ng-template>
+
+<ng-template #closeTpl>
+  <button cdsActionableButton
+          cdsButton="ghost"
+          size="md"
+          title="Close"
+          (click)="onClose()"
+          *ngIf="dismissible">
+    <svg class="cds--btn__icon"
+         cdsIcon="close"
+         size="16"></svg>
+  </button>
 </ng-template>

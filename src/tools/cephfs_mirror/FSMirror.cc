@@ -114,6 +114,7 @@ FSMirror::FSMirror(CephContext *cct, const Filesystem &filesystem, uint64_t pool
     m_args(args),
     m_work_queue(work_queue),
     m_snap_listener(this),
+    m_ts_listener(this),
     m_asok_hook(new MirrorAdminSocketHook(cct, filesystem, this)) {
   m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
                                                (uint64_t)0);
@@ -270,7 +271,7 @@ void FSMirror::init_instance_watcher(Context *on_finish) {
 
   Context *ctx = new C_CallbackAdapter<
     FSMirror, &FSMirror::handle_init_instance_watcher>(this);
-  m_instance_watcher = InstanceWatcher::create(m_ioctx, m_snap_listener, m_work_queue);
+  m_instance_watcher = InstanceWatcher::create(m_ioctx, m_snap_listener, m_ts_listener, m_work_queue);
   m_instance_watcher->init(ctx);
 }
 
@@ -299,7 +300,7 @@ void FSMirror::init_mirror_watcher() {
   std::scoped_lock locker(m_lock);
   Context *ctx = new C_CallbackAdapter<
     FSMirror, &FSMirror::handle_init_mirror_watcher>(this);
-  m_mirror_watcher = MirrorWatcher::create(m_ioctx, this, m_work_queue);
+  m_mirror_watcher = MirrorWatcher::create(m_ioctx, this, m_ts_listener, m_work_queue);
   m_mirror_watcher->init(ctx);
 }
 

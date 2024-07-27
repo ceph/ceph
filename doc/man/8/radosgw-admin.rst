@@ -96,7 +96,7 @@ as follows:
   Invoke with --marker to resume if the command is interrupted.
 
 :command:`bucket stats`
-  Returns bucket statistics.
+  List bucket statistics plus other internal information about a bucket.
 
 :command:`bucket rm`
   Remove a bucket.

@@ -1,14 +1,27 @@
-from typing import Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 import logging
 
 import orchestrator
 from ceph.deployment.service_spec import PlacementSpec, SMBSpec
-from mgr_module import MgrModule, Option
+from mgr_module import MgrModule, Option, OptionLevel
 
-from . import cli, fs, handler, mon_store, rados_store, resources
+from . import (
+    cli,
+    fs,
+    handler,
+    mon_store,
+    rados_store,
+    resources,
+    results,
+    sqlite_store,
+    utils,
+)
 from .enums import AuthMode, JoinSourceType, UserGroupSourceType
-from .proto import AccessAuthorizer, Simplified
+from .proto import AccessAuthorizer, ConfigStore, Simplified
+
+if TYPE_CHECKING:
+    import sqlite3
 
 log = logging.getLogger(__name__)
 
@@ -21,9 +34,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             default=True,
             desc='automatically update orchestration when smb resources are changed',
         ),
+        Option(
+            'internal_store_backend',
+            level=OptionLevel.DEV,
+            type='str',
+            default='',
+            desc='set internal store backend. for develoment and testing only',
+        ),
     ]
-
-    update_orchestration: bool = True
 
     def __init__(self, *args: str, **kwargs: Any) -> None:
         internal_store = kwargs.pop('internal_store', None)
@@ -31,19 +49,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         public_store = kwargs.pop('public_store', None)
         path_resolver = kwargs.pop('path_resolver', None)
         authorizer = kwargs.pop('authorizer', None)
-        update_orchestration = kwargs.pop(
-            'update_orchestration', self.update_orchestration
-        )
+        uo = kwargs.pop('update_orchestration', None)
         super().__init__(*args, **kwargs)
-        self._internal_store = internal_store or mon_store.ModuleConfigStore(
-            self
-        )
+        # the update_orchestration property only works post-init
+        update_orchestration = self.update_orchestration if uo is None else uo
+        if internal_store is not None:
+            self._internal_store = internal_store
+            log.info('Using internal_store passed to class: {internal_store}')
+        else:
+            self._internal_store = self._backend_store(
+                self.internal_store_backend
+            )
         self._priv_store = priv_store or mon_store.MonKeyConfigStore(self)
         # self._public_store = public_store or mon_store.MonKeyConfigStore(self)
         self._public_store = (
             public_store or rados_store.RADOSConfigStore.init(self)
         )
-        path_resolver = path_resolver or fs.CephFSPathResolver(self)
+        path_resolver = path_resolver or fs.CachingCephFSPathResolver(self)
         # Why the honk is the cast needed but path_resolver doesn't need it??
         # Sometimes mypy drives me batty.
         authorizer = cast(
@@ -58,12 +80,59 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             orch=(self if update_orchestration else None),
         )
 
+    def _backend_store(self, store_conf: str = '') -> ConfigStore:
+        # Store conf is meant for devs, maybe testers to experiment with
+        # certain backend options at run time. This is not meant to be
+        # a formal or friendly interface.
+        name = 'default'
+        opts = {}
+        if store_conf:
+            parts = [v.strip() for v in store_conf.split(';')]
+            assert parts
+            name = parts[0]
+            opts = dict(p.split('=', 1) for p in parts[1:])
+        if name == 'default':
+            log.info('Using default backend: sqlite3 with mirroring')
+            mc_store = mon_store.ModuleConfigStore(self)
+            db_store = sqlite_store.mgr_sqlite3_db_with_mirroring(
+                self, mc_store, opts
+            )
+            return db_store
+        if name == 'mon':
+            log.info('Using specified backend: module config internal store')
+            return mon_store.ModuleConfigStore(self)
+        if name == 'db':
+            log.info('Using specified backend: mgr pool sqlite3 db')
+            return sqlite_store.mgr_sqlite3_db(self, opts)
+        raise ValueError(f'invalid internal store: {name}')
+
+    @property
+    def update_orchestration(self) -> bool:
+        return cast(
+            bool,
+            self.get_module_option('update_orchestration', True),
+        )
+
+    @property
+    def internal_store_backend(self) -> str:
+        return cast(
+            str,
+            self.get_module_option('internal_store_backend', ''),
+        )
+
     @cli.SMBCommand('apply', perm='rw')
-    def apply_resources(self, inbuf: str) -> handler.ResultGroup:
+    def apply_resources(self, inbuf: str) -> results.ResultGroup:
         """Create, update, or remove smb configuration resources based on YAML
         or JSON specs
         """
-        return self._handler.apply(resources.load_text(inbuf))
+        try:
+            return self._handler.apply(resources.load_text(inbuf))
+        except resources.InvalidResourceError as err:
+            # convert the exception into a result and return it as the only
+            # item in the result group
+            return results.ResultGroup(
+                [results.InvalidResourceResult(err.resource_data, str(err))]
+            )
 
     @cli.SMBCommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
@@ -82,10 +151,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         define_user_pass: Optional[List[str]] = None,
         custom_dns: Optional[List[str]] = None,
         placement: Optional[str] = None,
-    ) -> handler.Result:
+    ) -> results.Result:
         """Create an smb cluster"""
         domain_settings = None
         user_group_settings = None
+        to_apply: List[resources.SMBResource] = []
 
         if domain_realm or domain_join_ref or domain_join_user_pass:
             join_sources: List[resources.JoinSource] = []
@@ -108,13 +178,21 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         'a domain join username & password value'
                         ' must contain a "%" separator'
                     )
+                rname = utils.rand_name(cluster_id)
                 join_sources.append(
                     resources.JoinSource(
-                        source_type=JoinSourceType.PASSWORD,
+                        source_type=JoinSourceType.RESOURCE,
+                        ref=rname,
+                    )
+                )
+                to_apply.append(
+                    resources.JoinAuth(
+                        auth_id=rname,
                         auth=resources.JoinAuthValues(
                             username=username,
                             password=password,
                         ),
+                        linked_to_cluster=cluster_id,
                     )
                 )
             domain_settings = resources.DomainSettings(
@@ -140,15 +218,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             for unpw in define_user_pass or []:
                 username, password = unpw.split('%', 1)
                 users.append({'name': username, 'password': password})
-            user_group_settings += [
+            rname = utils.rand_name(cluster_id)
+            user_group_settings.append(
                 resources.UserGroupSource(
-                    source_type=UserGroupSourceType.INLINE,
+                    source_type=UserGroupSourceType.RESOURCE, ref=rname
+                )
+            )
+            to_apply.append(
+                resources.UsersAndGroups(
+                    users_groups_id=rname,
                     values=resources.UserGroupSettings(
                         users=users,
                         groups=[],
                     ),
+                    linked_to_cluster=cluster_id,
                 )
-            ]
+            )
 
         pspec = resources.WrappedPlacementSpec.wrap(
             PlacementSpec.from_string(placement)
@@ -161,10 +246,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             custom_dns=custom_dns,
             placement=pspec,
         )
-        return self._handler.apply([cluster]).one()
+        to_apply.append(cluster)
+        return self._handler.apply(to_apply, create_only=True).squash(cluster)
 
     @cli.SMBCommand('cluster rm', perm='rw')
-    def cluster_rm(self, cluster_id: str) -> handler.Result:
+    def cluster_rm(self, cluster_id: str) -> results.Result:
         """Remove an smb cluster"""
         cluster = resources.RemovedCluster(cluster_id=cluster_id)
         return self._handler.apply([cluster]).one()
@@ -190,7 +276,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         share_name: str = '',
         subvolume: str = '',
         readonly: bool = False,
-    ) -> handler.Result:
+    ) -> results.Result:
         """Create an smb share"""
         share = resources.Share(
             cluster_id=cluster_id,
@@ -203,10 +289,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 subvolume=subvolume,
             ),
         )
-        return self._handler.apply([share]).one()
+        return self._handler.apply([share], create_only=True).one()
 
     @cli.SMBCommand('share rm', perm='rw')
-    def share_rm(self, cluster_id: str, share_id: str) -> handler.Result:
+    def share_rm(self, cluster_id: str, share_id: str) -> results.Result:
         """Remove an smb share"""
         share = resources.RemovedShare(
             cluster_id=cluster_id, share_id=share_id
@@ -276,3 +362,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def remove_smb_service(self, service_name: str) -> None:
         completion = self.remove_service(service_name)
         orchestrator.raise_if_exception(completion)
+
+    def maybe_upgrade(self, db: 'sqlite3.Connection', version: int) -> None:
+        # Our db tables are self managed by our abstraction layer, via a store
+        # class, not directly by the mgr module. Disable the default behavior
+        # of the mgr module schema loader and use our internal_store class.
+        if not isinstance(self._internal_store, sqlite_store.SqliteStore):
+            return
+        log.debug('Preparing db tables')
+        self._internal_store.prepare(db.cursor())

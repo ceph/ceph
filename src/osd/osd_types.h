@@ -164,7 +164,7 @@ struct osd_reqid_t {
   {}
 
   DENC(osd_reqid_t, v, p) {
-    DENC_START(2, 2, p);
+    DENC_START_OSD_REQID(2, 2, p);
     denc(v.name, p);
     denc(v.tid, p);
     denc(v.inc, p);

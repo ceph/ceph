@@ -10,7 +10,6 @@ if(WITH_LIBCEPHFS)
     main.cc
     deleg.cc
     monconfig.cc
-    vxattr.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
@@ -48,6 +47,21 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
     )
   install(TARGETS ceph_test_libcephfs_suidsgid
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  add_executable(ceph_test_libcephfs_vxattr
+    vxattr.cc
+    main.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_vxattr
+    ceph-common
+    cephfs
+    librados
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
+  install(TARGETS ceph_test_libcephfs_vxattr
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   add_executable(ceph_test_libcephfs_newops

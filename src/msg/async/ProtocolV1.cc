@@ -1174,8 +1174,8 @@ ssize_t ProtocolV1::write_message(Message *m, ceph::buffer::list &bl, bool more)
   }
 
   m->trace.event("async writing message");
-  ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
-                 << dendl;
+  ldout(cct, 2) << __func__ << " sending message m=" << m
+                << " seq=" << m->get_seq() << " " << *m << dendl;
   ssize_t total_send_size = connection->outgoing_bl.length();
   ssize_t rc = connection->_try_send(more);
   if (rc < 0) {

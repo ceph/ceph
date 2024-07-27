@@ -8,25 +8,14 @@ Leads
 -----
 
 The Ceph project was created by Sage Weil and is led by the Ceph Leadership
-Team (CLT). In addition, each major project component has its own lead. The
-following table shows all the leads and their nicks on `GitHub`_:
+Team (CLT). Each major component of the Ceph project has its own lead. The
+`team list`_ on the Ceph community website shows all the leads and their nicks
+on `GitHub`_:
 
 .. _github: https://github.com/
+.. _team list: https://ceph.io/en/community/team
 
-========= ================== =============
-Scope     Lead               GitHub nick
-========= ================== =============
-RADOS     Radoslaw Zarzynski rzarzynski 
-RGW       Casey Bodley       cbodley 
-RGW       Matt Benjamin      mattbenjamin
-RBD       Ilya Dryomov       dis 
-CephFS    Venky Shankar      vshankar
-Dashboard Nizamudeen A       nizamial09 
-Build/Ops Ken Dreyer         ktdreyer
-Docs      Zac Dover          zdover23
-========= ================== =============
-
-The Ceph-specific acronyms in the table are explained in
+Ceph-specific acronyms in the table of leads are explained in
 :doc:`/architecture`.
 
 History

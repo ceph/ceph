@@ -9,7 +9,15 @@ $ cd /path/to/ceph/src/test/rgw/
 $ nosetests test_multi.py
 ```
 This will assume a configuration file called `/path/to/ceph/src/test/rgw/test_multi.conf` exists.
-To use a different configuration file, set the `RGW_MULTI_TEST_CONF` environment variable to point to that file.
+To use a different configuration file, set the `RGW_MULTI_TEST_CONF` environment variable to point to that file. Here is an example of configuration file:
+```
+[DEFAULT]
+num_zonegroup=1
+num_zones=3
+gateway_per_zone=1
+no_bootstrap=false
+log_level=5
+```
 Since we use the same entry point file for all tests, running specific tests is possible using the following format:
 ```
 $ nosetests test_multi.py:<specific_test_name>
@@ -19,6 +27,10 @@ To run multiple tests based on wildcard string, use the following format:
 $ nosetests test_multi.py -m "<wildcard string>"
 ```
 Note that the test to run, does not have to be inside the `test_multi.py` file.
+Some tests have attributes set based on their current reliability. You can filter tests based on their attributes:
+```
+$ nosetests test_multi.py -a "!fails_with_rgw"
+```
 Note that different options for running specific and multiple tests exists in the [nose documentation](https://nose.readthedocs.io/en/latest/usage.html#options), as well as other options to control the execution of the tests.
 ## Configuration
 ### Environment Variables

@@ -252,6 +252,46 @@
           </div>
         </div>
 
+        <div class="form-group row">
+          <label for="crushNumFailureDomains"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush num failure domain</ng-container>
+            <cd-helper [html]="tooltips.crushNumFailureDomains">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="crushNumFailureDomains"
+                   name="crushNumFailureDomains"
+                   class="form-control"
+                   formControlName="crushNumFailureDomains"
+                   min="0">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('crushNumFailureDomains', frm, 'required')"
+                  i18n>This field is required when crush osds per failure domain is set!</span>
+          </div>
+        </div>
+
+        <div class="form-group row">
+          <label for="crushOsdsPerFailureDomain"
+                 class="cd-col-form-label">
+            <ng-container i18n>Crush osds per failure domain</ng-container>
+            <cd-helper [html]="tooltips.crushOsdsPerFailureDomain">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input type="number"
+                   id="crushOsdsPerFailureDomain"
+                   name="crushOsdsPerFailureDomain"
+                   class="form-control"
+                   formControlName="crushOsdsPerFailureDomain"
+                   min="0">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('crushOsdsPerFailureDomain', frm, 'required')"
+                  i18n>This field is required when crush num failure domain is set!</span>
+          </div>
+        </div>
+
         <div class="form-group row"
              *ngIf="plugin === PLUGIN.LRC">
           <label for="crushLocality"

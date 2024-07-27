@@ -48,10 +48,12 @@
       group image add                   Add an image to a group.
       group image list (... ls)         List images in a group.
       group image remove (... rm)       Remove an image from a group.
+      group info                        Show information about a group.
       group list (group ls)             List rbd groups.
       group remove (group rm)           Delete a group.
       group rename                      Rename a group within pool.
       group snap create                 Make a snapshot of a group.
+      group snap info                   Show information about a group snapshot.
       group snap list (... ls)          List snapshots of a group.
       group snap remove (... rm)        Remove a snapshot from a group.
       group snap rename                 Rename group's snapshot.
@@ -221,9 +223,10 @@
   
   rbd help clone
   usage: rbd clone [--pool <pool>] [--namespace <namespace>] [--image <image>] 
-                   [--snap <snap>] [--dest-pool <dest-pool>] 
-                   [--dest-namespace <dest-namespace>] [--dest <dest>] 
-                   [--order <order>] [--object-size <object-size>] 
+                   [--snap <snap>] [--snap-id <snap-id>] 
+                   [--dest-pool <dest-pool>] [--dest-namespace <dest-namespace>] 
+                   [--dest <dest>] [--order <order>] 
+                   [--object-size <object-size>] 
                    [--image-feature <image-feature>] [--image-shared] 
                    [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
                    [--data-pool <data-pool>] 
@@ -248,6 +251,7 @@
     --namespace arg           source namespace name
     --image arg               source image name
     --snap arg                source snapshot name
+    --snap-id arg             source snapshot id
     --dest-pool arg           destination pool name
     --dest-namespace arg      destination namespace name
     --dest arg                destination image name
@@ -972,6 +976,24 @@
     -p [ --pool ] arg     pool name unless overridden
     --image-id arg        image id
   
+  rbd help group info
+  usage: rbd group info [--pool <pool>] [--namespace <namespace>] 
+                        [--group <group>] [--format <format>] [--pretty-format] 
+                        <group-spec> 
+  
+  Show information about a group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
   rbd help group list
   usage: rbd group list [--pool <pool>] [--namespace <namespace>] 
                         [--format <format>] [--pretty-format] 
@@ -1048,6 +1070,27 @@
     --snap arg              snapshot name
     --skip-quiesce          do not run quiesce hooks
     --ignore-quiesce-error  ignore quiesce hook error
+  
+  rbd help group snap info
+  usage: rbd group snap info [--pool <pool>] [--namespace <namespace>] 
+                             [--group <group>] [--snap <snap>] 
+                             [--format <format>] [--pretty-format] 
+                             <group-snap-spec> 
+  
+  Show information about a group snapshot.
+  
+  Positional arguments
+    <group-snap-spec>    group specification
+                         (example:
+                         [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --group arg          group name
+    --snap arg           snapshot name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help group snap list
   usage: rbd group snap list [--format <format>] [--pretty-format] 

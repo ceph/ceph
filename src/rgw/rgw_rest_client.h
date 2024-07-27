@@ -168,7 +168,7 @@ public:
 
   virtual int send(RGWHTTPManager *mgr);
 
-  int complete_request(optional_yield y,
+  int complete_request(const DoutPrefixProvider* dpp, optional_yield y,
                        std::string *etag = nullptr,
                        real_time *mtime = nullptr,
                        uint64_t *psize = nullptr,

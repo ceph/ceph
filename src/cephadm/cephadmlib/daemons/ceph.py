@@ -292,8 +292,8 @@ class CephExporter(ContainerDaemonForm):
         self.image = image
 
         self.sock_dir = config_json.get('sock-dir', '/var/run/ceph/')
-        ipv4_addrs, _ = get_ip_addresses(get_hostname())
-        addrs = '0.0.0.0' if ipv4_addrs else '::'
+        _, ipv6_addrs = get_ip_addresses(get_hostname())
+        addrs = '::' if ipv6_addrs else '0.0.0.0'
         self.addrs = config_json.get('addrs', addrs)
         self.port = config_json.get('port', self.DEFAULT_PORT)
         self.prio_limit = config_json.get('prio-limit', 5)
@@ -436,13 +436,13 @@ def get_ceph_mounts_for_type(
                 mounts[cephadm_binary] = '/usr/sbin/cephadm'
                 mounts[
                     ceph_folder + '/src/ceph-volume/ceph_volume'
-                ] = '/usr/lib/python3.6/site-packages/ceph_volume'
+                ] = '/usr/lib/python3.9/site-packages/ceph_volume'
                 mounts[
                     ceph_folder + '/src/pybind/mgr'
                 ] = '/usr/share/ceph/mgr'
                 mounts[
                     ceph_folder + '/src/python-common/ceph'
-                ] = '/usr/lib/python3.6/site-packages/ceph'
+                ] = '/usr/lib/python3.9/site-packages/ceph'
                 mounts[
                     ceph_folder + '/monitoring/ceph-mixin/dashboards_out'
                 ] = '/etc/grafana/dashboards/ceph-dashboard'

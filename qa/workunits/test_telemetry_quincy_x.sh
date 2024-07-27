@@ -1,5 +1,9 @@
 #!/bin/bash -ex
 
+# Opt in to new collections right away to avoid "TELEMETRY_CHANGED"
+# health warning (see https://tracker.ceph.com/issues/64458).
+# Currently, no new collections between latest quincy and reef (dev)
+
 # For quincy, the last_opt_revision remains at 1 since last_opt_revision
 # was phased out for fresh installs of quincy.
 LAST_OPT_REVISION=$(ceph config get mgr mgr/telemetry/last_opt_revision)
@@ -26,9 +30,6 @@ done
 ceph telemetry preview
 ceph telemetry preview-device
 ceph telemetry preview-all
-
-# Opt in to new collections
-# Currently, no new collections between latest quincy and reef (dev)
 
 # Run show commands
 ceph telemetry show

@@ -37,3 +37,24 @@
      [ngClass]="[icons.warning]">
   </i>
 </ng-template>
+
+<ng-template #urlTpl
+             let-row="row">
+  <ng-container *ngIf="serviceUrls[row.service_type] else noUrl">
+    <a *ngIf="!isMgmtGateway else mgmtGateway"
+       target="_blank"
+       [href]="serviceUrls[row.service_type]">
+      {{ row.service_name }}
+      <i class="fa fa-external-link"></i>
+    </a>
+
+    <ng-template #mgmtGateway>
+      <a target="_blank"
+         [href]="row.service_type">
+        {{ row.service_name }}
+        <i class="fa fa-external-link"></i>
+      </a>
+    </ng-template>
+  </ng-container>
+  <ng-template #noUrl>{{row.service_name}}</ng-template>
+</ng-template>

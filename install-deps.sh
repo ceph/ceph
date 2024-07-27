@@ -141,7 +141,7 @@ function install_pkg_on_ubuntu {
     fi
 }
 
-boost_ver=1.82
+boost_ver=1.85
 
 function clean_boost_on_ubuntu {
     ci_debug "Running clean_boost_on_ubuntu() in install-deps.sh"
@@ -198,7 +198,7 @@ function install_boost_on_ubuntu {
     fi
     local codename=$1
     local project=libboost
-    local sha1=2804368f5b807ba8334b0ccfeb8af191edeb996f
+    local sha1=55f34507d322314fb0294629b7c0bb406de07aec
     install_pkg_on_ubuntu \
         $project \
         $sha1 \
@@ -220,6 +220,7 @@ function install_boost_on_ubuntu {
         ceph-libboost-test${boost_ver}-dev \
         ceph-libboost-thread${boost_ver}-dev \
         ceph-libboost-timer${boost_ver}-dev \
+        ceph-libboost-url${boost_ver}-dev \
 	|| ci_debug "ceph-libboost package unavailable, you can build the submodule"
 
 }
@@ -463,14 +464,14 @@ else
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
         ;;
-    rocky|centos|fedora|rhel|ol|virtuozzo)
+    almalinux|rocky|centos|fedora|rhel|ol|virtuozzo)
         builddepcmd="dnf -y builddep --allowerasing"
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
                 $SUDO dnf install -y dnf-utils
                 ;;
-            rocky|centos|rhel|ol|virtuozzo)
+            almalinux|rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO dnf install -y dnf-utils selinux-policy-targeted
                 rpm --quiet --query epel-release || \
@@ -525,7 +526,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO $zypp_install $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar false $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)

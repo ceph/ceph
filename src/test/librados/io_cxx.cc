@@ -879,10 +879,11 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
 
 TEST_F(LibRadosIoECPP, CrcZeroWrite) {
   SKIP_IF_CRIMSON();
-  set_allow_ec_overwrites(pool_name, true);
+  set_allow_ec_overwrites();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
+  bl.append(buf, sizeof(buf));
 
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, sizeof(buf)));
@@ -890,7 +891,6 @@ TEST_F(LibRadosIoECPP, CrcZeroWrite) {
   ObjectReadOperation read;
   read.read(0, bl.length(), NULL, NULL);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
-  recreate_pool();
 }
 
 TEST_F(LibRadosIoECPP, XattrListPP) {

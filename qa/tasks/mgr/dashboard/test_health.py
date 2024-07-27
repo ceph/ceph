@@ -186,6 +186,7 @@ class HealthTest(DashboardTestCase):
                 })
             }),
             'fs_map': JObj({
+                'btime': str,
                 'compat': JObj({
                     'compat': JObj({}, allow_unknown=True, unknown_schema=str),
                     'incompat': JObj(

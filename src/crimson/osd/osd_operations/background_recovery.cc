@@ -86,7 +86,7 @@ seastar::future<> BackgroundRecoveryT<T>::start()
             return do_recovery();
           }, [](std::exception_ptr) {
             return seastar::make_ready_future<bool>(false);
-          }, pg);
+          }, pg, epoch_started);
         }).handle_exception_type([ref, this](const std::system_error& err) {
 	  LOG_PREFIX(BackgroundRecoveryT<T>::start);
           if (err.code() == std::make_error_code(std::errc::interrupted)) {
@@ -116,15 +116,19 @@ UrgentRecovery::do_recovery()
 {
   LOG_PREFIX(UrgentRecovery::do_recovery);
   DEBUGDPPI("{}: {}", *pg, __func__, *this);
-  if (!pg->has_reset_since(epoch_started)) {
+  if (pg->has_reset_since(epoch_started)) {
+    return seastar::make_ready_future<bool>(false);
+  }
+
+  return pg->find_unfound(epoch_started
+  ).then_interruptible([this] {
     return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
 			       interruptor>([this] (auto&& trigger) {
       return pg->get_recovery_handler()->recover_missing(trigger, soid, need);
     }).then_interruptible([] {
       return seastar::make_ready_future<bool>(false);
     });
-  }
-  return seastar::make_ready_future<bool>(false);
+  });
 }
 
 void UrgentRecovery::print(std::ostream &lhs) const
@@ -164,11 +168,14 @@ PglogBasedRecovery::do_recovery()
   if (pg->has_reset_since(epoch_started)) {
     return seastar::make_ready_future<bool>(false);
   }
-  return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
-			     interruptor>([this] (auto&& trigger) {
-    return pg->get_recovery_handler()->start_recovery_ops(
-      trigger,
-      crimson::common::local_conf()->osd_recovery_max_single_start);
+  return pg->find_unfound(epoch_started
+  ).then_interruptible([this] {
+    return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
+			       interruptor>([this] (auto&& trigger) {
+      return pg->get_recovery_handler()->start_recovery_ops(
+	trigger,
+	crimson::common::local_conf()->osd_recovery_max_single_start);
+    });
   });
 }
 

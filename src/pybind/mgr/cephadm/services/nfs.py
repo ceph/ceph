@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class NFSService(CephService):
     TYPE = 'nfs'
 
-    def ranked(self) -> bool:
+    def ranked(self, spec: ServiceSpec) -> bool:
         return True
 
     def fence(self, daemon_id: str) -> None:

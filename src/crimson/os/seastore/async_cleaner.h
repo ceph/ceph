@@ -277,6 +277,8 @@ public:
 
   virtual ~ExtentCallbackInterface() = default;
 
+  virtual shard_stats_t& get_shard_stats() = 0;
+
   /// Creates empty transaction
   /// weak transaction should be type READ
   virtual TransactionRef create_transaction(

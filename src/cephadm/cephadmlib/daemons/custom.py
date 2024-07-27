@@ -15,6 +15,7 @@ from ..deploy import DeploymentType
 from ..deployment_utils import to_deployment_container
 from ..file_utils import write_new, makedirs
 from ..net_utils import EndPoint
+from ..constants import UID_NOBODY, GID_NOGROUP
 
 
 logger = logging.getLogger()
@@ -43,8 +44,8 @@ class CustomContainer(ContainerDaemonForm):
 
         # config-json options
         self.entrypoint = dict_get(config_json, 'entrypoint')
-        self.uid = dict_get(config_json, 'uid', 65534)  # nobody
-        self.gid = dict_get(config_json, 'gid', 65534)  # nobody
+        self.uid = dict_get(config_json, 'uid', UID_NOBODY)
+        self.gid = dict_get(config_json, 'gid', GID_NOGROUP)
         self.volume_mounts = dict_get(config_json, 'volume_mounts', {})
         self.args = dict_get(config_json, 'args', [])
         self.envs = dict_get(config_json, 'envs', [])

@@ -45,9 +45,6 @@ class Route(NamedTuple):
 
 class ServiceDiscovery:
 
-    KV_STORE_SD_ROOT_CERT = 'service_discovery/root/cert'
-    KV_STORE_SD_ROOT_KEY = 'service_discovery/root/key'
-
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr = mgr
         self.ssl_certs = SSLCerts()
@@ -89,14 +86,14 @@ class ServiceDiscovery:
             self.mgr.set_store('service_discovery/root/username', self.username)
 
     def configure_tls(self, server: Server) -> None:
-        old_cert = self.mgr.get_store(self.KV_STORE_SD_ROOT_CERT)
-        old_key = self.mgr.get_store(self.KV_STORE_SD_ROOT_KEY)
+        old_cert = self.mgr.cert_key_store.get_cert('service_discovery_root_cert')
+        old_key = self.mgr.cert_key_store.get_key('service_discovery_key')
         if old_key and old_cert:
             self.ssl_certs.load_root_credentials(old_cert, old_key)
         else:
             self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
-            self.mgr.set_store(self.KV_STORE_SD_ROOT_CERT, self.ssl_certs.get_root_cert())
-            self.mgr.set_store(self.KV_STORE_SD_ROOT_KEY, self.ssl_certs.get_root_key())
+            self.mgr.cert_key_store.save_cert('service_discovery_root_cert', self.ssl_certs.get_root_cert())
+            self.mgr.cert_key_store.save_key('service_discovery_key', self.ssl_certs.get_root_key())
         addr = self.mgr.get_mgr_ip()
         host_fqdn = socket.getfqdn(addr)
         server.ssl_certificate, server.ssl_private_key = self.ssl_certs.generate_cert_files(

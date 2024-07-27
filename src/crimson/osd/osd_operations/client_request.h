@@ -53,9 +53,6 @@ public:
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
     } await_map;
-    struct WaitRepop : OrderedConcurrentPhaseT<WaitRepop> {
-      static constexpr auto type_name = "ClientRequest::PGPipeline::wait_repop";
-    } wait_repop;
     struct SendReply : OrderedExclusivePhaseT<SendReply> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::send_reply";
     } send_reply;

@@ -769,7 +769,6 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
     }
     ldpp_dout(dpp, 4) << "Promoted to master zone and committed new period "
         << info.id << dendl;
-    (void) cfgstore->realm_notify_new_period(dpp, y, info);
     return 0;
   }
   // period must be based on current epoch
@@ -788,10 +787,6 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
   // write the period
   constexpr bool exclusive = true;
   int r = cfgstore->create_period(dpp, y, exclusive, info);
-  if (r == -EEXIST) {
-    // already have this epoch (or a more recent one)
-    return 0;
-  }
   if (r < 0) {
     ldpp_dout(dpp, 0) << "failed to store period: " << cpp_strerror(r) << dendl;
     return r;
@@ -803,7 +798,6 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
   }
   ldpp_dout(dpp, 4) << "Committed new epoch " << info.epoch
       << " for period " << info.id << dendl;
-  (void) cfgstore->realm_notify_new_period(dpp, y, info);
   return 0;
 }
 

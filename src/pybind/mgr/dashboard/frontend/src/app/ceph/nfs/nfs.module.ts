@@ -21,6 +21,7 @@ import { NfsListComponent } from './nfs-list/nfs-list.component';
     NgbTypeaheadModule,
     NgbTooltipModule
   ],
+  exports: [NfsListComponent, NfsFormComponent, NfsDetailsComponent],
   declarations: [NfsListComponent, NfsDetailsComponent, NfsFormComponent, NfsFormClientComponent]
 })
 export class NfsModule {}

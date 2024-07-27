@@ -1,3 +1,22 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - mons down
+      - mon down
+      - MON_DOWN
+      - out of quorum
+      - PG_
+      - OSD_DOWN
+      - POOL_APP_NOT_ENABLED
+      - pgs degraded
+      - pg degraded
+      - object degraded
+      - objects degraded
+      - FS_DEGRADED
+      - MDS_ALL_DOWN
+      - OSD_UPGRADE_FINISHED
+      - do not have an application enabled
+      - is down
 tasks:
 - install:
     branch: quincy
@@ -6,7 +25,7 @@ tasks:
 - print: "**** done install task..."
 - print: "**** done start installing quincy cephadm ..."
 - cephadm:
-    image: quay.io/ceph/daemon-base:latest-quincy
+    image: quay.ceph.io/ceph-ci/ceph:quincy
     cephadm_branch: quincy
     cephadm_git_url: https://github.com/ceph/ceph
     conf:
@@ -43,6 +62,12 @@ tasks:
             - ceph versions | jq -e '.overall | length == 1'
             - ceph versions | jq -e '.overall | keys' | grep $sha1
     - print: "**** done end upgrade..."
+
+    - print: "**** done set require-osd-release ..."
+    - cephadm.shell:
+        env: [sha1]
+        mon.a:
+            - ceph osd require-osd-release squid
 
     - print: "**** done start telemetry x..."
     - workunit:

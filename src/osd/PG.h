@@ -269,7 +269,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change();
+    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
   }
 
   static void set_last_deep_scrub_stamp(
@@ -285,7 +285,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change();
+    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
   }
 
   static void add_objects_scrubbed_count(
@@ -531,7 +531,7 @@ public:
    * - pg stat scrub timestamps
    * - etc
    */
-  void on_scrub_schedule_input_change();
+  void on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready);
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -701,7 +701,8 @@ public:
   bool get_must_scrub() const;
 
   Scrub::schedule_result_t start_scrubbing(
-      Scrub::OSDRestrictions osd_restrictions);
+    std::unique_ptr<Scrub::ScrubJob> candidate,
+    Scrub::OSDRestrictions osd_restrictions);
 
   unsigned int scrub_requeue_priority(
       Scrub::scrub_prio_t with_priority,
@@ -712,35 +713,6 @@ public:
 private:
   // auxiliaries used by sched_scrub():
   double next_deepscrub_interval() const;
-
-  /// should we perform deep scrub?
-  bool is_time_for_deep(bool allow_deep_scrub,
-                        bool allow_shallow_scrub,
-                        bool has_deep_errors,
-                        const requested_scrub_t& planned) const;
-
-  /**
-   * Validate the various 'next scrub' flags in m_planned_scrub against configuration
-   * and scrub-related timestamps.
-   *
-   * @returns an updated copy of the m_planned_flags (or nothing if no scrubbing)
-   */
-  std::optional<requested_scrub_t> validate_scrub_mode() const;
-
-  std::optional<requested_scrub_t> validate_periodic_mode(
-    bool allow_deep_scrub,
-    bool try_to_auto_repair,
-    bool allow_shallow_scrub,
-    bool time_for_deep,
-    bool has_deep_errors,
-    const requested_scrub_t& planned) const;
-
-  std::optional<requested_scrub_t> validate_initiated_scrub(
-    bool allow_deep_scrub,
-    bool try_to_auto_repair,
-    bool time_for_deep,
-    bool has_deep_errors,
-    const requested_scrub_t& planned) const;
 
   using ScrubAPI = void (ScrubPgIF::*)(epoch_t epoch_queued);
   void forward_scrub_event(ScrubAPI fn, epoch_t epoch_queued, std::string_view desc);

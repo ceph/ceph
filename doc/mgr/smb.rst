@@ -55,7 +55,7 @@ Create Cluster
 
 .. code:: bash
 
-    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>]
+    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>]
 
 Create a new logical cluster, identified by the cluster id value. The cluster
 create command must specify the authentication mode the cluster will use. This
@@ -78,6 +78,9 @@ domain_realm
 domain_join_user_pass
     A string in the form ``<username>%<password>`` that will be used to join
     Samba servers to the AD domain.
+define_user_pass
+    A string of the form ``<username>%<password>`` that will be used for
+    authentication in ``user`` auth_mode.
 custom_dns
     Optional. Can be specified multiple times. One or more IP Addresses that
     will be applied to the Samba containers to override the default DNS
@@ -357,6 +360,21 @@ custom_dns
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
+custom_smb_global_options
+    Optional mapping. Specify key-value pairs that will be directly added to
+    the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
+    *not* use this option unless you are prepared to debug the Samba instances
+    yourself.
+
+    This option is meant for developers, feature investigators, and other
+    advanced users to take more direct control of a share's options without
+    needing to make changes to the Ceph codebase. Entries in this map should
+    match parameters in ``smb.conf`` and their values. A special key
+    ``_allow_customization`` must appear somewhere in the mapping with the
+    value of ``i-take-responsibility-for-all-samba-configuration-errors`` as an
+    indicator that the user is aware that using this option can easily break
+    things in ways that the Ceph team can not help with. This special key will
+    automatically be removed from the list of options passed to Samba.
 
 
 .. _join-source-fields:
@@ -364,14 +382,7 @@ placement
 A join source object supports the following fields:
 
 source_type
-    One of ``password`` or ``resource``
-auth
-    Object. Required for ``source_type: password``. Fields:
-
-    username:
-        Required string. User with ability to join a system to AD.
-    password:
-        Required string. The AD user's password
+    Optional. Must be ``resource`` if specified.
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
     ``ceph.smb.join.auth`` resource
@@ -381,25 +392,14 @@ ref
 A user group source object supports the following fields:
 
 source_type
-    One of ``inline`` or ``resource``
-values
-    Object. Required for ``source_type: inline``. Fields:
-
-    users
-        List of objects. Fields:
-
-        username
-            A user name
-        password
-            A password
-    groups
-        List of objects. Fields:
-
-        name
-            The name of the group
+    Optional. One of ``resource`` (the default) or ``empty``
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
     ``ceph.smb.join.auth`` resource
+
+.. note::
+   The ``source_type`` ``empty`` is generally only for debugging and testing
+   the module and should not be needed in production deployments.
 
 The following is an example of a cluster configured for AD membership:
 
@@ -427,14 +427,8 @@ The following is an example of a cluster configured for standalone operation:
     cluster_id: rhumba
     auth_mode: user
     user_group_settings:
-      - source_type: inline
-        values:
-          users:
-            - name: chuckx
-              password: 3xample101
-            - name: steves
-              password: F00Bar123
-          groups: []
+      - source_type: resource
+        ref: ug1
     placement:
       hosts:
         - node6.mycluster.sink.test
@@ -489,6 +483,35 @@ cephfs
     provider
         Optional. One of ``samba-vfs`` or ``kcephfs`` (``kcephfs`` is not yet
         supported) . Selects how CephFS storage should be provided to the share
+restrict_access
+    Optional boolean, defaulting to false. If true the share will only permit
+    access by users explicitly listed in ``login_control``.
+login_control
+    Optional list of objects. Fields:
+
+    name
+        Required string. Name of the user or group.
+    category
+        Optional. One of ``user`` (default) or ``group``.
+    access
+        One of ``read`` (alias ``r``), ``read-write`` (alias ``rw``), ``none``,
+        or ``admin``. Specific access level to grant to the user or group when
+        logging into this share. The ``none`` value denies access to the share
+        regardless of the ``restrict_access`` value.
+custom_smb_share_options
+    Optional mapping. Specify key-value pairs that will be directly added to
+    the ``smb.conf`` (or equivalent) of a Samba server.  Do *not* use this
+    option unless you are prepared to debug the Samba instances yourself.
+
+    This option is meant for developers, feature investigators, and other
+    advanced users to take more direct control of a share's options without
+    needing to make changes to the Ceph codebase. Entries in this map should
+    match parameters in ``smb.conf`` and their values. A special key
+    ``_allow_customization`` must appear somewhere in the mapping with the
+    value of ``i-take-responsibility-for-all-samba-configuration-errors`` as an
+    indicator that the user is aware that using this option can easily break
+    things in ways that the Ceph team can not help with. This special key will
+    automatically be removed from the list of options passed to Samba.
 
 The following is an example of a share:
 
@@ -534,6 +557,10 @@ auth
         Required string. User with ability to join a system to AD
     password
         Required string. The AD user's password
+linked_to_cluster:
+    Optional. A string containing a cluster id. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
 
 Example:
 
@@ -564,7 +591,7 @@ values
     users
         List of objects. Fields:
 
-        username
+        name
             A user name
         password
             A password
@@ -573,6 +600,10 @@ values
 
         name
             The name of the group
+linked_to_cluster:
+    Optional. A string containing a cluster id. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
 
 
 Example:

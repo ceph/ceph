@@ -18,7 +18,7 @@ function extract_published_sch() {
   local -n dict=$4 # a ref to the in/out dictionary
   local current_time=$2
   local extra_time=$3
-  local extr_dbg=1 # note: 3 and above leave some temp files around
+  local extr_dbg=2 # note: 3 and above leave some temp files around
 
   #turn off '-x' (but remember previous state)
   local saved_echo_flag=${-//[^x]/}
@@ -51,18 +51,26 @@ function extract_published_sch() {
   (( extr_dbg >= 2 )) && echo "query output:"
   (( extr_dbg >= 2 )) && ceph pg $1 query -f json-pretty | awk -e '/scrubber/,/agent_state/ {print;}'
 
+  # note: the query output for the schedule containas two dates: the first is the not-before, and
+  # the second is the original target time (which is before or the same as the not-before)
+  # the current line format looks like this:
+  # "schedule": "scrub scheduled @ 2024-06-26T16:09:56.666 (2024-06-24T16:09:56.338)"
   from_qry=`ceph pg $1 query -f json-pretty | jq -r --arg extra_dt "$extra_time" --arg current_dt "$current_time"  --arg spt "'" '
     . |
         (.q_stat_part=((.scrubber.schedule// "-") | if test(".*@.*") then (split(" @ ")|first) else . end)) |
         (.q_when_part=((.scrubber.schedule// "0") | if test(".*@.*") then (split(" @ ")|last) else "0" end)) |
-	(.q_when_is_future=(.q_when_part > $current_dt)) |
+        (.q_target=((.scrubber.schedule// "0") | if test(".*@.*") then (split(" @ ")|last|split(" (")|last|split(")")|first) else "0" end)) |
+        (.q_not_before=((.scrubber.schedule// "0") | if test(".*@.*") then (split(" @ ")|last|split(" (")|first) else "0" end)) |
+	(.q_when_is_future=(.q_target > $current_dt)) |
 	(.q_vs_date=(.q_when_part > $extra_dt)) |	
       {
         query_epoch: .epoch,
         query_seq: .info.stats.reported_seq,
         query_active: (.scrubber | if has("active") then .active else "bug" end),
         query_schedule: .q_stat_part,
-        query_schedule_at: .q_when_part,
+        #query_schedule_at: .q_when_part,
+        query_schedule_at: .q_not_before,
+        query_target_at: .q_target,
         query_last_duration: .info.stats.last_scrub_duration,
         query_last_stamp: .info.history.last_scrub_stamp,
         query_last_scrub: (.info.history.last_scrub| sub($spt;"x") ),

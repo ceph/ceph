@@ -32,7 +32,8 @@ public:
 
   std::string_view get_type_name() const override { return "client_reclaim_reply"; }
   void print(std::ostream& o) const override {
-    o << "client_reclaim_reply(" << result << " e " << epoch << ")";
+    o << "client_reclaim_reply(" << result << " e " << epoch
+      << " addrs " << addrs << ")";
   }
 
   void encode_payload(uint64_t features) override {

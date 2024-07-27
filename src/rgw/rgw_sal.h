@@ -15,10 +15,12 @@
 
 #pragma once
 
+#include <optional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include "common/tracer.h"
+#include "rgw_cksum.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
 #include "rgw_notify_event_type.h"
@@ -179,6 +181,7 @@ class ObjectProcessor : public DataProcessor {
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -1046,8 +1049,8 @@ class Object {
 
         /// If non-null, read data/attributes from the given multipart part.
         int* part_num{nullptr};
-        /// If part_num is specified and the object is multipart, the total
-        /// number of multipart parts is assigned to this output parameter.
+        /// If the object is multipart, the total number of multipart
+        /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
       } params;
 
@@ -1081,6 +1084,7 @@ class Object {
         rgw_owner bucket_owner; //< bucket owner for usage/quota accounting
         ACLOwner obj_owner; //< acl owner for delete marker if necessary
         int versioning_status{0};
+        bool null_verid{false};
         uint64_t olh_epoch{0};
 	std::string marker_version_id;
         uint32_t bilog_flags{0};
@@ -1144,6 +1148,9 @@ class Object {
     virtual void set_compressed() = 0;
     /** Check if this object is compressed */
     virtual bool is_compressed() = 0;
+    /** Check if object is synced */
+    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
+      const ceph::real_time& obj_mtime) = 0;
     /** Invalidate cached info about this object, except atomic, prefetch, and
      * compressed */
     virtual void invalidate() = 0;
@@ -1157,7 +1164,7 @@ class Object {
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
-    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y) = 0;
+    virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
     /** Get attributes for this object */
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) = 0;
     /** Modify attributes for this object. */
@@ -1339,6 +1346,8 @@ public:
   virtual const std::string& get_etag() = 0;
   /** Get the modification time of this part */
   virtual ceph::real_time& get_mtime() = 0;
+  /** Get computed (or default/empty) checksum */
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() = 0;
 };
 
 /**
@@ -1355,6 +1364,7 @@ public:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+  rgw::cksum::Type cksum_type = rgw::cksum::Type::none;
 
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
@@ -1612,6 +1622,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,

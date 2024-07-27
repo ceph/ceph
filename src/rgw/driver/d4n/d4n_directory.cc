@@ -171,6 +171,7 @@ int ObjectDirectory::get(CacheObj* object, optional_yield y)
   return 0;
 }
 
+/* Note: This method is not compatible for use on Ubuntu systems. */
 int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) 
 {
   std::string key = build_index(object);
@@ -475,6 +476,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y)
   return 0;
 }
 
+/* Note: This method is not compatible for use on Ubuntu systems. */
 int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y) 
 {
   std::string key = build_index(block);

@@ -540,8 +540,8 @@ function TEST_dump_scrub_schedule() {
             --osd_scrub_interval_randomize_ratio=0 \
             --osd_scrub_backoff_ratio=0.0 \
             --osd_op_queue=wpq \
-            --osd_stats_update_period_not_scrubbing=3 \
-            --osd_stats_update_period_scrubbing=2 \
+            --osd_stats_update_period_not_scrubbing=1 \
+            --osd_stats_update_period_scrubbing=1 \
             --osd_scrub_sleep=0.2"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -562,7 +562,8 @@ function TEST_dump_scrub_schedule() {
     rm -f $TESTDATA
 
     local pgid="${poolid}.0"
-    local now_is=`date -I"ns"`
+    #local now_is=`date -I"ns"` # note: uses a comma for the ns part
+    local now_is=`date +'%Y-%m-%dT%H:%M:%S.%N%:z'`
 
     # before the scrubbing starts
 
@@ -604,8 +605,8 @@ function TEST_dump_scrub_schedule() {
     #         scheduled for the future' value
     #
 
-    ceph tell osd.* config set osd_scrub_chunk_max "3" || return 1
-    ceph tell osd.* config set osd_scrub_sleep "1.0" || return 1
+    ceph tell osd.* config set osd_shallow_scrub_chunk_max "3" || return 1
+    ceph tell osd.* config set osd_scrub_sleep "2.0" || return 1
     ceph osd set noscrub || return 1
     sleep 2
     saved_last_stamp=${sched_data['query_last_stamp']}

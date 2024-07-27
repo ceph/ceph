@@ -56,11 +56,12 @@ function TEST_set() {
     ceph osd erasure-code-profile get $profile | \
         grep -e key=value -e plugin=isa || return 1
     #
-    # --force is required to override an existing profile
+    # --force & --yes-i-really-mean-it are required to override
+    # an existing profile
     #
     ! ceph osd erasure-code-profile set $profile > $dir/out 2>&1 || return 1
     grep 'will not override' $dir/out || return 1
-    ceph osd erasure-code-profile set $profile key=other --force || return 1
+    ceph osd erasure-code-profile set $profile key=other --force --yes-i-really-mean-it || return 1
     ceph osd erasure-code-profile get $profile | \
         grep key=other || return 1
 

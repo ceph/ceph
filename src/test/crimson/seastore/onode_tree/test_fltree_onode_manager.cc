@@ -118,7 +118,7 @@ struct fltree_onode_manager_test_t
       auto p_kv = *it;
       auto onode = with_trans_intr(t, [&](auto &t) {
         return manager->get_or_create_onode(t, p_kv->key);
-      }).unsafe_get0();
+      }).unsafe_get();
       std::invoke(f, t, *onode, p_kv->value);
     });
   }
@@ -128,7 +128,7 @@ struct fltree_onode_manager_test_t
       auto p_kv = *it;
       auto onode = with_trans_intr(t, [&](auto &t) {
         return manager->get_onode(t,  p_kv->key);
-      }).unsafe_get0();
+      }).unsafe_get();
       p_kv->value.validate(*onode);
     });
   }
@@ -138,7 +138,7 @@ struct fltree_onode_manager_test_t
       auto p_kv = *it;
       auto exist = with_trans_intr(t, [&](auto &t) {
         return manager->contains_onode(t, p_kv->key);
-      }).unsafe_get0();
+      }).unsafe_get();
       ceph_assert(exist == false);
     });
   }
@@ -167,7 +167,7 @@ struct fltree_onode_manager_test_t
         [this, f=std::move(f)] (auto& t, auto& oids, auto& items) {
       auto onodes = with_trans_intr(t, [&](auto &t) {
         return manager->get_or_create_onodes(t, oids);
-      }).unsafe_get0();
+      }).unsafe_get();
       for (auto tup : boost::combine(onodes, items)) {
         OnodeRef onode;
         onode_item_t* p_item;
@@ -187,7 +187,7 @@ struct fltree_onode_manager_test_t
         boost::tie(oid, p_item) = tup;
         auto onode = with_trans_intr(t, [&](auto &t) {
           return manager->get_onode(t, oid);
-        }).unsafe_get0();
+        }).unsafe_get();
         p_item->validate(*onode);
       }
     });
@@ -200,7 +200,7 @@ struct fltree_onode_manager_test_t
       for (auto& oid : oids) {
         auto exist = with_trans_intr(t, [&](auto &t) {
           return manager->contains_onode(t, oid);
-        }).unsafe_get0();
+        }).unsafe_get();
         ceph_assert(exist == false);
       }
     });
@@ -219,7 +219,7 @@ struct fltree_onode_manager_test_t
       while (start != end) {
         auto [list_ret, list_end] = with_trans_intr(t, [&](auto &t) {
           return manager->list_onodes(t, start, end, LIST_LIMIT);
-        }).unsafe_get0();
+        }).unsafe_get();
         listed_oids.insert(listed_oids.end(), list_ret.begin(), list_ret.end());
         start = list_end;
       }
@@ -252,7 +252,7 @@ TEST_P(fltree_onode_manager_test_t, 1_single)
       OnodeRef onode_ref = &onode;
       with_trans_intr(t, [&](auto &t) {
         return manager->erase_onode(t, onode_ref);
-      }).unsafe_get0();
+      }).unsafe_get();
     });
     validate_erased(iter);
   });
@@ -302,7 +302,7 @@ TEST_P(fltree_onode_manager_test_t, 2_synthetic)
       OnodeRef onode_ref = &onode;
       with_trans_intr(t, [&](auto &t) {
         return manager->erase_onode(t, onode_ref);
-      }).unsafe_get0();
+      }).unsafe_get();
     });
     restart();
     validate_erased(rd_start, rd_end);

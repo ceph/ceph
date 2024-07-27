@@ -526,7 +526,7 @@ namespace rgw::sal {
     return read_op.prepare(dpp);
   }
 
-  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y)
+  int DBObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags)
   {
     Attrs empty;
     DB::Object op_target(store->getDB(),
@@ -551,7 +551,7 @@ namespace rgw::sal {
     }
     set_atomic();
     state.attrset[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &state.attrset, nullptr, y);
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y, rgw::sal::FLAG_LOG_OP);
   }
 
   int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -561,7 +561,7 @@ namespace rgw::sal {
 
     set_atomic();
     rmattr[attr_name] = bl;
-    return set_obj_attrs(dpp, nullptr, &rmattr, y);
+    return set_obj_attrs(dpp, nullptr, &rmattr, y, rgw::sal::FLAG_LOG_OP);
   }
 
   bool DBObject::is_expired() {
@@ -1210,9 +1210,11 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+  int DBMultipartWriter::complete(
+		       size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -1234,6 +1236,7 @@ namespace rgw::sal {
     RGWUploadPartInfo info;
     info.num = part_num;
     info.etag = etag;
+    info.cksum = cksum;
     info.size = total_data_size;
     info.accounted_size = accounted_size;
     info.modified = real_clock::now();
@@ -1368,6 +1371,7 @@ namespace rgw::sal {
   int DBAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                          ceph::real_time *mtime, ceph::real_time set_mtime,
                          std::map<std::string, bufferlist>& attrs,
+			 const std::optional<rgw::cksum::Cksum>& cksum,
                          ceph::real_time delete_at,
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,

@@ -68,7 +68,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/cephfs/${URLVerbs.EDIT}`);
+    this.editing = this.router.url.startsWith(`/cephfs/fs/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`File System`;
     this.hosts = {
@@ -176,7 +176,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
             this.form.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.router.navigate([BASE_URL]);
+            this.router.navigate([`${BASE_URL}/fs`]);
           }
         });
     } else {
@@ -210,7 +210,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
             self.form.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.router.navigate([BASE_URL]);
+            this.router.navigate([`${BASE_URL}/fs`]);
           }
         });
     }

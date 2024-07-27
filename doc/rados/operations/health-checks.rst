@@ -801,6 +801,98 @@ Or, to disable this alert on a specific OSD, run the following command:
 
    ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
 
+BLOCK_DEVICE_STALLED_READ_ALERT
+_______________________________
+
+There are certain BlueStore log messages that surface storage drive issues 
+that can lead to performance degradation and can cause bad disk.
+
+``read stalled read 0x29f40370000~100000 (buffered) since 63410177.290546s, timeout is 5.000000s``
+
+However, this is difficult to spot as there's no discernible warning (a
+health warning or info in ``ceph health detail`` for example). More observations
+can be found here: https://tracker.ceph.com/issues/62500
+
+As there can be false positive ``stalled read`` instances, a mechanism
+has been added for more reliability. If in last ``bdev_stalled_read_warn_lifetime``
+duration ``stalled read`` indications are found more than or equal to
+``bdev_stalled_read_warn_threshold`` for a given BlueStore block device, this
+warning will be reported in ``ceph health detail``.
+
+By default value of ``bdev_stalled_read_warn_lifetime = 86400s`` and
+``bdev_stalled_read_warn_threshold = 1``. But user can configure it for
+individual OSDs.
+
+To change this, run the following command:
+
+.. prompt:: bash $
+
+   ceph config set global bdev_stalled_read_warn_lifetime 10
+   ceph config set global bdev_stalled_read_warn_threshold 5
+
+this may be done surgically for individual OSDs or a given mask
+
+.. prompt:: bash $
+
+   ceph config set osd.123 bdev_stalled_read_warn_lifetime 10
+   ceph config set osd.123 bdev_stalled_read_warn_threshold 5
+   ceph config set class:ssd bdev_stalled_read_warn_lifetime 10
+   ceph config set class:ssd bdev_stalled_read_warn_threshold 5
+
+WAL_DEVICE_STALLED_READ_ALERT
+_____________________________
+
+A similar warning like ``BLOCK_DEVICE_STALLED_READ_ALERT`` will be raised to
+identify ``stalled read`` instances on a given BlueStore OSD's ``WAL_DEVICE``.
+This warning can be configured via ``bdev_stalled_read_warn_lifetime`` and
+``bdev_stalled_read_warn_threshold`` parameters similarly described in the
+``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
+
+DB_DEVICE_STALLED_READ_ALERT
+____________________________
+
+A similar warning like ``BLOCK_DEVICE_STALLED_READ_ALERT`` will be raised to
+identify ``stalled read`` instances on a given BlueStore OSD's ``WAL_DEVICE``.
+This warning can be configured via ``bdev_stalled_read_warn_lifetime`` and
+``bdev_stalled_read_warn_threshold`` parameters similarly described in the
+``BLOCK_DEVICE_STALLED_READ_ALERT`` warning section.
+
+BLUESTORE_SLOW_OP_ALERT
+_______________________
+
+There are certain BlueStore log messages that surface storage drive issues 
+that can lead to performance degradation and can cause bad disk.
+
+``log_latency_fn slow operation observed for _txc_committed_kv, latency = 12.028621219s, txc = 0x55a107c30f00``
+``log_latency_fn slow operation observed for upper_bound, latency = 6.25955s``
+``log_latency slow operation observed for submit_transaction..``
+
+As there can be false positive ``slow ops`` instances, a mechanism has
+been added for more reliability. If in last ``bluestore_slow_ops_warn_lifetime``
+duration ``slow ops`` indications are found more than or equal to
+``bluestore_slow_ops_warn_threshold`` for a given BlueStore OSD, this warning
+will be reported in ``ceph health detail``.
+
+By default value of ``bluestore_slow_ops_warn_lifetime = 86400s`` and
+``bluestore_slow_ops_warn_threshold = 1``. But user can configure it for
+individual OSDs.
+
+To change this, run the following command:
+
+.. prompt:: bash $
+
+   ceph config set global bluestore_slow_ops_warn_lifetime 10
+   ceph config set global bluestore_slow_ops_warn_threshold 5
+
+this may be done surgically for individual OSDs or a given mask
+
+.. prompt:: bash $
+
+   ceph config set osd.123 bluestore_slow_ops_warn_lifetime 10
+   ceph config set osd.123 bluestore_slow_ops_warn_threshold 5
+   ceph config set class:ssd bluestore_slow_ops_warn_lifetime 10
+   ceph config set class:ssd bluestore_slow_ops_warn_threshold 5
+
 Device health
 -------------
 

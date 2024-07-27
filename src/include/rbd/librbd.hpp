@@ -73,6 +73,11 @@ namespace librbd {
     std::string group_snap_name;
   } snap_group_namespace_t;
 
+  typedef struct {
+    snap_namespace_type_t original_namespace_type;
+    std::string original_name;
+  } snap_trash_namespace_t;
+
   typedef rbd_snap_mirror_state_t snap_mirror_state_t;
 
   typedef struct {
@@ -157,9 +162,24 @@ namespace librbd {
   typedef rbd_group_snap_state_t group_snap_state_t;
 
   typedef struct {
+    std::string image_name;
+    int64_t pool_id;
+    uint64_t snap_id;
+  } group_image_snap_info_t;
+
+  typedef struct {
     std::string name;
     group_snap_state_t state;
   } group_snap_info_t;
+
+  typedef struct {
+    std::string id;
+    std::string name;
+    std::string image_snap_name;
+    group_snap_state_t state;
+    //group_snap_namespace_type_t namespace_type;
+    std::vector<group_image_snap_info_t> image_snaps;
+  } group_snap_info2_t;
 
   typedef rbd_image_info_t image_info_t;
 
@@ -294,6 +314,8 @@ public:
 	     int *c_order, uint64_t stripe_unit, int stripe_count);
   int clone3(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
+  int clone4(IoCtx& p_ioctx, const char *p_name, uint64_t p_snap_id,
+	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
@@ -410,6 +432,8 @@ public:
   int group_create(IoCtx& io_ctx, const char *group_name);
   int group_remove(IoCtx& io_ctx, const char *group_name);
   int group_list(IoCtx& io_ctx, std::vector<std::string> *names);
+  int group_get_id(IoCtx& io_ctx, const char *group_name,
+                   std::string *group_id);
   int group_rename(IoCtx& io_ctx, const char *src_group_name,
                    const char *dest_group_name);
 
@@ -434,6 +458,11 @@ public:
   int group_snap_list(IoCtx& group_ioctx, const char *group_name,
                       std::vector<group_snap_info_t> *snaps,
                       size_t group_snap_info_size);
+  int group_snap_list2(IoCtx& group_ioctx, const char *group_name,
+                       std::vector<group_snap_info2_t> *snaps);
+  int group_snap_get_info(IoCtx& group_ioctx, const char *group_name,
+                          const char *snap_name,
+                          group_snap_info2_t *group_snap);
   int group_snap_rollback(IoCtx& io_ctx, const char *group_name,
                           const char *snap_name);
   int group_snap_rollback_with_progress(IoCtx& io_ctx, const char *group_name,
@@ -675,6 +704,9 @@ public:
                                snap_group_namespace_t *group_namespace,
                                size_t snap_group_namespace_size);
   int snap_get_trash_namespace(uint64_t snap_id, std::string* original_name);
+  int snap_get_trash_namespace2(uint64_t snap_id,
+                                snap_trash_namespace_t *trash_namespace,
+                                size_t snap_trash_namespace_size);
   int snap_get_mirror_namespace(
       uint64_t snap_id, snap_mirror_namespace_t *mirror_namespace,
       size_t snap_mirror_namespace_size);

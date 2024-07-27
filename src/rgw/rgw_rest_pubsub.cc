@@ -422,6 +422,8 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
                          << op_ret << dendl;
       return;
     }
+  } else if (already_persistent) {  // redundant call to CreateTopic
+    dest.persistent_queue = topic->dest.persistent_queue;
   }
   const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
@@ -882,7 +884,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
           << op_ret << dendl;
       return;
     }
-  } else if (already_persistent) {
+  } else if (already_persistent && !topic_needs_queue(dest)) {
     // changing the persistent topic to non-persistent.
     op_ret = driver->remove_persistent_topic(this, y, result.dest.persistent_queue);
     if (op_ret != -ENOENT && op_ret < 0) {

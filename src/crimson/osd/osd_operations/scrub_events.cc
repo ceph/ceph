@@ -56,7 +56,7 @@ seastar::future<> RemoteScrubEventBaseT<T>::with_pg(
     });
   }, [FNAME, pg, this](std::exception_ptr ep) {
     DEBUGDPP("{} interrupted with {}", *pg, *that(), ep);
-  }, pg);
+  }, pg, epoch);
 }
 
 ScrubRequested::ifut<> ScrubRequested::handle_event(PG &pg)
