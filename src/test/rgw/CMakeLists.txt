@@ -236,6 +236,10 @@ add_executable(unittest_rgw_sync_lease test_rgw_sync_lease.cc)
 add_ceph_unittest(unittest_rgw_sync_lease)
 target_link_libraries(unittest_rgw_sync_lease rgw_common ${UNITTEST_LIBS})
 
+add_executable(unittest_rgw_sync_metadata test_rgw_sync_metadata.cc)
+add_ceph_unittest(unittest_rgw_sync_metadata)
+target_link_libraries(unittest_rgw_sync_metadata rgw_common ${UNITTEST_LIBS})
+
 add_executable(unittest_rgw_throttle test_rgw_throttle.cc)
 add_ceph_unittest(unittest_rgw_throttle)
 target_link_libraries(unittest_rgw_throttle ${rgw_libs} ${UNITTEST_LIBS})
