@@ -189,6 +189,8 @@ class ScrubQueue {
    */
   void enqueue_target(const Scrub::SchedTarget& trgt);
 
+  void dequeue_target(spg_t pgid, scrub_level_t s_or_d);
+
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
  public:

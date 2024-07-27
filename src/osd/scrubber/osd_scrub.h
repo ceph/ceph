@@ -89,6 +89,11 @@ class OsdScrub {
   void enqueue_target(const Scrub::SchedTarget& trgt);
 
   /**
+   * remove the specified scheduling target from the OSD scrub queue
+   */
+  void dequeue_target(spg_t pgid, scrub_level_t s_or_d);
+
+  /**
    * remove the pg from set of PGs to be scanned for scrubbing.
    * To be used if we are no longer the PG's primary, or if the PG is removed.
    */

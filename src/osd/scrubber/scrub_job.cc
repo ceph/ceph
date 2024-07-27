@@ -161,6 +161,17 @@ void ScrubJob::adjust_shallow_schedule(
 }
 
 
+void ScrubJob::operator_forced(scrub_level_t s_or_d, scrub_type_t scrub_type)
+{
+  auto& trgt = get_target(s_or_d);
+  trgt.up_urgency_to(
+      (scrub_type == scrub_type_t::do_repair) ? urgency_t::must_repair
+					      : urgency_t::operator_requested);
+  trgt.sched_info.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
+  trgt.sched_info.schedule.not_before = PgScrubber::scrub_must_stamp();
+}
+
+
 std::optional<std::reference_wrapper<SchedTarget>> ScrubJob::earliest_eligible(
     utime_t scrub_clock_now)
 {
