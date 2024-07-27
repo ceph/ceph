@@ -662,8 +662,10 @@ scrub_level_t PgScrubber::scrub_requested(
     scrub_type_t scrub_type,
     requested_scrub_t& req_flags)
 {
-  const bool deep_requested = (scrub_level == scrub_level_t::deep) ||
-			      (scrub_type == scrub_type_t::do_repair);
+  const bool repair_requested = (scrub_type == scrub_type_t::do_repair);
+  const bool deep_requested =
+      (scrub_level == scrub_level_t::deep) || repair_requested;
+  scrub_level = deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
   dout(10) << fmt::format(
 		  "{}: {}{} scrub requested. "
 		  "@entry:{},last-stamp:{:s},Registered?{}",
@@ -674,16 +676,33 @@ scrub_level_t PgScrubber::scrub_requested(
 		  m_scrub_job->get_sched_time(), registration_state())
 	   << dendl;
 
+  // if we were marked as 'not registered' - do not try to push into
+  // the queue.
+  if (!m_scrub_job->is_registered()) {
+    dout(10) << fmt::format(
+		    "{}: pg[{}]: not registered for scrubbing on this OSD",
+		    __func__, m_pg_id)
+	     << dendl;
+    return scrub_level_t::shallow;
+  }
+
+  // modifying the planned-scrub flags - to be removed shortly
   req_flags.must_scrub = true;
   req_flags.must_deep_scrub = deep_requested;
-  req_flags.must_repair = (scrub_type == scrub_type_t::do_repair);
+  req_flags.must_repair = repair_requested;
   // User might intervene, so clear this
   req_flags.need_auto = false;
   req_flags.req_scrub = true;
   dout(20) << fmt::format("{}: planned scrub:{}", __func__, req_flags) << dendl;
 
-  update_scrub_job(delay_ready_t::no_delay);
-  return deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
+  // update the relevant SchedTarget (either shallow or deep). Set its urgency
+  // to either operator_requested or must_repair. Push it into the queue
+  auto& trgt = m_scrub_job->get_target(scrub_level);
+  m_osds->get_scrub_services().dequeue_target(m_pg_id, scrub_level);
+  m_scrub_job->operator_forced(scrub_level, scrub_type);
+  m_osds->get_scrub_services().enqueue_target(trgt);
+
+  return scrub_level;
 }
 
 

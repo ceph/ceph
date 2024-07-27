@@ -431,6 +431,11 @@ void OsdScrub::enqueue_target(const Scrub::SchedTarget& trgt)
   m_queue.enqueue_target(trgt);
 }
 
+void OsdScrub::dequeue_target(spg_t pgid, scrub_level_t s_or_d)
+{
+  m_queue.dequeue_target(pgid, s_or_d);
+}
+
 void OsdScrub::remove_from_osd_queue(spg_t pgid)
 {
   m_queue.remove_from_osd_queue(pgid);

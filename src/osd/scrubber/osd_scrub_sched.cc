@@ -73,6 +73,14 @@ void ScrubQueue::enqueue_target(const Scrub::SchedTarget& trgt)
   to_scrub.enqueue(trgt.queued_element());
 }
 
+
+void ScrubQueue::dequeue_target(spg_t pgid, scrub_level_t s_or_d)
+{
+  std::unique_lock lck{jobs_lock};
+  remove_entry_unlocked(pgid, s_or_d);
+}
+
+
 std::optional<Scrub::SchedEntry> ScrubQueue::pop_ready_entry(
     OSDRestrictions restrictions,  // note: 4B in size! (thus - copy)
     utime_t time_now)

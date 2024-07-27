@@ -244,6 +244,13 @@ class ScrubJob {
       const Scrub::sched_conf_t& aconf,
       utime_t scrub_clock_now) {}
 
+  /**
+   * the operator requested a scrub (shallow, deep or repair).
+   * Set the selected target to the requested urgency, adjusting scheduling
+   * parameters.
+   */
+  void operator_forced(scrub_level_t s_or_d, scrub_type_t scrub_type);
+
   void dump(ceph::Formatter* f) const;
 
   bool is_registered() const { return registered; }
