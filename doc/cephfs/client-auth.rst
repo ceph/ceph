@@ -30,9 +30,8 @@ access the underlying file data in RADOS directly. To segregate clients fully,
 isolate untrusted clients in their own RADOS namespace. You can place a
 client's filesystem subtree in a particular namespace using :ref:`file
 layouts<file-layouts>` and then restrict their RADOS access to that namespace
-using `OSD capabilities`_
+using :ref:`OSD capabilities<modify-user-capabilities>`.
 
-.. _OSD capabilities: ../rados/operations/user-management/#authorization-capabilities
 
 Syntax
 ------
