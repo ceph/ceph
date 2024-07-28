@@ -887,8 +887,6 @@ This enables distributed subtree partitioning policy for the "csi" subvolume
 group. This will cause every subvolume within the group to be automatically
 pinned to one of the available ranks on the file system.
 
-
-
 .. _disabling-volumes-plugin:
 
 Disabling Volumes Plugin
