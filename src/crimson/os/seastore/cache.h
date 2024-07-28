@@ -953,10 +953,12 @@ public:
 	      NULL_GENERATION,
               t.get_trans_id());
 
+    auto extent = ext->template cast<T>();
+    extent->set_laddr(remap_laddr);
     t.add_fresh_extent(ext);
     SUBTRACET(seastore_cache, "allocated {} {}B, hint={}, has ptr? {} -- {}",
-      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *ext);
-    return ext;
+      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *extent);
+    return extent;
   }
 
   /**

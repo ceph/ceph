@@ -307,10 +307,27 @@ BtreeLBAManager::_alloc_extents(
   std::vector<alloc_mapping_info_t> &alloc_infos,
   extent_ref_count_t refcount)
 {
+  ceph_assert(hint != L_ADDR_NULL);
   extent_len_t total_len = 0;
+#ifndef NDEBUG
+  bool laddr_null = (alloc_infos.front().key == L_ADDR_NULL);
+  laddr_t last_end = hint;
   for (auto &info : alloc_infos) {
-    total_len += info.len;
+    assert((info.key == L_ADDR_NULL) == (laddr_null));
+    if (!laddr_null) {
+      assert(info.key >= last_end);
+      last_end = info.key + info.len;
+    }
   }
+#endif
+  if (alloc_infos.front().key == L_ADDR_NULL) {
+    for (auto &info : alloc_infos) {
+      total_len += info.len;
+    }
+  } else {
+    total_len = alloc_infos.back().key + alloc_infos.back().len - hint;
+  }
+
   struct state_t {
     laddr_t last_end;
 
@@ -379,6 +396,9 @@ BtreeLBAManager::_alloc_extents(
 	  alloc_infos,
 	  [c, addr, hint, &btree, &state, FNAME,
 	  total_len, &rets, refcount](auto &alloc_info) {
+	  if (alloc_info.key != L_ADDR_NULL) {
+	    state.last_end = alloc_info.key;
+	  }
 	  return btree.insert(
 	    c,
 	    *state.insert_iter,
@@ -396,13 +416,23 @@ BtreeLBAManager::_alloc_extents(
 		   c.trans, addr, total_len, hint, state.last_end);
 	    if (alloc_info.extent) {
 	      ceph_assert(alloc_info.val.is_paddr());
+	      assert(alloc_info.val == iter.get_val().pladdr);
+	      assert(alloc_info.len == iter.get_val().len);
+	      if (alloc_info.extent->has_laddr()) {
+		assert(alloc_info.key == alloc_info.extent->get_laddr());
+		assert(alloc_info.key == iter.get_key());
+	      } else {
+		alloc_info.extent->set_laddr(iter.get_key());
+	      }
 	      alloc_info.extent->set_laddr(iter.get_key());
 	    }
 	    ceph_assert(inserted);
 	    rets.emplace_back(iter.get_pin(c));
 	    return iter.next(c).si_then([&state, &alloc_info](auto it) {
 	      state.insert_iter = it;
-	      state.last_end += alloc_info.len;
+	      if (alloc_info.key == L_ADDR_NULL) {
+		state.last_end += alloc_info.len;
+	      }
 	    });
 	  });
 	});
