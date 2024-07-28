@@ -574,6 +574,7 @@ public:
     with_obc_func_t&& f);
 
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
+  void update_stats(const pg_stat_t &stat);
   void log_operation(
     std::vector<pg_log_entry_t>&& logv,
     const eversion_t &trim_to,
