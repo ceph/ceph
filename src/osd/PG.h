@@ -425,19 +425,6 @@ public:
     forward_scrub_event(&ScrubPgIF::initiate_regular_scrub, queued, "StartScrub");
   }
 
-  /**
-   *  a special version of PG::scrub(), which:
-   *  - is initiated after repair, and
-   * (not true anymore:)
-   *  - is not required to allocate local/remote OSD scrub resources
-   */
-  void recovery_scrub(epoch_t queued, ThreadPool::TPHandle& handle)
-  {
-    // a new scrub
-    forward_scrub_event(&ScrubPgIF::initiate_scrub_after_repair, queued,
-			"AfterRepairScrub");
-  }
-
   void replica_scrub(epoch_t queued,
 		     Scrub::act_token_t act_token,
 		     ThreadPool::TPHandle& handle);
@@ -1219,8 +1206,6 @@ public:
 
   // -- scrub --
 protected:
-  bool scrub_after_recovery;
-
   int active_pushes;
 
   [[nodiscard]] bool ops_blocked_by_scrub() const;
@@ -1354,7 +1339,6 @@ protected:
   virtual void snap_trimmer_scrub_complete() = 0;
 
   void queue_recovery();
-  void queue_scrub_after_repair();
   unsigned int get_scrub_priority();
 
   bool try_flush_or_schedule_async() override;

@@ -59,15 +59,6 @@ void PGScrub::run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& ha
   pg->unlock();
 }
 
-void PGScrubAfterRepair::run(OSD* osd,
-			  OSDShard* sdata,
-			  PGRef& pg,
-			  ThreadPool::TPHandle& handle)
-{
-  pg->recovery_scrub(epoch_queued, handle);
-  pg->unlock();
-}
-
 void PGScrubResched::run(OSD* osd,
 			 OSDShard* sdata,
 			 PGRef& pg,

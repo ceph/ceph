@@ -355,12 +355,6 @@ struct requested_scrub_t {
   bool auto_repair{false};
 
   /**
-   * indicating that we are scrubbing post repair to verify everything is fixed.
-   * Otherwise - PG_STATE_FAILED_REPAIR will be asserted.
-   */
-  bool check_repair{false};
-
-  /**
    * Used to indicate, both in client-facing listings and internally, that
    * the planned scrub will be a deep one.
    */
@@ -377,10 +371,9 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx)
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{}{}{}{}{}{}{}{})",
+                          "(plnd:{}{}{}{}{}{}{}{}{})",
                           rs.must_repair ? " must_repair" : "",
                           rs.auto_repair ? " auto_repair" : "",
-                          rs.check_repair ? " check_repair" : "",
                           rs.deep_scrub_on_error ? " deep_scrub_on_error" : "",
                           rs.must_deep_scrub ? " must_deep_scrub" : "",
                           rs.must_scrub ? " must_scrub" : "",
@@ -408,8 +401,6 @@ struct ScrubPgIF {
   // --------------- triggering state-machine events:
 
   virtual void initiate_regular_scrub(epoch_t epoch_queued) = 0;
-
-  virtual void initiate_scrub_after_repair(epoch_t epoch_queued) = 0;
 
   virtual void send_scrub_resched(epoch_t epoch_queued) = 0;
 
@@ -601,6 +592,23 @@ struct ScrubPgIF {
    */
   virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
 
+  virtual scrub_level_t scrub_requested(
+      scrub_level_t scrub_level,
+      scrub_type_t scrub_type,
+      requested_scrub_t& req_flags) = 0;
+
+  /**
+   * let the scrubber know that a recovery operation has completed.
+   * This might trigger an 'after repair' scrub.
+   */
+  virtual void recovery_completed() = 0;
+
+  /**
+   * m_after_repair_scrub_required is set, and recovery_complete() is
+   * expected to trigger a deep scrub
+   */
+  virtual bool is_after_repair_required() const = 0;
+
 
   // --------------- reservations -----------------------------------
 
@@ -611,11 +619,6 @@ struct ScrubPgIF {
    * send all relevant messages to the ScrubMachine.
    */
   virtual void handle_scrub_reserve_msgs(OpRequestRef op) = 0;
-
-  virtual scrub_level_t scrub_requested(
-      scrub_level_t scrub_level,
-      scrub_type_t scrub_type,
-      requested_scrub_t& req_flags) = 0;
 
   // --------------- debugging via the asok ------------------------------
 

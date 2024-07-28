@@ -67,8 +67,6 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
     out << " MUST_REPAIR";
   if (sf.auto_repair)
     out << " planned AUTO_REPAIR";
-  if (sf.check_repair)
-    out << " planned CHECK_REPAIR";
   if (sf.deep_scrub_on_error)
     out << " planned DEEP_SCRUB_ON_ERROR";
   if (sf.must_deep_scrub)
@@ -189,7 +187,7 @@ bool PgScrubber::should_abort() const
 /*
  * a note re the checks performed before sending scrub-initiating messages:
  *
- * For those ('StartScrub', 'AfterRepairScrub') scrub-initiation messages that
+ * For those scrub-initiation messages ('StartScrub') that
  * possibly were in the queue while the PG changed state and became unavailable
  * for scrubbing:
  *
@@ -226,22 +224,6 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
 void PgScrubber::advance_token()
 {
   m_current_token++;
-}
-
-void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
-{
-  dout(10) << fmt::format(
-		  "{}: epoch:{} is PrimaryIdle:{}", __func__, epoch_queued,
-		  m_fsm->is_primary_idle())
-	   << dendl;
-  // we may have lost our Primary status while the message languished in the
-  // queue
-  if (check_interval(epoch_queued)) {
-    dout(10) << "scrubber event -->> AfterRepairScrub epoch: " << epoch_queued
-	     << dendl;
-    m_fsm->process_event(AfterRepairScrub{});
-    dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
-  }
 }
 
 void PgScrubber::send_scrub_unblock(epoch_t epoch_queued)
@@ -470,6 +452,7 @@ void PgScrubber::on_new_interval()
 		  (is_primary() ? "Primary" : "Replica/other"),
 		  is_scrub_active(), is_queued_or_active())
 	   << dendl;
+  m_after_repair_scrub_required = false;
   m_fsm->process_event(IntervalChanged{});
   // the following asserts were added due to a past bug, where PG flags were
   // left set in some scenarios.
@@ -704,6 +687,30 @@ scrub_level_t PgScrubber::scrub_requested(
   m_osds->get_scrub_services().enqueue_target(trgt);
 
   return scrub_level;
+}
+
+
+void PgScrubber::recovery_completed()
+{
+  dout(15) << fmt::format(
+		  "{}: is scrub required? {}", __func__,
+		  m_after_repair_scrub_required)
+	   << dendl;
+  if (m_after_repair_scrub_required) {
+    m_after_repair_scrub_required = false;
+    m_osds->get_scrub_services().dequeue_target(m_pg_id, scrub_level_t::deep);
+    auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
+    trgt.up_urgency_to(urgency_t::after_repair);
+    trgt.sched_info.schedule.scheduled_at = {0, 0};
+    trgt.sched_info.schedule.not_before = ceph_clock_now();
+    m_osds->get_scrub_services().enqueue_target(trgt);
+  }
+}
+
+
+bool PgScrubber::is_after_repair_required() const
+{
+  return m_after_repair_scrub_required;
 }
 
 
@@ -1703,7 +1710,7 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
   // to discard stale messages from previous aborted scrubs.
   m_epoch_start = m_pg->get_osdmap_epoch();
 
-  m_flags.check_repair = request.check_repair;
+  m_flags.check_repair = m_active_target->urgency() == urgency_t::after_repair;
   m_flags.auto_repair = request.auto_repair || request.need_auto;
   m_flags.required = request.req_scrub || request.must_scrub;
 
@@ -2016,7 +2023,7 @@ void PgScrubber::scrub_finish()
     } else if (has_error) {
 
       // Deep scrub in order to get corrected error counts
-      m_pg->scrub_after_recovery = true;
+      m_after_repair_scrub_required = true;
       m_planned_scrub.req_scrub = m_planned_scrub.req_scrub || m_flags.required;
 
       dout(20) << __func__ << " Current 'required': " << m_flags.required
@@ -2185,8 +2192,6 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
   m_planned_scrub.need_auto = m_planned_scrub.need_auto || m_flags.auto_repair;
   m_planned_scrub.deep_scrub_on_error =
       m_planned_scrub.deep_scrub_on_error || m_flags.deep_scrub_on_error;
-  m_planned_scrub.check_repair =
-      m_planned_scrub.check_repair || m_flags.check_repair;
 
   // copy the aborted target
   const auto aborted_target = *m_active_target;

@@ -150,7 +150,8 @@ struct scrub_flags_t {
   bool auto_repair{false};
 
   /// this flag indicates that we are scrubbing post repair to verify everything
-  /// is fixed
+  /// is fixed (otherwise - PG_STATE_FAILED_REPAIR will be asserted.)
+  /// Update (July 2024): now reflects an 'after-repair' urgency.
   bool check_repair{false};
 
   /// checked at the end of the scrub, to possibly initiate a deep-scrub
@@ -165,6 +166,35 @@ struct scrub_flags_t {
 };
 
 ostream& operator<<(ostream& out, const scrub_flags_t& sf);
+
+namespace fmt {
+template <>
+struct formatter<scrub_flags_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(scrub_flags_t& sf, FormatContext& ctx) const
+  {
+    std::string txt;
+    bool sep{false};
+    if (sf.auto_repair) {
+      txt = "auto-repair";
+      sep = true;
+    }
+    if (sf.check_repair) {
+      txt += sep ? ",check-repair" : "check-repair";
+      sep = true;
+    }
+    if (sf.deep_scrub_on_error) {
+      txt += sep ? ",deep-scrub-on-error" : "deep-scrub-on-error";
+      sep = true;
+    }
+    if (sf.required) {
+      txt += sep ? ",required" : "required";
+    }
+    return fmt::format_to(ctx.out(), "{}", txt);
+  }
+};
+}  // namespace fmt
 
 
 /**
@@ -194,8 +224,6 @@ class PgScrubber : public ScrubPgIF,
       const requested_scrub_t& requested_flags) final;
 
   void initiate_regular_scrub(epoch_t epoch_queued) final;
-
-  void initiate_scrub_after_repair(epoch_t epoch_queued) final;
 
   void send_scrub_resched(epoch_t epoch_queued) final;
 
@@ -266,6 +294,14 @@ class PgScrubber : public ScrubPgIF,
       scrub_level_t scrub_level,
       scrub_type_t scrub_type,
       requested_scrub_t& req_flags) final;
+
+  /**
+   * let the scrubber know that a recovery operation has completed.
+   * This might trigger an 'after repair' scrub.
+   */
+  void recovery_completed() final;
+
+  bool is_after_repair_required() const final;
 
   /**
    * Reserve local scrub resources (managed by the OSD)
@@ -505,6 +541,11 @@ class PgScrubber : public ScrubPgIF,
   /// An Optional instead of a regular member, as we wish to directly
   /// control the order of construction/destruction.
   std::optional<Scrub::ScrubJob> m_scrub_job;
+
+
+  /// the scrubber has initiated a recovery, and is waiting for the recovery
+  /// to complete (in order to perform an 'after-repair' scrub)
+  bool m_after_repair_scrub_required{false};
 
   ostream& show(ostream& out) const override;
 
