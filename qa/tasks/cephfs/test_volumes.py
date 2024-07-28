@@ -6444,7 +6444,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
 
         # insert delay at the beginning of snapshot clone
-        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 5)
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
 
         # disable "capped" clones
         self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', False)
