@@ -722,16 +722,9 @@ void PgScrubber::request_rescrubbing(requested_scrub_t& request_flags)
  * a wrapper around the actual reservation, and that object releases
  * the local resource automatically when reset.
  */
-bool PgScrubber::reserve_local()
+bool PgScrubber::reserve_local(const Scrub::SchedTarget& trgt)
 {
-  // Implementation note re the 'is high priority' parameter:
-  // In this step in the scrub scheduling rework, at the point of the call to
-  // this function, set_op_params() was not yet called, and we cannot rely
-  // on m_is_deep to determine the scrub level. So for now - we check both
-  // targets here.
-  const bool is_hp =
-      m_scrub_job->is_job_high_priority(scrub_level_t::shallow) ||
-      m_scrub_job->is_job_high_priority(scrub_level_t::deep);
+  const bool is_hp = !ScrubJob::observes_max_concurrency(trgt.urgency());
 
   m_local_osd_resource = m_osds->get_scrub_services().inc_scrubs_local(is_hp);
   if (m_local_osd_resource) {

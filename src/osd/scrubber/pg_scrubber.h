@@ -273,7 +273,7 @@ class PgScrubber : public ScrubPgIF,
    * Fails if OSD's local-scrubs budget was exhausted
    * \returns were local resources reserved?
    */
-  bool reserve_local() final;
+  bool reserve_local(const Scrub::SchedTarget& trgt);
 
   void handle_query_state(ceph::Formatter* f) final;
 

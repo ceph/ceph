@@ -89,6 +89,8 @@ struct OSDRestrictions {
   bool only_deadlined{false};
   bool load_is_low:1{true};
   bool time_permit:1{true};
+  bool max_concurrency_reached:1{false};
+  bool recovery_in_progress:1{false};
 };
 static_assert(sizeof(Scrub::OSDRestrictions) <= sizeof(uint32_t));
 
@@ -592,22 +594,15 @@ struct ScrubPgIF {
   virtual void update_scrub_stats(
     ceph::coarse_real_clock::time_point now_is) = 0;
 
-  // --------------- reservations -----------------------------------
-
-  /**
-   * Reserve local scrub resources (managed by the OSD)
-   *
-   * Fails if OSD's local-scrubs budget was exhausted
-   * \returns were local resources reserved?
-   */
-  virtual bool reserve_local() = 0;
-
   /**
    * Recalculate scrub (both deep & shallow) schedules
    *
    * Dequeues the scrub job, and re-queues it with the new schedule.
    */
   virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
+
+
+  // --------------- reservations -----------------------------------
 
   /**
    * route incoming replica-reservations requests/responses to the
