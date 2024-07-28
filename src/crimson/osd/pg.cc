@@ -578,7 +578,7 @@ void PG::on_active_actmap()
     }, [this](std::exception_ptr eptr) {
       logger().debug("{}: snap trimming interrupted", *this);
       ceph_assert(!peering_state.state_test(PG_STATE_SNAPTRIM));
-    }, pg_ref).finally([pg_ref, this] {
+    }, pg_ref, pg_ref->get_osdmap_epoch()).finally([pg_ref, this] {
       publish_stats_to_osd();
     });
   } else {
