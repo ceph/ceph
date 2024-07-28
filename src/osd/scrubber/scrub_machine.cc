@@ -159,14 +159,6 @@ sc::result PrimaryIdle::react(const StartScrub&)
   return transit<ReservingReplicas>();
 }
 
-sc::result PrimaryIdle::react(const AfterRepairScrub&)
-{
-  dout(10) << "PrimaryIdle::react(const AfterRepairScrub&)" << dendl;
-  DECLARE_LOCALS;
-  scrbr->reset_epoch();
-  return transit<ReservingReplicas>();
-}
-
 void PrimaryIdle::clear_state(const FullReset&) {
   dout(10) << "PrimaryIdle::react(const FullReset&): clearing state flags"
            << dendl;
