@@ -2740,3 +2740,184 @@ class TestFSSetMaxMDS(TestAdminCommands):
         '''
         self.fs.set_max_mds(2, confirm=True)
         self.assertEqual(self.fs.get_var('max_mds'), 2)
+
+
+class TestToggleVolumes(CephFSTestCase):
+    '''
+    Contains code for enabling/disabling mgr/volumes plugin.
+    '''
+
+    VOL_MOD_NAME = 'volumes'
+    CONFIRM = '--yes-i-really-mean-it'
+
+    def tearDown(self):
+        '''
+        Ensure that the volumes plugin is enabled after the test has finished
+        running since not doing so might affect tearDown() of CephFSTestCase or
+        other superclasses.
+        '''
+        json_output = self.get_ceph_cmd_stdout('mgr module ls --format json')
+        json_output = json.loads(json_output)
+
+        if 'volumes' in json_output['force_disabled_modules']:
+            self.run_ceph_cmd(f'mgr module enable {self.VOL_MOD_NAME}')
+
+        super(TestToggleVolumes, self).tearDown()
+
+    def test_force_disable_with_confirmation(self):
+        '''
+        Test that running "ceph mgr module force disable volumes
+        --yes-i-really-mean-it" successfully disables volumes plugin.
+
+        Also test "ceph mgr module ls" output after this.
+        '''
+        self.run_ceph_cmd(f'mgr module force disable {self.VOL_MOD_NAME} '
+                          f'{self.CONFIRM}')
+
+        json_output = self.get_ceph_cmd_stdout('mgr module ls --format json')
+        json_output = json.loads(json_output)
+
+        self.assertIn(self.VOL_MOD_NAME, json_output['always_on_modules'])
+        self.assertIn(self.VOL_MOD_NAME, json_output['force_disabled_modules'])
+
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['enabled_modules'])
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['disabled_modules'])
+
+    def test_force_disable_fails_without_confirmation(self):
+        '''
+        Test that running "ceph mgr module force disable volumes" fails with
+        EPERM when confirmation flag is not passed along.
+
+        Also test that output of this command suggests user to pass
+        --yes-i-really-mean-it.
+        '''
+        proc = self.run_ceph_cmd(
+            f'mgr module force disable {self.VOL_MOD_NAME}',
+            stderr=StringIO(), check_status=False)
+
+        self.assertEqual(proc.returncode, errno.EPERM)
+
+        proc_stderr = proc.stderr.getvalue()
+        self.assertIn('EPERM', proc_stderr)
+        # ensure that the confirmation flag was recommended
+        self.assertIn(self.CONFIRM, proc_stderr)
+
+    def test_force_disable_idempotency(self):
+        '''
+        Test that running "ceph mgr module force disable volumes" passes when
+        volumes plugin was already force disabled.
+        '''
+        self.run_ceph_cmd(f'mgr module force disable {self.VOL_MOD_NAME} '
+                          f'{self.CONFIRM}')
+        sleep(5)
+
+        json_output = self.get_ceph_cmd_stdout('mgr module ls --format '
+                                              'json-pretty')
+        json_output = json.loads(json_output)
+
+        self.assertIn(self.VOL_MOD_NAME, json_output['always_on_modules'])
+        self.assertIn(self.VOL_MOD_NAME, json_output['force_disabled_modules'])
+
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['enabled_modules'])
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['disabled_modules'])
+
+        # XXX: this this test, running this command 2nd time should pass.
+        self.run_ceph_cmd(f'mgr module force disable {self.VOL_MOD_NAME}')
+
+    def test_force_disable_nonexistent_mod(self):
+        '''
+        Test that passing non-existent name to "ceph mgr module force disable"
+        command leads to an error.
+        '''
+        proc = self.run_ceph_cmd(
+            f'mgr module force disable abcd {self.CONFIRM}',
+            check_status=False, stderr=StringIO())
+        self.assertEqual(proc.returncode, errno.EINVAL)
+        self.assertIn('EINVAL', proc.stderr.getvalue())
+
+    def test_force_disable_non_alwayson_mod(self):
+        '''
+        Test that passing non-existent name to "ceph mgr module force disable"
+        command leads to an error.
+        '''
+        json_output = self.get_ceph_cmd_stdout(
+            'mgr module ls --format json-pretty', check_status=False,
+            stderr=StringIO())
+        output_dict = json.loads(json_output)
+        some_non_alwayson_mod = output_dict['enabled_modules'][0]
+
+        proc = self.run_ceph_cmd(
+            f'mgr module force disable {some_non_alwayson_mod} {self.CONFIRM}',
+            check_status=False, stderr=StringIO())
+        self.assertEqual(proc.returncode, errno.EINVAL)
+        self.assertIn('EINVAL', proc.stderr.getvalue())
+
+    def test_enabled_by_default(self):
+        '''
+        Test that volumes plugin is enabled by default and is also reported as
+        "always on".
+        '''
+        json_output = self.get_ceph_cmd_stdout('mgr module ls --format json')
+        json_output = json.loads(json_output)
+
+        self.assertIn(self.VOL_MOD_NAME, json_output['always_on_modules'])
+
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['enabled_modules'])
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['disabled_modules'])
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['force_disabled_modules'])
+
+    def test_disable_fails(self):
+        '''
+        Test that running "ceph mgr module disable volumes" fails with EPERM.
+
+        This is expected since volumes is an always-on module and therefore
+        it can only be disabled using command "ceph mgr module force disable
+        volumes".
+        '''
+        proc = self.run_ceph_cmd(f'mgr module disable {self.VOL_MOD_NAME}',
+                                 stderr=StringIO(), check_status=False)
+        self.assertEqual(proc.returncode, errno.EPERM)
+
+        proc_stderr = proc.stderr.getvalue()
+        self.assertIn('EPERM', proc_stderr)
+
+    def test_enable_idempotency(self):
+        '''
+        Test that enabling volumes plugin when it is already enabled doesn't
+        exit with non-zero return value.
+
+        Also test that it reports plugin as already enabled.
+        '''
+        proc = self.run_ceph_cmd(f'mgr module enable {self.VOL_MOD_NAME}',
+                                 stderr=StringIO())
+        self.assertEqual(proc.returncode, 0)
+
+        proc_stderr = proc.stderr.getvalue()
+        self.assertIn('already enabled', proc_stderr)
+        self.assertIn('always-on', proc_stderr)
+
+    def test_enable_post_disabling(self):
+        '''
+        Test that enabling volumes plugin after (force-)disabling it works
+        successfully.
+
+        Alo test "ceph mgr module ls" output for volumes plugin afterwards.
+        '''
+        self.run_ceph_cmd(f'mgr module force disable {self.VOL_MOD_NAME} '
+                          f'{self.CONFIRM}')
+        # give bit of time for plugin to be disabled.
+        sleep(5)
+
+        self.run_ceph_cmd(f'mgr module enable {self.VOL_MOD_NAME}')
+        # give bit of time for plugin to be functional again
+        sleep(5)
+        json_output = self.get_ceph_cmd_stdout('mgr module ls --format json')
+        json_output = json.loads(json_output)
+        self.assertIn(self.VOL_MOD_NAME, json_output['always_on_modules'])
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['enabled_modules'])
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['disabled_modules'])
+        self.assertNotIn(self.VOL_MOD_NAME, json_output['force_disabled_modules'])
+
+        # plugin is reported properly by "ceph mgr module ls" command, check if
+        # it is also working fine.
+        self.run_ceph_cmd('fs volume ls')
