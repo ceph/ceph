@@ -137,12 +137,16 @@ public:
   }
 
   writer_stats_t get_stats() const final {
-    // TODO: collect stats
-    return {};
+    writer_stats_t ret = w_stats;
+    ret.minus(last_w_stats);
+    last_w_stats = w_stats;
+    return ret;
   }
 
   using open_ertr = ExtentOolWriter::open_ertr;
   open_ertr::future<> open() final {
+    w_stats = {};
+    last_w_stats = {};
     return open_ertr::now();
   }
 
@@ -192,6 +196,8 @@ private:
 
   RBMCleaner* rb_cleaner;
   seastar::gate write_guard;
+  writer_stats_t w_stats;
+  mutable writer_stats_t last_w_stats;
 };
 
 struct cleaner_usage_t {

@@ -911,7 +911,7 @@ std::ostream& operator<<(std::ostream& out, const writer_stats_printer_t& p)
       << ",sizeB="
       << fmt::format(dfmt, p.stats.get_total_bytes()/d_num_io)
       << "("
-      << fmt::format(dfmt, p.stats.record_group_data_bytes/d_num_io)
+      << fmt::format(dfmt, p.stats.data_bytes/d_num_io)
       << ","
       << fmt::format(dfmt, p.stats.record_group_metadata_bytes/d_num_io)
       << ","
