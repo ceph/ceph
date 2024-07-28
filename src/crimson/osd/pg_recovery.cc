@@ -152,11 +152,13 @@ size_t PGRecovery::start_primary_recovery_ops(
     if (pg->get_peering_state().get_missing_loc().is_unfound(soid)) {
       logger().debug("{}: object {} unfound", __func__, soid);
       ++skipped;
+      ++p;
       continue;
     }
     if (pg->get_peering_state().get_missing_loc().is_unfound(head)) {
       logger().debug("{}: head object {} unfound", __func__, soid);
       ++skipped;
+      ++p;
       continue;
     }
 
