@@ -357,6 +357,11 @@ private:
     return prefix_itr;
   }
 
+  /// reset the MapCacher backend, this should be called on pg interval change
+  void reset_backend() {
+    backend.reset();
+  }
+
   /// Update snaps for oid, empty new_snaps removes the mapping
   int update_snaps(
     const hobject_t &oid,       ///< [in] oid to update
