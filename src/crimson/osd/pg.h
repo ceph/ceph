@@ -22,6 +22,7 @@
 #include "osd/SnapMapper.h"
 
 #include "crimson/common/interruptible_future.h"
+#include "crimson/common/log.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/backfill_state.h"
@@ -165,14 +166,61 @@ public:
     return std::size(snap_trimq);
   }
 
+  /**
+   * complete_rctx
+   *
+   * complete_rctx is responsible for submitting writes and messages
+   * resulting from processing a PeeringState event as well as resolving
+   * any asyncronous actions initiated by the PeeringState::Listener
+   * callbacks below.  The caller is responsible for calling complete_rctx
+   * and waiting for the future to resolve before exiting the
+   * PGPeeringPipeline::process stage (see osd_operations/peering_event.h).
+   *
+   * orderer below ensures that operations submitted on the OSD-wide
+   * OSDSingleton instance are completed in the order initiated.  This is
+   * specifically important for operations on the local and remote async
+   * reserver instances, as well as setting and clearing pg_temp mapping
+   * requests.
+   */
+  ShardServices::singleton_orderer_t orderer;
+  seastar::future<> complete_rctx(PeeringCtx &&rctx) {
+    shard_services.send_pg_temp(orderer);
+    if (get_need_up_thru()) {
+      shard_services.send_alive(orderer, get_same_interval_since());
+    }
+
+    ShardServices::singleton_orderer_t o;
+    std::swap(o, orderer);
+    return seastar::when_all(
+      shard_services.dispatch_context(
+	get_collection_ref(),
+	std::move(rctx)),
+      shard_services.run_orderer(std::move(o))
+    ).then([](auto) {});
+  }
+
   void send_cluster_message(
     int osd, MessageURef m,
     epoch_t epoch, bool share_map_update=false) final {
-    (void)shard_services.send_to_osd(osd, std::move(m), epoch);
+    LOG_PREFIX(PG::send_cluster_message);
+    SUBDEBUGDPP(
+      osd, "message {} to {} share_map_update {}",
+      *this, *m, osd, share_map_update);
+    /* We don't bother to queue this one in the orderer because capturing the
+     * message ref in std::function is problematic as it isn't copyable.  This
+     * is solvable, but it's not quite worth the effort at the moment as we
+     * aren't worried about ordering of message send events except between
+     * messages to the same target within an interval, which doesn't really
+     * happen while processing a single event.  It'll probably be worth
+     * generalizing the orderer structure to fix this in the future, probably
+     * by using std::move_only_function once widely available. */
+    std::ignore = shard_services.send_to_osd(osd, std::move(m), epoch);
   }
 
   void send_pg_created(pg_t pgid) final {
-    (void)shard_services.send_pg_created(pgid);
+    LOG_PREFIX(PG::send_pg_created);
+    SUBDEBUGDPP(osd, "pgid {}", *this, pgid);
+    shard_services.send_pg_created(orderer, pgid);
   }
 
   bool try_flush_or_schedule_async() final;
@@ -191,6 +239,8 @@ public:
 
   template <typename T>
   void start_peering_event_operation(T &&evt, float delay = 0) {
+    LOG_PREFIX(PG::start_peering_event_operations);
+    SUBDEBUGDPP(osd, "event {} delay {}", *this, evt.get_desc(), delay);
     (void) shard_services.start_operation<LocalPeeringEvent>(
       this,
       pg_whoami,
@@ -211,9 +261,12 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_request_reservation(
+    LOG_PREFIX(PG::request_local_background_io_reservation);
+    SUBDEBUGDPP(
+      osd, "priority {} on_grant {} on_preempt {}",
+      *this, on_grant->get_desc(), on_preempt->get_desc());
+    shard_services.local_request_reservation(
+      orderer,
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
 	start_peering_event_operation(std::move(*on_grant));
@@ -221,23 +274,26 @@ public:
       priority,
       on_preempt ? make_lambda_context(
 	[this, on_preempt=std::move(on_preempt)] (int) {
-	start_peering_event_operation(std::move(*on_preempt));
-      }) : nullptr);
+	  start_peering_event_operation(std::move(*on_preempt));
+	}) : nullptr
+    );
   }
 
   void update_local_background_io_priority(
     unsigned priority) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_update_priority(
+    LOG_PREFIX(PG::update_local_background_io_priority);
+    SUBDEBUGDPP(osd, "priority {}", *this, priority);
+    shard_services.local_update_priority(
+      orderer,
       pgid,
       priority);
   }
 
   void cancel_local_background_io_reservation() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.local_cancel_reservation(
+    LOG_PREFIX(PG::cancel_local_background_io_reservation);
+    SUBDEBUGDPP(osd, "", *this);
+    shard_services.local_cancel_reservation(
+      orderer,
       pgid);
   }
 
@@ -245,9 +301,12 @@ public:
     unsigned priority,
     PGPeeringEventURef on_grant,
     PGPeeringEventURef on_preempt) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.remote_request_reservation(
+    LOG_PREFIX(PG::request_remote_recovery_reservation);
+    SUBDEBUGDPP(
+      osd, "priority {} on_grant {} on_preempt {}",
+      *this, on_grant->get_desc(), on_preempt->get_desc());
+    shard_services.remote_request_reservation(
+      orderer,
       pgid,
       on_grant ? make_lambda_context([this, on_grant=std::move(on_grant)] (int) {
 	start_peering_event_operation(std::move(*on_grant));
@@ -255,20 +314,22 @@ public:
       priority,
       on_preempt ? make_lambda_context(
 	[this, on_preempt=std::move(on_preempt)] (int) {
-	start_peering_event_operation(std::move(*on_preempt));
-      }) : nullptr);
+	  start_peering_event_operation(std::move(*on_preempt));
+      }) : nullptr
+    );
   }
 
   void cancel_remote_recovery_reservation() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore =  shard_services.remote_cancel_reservation(
-      pgid);
+    LOG_PREFIX(PG::cancel_remote_recovery_reservation);
+    SUBDEBUGDPP(osd, "", *this);
+    shard_services.remote_cancel_reservation(orderer, pgid);
   }
 
   void schedule_event_on_commit(
     ceph::os::Transaction &t,
     PGPeeringEventRef on_commit) final {
+    LOG_PREFIX(PG::schedule_event_on_commit);
+    SUBDEBUGDPP(osd, "on_commit {}", *this, on_commit->get_desc());
     t.register_on_commit(
       make_lambda_context(
 	[this, on_commit=std::move(on_commit)](int) {
@@ -286,14 +347,14 @@ public:
     // Not needed yet
   }
   void queue_want_pg_temp(const std::vector<int> &wanted) final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.queue_want_pg_temp(pgid.pgid, wanted);
+    LOG_PREFIX(PG::queue_want_pg_temp);
+    SUBDEBUGDPP(osd, "wanted {}", *this, wanted);
+    shard_services.queue_want_pg_temp(orderer, pgid.pgid, wanted);
   }
   void clear_want_pg_temp() final {
-    // TODO -- we probably want to add a mechanism for blocking on this
-    // after handling the peering event
-    std::ignore = shard_services.remove_want_pg_temp(pgid.pgid);
+    LOG_PREFIX(PG::clear_want_pg_temp);
+    SUBDEBUGDPP(osd, "", *this);
+    shard_services.remove_want_pg_temp(orderer, pgid.pgid);
   }
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
@@ -399,10 +460,7 @@ public:
   }
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) final {
-    pglog.rebuild_missing_set_with_deletes_crimson(
-      shard_services.get_store(),
-      coll_ref,
-      peering_state.get_info()).get();
+    ceph_assert(0 == "Impossible for crimson");
   }
 
   PerfCounters &get_peering_perf() final {
@@ -484,12 +542,11 @@ public:
 
   seastar::future<> read_state(crimson::os::FuturizedStore::Shard* store);
 
-  interruptible_future<> do_peering_event(
-    PGPeeringEvent& evt, PeeringCtx &rctx);
+  void do_peering_event(PGPeeringEvent& evt, PeeringCtx &rctx);
 
-  seastar::future<> handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
-  seastar::future<> handle_activate_map(PeeringCtx &rctx);
-  seastar::future<> handle_initialize(PeeringCtx &rctx);
+  void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
+  void handle_activate_map(PeeringCtx &rctx);
+  void handle_initialize(PeeringCtx &rctx);
 
   static hobject_t get_oid(const hobject_t& hobj);
   static RWState::State get_lock_type(const OpInfo &op_info);
