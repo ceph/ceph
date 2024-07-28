@@ -946,9 +946,10 @@ int PgScrubber::get_whoami() const
   return m_osds->whoami;
 }
 
-[[nodiscard]] bool PgScrubber::is_high_priority() const
+[[nodiscard]] bool PgScrubber::is_reservation_required() const
 {
-  return m_flags.required;
+  ceph_assert(m_active_target);
+  return ScrubJob::requires_reservation(m_active_target->urgency());
 }
 
 /*

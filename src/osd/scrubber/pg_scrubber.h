@@ -398,8 +398,8 @@ class PgScrubber : public ScrubPgIF,
     return m_pg->recovery_state.is_primary();
   }
 
-  /// is this scrub more than just regular periodic scrub?
-  [[nodiscard]] bool is_high_priority() const final;
+  /// is this scrub's urgency high enough, or must it reserve its replicas?
+  [[nodiscard]] bool is_reservation_required() const final;
 
   void set_state_name(const char* name) final
   {
