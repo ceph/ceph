@@ -250,6 +250,6 @@ struct ScrubMachineListener {
   /// delay next retry of this PG after a replica reservation failure
   virtual void flag_reservations_failure() = 0;
 
-  /// is this scrub more than just regular periodic scrub?
-  [[nodiscard]] virtual bool is_high_priority() const = 0;
+  /// is this scrub's urgency high enough, or must it reserve its replicas?
+  [[nodiscard]] virtual bool is_reservation_required() const = 0;
 };
