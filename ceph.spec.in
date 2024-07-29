@@ -262,6 +262,7 @@ BuildRequires:	gcc-toolset-%{gts_version}-runtime
 BuildRequires:	gcc-toolset-%{gts_version}-build
 %endif
 BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
+BuildRequires:	gcc-toolset-%{gts_version}-libstdc++-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
 BuildRequires:  libatomic
