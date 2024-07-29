@@ -288,6 +288,7 @@ int rollover_logging_object(const configuration& conf,
 }
 
 #define dash_if_empty(S) (S).empty() ? "-" : S
+#define dash_if_zero(i) (i) == 0 ? "-" : std::to_string(i)
 
 /* S3 bucket standard log record
  * based on: https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html
@@ -372,9 +373,48 @@ int log_record(rgw::sal::Driver* driver,
   const auto tt = ceph::coarse_real_time::clock::to_time_t(s->time);
   std::tm t{};
   localtime_r(&tt, &t);
+  auto user_or_account = s->account_name;
+  if (user_or_account.empty()) {
+    s->user->get_id().to_str(user_or_account);
+  }
+  auto fqdn = s->info.host;
+  if (!s->info.domain.empty() && !fqdn.empty()) {
+    fqdn.append(".").append(s->info.domain);
+  }
   switch (conf.record_type) {
     case RecordType::Standard:
-      // TODO
+      record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} {} {} REST.{}.{} {} \"{} {}{}{} HTTP/1.1\" {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+        dash_if_empty(to_string(s->bucket->get_owner())),
+        dash_if_empty(s->bucket->get_name()),
+        t,
+        "-", // no requester IP
+        dash_if_empty(user_or_account),
+        dash_if_empty(s->req_id),
+        s->info.method,
+        op_name, // TODO: use "resource" from URI
+        dash_if_empty(s->object->get_key().name),
+        s->info.method,
+        s->info.request_uri,
+        s->info.request_params.empty() ? "" : "?",
+        s->info.request_params,
+        dash_if_zero(s->err.http_ret),
+        dash_if_empty(s->err.err_code),
+        dash_if_zero(s->content_length),
+        dash_if_zero(s->object->get_size()),
+        "-", // no total time when logging record
+        "-", // no turn around time when logging record
+        "-", // TODO: referer
+        "-", // TODO: user agent
+        dash_if_empty(s->object->get_instance()),
+        s->info.x_meta_map.contains("x-amz-id-2") ? s->info.x_meta_map.at("x-amz-id-2") : "-",
+        "-", // TODO: Signature Version (SigV2 or SigV4)
+        "-", // TODO: SSL cipher. e.g. "ECDHE-RSA-AES128-GCM-SHA256"
+        "-", // TODO: Auth type. e.g. "AuthHeader"
+        dash_if_empty(fqdn),
+        "-", // TODO: TLS version. e.g. "TLSv1.2" or "TLSv1.3"
+        "-", // no access point ARN
+        (s->has_acl_header) ? "Yes" : "-");
+      break;
     case RecordType::Short:
       record = fmt::format("{} {} [{:%d/%b/%Y:%H:%M:%S %z}] {} REST.{}.{} {}",
         dash_if_empty(to_string(s->bucket->get_owner())),
