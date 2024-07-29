@@ -2446,14 +2446,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     } else {
       outstream = new ofstream(output);
     }
-
+    uint32_t nxt_ps = 0;
+    librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
+    const librados::NObjectIterator i_end = io_ctx.nobjects_end();
     {
       if (formatter) {
         formatter->open_array_section("objects");
       }
       try {
-	librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
-	const librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
 #ifdef WITH_LIBRADOSSTRIPER
 	  if (use_striper) {
@@ -2467,9 +2467,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    }
 	  }
 #endif // WITH_LIBRADOSSTRIPER
-          if (pgid) {
-            uint32_t ps;
-            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps) {
+          if (pgid) {        
+            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &nxt_ps) || pgid->ps() != nxt_ps) {
               break;
 	    }
           }
@@ -2513,6 +2512,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	*outstream << std::endl;
       }
       formatter->flush(*outstream);
+    } 
+    if (pgid) {
+      if (nxt_ps && i != i_end)
+        cerr << "info next pg id : " << std::dec << pgid->pool() << "." << std::hex << nxt_ps << std::endl;
+      else 
+        cerr << "info no next pg" << std::endl;
     }
     if (!stdout) {
       delete outstream;
