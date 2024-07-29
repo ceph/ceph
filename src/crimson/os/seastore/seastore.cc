@@ -668,12 +668,18 @@ seastar::future<> SeaStore::report_stats()
          calc_conflicts(io_total.io_num, io_total.repeat_io_num),
          calc_conflicts(io_total.read_num, io_total.repeat_read_num),
          calc_conflicts(io_total.get_bg_num(), io_total.get_repeat_bg_num()));
-    INFO("trans outstanding: {},{},{},{} per-shard: {:.2f},{:.2f},{:.2f},{:.2f}",
+    INFO("trans outstanding: {},{},{},{} "
+         "per-shard: {:.2f}({:.2f},{:.2f},{:.2f},{:.2f},{:.2f}),{:.2f},{:.2f},{:.2f}",
          io_total.pending_io_num,
          io_total.pending_read_num,
          io_total.pending_bg_num,
          io_total.pending_flush_num,
          (double)io_total.pending_io_num/seastar::smp::count,
+         (double)io_total.starting_io_num/seastar::smp::count,
+         (double)io_total.waiting_collock_io_num/seastar::smp::count,
+         (double)io_total.waiting_throttler_io_num/seastar::smp::count,
+         (double)io_total.processing_inlock_io_num/seastar::smp::count,
+         (double)io_total.processing_postlock_io_num/seastar::smp::count,
          (double)io_total.pending_read_num/seastar::smp::count,
          (double)io_total.pending_bg_num/seastar::smp::count,
          (double)io_total.pending_flush_num/seastar::smp::count);
