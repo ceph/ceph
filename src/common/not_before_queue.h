@@ -22,7 +22,7 @@
  * not_before_queue_t
  *
  * Implements a generic priority queue with two additional properties:
- * - Items are not eligble to be dequeued until their not_before value
+ * - Items are not eligible to be dequeued until their not_before value
  *   is after the current time (see project_not_before and advance_time)
  * - Items can be dequeued efficiently by removal_class (see
  *   project_removal_class and remove_by_class)
@@ -89,7 +89,7 @@ class not_before_queue_t {
    * - Contained items have project_not_before(v) > current_time.
    * - Contained elements have status set to INELIGIBLE.
    * - Contained elements are contained and owned by removal_registry_t
-   * - Uses same hook as and is mututally exclusive with eligible_queue.
+   * - Uses same hook as and is mutually exclusive with eligible_queue.
    */
   struct compare_by_nb_t {
     bool operator()(const container_t &lhs, const container_t &rhs) const {
@@ -108,7 +108,7 @@ class not_before_queue_t {
    * - Contains items where project_not_before(v) <= current_time.
    * - Contained elements have status set to ELIGIBLE.
    * - Contained elements are contained and owned by removal_registry_t
-   * - Uses same hook as and is mututally exclusive with ineligible_queue.
+   * - Uses same hook as and is mutually exclusive with ineligible_queue.
    */
   struct compare_by_user_order_t {
     bool operator()(const container_t &lhs, const container_t &rhs) const {
@@ -193,7 +193,7 @@ public:
   /**
    * advance_time
    *
-   * Advances the elibility cutoff, argument must be non-decreasing in
+   * Advances the eligibility cutoff, argument must be non-decreasing in
    * successive calls.
    */
   void advance_time(T next_time) {
