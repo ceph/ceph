@@ -150,6 +150,7 @@ void ScrubQueue::update_job(Scrub::ScrubJobRef scrub_job,
   // adjust the suggested scrub time according to OSD-wide status
   auto adjusted = adjust_target_time(suggested);
   scrub_job->high_priority = suggested.is_must == must_scrub_t::mandatory;
+  scrub_job->observes_max_concurrency = suggested.observes_max_scrubs;
   scrub_job->update_schedule(adjusted, reset_nb);
 }
 
