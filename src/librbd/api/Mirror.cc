@@ -33,6 +33,7 @@
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/mirror/snapshot/CreatePrimaryRequest.h"
+#include "librbd/mirror/snapshot/GetGroupInfoRequest.h"
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "librbd/mirror/snapshot/UnlinkPeerRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
@@ -3965,36 +3966,33 @@ int Mirror<I>::group_info_list(librados::IoCtx& io_ctx,
 }
 
 template <typename I>
+void Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
+                               const std::string& group_name,
+                               mirror_group_info_t *mirror_group_info,
+                               Context *on_finish) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 20) << "group_name=" << group_name << dendl;
+
+  auto req = mirror::snapshot::GetGroupInfoRequest<I>::create(
+    io_ctx, group_name, mirror_group_info, on_finish);
+  req->send();
+}
+
+template <typename I>
 int Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
                               const std::string &group_name,
                               mirror_group_info_t *mirror_group_info) {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "group_name=" << group_name << dendl;
 
-  std::string group_id;
-  int r = cls_client::dir_get_id(&io_ctx, RBD_GROUP_DIRECTORY, group_name,
-                                 &group_id);
+  C_SaferCond ctx;
+  group_get_info(io_ctx, group_name, mirror_group_info, &ctx);
+  int r = ctx.wait();
   if (r < 0) {
-    ldout(cct, 20) << "error getting id of group " << group_name << ": "
-                   << cpp_strerror(r) << dendl;
-    return r;
+    lderr(cct) << "failed to get mirror info of group '" << group_name
+               << "': " << cpp_strerror(r) << dendl;
   }
-
-  cls::rbd::MirrorGroup mirror_group;
-  r =  cls_client::mirror_group_get(&io_ctx, group_id, &mirror_group);
-  if (r < 0) {
-    lderr(cct) << "failed to get mirror group info: " << cpp_strerror(r)
-               << dendl;
-    return r;
-  }
-
-  mirror_group_info->global_id = mirror_group.global_group_id;
-  mirror_group_info->mirror_image_mode =
-      static_cast<rbd_mirror_image_mode_t>(mirror_group.mirror_image_mode);
-  mirror_group_info->state =
-      static_cast<rbd_mirror_group_state_t>(mirror_group.state);
-
-  return 0;
+  return r;
 }
 
 template <typename I>
