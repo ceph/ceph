@@ -3643,6 +3643,7 @@ void Client::put_cap_ref(Inode *in, int cap)
       }
     }
     if (last & CEPH_CAP_FILE_CACHE) {
+      signal_context_list(in->waitfor_caps);
       ldout(cct, 5) << __func__ << " dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
     }
