@@ -47,12 +47,12 @@ function test_encryption_format() {
   sudo chmod 666 $LIBRBD_DEV
 
   # write via librbd && compare
-  dd if=/tmp/testdata1 of=$LIBRBD_DEV oflag=direct bs=1M
+  dd if=/tmp/testdata1 of=$LIBRBD_DEV conv=fsync bs=1M
   dd if=/dev/mapper/cryptsetupdev of=/tmp/cmpdata iflag=direct bs=4M count=4
   cmp -n 16MB /tmp/cmpdata /tmp/testdata1
 
   # write via cryptsetup && compare
-  dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev oflag=direct bs=1M
+  dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev conv=fsync bs=1M
   dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=4M count=4
   cmp -n 16MB /tmp/cmpdata /tmp/testdata2
 
@@ -74,7 +74,7 @@ function test_clone_encryption() {
   clean_up_cryptsetup
 
   # write 1MB plaintext
-  dd if=/tmp/testdata1 of=$RAW_DEV oflag=direct bs=1M count=1
+  dd if=/tmp/testdata1 of=$RAW_DEV conv=fsync bs=1M count=1
 
   # clone (luks1)
   rbd snap create testimg@snap
@@ -85,9 +85,9 @@ function test_clone_encryption() {
   # open encryption with librbd, write one more MB, close
   LIBRBD_DEV=$(_sudo rbd -p rbd map testimg1 -t nbd -o encryption-format=luks1,encryption-passphrase-file=/tmp/passphrase)
   sudo chmod 666 $LIBRBD_DEV
-  dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=1M count=1
+  dd if=$LIBRBD_DEV of=/tmp/cmpdata bs=1M count=1
   cmp -n 1MB /tmp/cmpdata /tmp/testdata1
-  dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=1 skip=1 oflag=direct bs=1M count=1
+  dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=1 skip=1 conv=fsync bs=1M count=1
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
   # second clone (luks2)
@@ -99,9 +99,9 @@ function test_clone_encryption() {
   # open encryption with librbd, write one more MB, close
   LIBRBD_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd -o encryption-format=luks2,encryption-passphrase-file=/tmp/passphrase2,encryption-format=luks1,encryption-passphrase-file=/tmp/passphrase)
   sudo chmod 666 $LIBRBD_DEV
-  dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=1M count=2
+  dd if=$LIBRBD_DEV of=/tmp/cmpdata bs=1M count=2
   cmp -n 2MB /tmp/cmpdata /tmp/testdata1
-  dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=2 skip=2 oflag=direct bs=1M count=1
+  dd if=/tmp/testdata1 of=$LIBRBD_DEV seek=2 skip=2 conv=fsync bs=1M count=1
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
 
   # flatten
@@ -112,7 +112,7 @@ function test_clone_encryption() {
   RAW_FLAT_DEV=$(_sudo rbd -p rbd map testimg2 -t nbd)
   sudo cryptsetup open $RAW_FLAT_DEV --type luks cryptsetupdev -d /tmp/passphrase2
   sudo chmod 666 /dev/mapper/cryptsetupdev
-  dd if=/dev/mapper/cryptsetupdev of=/tmp/cmpdata iflag=direct bs=1M count=3
+  dd if=/dev/mapper/cryptsetupdev of=/tmp/cmpdata bs=1M count=3
   cmp -n 3MB /tmp/cmpdata /tmp/testdata1
   _sudo rbd device unmap -t nbd $RAW_FLAT_DEV
 }
@@ -149,7 +149,7 @@ function test_plaintext_detection {
   test_clone_and_load_with_a_single_passphrase true
 
   # no luks header
-  dd if=/dev/zero of=$RAW_DEV oflag=direct bs=4M count=8
+  dd if=/dev/zero of=$RAW_DEV conv=fsync bs=4M count=8
   test_clone_and_load_with_a_single_passphrase false
 }
 
