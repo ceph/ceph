@@ -101,7 +101,7 @@ public:
     }
   }
 
-  std::string_view get_name() const{
+  std::string get_name() const{
     return name.to_str();
   }
 
