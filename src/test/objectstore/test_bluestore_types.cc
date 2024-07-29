@@ -3237,6 +3237,7 @@ TEST_P(bluestore_blob_t_test, release_extents)
       uint32_t a = (rand() % test_region_range) + 1;
       if (a > num_aus) a = num_aus;
       if (cont && cont->size() > 0 && cont->back().is_valid()) {
+        illegal_pos = cont->back().end() + a * alloc_unit;
         v.emplace_back(cont->back().end(), a * alloc_unit);
         cont = nullptr;
       } else {
