@@ -236,7 +236,7 @@ block_sm_superblock_t make_superblock(
        uint64_t(config_segment_size),
        data.block_size);
   for (unsigned int i = 0; i < seastar::smp::count; i++) {
-    INFO("shard {} infos:", i, shard_infos[i]);
+    INFO("shard {} infos: {}", i, shard_infos[i]);
   }
 
   return block_sm_superblock_t{
