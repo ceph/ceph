@@ -62,8 +62,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   uint16_t get_num_parts(const std::string & etag)
   {
-    // 16Bytes MD5 takes 32 chars + 2 chars for the "" signs
-    if (etag.length() <= 34) {
+    // 16Bytes MD5 takes 32 chars
+    if (etag.length() <= 32) {
       return 1;
     }
     // Amazon S3 multipart upload Maximum number = 10,000 (5 decimal digits)
@@ -90,7 +90,7 @@ namespace rgw::dedup {
   {
     char buff[64];
     const uint16_t num_parts = get_num_parts(etag);
-    etag.copy(buff, 32, 1);
+    etag.copy(buff, 32, 0);
     const uint64_t high      = hex2int(buff, buff+16);
     const uint64_t low       = hex2int(buff+16, buff+32);
 
