@@ -325,17 +325,6 @@ struct requested_scrub_t {
    */
   bool must_deep_scrub{false};
 
-  /**
-   * (An intermediary flag used by pg::sched_scrub() on the first time
-   * a planned scrub has all its resources). Determines whether the next
-   * repair/scrub will be 'deep'.
-   *
-   * Note: 'dumped' by PgScrubber::dump() and such. In reality, being a
-   * temporary that is set and reset by the same operation, will never
-   * appear externally to be set
-   */
-  bool time_for_deep{false};
-
   bool deep_scrub_on_error{false};
 
   /**
@@ -350,15 +339,9 @@ struct requested_scrub_t {
    * the value of auto_repair is determined in sched_scrub() (once per scrub.
    * previous value is not remembered). Set if
    * - allowed by configuration and backend, and
-   * - for periodic scrubs: time_for_deep was just set
+   * - for periodic scrubs: time_for_deep was just set RRR
    */
   bool auto_repair{false};
-
-  /**
-   * Used to indicate, both in client-facing listings and internally, that
-   * the planned scrub will be a deep one.
-   */
-  bool calculated_to_deep{false};
 };
 
 std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
@@ -371,16 +354,14 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx)
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{}{}{}{}{}{}{})",
+                          "(plnd:{}{}{}{}{}{}{})",
                           rs.must_repair ? " must_repair" : "",
                           rs.auto_repair ? " auto_repair" : "",
                           rs.deep_scrub_on_error ? " deep_scrub_on_error" : "",
                           rs.must_deep_scrub ? " must_deep_scrub" : "",
                           rs.must_scrub ? " must_scrub" : "",
-                          rs.time_for_deep ? " time_for_deep" : "",
                           rs.need_auto ? " need_auto" : "",
-                          rs.req_scrub ? " req_scrub" : "",
-                          rs.calculated_to_deep ? " deep" : "");
+                          rs.req_scrub ? " req_scrub" : "");
   }
 };
 

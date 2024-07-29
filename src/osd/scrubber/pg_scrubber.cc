@@ -73,8 +73,6 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
     out << " MUST_DEEP_SCRUB";
   if (sf.must_scrub)
     out << " MUST_SCRUB";
-  if (sf.time_for_deep)
-    out << " TIME_FOR_DEEP";
   if (sf.need_auto)
     out << " NEED_AUTO";
   if (sf.req_scrub)
@@ -1721,13 +1719,10 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
   state_set(PG_STATE_SCRUBBING);
 
   // will we be deep-scrubbing?
-  if (request.calculated_to_deep) {
+  m_is_deep = m_active_target->sched_info.level == scrub_level_t::deep;
+  if (m_is_deep) {
     state_set(PG_STATE_DEEP_SCRUB);
-    m_is_deep = true;
   } else {
-    m_is_deep = false;
-
-    // make sure we got the 'calculated_to_deep' flag right
     ceph_assert(!request.must_deep_scrub);
     ceph_assert(!request.need_auto);
   }
@@ -2353,8 +2348,8 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     return schedule_result_t::osd_wide_failure;
   }
 
-  // can commit to the updated flags now, as nothing will stop the scrub
-  //m_planned_scrub = *updated_flags;
+  // can commit now to the specific scrub details, as nothing will
+  // stop the scrub
 
   // An interrupted recovery repair could leave this set.
   state_clear(PG_STATE_REPAIR);
@@ -2385,7 +2380,7 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f,
 {
   f->open_object_section("scrubber");
 
-  if (m_active) {  // TBD replace with PR#42780's test
+  if (m_active_target) {
     f->dump_bool("active", true);
     dump_active_scrubber(f, state_test(PG_STATE_DEEP_SCRUB));
   } else {
