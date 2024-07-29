@@ -29,8 +29,9 @@ static constexpr uint32_t max_keys = 1000;
 /// as -EINVAL, an empty stored value is compared as 0, and failure to decode
 /// a stored value is reported as -EIO
 [[nodiscard]] int cmp_vals(librados::ObjectReadOperation& op,
-                           Mode mode, Op comparison, ComparisonMap values,
-                           std::optional<ceph::bufferlist> default_value);
+                           Mode mode, Op comparison,
+			   const ComparisonMap& values,
+                           const std::optional<ceph::bufferlist>& default_value);
 
 /// process each of the omap value comparisons according to the same rules as
 /// cmpxattr(). any key/value pairs that compare successfully are overwritten
@@ -39,8 +40,22 @@ static constexpr uint32_t max_keys = 1000;
 /// compared as 0, while decode failure of a stored value is treated as an
 /// unsuccessful comparison and is not reported as an error
 [[nodiscard]] int cmp_set_vals(librados::ObjectWriteOperation& writeop,
-                               Mode mode, Op comparison, ComparisonMap values,
-                               std::optional<ceph::bufferlist> default_value);
+                               Mode mode, Op comparison,
+			       const ComparisonMap& values,
+                               const std::optional<ceph::bufferlist>& default_value);
+
+/// process each of the xattrs value comparisons according to the same rules as
+/// cmpxattr(). IFF **all** key/value pairs in @cmp_pairs compare successfully
+/// a set operation will be perfrom for **all** key/value pairs in @set_pairs.
+/// for comparisons with Mode::U64, failure to decode an input value is
+/// reported as -EINVAL.
+/// a decode failure of a stored value is treated as an unsuccessful comparison
+/// and is not reported as an error
+[[nodiscard]] int cmp_vals_set_vals(librados::ObjectWriteOperation& writeop,
+				    Mode mode, Op comparison,
+				    const ComparisonMap& cmp_pairs,
+				    const std::map<std::string, bufferlist>& set_pairs);
+
 
 /// process each of the omap value comparisons according to the same rules as
 /// cmpxattr(). any key/value pairs that compare successfully are removed. for
@@ -49,7 +64,8 @@ static constexpr uint32_t max_keys = 1000;
 /// stored value is treated as an unsuccessful comparison and is not reported
 /// as an error
 [[nodiscard]] int cmp_rm_keys(librados::ObjectWriteOperation& writeop,
-                              Mode mode, Op comparison, ComparisonMap values);
+                              Mode mode, Op comparison,
+			      const ComparisonMap& values);
 
 
 // bufferlist factories for comparison values

@@ -19,8 +19,8 @@
 namespace cls::cmpomap {
 
 int cmp_vals(librados::ObjectReadOperation& op,
-             Mode mode, Op comparison, ComparisonMap values,
-             std::optional<ceph::bufferlist> default_value)
+             Mode mode, Op comparison, const ComparisonMap& values,
+             const std::optional<ceph::bufferlist>& default_value)
 {
   if (values.size() > max_keys) {
     return -E2BIG;
@@ -38,8 +38,9 @@ int cmp_vals(librados::ObjectReadOperation& op,
 }
 
 int cmp_set_vals(librados::ObjectWriteOperation& op,
-                 Mode mode, Op comparison, ComparisonMap values,
-                 std::optional<ceph::bufferlist> default_value)
+                 Mode mode, Op comparison,
+		 const ComparisonMap& values,
+                 const std::optional<ceph::bufferlist>& default_value)
 {
   if (values.size() > max_keys) {
     return -E2BIG;
@@ -56,8 +57,28 @@ int cmp_set_vals(librados::ObjectWriteOperation& op,
   return 0;
 }
 
+int cmp_vals_set_vals(librados::ObjectWriteOperation& op,
+		      Mode mode, Op comparison,
+		      const ComparisonMap& cmp_pairs,
+		      const std::map<std::string, bufferlist>& set_pairs)
+{
+  if (cmp_pairs.size() > max_keys || cmp_pairs.empty() || set_pairs.empty() ) {
+    return -E2BIG;
+  }
+  cmp_vals_set_vals_op call;
+  call.mode = mode;
+  call.comparison = comparison;
+  call.cmp_pairs = std::move(cmp_pairs);
+  call.set_pairs = std::move(set_pairs);
+
+  bufferlist in;
+  encode(call, in);
+  op.exec("cmpomap", "cmp_vals_set_vals", in);
+  return 0;
+}
+
 int cmp_rm_keys(librados::ObjectWriteOperation& op,
-                Mode mode, Op comparison, ComparisonMap values)
+                Mode mode, Op comparison, const ComparisonMap& values)
 {
   if (values.size() > max_keys) {
     return -E2BIG;
