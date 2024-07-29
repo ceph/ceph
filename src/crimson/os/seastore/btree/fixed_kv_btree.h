@@ -511,6 +511,8 @@ public:
           &child_node);
       } else {
         if (i->get_val().pladdr.is_laddr()) {
+          assert(!node->children[i->get_offset()] ||
+                  is_reserved_ptr(node->children[i->get_offset()]));
           continue;
         }
         ret = c.trans.get_extent(
@@ -586,7 +588,7 @@ public:
                 : true);
             }
           }
-          if (child == get_reserved_ptr()) {
+          if (is_reserved_ptr(child)) {
             if constexpr(
               !std::is_base_of_v<typename internal_node_t::base_t,
                                  child_node_t>) {
