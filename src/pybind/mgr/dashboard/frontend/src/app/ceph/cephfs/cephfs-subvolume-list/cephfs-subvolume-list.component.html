@@ -1,0 +1,112 @@
+<div class="row">
+  <div class="col-sm-1"
+       *ngIf="subVolumeGroups$ | async as subVolumeGroups">
+    <cd-vertical-navigation title="Groups"
+                            [items]="subvolumeGroupList"
+                            inputIdentifier="group-filter"
+                            (emitActiveItem)="selectSubVolumeGroup($event)"></cd-vertical-navigation>
+  </div>
+  <div class="col-11 vertical-line">
+    <cd-table [data]="subVolumes$ | async"
+              columnMode="flex"
+              [columns]="columns"
+              selectionType="single"
+              [hasDetails]="false"
+              (fetchData)="fetchData()"
+              (updateSelection)="updateSelection($event)">
+
+      <div class="table-actions btn-toolbar">
+        <cd-table-actions [permission]="permissions.cephfs"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="cephfs-subvolume-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
+  </div>
+</div>
+
+<ng-template #quotaUsageTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row.info.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
+                [total]="row.info.bytes_quota"
+                [used]="row.info.bytes_used"
+                [title]="row.name"
+                [showFreeToolTip]="false"
+                customLegend="Quota"
+                [customLegendValue]="row.info.bytes_quota"
+                decimals="2"></cd-usage-bar>
+
+  <ng-template #noLimitTpl>
+    <span ngbTooltip="Quota limit is not set"
+          *ngIf="row.info.bytes_pcent === 'undefined'"
+          i18n-ngbTooltip>
+      {{row.info.bytes_used | dimlessBinary}}</span>
+  </ng-template>
+</ng-template>
+
+<ng-template #typeTpl
+             let-value="value">
+  <cd-label [value]="value"></cd-label>
+</ng-template>
+
+<ng-template #modeToHumanReadableTpl
+             let-value="value">
+  <span *ngFor="let result of (value | octalToHumanReadable)"
+        [ngClass]="result.class"
+        [ngbTooltip]="result.toolTip">
+    {{ result.content }}
+  </span>
+</ng-template>
+
+<ng-template #nameTpl
+             let-row="row">
+  <span class="fw-bold">{{row.name}}</span>
+
+  <span *ngIf="row.info.state === 'complete'; else snapshotRetainedTpl">
+    <i [ngClass]="[icons.success, icons.large]"
+       ngbTooltip="{{row.name}} is ready to use"
+       class="text-success"></i>
+  </span>
+
+  <ng-template #snapshotRetainedTpl>
+    <i [ngClass]="[icons.warning, icons.large]"
+       class="text-warning"
+       ngbTooltip="{{row.name}} is removed after retaining the snapshots"></i>
+  </ng-template>
+
+  <cd-label [value]="row.info.type"
+            *ngIf="row.info.type !== 'subvolume'"></cd-label>
+
+  <cd-label value="namespaced"
+            *ngIf="row.info.pool_namespace"
+            [tooltipText]="row.info.pool_namespace"></cd-label>
+</ng-template>
+
+<ng-template #removeTmpl
+             let-form="form">
+  <ng-container [formGroup]="form">
+    <ng-container formGroupName="child">
+      <cd-alert-panel *ngIf="errorMessage.length > 1"
+                      type="error">
+              {{errorMessage}}
+      </cd-alert-panel>
+      <div class="form-group">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox"
+                 class="custom-control-input"
+                 name="retainSnapshots"
+                 id="retainSnapshots"
+                 formControlName="retainSnapshots">
+          <label class="custom-control-label"
+                 for="retainSnapshots"
+                 i18n>Retain snapshots <cd-helper>The subvolume can be removed retaining
+                  existing snapshots using this option.
+                   If snapshots are retained, the subvolume is considered empty for all
+                    operations not involving the retained snapshots.</cd-helper></label>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
+</ng-template>

@@ -1,0 +1,77 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - mons down
+      - mon down
+      - MON_DOWN
+      - out of quorum
+      - PG_
+      - OSD_DOWN
+      - POOL_APP_NOT_ENABLED
+      - pgs degraded
+      - pg degraded
+      - object degraded
+      - objects degraded
+      - FS_DEGRADED
+      - MDS_ALL_DOWN
+      - OSD_UPGRADE_FINISHED
+      - do not have an application enabled
+      - is down
+tasks:
+- install:
+    branch: reef
+    exclude_packages:
+      - ceph-volume
+- print: "**** done install task..."
+- print: "**** done start installing reef cephadm ..."
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:reef
+    compiled_cephadm_branch: reef
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing reef cephadm ..."
+
+- print: "**** done start cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+
+- print: "**** done start telemetry reef..."
+- workunit:
+    clients:
+      client.0:
+        - test_telemetry_reef.sh
+- print: "**** done end telemetry reef..."
+
+- print: "**** done start upgrade sequence..."
+- sequential:
+    - print: "**** done start upgrade..."
+    - cephadm.shell:
+        env: [sha1]
+        mon.a:
+            - ceph config set global log_to_journald false --force
+            - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+            - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; sleep 30 ; done
+            - ceph orch ps
+            - ceph versions
+            - ceph versions | jq -e '.overall | length == 1'
+            - ceph versions | jq -e '.overall | keys' | grep $sha1
+    - print: "**** done end upgrade..."
+
+    - print: "**** done set require-osd-release ..."
+    - cephadm.shell:
+        env: [sha1]
+        mon.a:
+            - ceph osd require-osd-release squid
+
+    - print: "**** done start telemetry x..."
+    - workunit:
+        clients:
+          client.0:
+            - test_telemetry_reef_x.sh
+    - print: "**** done end telemetry x..."
+- print: "**** done end upgrade sequence..."
