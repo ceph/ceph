@@ -964,34 +964,54 @@ TEST_F(TestCls2PCQueue, MultiProducerConsumer)
   }
 
   const auto max_elements = 128;
-  std::vector<std::thread> consumers(max_workers/2);
-  for (auto& c : consumers) {
-    c = std::thread([this, &queue_name, &producer_count] {
+  std::vector<std::thread> readers(max_workers/2);
+  for (auto& c : readers) {
+    c = std::thread([this, &queue_name, &producer_count, &retry_happened] {
           librados::ObjectWriteOperation op;
           const std::string marker;
           bool truncated = true;
           std::string end_marker;
           std::vector<cls_queue_entry> entries;
           while (producer_count > 0 || truncated) {
+            if (!retry_happened) {
+              // queue was never full, let it fill
+              std::this_thread::sleep_for(std::chrono::milliseconds(100));
+              continue;
+            }
             const auto ret = cls_2pc_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             if (entries.empty()) {
-              // queue is empty, let it fill
-              std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            } else {
-              cls_2pc_queue_remove_entries(op, end_marker, max_elements);
-              ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+              // another consumer has emptied the queue
+              return; 
             }
           }
        });
   }
+  
+  auto deleter = std::thread([this, &queue_name, &producer_count, &retry_happened] {
+      librados::ObjectWriteOperation op;
+      const std::string marker;
+      bool truncated = true;
+      std::string end_marker;
+      std::vector<cls_queue_entry> entries;
+      while (producer_count > 0 || truncated) {
+        if (!retry_happened) {
+          // queue was never full, let it fill
+          std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          continue;
+        }
+        const auto ret = cls_2pc_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
+        ASSERT_EQ(0, ret);
+        ASSERT_FALSE(entries.empty());
+        cls_2pc_queue_remove_entries(op, end_marker, max_elements);
+        ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+      }
+  });
 
   std::for_each(producers.begin(), producers.end(), [](auto& p) { p.join(); });
-  std::for_each(consumers.begin(), consumers.end(), [](auto& c) { c.join(); });
-  if (!retry_happened) {
-      std::cerr << "Queue was never full - all reservations were successful." <<
-          "Please decrease the amount of consumer threads" << std::endl;
-  }
+  std::for_each(readers.begin(), readers.end(), [](auto& c) { c.join(); });
+  deleter.join();
+  ASSERT_TRUE(retry_happened);
   // make sure that queue is empty and no reservations remain
   cls_2pc_reservations reservations;
   ASSERT_EQ(0, cls_2pc_queue_list_reservations(ioctx, queue_name, reservations));
