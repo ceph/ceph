@@ -352,6 +352,37 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 self.log('switch_task: done waiting for the other thrasher')
                 other_thrasher.switch_thrasher.clear()
 
+    def kill_daemon(self, daemon):
+        kill_methods = [
+            "ceph_daemon_stop", "systemctl_stop",
+            "daemon_remove",
+        ]
+        chosen_method = self.rng.choice(kill_methods)
+        d_name = '%s.%s' % (daemon.type_, daemon.id_)
+        if chosen_method == "ceph_daemon_stop": 
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "stop",
+                d_name
+            ], check_status=False)
+        elif chosen_method == "systemctl_stop":
+            daemon.stop()
+        elif chosen_method == "daemon_remove":
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "rm",
+                d_name
+            ], check_status=False)
+        return chosen_method
+
+    def revive_daemon(self, daemon, killed_method):
+        if killed_method == "ceph_daemon_stop":
+            name = '%s.%s' % (daemon.type_, daemon.id_)
+            daemon.remote.run(args=[
+                "ceph", "orch", "daemon", "restart",
+                name
+            ])
+        elif killed_method == "systemctl_stop":
+            daemon.restart() 
+
     def do_thrash(self):
         self.log('start thrashing')
         self.log(f'seed: {self.random_seed}, , '\
@@ -363,7 +394,7 @@ class NvmeofThrasher(Thrasher, Greenlet):
         summary = []
 
         while not self.stopping.is_set():
-            killed_daemons = []
+            killed_daemons = defaultdict(list)
 
             weight = 1.0 / len(self.daemons)
             count = 0
@@ -389,9 +420,10 @@ class NvmeofThrasher(Thrasher, Greenlet):
                         continue
 
                 self.log('kill {label}'.format(label=daemon.id_))
-                daemon.stop()
+                # daemon.stop()
+                kill_method = self.kill_daemon(daemon)
 
-                killed_daemons.append(daemon)
+                killed_daemons[kill_method].append(daemon)
                 daemons_thrash_history[daemon.id_] += [datetime.now()]
 
                 # only thrash max_thrash_daemons amount of daemons
@@ -400,7 +432,10 @@ class NvmeofThrasher(Thrasher, Greenlet):
                     break
 
             if killed_daemons:
-                summary += ["killed: " + ", ".join([d.id_ for d in killed_daemons])]
+                iteration_summary = "thrashed- "
+                for kill_method in killed_daemons:
+                    iteration_summary += (", ".join([d.id_ for d in killed_daemons[kill_method]]) + f" (by {kill_method}); ") 
+                summary += [iteration_summary]
                 # delay before reviving
                 revive_delay = self.min_revive_delay
                 if self.randomize:
@@ -414,9 +449,11 @@ class NvmeofThrasher(Thrasher, Greenlet):
                 self.switch_task()
 
                 # revive after thrashing
-                for daemon in killed_daemons:
-                    self.log('reviving {label}'.format(label=daemon.id_))
-                    daemon.restart()
+                for kill_method in killed_daemons:
+                    for daemon in killed_daemons[kill_method]:
+                        self.log('reviving {label}'.format(label=daemon.id_))
+                        # daemon.restart()
+                        self.revive_daemon(daemon, kill_method)
                 
                 # delay before thrashing
                 thrash_delay = self.min_thrash_delay
