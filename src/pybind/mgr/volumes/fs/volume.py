@@ -856,6 +856,14 @@ class VolumeClient(CephfsClient["Module"]):
         src_group_name = src_subvol_details.get('group', dst_group.NO_GROUP_NAME)
         src_subvol_name = src_subvol_details['subvolume']
 
+        # We exercise op type checks on subvolume but not on subvolumegroups and we don't allow
+        # internal directories (including "_nogroup" to be opened). To do that we need to pass
+        # None (instead of "_nogroup") as value of "groupname" which is a parameter accepted by
+        # Group.__init__(). We could've allowed opening "_nogroup" but moving forward with
+        # current convention.
+        if src_group_name == '_nogroup':
+            src_group_name = None
+
         if src_group_name != dst_group.groupname:
             with open_subvol_in_group(self.mgr, vol_handle, self.volspec,
                                       src_group_name, src_subvol_name,
