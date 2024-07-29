@@ -248,12 +248,6 @@ BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 BuildRequires:	git
-%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9 || 0%{?openEuler}
-BuildRequires:	gcc-c++ >= 12
-%endif
-%if 0%{?suse_version} == 1500
-BuildRequires: gcc11-c++
-%endif
 %if 0%{?gts_version} > 0
 BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
 %if 0%{?gts_version} >= 12
@@ -263,6 +257,8 @@ BuildRequires:	gcc-toolset-%{gts_version}-build
 %endif
 BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 BuildRequires:	gcc-toolset-%{gts_version}-libstdc++-devel
+%else
+BuildRequires:	gcc-c++ >= 12
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
 BuildRequires:  libatomic
