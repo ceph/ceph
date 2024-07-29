@@ -61,6 +61,8 @@ void ScrubJob::adjust_schedule(
 	   << dendl;
 
   high_priority = (suggested.is_must == must_scrub_t::mandatory);
+  observes_max_concurrency = suggested.observes_max_scrubs;
+
   utime_t adj_not_before = suggested.proposed_time;
   utime_t adj_target = suggested.proposed_time;
   schedule.deadline = adj_target;

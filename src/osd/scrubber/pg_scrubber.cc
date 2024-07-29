@@ -513,6 +513,7 @@ sched_params_t PgScrubber::determine_initial_schedule(
     // Set the smallest time that isn't utime_t()
     res.proposed_time = PgScrubber::scrub_must_stamp();
     res.is_must = Scrub::must_scrub_t::mandatory;
+    res.observes_max_scrubs = false;
 
   } else if (m_pg->info.stats.stats_invalid && app_conf.mandatory_on_invalid) {
     res.proposed_time = scrub_clock_now;
@@ -660,7 +661,7 @@ bool PgScrubber::reserve_local()
   // a wrapper around the actual reservation, and that object releases
   // the local resource automatically when reset.
   m_local_osd_resource = m_osds->get_scrub_services().inc_scrubs_local(
-      m_scrub_job->is_high_priority());
+      !m_scrub_job->observes_max_concurrency);
   if (m_local_osd_resource) {
     dout(15) << __func__ << ": local resources reserved" << dendl;
     return true;
