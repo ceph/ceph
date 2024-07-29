@@ -15,8 +15,8 @@ namespace rgw::dedup {
   struct key_t;
   //Interval between each execution of the script is set to 5 seconds
   static inline constexpr int INIT_EXECUTE_INTERVAL = 5;
-  const work_shard_t MAX_WORK_SHARD = 2;
-  const md5_shard_t  MAX_MD5_SHARD  = 4;
+  const work_shard_t MAX_WORK_SHARD = 1;
+  const md5_shard_t  MAX_MD5_SHARD  = 2;
   class Background : public RGWRealmReloader::Pauser {
   public:
     Background(rgw::sal::Driver* _driver,

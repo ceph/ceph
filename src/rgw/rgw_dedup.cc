@@ -556,11 +556,11 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   [[maybe_unused]]static int get_ioctx1(const DoutPrefixProvider* const dpp,
-				       rgw::sal::Driver* driver,
-				       RGWRados* rados,
-				       const std::string &bucket_name,
-				       const std::string& obj_name,
-				       librados::IoCtx *p_ioctx)
+					rgw::sal::Driver* driver,
+					RGWRados* rados,
+					const std::string &bucket_name,
+					const std::string& obj_name,
+					librados::IoCtx *p_ioctx)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
     rgw_bucket b{"", bucket_name, ""};
@@ -589,11 +589,11 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   [[maybe_unused]]static int get_ioctx2(const DoutPrefixProvider* const dpp,
-				       rgw::sal::Driver* driver,
-				       rgw::sal::RadosStore *store,
-				       const std::string &bucket_name,
-				       const std::string &oid,
-				       librados::IoCtx *p_ioctx)
+					rgw::sal::Driver* driver,
+					rgw::sal::RadosStore *store,
+					const std::string &bucket_name,
+					const std::string &oid,
+					librados::IoCtx *p_ioctx)
   {
     unique_ptr<rgw::sal::Bucket> bucket;
     rgw_bucket b{"", bucket_name, ""};
@@ -636,7 +636,6 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad src manifest" << dendl;
       return -1;
     }
-
     RGWObjManifest tgt_manifest;
     try {
       auto bl_iter = p_tgt_rec->manifest_bl.cbegin();
@@ -645,45 +644,43 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1)  << __func__ << "::ERROR: bad tgt manifest" << dendl;
       return -1;
     }
-
     ldpp_dout(dpp, 0) << __func__ << "::DEDUP From: "
 		      << p_src_rec->bucket_name << "/" << p_src_rec->obj_name << " -> "
-      		      << p_tgt_rec->bucket_name << "/" << p_tgt_rec->obj_name << dendl;
+		      << p_tgt_rec->bucket_name << "/" << p_tgt_rec->obj_name << dendl;
+
+    bufferlist etag_bl;
+    etag_to_bufferlist(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, &etag_bl);
+    librados::ObjectWriteOperation op;
+    using namespace ::cls::cmpomap;
+    ComparisonMap cmp_pairs = {{RGW_ATTR_ETAG, etag_bl}};
+    map<string, bufferlist> set_pairs = {{RGW_ATTR_MANIFEST, p_src_rec->manifest_bl}};
+    int ret = cmp_vals_set_vals(op, Mode::String, Op::EQ, cmp_pairs, set_pairs);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 0) << __func__ << "::ERR: failed cmp_vals_set_vals()" << dendl;
+      return -1;
+    }
+
+    //const std::string &oid = p_tgt_rec->obj_name;
+    const std::string oid("6164da5e-39e3-488f-b09d-967e5690ddb3.4172.1_osm_2");
+    librados::IoCtx ioctx;
+    //ret = get_ioctx2(dpp, driver, store, p_tgt_rec->bucket_name, oid, &ioctx);
+    ret = get_ioctx1(dpp, driver, rados, p_tgt_rec->bucket_name, oid, &ioctx);
+    if (unlikely(ret != 0)) {
+      ldpp_dout(dpp, 0) << __func__ << "::ERR: failed get_ioctx1()" << dendl;
+      return -1;
+    }
+
     // TBD: need to read target object attributes (RGW_ATTR_TAIL_TAG/RGW_ATTR_TAG)
-    string ref_tag = rgw_obj::calc_refcount_tag_hash(p_tgt_rec->bucket_name,
-						     p_tgt_rec->obj_name);
-
-    int ret = inc_ref_count_by_manifest(ref_tag, src_manifest);
+    string ref_tag = rgw_obj::calc_refcount_tag_hash(p_tgt_rec->bucket_name, p_tgt_rec->obj_name);
+    ldpp_dout(dpp, 0) << __func__ << "::ref_tag=" << ref_tag << dendl;
+    ret = inc_ref_count_by_manifest(ref_tag, src_manifest);
     if (ret == 0) {
-      librados::ObjectWriteOperation op;
-      using namespace ::cls::cmpomap;
-      ComparisonMap cmap = {{RGW_ATTR_MANIFEST, p_tgt_rec->manifest_bl}};
-      // TBD - remove the const or use cast
-      bufferlist src_manifest_bl = p_src_rec->manifest_bl;
-      ret = cmp_set_vals(op, Mode::String, Op::EQ, cmap, src_manifest_bl);
-      if (unlikely(ret != 0)) {
-	ldpp_dout(dpp, 0) << __func__ << "::ERR: failed cmp_set_vals()" << dendl;
-	// TBD: rollback ref_count on SRC
-	return -1;
-      }
-      const std::string &oid = p_tgt_rec->obj_name;
-
-      librados::IoCtx ioctx;
-      ret = get_ioctx1(dpp, driver, rados, p_tgt_rec->bucket_name, oid, &ioctx);
-      if (unlikely(ret != 0)) {
-	ldpp_dout(dpp, 0) << __func__ << "::ERR: failed get_ioctx1()" << dendl;
-	// TBD: rollback ref_count on SRC
-	return -1;
-      }
-
       //ret = get_ioctx(dpp, driver, store, p_tgt_rec->bucket_name, oid, &ioctx);
       ldpp_dout(dpp, 0) << __func__ << "::send CLS" << dendl;
       ret = ioctx.operate(oid, &op);
-      //ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, null_yield);
       if (ret < 0) {
-	ldpp_dout(dpp, 0) << __func__ << "::failed rgw_rados_operate() ret="
-			  << ret << dendl;
-	// TBD: rollback ref_count on SRC
+	ldpp_dout(dpp, 0) << __func__ << "::failed rgw_rados_operate() ret=" << ret << dendl;
+	rollback_ref_by_manifest(ref_tag, src_manifest);
 	return ret;
       }
 
@@ -709,6 +706,10 @@ namespace rgw::dedup {
 				      record_id_t          rec_id,
 				      md5_shard_t          md5_shard)
   {
+    ldpp_dout(dpp, 0) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
+		      << ", obj=" << p_tgt_rec->obj_name
+		      << ", block_id=" << block_id << ", rec_id=" << rec_id
+		      << ", md5_shard=" << md5_shard << dendl;
     if (p_tgt_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
       // record holds a shared_manifest object so can't be a dedup target
       stats.skipped_shared_manifest++;
@@ -738,7 +739,8 @@ namespace rgw::dedup {
     ret = load_record(store, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
     if (ret == 0) {
       // TBD: Can we check OID? Is there any other unique id???
-
+      ldpp_dout(dpp, 0) << __func__ << "::src_bucket=" << src_rec.bucket_name
+			<< ", src_object=" << src_rec.obj_name << dendl;
       // verify that SRC and TGT records don't refer to the same physical object
       // This could happen in theory if we read the same objects twice
       if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
@@ -806,7 +808,11 @@ namespace rgw::dedup {
 	  if (p_header->verify(disk_block_id, dpp) != 0) {
 	    return -1;
 	  }
-
+	  if (p_header->rec_count == 0) {
+	    ldpp_dout(dpp, 0)  << __func__ << "::Empty header, no more blocks!" << dendl;
+	    has_more = false;
+	    break;
+	  }
 	  for (unsigned rec_id = 0; rec_id < p_header->rec_count; rec_id++) {
 	    unsigned offset = p_header->rec_offsets[rec_id];
 	    // We deserialize the record inside the CTOR
@@ -866,7 +872,7 @@ namespace rgw::dedup {
       return 1;
     }
     uint64_t size = obj->get_obj_size();
-#if 0
+#if 1
     if (size <= 4*1024*1024) {
       // dedup only useful for objects bigger than 4MB
       return 0;
@@ -945,8 +951,8 @@ namespace rgw::dedup {
       }
       else {
 	// if we reached the end of the shard read next shard
-	ldpp_dout(dpp, 0) << __func__ << "::" << bucket->get_name() << "::curr_shard=" << current_shard
-			  << ", next shard=" << current_shard + MAX_WORK_SHARD << dendl;
+	ldpp_dout(dpp, 10) << __func__ << "::" << bucket->get_name() << "::curr_shard=" << current_shard
+			   << ", next shard=" << current_shard + MAX_WORK_SHARD << dendl;
 	current_shard += MAX_WORK_SHARD;
 	marker = rgw_obj_index_key(); // reset marker to empty index
       }
@@ -1038,6 +1044,13 @@ namespace rgw::dedup {
 	      list_bucket_by_shard(bucket_name, last_scan_time, worker_id, &obj_count);
 	    }
 	  }
+	  if (deep_scan) {
+	    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
+	      ldpp_dout(dpp, 0) <<__func__ << "::flush buffers:: worker_id=" << (uint32_t)worker_id
+				<< ", md5_shard=" << (uint32_t) md5_shard << dendl;
+	      p_disk_arr[md5_shard][worker_id]->flush_disk_records(store, rados);
+	    }
+	  }
 	}
 	driver->meta_list_keys_complete(handle);
       }
@@ -1046,12 +1059,18 @@ namespace rgw::dedup {
       }
     }
 
+    if (!deep_scan) {
+      ldpp_dout(dpp, 0) <<__func__ << "::shallow scan -> return" << dendl;
+      return ret;
+    }
+#if 0
     for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
       for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
 	p_disk_arr[md5_shard][worker_id]->flush_disk_records(store, rados);
       }
     }
-
+#endif
+    ldpp_dout(dpp, 0) <<__func__ << "::Worker Flow!!" << dendl;
     if (deep_scan && obj_count) {
       uint32_t rec_count = 0;
       ldpp_dout(dpp, 0) <<__func__ << "::scanned objects count = " << obj_count << dendl;
