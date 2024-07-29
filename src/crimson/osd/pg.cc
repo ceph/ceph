@@ -1366,6 +1366,15 @@ PG::with_locked_obc(const hobject_t &hobj,
   };
 }
 
+void PG::update_stats(const pg_stat_t &stat) {
+  peering_state.update_stats(
+    [&stat] (auto& history, auto& stats) {
+      stats = stat;
+      return false;
+    }
+  );
+}
+
 PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 {
   if (__builtin_expect(stopping, false)) {
@@ -1384,6 +1393,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   auto p = req->logbl.cbegin();
   std::vector<pg_log_entry_t> log_entries;
   decode(log_entries, p);
+  update_stats(req->pg_stats);
   log_operation(std::move(log_entries),
                 req->pg_trim_to,
                 req->version,
