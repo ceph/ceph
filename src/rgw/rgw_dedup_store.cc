@@ -257,7 +257,7 @@ namespace rgw::dedup {
       // force explicit tail_placement as the dedup could be on another bucket
       const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
       if (tail_placement.bucket.name.empty()) {
-	//ldpp_dout(dpp, 1) << "dedup::updating tail placement" << dendl;
+	ldpp_dout(dpp, 1) << "dedup::updating tail placement" << dendl;
 	rgw_bucket b{"", p_bucket->get_name(), ""};
 	manifest.set_tail_placement(tail_placement.placement_rule, b);
 	encode(manifest, p_rec->manifest_bl);
@@ -539,12 +539,16 @@ namespace rgw::dedup {
   int disk_block_array_t::flush_disk_records(rgw::sal::RadosStore *store,
 					     RGWRados             *rados)
   {
+    // we need to force flush at the end of a cycle even if there was no work done
+    // it is used as a signal to worker in the next step
+
     if (p_curr_block == &d_arr[0] && p_curr_block->is_empty()) {
-      //ldpp_dout(dpp, 0) << __func__ << "::Empty buffers, skip flush" << dendl;
-      return 0;
-    };
-    ldpp_dout(dpp, 0) << __func__ << ":Flushing buffers..." << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "::Empty buffers, generate terminating block" << dendl;
+    }
     p_curr_block->close_block(dpp, false);
+
+    ldpp_dout(dpp, 0) << __func__ << "::worker_id=" << (uint32_t)d_worker_id
+		      << ", md5_shard=" << (uint32_t)d_md5_shard << dendl;
     int ret = flush(store);
     return ret;
   }
@@ -557,6 +561,9 @@ namespace rgw::dedup {
 				     const parsed_etag_t    *p_parsed_etag,
 				     uint64_t                obj_size)
   {
+    ldpp_dout(dpp, 0) << __func__  << "::worker_id=" << (uint32_t)d_worker_id
+		      << ", md5_shard=" << (uint32_t)d_md5_shard
+		      << "::" << p_bucket->get_name() << "/" << p_obj->get_name() << dendl;
     disk_record_t rec;
     int ret = fill_disk_record(&rec, p_bucket, p_obj, p_parsed_etag, obj_size);
     if (unlikely(ret != 0)) {
