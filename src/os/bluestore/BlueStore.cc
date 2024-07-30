@@ -5472,7 +5472,13 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
   if (o->onode.has_omap()) {
     o->get_omap_key(string(), &head);
     o->get_omap_tail(&tail);
+    auto start1 = mono_clock::now();
     it->lower_bound(head);
+    c->store->log_latency(
+    __func__,
+    l_bluestore_omap_seek_to_first_lat,
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
   }
 }
 BlueStore::OmapIteratorImpl::~OmapIteratorImpl()
