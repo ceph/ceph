@@ -22,18 +22,18 @@ struct FormatInterface;
 template <typename ImageCtxT>
 class OpenSourceImageRequest {
 public:
-  static OpenSourceImageRequest* create(librados::IoCtx& io_ctx,
+  static OpenSourceImageRequest* create(librados::IoCtx& dst_io_ctx,
                                         ImageCtxT* destination_image_ctx,
                                         uint64_t src_snap_id,
                                         const MigrationInfo &migration_info,
                                         ImageCtxT** source_image_ctx,
                                         Context* on_finish) {
-    return new OpenSourceImageRequest(io_ctx, destination_image_ctx,
+    return new OpenSourceImageRequest(dst_io_ctx, destination_image_ctx,
                                       src_snap_id, migration_info,
                                       source_image_ctx, on_finish);
   }
 
-  OpenSourceImageRequest(librados::IoCtx& io_ctx,
+  OpenSourceImageRequest(librados::IoCtx& dst_io_ctx,
                          ImageCtxT* destination_image_ctx,
                          uint64_t src_snap_id,
                          const MigrationInfo &migration_info,
@@ -66,7 +66,7 @@ private:
   typedef std::map<uint64_t, SnapInfo> SnapInfos;
 
   CephContext* m_cct;
-  librados::IoCtx& m_io_ctx;
+  librados::IoCtx& m_dst_io_ctx;
   ImageCtxT* m_dst_image_ctx;
   uint64_t m_src_snap_id;
   MigrationInfo m_migration_info;
