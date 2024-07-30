@@ -762,17 +762,18 @@ class C_MaybeExpiredSegment : public MDSInternalContext {
  * Like MDLog::trim, but instead of trimming to max_segments, trim all but the latest
  * segment.
  */
-int MDLog::trim_all()
+int MDLog::trim_to(SegmentBoundary::seq_t seq)
 {
   submit_mutex.lock();
 
   dout(10) << __func__ << ": "
-	   << segments.size()
+           << seq
+	   << " " << segments.size()
            << "/" << expiring_segments.size()
            << "/" << expired_segments.size() << dendl;
 
-  uint64_t last_seq = 0;
-  if (!segments.empty()) {
+  uint64_t last_seq = seq;
+  if (last_seq == 0 || !segments.empty()) {
     last_seq = get_last_segment_seq();
     try_to_commit_open_file_table(last_seq);
   }
