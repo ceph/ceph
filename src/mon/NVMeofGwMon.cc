@@ -142,7 +142,11 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t) {
     dout(10) <<  dendl;
     ceph_assert(get_last_committed() + 1 == pending_map.epoch);
     bufferlist bl;
-    pending_map.encode(bl);
+    uint64_t features = mon.get_quorum_con_features();
+    pending_map.encode(bl, features);
+    dout(10) << "is REEF: "  << HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_REEF) << " " << mon.get_quorum_con_features() << dendl;
+    dout(10) << "is SQUID: " << HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_SQUID) << dendl;
+
     put_version(t, pending_map.epoch, bl);
     put_last_committed(t, pending_map.epoch);
 }
@@ -171,7 +175,7 @@ void NVMeofGwMon::check_sub(Subscription *sub)
     dout(10) << "sub->next , map-epoch " << sub->next << " " << map.epoch << dendl;
     if (sub->next <= map.epoch)
     {
-      dout(10) << "Sending map to subscriber " << sub->session->con << " " << sub->session->con->get_peer_addr() << dendl;
+      dout(10) << "Sending map to subscriber " << sub->session->con << " " << sub->session->con->get_peer_addr()  << dendl;
       sub->session->con->send_message2(make_message<MNVMeofGwMap>(map));
 
       if (sub->onetime) {
@@ -409,6 +413,8 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op) {
     NvmeGroupKey group_key = std::make_pair(m->get_gw_pool(),  m->get_gw_group());
     gw_availability_t  avail = m->get_availability();
     bool propose = false;
+    //MonSession *session = op->get_session();
+    ConnectionRef con = op->get_connection();
     bool nonce_propose = false;
     bool timer_propose = false;
     bool gw_created = true;
@@ -416,6 +422,9 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op) {
     auto& group_gws = map.created_gws[group_key];
     auto gw = group_gws.find(gw_id);
     const BeaconSubsystems& sub = m->get_subsystems();
+    entity_addrvec_t vec =  entity_addrvec_t(con->get_peer_addr());
+    //dout(4) << "GW " << gw_id << " conn peer addr " << vec << " version " << m->version << dendl;
+    pending_map.peer_addr_2_version[vec] = (uint32_t)m->version;
 
     if (avail == gw_availability_t::GW_CREATED) {
         if (gw == group_gws.end()) {

@@ -50,9 +50,9 @@ void test_NVMeofGwMap() {
   pending_map.created_gws[group_key]["GW2"].nonce_map[2] = new_nonces;
   dout(0) << " == Dump map before Encode : == " <<dendl;
   dout(0) << pending_map << dendl;
-
+  uint64_t features = 4540701547738038271;
   ceph::buffer::list bl;
-  pending_map.encode(bl);
+  pending_map.encode(bl, features);
   auto p = bl.cbegin();
   pending_map.decode(p);
   dout(0) << " == Dump map after Decode: == " <<dendl;
@@ -163,6 +163,7 @@ void test_MNVMeofGwBeacon() {
 void test_NVMeofGwTimers()
 {
     NVMeofGwMap pending_map;
+    uint64_t features = 4540701547738038271;
     //pending_map.Gmetadata;
     const NvmeGroupKey group_key = std::make_pair("a","b");
     std::string gwid = "GW1";
@@ -172,7 +173,7 @@ void test_NVMeofGwTimers()
     uint64_t  millisecondsSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(end_time.time_since_epoch()).count();
     dout(0) << "Metadata milliseconds " << millisecondsSinceEpoch << " " << (int)pending_map.fsm_timers[group_key][gwid].data[grpid].timer_value << dendl;
     ceph::buffer::list bl;
-    pending_map.encode(bl);
+    pending_map.encode(bl, features);
     auto p = bl.cbegin();
     pending_map.decode(p);
 
