@@ -70,7 +70,7 @@ public:
   }
 
   void send() {
-    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
 
@@ -111,6 +111,7 @@ private:
   }
 
   void handle_clear_mdlog(int r) {
+    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
     dout(20) << __func__ << ": r=" << r << dendl;
 
     if (r != 0) {
@@ -180,6 +181,7 @@ private:
   }
 
   void trim_expired_segments() {
+    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
     dout(5) << __func__ << ": expiry complete, expire_pos/trim_pos is now "
             << std::hex << mdlog->get_journaler()->get_expire_pos() << "/"
             << mdlog->get_journaler()->get_trimmed_pos() << dendl;
@@ -217,6 +219,7 @@ private:
   }
 
   void finish(int r) override {
+    ceph_assert(!ceph_mutex_is_locked_by_me(mds->mds_lock));
     dout(20) << __func__ << ": r=" << r << dendl;
     on_finish->complete(r);
   }
