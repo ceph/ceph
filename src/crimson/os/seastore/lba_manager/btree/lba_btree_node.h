@@ -26,6 +26,8 @@ namespace crimson::os::seastore::lba_manager::btree {
 using base_iertr = LBAManager::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
 
+class BtreeLBAMapping;
+
 /**
  * lba_map_val_t
  *
@@ -202,6 +204,7 @@ struct LBALeafNode
       assert(nextent->has_parent_tracker()
 	&& nextent->get_parent_node<LBALeafNode>().get() == this);
     }
+    this->on_modify();
     if (val.pladdr.is_paddr()) {
       val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
     }
@@ -222,6 +225,7 @@ struct LBALeafNode
       iter.get_offset(),
       addr,
       (void*)nextent);
+    this->on_modify();
     this->insert_child_ptr(iter, nextent);
     if (val.pladdr.is_paddr()) {
       val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
@@ -241,6 +245,7 @@ struct LBALeafNode
       iter.get_offset(),
       iter.get_key());
     assert(iter != this->end());
+    this->on_modify();
     this->remove_child_ptr(iter);
     return this->journal_remove(
       iter,
@@ -287,6 +292,8 @@ struct LBALeafNode
   }
 
   std::ostream &_print_detail(std::ostream &out) const final;
+
+  void maybe_fix_mapping_pos(BtreeLBAMapping &mapping);
 };
 using LBALeafNodeRef = TCachedExtentRef<LBALeafNode>;
 

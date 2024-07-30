@@ -265,8 +265,14 @@ struct FixedKVNode : ChildableCachedExtent {
     set_child_ptracker(child);
   }
 
-  virtual bool is_child_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
-  virtual bool is_child_data_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
+  virtual bool is_child_stable(
+    op_context_t<node_key_t>,
+    uint16_t pos,
+    node_key_t key) const = 0;
+  virtual bool is_child_data_stable(
+    op_context_t<node_key_t>,
+    uint16_t pos,
+    node_key_t key) const = 0;
 
   template <typename T>
   get_child_ret_t<T> get_child(
@@ -275,6 +281,7 @@ struct FixedKVNode : ChildableCachedExtent {
     node_key_t key)
   {
     assert(children.capacity());
+    assert(key == get_key_from_idx(pos));
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
@@ -632,11 +639,17 @@ struct FixedKVInternalNode
     }
   }
 
-  bool is_child_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
+  bool is_child_stable(
+    op_context_t<NODE_KEY>,
+    uint16_t pos,
+    NODE_KEY key) const final {
     ceph_abort("impossible");
     return false;
   }
-  bool is_child_data_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
+  bool is_child_data_stable(
+    op_context_t<NODE_KEY>,
+    uint16_t pos,
+    NODE_KEY key) const final {
     ceph_abort("impossible");
     return false;
   }
@@ -1004,12 +1017,27 @@ struct FixedKVLeafNode
       node_layout_t(this->get_bptr().c_str()) {}
   FixedKVLeafNode(const FixedKVLeafNode &rhs)
     : FixedKVNode<NODE_KEY>(rhs),
-      node_layout_t(this->get_bptr().c_str()) {}
+      node_layout_t(this->get_bptr().c_str()),
+      modifications(rhs.modifications) {}
 
   static constexpr bool do_has_children = has_children;
+  // for the stable extent, modifications is always 0;
+  // it will increase for each transaction-local change, so that
+  // modifications can be detected (see BtreeLBAMapping.parent_modifications)
+  uint64_t modifications = 0;
+
 
   bool have_children() const final {
     return do_has_children;
+  }
+
+  void on_modify() {
+    modifications++;
+  }
+
+  bool modified_since(uint64_t v) const {
+    ceph_assert(v <= modifications);
+    return v != modifications;
   }
 
   bool is_leaf_and_has_children() const final {
@@ -1025,14 +1053,25 @@ struct FixedKVLeafNode
   // 2. The child extent is stable
   //
   // For reserved mappings, the return values are undefined.
-  bool is_child_stable(op_context_t<NODE_KEY> c, uint16_t pos) const final {
-    return _is_child_stable(c, pos);
+  bool is_child_stable(
+    op_context_t<NODE_KEY> c,
+    uint16_t pos,
+    NODE_KEY key) const final {
+    return _is_child_stable(c, pos, key);
   }
-  bool is_child_data_stable(op_context_t<NODE_KEY> c, uint16_t pos) const final {
-    return _is_child_stable(c, pos, true);
+  bool is_child_data_stable(
+    op_context_t<NODE_KEY> c,
+    uint16_t pos,
+    NODE_KEY key) const final {
+    return _is_child_stable(c, pos, key, true);
   }
 
-  bool _is_child_stable(op_context_t<NODE_KEY> c, uint16_t pos, bool data_only = false) const {
+  bool _is_child_stable(
+    op_context_t<NODE_KEY> c,
+    uint16_t pos,
+    NODE_KEY key,
+    bool data_only = false) const {
+    assert(key == get_key_from_idx(pos));
     auto child = this->children[pos];
     if (is_reserved_ptr(child)) {
       return true;
@@ -1108,6 +1147,7 @@ struct FixedKVLeafNode
 	this->copy_sources.clear();
       }
     }
+    modifications = 0;
     assert(this->is_initial_pending()
       ? this->copy_sources.empty():
       true);
@@ -1129,6 +1169,7 @@ struct FixedKVLeafNode
     } else {
       this->set_parent_tracker_from_prior_instance();
     }
+    modifications = 0;
   }
 
   uint16_t lower_bound_offset(NODE_KEY key) const final {
