@@ -153,6 +153,11 @@ class OsdScrub {
       bool is_recovery_active,
       utime_t scrub_clock_now) const;
 
+  static bool is_sched_target_eligible(
+      const Scrub::SchedEntry& e,
+      const Scrub::OSDRestrictions& r,
+      utime_t time_now);
+
   /**
    * initiate a scrub on a specific PG
    * The PG is locked, enabling us to query its state. Specifically, we

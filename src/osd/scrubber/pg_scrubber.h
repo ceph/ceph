@@ -606,7 +606,7 @@ class PgScrubber : public ScrubPgIF,
   void run_callbacks();
 
   // 'query' command data for an active scrub
-  void dump_active_scrubber(ceph::Formatter* f, bool is_deep) const;
+  void dump_active_scrubber(ceph::Formatter* f) const;
 
   /**
    * move the 'not before' to a later time (with a delay amount that is

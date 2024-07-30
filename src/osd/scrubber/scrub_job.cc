@@ -219,6 +219,22 @@ const SchedTarget& ScrubJob::earliest_target() const
   return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
 }
 
+
+SchedTarget& ScrubJob::earliest_target(utime_t scrub_clock_now)
+{
+  std::weak_ordering compr = cmp_entries(scrub_clock_now,
+      shallow_target.queued_element(), deep_target.queued_element());
+  return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
+}
+
+const SchedTarget& ScrubJob::earliest_target(utime_t scrub_clock_now) const
+{
+  std::weak_ordering compr = cmp_entries(scrub_clock_now,
+      shallow_target.queued_element(), deep_target.queued_element());
+  return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
+}
+
+
 utime_t ScrubJob::get_sched_time() const
 {
   return earliest_target().sched_info.schedule.not_before;
@@ -298,8 +314,7 @@ SchedTarget& ScrubJob::delay_on_failure(
 }
 
 
-std::string ScrubJob::scheduling_state(utime_t now_is, bool is_deep_expected)
-    const
+std::string ScrubJob::scheduling_state(utime_t now_is) const
 {
   // if not registered, not a candidate for scrubbing on this OSD (or at all)
   if (!registered) {
@@ -314,10 +329,9 @@ std::string ScrubJob::scheduling_state(utime_t now_is, bool is_deep_expected)
   if (first_ready) {
     // the target is ready to be scrubbed
     return fmt::format(
-	"queued for {}scrub at {:s} (debug RRR: {})",
+	"queued for {}scrub at {:s}",
 	(first_ready->get().is_deep() ? "deep " : ""),
-	first_ready->get().sched_info.schedule.scheduled_at,
-	(is_deep_expected ? "deep " : ""));
+	first_ready->get().sched_info.schedule.scheduled_at);
   } else {
     // both targets are in the future
     const auto& nearest = earliest_target();
@@ -377,4 +391,9 @@ bool ScrubJob::requires_randomization(urgency_t urgency)
 bool ScrubJob::observes_max_concurrency(urgency_t urgency)
 {
   return urgency < urgency_t::operator_requested;
+}
+
+bool ScrubJob::observes_random_backoff(urgency_t urgency)
+{
+  return urgency < urgency_t::after_repair;
 }

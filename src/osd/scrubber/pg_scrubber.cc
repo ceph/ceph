@@ -2382,45 +2382,38 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f,
 
   if (m_active_target) {
     f->dump_bool("active", true);
-    dump_active_scrubber(f, state_test(PG_STATE_DEEP_SCRUB));
+    dump_active_scrubber(f);
   } else {
     f->dump_bool("active", false);
-    f->dump_bool("must_scrub",
-		 (m_planned_scrub.must_scrub || m_flags.required));
-    f->dump_bool("must_deep_scrub", request_flags.must_deep_scrub);
+    const auto now_is = ceph_clock_now();
+    const auto& earliest = m_scrub_job->earliest_target(now_is);
+    f->dump_bool("must_scrub", earliest.is_high_priority());
+    f->dump_bool("must_deep_scrub", request_flags.must_deep_scrub); // RRR
     f->dump_bool("must_repair", request_flags.must_repair);
     f->dump_bool("need_auto", request_flags.need_auto);
 
-    f->dump_stream("scrub_reg_stamp") << m_scrub_job->get_sched_time();
-
-    // note that we are repeating logic that is coded elsewhere (currently
-    // PG.cc). This is not optimal.
-    bool deep_expected =
-      (ceph_clock_now() >= m_pg->next_deepscrub_interval()) ||
-      request_flags.must_deep_scrub || request_flags.need_auto;
-    auto sched_state =
-      m_scrub_job->scheduling_state(ceph_clock_now(), deep_expected);
+    f->dump_stream("scrub_reg_stamp") << earliest.sched_info.schedule.not_before;
+    auto sched_state = m_scrub_job->scheduling_state(now_is);
     f->dump_string("schedule", sched_state);
   }
 
   if (m_publish_sessions) {
-    f->dump_int("test_sequence",
-		m_sessions_counter);  // an ever-increasing number used by tests
+    // this is a test-only feature. It is not expected to be used in production.
+    // The 'test_sequence' is an ever-increasing number used by tests.
+    f->dump_int("test_sequence", m_sessions_counter);
   }
 
   f->close_section();
 }
 
-void PgScrubber::dump_active_scrubber(ceph::Formatter* f, bool is_deep) const
+void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
 {
   f->dump_stream("epoch_start") << m_interval_start;
   f->dump_stream("start") << m_start;
   f->dump_stream("end") << m_end;
   f->dump_stream("max_end") << m_max_end;
   f->dump_stream("subset_last_update") << m_subset_last_update;
-  // note that m_is_deep will be set some time after PG_STATE_DEEP_SCRUB is
-  // asserted. Thus, using the latter.
-  f->dump_bool("deep", is_deep);
+  f->dump_bool("deep", m_active_target->is_deep());
 
   // dump the scrub-type flags
   f->dump_bool("req_scrub", m_flags.required);
@@ -2506,7 +2499,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	pg_scrub_sched_status_t::queued,
 	false,
 	(targ.is_deep() ? scrub_level_t::deep : scrub_level_t::shallow),
-	!targ.sched_info.is_high_priority()};
+	!targ.is_high_priority()};
   }
 
   // both targets are not ready yet
@@ -2517,7 +2510,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
       pg_scrub_sched_status_t::scheduled,
       false,
       (targ.is_deep() ? scrub_level_t::deep : scrub_level_t::shallow),
-      !targ.sched_info.is_high_priority()};
+      !targ.is_high_priority()};
 }
 
 
