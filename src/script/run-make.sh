@@ -53,9 +53,23 @@ function prepare() {
         which_pkg="debianutils"
     fi
 
+    INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
+    source /etc/os-release
+    if [[ "$ID" == "ubuntu" ]]; then
+        case "$VERSION" in
+            *Jammy*)
+                # when g++-12 is installed, clang builds try to use it's
+                # version of libstdc++. but nothing depends specifically
+                # on gcc 12's libstdc++ to install it
+                if command -v g++-12 > /dev/null 2>&1 ; then
+                    INSTALL_EXTRA_PACKAGES+=" libstdc++-12-dev"
+                fi
+                ;;
+        esac
+    fi
+
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
-        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
         $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
