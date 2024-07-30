@@ -111,33 +111,6 @@ private:
     mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, ctx));
   }
 
-  void handle_flush_mdlog(int r) {
-    dout(20) << __func__ << ": r=" << r << dendl;
-
-    if (r != 0) {
-      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
-      complete(r);
-      return;
-    }
-
-    clear_mdlog();
-  }
-
-  void clear_mdlog() {
-    dout(20) << __func__ << dendl;
-
-    Context *ctx = new LambdaContext([this](int r) {
-        handle_clear_mdlog(r);
-      });
-
-    // Because we may not be the last wait_for_safe context on MDLog,
-    // and subsequent contexts might wake up in the middle of our
-    // later trim_all and interfere with expiry (by e.g. marking
-    // dirs/dentries dirty on previous log segments), we run a second
-    // wait_for_safe here. See #10368
-    mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, ctx));
-  }
-
   void handle_clear_mdlog(int r) {
     dout(20) << __func__ << ": r=" << r << dendl;
 
