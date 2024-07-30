@@ -3789,6 +3789,22 @@ options:
   flags:
   - create
   with_legacy: true
+- name: osd_objectstore_ideal_list_max
+  type: uint
+  level: advanced
+  desc: The max number of results of ObjectStore::collection_list()
+  long_desc: This value caps the maximal number of entries a single
+    call to collection_list() can return. The configurable controls
+    this aspect of PG deletion and OSD::clear_temp_objects().
+    Increasing it trade-offs less agressive chunking (and thus less
+    CPU consumption overall) for higher memory pressure.
+    Please note that in the case of PG deletion the chunking is
+    steered by std::min of the this value and the value of
+    osd_target_transaction_size.
+  default: 64
+  see_also:
+  - osd_memory_target
+  with_legacy: true
 # true if LTTng-UST tracepoints should be enabled
 - name: osd_objectstore_tracing
   type: bool

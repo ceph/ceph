@@ -111,3 +111,8 @@ int ObjectStore::read_meta(const std::string& key,
   *value = string(buf, r);
   return 0;
 }
+
+int ObjectStore::get_ideal_list_max()
+{
+  return cct->_conf->osd_objectstore_ideal_list_max;
+}
