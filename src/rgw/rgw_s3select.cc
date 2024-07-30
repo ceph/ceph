@@ -426,8 +426,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   } else if (m_header_info.compare("USE")==0) {
     csv.use_header_info=true;
   }
-
-  if(m_outputFormat == OutputFormat::JSON) {
+  if (m_outputFormat == OutputFormat::JSON) {
     csv.output_json_format = true;
   }
   m_s3_csv_object.set_csv_query(&s3select_syntax, csv);
@@ -482,7 +481,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
     //parsing the SQL statement.
     s3select_syntax.parse_query(m_sql_query.c_str());
     parquet_object::csv_definitions parquet;
-    if(m_outputFormat == OutputFormat::JSON) {
+    if (m_outputFormat == OutputFormat::JSON) {
     parquet.output_json_format = true;
     }
 
@@ -546,7 +545,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
     return -EINVAL;
   } 
 
-  if(m_outputFormat == OutputFormat::JSON) {
+  if (m_outputFormat == OutputFormat::JSON) {
     json.output_json_format = true;
   }
 
