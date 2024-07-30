@@ -28,7 +28,35 @@
 
 using ceph::coarse_mono_clock;
 class Monitor;
-/*-------------------*/
+
+/**
+ * NVMeofGwMap
+ *
+ * Encapsulates state maintained by NVMeofMon
+ *
+ * Type Summary:
+ * created_gw {NvmeGroupKey -> {NvmeGwID -> NvmeGwMonState}}
+ * fsm_timers {NvmeGroupKey -> {NvmeGwID -> NvmeGwTimerState}}
+ *
+ * NvmeGwMonState:
+ * - State for a single gateway within a group
+ * - Each gateway has an associated NvmeAnaGrpId (NvmeGwMonState::ana_grp_id)
+ *   which identifies the ana group associated with that gateway or, if the value
+ *   is REDUNDANT_GW_ANA_GROUP, that the gateway is a designated failover target.
+ * - NvmeGwMonState::sm_state indicates the status of each of the group's
+ *   ana_group_id with respect to that gateway.
+ *
+ * Invariants:
+ * - NvmeGwMonState::ana_grp_id for each gateway is either
+ *   REDUNDANT_GW_ANA_GROUP_ID or is unique within the group.
+ * - NvmeGwMonState::sm_state contains an entry matching the
+ *   NvmeGwMonState::ana_grp_id for each gateway in the group
+ *   with an NvmeGwMonState::ana_grp_id value other than
+ *   REDUNDANT_GW_ANA_GROUP
+ * - NvmeGwMonState::sm_state will list a given ana-group-id as active for no
+ *   more than one gateway within the group -- see
+ *   NVMeofGwMap::validate_gw_map.
+ */
 class NVMeofGwMap
 {
 public:
