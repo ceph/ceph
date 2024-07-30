@@ -87,6 +87,23 @@ public:
    * @return -EINVAL if gw_id is not present in group, 0 otherwise
    */
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+
+  /**
+   * process_gw_map_ka
+   *
+   * Notifies NVMeofGwMap of receipt of a keep-alive beacon from
+   * gateway <gw_id> in group <group_key>.  Adds <group_key>/<gw_id>
+   * to map if not already present.
+   *
+   * Caller must ensure that <group_key>/<gw_id> is already present
+   * in the map.
+   *
+   * @param [in] gw_id          id of gateway to add
+   * @param [in] group_key      key for group containing <gw_id>
+   * @param [in] last_osd_epoch most recent OSDMap epoch seen by gw_id
+   *                            prior to sending beacon.
+   * @param [out] propose_pending set to true if map is mutated
+   */
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);

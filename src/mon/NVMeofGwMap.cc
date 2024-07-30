@@ -192,27 +192,42 @@ void NVMeofGwMap::process_gw_map_ka(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
   epoch_t& last_osd_epoch, bool &propose_pending)
 {
-  auto& gws_states = created_gws[group_key];
-  auto  gw_state = gws_states.find(gw_id);
-  auto& st = gw_state->second;
-  dout(20)  << "KA beacon from the GW " << gw_id
-	    << " in state " << (int)st.availability << dendl;
+  auto giter = created_gws.find(group_key);
+  if (giter == created_gws.end()) {
+    derr << __FUNCTION__ << "ERROR group_key was not found in the map "
+	 << group_key << dendl;
+    return;
+  }
+  auto &group_gws = giter->second;
 
-  if (st.availability == gw_availability_t::GW_CREATED) {
+  auto gwiter = group_gws.find(gw_id);
+  if (gwiter == group_gws.end()) {
+    derr  << __FUNCTION__ << "ERROR GW-id was not found in the map "
+	  << gw_id << dendl;
+    return;
+  }
+  auto &gw_ka = gwiter->second;
+
+  dout(20)  << "KA beacon from the GW " << gw_id
+	    << " in state " << (int)gw_ka.availability << dendl;
+
+  if (gw_ka.availability == gw_availability_t::GW_CREATED) {
     // first time appears - allow IO traffic for this GW
-    st.availability = gw_availability_t::GW_AVAILABLE;
-    for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
-      state_itr.second = gw_states_per_group_t::GW_STANDBY_STATE;
+    gw_ka.availability = gw_availability_t::GW_AVAILABLE;
+    // set standby for all ana groups
+    for (auto &[_, ana_state]: gw_ka.sm_state) {
+      ana_state = gw_states_per_group_t::GW_STANDBY_STATE;
     }
-    if (st.ana_grp_id != REDUNDANT_GW_ANA_GROUP_ID) { // not a redundand GW
-      st.active_state(st.ana_grp_id);
+    // set active for own ana group if not redundant
+    if (gw_ka.ana_grp_id != REDUNDANT_GW_ANA_GROUP_ID) {
+      gw_ka.active_state(gw_ka.ana_grp_id);
     }
     propose_pending = true;
-  } else if (st.availability == gw_availability_t::GW_UNAVAILABLE) {
-    st.availability = gw_availability_t::GW_AVAILABLE;
-    if (st.ana_grp_id == REDUNDANT_GW_ANA_GROUP_ID) {
-      for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
-	state_itr.second = gw_states_per_group_t::GW_STANDBY_STATE;
+  } else if (gw_ka.availability == gw_availability_t::GW_UNAVAILABLE) {
+    gw_ka.availability = gw_availability_t::GW_AVAILABLE;
+    if (gw_ka.ana_grp_id == REDUNDANT_GW_ANA_GROUP_ID) {
+      for (auto &[_, ana_state]: gw_ka.sm_state) {
+	ana_state = gw_states_per_group_t::GW_STANDBY_STATE;
       }
       propose_pending = true;
     } else {
@@ -220,11 +235,11 @@ void NVMeofGwMap::process_gw_map_ka(
       // find the GW that took over on the group st.ana_grp_id
       find_failback_gw(gw_id, group_key, propose_pending);
     }
-  } else if (st.availability == gw_availability_t::GW_AVAILABLE) {
-    for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
+  } else if (gw_ka.availability == gw_availability_t::GW_AVAILABLE) {
+    for (auto &[ana_id, ana_state]: gw_ka.sm_state) {
       fsm_handle_gw_alive(
-	gw_id, group_key, gw_state->second, state_itr.second,
-	state_itr.first, last_osd_epoch, propose_pending);
+	gw_id, group_key, gw_ka, ana_state,
+	ana_id, last_osd_epoch, propose_pending);
     }
   }
   if (propose_pending) validate_gw_map(group_key);
