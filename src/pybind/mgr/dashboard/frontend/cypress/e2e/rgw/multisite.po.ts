@@ -134,9 +134,9 @@ export class MultisitePageHelper extends PageHelper {
       cy.get(`button.delete`).first().click();
     });
 
-    cy.get('cd-modal .custom-control-label').click();
+    cy.get('cds-modal .custom-control-label').click();
     cy.get('[aria-label="Delete Flow"]').click();
-    cy.get('cd-modal').should('not.exist');
+    cy.get('cds-modal').should('not.exist');
 
     cy.get('cd-rgw-multisite-sync-policy-details')
       .first()

@@ -20,11 +20,11 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { Task } from '~/app/shared/models/task';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 import { SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 export enum RgwExportType {
   BUCKET = 'bucket',
@@ -72,7 +72,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
 
   constructor(
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private nfsService: NfsService,
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,

@@ -368,7 +368,12 @@ describe('CephfsDirectoriesComponent', () => {
         NgbModalModule
       ],
       declarations: [CephfsDirectoriesComponent],
-      providers: [NgbActiveModal]
+      providers: [
+        NgbActiveModal,
+        { provide: 'titleText', useValue: '' },
+        { provide: 'buttonText', useValue: '' },
+        { provide: 'onSubmit', useValue: new Function() }
+      ]
     },
     [CriticalConfirmationModalComponent, FormModalComponent, ConfirmationModalComponent]
   );

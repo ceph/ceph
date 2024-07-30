@@ -30,7 +30,7 @@ describe('User Management page', () => {
     });
 
     it('should delete a user', () => {
-      userMgmt.delete(user_name);
+      userMgmt.delete(user_name, null, null, true);
     });
   });
 });

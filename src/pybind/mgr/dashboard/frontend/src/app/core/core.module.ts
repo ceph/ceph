@@ -12,6 +12,7 @@ import { BlankLayoutComponent } from './layouts/blank-layout/blank-layout.compon
 import { LoginLayoutComponent } from './layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './layouts/workbench-layout/workbench-layout.component';
 import { NavigationModule } from './navigation/navigation.module';
+import { PlaceholderModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -20,7 +21,8 @@ import { NavigationModule } from './navigation/navigation.module';
     NavigationModule,
     NgbDropdownModule,
     RouterModule,
-    SharedModule
+    SharedModule,
+    PlaceholderModule
   ],
   exports: [NavigationModule],
   declarations: [

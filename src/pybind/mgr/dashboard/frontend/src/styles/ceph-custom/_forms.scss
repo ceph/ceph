@@ -1,4 +1,5 @@
 @use '../vendor/variables' as vv;
+@use '@carbon/colors';
 
 /* Forms */
 .required::after {
@@ -13,24 +14,9 @@
   width: 100%;
 }
 
-.form-control,
-.form-select {
-  display: table-cell;
-
-  &:focus {
-    border-color: rgba(vv.$primary, 0.8);
-    box-shadow: 0 0 3px 2px rgba(vv.$primary, 0.5);
-    outline: 0;
-  }
-}
-
 .custom-checkbox {
   @extend .form-check;
   padding-top: 7px;
-
-  .custom-control-input {
-    @extend .form-check-input;
-  }
 
   .custom-control-label {
     @extend .form-check-label;
@@ -102,4 +88,32 @@ cd-modal {
 
 .custom-control-label {
   @extend .form-label;
+}
+
+/******************************************
+Carbon Overrides
+******************************************/
+
+/******************************************
+Form Controls
+******************************************/
+.form-item {
+  @extend .cds--form-item;
+  display: block;
+  margin-bottom: 32px;
+}
+
+.cds-input-group {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+}
+
+.icon-btn-group {
+  background-color: colors.$gray-10;
+  border-bottom: 1px solid colors.$gray-50;
+}
+
+fieldset {
+  @extend .cds--fieldset;
 }

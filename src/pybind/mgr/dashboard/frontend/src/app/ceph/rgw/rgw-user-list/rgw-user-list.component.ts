@@ -15,7 +15,7 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 const BASE_URL = 'rgw/user';
@@ -43,7 +43,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     private rgwUserService: RgwUserService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private urlBuilder: URLBuilderService,
     public actionLabels: ActionLabelsI18n,
     protected ngZone: NgZone

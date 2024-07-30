@@ -53,10 +53,6 @@
   }
 }
 
-.btn-primary {
-  @extend .btn-accent;
-}
-
 // We have some inputs that don't have a corresponding formControlName,
 // to be able to get the same styling and no JS errors we need use a different
 // class name

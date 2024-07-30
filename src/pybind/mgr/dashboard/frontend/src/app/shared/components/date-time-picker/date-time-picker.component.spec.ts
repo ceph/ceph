@@ -1,10 +1,13 @@
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { FormControl, FormsModule } from '@angular/forms';
 
-import { NgbDatepickerModule, NgbTimepickerModule } from '@ng-bootstrap/ng-bootstrap';
-
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { DateTimePickerComponent } from './date-time-picker.component';
+import {
+  DatePickerModule,
+  TimePickerModule,
+  TimePickerSelectModule
+} from 'carbon-components-angular';
 
 describe('DateTimePickerComponent', () => {
   let component: DateTimePickerComponent;
@@ -12,7 +15,7 @@ describe('DateTimePickerComponent', () => {
 
   configureTestBed({
     declarations: [DateTimePickerComponent],
-    imports: [NgbDatepickerModule, NgbTimepickerModule, FormsModule]
+    imports: [DatePickerModule, FormsModule, TimePickerModule, TimePickerSelectModule]
   });
 
   beforeEach(() => {

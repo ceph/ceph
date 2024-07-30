@@ -1,11 +1,15 @@
 <button [type]="type"
-        class="btn btn-accent tc_submitButton"
-        [ngClass]="btnClass"
+        class="tc_submitButton"
+        [ngClass]="{'w-100': modalForm}"
         [disabled]="loading || disabled"
         (click)="submit($event)"
-        [attr.aria-label]="ariaLabel">
+        [attr.aria-label]="ariaLabel"
+        size="lg"
+        modal-primary-focus
+        [cdsButton]="buttonType">
   <ng-content></ng-content>
-  <span *ngIf="loading">
-    <i [ngClass]="[icons.spinner, icons.spin]"></i>
-  </span>
+  <cds-loading [isActive]="loading"
+               [overlay]="false"
+               size="sm"
+               *ngIf="loading"></cds-loading>
 </button>

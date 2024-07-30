@@ -34,6 +34,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { HostFormComponent } from './host-form/host-form.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const BASE_URL = 'hosts';
 
@@ -125,7 +126,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     private taskWrapper: TaskWrapperService,
     private router: Router,
     private notificationService: NotificationService,
-    private orchService: OrchestratorService
+    private orchService: OrchestratorService,
+    private cdsModalService: ModalCdsService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -390,14 +392,12 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
               showSubmit: true,
               onSubmit: () => {
                 this.hostService.update(host['hostname'], false, [], true, true).subscribe(
-                  () => {
-                    this.modalRef.close();
-                  },
-                  () => this.modalRef.close()
+                  () => this.cdsModalService.dismissAll(),
+                  () => this.cdsModalService.dismissAll()
                 );
               }
             };
-            this.modalRef = this.modalService.show(ConfirmationModalComponent, modalVariables);
+            this.modalRef = this.cdsModalService.show(ConfirmationModalComponent, modalVariables);
           } else {
             this.notificationService.show(
               NotificationType.error,
@@ -467,7 +467,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
 
   deleteAction() {
     const hostname = this.selection.first().hostname;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Host',
       itemNames: [hostname],
       actionDescription: 'remove',

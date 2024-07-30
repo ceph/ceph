@@ -1,41 +1,43 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n
-                class="modal-title">Restore Image</ng-container>
+<cds-modal size="sm"
+           [open]="open"
+           (overlaySelected)="closeModal()">
 
-  <ng-container class="modal-content">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Restore Image</h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
     <form name="restoreForm"
           class="form"
           #formDir="ngForm"
           [formGroup]="restoreForm"
           novalidate>
-      <div class="modal-body">
-        <p i18n>To restore&nbsp;
-          <kbd>{{ imageSpec }}@{{ imageId }}</kbd>,&nbsp;
-          type the image's new name and click&nbsp;
-          <kbd>Restore</kbd>.</p>
+      <p i18n>To restore&nbsp;
+        <kbd>{{ imageSpec }}@{{ imageId }}</kbd>,&nbsp;
+        type the image's new name and click&nbsp;
+        <kbd>Restore</kbd>.</p>
 
-        <div class="form-group">
-          <label class="col-form-label"
-                 for="name"
-                 i18n>New Name</label>
-          <input type="text"
-                 class="form-control"
+      <div class="form-item">
+        <cds-text-label for="name"
+                        i18n
+                        [invalid]="restoreForm.showError('name', formDir, 'required')"
+                        invalidText="The field is required"
+                        cdRequiredField="Name">Name
+          <input cdsText
                  name="name"
                  id="name"
-                 autocomplete="off"
                  formControlName="name"
+                 autocomplete="off"
                  autofocus>
-          <span class="invalid-feedback"
-                *ngIf="restoreForm.showError('name', formDir, 'required')"
-                i18n>This field is required.</span>
-        </div>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="restore()"
-                              [form]="restoreForm"
-                              [submitText]="actionLabels.RESTORE"></cd-form-button-panel>
+        </cds-text-label>
       </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="restore()"
+                        [form]="restoreForm"
+                        [submitText]="actionLabels.RESTORE"
+                        [modalForm]="true"></cd-form-button-panel>
+
+</cds-modal>

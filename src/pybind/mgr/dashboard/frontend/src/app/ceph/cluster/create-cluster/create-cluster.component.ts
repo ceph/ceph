@@ -26,12 +26,12 @@ import { DeploymentOptions } from '~/app/shared/models/osd-deployment-options';
 import { Permissions } from '~/app/shared/models/permissions';
 import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
 import { DriveGroup } from '../osd/osd-form/drive-group.model';
 import { Location } from '@angular/common';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-create-cluster',
@@ -67,7 +67,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService,
     private actionLabels: ActionLabelsI18n,
     private clusterService: ClusterService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
     private osdService: OsdService,
     private route: ActivatedRoute,
@@ -114,19 +114,19 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
       showSubmit: true,
       onSubmit: () => {
         this.clusterService.updateStatus('POST_INSTALLED').subscribe({
-          error: () => this.modalRef.close(),
+          error: () => this.modalService.dismissAll(),
           complete: () => {
             this.notificationService.show(
               NotificationType.info,
               $localize`Cluster expansion skipped by user`
             );
             this.router.navigate(['/dashboard']);
-            this.modalRef.close();
+            this.modalService.dismissAll();
           }
         });
       }
     };
-    this.modalRef = this.modalService.show(ConfirmationModalComponent, modalVariables);
+    this.modalService.show(ConfirmationModalComponent, modalVariables);
   }
 
   onSubmit() {

@@ -1,79 +1,83 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>Create Namespace</ng-container>
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+      Create Namespace
+  </h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <section cdsModalContent>
+
     <form name="namespaceForm"
           #formDir="ngForm"
           [formGroup]="namespaceForm"
           novalidate>
-      <div class="modal-body">
 
-        <!-- Pool -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="pool"
-                 i18n>Pool</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="Pool name..."
-                   id="pool"
-                   name="pool"
-                   formControlName="pool"
-                   *ngIf="!poolPermission.read">
-            <select id="pool"
-                    name="pool"
-                    class="form-select"
-                    formControlName="pool"
-                    *ngIf="poolPermission.read">
-              <option *ngIf="pools === null"
-                      [ngValue]="null"
-                      i18n>Loading...</option>
-              <option *ngIf="pools !== null && pools.length === 0"
-                      [ngValue]="null"
-                      i18n>-- No rbd pools available --</option>
-              <option *ngIf="pools !== null && pools.length > 0"
-                      [ngValue]="null"
-                      i18n>-- Select a pool --</option>
-              <option *ngFor="let pool of pools"
-                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
-            </select>
-            <span *ngIf="namespaceForm.showError('pool', formDir, 'required')"
-                  class="invalid-feedback"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
+    <!-- Pool -->
+    <div class="form-item">
+      <cds-select label="Pool"
+                  for="pool"
+                  formControlName="pool"
+                  name="pool"
+                  id="pool"
+                  [invalid]="namespaceForm.controls['pool'].invalid && (namespaceForm.controls['pool'].dirty || namespaceForm.controls['pool'].touched)"
+                  [invalidText]="poolError"
+                  *ngIf="poolPermission.read"
+                  cdRequiredField="Pool"
+                  i18n>
 
-        <!-- Name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="namespace"
-                 i18n>Name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
-                   type="text"
-                   placeholder="Namespace name..."
-                   id="namespace"
-                   name="namespace"
-                   formControlName="namespace"
-                   autofocus>
-            <span class="invalid-feedback"
-                  *ngIf="namespaceForm.showError('namespace', formDir, 'required')"
-                  i18n>This field is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="namespaceForm.showError('namespace', formDir, 'namespaceExists')"
-                  i18n>Namespace already exists.</span>
-          </div>
-        </div>
+        <option *ngIf="pools === null"
+                [ngValue]="null">Loading...</option>
+        <option *ngIf="pools !== null && pools.length === 0"
+                [ngValue]="null">-- No rbd pools available --</option>
+        <option *ngIf="pools !== null && pools.length > 0"
+                [ngValue]="null">-- Select a pool --</option>
+        <option *ngFor="let pool of pools"
+                [value]="pool.pool_name">{{ pool.pool_name }}</option>
+      </cds-select>
+      <ng-template #poolError>
+        <span *ngIf="namespaceForm.showError('pool', formDir, 'required')"
+              class="invalid-feedback"
+              i18n>This field is required.</span>
+      </ng-template>
+    </div>
 
-      </div>
+    <!-- Name -->
+    <div class="form-item">
+      <cds-text-label label="Name"
+                      for="namespace"
+                      [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty || namespaceForm.controls['namespace'].touched)"
+                      [invalidText]="namespaceError"
+                      cdRequiredField="Namespace"
+                      i18n>Namespace
+        <input cdsText
+               type="text"
+               placeholder="Namespace name..."
+               id="namespace"
+               name="namespace"
+               formControlName="namespace"
+               [invalid]="namespaceForm.controls['namespace'].invalid && (namespaceForm.controls['namespace'].dirty || namespaceForm.controls['namespace'].touched)"
+               autofocus>
+      </cds-text-label>
+      <ng-template #namespaceError>
+        <span *ngIf="namespaceForm.showError('namespace', formDir, 'required')"
+              class="invalid-feedback"
+              i18n>This field is required.</span>
+        <span *ngIf="namespaceForm.showError('namespace', formDir, 'namespaceExists')"
+              class="invalid-feedback"
+              i18n>The namespace already exists.</span>
+      </ng-template>
+    </div>
 
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="namespaceForm"
-                              [submitText]="actionLabels.CREATE"></cd-form-button-panel>
-      </div>
+
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
+  <cd-form-button-panel (submitActionEvent)="submit()"
+                        [form]="namespaceForm"
+                        [submitText]="actionLabels.CREATE"
+                        [modalForm]="true"></cd-form-button-panel>
+
+</cds-modal>

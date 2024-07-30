@@ -5,6 +5,8 @@ import { UntypedFormGroup, NgForm } from '@angular/forms';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
+import { ModalCdsService } from '../../services/modal-cds.service';
+import { ActivatedRoute } from '@angular/router';
 
 @Component({
   selector: 'cd-form-button-panel',
@@ -36,16 +38,25 @@ export class FormButtonPanelComponent implements OnInit {
   cancelText?: string;
   @Input()
   disabled = false;
+  @Input()
+  modalForm = false;
+  @Input()
+  submitBtnType: 'primary' | 'danger';
+
+  hasModalOutlet = false;
 
   constructor(
     private location: Location,
     private actionLabels: ActionLabelsI18n,
-    private modalService: ModalService
+    private modalService: ModalService,
+    private cdsModalService: ModalCdsService,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit() {
     this.submitText = this.submitText || this.actionLabels.CREATE;
     this.cancelText = this.cancelText || this.actionLabels.CANCEL;
+    this.hasModalOutlet = this.route.outlet === 'modal';
   }
 
   submitAction() {
@@ -54,7 +65,11 @@ export class FormButtonPanelComponent implements OnInit {
 
   backAction() {
     if (this.backActionEvent.observers.length === 0) {
-      if (this.modalService.hasOpenModals()) {
+      if (this.modalForm && this.cdsModalService.hasOpenModals()) {
+        this.cdsModalService.dismissAll();
+      } else if (this.modalForm && this.hasModalOutlet) {
+        this.location.back();
+      } else if (this.modalService.hasOpenModals()) {
         this.modalService.dismissAll();
       } else {
         this.location.back();

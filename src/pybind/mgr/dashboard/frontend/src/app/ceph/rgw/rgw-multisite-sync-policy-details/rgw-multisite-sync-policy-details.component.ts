@@ -16,6 +16,7 @@ import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { RgwMultisiteSyncFlowModalComponent } from '../rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { FlowType } from '../models/rgw-multisite';
 import { RgwMultisiteSyncPipeModalComponent } from '../rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rgw-multisite-sync-policy-details',
@@ -52,7 +53,8 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private rgwMultisiteService: RgwMultisiteService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private cdsModalService: ModalCdsService
   ) {
     this.symmetricalFlowCols = [
       {
@@ -239,7 +241,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       selection = this.dirFlowSelection;
     }
     const flowIds = selection.selected.map((flow: any) => flow.id);
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: selection.hasSingleSelection ? $localize`Flow` : $localize`Flows`,
       itemNames: flowIds,
       bodyTemplate: this.deleteTpl,
@@ -303,7 +305,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
 
   deletePipe() {
     const pipeIds = this.pipeSelection.selected.map((pipe: any) => pipe.id);
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: this.pipeSelection.hasSingleSelection ? $localize`Pipe` : $localize`Pipes`,
       itemNames: pipeIds,
       bodyTemplate: this.deleteTpl,

@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgbActiveModal, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
 import { ToastrModule } from 'ngx-toastr';
 
@@ -11,6 +11,13 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal.component';
+import {
+  CheckboxModule,
+  DatePickerModule,
+  ModalModule,
+  TimePickerModule
+} from 'carbon-components-angular';
+import { DateTimePickerComponent } from '~/app/shared/components/date-time-picker/date-time-picker.component';
 
 describe('RbdTrashMoveModalComponent', () => {
   let component: RbdTrashMoveModalComponent;
@@ -24,10 +31,19 @@ describe('RbdTrashMoveModalComponent', () => {
       RouterTestingModule,
       SharedModule,
       ToastrModule.forRoot(),
-      NgbPopoverModule
+      NgbPopoverModule,
+      ModalModule,
+      CheckboxModule,
+      DatePickerModule,
+      TimePickerModule
     ],
-    declarations: [RbdTrashMoveModalComponent],
-    providers: [NgbActiveModal]
+    declarations: [RbdTrashMoveModalComponent, DateTimePickerComponent],
+    providers: [
+      { provide: 'poolName', useValue: 'foo' },
+      { provide: 'imageName', useValue: 'bar' },
+      { provide: 'namespace', useValue: '' },
+      { provide: 'hasSnapshots', useValue: false }
+    ]
   });
 
   beforeEach(() => {
@@ -56,12 +72,12 @@ describe('RbdTrashMoveModalComponent', () => {
     beforeEach(() => {
       notificationService = TestBed.inject(NotificationService);
       spyOn(notificationService, 'show').and.stub();
-      spyOn(component.activeModal, 'close').and.callThrough();
+      spyOn(component, 'closeModal').and.callThrough();
     });
 
     afterEach(() => {
       expect(notificationService.show).toHaveBeenCalledTimes(1);
-      expect(component.activeModal.close).toHaveBeenCalledTimes(1);
+      expect(component.closeModal).toHaveBeenCalledTimes(1);
     });
 
     it('with normal delay', () => {

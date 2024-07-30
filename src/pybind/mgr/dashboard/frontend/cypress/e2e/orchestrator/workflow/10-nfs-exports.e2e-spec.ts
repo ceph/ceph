@@ -75,10 +75,10 @@ describe('nfsExport page', () => {
 
     it('should delete exports and bucket', () => {
       nfsExport.navigateTo('rgw_index');
-      nfsExport.delete(editPseudo);
+      nfsExport.delete(editPseudo, null, null, true);
 
       buckets.navigateTo();
-      buckets.delete(bucketName);
+      buckets.delete(bucketName, null, null, true);
     });
   });
 });

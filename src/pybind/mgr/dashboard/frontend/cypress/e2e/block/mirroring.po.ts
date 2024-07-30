@@ -25,12 +25,12 @@ export class MirroringPageHelper extends PageHelper {
     cy.contains('button', 'Edit Mode').click();
 
     // Clicks the drop down in the edit pop-up, then clicks the Update button
-    cy.get('.modal-content').should('be.visible');
+    cy.get('cds-modal').should('be.visible');
     this.selectOption('mirrorMode', option);
 
     // Clicks update button and checks if the mode has been changed
     cy.contains('button', 'Update').click();
-    cy.contains('.modal-dialog', 'Edit pool mirror mode').should('not.exist');
+    cy.contains('cds-modal').should('not.exist');
     const val = option.toLowerCase(); // used since entries in table are lower case
     this.getFirstTableCell(val).should('be.visible');
   }
@@ -39,7 +39,7 @@ export class MirroringPageHelper extends PageHelper {
   generateToken(poolName: string) {
     cy.get('[aria-label="Create Bootstrap Token"]').first().click();
     cy.get('cd-bootstrap-create-modal').within(() => {
-      cy.get(`label[for=${poolName}]`).click();
+      cy.get(`input[name=${poolName}]`).click({ force: true });
       cy.get('button[type=submit]').click();
       cy.get('textarea[id=token]').wait(200).invoke('val').as('token');
       cy.get('[aria-label="Back"]').click();

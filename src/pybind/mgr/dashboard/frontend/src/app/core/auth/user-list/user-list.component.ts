@@ -15,7 +15,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
@@ -49,7 +49,7 @@ export class UserListComponent implements OnInit {
   constructor(
     private userService: UserService,
     private emptyPipe: EmptyPipe,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
     private urlBuilder: URLBuilderService,
@@ -149,7 +149,7 @@ export class UserListComponent implements OnInit {
     this.userService.delete(username).subscribe(
       () => {
         this.getUsers();
-        this.modalRef.close();
+        this.modalService.dismissAll();
         this.notificationService.show(
           NotificationType.success,
           $localize`Deleted user '${username}'`

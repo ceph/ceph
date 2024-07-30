@@ -19,7 +19,18 @@ import {
   UIShellModule,
   ButtonModule,
   NotificationModule,
-  IconModule
+  IconModule,
+  IconService,
+  TooltipModule,
+  GridModule,
+  AccordionModule,
+  LoadingModule,
+  ModalModule,
+  InputModule,
+  CheckboxModule,
+  DatePickerModule,
+  TimePickerModule,
+  TimePickerSelectModule
 } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -64,6 +75,9 @@ import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
 import { UpgradableComponent } from './upgradable/upgradable.component';
 
+// Icons
+import InfoIcon from '@carbon/icons/es/information/16';
+
 @NgModule({
   imports: [
     CommonModule,
@@ -86,7 +100,17 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
     UIShellModule,
     ButtonModule,
     NotificationModule,
-    IconModule
+    IconModule,
+    TooltipModule,
+    GridModule,
+    AccordionModule,
+    LoadingModule,
+    ModalModule,
+    InputModule,
+    CheckboxModule,
+    DatePickerModule,
+    TimePickerModule,
+    TimePickerSelectModule
   ],
   declarations: [
     SparklineComponent,
@@ -168,4 +192,8 @@ import { UpgradableComponent } from './upgradable/upgradable.component';
     UpgradableComponent
   ]
 })
-export class ComponentsModule {}
+export class ComponentsModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([InfoIcon]);
+  }
+}

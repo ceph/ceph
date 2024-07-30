@@ -61,7 +61,7 @@ export class HostsPageHelper extends PageHelper {
   }
 
   remove(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname, 'hosts');
+    super.delete(hostname, this.columnIndex.hostname, 'hosts', true);
   }
 
   // Add or remove labels on a host, then verify labels in the table
@@ -113,7 +113,7 @@ export class HostsPageHelper extends PageHelper {
       this.getTableCell(this.columnIndex.hostname, hostname, true).click();
       this.clickActionButton('enter-maintenance');
 
-      cy.get('cd-modal').within(() => {
+      cy.get('cds-modal').within(() => {
         cy.contains('button', 'Continue').click();
       });
 

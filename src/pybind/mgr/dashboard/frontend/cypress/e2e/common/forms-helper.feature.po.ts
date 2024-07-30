@@ -60,9 +60,18 @@ Then('I check the tick box in modal', () => {
   cy.get('cd-modal input#confirmation').click();
 });
 
+Then('I check the tick box in carbon modal', () => {
+  cy.get('cds-modal input#confirmation_input').click({ force: true });
+});
+
 And('I confirm to {string}', (action: string) => {
   cy.contains('cd-modal button', action).click();
   cy.get('cd-modal').should('not.exist');
+});
+
+And('I confirm to {string} on carbon modal', (action: string) => {
+  cy.contains('cds-modal button', action).click();
+  cy.get('cds-modal').should('not.exist');
 });
 
 Then('I should see an error in {string} field', (field: string) => {

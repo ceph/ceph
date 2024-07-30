@@ -24,12 +24,12 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permissions } from '~/app/shared/models/permissions';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Pool } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const BASE_URL = 'pool';
 
@@ -68,7 +68,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
     private ecpService: ErasureCodeProfileService,
     private authStorageService: AuthStorageService,
     public taskListService: TaskListService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private pgCategoryService: PgCategoryService,
     private dimlessPipe: DimlessPipe,
     private urlBuilder: URLBuilderService,

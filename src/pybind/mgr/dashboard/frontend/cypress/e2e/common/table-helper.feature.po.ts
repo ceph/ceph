@@ -143,6 +143,6 @@ And('I should see row {string} have {string} on this tab', (row: string, options
 
 Then('I should see an alert {string} in the expanded row', (alert: string) => {
   cy.get('.datatable-row-detail').within(() => {
-    cy.get('.alert-panel-text').contains(alert);
+    cy.get('.cds--actionable-notification__content').contains(alert);
   });
 });
