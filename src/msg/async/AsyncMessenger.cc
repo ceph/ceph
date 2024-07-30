@@ -694,6 +694,23 @@ entity_addrvec_t AsyncMessenger::_filter_addrs(const entity_addrvec_t& addrs)
   }
 }
 
+entity_addrvec_t AsyncMessenger::extend_with_wildcard_nonces(
+  entity_addrvec_t&& addrs
+) const
+{
+  entity_addrvec_t retvec;
+  for (const auto& addr : addrs.v) {
+    auto addr_with_random_nonce = addr;
+    addr_with_random_nonce.set_nonce(get_nonce());
+    retvec.v.emplace_back(std::move(addr_with_random_nonce));
+  }
+  for (auto&& addr : addrs.v) {
+    addr.set_nonce(entity_addr_t::NONCE_WILDCARD);
+    retvec.v.emplace_back(std::move(addr));
+  }
+  return retvec;
+}
+
 int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
 {
   FUNCTRACE(cct);

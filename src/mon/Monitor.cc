@@ -1192,7 +1192,7 @@ void Monitor::bootstrap()
     elector.notify_clear_peer_state();
   }
   if (newrank >= 0 &&
-      monmap->get_addrs(newrank) != messenger->get_myaddrs()) {
+      monmap->get_addrs(newrank) != messenger->get_myaddr_wildcards()) {
     dout(0) << " monmap addrs for rank " << newrank << " changed, i am "
 	    << messenger->get_myaddrs()
 	    << ", monmap is " << monmap->get_addrs(newrank) << ", respawning"

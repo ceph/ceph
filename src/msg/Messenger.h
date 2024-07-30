@@ -178,6 +178,7 @@ public:
                            uint64_t nonce);
 
   static uint64_t get_random_nonce();
+  virtual entity_addrvec_t extend_with_wildcard_nonces(entity_addrvec_t&& addrs) const = 0;
 
   /**
    * create a new messenger
@@ -227,6 +228,18 @@ public:
     return my_addrs->as_legacy_addr();
   }
 
+  /**
+   * get addr for myself but only those with wildcarded nonces
+r  */
+  entity_addrvec_t get_myaddr_wildcards() {
+    entity_addrvec_t ret;
+    std::copy_if(
+      std::begin(my_addrs->v),
+      std::end(my_addrs->v),
+      std::back_inserter(ret.v),
+      [](const auto& a) { return a.is_nonce_wildcard(); });
+    return ret;
+  }
 
   /**
    * std::set messenger's instance

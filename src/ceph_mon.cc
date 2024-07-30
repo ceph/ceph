@@ -823,7 +823,7 @@ int main(int argc, const char **argv)
                               NULL);
 
   entity_addrvec_t bind_addrs = ipaddrs;
-  entity_addrvec_t public_addrs = ipaddrs;
+  entity_addrvec_t public_addrs = msgr->extend_with_wildcard_nonces(std::move(ipaddrs));
 
   // check if the public_bind_addr option is set
   if (!g_conf()->public_bind_addr.is_blank_ip()) {
