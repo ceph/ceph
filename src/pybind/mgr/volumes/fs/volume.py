@@ -865,23 +865,35 @@ class VolumeClient(CephfsClient["Module"]):
         if src_group_name == '_nogroup':
             src_group_name = None
 
-        if src_group_name != dst_group.groupname:
-            with open_subvol_in_group(self.mgr, vol_handle, self.volspec,
-                                      src_group_name, src_subvol_name,
-                                      SubvolumeOpType.CLONE_SOURCE) as src_subvol:
-                src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
+        try:
+            if src_group_name != dst_group.groupname:
+                with open_subvol_in_group(self.mgr, vol_handle, self.volspec,
+                                          src_group_name, src_subvol_name,
+                                          SubvolumeOpType.CLONE_SOURCE) as src_subvol:
+                    src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
 
-        else:
-            with open_subvol(self.mgr, vol_handle, self.volspec, dst_group,
-                             src_subvol_name, SubvolumeOpType.CLONE_SOURCE) as \
-                             src_subvol:
-                src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
+            else:
+                with open_subvol(self.mgr, vol_handle, self.volspec, dst_group,
+                                 src_subvol_name, SubvolumeOpType.CLONE_SOURCE) as \
+                                 src_subvol:
+                    src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
+        except VolumeException as e:
+            if e.errno != -errno.ENOENT:
+                raise
+
+            log.debug(f'snapshot "{src_snap_name}" which is/was being cloned to create subvolume '
+                      '"{dst_subvol.subvolname}" has become missing. skipping adding progress '
+                      'report to "clone status" output and, likely, cloning will fail.')
+            src_path = None
 
         return src_path
 
     def _get_clone_progress_report(self, vol_handle, dst_group, dst_subvol):
         dst_path = dst_subvol.base_path.decode('utf-8')
         src_path = self._get_src_path(vol_handle, dst_group, dst_subvol)
+        if not src_path:
+            return None
+
         stats = get_stats(src_path, dst_path, vol_handle)
         stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
         return stats
@@ -890,7 +902,8 @@ class VolumeClient(CephfsClient["Module"]):
         status = subvol.status
         if status['state'] == 'in-progress':
             stats = self._get_clone_progress_report(vol_handle, group, subvol)
-            status.update({'progress_report': stats})
+            if stats:
+                status.update({'progress_report': stats})
 
         return json.dumps({'status' : status}, indent=2)
 
