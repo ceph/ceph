@@ -287,6 +287,8 @@ LogSegment* MDLog::_start_new_segment(SegmentBoundary* sb)
   logger->set(l_mdl_seg, segments.size());
   sb->set_seq(event_seq);
 
+  dout(20) << __func__ << ": starting new segment " << *ls << dendl;
+
   // Adjust to next stray dir
   if (!mds->is_stopping()) {
     mds->mdcache->advance_stray();
