@@ -6,6 +6,7 @@
 #include "arch/intel.h"
 #include "arch/arm.h"
 #include "arch/ppc.h"
+#include "arch/s390x.h"
 
 int ceph_arch_probe(void)
 {
@@ -17,6 +18,8 @@ int ceph_arch_probe(void)
   ceph_arch_arm_probe();
 #elif defined(__powerpc__) || defined(__ppc__)
   ceph_arch_ppc_probe();
+#elif defined(__s390__)
+  ceph_arch_s390x_probe();
 #endif
   ceph_arch_probed = 1;
   return 1;
