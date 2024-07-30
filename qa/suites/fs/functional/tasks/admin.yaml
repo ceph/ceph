@@ -10,6 +10,7 @@ overrides:
       - \(MDS_CLIENTS_BROKEN_ROOTSQUASH\)
       - report clients with broken root_squash implementation
       - evicting unresponsive client
+      - as file system flag refuse_client_session is set
 tasks:
   - cephfs_test_runner:
       fail_on_skip: false
