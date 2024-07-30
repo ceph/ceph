@@ -1,0 +1,31 @@
+
+server {
+    listen              {{ internal_port }} ssl;
+    listen              [::]:{{ internal_port }} ssl;
+    ssl_certificate     /etc/nginx/ssl/nginx_internal.crt;
+    ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         AES128-SHA:AES256-SHA:RC4-SHA:DES-CBC3-SHA:RC4-MD5;
+    ssl_prefer_server_ciphers on;
+
+{% if grafana_endpoints %}
+    location /internal/grafana {
+        rewrite ^/internal/grafana/(.*) /$1 break;
+        proxy_pass {{ grafana_scheme }}://grafana_servers;
+    }
+{% endif %}
+
+{% if prometheus_endpoints %}
+    location /internal/prometheus {
+        rewrite ^/internal/prometheus/(.*) /prometheus/$1 break;
+        proxy_pass {{ prometheus_scheme }}://prometheus_servers;
+    }
+{% endif %}
+
+{% if alertmanager_endpoints %}
+    location /internal/alertmanager {
+        rewrite ^/internal/alertmanager/(.*) /alertmanager/$1 break;
+        proxy_pass {{ alertmanager_scheme }}://alertmanager_servers;
+    }
+{% endif %}
+}
