@@ -165,6 +165,23 @@ struct NqnState {
             i ++;
         }
     }
+    NqnState(const std::string& _nqn, const SmState& sm_state, const NvmeGwMonState & gw_created, uint8_t bc) : nqn(_nqn) {
+#define MAX_SUPPORTED_ANA_GROUPS 16
+      std::pair<gw_exported_states_per_group_t, epoch_t> state_pair[MAX_SUPPORTED_ANA_GROUPS];
+      for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
+        state_pair[i].first = gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
+        state_pair[i].second = 0;
+      }
+      for (auto& state_itr: sm_state) {
+         state_pair[state_itr.first].first = (sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
+             || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
+                        ? gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE
+                                : gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
+      }
+      for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
+        ana_state.push_back(state_pair[i]);
+      }
+    }
 };
 
 typedef std::map<NvmeNqnId, NqnState> GwSubsystems;
