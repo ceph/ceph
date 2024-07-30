@@ -359,6 +359,31 @@ A directory can be in one of the following states::
   - `syncing`: The directory is currently being synchronized
   - `failed`: The directory has hit upper limit of consecutive failures
 
+When a directory is currently being synchronized, the mirror daemon marks it as `syncing` and
+`fs mirror peer status` shows the snapshot being synchronized under the `current_syncing_snap`::
+
+  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+  {
+    "/d0": {
+        "state": "syncing",
+        "current_syncing_snap": {
+            "id": 121,
+            "name": "snap2"
+        },
+        "last_synced_snap": {
+            "id": 120,
+            "name": "snap1",
+            "sync_duration": 0.079997898999999997,
+            "sync_time_stamp": "274900.558797s"
+        },
+        "snaps_synced": 2,
+        "snaps_deleted": 0,
+        "snaps_renamed": 0
+    }
+  }
+
+The mirror daemon marks it back to `idle`, when the syncing completes.
+
 When a directory experiences a configured number of consecutive synchronization failures, the
 mirror daemon marks it as `failed`. Synchronization for these directories is retried.
 By default, the number of consecutive failures before a directory is marked as failed
@@ -374,12 +399,12 @@ E.g., adding a regular file for synchronization would result in failed status::
     "/d0": {
         "state": "idle",
         "last_synced_snap": {
-            "id": 120,
-            "name": "snap1",
-            "sync_duration": 0.079997898999999997,
-            "sync_time_stamp": "274900.558797s"
+            "id": 121,
+            "name": "snap2",
+            "sync_duration": 300,
+            "sync_time_stamp": "500900.600797s"
         },
-        "snaps_synced": 2,
+        "snaps_synced": 3,
         "snaps_deleted": 0,
         "snaps_renamed": 0
     },
