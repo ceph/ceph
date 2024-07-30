@@ -22,12 +22,12 @@ namespace migration {
 
 template <typename I>
 OpenSourceImageRequest<I>::OpenSourceImageRequest(
-    librados::IoCtx& io_ctx, I* dst_image_ctx, uint64_t src_snap_id,
+    librados::IoCtx& dst_io_ctx, I* dst_image_ctx, uint64_t src_snap_id,
     const MigrationInfo &migration_info, I** src_image_ctx, Context* on_finish)
-  : m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())), m_io_ctx(io_ctx),
-    m_dst_image_ctx(dst_image_ctx), m_src_snap_id(src_snap_id),
-    m_migration_info(migration_info), m_src_image_ctx(src_image_ctx),
-    m_on_finish(on_finish) {
+  : m_cct(reinterpret_cast<CephContext*>(dst_io_ctx.cct())),
+    m_dst_io_ctx(dst_io_ctx), m_dst_image_ctx(dst_image_ctx),
+    m_src_snap_id(src_snap_id), m_migration_info(migration_info),
+    m_src_image_ctx(src_image_ctx), m_on_finish(on_finish) {
   ldout(m_cct, 10) << dendl;
 }
 
@@ -41,7 +41,7 @@ void OpenSourceImageRequest<I>::open_source() {
   ldout(m_cct, 10) << dendl;
 
   // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", CEPH_NOSNAP, m_io_ctx, true);
+  *m_src_image_ctx = I::create("", "", CEPH_NOSNAP, m_dst_io_ctx, true);
   auto src_image_ctx = *m_src_image_ctx;
   src_image_ctx->child = m_dst_image_ctx;
 
