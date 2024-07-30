@@ -125,7 +125,8 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
     debug_log_all_jobs();
   }
 
-  auto candidate = m_queue.pop_ready_entry(env_restrictions, scrub_time);
+  auto candidate = m_queue.pop_ready_entry(
+      is_sched_target_eligible, env_restrictions, scrub_time);
   if (!candidate) {
     dout(20) << "no PGs are ready for scrubbing" << dendl;
     return;
@@ -143,6 +144,38 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 	       << dendl;
       break;
   }
+}
+
+
+/**
+ *
+ * Note: only checking those conditions that are frequent, and should not cause
+ * a queue reshuffle.
+ */
+bool OsdScrub::is_sched_target_eligible(
+    const Scrub::SchedEntry& e,
+    const Scrub::OSDRestrictions& r,
+    utime_t time_now)
+{
+  using ScrubJob = Scrub::ScrubJob;
+  if (e.schedule.not_before > time_now) {
+    return false;
+  }
+  if (r.max_concurrency_reached &&
+      ScrubJob::observes_max_concurrency(e.urgency)) {
+    return false;
+  }
+  if (!r.load_is_low && ScrubJob::observes_random_backoff(e.urgency)) {
+    return false;
+  }
+  if (!r.time_permit && ScrubJob::observes_allowed_hours(e.urgency)) {
+    return false;
+  }
+  if (!r.load_is_low && ScrubJob::observes_load_limit(e.urgency)) {
+    return false;
+  }
+  // recovery?
+  return true;
 }
 
 

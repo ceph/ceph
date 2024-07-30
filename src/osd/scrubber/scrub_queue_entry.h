@@ -85,13 +85,6 @@ struct SchedEntry {
   /// either 'none', or the reason for the latest failure/delay (for
   /// logging/reporting purposes)
   delay_cause_t last_issue{delay_cause_t::none};
-
-  // note: is_high_priority() is temporary. Will be removed
-  // in a followup commit.
-  bool is_high_priority() const
-  {
-    return urgency != urgency_t::periodic_regular;
-  }
 };
 
 

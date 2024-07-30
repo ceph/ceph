@@ -82,17 +82,15 @@ void ScrubQueue::dequeue_target(spg_t pgid, scrub_level_t s_or_d)
 
 
 std::optional<Scrub::SchedEntry> ScrubQueue::pop_ready_entry(
+    EligibilityPred eligibility_pred,
     OSDRestrictions restrictions,
     utime_t time_now)
 {
-  auto eligible_filtr = [time_now, rst = restrictions](
+  /// \todo must handle 'only_deadlined'!
+
+  auto eligible_filtr = [&, rst = restrictions](
 				  const SchedEntry& e) -> bool {
-      return (e.schedule.not_before <= time_now) &&
-	     (e.is_high_priority() ||
-	      (!rst.high_priority_only &&
-	       (!rst.only_deadlined ||
-		(!e.schedule.deadline.is_zero() &&
-		 e.schedule.deadline <= time_now))));
+      return eligibility_pred(e, rst, time_now);
   };
 
   std::unique_lock lck{jobs_lock};

@@ -171,6 +171,10 @@ class ScrubQueue {
   using EntryPred =
       std::function<bool(const ::Scrub::SchedEntry&, bool only_eligibles)>;
 
+  /// a predicate to check entries against some common temporary restrictions
+  using EligibilityPred = std::function<
+      bool(const Scrub::SchedEntry&, const Scrub::OSDRestrictions&, utime_t)>;
+
   /**
    * the set of all PGs named by the entries in the queue (but only those
    * entries that satisfy the predicate)
@@ -212,6 +216,7 @@ class ScrubQueue {
    * nullopt is returned if no such entry exists.
    */
   std::optional<Scrub::SchedEntry> pop_ready_entry(
+    EligibilityPred eligibility_pred,
     Scrub::OSDRestrictions restrictions,
     utime_t time_now);
 
