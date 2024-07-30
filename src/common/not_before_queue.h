@@ -50,6 +50,13 @@
  */
 template <typename V, typename T=utime_t>
 class not_before_queue_t {
+
+  enum class status_t {
+    INVALID,  // Not queued, only possible during construction and destruction
+    INELIGIBLE,	 // Queued in ineligible_queue
+    ELIGIBLE	 // Queued in eligible_queue
+  };
+
   /**
    * container_t
    *
@@ -63,11 +70,7 @@ class not_before_queue_t {
     using queue_hook_t = boost::intrusive::set_member_hook<>;
     queue_hook_t queue_hook;
 
-    enum class status_t {
-      INVALID,  // Not queued, only possible during construction and destruction
-      INELIGIBLE, // Queued in ineligible_queue
-      ELIGIBLE     // Queued in eligible_queue
-    } status = status_t::INVALID;
+    status_t status = status_t::INVALID;
 
     const V v;
 
@@ -162,10 +165,10 @@ public:
     removal_registry.insert(*item);
 
     if (project_not_before(item->v) > current_time) {
-      item->status = container_t::status_t::INELIGIBLE;
+      item->status = status_t::INELIGIBLE;
       ineligible_queue.insert(*item);
     } else {
-      item->status = container_t::status_t::ELIGIBLE;
+      item->status = status_t::ELIGIBLE;
       eligible_queue.insert(*item);
     }
   }
@@ -177,11 +180,11 @@ public:
     }
 
     auto iter = eligible_queue.begin();
-    assert(iter->status == container_t::status_t::ELIGIBLE);
+    assert(iter->status == status_t::ELIGIBLE);
 
     eligible_queue.erase(
       typename eligible_queue_t::const_iterator(iter));
-    iter->status = container_t::status_t::INVALID;
+    iter->status = status_t::INVALID;
 
     std::optional<V> ret(iter->v);
     removal_registry.erase_and_dispose(
@@ -206,13 +209,13 @@ public:
 
       auto iter = ineligible_queue.begin();
       auto &item = *iter;
-      assert(item.status == container_t::status_t::INELIGIBLE);
+      assert(item.status == status_t::INELIGIBLE);
 
       if (project_not_before(item.v) > current_time) {
 	break;
       }
 
-      item.status = container_t::status_t::ELIGIBLE;
+      item.status = status_t::ELIGIBLE;
       ineligible_queue.erase(typename ineligible_queue_t::const_iterator(iter));
       eligible_queue.insert(item);
     }
@@ -229,16 +232,16 @@ public:
 	   k, compare_by_removal_class_t{});
 	 iter != removal_registry.upper_bound(
 	   k, compare_by_removal_class_t{}); ) {
-      if (iter->status == container_t::status_t::INELIGIBLE) {
+      if (iter->status == status_t::INELIGIBLE) {
 	ineligible_queue.erase(
 	  ineligible_queue_t::s_iterator_to(std::as_const(*iter)));
-      } else if (iter->status == container_t::status_t::ELIGIBLE) {
+      } else if (iter->status == status_t::ELIGIBLE) {
 	eligible_queue.erase(
 	  eligible_queue_t::s_iterator_to(std::as_const(*iter)));
       } else {
 	assert(0 == "impossible status");
       }
-      iter->status = container_t::status_t::INVALID;
+      iter->status = status_t::INVALID;
       removal_registry.erase_and_dispose(
 	typename removal_registry_t::const_iterator(iter++),
 	removal_registry_disposer_t{});
