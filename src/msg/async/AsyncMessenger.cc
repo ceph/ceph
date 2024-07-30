@@ -506,7 +506,9 @@ void AsyncMessenger::_finish_bind(const entity_addrvec_t& bind_addrs,
   if (saved_public_addrs) {
     newaddrs = *saved_public_addrs;
     for (auto& public_addr : newaddrs.v) {
-      public_addr.set_nonce(nonce);
+      if (!public_addr.is_nonce_wildcard()) {
+        public_addr.set_nonce(nonce);
+      }
       if (public_addr.is_ip() && public_addr.get_port() == 0) {
 	// port is not explicitly set. This is fine as it can be figured
 	// out by msgr. For instance, the low-level `Processor::bind`
@@ -522,7 +524,9 @@ void AsyncMessenger::_finish_bind(const entity_addrvec_t& bind_addrs,
   } else {
     newaddrs = *my_addrs;
     for (auto& a : newaddrs.v) {
-      a.set_nonce(nonce);
+      if (!a.is_nonce_wildcard()) {
+        a.set_nonce(nonce);
+      }
     }
   }
   set_myaddrs(newaddrs);
@@ -544,7 +548,9 @@ int AsyncMessenger::client_reset()
 
   entity_addrvec_t newaddrs = *my_addrs;
   for (auto& a : newaddrs.v) {
-    a.set_nonce(nonce);
+    if (!a.is_nonce_wildcard()) {
+      a.set_nonce(nonce);
+    }
   }
   set_myaddrs(newaddrs);
   _init_local_connection();
@@ -778,7 +784,9 @@ bool AsyncMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 	  ldout(cct,1) << __func__ << " assuming my addr " << a
 		       << " matches provided addr " << b << dendl;
 	  a = b;
-	  a.set_nonce(nonce);
+	  if (!a.is_nonce_wildcard()) {
+	    a.set_nonce(nonce);
+	  }
 	  a.set_type(type);
 	  a.set_port(port);
 	  ret = true;
@@ -905,7 +913,9 @@ bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     if (my_addrs->empty()) {
       auto a = peer_addr_for_me;
       a.set_type(entity_addr_t::TYPE_ANY);
-      a.set_nonce(nonce);
+      if (!a.is_nonce_wildcard()) {
+        a.set_nonce(nonce);
+      }
       if (!did_bind) {
 	a.set_port(0);
       }
