@@ -7,6 +7,9 @@ from ceph_volume.util import disk
 from ceph_volume.util.encryption import set_dmcrypt_no_workqueue
 
 
+mlogger = terminal.MultiLogger(__name__)
+
+
 def valid_osd_id(val):
     return str(int(val))
 
@@ -67,6 +70,17 @@ class ValidZapDevice(ValidDevice):
 
     def _is_valid_device(self, raise_sys_exit=True):
         super()._is_valid_device()
+        return self._device
+
+
+class ValidClearReplaceHeaderDevice(ValidDevice):
+    def __call__(self, dev_path: str) -> str:
+        super().get_device(dev_path)
+        return self._format_device(self._is_valid_device())
+
+    def _is_valid_device(self) -> Device:
+        if not self._device.is_being_replaced:
+            mlogger.info(f'{self.dev_path} has no replacement header.')
         return self._device
 
 

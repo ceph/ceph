@@ -520,6 +520,15 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def replace_device(self,
+                       hostname: str,
+                       device: str,
+                       clear: bool = False,
+                       yes_i_really_mean_it: bool = False) -> OrchResult:
+        """Perform all required operations in order to replace a device.
+        """
+        raise NotImplementedError()
+
     def get_inventory(self, host_filter: Optional['InventoryFilter'] = None, refresh: bool = False) -> OrchResult[List['InventoryHost']]:
         """
         Returns something that was created by `ceph-volume inventory`.
@@ -699,12 +708,18 @@ class Orchestrator(object):
 
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
+                    replace_block: bool = False,
+                    replace_db: bool = False,
+                    replace_wal: bool = False,
                     force: bool = False,
                     zap: bool = False,
                     no_destroy: bool = False) -> OrchResult[str]:
         """
         :param osd_ids: list of OSD IDs
         :param replace: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
+        :param replace_block: marks the corresponding block device as being replaced.
+        :param replace_db: marks the corresponding db device as being replaced.
+        :param replace_wal: marks the corresponding wal device as being replaced.
         :param force: Forces the OSD removal process without waiting for the data to be drained first.
         :param zap: Zap/Erase all devices associated with the OSDs (DESTROYS DATA)
         :param no_destroy: Do not destroy associated VGs/LVs with the OSD.
