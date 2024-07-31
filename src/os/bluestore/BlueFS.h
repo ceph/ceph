@@ -781,6 +781,7 @@ public:
     const std::set<int>& devs_source,
     int dev_target,
     const bluefs_layout_t& layout);
+  int downgrade_wal_to_v1();
 
   uint64_t get_used();
   uint64_t get_total(unsigned id);
