@@ -242,6 +242,7 @@ public:
   void handle_client_setlayout(const MDRequestRef& mdr);
   void handle_client_setdirlayout(const MDRequestRef& mdr);
 
+  int64_t make_quota_max_byte_parseable(std::string val);
   int parse_quota_vxattr(std::string name, std::string value, quota_info_t *quota);
   void create_quota_realm(CInode *in);
   int parse_layout_vxattr_json(std::string name, std::string value,
