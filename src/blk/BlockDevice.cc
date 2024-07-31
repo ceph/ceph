@@ -140,13 +140,13 @@ BlockDevice::device_type_from_name(const std::string& blk_dev_name)
 
 BlockDevice* BlockDevice::create_with_type(block_device_t device_type,
   CephContext* cct, const std::string& path, aio_callback_t cb,
-  void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+  void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
 {
 
   switch (device_type) {
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   case block_device_t::aio:
-    return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
+    return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv, dev_name);
 #endif
 #if defined(HAVE_SPDK)
   case block_device_t::spdk:
@@ -164,7 +164,7 @@ BlockDevice* BlockDevice::create_with_type(block_device_t device_type,
 
 BlockDevice *BlockDevice::create(
     CephContext* cct, const string& path, aio_callback_t cb,
-    void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+    void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
 {
   const string blk_dev_name = cct->_conf.get_val<string>("bdev_type");
   block_device_t device_type = block_device_t::unknown;
@@ -173,7 +173,7 @@ BlockDevice *BlockDevice::create(
   } else {
     device_type = device_type_from_name(blk_dev_name);
   }
-  return create_with_type(device_type, cct, path, cb, cbpriv, d_cb, d_cbpriv);
+  return create_with_type(device_type, cct, path, cb, cbpriv, d_cb, d_cbpriv, dev_name);
 }
 
 bool BlockDevice::is_valid_io(uint64_t off, uint64_t len) const {

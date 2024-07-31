@@ -59,7 +59,7 @@ using ceph::make_timespan;
 using ceph::mono_clock;
 using ceph::operator <<;
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
     discard_callback(d_cb),
