@@ -7,6 +7,7 @@ import { MultiClusterListComponent } from './multi-cluster-list.component';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '~/app/shared/shared.module';
+import { ActivatedRoute } from '@angular/router';
 
 describe('MultiClusterListComponent', () => {
   let component: MultiClusterListComponent;
@@ -16,7 +17,7 @@ describe('MultiClusterListComponent', () => {
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, ToastrModule.forRoot(), NgbNavModule, SharedModule],
       declarations: [MultiClusterListComponent],
-      providers: [CdDatePipe, TableActionsComponent]
+      providers: [CdDatePipe, TableActionsComponent, { provide: ActivatedRoute, useValue: {} }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(MultiClusterListComponent);
