@@ -47,7 +47,7 @@ describe('Pools page', () => {
     });
 
     it('should delete a pool', () => {
-      pools.delete(poolName);
+      pools.delete(poolName, null, null, true);
     });
   });
 
@@ -65,7 +65,7 @@ describe('Pools page', () => {
     });
 
     it('should delete the pool', () => {
-      pools.delete(poolName);
+      pools.delete(poolName, null, null, true);
     });
   });
 });

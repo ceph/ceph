@@ -1,7 +1,22 @@
 import ceph_module  # noqa
 
-from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
-    Mapping, NamedTuple, Sequence, Union, Set, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterator,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Set,
+    TYPE_CHECKING,
+    Tuple,
+    Union,
+    cast,
+)
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -17,6 +32,7 @@ import json
 import subprocess
 import threading
 from collections import defaultdict
+from contextlib import contextmanager
 from enum import IntEnum, Enum
 import os
 import rados
@@ -172,6 +188,13 @@ class MonCommandFailed(RuntimeError):
 
 
 class MgrDBNotReady(RuntimeError):
+    pass
+
+
+class MgrDBNotAllowed(MgrDBNotReady):
+    """A more specific subclass of MgrDBNotReady raised when mgr_pool option
+    disabled.
+    """
     pass
 
 
@@ -1307,6 +1330,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     def open_db(self) -> Optional[sqlite3.Connection]:
         if not self.pool_exists(self.MGR_POOL_NAME):
             if not self.have_enough_osds():
+                self.log.warning('not enough osds to create mgr pool')
                 return None
             self.create_mgr_pool()
         uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph"
@@ -1340,11 +1364,28 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return self._db
         db_allowed = self.get_ceph_option("mgr_pool")
         if not db_allowed:
-            raise MgrDBNotReady()
+            raise MgrDBNotAllowed()
         self._db = self.open_db()
         if self._db is None:
             raise MgrDBNotReady()
         return self._db
+
+    @contextmanager
+    def exclusive_db_access(self) -> Iterator[sqlite3.Connection]:
+        """Context manager that grants exclusive access to the manager module sqlite3
+        db connection, while establishing a new db transaction.
+        """
+        with self._db_lock, self.db:
+            yield self.db
+
+    @contextmanager
+    def exclusive_db_cursor(self) -> Iterator[sqlite3.Cursor]:
+        """Context manager that yields a db cursor after getting exclusive
+        access to the manager module sqlite3 connection and a new db
+        transaction.
+        """
+        with self.exclusive_db_access() as db:
+            yield db.cursor()
 
     @property
     def release_name(self) -> str:

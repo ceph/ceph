@@ -145,7 +145,7 @@ struct object_data_handler_test_t:
 	    offset,
 	    bl);
 	});
-    }).unsafe_get0();
+    }).unsafe_get();
   }
   void write(objaddr_t offset, extent_len_t len, char fill) {
     auto t = create_mutate_transaction();
@@ -171,7 +171,7 @@ struct object_data_handler_test_t:
 	    },
 	    offset);
 	});
-      }).unsafe_get0();
+      }).unsafe_get();
     }
     size = offset;
   }
@@ -191,7 +191,7 @@ struct object_data_handler_test_t:
         },
         offset,
         len);
-    }).unsafe_get0();
+    }).unsafe_get();
     bufferlist known;
     known.append(
       bufferptr(
@@ -219,14 +219,14 @@ struct object_data_handler_test_t:
     extent_len_t length) {
     auto ret = with_trans_intr(t, [&](auto &t) {
       return tm->get_pins(t, offset, length);
-    }).unsafe_get0();
+    }).unsafe_get();
     return ret;
   }
   std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
       return tm->get_pins(t, offset, length);
-    }).unsafe_get0();
+    }).unsafe_get();
     return ret;
   }
 
@@ -246,7 +246,7 @@ struct object_data_handler_test_t:
     }).handle_error(crimson::ct_error::eagain::handle([] {
       LBAMappingRef t = nullptr;
       return t;
-    }), crimson::ct_error::pass_further_all{}).unsafe_get0();
+    }), crimson::ct_error::pass_further_all{}).unsafe_get();
     EXPECT_TRUE(pin);
     return pin;
   }
@@ -257,7 +257,7 @@ struct object_data_handler_test_t:
     extent_len_t len) {
     auto ext = with_trans_intr(t, [&](auto& trans) {
 	return tm->read_extent<ObjectDataBlock>(trans, addr, len);
-	}).unsafe_get0();
+	}).unsafe_get();
     EXPECT_EQ(addr, ext->get_laddr());
     return ext;
   }
@@ -844,7 +844,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
         },
         base + 4096,
         4096);
-    }).unsafe_get0();
+    }).unsafe_get();
     bufferlist pending;
     pending.append(
       bufferptr(

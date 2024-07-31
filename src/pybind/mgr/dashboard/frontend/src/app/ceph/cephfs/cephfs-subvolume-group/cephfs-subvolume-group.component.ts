@@ -18,6 +18,9 @@ import { CriticalConfirmationModalComponent } from '~/app/shared/components/crit
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-cephfs-subvolume-group',
@@ -54,12 +57,15 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   subvolumeGroup$: Observable<CephfsSubvolumeGroup[]>;
   subject = new BehaviorSubject<CephfsSubvolumeGroup[]>([]);
 
+  modalRef: NgbModalRef;
+
   constructor(
     private cephfsSubvolumeGroup: CephfsSubvolumeGroupService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private authStorageService: AuthStorageService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private cdsModalService: ModalCdsService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -117,6 +123,13 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
         click: () => this.openModal(true)
       },
       {
+        name: this.actionLabels.NFS_EXPORT,
+        permission: 'create',
+        icon: Icons.nfsExport,
+        routerLink: () => ['/cephfs/nfs/create', this.fsName, this.selection?.first()?.name],
+        disable: () => !this.selection.hasSingleSelection
+      },
+      {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
@@ -166,7 +179,7 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
 
   removeSubVolumeModal() {
     const name = this.selection.first().name;
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'subvolume group',
       itemNames: [name],
       actionDescription: 'remove',

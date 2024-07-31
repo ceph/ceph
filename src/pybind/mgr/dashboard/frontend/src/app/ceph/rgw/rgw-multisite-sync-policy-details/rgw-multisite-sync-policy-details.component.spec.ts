@@ -4,6 +4,7 @@ import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-pol
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { ModalModule } from 'carbon-components-angular';
 
 describe('RgwMultisiteSyncPolicyDetailsComponent', () => {
   let component: RgwMultisiteSyncPolicyDetailsComponent;
@@ -12,7 +13,7 @@ describe('RgwMultisiteSyncPolicyDetailsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [RgwMultisiteSyncPolicyDetailsComponent],
-      imports: [HttpClientTestingModule, ToastrModule.forRoot(), PipesModule]
+      imports: [HttpClientTestingModule, ToastrModule.forRoot(), PipesModule, ModalModule]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncPolicyDetailsComponent);

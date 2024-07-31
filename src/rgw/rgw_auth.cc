@@ -773,7 +773,7 @@ ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
     owner.id = account->id;
     owner.display_name = account->name;
   } else {
-    owner.id = info.acct_user;
+    owner.id = owner_acct_user;
     owner.display_name = info.acct_name;
   }
   return owner;
@@ -848,7 +848,7 @@ bool rgw::auth::RemoteApplier::is_identity(const Principal& p) const {
 
 void rgw::auth::RemoteApplier::to_str(std::ostream& out) const
 {
-  out << "rgw::auth::RemoteApplier(acct_user=" << info.acct_user
+  out << "rgw::auth::RemoteApplier(acct_user=" << owner_acct_user
       << ", acct_name=" << info.acct_name
       << ", perm_mask=" << info.perm_mask
       << ", is_admin=" << info.is_admin << ")";
@@ -898,15 +898,15 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
                                               bool implicit_tenant,
                                               RGWUserInfo& user_info) const      /* out */
 {
-  rgw_user new_acct_user = acct_user;
+  owner_acct_user = acct_user;
 
   /* An upper layer may enforce creating new accounts within their own
    * tenants. */
-  if (new_acct_user.tenant.empty() && implicit_tenant) {
-    new_acct_user.tenant = new_acct_user.id;
+  if (owner_acct_user.tenant.empty() && implicit_tenant) {
+    owner_acct_user.tenant = owner_acct_user.id;
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(new_acct_user);
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(owner_acct_user);
   user->get_info().display_name = info.acct_name;
   if (info.acct_type) {
     //ldap/keystone for s3 users
@@ -967,7 +967,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   if (split_mode && !implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
   else if (acct_user.tenant.empty()) {
-    const rgw_user tenanted_uid(acct_user.id, acct_user.id);
+    rgw_user tenanted_uid(acct_user.id, acct_user.id);
     user = driver->get_user(tenanted_uid);
 
     if (user->load_user(dpp, null_yield) >= 0) {
@@ -976,6 +976,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
                                        user->get_attrs(), account, policies);
 
       user_info = std::move(user->get_info());
+      owner_acct_user = std::move(tenanted_uid);
       return;
     }
   }
@@ -990,6 +991,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
                                      user->get_attrs(), account, policies);
 
     user_info = std::move(user->get_info());
+    owner_acct_user = acct_user;
     return;
   }
 

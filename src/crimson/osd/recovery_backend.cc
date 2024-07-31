@@ -45,11 +45,11 @@ void RecoveryBackend::clear_temp_obj(const hobject_t &oid)
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
 			       std::string_view why)
 {
-  for (auto& soid : temp_contents) {
+  for_each_temp_obj([&](auto &soid) {
     t.remove(pg.get_collection_ref()->get_cid(),
 	      ghobject_t(soid, ghobject_t::NO_GEN, pg.get_pg_whoami().shard));
-  }
-  temp_contents.clear();
+  });
+  clear_temp_objs();
 
   for (auto& [soid, recovery_waiter] : recovering) {
     if ((recovery_waiter->pull_info

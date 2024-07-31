@@ -1,87 +1,94 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n
-                class="modal-title">Create Bootstrap Token</ng-container>
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Create Bootstrap Token</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <section cdsModalContent>
     <form name="createBootstrapForm"
           class="form"
           #formDir="ngForm"
           [formGroup]="createBootstrapForm"
           novalidate>
-      <div class="modal-body">
-        <p>
-          <ng-container i18n>To create a bootstrap token which can be imported
-          by a peer site cluster, provide the local site's name, select
-          which pools will have mirroring enabled, and click&nbsp;
-          <kbd>Generate</kbd>.</ng-container>
-        </p>
+      <p>
+        <ng-container i18n>To create a bootstrap token which can be imported
+        by a peer site cluster, provide the local site's name, select
+        which pools will have mirroring enabled, and click&nbsp;
+        <kbd>Generate</kbd>.</ng-container>
+      </p>
 
-        <div class="form-group">
-          <label class="col-form-label required"
-                 for="siteName"
-                 i18n>Site Name</label>
-          <input class="form-control"
-                 type="text"
+      <div class="form-item">
+        <cds-text-label for="siteName"
+                        cdRequiredField="Site Name"
+                        [invalid]="!createBootstrapForm.controls['siteName'].valid && (createBootstrapForm.controls['siteName'].dirty || createBootstrapForm.controls['siteName'].touched)"
+                        [invalidText]="siteNameError"
+                        i18n>Site Name
+          <input cdsText
                  placeholder="Name..."
                  i18n-placeholder
                  id="siteName"
                  name="siteName"
                  formControlName="siteName"
+                 [invalid]="!createBootstrapForm.controls['siteName'].valid && (createBootstrapForm.controls['siteName'].dirty || createBootstrapForm.controls['siteName'].touched)"
                  autofocus>
+        </cds-text-label>
+        <ng-template #siteNameError>
           <span *ngIf="createBootstrapForm.showError('siteName', formDir, 'required')"
                 class="invalid-feedback"
                 i18n>This field is required.</span>
-        </div>
+        </ng-template>
+      </div>
 
-        <div class="form-group"
-             formGroupName="pools">
-          <label class="col-form-label required"
+      <div class="form-item"
+           formGroupName="pools">
+        <fieldset>
+          <label class="cds--label"
                  for="pools"
                  i18n>Pools</label>
-          <div class="custom-control custom-checkbox"
-               *ngFor="let pool of pools">
-            <input type="checkbox"
-                   class="custom-control-input"
-                   id="{{ pool.name }}"
-                   name="{{ pool.name }}"
-                   formControlName="{{ pool.name }}">
-            <label class="custom-control-label"
-                   for="{{ pool.name }}">{{ pool.name }}</label>
-          </div>
-          <span *ngIf="createBootstrapForm.showError('pools', formDir, 'requirePool')"
-                class="invalid-feedback"
-                i18n>At least one pool is required.</span>
-        </div>
+          <ng-container *ngFor="let pool of pools">
+            <cds-checkbox i18n-label
+                          [id]="pool.name"
+                          [name]="pool.name"
+                          [formControlName]="pool.name">
+              {{ pool.name }}
+            </cds-checkbox>
+          </ng-container>
+        </fieldset>
+        <span *ngIf="createBootstrapForm.showError('pools', formDir, 'requirePool')"
+              class="invalid-feedback"
+              i18n>At least one pool is required.</span>
+      </div>
 
-        <cd-submit-button class="mb-4 float-end"
-                          i18n
-                          [form]="createBootstrapForm"
-                          (submitAction)="generate()">Generate</cd-submit-button>
+      <cd-submit-button i18n
+                        [form]="createBootstrapForm"
+                        (submitAction)="generate()">Generate</cd-submit-button>
 
-        <div class="form-group">
-          <label class="col-form-label"
-                 for="token">
-            <span i18n>Token</span>
-          </label>
-          <textarea class="form-control resize-vertical"
+      <div class="form-item mt-2">
+        <cds-textarea-label for="token"
+                            i18n>Token
+          <textarea cdsTextArea
                     placeholder="Generated token..."
                     i18n-placeholder
                     id="token"
                     formControlName="token"
+                    cols="200"
+                    rows="5"
                     readonly>
           </textarea>
-        </div>
+        </cds-textarea-label>
         <cd-copy-2-clipboard-button class="float-end"
                                     source="token">
         </cd-copy-2-clipboard-button>
       </div>
-
-      <div class="modal-footer">
-        <cd-back-button (backAction)="activeModal.close()"
-                        name="Close"
-                        i18n-name>
-        </cd-back-button>
-      </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
+
+  <cd-form-button-panel (backAction)="closeModal()"
+                        [showSubmit]="false"
+                        [modalForm]="true"
+                        cancelText="Close"></cd-form-button-panel>
+
+</cds-modal>

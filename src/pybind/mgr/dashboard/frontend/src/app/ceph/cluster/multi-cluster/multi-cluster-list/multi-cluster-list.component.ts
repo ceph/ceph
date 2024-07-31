@@ -20,6 +20,7 @@ import { Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
 import { Observable, Subscription } from 'rxjs';
 import { SettingsService } from '~/app/shared/api/settings.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-multi-cluster-list',
@@ -57,7 +58,8 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
     private cookieService: CookiesService,
-    private settingsService: SettingsService
+    private settingsService: SettingsService,
+    private cdsModalService: ModalCdsService
   ) {
     this.tableActions = [
       {
@@ -227,7 +229,7 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
 
   openDeleteClusterModal() {
     const cluster = this.selection.first();
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
       infoMessage: $localize`Please note that the data for the disconnected cluster will be visible for a duration of ~ 5 minutes. After this period, it will be automatically removed.`,
       actionDescription: $localize`Disconnect`,
       itemDescription: $localize`Cluster`,
@@ -236,7 +238,7 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
         this.multiClusterService.deleteCluster(cluster['name'], cluster['user']).subscribe(() => {
           this.cookieService.deleteToken(`${cluster['name']}-${cluster['user']}`);
           this.multiClusterService.showPrometheusDelayMessage(true);
-          this.modalRef.close();
+          this.cdsModalService.dismissAll();
           this.notificationService.show(
             NotificationType.success,
             $localize`Disconnected cluster '${cluster['cluster_alias']}'`

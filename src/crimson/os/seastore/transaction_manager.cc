@@ -331,7 +331,7 @@ TransactionManager::update_lba_mappings(
     std::list<LogicalCachedExtentRef>(),
     std::list<CachedExtentRef>(),
     [this, &t, &pre_allocated_extents](auto &lextents, auto &pextents) {
-    auto chksum_func = [&lextents, &pextents](auto &extent) {
+    auto chksum_func = [&lextents, &pextents, this](auto &extent) {
       if (!extent->is_valid() ||
           !extent->is_fully_loaded() ||
           // EXIST_MUTATION_PENDING extents' crc will be calculated when
@@ -343,10 +343,20 @@ TransactionManager::update_lba_mappings(
         // for rewritten extents, last_committed_crc should have been set
         // because the crc of the original extent may be reused.
         // also see rewrite_logical_extent()
-        if (!extent->get_last_committed_crc()) {
-          extent->set_last_committed_crc(extent->calc_crc32c());
-        }
-        assert(extent->calc_crc32c() == extent->get_last_committed_crc());
+	if (!extent->get_last_committed_crc()) {
+	  if (get_checksum_needed(extent->get_paddr())) {
+	    extent->set_last_committed_crc(extent->calc_crc32c());
+	  } else {
+	    extent->set_last_committed_crc(CRC_NULL);
+	  }
+	}
+#ifndef NDEBUG
+	if (get_checksum_needed(extent->get_paddr())) {
+	  assert(extent->get_last_committed_crc() == extent->calc_crc32c());
+	} else {
+	  assert(extent->get_last_committed_crc() == CRC_NULL);
+	}
+#endif
         lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
       } else {
         pextents.emplace_back(extent);
@@ -367,15 +377,20 @@ TransactionManager::update_lba_mappings(
 
     return lba_manager->update_mappings(
       t, lextents
-    ).si_then([&pextents] {
+    ).si_then([&pextents, this] {
       for (auto &extent : pextents) {
         assert(!extent->is_logical() && extent->is_valid());
         // for non-logical extents, we update its last_committed_crc
         // and in-extent checksum fields
         // For pre-allocated fresh physical extents, update in-extent crc.
-        auto crc = extent->calc_crc32c();
-        extent->set_last_committed_crc(crc);
-        extent->update_in_extent_chksum_field(crc);
+	checksum_t crc;
+	if (get_checksum_needed(extent->get_paddr())) {
+	  crc = extent->calc_crc32c();
+	} else {
+	  crc = CRC_NULL;
+	}
+	extent->set_last_committed_crc(crc);
+	extent->update_in_extent_chksum_field(crc);
       }
     });
   });
@@ -512,11 +527,17 @@ TransactionManager::rewrite_logical_extent(
       lextent->get_user_hint(),
       // get target rewrite generation
       lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
-    nlextent->rewrite(*lextent, 0);
+    nlextent->rewrite(t, *lextent, 0);
 
     DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
-    assert(lextent->get_last_committed_crc() == lextent->calc_crc32c());
+#ifndef NDEBUG
+    if (get_checksum_needed(lextent->get_paddr())) {
+      assert(lextent->get_last_committed_crc() == lextent->calc_crc32c());
+    } else {
+      assert(lextent->get_last_committed_crc() == CRC_NULL);
+    }
+#endif
     nlextent->set_last_committed_crc(lextent->get_last_committed_crc());
     /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
      * extents since we're going to do it again once we either do the ool write
@@ -553,7 +574,7 @@ TransactionManager::rewrite_logical_extent(
         bool first_extent = (off == 0);
         ceph_assert(left >= nextent->get_length());
         auto nlextent = nextent->template cast<LogicalCachedExtent>();
-        nlextent->rewrite(*lextent, off);
+        nlextent->rewrite(t, *lextent, off);
         DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
         /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
@@ -699,13 +720,26 @@ TransactionManager::get_extents_if_live(
             auto pin_paddr = pin->get_val();
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
             auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
-            auto pin_len = pin->get_length();
+            // auto pin_len = pin->get_length();
             if (pin_paddr_seg_id != paddr_seg_id) {
               return seastar::now();
             }
-            // Only extent split can happen during the lookup
-            ceph_assert(pin_seg_paddr >= paddr &&
-                        pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
+
+            // pin may be out of the range paddr~len, consider the following scene:
+            // 1. Trans.A writes the final record of Segment S, in which it overwrite
+            //    another extent E in the same segment S;
+            // 2. Before Trans.A "complete_commit", Trans.B tries to rewrite new
+            //    records and roll the segments, which closes Segment S;
+            // 3. Before Trans.A "complete_commit", a new cleaner Transaction C tries
+            //    to clean the segment;
+            //
+            // In this scenario, C might see a part of extent E's laddr space mapped
+            // to another location within the same segment S.
+            //
+            // FIXME: this assert should be re-enabled once we have space reclaiming
+            //        recognize committed segments: https://tracker.ceph.com/issues/66941
+            // ceph_assert(pin_seg_paddr >= paddr &&
+            //             pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
             return read_pin_by_type(t, std::move(pin), type
             ).si_then([&list](auto ret) {
               list.emplace_back(std::move(ret));

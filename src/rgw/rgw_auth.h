@@ -621,6 +621,9 @@ protected:
   const rgw::auth::ImplicitTenants& implicit_tenant_context;
   const rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit;
 
+  // AuthInfo::acct_user updated with implicit tenant if necessary
+  mutable rgw_user owner_acct_user;
+
   // account and policies are loaded by load_acct_info()
   mutable std::optional<RGWAccountInfo> account;
   mutable std::vector<IAM::Policy> policies;
@@ -660,7 +663,7 @@ public:
   std::string get_acct_name() const override { return info.acct_name; }
   std::string get_subuser() const override { return {}; }
   const std::string& get_tenant() const override {
-    return info.acct_user.tenant;
+    return owner_acct_user.tenant;
   }
   const std::optional<RGWAccountInfo>& get_account() const override {
     return account;

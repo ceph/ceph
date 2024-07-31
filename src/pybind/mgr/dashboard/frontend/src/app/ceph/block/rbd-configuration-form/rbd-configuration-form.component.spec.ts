@@ -13,6 +13,7 @@ import { RbdConfigurationService } from '~/app/shared/services/rbd-configuration
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, FormHelper } from '~/testing/unit-test-helper';
 import { RbdConfigurationFormComponent } from './rbd-configuration-form.component';
+import { ButtonModule, InputModule } from 'carbon-components-angular';
 
 describe('RbdConfigurationFormComponent', () => {
   let component: RbdConfigurationFormComponent;
@@ -21,7 +22,7 @@ describe('RbdConfigurationFormComponent', () => {
   let fh: FormHelper;
 
   configureTestBed({
-    imports: [ReactiveFormsModule, DirectivesModule, SharedModule],
+    imports: [ReactiveFormsModule, DirectivesModule, SharedModule, InputModule, ButtonModule],
     declarations: [RbdConfigurationFormComponent],
     providers: [RbdConfigurationService, FormatterService, DimlessBinaryPerSecondPipe]
   });
@@ -49,7 +50,7 @@ describe('RbdConfigurationFormComponent', () => {
     expect(actual).toEqual(expected);
 
     /* Test form creation on a template level */
-    const controlDebugElements = fixture.debugElement.queryAll(By.css('input.form-control'));
+    const controlDebugElements = fixture.debugElement.queryAll(By.css('input'));
     expect(controlDebugElements.length).toBe(expected.length);
     controlDebugElements.forEach((element) => expect(element.nativeElement).toBeTruthy());
   });

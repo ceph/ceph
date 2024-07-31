@@ -18,7 +18,7 @@ describe('Images page', () => {
   after(() => {
     // Deletes images test pool
     pools.navigateTo();
-    pools.delete(poolName);
+    pools.delete(poolName, null, null, true);
     pools.navigateTo();
     pools.existTableCell(poolName, false);
   });
@@ -58,7 +58,7 @@ describe('Images page', () => {
     });
 
     it('should delete image', () => {
-      images.delete(newImageName);
+      images.delete(newImageName, null, null, true);
     });
   });
 

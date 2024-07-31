@@ -11844,6 +11844,10 @@ void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
   oi.watchers.erase(make_pair(watch->get_cookie(),
 			      watch->get_entity()));
 
+  osd->logger->inc(l_osd_watch_timeouts);
+  dout(3) << __func__ << " watcher " << watch->get_peer_addr()
+	  << " object " << obc->obs.oi.soid << dendl;
+
   list<watch_disconnect_t> watch_disconnects = {
     watch_disconnect_t(watch->get_cookie(), watch->get_entity(), true)
   };

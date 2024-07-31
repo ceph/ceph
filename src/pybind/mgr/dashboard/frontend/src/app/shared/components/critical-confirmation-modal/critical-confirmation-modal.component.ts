@@ -1,36 +1,44 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Inject, OnInit, Optional, TemplateRef, ViewChild } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-deletion-modal',
   templateUrl: './critical-confirmation-modal.component.html',
   styleUrls: ['./critical-confirmation-modal.component.scss']
 })
-export class CriticalConfirmationModalComponent implements OnInit {
+export class CriticalConfirmationModalComponent extends BaseModal implements OnInit {
   @ViewChild(SubmitButtonComponent, { static: true })
   submitButton: SubmitButtonComponent;
-  bodyTemplate: TemplateRef<any>;
-  bodyContext: object;
-  submitActionObservable: () => Observable<any>;
-  callBackAtionObservable: () => Observable<any>;
-  submitAction: Function;
-  backAction: Function;
   deletionForm: CdFormGroup;
-  itemDescription: 'entry';
-  itemNames: string[];
-  actionDescription = 'delete';
-  infoMessage: string;
 
   childFormGroup: CdFormGroup;
   childFormGroupTemplate: TemplateRef<any>;
 
-  constructor(public activeModal: NgbActiveModal) {}
+  constructor(
+    @Optional() @Inject('itemNames') public itemNames: string[],
+    @Optional() @Inject('itemDescription') public itemDescription: 'entry',
+    @Optional() @Inject('actionDescription') public actionDescription = 'delete',
+    @Optional() @Inject('submitAction') public submitAction?: Function,
+    @Optional() @Inject('backAction') public backAction?: Function,
+    @Optional() @Inject('bodyTemplate') public bodyTemplate?: TemplateRef<any>,
+    @Optional() @Inject('bodyContext') public bodyContext?: object,
+    @Optional() @Inject('infoMessage') public infoMessage?: string,
+    @Optional()
+    @Inject('submitActionObservable')
+    public submitActionObservable?: () => Observable<any>,
+    @Optional()
+    @Inject('callBackAtionObservable')
+    public callBackAtionObservable?: () => Observable<any>
+  ) {
+    super();
+    this.actionDescription = actionDescription || 'delete';
+  }
 
   ngOnInit() {
     const controls = {
@@ -68,7 +76,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   }
 
   hideModal() {
-    this.activeModal.close();
+    this.closeModal();
   }
 
   stopLoadingSpinner() {

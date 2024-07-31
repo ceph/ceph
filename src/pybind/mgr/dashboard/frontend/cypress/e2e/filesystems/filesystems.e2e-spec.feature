@@ -25,7 +25,7 @@ Feature: CephFS Management
         Given I am on the "cephfs" page
         And I select a row "test_cephfs"
         And I click on "Remove" button from the table actions
-        Then I should see the modal
-        And I check the tick box in modal
+        Then I should see the carbon modal
+        And I check the tick box in carbon modal
         And I click on "Remove File System" button
         Then I should not see a row with "test_cephfs"

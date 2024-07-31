@@ -902,19 +902,22 @@ void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, 
   op.exec(RGW_CLASS, RGW_GC_DEFER_ENTRY, in);
 }
 
-int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
-                    list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+void cls_rgw_gc_list(ObjectReadOperation& op, const string& marker,
+                     uint32_t max, bool expired_only, bufferlist& out)
 {
-  bufferlist in, out;
+  bufferlist in;
   cls_rgw_gc_list_op call;
   call.marker = marker;
   call.max = max;
   call.expired_only = expired_only;
   encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_GC_LIST, in, out);
-  if (r < 0)
-    return r;
+  op.exec(RGW_CLASS, RGW_GC_LIST, in, &out, nullptr);
+}
 
+int cls_rgw_gc_list_decode(const bufferlist& out,
+                           std::list<cls_rgw_gc_obj_info>& entries,
+                           bool *truncated, std::string& next_marker)
+{
   cls_rgw_gc_list_ret ret;
   try {
     auto iter = out.cbegin();
@@ -928,7 +931,7 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
   if (truncated)
     *truncated = ret.truncated;
   next_marker = std::move(ret.next_marker);
-  return r;
+  return 0;
 }
 
 void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const vector<string>& tags)

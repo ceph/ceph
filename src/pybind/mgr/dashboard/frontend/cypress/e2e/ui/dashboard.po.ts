@@ -4,7 +4,7 @@ export class DashboardPageHelper extends PageHelper {
   pages = { index: { url: '#/dashboard', id: 'cd-dashboard' } };
 
   infoGroupTitle(index: number) {
-    return cy.get('.info-group-title').its(index).text();
+    return cy.get('[data-testid=group-title]').its(index).text();
   }
 
   clickInfoCardLink(cardName: string) {

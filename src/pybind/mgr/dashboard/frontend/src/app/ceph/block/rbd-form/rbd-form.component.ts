@@ -142,7 +142,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
     super();
     this.routerUrl = this.router.url;
     this.poolPermission = this.authStorageService.getPermissions().pool;
-    this.resource = $localize`RBD`;
+    this.resource = $localize`Image`;
     this.features = {
       'deep-flatten': {
         desc: $localize`Deep flatten`,
@@ -880,5 +880,12 @@ export class RbdFormComponent extends CdForm implements OnInit {
         () => this.rbdForm.setErrors({ cdSubmitButton: true }),
         () => this.router.navigate(['/block/rbd'])
       );
+  }
+
+  onAlertAction() {
+    this.router.navigate([
+      '/block/mirroring',
+      { outlets: { modal: ['edit', this.rbdForm.getValue('pool')] } }
+    ]);
   }
 }

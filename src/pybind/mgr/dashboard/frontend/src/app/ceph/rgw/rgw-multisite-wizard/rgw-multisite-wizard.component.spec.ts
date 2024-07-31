@@ -6,6 +6,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { ToastrModule } from 'ngx-toastr';
+import { RouterTestingModule } from '@angular/router/testing';
 
 describe('RgwMultisiteWizardComponent', () => {
   let component: RgwMultisiteWizardComponent;
@@ -14,7 +15,13 @@ describe('RgwMultisiteWizardComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [RgwMultisiteWizardComponent],
-      imports: [HttpClientTestingModule, SharedModule, ReactiveFormsModule, ToastrModule.forRoot()],
+      imports: [
+        HttpClientTestingModule,
+        SharedModule,
+        ReactiveFormsModule,
+        ToastrModule.forRoot(),
+        RouterTestingModule
+      ],
       providers: [NgbActiveModal]
     }).compileComponents();
 

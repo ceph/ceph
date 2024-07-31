@@ -79,7 +79,7 @@ struct omap_manager_test_t :
       t,
       [&, this](auto &t) {
 	return omap_manager->omap_set_key(omap_root, t, key, val);
-      }).unsafe_get0();
+      }).unsafe_get();
     test_omap_mappings[key] = val;
   }
 
@@ -113,7 +113,7 @@ struct omap_manager_test_t :
       t,
       [&, this](auto &t) {
 	return omap_manager->omap_get_value(omap_root, t, key);
-      }).unsafe_get0();
+      }).unsafe_get();
     auto iter = test_omap_mappings.find(key);
     if (iter == test_omap_mappings.end()) {
       EXPECT_FALSE(ret);
@@ -133,7 +133,7 @@ struct omap_manager_test_t :
       t,
       [&, this](auto &t) {
 	return omap_manager->omap_rm_key(omap_root, t, key);
-      }).unsafe_get0();
+      }).unsafe_get();
     test_omap_mappings.erase(test_omap_mappings.find(key));
   }
 
@@ -152,7 +152,7 @@ struct omap_manager_test_t :
       [&, this](auto &t) {
       return omap_manager->omap_rm_key_range(
 	omap_root, t, first, last, config);
-    }).unsafe_get0();
+    }).unsafe_get();
 
     std::vector<std::string> keys;
     size_t count = 0;
@@ -198,7 +198,7 @@ struct omap_manager_test_t :
       t,
       [&, this](auto &t) {
 	return omap_manager->omap_list(omap_root, t, first, last, config);
-      }).unsafe_get0();
+      }).unsafe_get();
 
     test_omap_t::iterator it, lit;
     if (first) {
@@ -239,7 +239,7 @@ struct omap_manager_test_t :
       t,
       [&, this](auto &t) {
 	return omap_manager->omap_clear(omap_root, t);
-      }).unsafe_get0();
+      }).unsafe_get();
     EXPECT_EQ(omap_root.get_location(), L_ADDR_NULL);
   }
 
@@ -274,7 +274,7 @@ struct omap_manager_test_t :
       *t,
       [this](auto &t) {
 	return omap_manager->initialize_omap(t, L_ADDR_MIN);
-      }).unsafe_get0();
+      }).unsafe_get();
     submit_transaction(std::move(t));
     return omap_root;
   }

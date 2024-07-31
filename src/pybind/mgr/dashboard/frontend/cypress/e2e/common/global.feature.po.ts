@@ -29,8 +29,18 @@ Then('I should see the modal', () => {
   cy.get('cd-modal').should('exist');
 });
 
+// @TODO: Replace with the existing (above one)
+// once carbon migration is completed
+Then('I should see the carbon modal', () => {
+  cy.get('cds-modal').should('exist');
+});
+
 Then('I should not see the modal', () => {
   cy.get('cd-modal').should('not.exist');
+});
+
+Then('I should not see the carbon modal', () => {
+  cy.get('cds-modal').should('not.exist');
 });
 
 And('I go to the {string} tab', (names: string) => {

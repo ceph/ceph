@@ -20,12 +20,10 @@ development-mode Ceph cluster::
 
 The ``dev@ceph.io`` list is for discussion about the development of Ceph,
 its interoperability with other technology, and the operations of the
-project itself.  Subscribe by sending a message to ``dev-request@ceph.io``
-with the line::
+project itself.  Subscribe by sending a message to ``dev-join@ceph.io``
+with the word `subscribe` in the subject.
 
- subscribe ceph-devel
-
-in the body of the message.
+Alternatively you can visit https://lists.ceph.io and register.
 
 The ceph-devel@vger.kernel.org list is for discussion
 and patch review for the Linux kernel Ceph client component.

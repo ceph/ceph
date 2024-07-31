@@ -772,6 +772,12 @@ static void rgw_iam_add_crypt_attrs(rgw::IAM::Environment& e,
     rgw_add_to_iam_environment(e, s3_encrypt_attr, h->second);
   }
 
+  constexpr auto customer_algo_attr = "x-amz-server-side-encryption-customer-algorithm";
+  constexpr auto s3_customer_algo_attr = "s3:x-amz-server-side-encryption-customer-algorithm";
+  if (auto h = attrs.find(customer_algo_attr); h != attrs.end()) {
+    rgw_add_to_iam_environment(e, s3_customer_algo_attr, h->second);
+  }
+
   constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
   constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
   if (auto h = attrs.find(kms_attr); h != attrs.end()) {
@@ -4463,6 +4469,7 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 20) << "storing " << RGW_ATTR_COMPRESSION
         << " with type=" << cs_info.compression_type
         << ", orig_size=" << cs_info.orig_size
+        << ", compressor_message=" << cs_info.compressor_message
         << ", blocks=" << cs_info.blocks.size() << dendl;
   }
   if (torrent) {
@@ -7189,10 +7196,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   auto group = ceph::async::spawn_throttle{y, max_aio};
 
   for (const auto& key : multi_delete->objects) {
-    boost::asio::spawn(group.get_executor(),
-                       [this, &key] (boost::asio::yield_context yield) {
-                         handle_individual_object(key, yield);
-                       }, group);
+    group.spawn([this, &key] (boost::asio::yield_context yield) {
+                  handle_individual_object(key, yield);
+                });
 
     rgw_flush_formatter(s, s->formatter);
   }

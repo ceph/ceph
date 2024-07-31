@@ -85,6 +85,18 @@ void add_group_spec_options(po::options_description *pos,
   }
 }
 
+std::string get_group_snap_state_name(rbd_group_snap_state_t state)
+{
+  switch (state) {
+  case RBD_GROUP_SNAP_STATE_INCOMPLETE:
+    return "incomplete";
+  case RBD_GROUP_SNAP_STATE_COMPLETE:
+    return "complete";
+  default:
+    return "unknown (" + stringify(state) + ")";
+  }
+}
+
 int execute_create(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -705,14 +717,8 @@ int execute_group_snap_list(const po::variables_map &vm,
   }
 
   librbd::RBD rbd;
-  std::vector<librbd::group_snap_info_t> snaps;
-
-  r = rbd.group_snap_list(io_ctx, group_name.c_str(), &snaps,
-                          sizeof(librbd::group_snap_info_t));
-
-  if (r == -ENOENT) {
-    r = 0;
-  }
+  std::vector<librbd::group_snap_info2_t> snaps;
+  r = rbd.group_snap_list2(io_ctx, group_name.c_str(), &snaps);
   if (r < 0) {
     return r;
   }
@@ -721,29 +727,21 @@ int execute_group_snap_list(const po::variables_map &vm,
   if (f) {
     f->open_array_section("group_snaps");
   } else {
+    t.define_column("ID", TextTable::LEFT, TextTable::LEFT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    t.define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
+    t.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
   }
 
-  for (auto i : snaps) {
-    std::string snap_name = i.name;
-    int state = i.state;
-    std::string state_string;
-    if (RBD_GROUP_SNAP_STATE_INCOMPLETE == state) {
-      state_string = "incomplete";
-    } else {
-      state_string = "ok";
-    }
-    if (r < 0) {
-      return r;
-    }
+  for (const auto& snap : snaps) {
+    auto state_string = get_group_snap_state_name(snap.state);
     if (f) {
       f->open_object_section("group_snap");
-      f->dump_string("snapshot", snap_name);
+      f->dump_string("id", snap.id);
+      f->dump_string("snapshot", snap.name);
       f->dump_string("state", state_string);
       f->close_section();
     } else {
-      t << snap_name << state_string << TextTable::endrow;
+      t << snap.id << snap.name << state_string << TextTable::endrow;
     }
   }
 
@@ -753,6 +751,109 @@ int execute_group_snap_list(const po::variables_map &vm,
   } else if (snaps.size()) {
     std::cout << t;
   }
+  return 0;
+}
+
+int execute_group_snap_info(const po::variables_map &vm,
+                            const std::vector<std::string> &ceph_global_args) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string namespace_name;
+  std::string group_name;
+  std::string group_snap_name;
+
+  int r = utils::get_pool_generic_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
+    &namespace_name, GROUP_NAME, "group", &group_name, &group_snap_name, true,
+    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_FULL);
+  if (r < 0) {
+    return r;
+  }
+
+  at::Format::Formatter formatter;
+  r = utils::get_formatter(vm, &formatter);
+  if (r < 0) {
+    return r;
+  }
+  Formatter *f = formatter.get();
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  librbd::group_snap_info2_t group_snap;
+  r = rbd.group_snap_get_info(io_ctx, group_name.c_str(),
+                              group_snap_name.c_str(), &group_snap);
+  if (r < 0) {
+    std::cerr << "rbd: failed to show group snapshot: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  auto state_string = get_group_snap_state_name(group_snap.state);
+  if (f) {
+    f->open_object_section("group_snapshot");
+    f->dump_string("id", group_snap.id);
+    f->dump_string("name", group_snap.name);
+    f->dump_string("state", state_string);
+    f->dump_string("image_snap_name", group_snap.image_snap_name);
+    f->open_array_section("images");
+  } else {
+    std::cout << "rbd group snapshot '" << group_snap.name << "':\n"
+              << "\tid: " << group_snap.id << std::endl
+              << "\tstate: " << state_string << std::endl
+              << "\timage snap: " << group_snap.image_snap_name << std::endl
+              << "\timages:" << std::endl;
+  }
+
+  std::sort(group_snap.image_snaps.begin(), group_snap.image_snaps.end(),
+    [](const librbd::group_image_snap_info_t& lhs,
+       const librbd::group_image_snap_info_t& rhs) {
+      if (lhs.pool_id != rhs.pool_id) {
+        return lhs.pool_id < rhs.pool_id;
+      }
+      return lhs.image_name < rhs.image_name;
+    }
+  );
+
+  for (const auto& image_snap : group_snap.image_snaps) {
+    std::string pool_name;
+    r = rados.pool_reverse_lookup(image_snap.pool_id, &pool_name);
+    if (r == -ENOENT) {
+      pool_name = "<missing image pool " + stringify(image_snap.pool_id) + ">";
+    } else if (r < 0) {
+      std::cerr << "rbd: error looking up pool name for pool_id="
+                << image_snap.pool_id << ": " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    if (f) {
+      f->open_object_section("image");
+      f->dump_string("pool_name", pool_name);
+      f->dump_string("namespace", io_ctx.get_namespace());
+      f->dump_string("image_name", image_snap.image_name);
+      f->dump_int("snap_id", image_snap.snap_id);
+      f->close_section();
+    } else {
+      std::cout << "\t\t" << pool_name << "/";
+      if (!io_ctx.get_namespace().empty()) {
+        std::cout << io_ctx.get_namespace() << "/";
+      }
+      std::cout << image_snap.image_name << " (snap id: " << image_snap.snap_id
+                << ")" << std::endl;
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->close_section();
+    f->flush(std::cout);
+  }
+
   return 0;
 }
 
@@ -917,6 +1018,13 @@ void get_group_snap_list_arguments(po::options_description *positional,
                          false);
 }
 
+void get_group_snap_info_arguments(po::options_description *positional,
+                                   po::options_description *options) {
+  add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                         true);
+  at::add_format_options(options);
+}
+
 void get_group_snap_rollback_arguments(po::options_description *positional,
                                        po::options_description *options) {
   at::add_no_progress_option(options);
@@ -964,6 +1072,10 @@ Shell::Action action_group_snap_list(
   {"group", "snap", "list"}, {"group", "snap", "ls"},
   "List snapshots of a group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);
+Shell::Action action_group_snap_info(
+  {"group", "snap", "info"}, {},
+  "Show information about a group snapshot.",
+  "", &get_group_snap_info_arguments, &execute_group_snap_info);
 Shell::Action action_group_snap_rollback(
   {"group", "snap", "rollback"}, {},
   "Rollback group to snapshot.",

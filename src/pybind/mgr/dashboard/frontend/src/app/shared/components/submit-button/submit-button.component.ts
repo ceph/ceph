@@ -45,6 +45,12 @@ export class SubmitButtonComponent implements OnInit {
   @Input()
   ariaLabel: string;
 
+  @Input()
+  buttonType: 'primary' | 'danger' = 'primary';
+
+  @Input()
+  modalForm = false;
+
   @Output()
   submitAction = new EventEmitter();
 

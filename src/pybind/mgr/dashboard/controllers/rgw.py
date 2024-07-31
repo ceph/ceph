@@ -222,14 +222,15 @@ class RgwMultisiteController(RESTController):
     @EndpointDoc("Create or update the sync pipe")
     @CreatePermission
     def create_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_bucket: str = '',
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_buckets: Optional[List[str]] = None,
+                         destination_bucket: str = '',
                          bucket_name: str = ''):
         multisite_instance = RgwMultisite()
         return multisite_instance.create_sync_pipe(group_id, pipe_id, source_zones,
-                                                   destination_zones, destination_buckets,
-                                                   bucket_name)
+                                                   destination_zones, source_bucket,
+                                                   destination_bucket, bucket_name)
 
     @Endpoint(method='DELETE', path='/sync-pipe')
     @EndpointDoc("Remove the sync pipe")
@@ -237,11 +238,11 @@ class RgwMultisiteController(RESTController):
     def remove_sync_pipe(self, group_id: str, pipe_id: str,
                          source_zones: Optional[List[str]] = None,
                          destination_zones: Optional[List[str]] = None,
-                         destination_buckets: Optional[List[str]] = None,
+                         destination_bucket: str = '',
                          bucket_name: str = ''):
         multisite_instance = RgwMultisite()
         return multisite_instance.remove_sync_pipe(group_id, pipe_id, source_zones,
-                                                   destination_zones, destination_buckets,
+                                                   destination_zones, destination_bucket,
                                                    bucket_name)
 
 

@@ -49,6 +49,7 @@ class QatAccel {
   std::vector<session_ptr> sessions;
   std::mutex mutex;
   std::string alg_name;
+  int windowBits;
 };
 
 #endif

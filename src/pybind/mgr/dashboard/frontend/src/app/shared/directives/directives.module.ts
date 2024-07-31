@@ -15,9 +15,11 @@ import { CdFormValidationDirective } from './ng-bootstrap-form-validation/cd-for
 import { PasswordButtonDirective } from './password-button.directive';
 import { StatefulTabDirective } from './stateful-tab.directive';
 import { TrimDirective } from './trim.directive';
+import { RequiredFieldDirective } from './required-field.directive';
+import { ReactiveFormsModule } from '@angular/forms';
 
 @NgModule({
-  imports: [],
+  imports: [ReactiveFormsModule],
   declarations: [
     AutofocusDirective,
     DimlessBinaryDirective,
@@ -33,7 +35,8 @@ import { TrimDirective } from './trim.directive';
     CdFormControlDirective,
     CdFormGroupDirective,
     CdFormValidationDirective,
-    AuthStorageDirective
+    AuthStorageDirective,
+    RequiredFieldDirective
   ],
   exports: [
     AutofocusDirective,
@@ -50,7 +53,8 @@ import { TrimDirective } from './trim.directive';
     CdFormControlDirective,
     CdFormGroupDirective,
     CdFormValidationDirective,
-    AuthStorageDirective
+    AuthStorageDirective,
+    RequiredFieldDirective
   ]
 })
 export class DirectivesModule {}

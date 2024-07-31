@@ -90,6 +90,11 @@
                 object store, RADOS.  See :ref:`CephFS Architecture
                 <arch-cephfs>` for more details.
 
+        :ref:`ceph-fuse <man-ceph-fuse>`
+                :ref:`ceph-fuse <man-ceph-fuse>` is a FUSE ("**F**\ilesystem in
+                **USE**\rspace") client for CephFS. ceph-fuse mounts a Ceph FS
+                ata  specified mount point. 
+
 	Ceph Interim Release
                 See :term:`Releases`.
 

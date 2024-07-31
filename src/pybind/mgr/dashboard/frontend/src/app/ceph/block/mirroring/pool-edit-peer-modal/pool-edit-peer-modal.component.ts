@@ -1,7 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms';
-
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -9,17 +7,14 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { PoolEditPeerResponseModel } from './pool-edit-peer-response.model';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-pool-edit-peer-modal',
   templateUrl: './pool-edit-peer-modal.component.html',
   styleUrls: ['./pool-edit-peer-modal.component.scss']
 })
-export class PoolEditPeerModalComponent implements OnInit {
-  mode: string;
-  poolName: string;
-  peerUUID: string;
-
+export class PoolEditPeerModalComponent extends BaseModal implements OnInit {
   editPeerForm: CdFormGroup;
   bsConfig = {
     containerClass: 'theme-default'
@@ -29,11 +24,15 @@ export class PoolEditPeerModalComponent implements OnInit {
   response: PoolEditPeerResponseModel;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+
+    @Inject('poolName') public poolName: string,
+    @Optional() @Inject('peerUUID') public peerUUID = '',
+    @Optional() @Inject('mode') public mode = ''
   ) {
+    super();
     this.createForm();
   }
 
@@ -134,7 +133,7 @@ export class PoolEditPeerModalComponent implements OnInit {
       error: () => this.editPeerForm.setErrors({ cdSubmitButton: true }),
       complete: () => {
         this.rbdMirroringService.refresh();
-        this.activeModal.close();
+        this.closeModal();
       }
     });
   }

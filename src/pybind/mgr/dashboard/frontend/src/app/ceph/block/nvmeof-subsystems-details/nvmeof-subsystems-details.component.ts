@@ -12,10 +12,13 @@ export class NvmeofSubsystemsDetailsComponent implements OnChanges {
 
   selectedItem: any;
   data: any;
+  subsystemNQN: string;
 
   ngOnChanges() {
     if (this.selection) {
       this.selectedItem = this.selection;
+      this.subsystemNQN = this.selectedItem.nqn;
+
       this.data = {};
       this.data[$localize`Serial Number`] = this.selectedItem.serial_number;
       this.data[$localize`Model Number`] = this.selectedItem.model_number;

@@ -163,9 +163,14 @@ def main():
     cmd = exec_cmd('radosgw-admin reshard add --bucket {} --num-shards {}'.format(BUCKET_NAME, num_shards_expected))
     cmd = exec_cmd('radosgw-admin reshard list')
     json_op = json.loads(cmd)
-    log.debug('bucket name {}'.format(json_op[0]['bucket_name']))
-    assert json_op[0]['bucket_name'] == BUCKET_NAME
-    assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
+    if (len(json_op) >= 1):
+        log.debug('bucket name {}'.format(json_op[0]['bucket_name']))
+        assert json_op[0]['bucket_name'] == BUCKET_NAME
+        assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
+    else:
+        cmd = exec_cmd('radosgw-admin bucket stats --bucket {}'.format(BUCKET_NAME))
+        json_op = json.loads(cmd)
+        assert json_op['num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard-process','reshard','','process bucket resharding','succeeds'
     log.debug('TEST: reshard process\n')
@@ -187,8 +192,14 @@ def main():
     cmd = exec_cmd('radosgw-admin reshard add --bucket {} --num-shards {}'.format(BUCKET_NAME, num_shards_expected))
     cmd = exec_cmd('radosgw-admin reshard list')
     json_op = json.loads(cmd)
-    assert json_op[0]['bucket_name'] == BUCKET_NAME
-    assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
+    if (len(json_op) >= 1):
+        log.debug('bucket name {}'.format(json_op[0]['bucket_name']))
+        assert json_op[0]['bucket_name'] == BUCKET_NAME
+        assert json_op[0]['tentative_new_num_shards'] == num_shards_expected
+    else:
+        cmd = exec_cmd('radosgw-admin bucket stats --bucket {}'.format(BUCKET_NAME))
+        json_op = json.loads(cmd)
+        assert json_op['num_shards'] == num_shards_expected
 
     # TESTCASE 'reshard process ,'reshard','process','reshard non empty bucket','succeeds'
     log.debug('TEST: reshard process non empty bucket\n')

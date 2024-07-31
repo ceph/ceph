@@ -2,9 +2,12 @@ import { PageHelper } from '../page-helper.po';
 
 const WAIT_TIMER = 1000;
 const pages = {
-  index: { url: '#/rgw/multisite', id: 'cd-rgw-multisite-details' },
-  create: { url: '#/rgw/multisite/sync-policy/create', id: 'cd-rgw-multisite-sync-policy-form' },
-  edit: { url: '#/rgw/multisite/sync-policy/edit', id: 'cd-rgw-multisite-sync-policy-form' }
+  index: { url: '#/rgw/multisite/sync-policy', id: 'cd-rgw-multisite-sync-policy' },
+  create: {
+    url: '#/rgw/multisite/sync-policy/(modal:create)',
+    id: 'cd-rgw-multisite-sync-policy-form'
+  },
+  edit: { url: '#/rgw/multisite/sync-policy/(modal:edit', id: 'cd-rgw-multisite-sync-policy-form' }
 };
 export class MultisitePageHelper extends PageHelper {
   pages = pages;
@@ -12,6 +15,11 @@ export class MultisitePageHelper extends PageHelper {
   columnIndex = {
     status: 4
   };
+
+  tableExist() {
+    cy.get('cd-rgw-multisite-sync-policy cd-table').should('exist');
+    cy.get('cd-rgw-multisite-sync-policy cd-table-actions').should('exist');
+  }
 
   @PageHelper.restrictTo(pages.create.url)
   create(group_id: string, status: string) {
@@ -28,7 +36,7 @@ export class MultisitePageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(group_id: string, status: string) {
-    cy.visit(`${pages.edit.url}/${group_id}`);
+    cy.visit(`${pages.edit.url}/${group_id})`);
 
     // Change the status field
     this.selectOption('status', status);
@@ -42,9 +50,6 @@ export class MultisitePageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   createSymmetricalFlow(flow_id: string, zones: string[]) {
-    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
-    this.getTab('Flow').should('exist');
-    this.getTab('Flow').click();
     cy.request({
       method: 'GET',
       url: '/api/rgw/daemon',
@@ -129,9 +134,9 @@ export class MultisitePageHelper extends PageHelper {
       cy.get(`button.delete`).first().click();
     });
 
-    cy.get('cd-modal .custom-control-label').click();
+    cy.get('cds-modal .custom-control-label').click();
     cy.get('[aria-label="Delete Flow"]').click();
-    cy.get('cd-modal').should('not.exist');
+    cy.get('cds-modal').should('not.exist');
 
     cy.get('cd-rgw-multisite-sync-policy-details')
       .first()
@@ -184,5 +189,109 @@ export class MultisitePageHelper extends PageHelper {
       .eq(1)
       .find('.datatable-body-cell-label')
       .should('contain', dest_zones[0]);
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  createPipe(pipe_id: string, source_zones: string[], dest_zones: string[]) {
+    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
+    this.getTab('Pipe').should('exist');
+    this.getTab('Pipe').click();
+    cy.request({
+      method: 'GET',
+      url: '/api/rgw/daemon',
+      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' }
+    });
+    cy.get('cd-rgw-multisite-sync-policy-details .table-actions button').first().click();
+    cy.get('cd-rgw-multisite-sync-pipe-modal').should('exist');
+
+    // Enter in pipe_id
+    cy.get('#pipe_id').type(pipe_id);
+    cy.wait(WAIT_TIMER);
+    // Select zone
+    cy.get('a[data-testid=select-menu-edit]').eq(0).click();
+    for (const zone of source_zones) {
+      cy.get('.popover-body div.select-menu-item-content').contains(zone).click();
+    }
+    cy.get('cd-rgw-multisite-sync-pipe-modal').click();
+    cy.get('a[data-testid=select-menu-edit]').eq(1).click();
+    for (const zone of dest_zones) {
+      cy.get('.popover-body input').type(`${zone}{enter}`);
+    }
+    cy.get('button.tc_submitButton').click();
+
+    cy.get('cd-rgw-multisite-sync-policy-details .datatable-body-cell-label').should(
+      'contain',
+      pipe_id
+    );
+
+    cy.get('cd-rgw-multisite-sync-policy-details')
+      .first()
+      .find('[aria-label=search]')
+      .first()
+      .clear({ force: true })
+      .type(pipe_id);
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  editPipe(pipe_id: string, zoneToAdd: string) {
+    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
+    this.getTab('Pipe').should('exist');
+    this.getTab('Pipe').click();
+    cy.request({
+      method: 'GET',
+      url: '/api/rgw/daemon',
+      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' }
+    });
+
+    cy.get('cd-rgw-multisite-sync-policy-details').within(() => {
+      cy.get('.datatable-body-cell-label').should('contain', pipe_id);
+      cy.get('[aria-label=search]').first().clear({ force: true }).type(pipe_id);
+      cy.get('input.cd-datatable-checkbox').first().check();
+      cy.get('.table-actions button').first().click();
+    });
+    cy.get('cd-rgw-multisite-sync-pipe-modal').should('exist');
+
+    cy.wait(WAIT_TIMER);
+    // Enter in pipe_id
+    cy.get('#pipe_id').should('contain.value', pipe_id);
+    // Select zone
+    cy.get('a[data-testid=select-menu-edit]').eq(1).click();
+
+    cy.get('.popover-body input').type(`${zoneToAdd}{enter}`);
+
+    cy.get('button.tc_submitButton').click();
+
+    this.getNestedTableCell('cd-rgw-multisite-sync-policy-details', 4, zoneToAdd, true);
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  deletePipe(pipe_id: string) {
+    cy.get('cd-rgw-multisite-sync-policy-details').should('exist');
+    this.getTab('Pipe').should('exist');
+    this.getTab('Pipe').click();
+    cy.get('cd-rgw-multisite-sync-policy-details').within(() => {
+      cy.get('.datatable-body-cell-label').should('contain', pipe_id);
+      cy.get('[aria-label=search]').first().clear({ force: true }).type(pipe_id);
+    });
+
+    const getRow = this.getTableCellWithContent.bind(this);
+    getRow('cd-rgw-multisite-sync-policy-details', pipe_id).click();
+
+    cy.get('cd-rgw-multisite-sync-policy-details').within(() => {
+      cy.get('.table-actions button.dropdown-toggle').first().click(); // open submenu
+      cy.get(`button.delete`).first().click();
+    });
+
+    cy.get('cd-modal .custom-control-label').click();
+    cy.get('[aria-label="Delete Pipe"]').click();
+    cy.get('cd-modal').should('not.exist');
+
+    cy.get('cd-rgw-multisite-sync-policy-details')
+      .first()
+      .within(() => {
+        cy.get('[aria-label=search]').first().clear({ force: true }).type(pipe_id);
+      });
+    // Waits for item to be removed from table
+    getRow(pipe_id).should('not.exist');
   }
 }

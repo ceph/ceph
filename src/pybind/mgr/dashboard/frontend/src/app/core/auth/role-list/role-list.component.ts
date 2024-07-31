@@ -18,6 +18,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -48,7 +49,8 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private notificationService: NotificationService,
     private urlBuilder: URLBuilderService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private cdsModalService: ModalCdsService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().user;
@@ -123,7 +125,7 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
     this.roleService.delete(role).subscribe(
       () => {
         this.getRoles();
-        this.modalRef.close();
+        this.cdsModalService.dismissAll();
         this.notificationService.show(NotificationType.success, $localize`Deleted role '${role}'`);
       },
       () => {
@@ -134,7 +136,7 @@ export class RoleListComponent extends ListWithDetails implements OnInit {
 
   deleteRoleModal() {
     const name = this.selection.first().name;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Role',
       itemNames: [name],
       submitAction: () => this.deleteRole(name)

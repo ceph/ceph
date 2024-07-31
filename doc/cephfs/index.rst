@@ -10,14 +10,13 @@ a state-of-the-art, multi-use, highly available, and performant file store for
 a variety of applications, including traditional use-cases like shared home
 directories, HPC scratch space, and distributed workflow shared storage.
 
-CephFS achieves these goals through the use of some novel architectural
-choices.  Notably, file metadata is stored in a separate RADOS pool from file
-data and served via a resizable cluster of *Metadata Servers*, or **MDS**,
-which may scale to support higher throughput metadata workloads.  Clients of
-the file system have direct access to RADOS for reading and writing file data
-blocks. For this reason, workloads may linearly scale with the size of the
-underlying RADOS object store; that is, there is no gateway or broker mediating
-data I/O for clients.
+CephFS achieves these goals through novel architectural choices. Notably, file
+metadata is stored in a RADOS pool separate from file data and is served via a
+resizable cluster of *Metadata Servers*, or **MDS**\es, which scale to support
+higher-throughput workloads. Clients of the file system have direct access to
+RADOS for reading and writing file data blocks. This makes it possible for
+workloads to scale linearly with the size of the underlying RADOS object store.
+There is no gateway or broker that mediates data I/O for clients.
 
 Access to data is coordinated through the cluster of MDS which serve as
 authorities for the state of the distributed metadata cache cooperatively

@@ -154,6 +154,7 @@ crimson:
   - src/crimson/**
   - src/test/crimson/**
   - qa/suites/crimson-rados/**
+  - src/seastar/**
 
 dashboard:
   - src/pybind/mgr/dashboard/**

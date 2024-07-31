@@ -1562,7 +1562,13 @@ void Cache::complete_commit(
       is_inline = true;
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
-    assert(i->get_last_committed_crc() == i->calc_crc32c());
+#ifndef NDEBUG
+    if (i->get_paddr().is_root() || epm.get_checksum_needed(i->get_paddr())) {
+      assert(i->get_last_committed_crc() == i->calc_crc32c());
+    } else {
+      assert(i->get_last_committed_crc() == CRC_NULL);
+    }
+#endif
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
 

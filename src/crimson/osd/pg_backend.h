@@ -486,8 +486,6 @@ private:
   friend class ::crimson::osd::PG;
 
 protected:
-  boost::container::flat_set<hobject_t> temp_contents;
-
   template <class... Args>
   void add_temp_obj(Args&&... args) {
     temp_contents.insert(std::forward<Args>(args)...);
@@ -501,5 +499,15 @@ protected:
       clear_temp_obj(oid);
     }
   }
+  template <typename Func>
+  void for_each_temp_obj(Func &&f) {
+    std::for_each(temp_contents.begin(), temp_contents.end(), f);
+  }
+  void clear_temp_objs() {
+    temp_contents.clear();
+  }
+private:
+  boost::container::flat_set<hobject_t> temp_contents;
+
   friend class RecoveryBackend;
 };

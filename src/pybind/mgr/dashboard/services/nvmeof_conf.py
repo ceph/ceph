@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 
 import json
+import logging
 
 from orchestrator import OrchestratorError
 
 from .. import mgr
 from ..exceptions import DashboardException
 from ..services.orchestrator import OrchClient
+
+logger = logging.getLogger('nvmeof_conf')
 
 
 class NvmeofGatewayAlreadyExists(Exception):
@@ -87,12 +90,9 @@ class NvmeofGatewaysConfig(object):
 
     @classmethod
     def get_root_ca_cert(cls, service_name: str):
-        try:
-            root_ca_cert = cls.from_cert_store('nvmeof_root_ca_cert', service_name)
-            return root_ca_cert.encode()
-        except DashboardException:
-            # If root_ca_cert is not set, use server_cert as root_ca_cert
-            return cls.get_server_cert(service_name)
+        root_ca_cert = cls.from_cert_store('nvmeof_root_ca_cert', service_name)
+        # If root_ca_cert is not set, use server_cert as root_ca_cert
+        return root_ca_cert.encode() if root_ca_cert else cls.get_server_cert(service_name)
 
     @classmethod
     def get_server_cert(cls, service_name: str):
@@ -108,7 +108,7 @@ class NvmeofGatewaysConfig(object):
                     return orch.cert_store.get_key(entity, service_name)
                 return orch.cert_store.get_cert(entity, service_name)
             return None
-        except OrchestratorError as e:
-            raise DashboardException(
-                msg=f'Failed to get {entity} for {service_name}: {e}',
-            )
+        except OrchestratorError:
+            # just return None if any orchestrator error is raised
+            # otherwise nvmeof api will raise this error and doesn't proceed.
+            return None

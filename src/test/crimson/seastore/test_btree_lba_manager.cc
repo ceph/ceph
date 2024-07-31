@@ -267,7 +267,7 @@ struct lba_btree_test : btree_test_base {
 	}).si_then([this, tref=std::move(tref)]() mutable {
 	  return submit_transaction(std::move(tref));
 	});
-      }).unsafe_get0();
+      }).unsafe_get();
   }
 
   template <typename F>
@@ -288,7 +288,7 @@ struct lba_btree_test : btree_test_base {
 	      );
 	    });
 	});
-      }).unsafe_get0();
+      }).unsafe_get();
   }
 
   static auto get_map_val(extent_len_t len) {
@@ -487,7 +487,7 @@ struct btree_lba_manager_test : btree_test_base {
 	    }
 	  });
 	});
-      }).unsafe_get0();
+      }).unsafe_get();
     submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
@@ -532,7 +532,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  [this, &t, hint](auto &extents) {
 	  return lba_manager->alloc_extents(t, hint, std::move(extents), EXTENT_DEFAULT_REF_COUNT);
 	});
-      }).unsafe_get0();
+      }).unsafe_get();
     for (auto &ret : rets) {
       logger().debug("alloc'd: {}", *ret);
       EXPECT_EQ(len, ret->get_length());
@@ -578,7 +578,7 @@ struct btree_lba_manager_test : btree_test_base {
 	  }
 	  return Cache::retire_extent_iertr::now();
 	});
-      }).unsafe_get0();
+      }).unsafe_get();
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
     }
@@ -601,7 +601,7 @@ struct btree_lba_manager_test : btree_test_base {
 	return lba_manager->incref_extent(
 	  t,
 	  target->first);
-      }).unsafe_get0().refcount;
+      }).unsafe_get().refcount;
     EXPECT_EQ(refcnt, target->second.refcount);
   }
 
@@ -633,7 +633,7 @@ struct btree_lba_manager_test : btree_test_base {
       *t.t,
       [=, this](auto &t) {
 	return lba_manager->check_child_trackers(t);
-      }).unsafe_get0();
+      }).unsafe_get();
     for (auto &&i: t.mappings) {
       auto laddr = i.first;
       auto len = i.second.len;
@@ -643,7 +643,7 @@ struct btree_lba_manager_test : btree_test_base {
 	[=, this](auto &t) {
 	  return lba_manager->get_mappings(
 	    t, laddr, len);
-	}).unsafe_get0();
+	}).unsafe_get();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
       EXPECT_EQ(i.second.addr, ret->get_val());
@@ -655,7 +655,7 @@ struct btree_lba_manager_test : btree_test_base {
 	[=, this](auto &t) {
 	  return lba_manager->get_mapping(
 	    t, laddr);
-	}).unsafe_get0();
+	}).unsafe_get();
       EXPECT_EQ(i.second.addr, ret_pin->get_val());
       EXPECT_EQ(laddr, ret_pin->get_key());
       EXPECT_EQ(len, ret_pin->get_length());

@@ -84,6 +84,7 @@ export enum Icons {
   eye = 'fa fa-eye', // Observability
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
+  nfsExport = 'fa fa-server', // NFS export
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

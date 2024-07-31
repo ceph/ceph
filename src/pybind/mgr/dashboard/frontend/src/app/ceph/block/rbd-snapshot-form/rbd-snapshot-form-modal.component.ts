@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import { Observable, Subject } from 'rxjs';
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 
@@ -10,6 +10,7 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ImageSpec } from '~/app/shared/models/image-spec';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskManagerService } from '~/app/shared/services/task-manager.service';
 
@@ -18,13 +19,7 @@ import { TaskManagerService } from '~/app/shared/services/task-manager.service';
   templateUrl: './rbd-snapshot-form-modal.component.html',
   styleUrls: ['./rbd-snapshot-form-modal.component.scss']
 })
-export class RbdSnapshotFormModalComponent implements OnInit {
-  poolName: string;
-  namespace: string;
-  imageName: string;
-  snapName: string;
-  mirroring: string;
-
+export class RbdSnapshotFormModalComponent extends BaseModal implements OnInit {
   snapshotForm: CdFormGroup;
 
   editing = false;
@@ -36,13 +31,20 @@ export class RbdSnapshotFormModalComponent implements OnInit {
   peerConfigured$: Observable<any>;
 
   constructor(
-    public activeModal: NgbActiveModal,
+    private cdsModalService: ModalCdsService,
     private rbdService: RbdService,
     private taskManagerService: TaskManagerService,
     private notificationService: NotificationService,
     private actionLabels: ActionLabelsI18n,
-    private rbdMirrorService: RbdMirroringService
+    private rbdMirrorService: RbdMirroringService,
+
+    @Inject('poolName') public poolName: string,
+    @Optional() @Inject('namespace') public namespace = '',
+    @Optional() @Inject('imageName') public imageName = '',
+    @Optional() @Inject('mirroring') public mirroring = '',
+    @Optional() @Inject('snapName') public snapName = ''
   ) {
+    super();
     this.action = this.actionLabels.CREATE;
     this.resource = $localize`RBD Snapshot`;
     this.createForm();
@@ -107,7 +109,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
             this.notificationService.notifyTask(asyncFinishedTask);
           }
         );
-        this.activeModal.close();
+        this.cdsModalService.dismissAll();
         this.onSubmit.next(this.snapName);
       })
       .catch(() => {
@@ -136,7 +138,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
             this.notificationService.notifyTask(asyncFinishedTask);
           }
         );
-        this.activeModal.close();
+        this.cdsModalService.dismissAll();
         this.onSubmit.next(snapshotName);
       })
       .catch(() => {

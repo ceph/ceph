@@ -1,3 +1,5 @@
+<cd-rgw-multisite-tabs></cd-rgw-multisite-tabs>
+
 <legend i18n>
   Multisite Sync Policy
   <cd-help-text>
@@ -41,3 +43,5 @@
     Are you sure you want to delete these policy groups?
   </cd-alert-panel>
 </ng-template>
+<router-outlet name="modal"
+               (deactivate)="getPolicyList()"></router-outlet>

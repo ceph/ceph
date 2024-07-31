@@ -1,7 +1,7 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, Inject, OnDestroy, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, ValidatorFn, Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 import { concat, forkJoin, Observable, Subscription } from 'rxjs';
 import { last } from 'rxjs/operators';
@@ -18,8 +18,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   templateUrl: './bootstrap-import-modal.component.html',
   styleUrls: ['./bootstrap-import-modal.component.scss']
 })
-export class BootstrapImportModalComponent implements OnInit, OnDestroy {
-  siteName: string;
+export class BootstrapImportModalComponent extends BaseModal implements OnInit, OnDestroy {
   pools: any[] = [];
   token: string;
 
@@ -33,11 +32,13 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
   ];
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private rbdMirroringService: RbdMirroringService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+
+    @Inject('siteName') @Optional() public siteName: string
   ) {
+    super();
     this.createForm();
   }
 
@@ -180,7 +181,7 @@ export class BootstrapImportModalComponent implements OnInit, OnDestroy {
       error: finishHandler,
       complete: () => {
         finishHandler();
-        this.activeModal.close();
+        this.closeModal();
       }
     });
   }

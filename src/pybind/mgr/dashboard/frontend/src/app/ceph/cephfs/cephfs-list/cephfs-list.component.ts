@@ -26,6 +26,7 @@ import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-moun
 import { map, switchMap } from 'rxjs/operators';
 import { HealthService } from '~/app/shared/api/health.service';
 import { CephfsAuthModalComponent } from '~/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const BASE_URL = 'cephfs/fs';
 
@@ -55,7 +56,8 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
     private modalService: ModalService,
     private taskWrapper: TaskWrapperService,
     public notificationService: NotificationService,
-    private healthService: HealthService
+    private healthService: HealthService,
+    private cdsModalService: ModalCdsService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -171,7 +173,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
 
   removeVolumeModal() {
     const volName = this.selection.first().mdsmap['fs_name'];
-    this.modalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'File System',
       itemNames: [volName],
       actionDescription: 'remove',

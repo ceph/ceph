@@ -367,6 +367,9 @@ Commands
 :command:`group snap list` *group-spec*
   List snapshots of a group.
 
+:command:`group snap info` *group-snap-spec*
+  Get information about a snapshot of a group.
+
 :command:`group snap rm` *group-snap-spec*
   Remove a snapshot from a group.
 

@@ -225,8 +225,8 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         # pylint: disable=protected-access
         with self.assertRaises(DashboardException) as ctx:
             IscsiTarget._validate(None, None, None, None, None, None)
-        self.assertEquals(ctx.exception.__str__(),
-                          "Target IQN is required")
+        self.assertEqual(ctx.exception.__str__(),
+                         "Target IQN is required")
 
     def test_validate_error_portals(self):
         # pylint: disable=protected-access
@@ -238,13 +238,13 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         settings = {'config': {'minimum_gateways': 1}}
         with self.assertRaises(DashboardException) as ctx:
             IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
-        self.assertEquals(ctx.exception.__str__(),
-                          "At least one portal is required")
+        self.assertEqual(ctx.exception.__str__(),
+                         "At least one portal is required")
         settings = {'config': {'minimum_gateways': 2}}
         with self.assertRaises(DashboardException) as ctx:
             IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
-        self.assertEquals(ctx.exception.__str__(),
-                          "At least 2 portals are required")
+        self.assertEqual(ctx.exception.__str__(),
+                         "At least 2 portals are required")
 
     def test_validate_error_target_control(self):
         # pylint: disable=protected-access
@@ -266,15 +266,15 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         }
         with self.assertRaises(DashboardException) as ctx:
             IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
-        self.assertEquals(ctx.exception.__str__(),
-                          "Target control target_name must be >= 1")
+        self.assertEqual(ctx.exception.__str__(),
+                         "Target control target_name must be >= 1")
         target_controls = {
             'target_name': 3
         }
         with self.assertRaises(DashboardException) as ctx:
             IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
-        self.assertEquals(ctx.exception.__str__(),
-                          "Target control target_name must be <= 2")
+        self.assertEqual(ctx.exception.__str__(),
+                         "Target control target_name must be <= 2")
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_validate_error_disk_control(self, _validate_image_mock):
@@ -301,13 +301,13 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         }
         with self.assertRaises(DashboardException) as ctx:
             IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
-        self.assertEquals(ctx.exception.__str__(),
-                          "Disk control max_data_area_mb must be >= 129")
+        self.assertEqual(ctx.exception.__str__(),
+                         "Disk control max_data_area_mb must be >= 129")
         settings['disk_controls_limits']['user:rbd']['max_data_area_mb']['min'] = 1
         with self.assertRaises(DashboardException) as ctx:
             IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups, settings)
-        self.assertEquals(ctx.exception.__str__(),
-                          "Disk control max_data_area_mb must be <= 127")
+        self.assertEqual(ctx.exception.__str__(),
+                         "Disk control max_data_area_mb must be <= 127")
 
     @mock.patch('dashboard.controllers.iscsi.IscsiTarget._validate_image')
     def test_delete(self, _validate_image_mock):

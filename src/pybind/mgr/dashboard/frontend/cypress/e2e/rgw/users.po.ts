@@ -100,7 +100,7 @@ export class UsersPageHelper extends PageHelper {
     cy.contains('#max_buckets + .invalid-feedback', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(tenant + '$' + uname);
+    this.delete(tenant + '$' + uname, null, null, true);
   }
 
   invalidEdit() {
@@ -134,6 +134,6 @@ export class UsersPageHelper extends PageHelper {
     cy.contains('#max_buckets + .invalid-feedback', 'The entered value must be >= 1.');
 
     this.navigateTo();
-    this.delete(tenant + '$' + uname);
+    this.delete(tenant + '$' + uname, null, null, true);
   }
 }

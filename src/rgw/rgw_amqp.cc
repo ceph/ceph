@@ -535,9 +535,12 @@ typedef boost::lockfree::queue<message_wrapper_t*, boost::lockfree::fixed_sized<
           continue;
 
 #define ERASE_AND_CONTINUE(IT,CONTAINER) \
-          IT=CONTAINER.erase(IT); \
-          --connection_count; \
-          continue;
+          { \
+            std::lock_guard lock(connections_lock); \
+            IT=CONTAINER.erase(IT); \
+            --connection_count; \
+            continue; \
+          }
 
 class Manager {
 public:
@@ -886,12 +889,14 @@ public:
     }
     // if error occurred during creation the creation will be retried in the main thread
     ++connection_count;
-    auto conn = connections.emplace(tmp_id, std::make_unique<connection_t>(cct, info, verify_ssl, ca_location)).first->second.get();
-    ldout(cct, 10) << "AMQP connect: new connection is created. Total connections: " << connection_count << dendl;
-    if (!new_state(conn, tmp_id)) {
-      ldout(cct, 1) << "AMQP connect: new connection '" << to_string(tmp_id) << "' is created. but state creation failed (will retry). error: " <<
-        status_to_string(conn->status) << " (" << conn->reply_code << ")"  << dendl;
+    auto conn = std::make_unique<connection_t>(cct, info, verify_ssl, ca_location);
+    if (new_state(conn.get(), tmp_id)) {
+        ldout(cct, 10) << "AMQP connect: new connection is created. Total connections: " << connection_count << dendl;
+    } else {
+        ldout(cct, 1) << "AMQP connect: new connection '" << to_string(tmp_id) << "' is created. but state creation failed (will retry). error: " <<
+            status_to_string(conn->status) << " (" << conn->reply_code << ")"  << dendl;
     }
+    connections.emplace(tmp_id, std::move(conn));
     id = std::move(tmp_id);
     return true;
   }

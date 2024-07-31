@@ -29,7 +29,7 @@ describe('RGW users page', () => {
     });
 
     it('should delete user', () => {
-      users.delete(user_name);
+      users.delete(user_name, null, null, true);
     });
   });
 

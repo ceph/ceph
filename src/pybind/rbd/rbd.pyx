@@ -2778,6 +2778,71 @@ cdef class Group(object):
         if ret != 0:
             raise make_ex(ret, 'error removing group snapshot', group_errno_to_exception)
 
+    def get_snap_info(self, snap_name):
+        """
+        Get information about a group snapshot.
+
+        :param snap_name: the name of the snapshot to get
+        :type name: str
+
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+
+        :returns: dict - contains the following keys:
+
+            * ``id`` (str) - ID of the group snapshot
+
+            * ``name`` (str) - name of the group snapshot
+
+            * ``state`` (int) - state of the group snapshot
+
+            * ``image_snap_name`` (str) - name of the image snapshots
+
+            * ``image_snaps`` (list) - image snapshots that constitute the group snapshot.
+
+              Each image snapshot is itself a dictionary with keys:
+
+              * ``pool_id`` (int) - ID of the image's pool
+
+              * ``snap_id`` (int) - ID of the image snapshot
+
+              * ``image_name`` (str) - name of the image
+
+        """
+        snap_name = cstr(snap_name, 'snap_name')
+        cdef:
+            char *_snap_name = snap_name
+            rbd_group_snap_info2_t group_snap
+
+        with nogil:
+            ret = rbd_group_snap_get_info(self._ioctx, self._name,
+                                          _snap_name, &group_snap)
+        if ret != 0:
+            raise make_ex(ret, 'error showing a group snapshot',
+                          group_errno_to_exception)
+        image_snaps = []
+        for i in range(group_snap.image_snaps_count):
+            image_snap = &group_snap.image_snaps[i]
+            image_snaps.append(
+                {
+                    'pool_id': image_snap.pool_id,
+                    'snap_id': image_snap.snap_id,
+                    'image_name': decode_cstr(image_snap.image_name),
+                }
+            )
+        snap_info = {
+            'id': decode_cstr(group_snap.id),
+            'name': decode_cstr(group_snap.name),
+            'state': group_snap.state,
+            'image_snap_name': decode_cstr(group_snap.image_snap_name),
+            'image_snaps': image_snaps
+        }
+
+        rbd_group_snap_get_info_cleanup(&group_snap)
+
+        return snap_info
+
     def rename_snap(self, old_snap_name, new_snap_name):
         """
         Rename group's snapshot.
@@ -2802,7 +2867,7 @@ cdef class Group(object):
 
     def list_snaps(self):
         """
-        Iterate over the images of a group.
+        Iterate over the snapshots of a group.
 
         :returns: :class:`GroupSnapIterator`
         """
@@ -5934,47 +5999,72 @@ cdef class GroupSnapIterator(object):
     """
     Iterator over snaps specs for a group.
 
-    Yields a dictionary containing information about a snapshot.
+    Yields a dictionary containing information about a group snapshot.
 
     Keys are:
 
-    * ``name`` (str) - name of the snapshot
+    * ``id`` (str) - ID of the group snapshot
 
-    * ``state`` (int) - state of the snapshot
+    * ``name`` (str) - name of the group snapshot
+
+    * ``state`` (int) - state of the group snapshot
+
+    * ``image_snap_name`` (str) - name of the image snapshots
+
+    * ``image_snaps`` (list) - image snapshots that constitute the group snapshot.
+
+      Each image snapshot is itself a dictionary with keys:
+
+      * ``pool_id`` (int) - ID of the image's pool
+
+      * ``snap_id`` (int) - ID of the image snapshot
+
+      * ``image_name`` (str) - name of the image
     """
 
-    cdef rbd_group_snap_info_t *snaps
-    cdef size_t num_snaps
+    cdef rbd_group_snap_info2_t *group_snaps
+    cdef size_t num_group_snaps
     cdef object group
 
     def __init__(self, Group group):
         self.group = group
-        self.snaps = NULL
-        self.num_snaps = 10
+        self.group_snaps = NULL
+        self.num_group_snaps = 10
         while True:
-            self.snaps = <rbd_group_snap_info_t*>realloc_chk(self.snaps,
-                                                             self.num_snaps *
-                                                             sizeof(rbd_group_snap_info_t))
+            self.group_snaps = <rbd_group_snap_info2_t*>realloc_chk(
+                self.group_snaps, self.num_group_snaps * sizeof(rbd_group_snap_info2_t))
             with nogil:
-                ret = rbd_group_snap_list(group._ioctx, group._name, self.snaps,
-                                          sizeof(rbd_group_snap_info_t),
-                                          &self.num_snaps)
-
+                ret = rbd_group_snap_list2(group._ioctx, group._name, self.group_snaps,
+                                           &self.num_group_snaps)
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing snapshots for group %s' % group.name, group_errno_to_exception)
 
     def __iter__(self):
-        for i in range(self.num_snaps):
+        for i in range(self.num_group_snaps):
+            group_snap = &self.group_snaps[i]
+            image_snaps = []
+            for j in range(group_snap.image_snaps_count):
+                image_snap = &group_snap.image_snaps[j]
+                image_snaps.append(
+                    {
+                        'pool_id': image_snap.pool_id,
+                        'snap_id': image_snap.snap_id,
+                        'image_name': decode_cstr(image_snap.image_name),
+                    }
+                )
+
             yield {
-                'name'  : decode_cstr(self.snaps[i].name),
-                'state' : self.snaps[i].state,
-                }
+                'id': decode_cstr(group_snap.id),
+                'name': decode_cstr(group_snap.name),
+                'state': group_snap.state,
+                'image_snap_name': decode_cstr(group_snap.image_snap_name),
+                'image_snaps': image_snaps,
+            }
 
     def __dealloc__(self):
-        if self.snaps:
-            rbd_group_snap_list_cleanup(self.snaps,
-                                        sizeof(rbd_group_snap_info_t),
-                                        self.num_snaps)
-            free(self.snaps)
+        if self.group_snaps:
+            rbd_group_snap_list2_cleanup(self.group_snaps,
+                                         self.num_group_snaps)
+            free(self.group_snaps)

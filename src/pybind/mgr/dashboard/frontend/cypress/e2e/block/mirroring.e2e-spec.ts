@@ -74,7 +74,7 @@ describe('Mirroring page', () => {
           cy.get('.table-actions button.dropdown-toggle').first().click();
           cy.get('[aria-label="Import Bootstrap Token"]').click();
           cy.get('cd-bootstrap-import-modal').within(() => {
-            cy.get(`label[for=${name}]`).click();
+            cy.get(`input[name=${name}]`).click({ force: true });
             cy.get('textarea[id=token]').wait(100).type(bootstrapToken);
             cy.get('button[type=submit]').click();
           });
@@ -112,7 +112,7 @@ describe('Mirroring page', () => {
 
     afterEach(() => {
       pools.navigateTo();
-      pools.delete(poolName);
+      pools.delete(poolName, null, null, true);
     });
   });
 });

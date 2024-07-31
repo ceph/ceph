@@ -26,8 +26,8 @@ export class MultiClusterPageHelper extends PageHelper {
   disconnect(alias: string) {
     this.getFirstTableCell(alias).click();
     this.clickActionButton('disconnect');
-    cy.get('cd-modal').within(() => {
-      cy.get('#confirmation').click();
+    cy.get('cds-modal').within(() => {
+      cy.get('#confirmation_input').click({ force: true });
       cy.get('cd-submit-button').click();
     });
     cy.wait(WAIT_TIMER);

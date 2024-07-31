@@ -1,6 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import _ from 'lodash';
 import { Observable } from 'rxjs';
@@ -15,8 +14,9 @@ import { FinishedTask } from '../../models/finished-task';
 import { Permission, Permissions } from '../../models/permissions';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { TaskWrapperService } from '../../services/task-wrapper.service';
-import { ModalService } from '../../services/modal.service';
 import { CriticalConfirmationModalComponent } from '../../components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ModalCdsService } from '../../services/modal-cds.service';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-crud-table',
@@ -40,7 +40,7 @@ export class CRUDTableComponent implements OnInit {
   permission: Permission;
   selection = new CdTableSelection();
   expandedRow: { [key: string]: any } = {};
-  modalRef: NgbModalRef;
+  modalRef: BaseModal;
   tabs = {};
   resource: string;
   modalState = {};
@@ -52,7 +52,7 @@ export class CRUDTableComponent implements OnInit {
     private taskWrapper: TaskWrapperService,
     private cephUserService: CephUserService,
     private activatedRoute: ActivatedRoute,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private router: Router
   ) {
     this.permissions = this.authStorageService.getPermissions();
@@ -130,10 +130,10 @@ export class CRUDTableComponent implements OnInit {
           })
           .subscribe({
             error: () => {
-              this.modalRef.close();
+              this.modalRef.closeModal();
             },
             complete: () => {
-              this.modalRef.close();
+              this.modalRef.closeModal();
             }
           });
       }
@@ -173,7 +173,7 @@ export class CRUDTableComponent implements OnInit {
         showSubmit: true,
         showCancel: false,
         onSubmit: () => {
-          this.modalRef.close();
+          this.modalRef.closeModal();
         }
       };
       this.modalState['authExportData'] = data.trim();

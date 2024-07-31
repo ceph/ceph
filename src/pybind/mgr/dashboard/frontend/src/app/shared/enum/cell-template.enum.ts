@@ -72,5 +72,12 @@ export enum CellTemplate {
   //     }
   //  }
   */
-  tooltip = 'tooltip'
+  tooltip = 'tooltip',
+  /*
+  This template is used to attach copy to clipboard functionality to the given column value
+  // {
+  //   ...
+  //   cellTransformation: CellTemplate.copy,
+  */
+  copy = 'copy'
 }

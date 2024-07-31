@@ -23,6 +23,7 @@ using ScrubTimePoint = ScrubClock::time_point;
 namespace Scrub {
   class ReplicaReservations;
   struct ReplicaActive;
+  class ScrubJob;
 }
 
 /// reservation-related data sent by the primary to the replicas,
@@ -106,6 +107,10 @@ enum class schedule_result_t {
   target_specific_failure,  // failed to scrub this specific target
   osd_wide_failure	    // failed to scrub any target
 };
+
+/// rescheduling param: should we delay jobs already ready to execute?
+enum class delay_ready_t : bool { delay_ready = true, no_delay = false };
+
 }  // namespace Scrub
 
 namespace fmt {
@@ -421,6 +426,11 @@ struct ScrubPgIF {
 
   /**
    * attempt to initiate a scrub session.
+   * @param candidate the scrub job to start. Later on - this will be the
+   *   specific queue entry (that carries the information about the level,
+   *   priority, etc. of the scrub that should be initiated on this PG).
+   *   This parameter is saved by the scrubber for the whole duration of
+   *   the scrub session (to be used if the scrub is aborted).
    * @param osd_restrictions limitations on the types of scrubs that can
    *   be initiated on this OSD at this time.
    * @param preconds the PG state re scrubbing at the time of the request,
@@ -432,8 +442,9 @@ struct ScrubPgIF {
    *   external reasons.
    */
   virtual Scrub::schedule_result_t start_scrub_session(
+      std::unique_ptr<Scrub::ScrubJob> candidate,
       Scrub::OSDRestrictions osd_restrictions,
-      Scrub::ScrubPGPreconds,
+      Scrub::ScrubPGPreconds pg_cond,
       const requested_scrub_t& requested_flags) = 0;
 
   virtual void set_op_parameters(const requested_scrub_t&) = 0;
@@ -452,9 +463,6 @@ struct ScrubPgIF {
   virtual void handle_query_state(ceph::Formatter* f) = 0;
 
   virtual pg_scrubbing_status_t get_schedule() const = 0;
-
-  /// notify the scrubber about a scrub failure
-  virtual void penalize_next_scrub(Scrub::delay_cause_t cause) = 0;
 
   // // perform 'scrub'/'deep_scrub' asok commands
 
@@ -543,7 +551,7 @@ struct ScrubPgIF {
    * This function assumes that the queue registration status is up-to-date,
    * i.e. the OSD "knows our name" if-f we are the Primary.
    */
-  virtual void update_scrub_job(const requested_scrub_t& request_flags) = 0;
+  virtual void update_scrub_job(Scrub::delay_ready_t delay_ready) = 0;
 
   /**
    * route incoming replica-reservations requests/responses to the

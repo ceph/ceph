@@ -14,10 +14,10 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { RbdNamespaceFormModalComponent } from '../rbd-namespace-form/rbd-namespace-form-modal.component';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rbd-namespace-list',
@@ -37,9 +37,9 @@ export class RbdNamespaceListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private rbdService: RbdService,
     private poolService: PoolService,
-    private modalService: ModalService,
     private notificationService: NotificationService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private cdsModalService: ModalCdsService
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const createAction: CdTableAction = {
@@ -116,16 +116,14 @@ export class RbdNamespaceListComponent implements OnInit {
   }
 
   createModal() {
-    this.modalRef = this.modalService.show(RbdNamespaceFormModalComponent);
-    this.modalRef.componentInstance.onSubmit.subscribe(() => {
-      this.refresh();
-    });
+    const modalRef = this.cdsModalService.show(RbdNamespaceFormModalComponent);
+    modalRef.onSubmit?.subscribe(() => this.refresh());
   }
 
   deleteModal() {
     const pool = this.selection.first().pool;
     const namespace = this.selection.first().namespace;
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    const modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
       itemDescription: 'Namespace',
       itemNames: [`${pool}/${namespace}`],
       submitAction: () =>
@@ -135,11 +133,11 @@ export class RbdNamespaceListComponent implements OnInit {
               NotificationType.success,
               $localize`Deleted namespace '${pool}/${namespace}'`
             );
-            this.modalRef.close();
+            this.cdsModalService.dismissAll();
             this.refresh();
           },
           () => {
-            this.modalRef.componentInstance.stopLoadingSpinner();
+            this.cdsModalService.stopLoadingSpinner(modalRef.deletionForm);
           }
         )
     });

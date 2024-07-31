@@ -246,7 +246,7 @@ seastar::future<> ClientRequest::with_pg_process(
     }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
       DEBUGDPP("{}.{}: interrupted due to {}",
 	       *pgref, *this, this_instance_id, eptr);
-    }, pgref).finally(
+    }, pgref, pgref->get_osdmap_epoch()).finally(
       [this, FNAME, opref=std::move(opref), pgref,
        this_instance_id, instance_handle=std::move(instance_handle), &ihref] {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);

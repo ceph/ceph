@@ -19,6 +19,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "QatAccel.h"
+#include "zlib.h"
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
@@ -33,6 +34,7 @@ static std::ostream& _prefix(std::ostream* _dout)
 // -----------------------------------------------------------------------------
 // default window size for Zlib 1.2.8, negated for raw deflate
 #define ZLIB_DEFAULT_WIN_SIZE -15
+#define GZIP_WRAPPER 16
 
 /* Estimate data expansion after decompression */
 static const unsigned int expansion_ratio[] = {5, 20, 50, 100, 200, 1000, 10000};
@@ -40,6 +42,10 @@ static const unsigned int expansion_ratio[] = {5, 20, 50, 100, 200, 1000, 10000}
 void QzSessionDeleter::operator() (struct QzSession_S *session) {
   qzTeardownSession(session);
   delete session;
+}
+
+QzPollingMode_T busy_polling(bool isSet) {
+  return isSet ? QZ_BUSY_POLLING : QZ_PERIODICAL_POLLING;
 }
 
 static bool setup_session(const std::string &alg, QatAccel::session_ptr &session) {
@@ -52,10 +58,12 @@ static bool setup_session(const std::string &alg, QatAccel::session_ptr &session
     rc = qzGetDefaultsDeflate(&params);
     if (rc != QZ_OK)
       return false;
-    params.data_fmt = QZ_DEFLATE_RAW;
+
+    params.data_fmt = QZ_DEFLATE_GZIP_EXT;
     params.common_params.comp_algorithm = QZ_DEFLATE;
     params.common_params.comp_lvl = g_ceph_context->_conf->compressor_zlib_level;
     params.common_params.direction = QZ_DIR_BOTH;
+    params.common_params.polling_mode = busy_polling(g_ceph_context->_conf.get_val<bool>("qat_compressor_busy_polling"));
     rc = qzSetupSessionDeflate(session.get(), &params);
     if (rc != QZ_OK)
       return false;
@@ -136,6 +144,8 @@ bool QatAccel::init(const std::string &alg) {
   }
 
   alg_name = alg;
+  windowBits = GZIP_WRAPPER + MAX_WBITS;
+
   return true;
 }
 
@@ -145,7 +155,8 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out, std::optional<int3
     return -1; // session initialization failed
   }
   auto session = cached_session_t{this, std::move(s)}; // returns to the session pool on destruction
-  compressor_message = ZLIB_DEFAULT_WIN_SIZE;
+  compressor_message = windowBits;
+
   int begin = 1;
   for (auto &i : in.buffers()) {
     const unsigned char* c_in = (unsigned char*) i.c_str();
@@ -188,28 +199,31 @@ int QatAccel::decompress(bufferlist::const_iterator &p,
 
   int rc = 0;
   bufferlist tmp;
-  size_t remaining = std::min<size_t>(p.get_remaining(), compressed_len);
+  unsigned int ratio_idx = 0;
+  const char* c_in = nullptr;
+  p.copy_all(tmp);
+  c_in = tmp.c_str();
+  unsigned int len = std::min<unsigned int>(tmp.length(), compressed_len);
 
-  while (remaining) {
-    unsigned int ratio_idx = 0;
-    const char* c_in = nullptr;
-    unsigned int len = p.get_ptr_and_advance(remaining, &c_in);
-    remaining -= len;
-    len -= begin;
-    c_in += begin;
-    begin = 0;
+  len -= begin;
+  c_in += begin;
+  begin = 0;
+
+  bufferptr ptr;
+  do {
     unsigned int out_len = QZ_HW_BUFF_SZ;
-
-    bufferptr ptr;
+    unsigned int len_current = len;
     do {
-      while (out_len <= len * expansion_ratio[ratio_idx]) {
+      while (out_len <= len_current * expansion_ratio[ratio_idx]) {
         out_len *= 2;
       }
 
       ptr = buffer::create_small_page_aligned(out_len);
-      rc = qzDecompress(session.get(), (const unsigned char*)c_in, &len, (unsigned char*)ptr.c_str(), &out_len);
+      rc = qzDecompress(session.get(), (const unsigned char*)c_in, &len_current, (unsigned char*)ptr.c_str(), &out_len);
       ratio_idx++;
     } while (rc == QZ_BUF_ERROR && ratio_idx < std::size(expansion_ratio));
+    c_in += len_current;
+    len -= len_current;
 
     if (rc == QZ_OK) {
       dst.append(ptr, 0, out_len);
@@ -223,7 +237,7 @@ int QatAccel::decompress(bufferlist::const_iterator &p,
       dout(1) << "QAT compressor NOT OK" << dendl;
       return -1;
     }
-  }
 
+  } while (len != 0);
   return 0;
 }

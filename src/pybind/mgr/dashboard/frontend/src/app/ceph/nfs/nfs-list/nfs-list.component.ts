@@ -20,11 +20,16 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { Task } from '~/app/shared/models/task';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskListService } from '~/app/shared/services/task-list.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 import { SUPPORTED_FSAL } from '../models/nfs.fsal';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+
+export enum RgwExportType {
+  BUCKET = 'bucket',
+  USER = 'user'
+}
 
 @Component({
   selector: 'cd-nfs-list',
@@ -37,6 +42,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   nfsState: TemplateRef<any>;
   @ViewChild('nfsFsal', { static: true })
   nfsFsal: TemplateRef<any>;
+  @ViewChild('pathTmpl', { static: true })
+  pathTmpl: TemplateRef<any>;
 
   @ViewChild('table', { static: true })
   table: TableComponent;
@@ -65,7 +72,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
 
   constructor(
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private nfsService: NfsService,
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,
@@ -93,7 +100,15 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => `/${prefix}/nfs/edit/${getNfsUri()}`,
+      routerLink: () => [
+        `/${prefix}/nfs/edit/${getNfsUri()}`,
+        {
+          rgw_export_type:
+            this.fsal === SUPPORTED_FSAL.RGW && !_.isEmpty(this.selection?.first()?.path)
+              ? RgwExportType.BUCKET
+              : RgwExportType.USER
+        }
+      ],
       name: this.actionLabels.EDIT
     };
 
@@ -110,10 +125,16 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   ngOnInit() {
     this.columns = [
       {
+        name: $localize`User`,
+        prop: 'fsal.user_id',
+        flexGrow: 2,
+        cellTransformation: CellTemplate.executing
+      },
+      {
         name: this.fsal === SUPPORTED_FSAL.CEPH ? $localize`Path` : $localize`Bucket`,
         prop: 'path',
         flexGrow: 2,
-        cellTransformation: CellTemplate.executing
+        cellTemplate: this.pathTmpl
       },
       {
         name: $localize`Pseudo`,

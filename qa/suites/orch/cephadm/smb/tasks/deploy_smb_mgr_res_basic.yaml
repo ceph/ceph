@@ -17,6 +17,7 @@ tasks:
 - cephadm.configure_samba_client_container:
     role: host.b
 - cephadm:
+    single_host_defaults: true
 
 - cephadm.shell:
     host.a:

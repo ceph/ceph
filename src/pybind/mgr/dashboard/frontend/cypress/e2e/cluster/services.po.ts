@@ -198,11 +198,11 @@ export class ServicesPageHelper extends PageHelper {
     this.clickActionButton('delete');
 
     // Confirms deletion
-    cy.get('cd-modal .custom-control-label').click();
-    cy.contains('cd-modal button', 'Delete').click();
+    cy.get('cds-modal input#confirmation_input').click({ force: true });
+    cy.contains('cds-modal button', 'Delete').click();
 
     // Wait for modal to close
-    cy.get('cd-modal').should('not.exist');
+    cy.get('cds-modal').should('not.exist');
     this.checkExist(serviceName, false);
   }
 

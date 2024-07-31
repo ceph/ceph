@@ -7,8 +7,9 @@ from ..model import nvmeof as model
 from ..security import Scope
 from ..services.orchestrator import OrchClient
 from ..tools import str_to_bool
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, Param, \
-    ReadPermission, RESTController, UIRouter
+from . import APIDoc, APIRouter, BaseController, CreatePermission, \
+    DeletePermission, Endpoint, EndpointDoc, Param, ReadPermission, \
+    RESTController, UIRouter
 
 logger = logging.getLogger(__name__)
 
@@ -392,23 +393,65 @@ else:
                 NVMeoFClient.pb2.list_connections_req(subsystem=nqn)
             )
 
+    @UIRouter('/nvmeof', Scope.NVME_OF)
+    class NVMeoFTcpUI(BaseController):
+        @Endpoint('GET', '/status')
+        @ReadPermission
+        @EndpointDoc("Display NVMe/TCP service status",
+                     responses={200: NVME_SCHEMA})
+        def status(self) -> dict:
+            status: Dict[str, Any] = {'available': True, 'message': None}
+            orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+            if orch_backend == 'cephadm':
+                orch = OrchClient.instance()
+                orch_status = orch.status()
+                if not orch_status['available']:
+                    return status
+                if not orch.services.list_daemons(daemon_type='nvmeof'):
+                    status["available"] = False
+                    status["message"] = 'An NVMe/TCP service must be created.'
+            return status
 
-@UIRouter('/nvmeof', Scope.NVME_OF)
-@APIDoc("NVMe/TCP Management API", "NVMe/TCP")
-class NVMeoFStatus(BaseController):
-    @Endpoint()
-    @ReadPermission
-    @EndpointDoc("Display NVMe/TCP service Status",
-                 responses={200: NVME_SCHEMA})
-    def status(self) -> dict:
-        status: Dict[str, Any] = {'available': True, 'message': None}
-        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
-        if orch_backend == 'cephadm':
-            orch = OrchClient.instance()
-            orch_status = orch.status()
-            if not orch_status['available']:
-                return status
-            if not orch.services.list_daemons(daemon_type='nvmeof'):
-                status["available"] = False
-                status["message"] = 'Create an NVMe/TCP service to get started.'
-        return status
+        @Endpoint('POST', "/subsystem/{subsystem_nqn}/host")
+        @EndpointDoc("Add one or more initiator hosts to an NVMeoF subsystem",
+                     parameters={
+                         'subsystem_nqn': (str, 'Subsystem NQN'),
+                         "host_nqn": Param(str, 'Comma separated list of NVMeoF host NQNs'),
+                     })
+        @empty_response
+        @handle_nvmeof_error
+        @CreatePermission
+        def add(self, subsystem_nqn: str, host_nqn: str = ""):
+            response = None
+            all_host_nqns = host_nqn.split(',')
+
+            for nqn in all_host_nqns:
+                response = NVMeoFClient().stub.add_host(
+                    NVMeoFClient.pb2.add_host_req(subsystem_nqn=subsystem_nqn, host_nqn=nqn)
+                )
+                if response.status != 0:
+                    return response
+            return response
+
+        @Endpoint(method='DELETE', path="/subsystem/{subsystem_nqn}/host/{host_nqn}")
+        @EndpointDoc("Remove on or more initiator hosts from an NVMeoF subsystem",
+                     parameters={
+                         "subsystem_nqn": Param(str, "NVMeoF subsystem NQN"),
+                         "host_nqn": Param(str, 'Comma separated list of NVMeoF host NQN.'),
+                     })
+        @empty_response
+        @handle_nvmeof_error
+        @DeletePermission
+        def remove(self, subsystem_nqn: str, host_nqn: str):
+            response = None
+            to_delete_nqns = host_nqn.split(',')
+
+            for del_nqn in to_delete_nqns:
+                response = NVMeoFClient().stub.remove_host(
+                    NVMeoFClient.pb2.remove_host_req(subsystem_nqn=subsystem_nqn, host_nqn=del_nqn)
+                )
+                if response.status != 0:
+                    return response
+                logger.info("removed host %s from subsystem %s", del_nqn, subsystem_nqn)
+
+            return response

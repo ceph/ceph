@@ -1,24 +1,19 @@
-<div class="cd-col-form">
-  <form
-    name="bucketForm"
-    #frm="ngForm"
-    [formGroup]="syncPolicyForm"
-    *cdFormLoading="loading"
-    novalidate>
-    <div class="card">
-      <div
-        i18n="form title"
-        class="card-header">
-        {{ action | titlecase }} {{ resource | upperFirst }}
-      </div>
-
-      <div class="card-body">
+<cd-modal [pageURL]="pageURL">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+  <ng-container class="modal-content">
+    <form
+      #frm="ngForm"
+      [formGroup]="syncPolicyForm"
+      *cdFormLoading="loading"
+      novalidate>
+      <div class="modal-body">
         <!-- Group Id -->
         <div class="form-group row">
           <label
             class="cd-col-form-label required"
             for="group_id"
-            i18n>Group Id</label>
+            i18n>Group Name</label>
           <div class="cd-col-form-input">
             <input
               id="group_id"
@@ -26,7 +21,7 @@
               class="form-control"
               type="text"
               i18n-placeholder
-              placeholder="Group Id..."
+              placeholder="Group Name..."
               formControlName="group_id"
               [readonly]="editing"/>
             <span
@@ -35,7 +30,6 @@
               i18n>This field is required.</span>
           </div>
         </div>
-
         <!-- Status -->
         <div class="form-group row">
           <label
@@ -64,7 +58,6 @@
               i18n>This field is required.</span>
           </div>
         </div>
-
         <!-- Bucket Name -->
         <div class="form-group row">
           <label
@@ -80,7 +73,6 @@
               i18n-placeholder
               placeholder="Bucket Name..."
               formControlName="bucket_name"
-              [readonly]="editing"
               [ngbTypeahead]="bucketDataSource"/>
             <span
               class="invalid-feedback"
@@ -90,13 +82,13 @@
         </div>
       </div>
 
-      <div class="card-footer">
-        <cd-form-button-panel
-          (submitActionEvent)="submit()"
-          [form]="syncPolicyForm"
-          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-          wrappingClass="text-right"></cd-form-button-panel>
+      <div class="modal-footer">
+        <div class="text-right">
+          <cd-form-button-panel (submitActionEvent)="submit()"
+                                [form]="syncPolicyForm"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+        </div>
       </div>
-    </div>
-  </form>
-</div>
+    </form>
+  </ng-container>
+</cd-modal>

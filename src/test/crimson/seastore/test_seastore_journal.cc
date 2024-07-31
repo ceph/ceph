@@ -32,7 +32,7 @@ struct record_validator_t {
     for (auto &&block : record.extents) {
       auto test = manager.read(
 	record_final_offset.add_relative(addr),
-	block.bl.length()).unsafe_get0();
+	block.bl.length()).unsafe_get();
       addr = addr.add_offset(block.bl.length());
       bufferlist bl;
       bl.push_back(test);
@@ -222,7 +222,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 	}
 	return Journal::replay_ertr::make_ready_future<
 	  std::pair<bool, CachedExtentRef>>(true, nullptr);
-      }).unsafe_get0();
+      }).unsafe_get();
     ASSERT_EQ(record_iter, records.end());
     for (auto &i : records) {
       i.validate(*segment_manager);
@@ -236,7 +236,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
     OrderingHandle handle = get_dummy_ordering_handle();
     auto [addr, _] = journal->submit_record(
       std::move(record),
-      handle).unsafe_get0();
+      handle).unsafe_get();
     records.back().record_final_offset = addr;
     return addr;
   }

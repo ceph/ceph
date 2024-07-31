@@ -43,6 +43,34 @@ import { NvmeofSubsystemsComponent } from './nvmeof-subsystems/nvmeof-subsystems
 import { NvmeofSubsystemsDetailsComponent } from './nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-subsystems-form.component';
+import { NvmeofListenersFormComponent } from './nvmeof-listeners-form/nvmeof-listeners-form.component';
+import { NvmeofListenersListComponent } from './nvmeof-listeners-list/nvmeof-listeners-list.component';
+import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list/nvmeof-namespaces-list.component';
+import { NvmeofNamespacesFormComponent } from './nvmeof-namespaces-form/nvmeof-namespaces-form.component';
+import { NvmeofInitiatorsListComponent } from './nvmeof-initiators-list/nvmeof-initiators-list.component';
+import { NvmeofInitiatorsFormComponent } from './nvmeof-initiators-form/nvmeof-initiators-form.component';
+
+import {
+  ButtonModule,
+  CheckboxModule,
+  DatePickerModule,
+  GridModule,
+  IconModule,
+  IconService,
+  InputModule,
+  ModalModule,
+  NumberModule,
+  RadioModule,
+  SelectModule,
+  UIShellModule
+} from 'carbon-components-angular';
+
+// Icons
+import ChevronDown from '@carbon/icons/es/chevron--down/16';
+import Close from '@carbon/icons/es/close/32';
+import AddFilled from '@carbon/icons/es/add--filled/32';
+import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
+import Reset from '@carbon/icons/es/reset/32';
 
 @NgModule({
   imports: [
@@ -56,7 +84,18 @@ import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-s
     NgxPipeFunctionModule,
     SharedModule,
     RouterModule,
-    TreeModule
+    TreeModule,
+    UIShellModule,
+    InputModule,
+    GridModule,
+    ButtonModule,
+    IconModule,
+    CheckboxModule,
+    RadioModule,
+    SelectModule,
+    NumberModule,
+    ModalModule,
+    DatePickerModule
   ],
   declarations: [
     RbdListComponent,
@@ -87,11 +126,21 @@ import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-s
     NvmeofSubsystemsComponent,
     NvmeofSubsystemsDetailsComponent,
     NvmeofTabsComponent,
-    NvmeofSubsystemsFormComponent
+    NvmeofSubsystemsFormComponent,
+    NvmeofListenersFormComponent,
+    NvmeofListenersListComponent,
+    NvmeofNamespacesListComponent,
+    NvmeofNamespacesFormComponent,
+    NvmeofInitiatorsListComponent,
+    NvmeofInitiatorsFormComponent
   ],
   exports: [RbdConfigurationListComponent, RbdConfigurationFormComponent]
 })
-export class BlockModule {}
+export class BlockModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset]);
+  }
+}
 
 /* The following breakdown is needed to allow importing block.module without
     the routes (e.g.: this module is imported by pool.module for RBD QoS
@@ -234,15 +283,34 @@ const routes: Routes = [
         component: NvmeofSubsystemsComponent,
         data: { breadcrumbs: 'Subsystems' },
         children: [
+          // subsystems
           { path: '', component: NvmeofSubsystemsComponent },
           {
             path: URLVerbs.CREATE,
             component: NvmeofSubsystemsFormComponent,
             outlet: 'modal'
           },
+          // listeners
           {
-            path: `${URLVerbs.EDIT}/:subsystem_nqn`,
-            component: NvmeofSubsystemsFormComponent,
+            path: `${URLVerbs.CREATE}/:subsystem_nqn/listener`,
+            component: NvmeofListenersFormComponent,
+            outlet: 'modal'
+          },
+          // namespaces
+          {
+            path: `${URLVerbs.CREATE}/:subsystem_nqn/namespace`,
+            component: NvmeofNamespacesFormComponent,
+            outlet: 'modal'
+          },
+          {
+            path: `${URLVerbs.EDIT}/:subsystem_nqn/namespace/:nsid`,
+            component: NvmeofNamespacesFormComponent,
+            outlet: 'modal'
+          },
+          // initiators
+          {
+            path: `${URLVerbs.ADD}/:subsystem_nqn/initiator`,
+            component: NvmeofInitiatorsFormComponent,
             outlet: 'modal'
           }
         ]

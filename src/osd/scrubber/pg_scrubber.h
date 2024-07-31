@@ -188,8 +188,9 @@ class PgScrubber : public ScrubPgIF,
   [[nodiscard]] bool is_reserving() const final;
 
   Scrub::schedule_result_t start_scrub_session(
+      std::unique_ptr<Scrub::ScrubJob> candidate,
       Scrub::OSDRestrictions osd_restrictions,
-      Scrub::ScrubPGPreconds,
+      Scrub::ScrubPGPreconds pg_cond,
       const requested_scrub_t& requested_flags) final;
 
   void initiate_regular_scrub(epoch_t epoch_queued) final;
@@ -255,7 +256,7 @@ class PgScrubber : public ScrubPgIF,
 
   // managing scrub op registration
 
-  void update_scrub_job(const requested_scrub_t& request_flags) final;
+  void update_scrub_job(Scrub::delay_ready_t delay_ready) final;
 
   void rm_from_osd_scrubbing() final;
 
@@ -436,7 +437,7 @@ class PgScrubber : public ScrubPgIF,
 
   void scrub_finish() final;
 
-  void penalize_next_scrub(Scrub::delay_cause_t cause) final;
+  void on_mid_scrub_abort(Scrub::delay_cause_t issue) final;
 
   ScrubMachineListener::MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) final;
@@ -499,8 +500,11 @@ class PgScrubber : public ScrubPgIF,
   virtual void _scrub_clear_state() {}
 
   utime_t m_scrub_reg_stamp;		///< stamp we registered for
-  Scrub::ScrubJobRef m_scrub_job;	///< the scrub-job used by the OSD to
-					///< schedule us
+
+  /// the sub-object that manages this PG's scheduling parameters.
+  /// An Optional instead of a regular member, as we wish to directly
+  /// control the order of construction/destruction.
+  std::optional<Scrub::ScrubJob> m_scrub_job;
 
   ostream& show(ostream& out) const override;
 
@@ -563,9 +567,11 @@ class PgScrubber : public ScrubPgIF,
   // 'query' command data for an active scrub
   void dump_active_scrubber(ceph::Formatter* f, bool is_deep) const;
 
-  /// calls penalize_next_scrub() to push the 'not before' to a later time
-  /// (for now. The fuller implementation will also push the scrub job back
-  /// into the queue).
+  /**
+   * move the 'not before' to a later time (with a delay amount that is
+   * based on the delay cause). Also saves the cause.
+   * Pushes the updated scrub-job into the OSD's queue.
+   */
   void requeue_penalized(Scrub::delay_cause_t cause);
 
   // -----     methods used to verify the relevance of incoming events:
@@ -726,6 +732,15 @@ class PgScrubber : public ScrubPgIF,
    */
   bool m_queued_or_active{false};
 
+  /**
+   * A copy of the specific scheduling target (either shallow_target or
+   * deep_target in the scrub_job) that was selected for this active scrub
+   * session.
+   * \ATTN: in this initial step - a copy of the whole scrub-job is passed
+   * around. Later on this would be just a part of a Scrub::SchedTarget
+   */
+  std::unique_ptr<Scrub::ScrubJob> m_active_target;
+
   eversion_t m_subset_last_update{};
 
   std::unique_ptr<Scrub::Store> m_store;
@@ -797,10 +812,12 @@ class PgScrubber : public ScrubPgIF,
    * determine the time when the next scrub should be scheduled
    *
    * based on the planned scrub's flags, time of last scrub, and
-   * the pool's scrub configuration.
+   * the pool's scrub configuration. This is only an initial "proposal",
+   * and will be further adjusted based on the scheduling parameters.
    */
-  Scrub::sched_params_t determine_scrub_time(
-      const pool_opts_t& pool_conf) const;
+  Scrub::sched_params_t determine_initial_schedule(
+      const Scrub::sched_conf_t& app_conf,
+      utime_t scrub_clock_now) const;
 
   /// should we perform deep scrub?
   bool is_time_for_deep(

@@ -60,12 +60,14 @@ shard_evaluation_t evaluate_object_shard(
   if (from == policy.primary) {
     ret.shard_info.primary = true;
   }
-  if (!maybe_obj || maybe_obj->negative) {
-    // impossible since chunky scrub was introduced
-    ceph_assert(!maybe_obj->negative);
+
+  if (!maybe_obj) {
     ret.shard_info.set_missing();
     return ret;
   }
+
+  // impossible since chunky scrub was introduced
+  ceph_assert(!maybe_obj->negative);
 
   auto &obj = *maybe_obj;
   /* We are ignoring ScrubMap::object::large_omap_object*, object_omap_* is all the

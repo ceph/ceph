@@ -33,12 +33,7 @@ namespace io {
 
 int AioCompletion::wait_for_complete() {
   tracepoint(librbd, aio_wait_for_complete_enter, this);
-  {
-    std::unique_lock<std::mutex> locker(lock);
-    while (state != AIO_STATE_COMPLETE) {
-      cond.wait(locker);
-    }
-  }
+  completed.wait(false, std::memory_order_acquire);
   tracepoint(librbd, aio_wait_for_complete_exit, 0);
   return 0;
 }
@@ -97,18 +92,15 @@ void AioCompletion::complete() {
     }
   }
 
-  state = AIO_STATE_CALLBACK;
   if (complete_cb) {
     if (external_callback) {
       complete_external_callback();
     } else {
       complete_cb(rbd_comp, complete_arg);
-      complete_event_socket();
-      notify_callbacks_complete();
+      mark_complete_and_notify();
     }
   } else {
-    complete_event_socket();
-    notify_callbacks_complete();
+    mark_complete_and_notify();
   }
 
   tracepoint(librbd, aio_complete_exit);
@@ -240,7 +232,7 @@ void AioCompletion::complete_request(ssize_t r)
 
 bool AioCompletion::is_complete() {
   tracepoint(librbd, aio_is_complete_enter, this);
-  bool done = (this->state != AIO_STATE_PENDING);
+  bool done = completed.load(std::memory_order_acquire);
   tracepoint(librbd, aio_is_complete_exit, done);
   return done;
 }
@@ -259,26 +251,20 @@ void AioCompletion::complete_external_callback() {
   // from multiple librbd-internal threads.
   boost::asio::dispatch(ictx->asio_engine->get_api_strand(), [this]() {
       complete_cb(rbd_comp, complete_arg);
-      complete_event_socket();
-      notify_callbacks_complete();
+      mark_complete_and_notify();
       put();
     });
 }
 
-void AioCompletion::complete_event_socket() {
+void AioCompletion::mark_complete_and_notify() {
+  completed.store(true, std::memory_order_release);
+
   if (ictx != nullptr && event_notify && ictx->event_socket.is_valid()) {
     ictx->event_socket_completions.push(this);
     ictx->event_socket.notify();
   }
-}
 
-void AioCompletion::notify_callbacks_complete() {
-  state = AIO_STATE_COMPLETE;
-
-  {
-    std::unique_lock<std::mutex> locker(lock);
-    cond.notify_all();
-  }
+  completed.notify_all();
 
   if (image_dispatcher_ctx != nullptr) {
     image_dispatcher_ctx->complete(rval);

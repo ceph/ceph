@@ -1,11 +1,14 @@
-<ol *ngIf="crumbs.length"
-    class="breadcrumb">
-  <li *ngFor="let crumb of crumbs; let last = last"
-      [ngClass]="{ 'active': last && finished }"
-      class="breadcrumb-item">
-    <a *ngIf="!last && crumb.path !== null"
-       [routerLink]="crumb.path"
-       preserveFragment>{{ crumb.text }}</a>
-    <span *ngIf="last || crumb.path === null">{{ crumb.text }}</span>
-  </li>
-</ol>
+<cds-breadcrumb [noTrailingSlash]="true"
+                *ngIf="crumbs.length">
+  <ng-container *ngFor="let crumb of crumbs; let last = last">
+    <cds-breadcrumb-item *ngIf="!last && crumb.path !== null"
+                         href="#/{{ crumb.path }}">
+      {{ crumb.text }}
+    </cds-breadcrumb-item>
+
+    <cds-breadcrumb-item *ngIf="last || crumb.path === null"
+                         data-testid="active-breadcrumb-item">
+      {{ crumb.text }}
+    </cds-breadcrumb-item>
+  </ng-container>
+</cds-breadcrumb>

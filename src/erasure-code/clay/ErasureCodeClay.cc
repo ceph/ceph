@@ -478,7 +478,6 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
   int z_vec[t];
   map<int, set<int> > ordered_planes;
   map<int, int> repair_plane_to_ind;
-  int count_retrieved_sub_chunks = 0;
   int plane_ind = 0;
 
   bufferptr buf(buffer::create_aligned(sub_chunksize, SIMD_ALIGN));
@@ -622,7 +621,6 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
 	    memcpy(&coupled_chunk[z*sub_chunksize],
 		   &uncoupled_chunk[z*sub_chunksize],
 		   sub_chunksize);
-	    count_retrieved_sub_chunks++;
 	  } else {
 	    ceph_assert(y == lost_chunk / q);
 	    ceph_assert(node_sw == lost_chunk);
