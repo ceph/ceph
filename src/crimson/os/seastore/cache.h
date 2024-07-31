@@ -479,9 +479,7 @@ public:
     auto p_extent = extent->get_transactional_view(t);
     if (!p_extent->is_pending_in_trans(t.get_trans_id())) {
       t.add_to_read_set(p_extent);
-      if (!p_extent->is_mutation_pending()) {
-	touch_extent(*p_extent);
-      }
+      touch_extent(*p_extent);
     }
     // user should not see RETIRED_PLACEHOLDER extents
     ceph_assert(p_extent->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
