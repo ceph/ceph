@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import base64
 import http.cookies
 import json
 import logging
@@ -52,16 +53,24 @@ class Auth(RESTController, ControllerAuthMixin):
     @EndpointDoc("Dashboard Authentication",
                  parameters={
                      'username': (str, 'Username'),
-                     'password': (str, 'Password'),
-                     'ttl': (int, 'Token Time to Live (in hours)')
+                     'password': (str, 'Password')
                  },
                  responses={201: AUTH_SCHEMA})
-    def create(self, username, password, ttl: Optional[int] = None):
+    def create(self, username, password):
         # pylint: disable=R0912
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
         max_attempt = Settings.ACCOUNT_LOCKOUT_ATTEMPTS
         origin = cherrypy.request.headers.get('Origin', None)
+        multi_cluster_token = cherrypy.request.headers.get('X-Multi-Cluster-Token', None)
+        ttl = None
+
+        if multi_cluster_token:
+            split_message = multi_cluster_token.split(".")
+            base64_message = split_message[1]
+            decoded_token = json.loads(base64.urlsafe_b64decode(base64_message + "===="))
+            ttl = decoded_token['ttl']
+
         try:
             fsid = mgr.get('config')['fsid']
         except KeyError:
