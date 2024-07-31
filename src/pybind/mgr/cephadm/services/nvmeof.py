@@ -92,14 +92,14 @@ class NvmeofService(CephService):
         """ Overrides the daemon_check_post to add nvmeof gateways safely
         """
         self.mgr.log.info(f"nvmeof daemon_check_post {daemon_descrs}")
-        spec = cast(NvmeofServiceSpec,
-                    self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
-        if not spec:
-            self.mgr.log.error(f'Failed to find spec for {daemon_descrs[0].name()}')
-            return
-        pool = spec.pool
-        group = spec.group
         for dd in daemon_descrs:
+            spec = cast(NvmeofServiceSpec,
+                        self.mgr.spec_store.all_specs.get(dd.service_name(), None))
+            if not spec:
+                self.mgr.log.error(f'Failed to find spec for {dd.name()}')
+                return
+            pool = spec.pool
+            group = spec.group
             # Notify monitor about this gateway creation
             cmd = {
                 'prefix': 'nvme-gw create',
