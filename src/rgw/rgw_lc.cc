@@ -1406,15 +1406,6 @@ public:
     }
     auto size = obj->get_size();
 
-    if (obj->get_attr(RGW_ATTR_RESTORE_STATUS, bl)) {
-      std::string restore_status = rgw_bl_str(bl);
-      if (restore_status == "CLOUD_RESTORED") {
-        // XXX: Check for buffer period for the permanent restored objects
-        ldpp_dout(oc.dpp, 1) << "Cannot transition restored object k=" << oc.o.key << dendl;
-        return 0;
-      }
-    }
-
     ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
 				      oc.env.worker->get_cloud_targets(),
 				      oc.cct, !delete_object, oc.dpp,
@@ -1450,14 +1441,11 @@ public:
     auto& o = oc.o;
     int r;
 
-   // XXX: Below changes only for testing.. to be removed 
-/*   if (oc.o.meta.category == RGWObjCategory::CloudTiered) {
-      // Skip objects which are already cloud restored. 
+    if (oc.o.meta.category == RGWObjCategory::CloudTiered) {
+      /* Skip objects which are already cloud tiered. */
       ldpp_dout(oc.dpp, 30) << "Object(key:" << oc.o.key << ") is already cloud tiered to cloud-s3 tier: " << oc.o.meta.storage_class << dendl;
-      return 1;
-    } */ 
-    // XXX: for permanent restored objects, do not allow transitions/expiration
-    // for some buffer period.
+      return 0;
+    }
 
     std::string tier_type = ""; 
     rgw::sal::ZoneGroup& zonegroup = oc.driver->get_zone()->get_zonegroup();
@@ -1470,15 +1458,6 @@ public:
 
     if (!r && oc.tier->get_tier_type() == "cloud-s3") {
       ldpp_dout(oc.dpp, 30) << "Found cloud s3 tier: " << target_placement.storage_class << dendl;
-    // XXX: delete below one post testing
-    if (oc.o.meta.category == RGWObjCategory::CloudTiered) {
-      /* Skip objects which are already cloud tiered. */
-      ldpp_dout(oc.dpp, 30) << "Object(key:" << oc.o.key << ") is already cloud tiered to cloud-s3 tier: " << oc.o.meta.storage_class << dendl;
-      return 0;
-    }
-    // XXX: for permanent restored objects, do not allow transitions/expiration
-    // for some buffer period.
-
       if (!oc.o.is_current() &&
           !pass_object_lock_check(oc.driver, oc.obj.get(), oc.dpp)) {
         /* Skip objects which has object lock enabled. */
@@ -1504,38 +1483,6 @@ public:
 
       uint32_t flags = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone())
                        ? rgw::sal::FLAG_LOG_OP : 0;
-
-
-    // DDDDD delete below if block post testing
-    if (oc.o.meta.category == RGWObjCategory::CloudTiered) {
-    rgw_placement_rule src_placement;
-    src_placement.inherit_from(oc.bucket->get_placement_rule());
-    src_placement.storage_class = oc.o.meta.storage_class;
-
-    if (oc.o.meta.size != 0) {
-      /* Skip objects which are already restored. */
-      ldpp_dout(oc.dpp, 30) << "Restoring Object(key:" << oc.o.key << ") from cloud-s3 tier: " << oc.o.meta.storage_class << dendl;
-      return 0;
-    }
-
-    r = zonegroup.get_placement_tier(src_placement, &oc.tier);
-      /* Skip objects which are already cloud tiered. */
-      ldpp_dout(oc.dpp, 30) << "Object(key:" << oc.o.key << ") is being restored from the cloud-s3 tier: " << oc.o.meta.storage_class << dendl;
-      int days = 1; // permanent restore
-      std::optional<int> days_o; // permanent restore
-      int r = oc.obj->restore_obj_from_cloud(oc.bucket, oc.tier.get(), target_placement, oc.o, oc.cct, o.meta.mtime, 
-                                        o.versioned_epoch, days, oc.dpp, null_yield, flags);
-      if (r < 0) {
-        ldpp_dout(oc.dpp, 0) << "ERROR: failed to restore obj from cloud " 
-			     << oc.bucket << ":" << o.key 
-			     << " -> " << transition.storage_class 
-			     << " " << cpp_strerror(r)
-			     << " " << oc.wq->thr_name() << dendl;
-        return r;
-      }
-      return 0;
-    }
-
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
                                  o.versioned_epoch, oc.dpp, null_yield, flags);
       if (r < 0) {
@@ -2041,6 +1988,12 @@ int RGWLC::process(LCWorker* worker,
       if (ret < 0)
 	return ret;
     }
+  }
+
+  ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_expire_objects(this, null_yield);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "RGWLC::process_expire_objects: failed, "
+	          << " worker ix: " << worker->ix << dendl;
   }
 
   return 0;

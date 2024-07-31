@@ -42,9 +42,9 @@ void read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& cate
     string m = i.to_str();
 
     if (m == "cloud-s3") {
-      category = RGWObjCategory::CloudTiered;
       manifest.set_tier_type("cloud-s3");
 
+      {
       auto config_iter = attrs.find(RGW_ATTR_CLOUD_TIER_CONFIG);
       if (config_iter != attrs.end()) {
         auto i = config_iter->second.cbegin();
@@ -57,6 +57,29 @@ void read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& cate
           attrs.erase(config_iter);
         } catch (buffer::error& err) {
         }
+      }
+      }
+
+      {
+      // keep the object as CloudTiered only for Cloud-transitioned or 
+      // temporary restored objects.
+      auto config_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+      if (config_iter != attrs.end()) {
+        rgw::sal::RGWRestoreType rt = rgw::sal::RGWRestoreType::None;
+        auto iter = config_iter->second.cbegin();
+
+        try {
+          using ceph::decode;
+          decode(rt, iter);
+
+          if (rt == rgw::sal::RGWRestoreType::Permanent) {
+            category = RGWObjCategory::Main;
+          } else {
+            category = RGWObjCategory::CloudTiered;
+          }
+        } catch (buffer::error& err) {
+        }
+      }
       }
     }
     attrs.erase(attr_iter);

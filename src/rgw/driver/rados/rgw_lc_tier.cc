@@ -324,25 +324,6 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     if (aiter != std::end(generic_attrs_map)) {
       ldpp_dout(tier_ctx.dpp, 20) << __func__ << " Received attrs aiter->first = " << aiter->first << ", aiter->second = " << aiter->second << ret << dendl;
      attrs[aiter->second] = bl;
-    } else {
-      std::string meta_name = header.first;
-      boost::algorithm::to_lower(meta_name);
-      std::replace(meta_name.begin(), meta_name.end(), '_', '-');
-      if (strncmp(meta_name.c_str(), RGW_AMZ_META_PREFIX, sizeof(RGW_AMZ_META_PREFIX)-1) == 0) {
-        meta_name += sizeof(RGW_AMZ_META_PREFIX) - 1;
-        string sname(meta_name);
-        string name_prefix = RGW_ATTR_PREFIX;
-        char full_name_buf[name_prefix.size() + sname.size() + 1];
-        snprintf(full_name_buf, sizeof(full_name_buf), "%.*s%.*s",
-            static_cast<int>(name_prefix.length()),
-            name_prefix.data(),
-            static_cast<int>(sname.length()),
-            sname.data());
-        ldpp_dout(tier_ctx.dpp, 30) << __func__ << " Received attrs meta_name:" << meta_name << ", sname:" << sname << ", full_name_buf:" << full_name_buf << dendl; 
-        attrs[full_name_buf] = bl;
-      } else {
-        attrs[header.first] = bl;
-      }
     }
     
     if (header.first == "CONTENT_LENGTH") {

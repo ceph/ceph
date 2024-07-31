@@ -159,11 +159,6 @@ enum RGWRestoreStatus : uint8_t {
   RestoreFailed = 3
 };
 
-std::string_view to_string(RGWRestoreStatus c);
-
-inline std::ostream& operator<<(std::ostream& out, RGWRestoreStatus c) {
-  return out << to_string(c);
-}
 
 enum class RGWRestoreType : uint8_t {
   None = 0,
@@ -171,11 +166,6 @@ enum class RGWRestoreType : uint8_t {
   Permanent = 2
 };
 
-std::string_view to_string(RGWRestoreType c);
-
-inline std::ostream& operator<<(std::ostream& out, RGWRestoreType c) {
-  return out << to_string(c);
-}
 
 // a simple streaming data processing abstraction
 /**
@@ -1225,6 +1215,7 @@ class Object {
 			   rgw_placement_rule& placement_rule,
 			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
+         RGWObjTier& tier_config,
 			   real_time& mtime,
 			   uint64_t olh_epoch,
          std::optional<uint64_t> days,

@@ -448,6 +448,19 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_restore_debug_interval
+  type: int
+  level: dev
+  desc: The number of seconds that simulate one "day" in order to debug RGW CloudRestore.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW Cloud Restore, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change Restore behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_mp_lock_max_time
   type: int
   level: advanced
