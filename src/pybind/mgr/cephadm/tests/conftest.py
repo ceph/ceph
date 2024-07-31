@@ -1,13 +1,14 @@
 import pytest
 
 from cephadm.services.osd import RemoveUtil, OSD
-from tests import mock
-
+from mock import mock
 from .fixtures import with_cephadm_module
+from cephadm import CephadmOrchestrator
+from typing import Generator
 
 
 @pytest.fixture()
-def cephadm_module():
+def cephadm_module() -> Generator[CephadmOrchestrator, None, None]:
     with with_cephadm_module({}) as m:
         yield m
 

@@ -4,6 +4,8 @@ from collections import namedtuple
 sys_info = namedtuple('sys_info', ['devices'])
 sys_info.devices = dict()
 
+BEING_REPLACED_HEADER: str = 'CEPH_DEVICE_BEING_REPLACED'
+
 
 class UnloadedConfig(object):
     """

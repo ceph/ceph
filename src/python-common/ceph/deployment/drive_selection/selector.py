@@ -131,6 +131,10 @@ class DriveSelection(object):
         for disk in self.disks:
             logger.debug("Processing disk {}".format(disk.path))
 
+            if disk.being_replaced:
+                logger.debug('Ignoring disk {} as it is being replaced.'.format(disk.path))
+                continue
+
             if not disk.available and not disk.ceph_device:
                 logger.debug(
                     ("Ignoring disk {}. "
