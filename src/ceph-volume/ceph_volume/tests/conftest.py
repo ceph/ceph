@@ -360,7 +360,7 @@ def device_info(monkeypatch, patch_bluestore_label):
               has_bluestore_label=False):
         if devices:
             for dev in devices.keys():
-                devices[dev]['device_nodes'] = os.path.basename(dev)
+                devices[dev]['device_nodes'] = [os.path.basename(dev)]
         else:
             devices = {}
         lsblk = lsblk if lsblk else {}

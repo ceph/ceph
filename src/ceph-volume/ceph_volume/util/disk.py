@@ -857,13 +857,14 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
             metadata['partitions'] = get_partitions_facts(sysdir)
 
+        metadata['device_nodes'] = []
         if device_slaves:
-            metadata['device_nodes'] = ','.join(device_slaves)
+            metadata['device_nodes'].extend(device_slaves)
         else:
             if block[2] == 'part':
-                metadata['device_nodes'] = block[3]
+                metadata['device_nodes'].append(block[3])
             else:
-                metadata['device_nodes'] = devname
+                metadata['device_nodes'].append(devname)
 
         metadata['actuators'] = None
         if os.path.isdir(sysdir + "/queue/independent_access_ranges/"):
