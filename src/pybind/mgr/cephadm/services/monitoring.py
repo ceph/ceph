@@ -97,7 +97,8 @@ class GrafanaService(CephadmService):
                 'http_port': grafana_port,
                 'protocol': spec.protocol,
                 'http_addr': grafana_ip,
-                'use_url_prefix': mgmt_gw_enabled
+                'use_url_prefix': mgmt_gw_enabled,
+                'domain': daemon_spec.host,
             })
 
         if 'dashboard' in self.mgr.get('mgr_map')['modules'] and spec.initial_admin_password:

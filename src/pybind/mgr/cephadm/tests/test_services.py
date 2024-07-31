@@ -1224,7 +1224,7 @@ class TestMonitoring:
                           org_name = 'Main Org.'
                           org_role = 'Viewer'
                         [server]
-                          domain = 'bootstrap.storage.lab'
+                          domain = 'test'
                           protocol = https
                           cert_file = /etc/grafana/certs/cert_file
                           cert_key = /etc/grafana/certs/cert_key
@@ -1332,7 +1332,7 @@ class TestMonitoring:
                                     "  org_name = 'Main Org.'\n"
                                     "  org_role = 'Viewer'\n"
                                     '[server]\n'
-                                    "  domain = 'bootstrap.storage.lab'\n"
+                                    "  domain = 'test'\n"
                                     '  protocol = https\n'
                                     '  cert_file = /etc/grafana/certs/cert_file\n'
                                     '  cert_key = /etc/grafana/certs/cert_key\n'
@@ -1394,7 +1394,7 @@ class TestMonitoring:
                                     '[users]\n'
                                     '  default_theme = light\n'
                                     '[server]\n'
-                                    "  domain = 'bootstrap.storage.lab'\n"
+                                    "  domain = 'test'\n"
                                     '  protocol = https\n'
                                     '  cert_file = /etc/grafana/certs/cert_file\n'
                                     '  cert_key = /etc/grafana/certs/cert_key\n'
