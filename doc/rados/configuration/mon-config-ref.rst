@@ -603,8 +603,7 @@ For more information about the pool flags see :ref:`Pool values <setpoolvalues>`
 Monitor backup
 ==============
 
-The monitor daemon is capable of creating consistant backups of the RocksDB to allow restorating
-in case of fatal multi node failure. It uses the native RocksDB backup functionality to create consistant 
+The Ceph Monitor can create consistent backups of its RocksDB to facilitate restoration in case the entire Monitor cluster fails. It uses the native RocksDB backup functionality to create consistant
 snapshots that can be backuped elsewhere without downtime.
 
 When :ref:`Backup Interval<mon_backup_interval>` is set, the backup is triggered the specified interval in minutes.
@@ -615,17 +614,17 @@ permissions trigger a backup.
 When :ref:`Auto Backup <mon_auto_backup>` is enabled, creation of certain objects like auth
 permissions trigger a backup.
 
-To reduce IO on mon database, shared backups are the default, but every 5th backup or manually triggered backups are full backups.
+In order to limit demands on the Ceph Monitor database, shared backups are the default. Every fifth backup, or any manually-triggered backup however will be a full backup.
 If :ref:`Always Full Backup <mon_backup_always_full>` is enabled, all backups are full copies. Full backups can be copied to an external
-drive by copying the backup folder. Shared backus use a shared object tree and only safe pointers.
-The cleanup mechanism will keep full backups over incremental to reduce risk of corruption.
+location by copying the backup folder. Shared backups use a shared object tree and only store pointers.
+The cleanup mechanism will keep full backups over incremental to reduce the risk of corruption.
 
 
 The :ref:`Backup Cleanup<mon_backup_cleanup_interval>` specifies the interval for backup cleanup.
 The cleanup algorithm keeps the last ``mon_backup_keep_last`` backups. It then collects hourly ``mon_backup_keep_hourly``
 and daily ``mon_backup_keep_daily`` versions. It selects the largest of all variants in a time window.
 
-You can trigger `backup` and `backup_cleanup` through the admin socket
+You can trigger `backup` and `backup_cleanup` through the admin socket of any mon.
 
   .. prompt:: bash #
      ceph --admin-daemon .../mon.asok backup
@@ -633,7 +632,7 @@ You can trigger `backup` and `backup_cleanup` through the admin socket
   .. prompt:: bash #
      ceph --admin-daemon .../mon.asok backup_cleanup
 
-Since all backup operations run in its own threads, monitoring should be done using performance metrics.
+Since all backup operations run in their own threads, monitoring should be done using performance metrics.
 Use the prometheus interface to monitor for `backup_failed` or missing `backup_started` counters.
 
   .. prompt:: bash #

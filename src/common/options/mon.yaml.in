@@ -1114,7 +1114,7 @@ options:
   type: str
   level: advanced
   desc: path to mon database backups
-  fmt_desc: The monitor's backup location.
+  fmt_desc: the monitor's backup location.
   default: /var/backups/ceph/mon/$cluster-$id
   services:
   - mon
@@ -1133,7 +1133,7 @@ options:
 - name: mon_backup_always_full
   type: bool
   level: advanced
-  desc: Always create full backups. Otherwise only externally triggered and every 5th backup is automatically full.
+  desc: always create full backups, otherwise only externally triggered and every 5th backup is automatically full.
   default: false
   services:
   - mon
@@ -1142,7 +1142,7 @@ options:
 - name: mon_backup_min_avail
   type: int
   level: advanced
-  desc: Only start backups if available disk space is above percentage
+  desc: only start backups if available disk space is above percentage
   default: 5
   services:
   - mon
@@ -1150,7 +1150,7 @@ options:
   type: uint
   level: advanced
   desc: keep last N backups
-  fmt_desc: Keep the last backups of the monitor database
+  fmt_desc: keep the last backups of the monitor database
   default: 6
   services:
   - mon
@@ -1159,8 +1159,7 @@ options:
 - name: mon_backup_keep_hourly
   type: uint
   level: advanced
-  desc: keep N hourly backups
-  fmt_desc: Keep the hourly backups of the monitor database
+  desc: number of hourly backups
   default: 5
   services:
   - mon
@@ -1169,7 +1168,7 @@ options:
 - name: mon_backup_keep_daily
   type: uint
   level: advanced
-  desc: keep last daily backups
+  desc: number of daily backups
   fmt_desc: Keep a one backup of every specified days
   default: 7
   services:
@@ -1180,7 +1179,6 @@ options:
   type: uint
   level: advanced
   desc: automatic backups very N minutes
-  fmt_desc: Trigger backups every N minutes
   services:
   - mon
   flags:
@@ -1188,8 +1186,7 @@ options:
 - name: mon_backup_cleanup_interval
   type: uint
   level: advanced
-  desc: trigger backup cleanup very N minutes
-  fmt_desc: Trigger backup cleanup every N minutes
+  desc: trigger backup cleanup very specified minutes
   services:
   - mon
   flags:

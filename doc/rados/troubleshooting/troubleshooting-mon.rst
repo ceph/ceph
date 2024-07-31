@@ -538,14 +538,14 @@ To list available backups run:
 .. code-block:: bash
   ceph-mon -i [num] --list-backups /path/to/backups
 
-To restore a backup version, run following command:
+To restore a backup, run following command:
 
 .. code-block:: bash
   ceph-mon -i [num] --restore-backup /path/to/backups --backup-version <version>
 
-You can skip the `--backup-version` argument, which will use the latest version automatically.
-The cluster will recover from that point on by applying missing `osdmap` versions stored on the osds.
-Auth accounts and other none osd related entries are lost.
+If the `--backup-version` argument is omitted, the latest version will be restored.
+The cluster will recover from that point on by applying missing `osdmap` versions to each OSD.
+Auth accounts and other non-OSD-related entries are lost.
 
 
 Recovery using healthy monitor(s)
