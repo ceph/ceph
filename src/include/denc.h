@@ -1876,6 +1876,16 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   static_assert(CEPH_RELEASE >= (CEPH_RELEASE_SQUID /*19*/ + 2) || compat == 2);	\
   _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
   do {
+  
+// This variant is unsafe, because older versions will not even catch incompatibility.
+// The ability to decode must be verified by other means,
+#define DENC_START_UNSAFE(v, compat, p)				\
+  __u8 struct_v = v;							\
+  __u8 struct_compat = compat;						\
+  char *_denc_pchar;							\
+  uint32_t _denc_u32;							\
+  _denc_start(p, &struct_v, &struct_compat, &_denc_pchar, &_denc_u32);	\
+  do {
 
 // For osd_reqid_t which cannot be upgraded at all.
 // We used it to communicate with clients and now we cannot safely upgrade.

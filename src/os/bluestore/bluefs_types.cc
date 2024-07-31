@@ -5,7 +5,9 @@
 #include "bluefs_types.h"
 #include "BlueFS.h"
 #include "common/Formatter.h"
+#include "include/byteorder.h"
 #include "include/denc.h"
+#include "include/encoding.h"
 #include "include/uuid.h"
 #include "include/stringify.h"
 
@@ -75,13 +77,19 @@ void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
 }
 
 // bluefs_super_t
-bluefs_super_t::bluefs_super_t() : version(0), block_size(4096) {
+bluefs_super_t::bluefs_super_t() : version(0), block_size(4096), wal_version(1) {
   bluefs_max_alloc_size.resize(BlueFS::MAX_BDEV, 0);
 }
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 1, bl);
+  __u8 _version = 3;
+  __u8 _compat = 1;
+  if (wal_version >= 2) {
+    _version = 4;
+    _compat = 4;
+  }
+  ENCODE_START(_version, _compat, bl);
   encode(uuid, bl);
   encode(osd_uuid, bl);
   encode(version, bl);
@@ -89,12 +97,15 @@ void bluefs_super_t::encode(bufferlist& bl) const
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
   encode(bluefs_max_alloc_size, bl);
+  if (_version >= 4) {
+    encode(wal_version, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void bluefs_super_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(3, p);
+  DECODE_START(4, p);
   decode(uuid, p);
   decode(osd_uuid, p);
   decode(version, p);
@@ -107,6 +118,9 @@ void bluefs_super_t::decode(bufferlist::const_iterator& p)
     decode(bluefs_max_alloc_size, p);
   } else {
     std::fill(bluefs_max_alloc_size.begin(), bluefs_max_alloc_size.end(), 0);
+  }
+  if (struct_v >= 4) {
+    decode(wal_version, p);
   }
   DECODE_FINISH(p);
 }
@@ -177,6 +191,10 @@ bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
   delta->mtime = mtime;
   delta->offset = allocated_commited;
   delta->extents.clear();
+
+  delta->type = type;
+  delta->wal_limit = wal_limit;
+  delta->wal_size = wal_size;
   if (allocated_commited < allocated) {
     uint64_t x_off = 0;
     auto p = seek(allocated_commited, &x_off);
@@ -214,17 +232,24 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
   ls.back()->mtime = utime_t(123,45);
   ls.back()->extents.push_back(bluefs_extent_t(0, 1048576, 4096));
   ls.back()->__unused__ = 1;
+  ls.back()->type = 0;
 }
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
-  return out << "file(ino " << file.ino
+  out << "file(ino " << file.ino
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
-	     << " extents " << file.extents
-	     << ")";
+	     << " extents " << file.extents;
+  if (file.type == WAL_V2) {
+    out << " wal_limit " << file.wal_limit << std::hex;
+    out << " wal_size " << file.wal_size << std::hex;
+    out << " type WAL_V2 " << std::dec;
+  }
+  out << ")";
+  return out;
 }
 
 // bluefs_fnode_delta_t
@@ -317,3 +342,29 @@ ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 	     << std::dec << ")";
 }
 
+void bluefs_wal_header_t::bound_encode(size_t &s) const {
+  s += 1; // version
+  s += 1; // compat
+  s += 4; // size
+  denc(flush_length, s);
+}
+
+void bluefs_wal_header_t::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(flush_length, bl);
+  ENCODE_FINISH(bl);
+}
+
+void bluefs_wal_header_t::encode(bufferlist::contiguous_filler& filler_in) const {
+  ENCODE_START_FILLER(1, 1, filler_in);
+  ceph_le64 flush_length_le(flush_length);
+  filler_in.copy_in(sizeof(flush_length_le), (char*)&flush_length_le);
+  ENCODE_FINISH_FILLER();
+}
+
+void bluefs_wal_header_t::decode(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(flush_length, p);
+  DECODE_FINISH(p);
+}

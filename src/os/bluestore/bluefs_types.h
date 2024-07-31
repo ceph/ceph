@@ -4,6 +4,7 @@
 #define CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 
 #include <optional>
+#include <ostream>
 
 #include "bluestore_types.h"
 #include "include/utime.h"
@@ -33,6 +34,12 @@ public:
 };
 WRITE_CLASS_DENC(bluefs_extent_t)
 
+enum bluefs_node_type {
+  REGULAR = 0,
+  WAL_V2 = 1,
+  NODE_TYPE_END = 0x100,
+};
+
 std::ostream& operator<<(std::ostream& out, const bluefs_extent_t& e);
 
 struct bluefs_fnode_delta_t {
@@ -42,16 +49,65 @@ struct bluefs_fnode_delta_t {
   uint64_t offset; // Contains offset in file of extents.
                    // Equal to 'allocated' when created.
                    // Used for consistency checking.
+
+  // only relevant in case of wal node
+  uint64_t wal_limit;
+  uint64_t wal_size;
+  uint8_t type = REGULAR;
+
+
   mempool::bluefs::vector<bluefs_extent_t> extents;
 
-  DENC(bluefs_fnode_delta_t, v, p) {
-    DENC_START(1, 1, p);
+  DENC_HELPERS
+
+  void bound_encode(size_t& p) const {
+    _denc_friend(*this, p);
+  }
+  void encode(ceph::buffer::list::contiguous_appender& p) const {
+    DENC_DUMP_PRE(bluefs_fnode_t);
+    _denc_friend(*this, p);
+  }
+  void decode(ceph::buffer::ptr::const_iterator& p) {
+    DENC_START_UNSAFE(2, 2, p);
+    denc_varint(ino, p);
+    denc_varint(size, p);
+    denc(mtime, p);
+    denc(offset, p);
+    denc(extents, p);
+
+    if (struct_v >= 2) {
+      denc(type, p);
+      denc(wal_limit, p);
+      denc(wal_size, p);
+    }
+    DENC_FINISH(p);
+
+  }
+
+  template<typename T, typename P>
+  friend std::enable_if_t<std::is_same_v<bluefs_fnode_delta_t, std::remove_const_t<T>>>
+  _denc_friend(T& v, P& p) {
+    uint8_t version = 1, compat = 1;
+    if (v.type == WAL_V2) {
+      version = 2;
+      compat = 2;
+    }
+    DENC_START_UNSAFE(version, compat, p);
+
     denc_varint(v.ino, p);
     denc_varint(v.size, p);
     denc(v.mtime, p);
     denc(v.offset, p);
     denc(v.extents, p);
+
+    if (struct_v >= 2) {
+      denc(v.type, p);
+      denc(v.wal_limit, p);
+      denc(v.wal_size, p);
+    }
+
     DENC_FINISH(p);
+
   }
 };
 WRITE_CLASS_DENC(bluefs_fnode_delta_t)
@@ -71,14 +127,19 @@ struct bluefs_fnode_t {
 
   uint64_t allocated;
   uint64_t allocated_commited;
+  uint8_t type = REGULAR;
+  uint64_t wal_limit; // EOF of wal, this limit represents upper limit of fnode.size, not upper limit of wal_size
+  uint64_t wal_size; // Amount of payload bytes in WAL(not including envelope data), there could be more on power off instances, in range of wal_size~wal_limit
 
-  bluefs_fnode_t() : ino(0), size(0), allocated(0), allocated_commited(0) {}
+  bluefs_fnode_t() : ino(0), size(0), allocated(0), allocated_commited(0), wal_limit(0), wal_size(0) {}
   bluefs_fnode_t(uint64_t _ino, uint64_t _size, utime_t _mtime) :
-    ino(_ino), size(_size), mtime(_mtime), allocated(0), allocated_commited(0) {}
+    ino(_ino), size(_size), mtime(_mtime), allocated(0), allocated_commited(0), wal_limit(0), wal_size(0) {}
   bluefs_fnode_t(const bluefs_fnode_t& other) :
     ino(other.ino), size(other.size), mtime(other.mtime),
     allocated(other.allocated),
-    allocated_commited(other.allocated_commited) {
+    allocated_commited(other.allocated_commited),
+    wal_limit(other.wal_limit),
+    wal_size(other.wal_size) {
     clone_extents(other);
   }
 
@@ -104,19 +165,46 @@ struct bluefs_fnode_t {
     DENC_DUMP_PRE(bluefs_fnode_t);
     _denc_friend(*this, p);
   }
+
   void decode(ceph::buffer::ptr::const_iterator& p) {
-    _denc_friend(*this, p);
+    DENC_START_COMPAT_2(2, 2, p);
+    denc_varint(ino, p);
+    denc_varint(size, p);
+    denc(mtime, p);
+    denc(__unused__, p);
+    denc(extents, p);
+    if (struct_v >= 2) {
+      denc(type, p);
+      denc(wal_limit, p);
+      denc(wal_size, p);
+    }
+    if (struct_v == 1) {
+    	type = REGULAR;
+    }
+    DENC_FINISH(p);
     recalc_allocated();
   }
+
   template<typename T, typename P>
   friend std::enable_if_t<std::is_same_v<bluefs_fnode_t, std::remove_const_t<T>>>
   _denc_friend(T& v, P& p) {
-    DENC_START(1, 1, p);
+
+    uint8_t version = 1, compat = 1;
+    if (v.type == WAL_V2) {
+      version = 2;
+      compat = 2;
+    }
+    DENC_START_UNSAFE(version, compat, p);
     denc_varint(v.ino, p);
     denc_varint(v.size, p);
     denc(v.mtime, p);
     denc(v.__unused__, p);
     denc(v.extents, p);
+    if (struct_v >= 2) {
+      denc(v.type, p);
+      denc(v.wal_limit, p);
+      denc(v.wal_size, p);
+    }
     DENC_FINISH(p);
   }
   void reset_delta() {
@@ -220,6 +308,7 @@ struct bluefs_super_t {
   std::optional<bluefs_layout_t> memorized_layout;
 
   std::vector<uint64_t> bluefs_max_alloc_size;
+  uint8_t wal_version;
 
   bluefs_super_t();
 
@@ -257,7 +346,6 @@ struct bluefs_transaction_t {
   uuid_d uuid;          ///< fs uuid
   uint64_t seq;         ///< sequence number
   ceph::buffer::list op_bl;     ///< encoded transaction ops
-
   bluefs_transaction_t() : seq(0) {}
 
   void clear() {
@@ -339,4 +427,20 @@ struct bluefs_transaction_t {
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 
 std::ostream& operator<<(std::ostream& out, const bluefs_transaction_t& t);
+
+
+
+struct bluefs_wal_header_t {
+  uint64_t flush_length;
+  
+  bluefs_wal_header_t() : flush_length(0) {}
+  bluefs_wal_header_t(uint64_t flush_length) : flush_length(flush_length) {}
+  static constexpr size_t size() { return (sizeof(__u8)*2) + sizeof(uint32_t) + sizeof(uint64_t); }
+  void bound_encode(size_t &s) const;
+  void encode(ceph::buffer::list& bl) const;
+  void encode(ceph::buffer::list::contiguous_filler& filler_in) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+};
+WRITE_CLASS_ENCODER(bluefs_wal_header_t)
+
 #endif

@@ -6584,3 +6584,12 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: bluefs_wal_v2
+  type: bool
+  level: advanced
+  desc: Enables a faster backend in BlueFS for WAL writes.
+  long_desc: Enabling this feature will reduce ~50% the amount of fdatasync syscalls issued by WAL writes. This happens because we embed metadata
+    with the data itself. Downgrading from a version that uses v2 to v1 will require running `ceph-bluestore-tool --command downgrade-wal-to-v1`
+    to move wal files to previous format.
+  default: true
+  with_legacy: false
