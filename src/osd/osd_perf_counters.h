@@ -136,6 +136,8 @@ enum {
   // are labeled, and histograms do not fully support labels.
   l_osd_scrub_reservation_dur_hist,
 
+  l_osd_watch_timeouts,
+
   l_osd_last,
 };
 

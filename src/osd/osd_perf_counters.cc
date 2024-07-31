@@ -337,6 +337,10 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter_histogram(
       l_osd_scrub_reservation_dur_hist, "scrub_resrv_repnum_vs_duration",
       rsrv_hist_x_axis_config, rsrv_hist_y_axis_config, "Histogram of scrub replicas reservation duration");
+  osd_plb.add_u64_counter(
+  l_osd_watch_timeouts, "watch_timeouts",
+  "Number of watches that timed out or were blocklisted",
+  NULL, PerfCountersBuilder::PRIO_USEFUL);
 
   return osd_plb.create_perf_counters();
 }
