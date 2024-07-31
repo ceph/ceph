@@ -35,11 +35,11 @@ def get_module_option_ex(_, module, key, default=None):
     return None
 
 
-def _run_cephadm(ret):
+def _run_cephadm(ret, rc: int = 0):
     async def foo(s, host, entity, cmd, e, **kwargs):
         if cmd == 'gather-facts':
             return '{}', '', 0
-        return [ret], '', 0
+        return [ret], '', rc
     return foo
 
 

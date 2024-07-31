@@ -101,6 +101,7 @@ from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
+from .ceph_volume import CephVolume
 
 try:
     import asyncssh
@@ -791,6 +792,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         # removed daemons. Daemons are added to the dict upon creation or removal and cleared
         # as part of the handling of stray daemons
         self.recently_altered_daemons: Dict[str, datetime.datetime] = {}
+
+        self.ceph_volume: CephVolume = CephVolume(self)
 
     def shutdown(self) -> None:
         self.log.debug('shutdown')
@@ -3829,8 +3832,55 @@ Then run the following:
         return self.upgrade.upgrade_stop()
 
     @handle_orch_error
+    def replace_device(self,
+                       hostname: str,
+                       device: str,
+                       clear: bool = False,
+                       yes_i_really_mean_it: bool = False) -> Any:
+        output: str = ''
+
+        self.ceph_volume.lvm_list.get_data(hostname=hostname)
+
+        if clear:
+            output = self.ceph_volume.clear_replace_header(hostname, device)
+        else:
+            osds_to_zap: List[str] = []
+            if hostname not in list(self.inventory.keys()):
+                raise OrchestratorError(f'{hostname} invalid host.')
+
+            if device not in self.ceph_volume.lvm_list.all_devices():
+                raise OrchestratorError(f"{device} doesn't appear to be used for an OSD, not a valid device in {hostname}.")
+
+            device_osd_mapping = self.ceph_volume.lvm_list.device_osd_mapping()
+            osds_to_zap = device_osd_mapping[device]['osd_ids']
+
+            if self.ceph_volume.lvm_list.is_shared_device(device):
+                if not yes_i_really_mean_it:
+                    raise OrchestratorError(f'{device} is a shared device.\n'
+                                            f'Replacing {device} implies destroying OSD(s): {osds_to_zap}.\n'
+                                            'Please, *be very careful*, this can be a very dangerous operation.\n'
+                                            'If you know what you are doing, pass --yes-i-really-mean-it')
+            if not self.to_remove_osds.rm_util.safe_to_destroy([int(osd_id) for osd_id in osds_to_zap]):
+                raise OrchestratorError(f"Destroying OSD(s) {osds_to_zap} would cause some PGs to be undersized/degraded.\n"
+                                        'Refusing to proceed.')
+            replace_block: bool = self.ceph_volume.lvm_list.is_block_device(device)
+            replace_db: bool = self.ceph_volume.lvm_list.is_db_device(device)
+            replace_wal: bool = self.ceph_volume.lvm_list.is_wal_device(device)
+
+            self.remove_osds(list(osds_to_zap),
+                             replace_block=replace_block,
+                             replace_db=replace_db,
+                             replace_wal=replace_wal)
+
+            output = f'Scheduled to destroy osds: {osds_to_zap} and mark {device} as being replaced.'
+        return output
+
+    @handle_orch_error
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
+                    replace_block: bool = False,
+                    replace_db: bool = False,
+                    replace_wal: bool = False,
                     force: bool = False,
                     zap: bool = False,
                     no_destroy: bool = False) -> str:
@@ -3853,6 +3903,9 @@ Then run the following:
             try:
                 self.to_remove_osds.enqueue(OSD(osd_id=int(daemon.daemon_id),
                                                 replace=replace,
+                                                replace_block=replace_block,
+                                                replace_db=replace_db,
+                                                replace_wal=replace_wal,
                                                 force=force,
                                                 zap=zap,
                                                 no_destroy=no_destroy,
