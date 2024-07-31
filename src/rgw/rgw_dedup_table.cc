@@ -126,15 +126,18 @@ namespace rgw::dedup {
     if (!hash_tab[idx].val.is_occupied()) {
       hash_tab[idx].key = *p_key;
       hash_tab[idx].val = val;
+      ldpp_dout(dpp, 0) << __func__ << "::add new entry" << dendl;
     }
     else {
       ceph_assert(hash_tab[idx].key == *p_key);
       if (!hash_tab[idx].val.is_shared_manifest() && shared_manifest) {
 	// replace value!
+	ldpp_dout(dpp, 0) << __func__ << "::Replace with shared_manifest" << dendl;
 	val.clear_singleton();
 	hash_tab[idx].val = val;
       }
       else if (hash_tab[idx].val.is_singleton()) {
+	ldpp_dout(dpp, 0) << __func__ << "::clear singleton" << dendl;
 	// This is the second record with the same key -> clear singleton state
 	hash_tab[idx].val.clear_singleton();
       }

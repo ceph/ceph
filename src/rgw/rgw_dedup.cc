@@ -318,7 +318,6 @@ namespace rgw::dedup {
     unsigned idx = 0;
     for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p, ++idx) {
       rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
-      ldpp_dout(dpp, 1) << __func__ << "::[" << idx << "]tail object=" << raw_obj.oid << dendl;
       if (oid == raw_obj.oid) {
 	ldpp_dout(dpp, 0) << __func__ << "::[" << idx <<"] Skip HEAD OBJ: " << raw_obj.oid << dendl;
 	continue;
@@ -438,6 +437,12 @@ namespace rgw::dedup {
 	      p_rec->s.num_parts);
     bool valid_sha256 = p_rec->s.flags & RGW_DEDUP_FLAG_SHA256;
     bool shared_manifest = p_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST;
+
+    ldpp_dout(dpp, 0) << __func__ << "::bucket=" << p_rec->bucket_name
+		      << ", obj=" << p_rec->obj_name << ", block_id="
+		      << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
+		      << ", shared_manifest=" << shared_manifest << dendl;
+
     return d_table.add_entry(&key, block_id, rec_id, shared_manifest, valid_sha256);
   }
 
@@ -617,10 +622,11 @@ namespace rgw::dedup {
   {
     ldpp_dout(dpp, 0) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
 		      << ", obj=" << p_tgt_rec->obj_name
-		      << ", block_id=" << block_id << ", rec_id=" << rec_id
+		      << ", block_id=" << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
 		      << ", md5_shard=" << md5_shard << dendl;
     if (p_tgt_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
       // record holds a shared_manifest object so can't be a dedup target
+      ldpp_dout(dpp, 0) << __func__ << "::skipped shared_manifest" << dendl;
       stats.skipped_shared_manifest++;
       return 0;
     }
@@ -633,11 +639,13 @@ namespace rgw::dedup {
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
       stats.skipped_singleton++;
+      ldpp_dout(dpp, 0) << __func__ << "::skipped singleton" << dendl;
       return 0;
     }
 
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
+      ldpp_dout(dpp, 0) << __func__ << "::skipped source-record" << dendl;
       stats.skipped_source_record++;
       return 0;
     }
