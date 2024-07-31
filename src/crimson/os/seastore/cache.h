@@ -437,6 +437,11 @@ public:
    * Mostly the same as Cache::get_extent(), with the only difference
    * that get_absent_extent won't search the transaction's context for
    * the specific CachedExtent
+   *
+   * The extent in query is supposed to be absent in Cache.
+   *
+   * User is responsible to call get_extent_viewable_by_trans()
+   * *atomically* prior to call this method.
    */
   template <typename T>
   get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
@@ -784,6 +789,9 @@ public:
    * and read in the extent at location offset~length.
    *
    * The extent in query is supposed to be absent in Cache.
+   *
+   * User is responsible to call get_extent_viewable_by_trans()
+   * *atomically* prior to call this method.
    */
   template <typename Func>
   get_extent_by_type_ret get_absent_extent_by_type(
