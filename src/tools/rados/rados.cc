@@ -54,7 +54,7 @@
 #include "include/compat.h"
 #include "include/util.h"
 #include "common/hobject.h"
-
+#include "common/ceph_crypto.h"
 #include "PoolDump.h"
 #include "RadosImport.h"
 
@@ -2772,6 +2772,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	  cout << "retired_refs::" << ref << std::endl;
 	}
       }
+    }
+    else if (attr_name == "user.rgw.shared_manifest")  {
+      sha_digest_t<crypto::SHA1::digest_size> sha1;
+      auto p = bl.cbegin();
+      decode(sha1, p);
+      cout << sha1.to_str() << std::endl;
     }
     else {
       string s(bl.c_str(), bl.length());

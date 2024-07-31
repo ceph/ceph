@@ -72,8 +72,8 @@ namespace rgw::dedup {
     constexpr unsigned max_part_len = 8;
     std::string::size_type n = etag.find('-', etag.length() - max_part_len);
     if (n != std::string::npos) {
-      // again, 1 extra byte for the '-' delimiter and 1 extra byte for '"' at the end
-      unsigned copy_size = etag.length() - (n + 1 + 1);
+      // again, 1 extra byte for the '-' delimiter
+      unsigned copy_size = etag.length() - (n + 1);
       char buff[copy_size+1];
       unsigned nbytes = etag.copy(buff, copy_size, n+1);
       uint64_t num_parts = dec2int(buff, buff+nbytes);
@@ -81,7 +81,7 @@ namespace rgw::dedup {
     }
     else {
       //derr << "Bad MD5=" << etag << dendl;
-      return 1;
+      return -1;
     }
   }
 
@@ -99,4 +99,15 @@ namespace rgw::dedup {
     parsed_etag->num_parts = num_parts; // How many parts were used in multipart upload
   }
 
+  //---------------------------------------------------------------------------
+  void etag_to_bufferlist(uint64_t md5_high, uint64_t md5_low, uint16_t num_parts,
+			  ceph::bufferlist *bl)
+  {
+    char buff[64];
+    int n = snprintf(buff, sizeof(buff), "%016lx%016lx", md5_high, md5_low);
+    if (num_parts > 1) {
+      n += snprintf(buff + n, sizeof(buff) - n, "-%u", num_parts);
+    }
+    bl->append(buff, n);
+  }
 } //namespace rgw::dedup

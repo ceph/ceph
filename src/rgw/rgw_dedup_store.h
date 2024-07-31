@@ -217,7 +217,8 @@ namespace rgw::dedup {
   private:
     inline const disk_block_t* last_block() { return &d_arr[DISK_BLOCK_COUNT-1]; }
     int flush(rgw::sal::RadosStore* store);
-    int fill_disk_record(disk_record_t          *p_rec,
+    int fill_disk_record(RGWRados               *rados,
+			 disk_record_t          *p_rec,
 			 const rgw::sal::Bucket *p_bucket,
 			 const rgw::sal::Object *p_obj,
 			 const parsed_etag_t    *p_parsed_etag,

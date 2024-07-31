@@ -219,7 +219,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::fill_disk_record(disk_record_t          *p_rec,
+  int disk_block_array_t::fill_disk_record(RGWRados               *rados,
+					   disk_record_t          *p_rec,
 					   const rgw::sal::Bucket *p_bucket,
 					   const rgw::sal::Object *p_obj,
 					   const parsed_etag_t    *p_parsed_etag,
@@ -253,6 +254,11 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 1)  << __func__
 			   << "::ERROR: unable to decode manifest" << dendl;
 	return -1;
+      }
+      unsigned idx = 0;
+      for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p, ++idx) {
+	rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
+	ldpp_dout(dpp, 1) << __func__ << "::[" << idx << "]tail object=" << raw_obj.oid << dendl;
       }
       // force explicit tail_placement as the dedup could be on another bucket
       const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
@@ -565,7 +571,7 @@ namespace rgw::dedup {
 		      << ", md5_shard=" << (uint32_t)d_md5_shard
 		      << "::" << p_bucket->get_name() << "/" << p_obj->get_name() << dendl;
     disk_record_t rec;
-    int ret = fill_disk_record(&rec, p_bucket, p_obj, p_parsed_etag, obj_size);
+    int ret = fill_disk_record(rados, &rec, p_bucket, p_obj, p_parsed_etag, obj_size);
     if (unlikely(ret != 0)) {
       return ret;
     }

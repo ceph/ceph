@@ -72,20 +72,18 @@ namespace rgw::dedup {
     int add_record_to_dedup_table(const struct disk_record_t *p_rec,
 				  disk_block_id_t block_id,
 				  record_id_t rec_id);
-    int inc_ref_count_by_manifest(const string   &ref_tag, RGWObjManifest &manifest);
-    int rollback_ref_by_manifest(const string &ref_tag, RGWObjManifest &manifest);
-    int free_tail_objs_by_manifest(const string &ref_tag, RGWObjManifest &tgt_manifest);
-#if 0
-    int dedup_object(const string     &src_bucket_name,
-		     const string     &src_obj_name,
-		     rgw::sal::Bucket *tgt_bucket,
-		     rgw::sal::Object *tgt_obj,
-		     uint64_t          tgt_size,
-		     bufferlist       &tgt_etag_bl);
-#endif
+    int inc_ref_count_by_manifest(const string   &ref_tag,
+				  const string   &oid,
+				  RGWObjManifest &manifest);
+    int rollback_ref_by_manifest(const string   &ref_tag,
+				 const string   &oid,
+				 RGWObjManifest &tgt_manifest);
+    int free_tail_objs_by_manifest(const string   &ref_tag,
+				   const string   &oid,
+				   RGWObjManifest &tgt_manifest);
     int dedup_object(const disk_record_t *p_src_rec,
 		     const disk_record_t *p_tgt_rec,
-		     const struct key_t  *p_key);
+		     bool                 is_shared_manifest);
 
     void init_rados_access_handles();
 

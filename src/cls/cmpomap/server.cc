@@ -234,18 +234,20 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
   //int r = cls_cxx_map_get_vals_by_keys(hctx, cmp_keys, &cmp_values);
   for (const auto& kv : op.cmp_pairs) {
     const std::string &key = kv.first;
+    //std::cerr << __func__ << "::calling cls_cxx_getxattr key=" << key << std::endl;
     ceph::bufferlist bl;
     //int ret = cls_cxx_map_get_val(hctx, key, &bl);
     int ret = cls_cxx_getxattr(hctx, key.c_str(), &bl);
     if (ret < 0) {
       CLS_LOG(4, "ERROR: %s: cls_cxx_getxattr() for key=%s ret=%d",
 	      __func__, key.c_str(), ret);
+      std::cerr << __func__ << "::failed getxattr() for key=" << key << ", ret=" << ret << std::endl;
+      return -1;
     } else {
       cmp_values[key] = bl;
     }
   }
-  std::cerr << __func__ << "::cmp_values.size() = " << cmp_values.size() << std::endl;
-
+  //std::cerr << __func__ << "::cmp_values.size() = " << cmp_values.size() << std::endl;
   auto v = cmp_values.begin();
   for (const auto& [key, input] : op.cmp_pairs) {
     auto k = cmp_values.end();
@@ -257,6 +259,7 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
 	      __func__, key.c_str(), (int)op.mode, (int)op.comparison);
     } else {
       CLS_LOG(20, "%s:: missing key=%s, abort operation", __func__, key.c_str());
+      std::cerr << __func__ << "::missing  key=" << key << std::endl;
       return -EINVAL;
     }
 
@@ -264,6 +267,8 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
     if (ret <= 0) {
       // unsuccessful comparison
       CLS_LOG(10, "%s:: failed compare key=%s ret=%d", __func__, key.c_str(), ret);
+      std::cerr << __func__ << "::failed compare key=" << key
+		<< ", input=" << input << ", value=" << value << std::endl;
       return -1;
     }
 
@@ -277,9 +282,11 @@ static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferli
     int ret = cls_cxx_setxattr(hctx, key.c_str(), &value);
     if (ret == 0) {
       CLS_LOG(20, "%s:: successful set xattr key=%s", __func__, key.c_str());
+      std::cerr << __func__ << "::successful set xattr key=" << key << std::endl;
     }
     else {
       CLS_LOG(4, "ERROR: %s failed to set xattr key=%s ret=%d", __func__, key.c_str(), ret);
+      std::cerr << __func__ << "::failed to set xattr key=" << key << ", ret=" << ret  << std::endl;
       return ret;
     }
   }
