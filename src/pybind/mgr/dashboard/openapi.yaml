@@ -3650,7 +3650,7 @@ paths:
       - Upgrade
   /api/cluster/user:
     get:
-      description: "\n        Get list of ceph users and its respective data\n   \
+      description: "\n        Get list of ceph users and its associated data\n   \
         \     "
       parameters: []
       responses:
@@ -3670,13 +3670,12 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Get Ceph Users
+      summary: Get list of ceph users
       tags:
       - Cluster
     post:
-      description: "\n        Add a ceph user with its defined capabilities.\n   \
-        \     :param user_entity: Entity to change\n        :param capabilities: List\
-        \ of capabilities to add to user_entity\n        "
+      description: "\n        Add a Ceph user, with its defined capabilities.\n  \
+        \      "
       parameters: []
       requestBody:
         content:
@@ -3684,12 +3683,26 @@ paths:
             schema:
               properties:
                 capabilities:
-                  type: string
+                  description: List of capabilities to add to user_entity
+                  items:
+                    properties:
+                      cap:
+                        description: Capability to add; eg. allow *
+                        type: string
+                      entity:
+                        description: Entity to add
+                        type: string
+                    required:
+                    - entity
+                    - cap
+                    type: object
+                  type: array
                 import_data:
                   default: ''
                   type: string
                 user_entity:
                   default: ''
+                  description: Entity to add
                   type: string
               type: object
       responses:
@@ -3719,9 +3732,7 @@ paths:
       - Cluster
     put:
       description: "\n        Change the ceph user capabilities.\n        Setting\
-        \ new capabilities will overwrite current ones.\n        :param user_entity:\
-        \ Entity to change\n        :param capabilities: List of updated capabilities\
-        \ to user_entity\n        "
+        \ new capabilities will overwrite current ones.\n        "
       parameters: []
       requestBody:
         content:
@@ -3729,9 +3740,23 @@ paths:
             schema:
               properties:
                 capabilities:
-                  type: string
+                  description: List of updated capabilities to user_entity
+                  items:
+                    properties:
+                      cap:
+                        description: Capability to edit; eg. allow *
+                        type: string
+                      entity:
+                        description: Entity to edit
+                        type: string
+                    required:
+                    - entity
+                    - cap
+                    type: object
+                  type: array
                 user_entity:
                   default: ''
+                  description: Entity to edit
                   type: string
               type: object
       responses:
@@ -3756,7 +3781,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Edit Ceph User
+      summary: Edit Ceph User Capabilities
       tags:
       - Cluster
   /api/cluster/user/export:
@@ -3800,9 +3825,10 @@ paths:
   /api/cluster/user/{user_entity}:
     delete:
       description: "\n        Delete a ceph user and it's defined capabilities.\n\
-        \        :param user_entity: Entity to delete\n        "
+        \        "
       parameters:
-      - in: path
+      - description: Entity to delete
+        in: path
         name: user_entity
         required: true
         schema:
