@@ -294,7 +294,7 @@
                         "value": [
                            {
                               "title": "",
-                              "url": "/d/GQ3MHvnIz/ceph-cluster-new?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}"
+                              "url": "/d/edtb0oxdq/ceph-cluster?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}"
                            }
                         ]
                      }
