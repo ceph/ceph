@@ -323,9 +323,6 @@ class RGWRestoreObj_ObjStore : public RGWRestoreObj
 public:
   RGWRestoreObj_ObjStore() {}
   ~RGWRestoreObj_ObjStore() override {}
-  int verify_params() override;
-  int get_params(optional_yield y) override;
-  // int get_data(bufferlist& bl) override;
 };
 
 class RGWDeleteObj_ObjStore : public RGWDeleteObj {

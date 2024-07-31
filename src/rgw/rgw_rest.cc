@@ -1458,38 +1458,6 @@ int RGWPostObj_ObjStore::get_params(optional_yield y)
   return 0;
 }
 
-int RGWRestoreObj_ObjStore::verify_params()
-{
-  if (!s->length) {
-    return -ERR_LENGTH_REQUIRED;
-  }
-  off_t len = atoll(s->length);
-  if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
-    return -ERR_TOO_LARGE;
-  }
-
-  return 0;
-}
-
-int RGWRestoreObj_ObjStore::get_params(optional_yield y)
-{ 
-  string bucket_name;
-  string object_name;
-  string version_id;
-  // wildcard can also be given such as '*'
-  if (!s->bucket->get_name().empty()) {
-    bucket_name = s->bucket->get_name();
-  }
-  if (!s->object->get_name().empty()) {
-    object_name = s->object->get_name();
-  }
-  if (!s->info.args.get("versionId").empty()) {
-    version_id = s->info.env->get("versionId");
-  }
-
-  return 0;
-}
-
 int RGWPutACLs_ObjStore::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;

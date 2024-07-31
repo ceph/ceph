@@ -3391,81 +3391,39 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   return res;
 }
 
-struct S3Location {
-  std::string bucket_name;
-  std::string prefix;
-  std::optional<std::string> storage_class;
-
-
-  void decode_xml(XMLObj *obj) {
-    RGWXMLDecoder::decode_xml("BucketName", bucket_name, obj);
-    RGWXMLDecoder::decode_xml("Prefix", prefix, obj);
-    RGWXMLDecoder::decode_xml("StorageClass", storage_class, obj);
-  }
-
-  void dump_xml(Formatter *f) const {
-    encode_xml("BucketName", bucket_name, f);
-    encode_xml("Prefix", prefix, f);
-    encode_xml("StorageClass", storage_class, f);
-  }
-};
-
-struct OutputLocation {
-  S3Location s3;
-
-  bool is_empty() const {
-    return s3.bucket_name.empty();
-  }
-
-  void decode_xml(XMLObj *obj) {
-    RGWXMLDecoder::decode_xml("S3", s3, obj);
-  }
-
-  void dump_xml(Formatter *f) const {
-    encode_xml("S3", s3, f);
-  }
-};
-
 struct RestoreObjectRequest {
   std::optional<int> days;
-  std::optional<std::string> type;
-  std::string tier;
-  std::optional<std::string> description;
-  std::optional<OutputLocation> output_location;
 
   void decode_xml(XMLObj *obj) {
     RGWXMLDecoder::decode_xml("Days", days, obj);
-    RGWXMLDecoder::decode_xml("Type", type, obj);
-    RGWXMLDecoder::decode_xml("Tier", tier, obj);
-    RGWXMLDecoder::decode_xml("Description", description, obj);
-    RGWXMLDecoder::decode_xml("OutputLocation", output_location, obj);
   }
 
   void dump_xml(Formatter *f) const {
     encode_xml("Days", days, f);
-    encode_xml("Type", type, f);
-    encode_xml("Tier", tier, f);
-    encode_xml("Description", description, f);
-    encode_xml("OutputLocation", output_location, f);
   }
 };
 
 int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
 {
-
-  op_ret = RGWRestoreObj_ObjStore::get_params(y);
-  if (op_ret < 0)
-  {
-    return op_ret;
+  s->object->set_atomic();
+  int op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to fetch get_obj_attrs op ret = " << op_ret << dendl;
+    return;
   }
 
-  std::string bucket_name;
-  std::string storage_class;
-  std::string prefix;
+  // check if the object is already restored with attrs as object set to 'CLOUD_RESTORED'
+  bufferlist bl;
+  if (s->object->get_attrs(RGW_ATTR_RESTORE_STATUS, bl)) {
+    std::string restore_status=rgw_bl_str(bl);
+    if (restore_status == "CloudRestored") {
+      ldpp_dout(this, 0) << "Object is already restored" << dendl;
+    }
+  }
+  
   std::string expected_bucket_owner;
 
-  if (s->info.env->get("x-amz-expected-bucket-owner") != nullptr)
-  {
+  if (s->info.env->get("x-amz-expected-bucket-owner") != nullptr) {
     expected_bucket_owner = s->info.env->get("x-amz-expected-bucket-owner");
   }
 
@@ -3476,13 +3434,11 @@ int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
   bufferlist data;
   std::tie(r, data) = read_all_input(s, max_size, false);
 
-  if (r < 0)
-  {
+  if (r < 0) {
     return r;
   }
 
-  if(!parser.init())
-  {
+  if(!parser.init()) {
     return -EINVAL;
   }
 
@@ -3492,41 +3448,20 @@ int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
 
   RestoreObjectRequest request;
 
-  try
-  {
+  try {
     RGWXMLDecoder::decode_xml("RestoreRequest", request, &parser);
   }
-  catch (RGWXMLDecoder::err &err)
-  {
+  catch (RGWXMLDecoder::err &err) {
     ldpp_dout(this, 5) << "Malformed restore request: " << err << dendl;
     return -EINVAL;
   }
-  
-  if (request.days)
-  {
-    int expiry_days = request.days.value();
-    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
 
-    if (request.output_location)
-    {
-      if (!request.output_location->s3.bucket_name.empty())
-      {
-        output_location = request.output_location->s3.bucket_name;
-        ldpp_dout(this, 10) << "Bucket Name: " << bucket_name << dendl;
-      }
-      if (!request.output_location->s3.prefix.empty())
-      {
-        prefix = request.output_location->s3.prefix;
-        ldpp_dout(this, 10) << "prefix=" << prefix << dendl;
-      }
-      if (request.output_location->s3.storage_class)
-      {
-        storage_class = request.output_location->s3.storage_class.value();
-        ldpp_dout(this, 10) << "storage_class=" << storage_class << dendl;
-      }
-    }
+  std::optional<int> expiry_days;
+  if (request.days) {
+    expiry_days = request.days.value();
+    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
   } else {
-    ldpp_dout(this, 10) << "No output location found" << dendl;
+    expiry_days=nullopt;
   }
 
   return 0;
@@ -3545,12 +3480,6 @@ void RGWRestoreObj_ObjStore_S3::send_response()
 
   set_req_state_err(s, op_ret);
   dump_errno(s);
-  
-  if (output_location.empty()) {
-    dump_header(s, "x-amz-restore-output-path", "NONE");
-  }
-  
-  dump_header_if_nonempty(s, "x-amz-restore-output-path", output_location);
   end_header(s, this);
 }
 int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)

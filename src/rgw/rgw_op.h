@@ -1457,24 +1457,19 @@ public:
 };
 
 class RGWRestoreObj : public RGWOp {
-  protected:
-    std::string version_id;
-    int restore_days;
-    std::string output_location;
+public:
+  RGWRestoreObj() {}
 
-  public:
-    RGWRestoreObj() {}
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  void pre_exec() override;
+  void execute(optional_yield y) override;
+  virtual int get_params(optional_yield y) {return 0;}
 
-    int init_processing(optional_yield y) override;
-    int verify_permission(optional_yield y) override;
-    void pre_exec() override;
-    void execute(optional_yield y) override;
-    virtual int get_params(optional_yield y) {return 0;}
-
-    void send_response() override = 0;
-    const char* name() const override { return "restore_obj"; }
-    RGWOpType get_type() override { return RGW_OP_RESTORE_OBJ; }
-    uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  void send_response() override = 0;
+  const char* name() const override { return "restore_obj"; }
+  RGWOpType get_type() override { return RGW_OP_RESTORE_OBJ; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWDeleteObj : public RGWOp {

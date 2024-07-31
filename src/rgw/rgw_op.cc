@@ -5013,15 +5013,9 @@ void RGWPutMetadataObject::execute(optional_yield y)
 
 int RGWRestoreObj::init_processing(optional_yield y)
 {
-  /* Read in the data from the POST form. */
-  int ret = get_params(y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = verify_params();
-  if (ret < 0) {
-    return ret;
+  int op_ret = get_params(y);
+  if (op_ret < 0) {
+    return op_ret;
   }
 
   return RGWOp::init_processing(y);
