@@ -529,6 +529,7 @@ Depends: ceph-osd (= ${binary:Version}),
          e2fsprogs,
          lvm2,
          parted,
+         python3-packaging,
          xfsprogs,
          ${misc:Depends},
          ${python3:Depends}
