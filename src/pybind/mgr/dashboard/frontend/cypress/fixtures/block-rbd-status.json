@@ -1,0 +1,1 @@
+{ "available": false, "message": "No RBD pools in the cluster. Please create a pool with the \"rbd\" application label." }
