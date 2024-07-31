@@ -738,61 +738,49 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore::Shard* store)
   });
 }
 
-PG::interruptible_future<> PG::do_peering_event(
+void PG::do_peering_event(
   PGPeeringEvent& evt, PeeringCtx &rctx)
 {
   if (peering_state.pg_has_reset_since(evt.get_epoch_requested()) ||
       peering_state.pg_has_reset_since(evt.get_epoch_sent())) {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
-    return interruptor::now();
   } else {
     logger().debug("{} handling {} for pg: {}", __func__, evt.get_desc(), pgid);
-    // all peering event handling needs to be run in a dedicated seastar::thread,
-    // so that event processing can involve I/O reqs freely, for example: PG::on_removal,
-    // PG::on_new_interval
-    return interruptor::async([this, &evt, &rctx] {
-      peering_state.handle_event(
-        evt.get_event(),
-        &rctx);
-      peering_state.write_if_dirty(rctx.transaction);
-    });
+    peering_state.handle_event(
+      evt.get_event(),
+      &rctx);
+    peering_state.write_if_dirty(rctx.transaction);
   }
 }
 
-seastar::future<> PG::handle_advance_map(
+void PG::handle_advance_map(
   cached_map_t next_map, PeeringCtx &rctx)
 {
-  return seastar::async([this, next_map=std::move(next_map), &rctx] {
-    vector<int> newup, newacting;
-    int up_primary, acting_primary;
-    next_map->pg_to_up_acting_osds(
-      pgid.pgid,
-      &newup, &up_primary,
-      &newacting, &acting_primary);
-    peering_state.advance_map(
-      next_map,
-      peering_state.get_osdmap(),
-      newup,
-      up_primary,
-      newacting,
-      acting_primary,
-      rctx);
-    osdmap_gate.got_map(next_map->get_epoch());
-  });
+  vector<int> newup, newacting;
+  int up_primary, acting_primary;
+  next_map->pg_to_up_acting_osds(
+    pgid.pgid,
+    &newup, &up_primary,
+    &newacting, &acting_primary);
+  peering_state.advance_map(
+    next_map,
+    peering_state.get_osdmap(),
+    newup,
+    up_primary,
+    newacting,
+    acting_primary,
+    rctx);
+  osdmap_gate.got_map(next_map->get_epoch());
 }
 
-seastar::future<> PG::handle_activate_map(PeeringCtx &rctx)
+void PG::handle_activate_map(PeeringCtx &rctx)
 {
-  return seastar::async([this, &rctx] {
-    peering_state.activate_map(rctx);
-  });
+  peering_state.activate_map(rctx);
 }
 
-seastar::future<> PG::handle_initialize(PeeringCtx &rctx)
+void PG::handle_initialize(PeeringCtx &rctx)
 {
-  return seastar::async([this, &rctx] {
-    peering_state.handle_event(PeeringState::Initialize{}, &rctx);
-  });
+  peering_state.handle_event(PeeringState::Initialize{}, &rctx);
 }
 
 void PG::init_collection_pool_opts()
