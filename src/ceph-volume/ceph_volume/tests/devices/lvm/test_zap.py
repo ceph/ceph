@@ -7,10 +7,29 @@ from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap
 
 
-class TestZap(object):
-    def test_invalid_osd_id_passed(self):
+class TestZap:
+    def test_invalid_osd_id_passed(self) -> None:
         with pytest.raises(SystemExit):
             zap.Zap(argv=['--osd-id', 'foo']).main()
+
+    @patch('ceph_volume.util.disk._dd_write', Mock())
+    @patch('ceph_volume.util.arg_validators.Device')
+    def test_clear_replace_header_is_being_replaced(self, m_device: Mock) -> None:
+        m_dev = m_device.return_value
+        m_dev.is_being_replaced = True
+        with pytest.raises(SystemExit) as e:
+            zap.Zap(argv=['--clear', '/dev/foo']).main()
+        assert e.value.code == 0
+
+    @patch('ceph_volume.util.disk._dd_write', Mock())
+    @patch('ceph_volume.util.arg_validators.Device')
+    def test_clear_replace_header_is_not_being_replaced(self, m_device: Mock) -> None:
+        m_dev = m_device.return_value
+        m_dev.is_being_replaced = False
+        with pytest.raises(SystemExit) as e:
+            zap.Zap(argv=['--clear', '/dev/foo']).main()
+        assert e.value.code == 1
+
 
 class TestFindAssociatedDevices(object):
 

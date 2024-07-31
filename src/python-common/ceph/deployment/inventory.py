@@ -54,7 +54,8 @@ class Device(object):
         'human_readable_type',
         'device_id',
         'lsm_data',
-        'crush_device_class'
+        'crush_device_class',
+        'being_replaced'
     ]
 
     def __init__(self,
@@ -67,7 +68,8 @@ class Device(object):
                  lsm_data=None,  # type: Optional[Dict[str, Dict[str, str]]]
                  created=None,  # type: Optional[datetime.datetime]
                  ceph_device=None,  # type: Optional[bool]
-                 crush_device_class=None  # type: Optional[str]
+                 crush_device_class=None,  # type: Optional[str]
+                 being_replaced=None,  # type: Optional[bool]
                  ):
 
         self.path = path
@@ -80,6 +82,7 @@ class Device(object):
         self.created = created if created is not None else datetime_now()
         self.ceph_device = ceph_device
         self.crush_device_class = crush_device_class
+        self.being_replaced = being_replaced
 
     def __eq__(self, other):
         # type: (Any) -> bool
@@ -129,7 +132,8 @@ class Device(object):
             'lvs': self.lvs if self.lvs else 'None',
             'available': str(self.available),
             'ceph_device': str(self.ceph_device),
-            'crush_device_class': str(self.crush_device_class)
+            'crush_device_class': str(self.crush_device_class),
+            'being_replaced': str(self.being_replaced)
         }
         if not self.available and self.rejected_reasons:
             device_desc['rejection reasons'] = self.rejected_reasons
