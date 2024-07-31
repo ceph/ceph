@@ -102,9 +102,9 @@ This hook is passed several arguments (see below). The hook outputs a single
 line to ``stdout`` that contains the CRUSH location description. The arguments
 resemble the following:::
 
-  --cluster CLUSTER --id ID --type TYPE
+  --id ID --type TYPE
 
-Here the cluster name is typically ``ceph``, the ``id`` is the daemon
+Here the ``id`` is the daemon
 identifier or (in the case of OSDs) the OSD number, and the daemon type is
 ``osd``, ``mds``, ``mgr``, or ``mon``.
 
