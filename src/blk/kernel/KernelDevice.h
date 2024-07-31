@@ -119,7 +119,8 @@ private:
   ceph::unique_leakable_ptr<buffer::raw> create_custom_aligned(size_t len, IOContext* ioc) const;
 
 public:
-  KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
+  KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb,
+    void *d_cbpriv, const char* dev_name = "");
   ~KernelDevice();
 
   void aio_submit(IOContext *ioc) override;
