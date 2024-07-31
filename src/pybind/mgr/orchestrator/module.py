@@ -816,6 +816,21 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             return HandleCommandResult(stdout=completion.result_str())
         return HandleCommandResult(stdout=completion.result_str().split('.')[0])
 
+    @_cli_read_command('orch device replace')
+    def _replace_device(self,
+                        hostname: str,
+                        device: str,
+                        clear: bool = False,
+                        yes_i_really_mean_it: bool = False) -> HandleCommandResult:
+        """Perform all required operations in order to replace a device.
+        """
+        completion = self.replace_device(hostname=hostname,
+                                         device=device,
+                                         clear=clear,
+                                         yes_i_really_mean_it=yes_i_really_mean_it)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_read_command('orch device ls')
     def _list_devices(self,
                       hostname: Optional[List[str]] = None,
@@ -1395,8 +1410,9 @@ Usage:
                       zap: bool = False,
                       no_destroy: bool = False) -> HandleCommandResult:
         """Remove OSD daemons"""
-        completion = self.remove_osds(osd_id, replace=replace, force=force,
-                                      zap=zap, no_destroy=no_destroy)
+        completion = self.remove_osds(osd_id,
+                                      replace=replace,
+                                      force=force, zap=zap, no_destroy=no_destroy)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
