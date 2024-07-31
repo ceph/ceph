@@ -257,7 +257,7 @@ RecordSubmitter::roll_segment()
         wait_available_promise.reset();
       }).handle_error(
         crimson::ct_error::all_same_way([FNAME, this](auto e) {
-          ERROR("{} got error {}, available", get_name(), e);
+          ERROR("{} got error, available", get_name());
           has_io_error = true;
           wait_available_promise->set_value();
           wait_available_promise.reset();
@@ -540,8 +540,8 @@ void RecordSubmitter::flush_current_batch()
     finish_submit_batch(p_batch, write_result);
   }).handle_error(
     crimson::ct_error::all_same_way([this, p_batch, FNAME, num, sizes](auto e) {
-      ERROR("{} {} records, {}, got error {}",
-            get_name(), num, sizes, e);
+      ERROR("{} {} records, {}, got error",
+            get_name(), num, sizes);
       finish_submit_batch(p_batch, std::nullopt);
       return seastar::now();
     })
