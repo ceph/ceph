@@ -1120,6 +1120,7 @@ int FilterObject::restore_obj_from_cloud(Bucket* bucket,
           rgw_placement_rule& placement_rule,
 			    rgw_bucket_dir_entry& o,
 			    CephContext* cct,
+          RGWObjTier& tier_config,
           real_time& mtime,
           uint64_t olh_epoch,
           std::optional<uint64_t> days,
@@ -1128,7 +1129,7 @@ int FilterObject::restore_obj_from_cloud(Bucket* bucket,
           uint32_t flags)
 {
   return next->restore_obj_from_cloud(nextBucket(bucket), nextPlacementTier(tier),
-           placement_rule, o, cct, mtime, olh_epoch, days, dpp, y, flags);
+           placement_rule, o, cct, tier_config, mtime, olh_epoch, days, dpp, y, flags);
 }
 
 bool FilterObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)

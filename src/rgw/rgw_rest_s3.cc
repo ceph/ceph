@@ -531,6 +531,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
 
         if (c_iter != attrs.end()) {
+          attrs[RGW_ATTR_STORAGE_CLASS] = c_iter->second;
           dump_header(s, "x-amz-storage-class", rgw_bl_str(c_iter->second) );
         }
       }

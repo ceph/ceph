@@ -629,6 +629,7 @@ class RadosObject : public StoreObject {
 			   rgw_placement_rule& placement_rule,
 			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
+         RGWObjTier& tier_config,
 			   real_time& mtime,
 			   uint64_t olh_epoch,
          std::optional<uint64_t> days,
@@ -673,6 +674,7 @@ class RadosObject : public StoreObject {
 			   bool is_multipart_upload,
 			   rgw_placement_rule& target_placement,
 			   Object* head_obj);
+    int handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield y);
     int set_cloud_restore_status(const DoutPrefixProvider* dpp,
 				  optional_yield y,
           RGWRestoreStatus restore_status);
