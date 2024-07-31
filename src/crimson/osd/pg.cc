@@ -1636,6 +1636,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   // is save and in time.
   peering_state.state_clear(PG_STATE_SNAPTRIM);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+  snap_mapper.reset_backend();
 }
 
 void PG::context_registry_on_change() {
