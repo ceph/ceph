@@ -61,6 +61,9 @@ using namespace TOPNSPC::common;
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
+// NVMe-oF gateway monitor and HA is disabled by default upstream for now.
+// see doc/nvmeof/ha.md for more details
+//#define WITH_NVMEOF_GATEWAY_MONITOR
 
 enum {
   l_cluster_first = 555000,
@@ -711,6 +714,15 @@ public:
   class KVMonitor *kvmon() {
     return (class KVMonitor*) paxos_service[PAXOS_KV].get();
   }
+
+  class NVMeofGwMon *nvmegwmon() {
+#ifdef WITH_NVMEOF_GATEWAY_MONITOR
+      return (class NVMeofGwMon*) paxos_service[PAXOS_NVMEGW].get();
+#else
+      return nullptr;
+#endif
+  }
+
 
   friend class Paxos;
   friend class OSDMonitor;

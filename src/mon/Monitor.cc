@@ -84,6 +84,7 @@
 #include "MgrStatMonitor.h"
 #include "ConfigMonitor.h"
 #include "KVMonitor.h"
+#include "NVMeofGwMon.h"
 #include "mon/HealthMonitor.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
@@ -247,6 +248,9 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_HEALTH].reset(new HealthMonitor(*this, *paxos, "health"));
   paxos_service[PAXOS_CONFIG].reset(new ConfigMonitor(*this, *paxos, "config"));
   paxos_service[PAXOS_KV].reset(new KVMonitor(*this, *paxos, "kv"));
+#ifdef WITH_NVMEOF_GATEWAY_MONITOR
+  paxos_service[PAXOS_NVMEGW].reset(new NVMeofGwMon(*this, *paxos, "nvmeofgw"));
+#endif
 
   bool r = mon_caps.parse("allow *", NULL);
   ceph_assert(r);
@@ -3617,7 +3621,12 @@ void Monitor::handle_command(MonOpRequestRef op)
     mgrmon()->dispatch(op);
     return;
   }
-
+#ifdef WITH_NVMEOF_GATEWAY_MONITOR
+  if (module == "nvme-gw"){
+      nvmegwmon()->dispatch(op);
+      return;
+  }
+#endif
   if (prefix == "fsid") {
     if (f) {
       f->open_object_section("fsid");
@@ -4551,6 +4560,7 @@ void Monitor::_ms_dispatch(Message *m)
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
+
   MonSession *s = op->get_session();
   ceph_assert(s);
   if (s->closed) {
@@ -4663,6 +4673,13 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_MGR_BEACON:
       paxos_service[PAXOS_MGR]->dispatch(op);
       return;
+
+#ifdef WITH_NVMEOF_GATEWAY_MONITOR
+    case MSG_MNVMEOF_GW_BEACON:
+       paxos_service[PAXOS_NVMEGW]->dispatch(op);
+       return;
+#endif
+
 
     // MgrStat
     case MSG_MON_MGR_REPORT:
@@ -5351,6 +5368,11 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     } else if (p->first.find("kv:") == 0) {
       kvmon()->check_sub(s->sub_map[p->first]);
     }
+#ifdef WITH_NVMEOF_GATEWAY_MONITOR
+    else if (p->first == "NVMeofGw") {
+        nvmegwmon()->check_sub(s->sub_map[p->first]);
+    }
+#endif
   }
 
   if (reply) {
