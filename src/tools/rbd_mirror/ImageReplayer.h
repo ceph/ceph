@@ -131,6 +131,7 @@ public:
   }
   inline const std::string get_local_image_id() const {
     std::string image_id;
+    std::lock_guard l{m_lock};
     if (m_state_builder) {
       image_id = m_state_builder->local_image_id;
     }
