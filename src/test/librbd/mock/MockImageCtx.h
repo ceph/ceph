@@ -183,6 +183,8 @@ struct MockImageCtx {
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;
 
+  std::unique_ptr<librados::Rados> migration_rados;
+
   ceph::shared_mutex &owner_lock;
   ceph::shared_mutex &image_lock;
   ceph::shared_mutex &timestamp_lock;

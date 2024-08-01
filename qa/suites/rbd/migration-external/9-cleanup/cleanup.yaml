@@ -1,0 +1,12 @@
+tasks:
+  - exec:
+      cluster2.client.0:
+        - rbd --cluster cluster2 snap remove client.0.1@snap || true
+        - rbd --cluster cluster2 remove client.0.1 || true
+        - rbd --cluster cluster2 snap unprotect client.0.0@snap || true
+        - rbd --cluster cluster2 snap remove client.0.0@snap || true
+        - rbd --cluster cluster2 remove client.0.0 || true
+  - exec:
+      cluster1.client.0:
+        - rbd --cluster cluster1 migration abort client.0.0 || true
+        - rbd --cluster cluster1 rm client.0.0 || true

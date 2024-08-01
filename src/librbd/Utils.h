@@ -280,6 +280,18 @@ bool is_config_key_uri(const std::string& uri);
 int get_config_key(librados::Rados& rados, const std::string& uri,
                    std::string* value);
 
+int init_rados(CephContext *cct,
+               const std::string &cluster_name,
+               const std::string &client_name,
+               const std::string &mon_host,
+               const std::string &key,
+               const std::string &description,
+               const std::vector<const char*>& args,
+               librados::Rados **rados_ref,
+               bool strip_cluster_overrides,
+               const std::string &admin_socket,
+               int preinit_flags);
+
 } // namespace util
 } // namespace librbd
 

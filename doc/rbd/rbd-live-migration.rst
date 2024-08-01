@@ -156,6 +156,8 @@ as follows::
 
         {
             "type": "native",
+            ["cluster_name": "<cluster-name>",] (optional, for external clusters)
+            ["client_name": "<client-name>",] (optional, for external clusters)
             "pool_name": "<pool-name>",
             ["pool_id": <pool-id>,] (optional alternative to "pool_name")
             ["pool_namespace": "<pool-namespace",] (optional)
