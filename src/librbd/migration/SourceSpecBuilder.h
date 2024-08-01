@@ -7,7 +7,6 @@
 #include "include/int_types.h"
 #include <json_spirit/json_spirit.h>
 #include <memory>
-#include <optional>
 #include <string>
 
 struct Context;
@@ -25,13 +24,13 @@ struct StreamInterface;
 template <typename ImageCtxT>
 class SourceSpecBuilder {
 public:
+  static int parse_source_spec(const std::string& source_spec,
+                               json_spirit::mObject* source_spec_object);
+
   SourceSpecBuilder(ImageCtxT* image_ctx) : m_image_ctx(image_ctx) {
   }
 
-  int parse_source_spec(const std::string& source_spec,
-                        json_spirit::mObject* source_spec_object) const;
-
-  int build_format(const json_spirit::mObject& format_object, bool import_only,
+  int build_format(const json_spirit::mObject& format_object,
                    std::unique_ptr<FormatInterface>* format) const;
 
   int build_snapshot(const json_spirit::mObject& source_spec_object,
@@ -43,7 +42,6 @@ public:
 
 private:
   ImageCtxT* m_image_ctx;
-
 };
 
 } // namespace migration
