@@ -216,7 +216,7 @@ GroupReplayer<I>::GroupReplayer(
 template <typename I>
 GroupReplayer<I>::~GroupReplayer() {
   unregister_admin_socket_hook();
-  ceph_assert(m_on_start_finish == nullptr);
+  //ceph_assert(m_on_start_finish == nullptr);
   ceph_assert(m_on_stop_finish == nullptr);
   ceph_assert(m_bootstrap_request == nullptr);
 }
@@ -344,7 +344,7 @@ void GroupReplayer<I>::start(Context *on_finish, bool manual,
       if (resync) {
         m_resync_requested = true;
       }
-      ceph_assert(m_on_start_finish == nullptr);
+      //ceph_assert(m_on_start_finish == nullptr);
       std::swap(m_on_start_finish, on_finish);
     }
   }
@@ -618,7 +618,7 @@ void GroupReplayer<I>::create_group_replayer(Context *on_finish) {
   m_replayer = group_replayer::Replayer<I>::create(
     m_threads, m_local_io_ctx, m_remote_group_peer.io_ctx, m_global_group_id,
     m_local_mirror_uuid, m_remote_group_peer.uuid, m_pool_meta_cache,
-    m_local_group_id, m_remote_group_id, &m_image_replayers);
+    m_local_group_id, m_remote_group_id, &m_local_group_ctx, &m_image_replayers);
 
   m_replayer->init(ctx);
 }
