@@ -361,6 +361,9 @@ void FSCryptContext::generate_new_nonce()
 void FSCryptKeyHandler::reset(int64_t _epoch, FSCryptKeyRef k)
 {
   std::unique_lock wl{lock};
+
+  // clear any previous crypto key with overwrite of 0s
+  key->get_key().zero();
   epoch = _epoch;
   key = k;
 }
