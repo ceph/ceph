@@ -1403,9 +1403,6 @@ public:
     void decode_omap_key(const std::string& key, std::string *user_key);
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
-
-private:
-    void _decode(const ceph::buffer::list& v);
   };
 
   /// A generic Cache Shard
