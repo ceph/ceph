@@ -108,7 +108,7 @@ class LogSegment {
 
 static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {
   return out << "LogSegment(" << ls.seq << "/0x" << std::hex << ls.offset
-             << std::dec << " events=" << ls.num_events << ")";
+             << "~" << ls.end << std::dec << " events=" << ls.num_events << ")";
 }
 
 #endif
