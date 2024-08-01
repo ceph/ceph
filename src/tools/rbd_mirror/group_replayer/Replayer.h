@@ -9,6 +9,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "librbd/mirror/snapshot/Types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
 #include <string>
 
@@ -37,10 +38,11 @@ public:
       PoolMetaCache* pool_meta_cache,
       std::string local_group_id,
       std::string remote_group_id,
+      GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers) {
     return new Replayer(threads, local_io_ctx, remote_io_ctx, global_group_id,
         local_mirror_uuid, remote_mirror_uuid, pool_meta_cache, local_group_id,
-        remote_group_id, image_replayers);
+        remote_group_id, local_group_ctx, image_replayers);
   }
 
   Replayer(
@@ -53,6 +55,7 @@ public:
       PoolMetaCache* pool_meta_cache,
       std::string local_group_id,
       std::string remote_group_id,
+      GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers);
   ~Replayer();
 
@@ -90,6 +93,7 @@ private:
   PoolMetaCache* m_pool_meta_cache;
   std::string m_local_group_id;
   std::string m_remote_group_id;
+  GroupCtx *m_local_group_ctx;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
 
   mutable ceph::mutex m_lock;
@@ -100,6 +104,8 @@ private:
 
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
+
+  bool m_remote_demoted = false;
 
   // map of <group_snap_id, pair<GroupSnapshot, on_finish>>
   std::map<std::string, std::pair<cls::rbd::GroupSnapshot, Context *>> m_create_snap_requests;
