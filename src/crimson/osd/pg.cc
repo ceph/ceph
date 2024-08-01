@@ -13,6 +13,7 @@
 #include <boost/range/numeric.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include "include/utime_fmt.h"
 
 #include "common/hobject.h"
 
@@ -1515,7 +1516,8 @@ PG::interruptible_future<> PG::do_update_log_missing(
   if (m->pg_roll_forward_to != eversion_t())
     op_roll_forward_to = m->pg_roll_forward_to;
   logger().debug("op_trim_to = {}, op_roll_forward_to = {}",
-    op_trim_to, op_roll_forward_to);
+    op_trim_to.has_value() ? *op_trim_to : eversion_t(),
+    op_roll_forward_to.has_value() ? *op_roll_forward_to : eversion_t());
 
   peering_state.append_log_entries_update_missing(
     m->entries, t, op_trim_to, op_roll_forward_to);
