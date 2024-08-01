@@ -157,7 +157,7 @@ public:
   ObjectDispatcherInterface* object_dispatcher;
   ObjectDispatchLayer dispatch_layer;
   int object_dispatch_flags = 0;
-  DispatchResult dispatch_result = DISPATCH_RESULT_INVALID;
+  DispatchResult dispatch_result = DISPATCH_RESULT_INIT;
 
   Request request;
   IOContext io_context;

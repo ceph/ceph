@@ -152,7 +152,7 @@ bool RefreshImageDispatch<I>::needs_refresh(
   if (m_image_ctx->state->is_refresh_required()) {
     ldout(cct, 15) << "on_dispatched=" << on_dispatched << dendl;
 
-    *dispatch_result = DISPATCH_RESULT_CONTINUE;
+    *dispatch_result = DISPATCH_RESULT_REFRESH;
     m_image_ctx->state->refresh(on_dispatched);
     return true;
   }

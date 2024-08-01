@@ -9,10 +9,12 @@
 #include "common/ceph_mutex.h"
 #include "common/dout.h"
 #include "common/AsyncOpTracker.h"
+#include "common/Cond.h"
 #include "librbd/Utils.h"
 #include "librbd/io/DispatcherInterface.h"
 #include "librbd/io/Types.h"
 #include <map>
+#include <ostream>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -31,29 +33,37 @@ public:
 
   Dispatcher(ImageCtxT* image_ctx)
     : m_image_ctx(image_ctx),
-      m_lock(ceph::make_shared_mutex(
-        librbd::util::unique_lock_name("librbd::io::Dispatcher::lock",
-                                       this))) {
+      m_op_tracker(new AsyncOpTracker()) {
   }
 
   virtual ~Dispatcher() {
     ceph_assert(m_dispatches.empty());
+    delete m_op_tracker;
   }
 
+  void shut_down_whilst_quiesced(Context* on_finish) {
+    std::map<DispatchLayer, DispatchMeta> dispatches;
+    {
+      std::swap(dispatches, m_dispatches);
+    }
+
+    // add the callbacks for shutting down the dispatch layers to the on_finish callback
+    for (auto it : dispatches) {
+      shut_down_dispatch(it.second, &on_finish);
+    }
+  }
+
+  // shutdown all layers in this dispatcher (image or object)
   void shut_down(Context* on_finish) override {
     auto cct = m_image_ctx->cct;
     ldout(cct, 5) << dendl;
 
-    std::map<DispatchLayer, DispatchMeta> dispatches;
-    {
-      std::unique_lock locker{m_lock};
-      std::swap(dispatches, m_dispatches);
-    }
+    // The dispatch shutdown method will be called from the AsyncOpTracker when quiesced with the lock held  
+    auto locked_ctx = new LambdaContext([this, on_finish]() {
+      this->shut_down_whilst_quiesced(on_finish);
+    });
 
-    for (auto it : dispatches) {
-      shut_down_dispatch(it.second, &on_finish);
-    }
-    on_finish->complete(0);
+    m_op_tracker->wait_for_ops(on_finish, locked_ctx);
   }
 
   void register_dispatch(Dispatch* dispatch) override {
@@ -61,38 +71,60 @@ public:
     auto type = dispatch->get_dispatch_layer();
     ldout(cct, 5) << "dispatch_layer=" << type << dendl;
 
-    std::unique_lock locker{m_lock};
+    C_SaferCond on_finish;
 
-    auto result = m_dispatches.insert(
-      {type, {dispatch, new AsyncOpTracker()}});
-    ceph_assert(result.second);
+    // This will be called from the AsyncOpTracker when quiesced with the lock held  
+    auto on_quiesced_locked_ctx = new LambdaContext([this, dispatch]() {
+      auto type = dispatch->get_dispatch_layer();
+      auto result = m_dispatches.insert({type, {dispatch}});
+      ceph_assert(result.second);
+    });
+
+    // Wait for IO to quiesce then add layer
+    m_op_tracker->wait_for_ops(&on_finish, on_quiesced_locked_ctx);
+
+    // Resume thread once layer has been added
+    on_finish.wait();
   }
 
   bool exists(DispatchLayer dispatch_layer) override {
-    std::unique_lock locker{m_lock};
-    return m_dispatches.find(dispatch_layer) != m_dispatches.end();
+    // register with the tracker to prevent m_dispatches from being changed under our feet.
+    m_op_tracker->start_op();
+    bool exists = m_dispatches.find(dispatch_layer) != m_dispatches.end();
+    m_op_tracker->finish_op();
+    return exists;
   }
+
+  void shut_down_dispatch_whilst_quiesced(DispatchLayer dispatch_layer,
+                                          Context* on_finish) {
+    DispatchMeta dispatch_meta;
+    auto it = m_dispatches.find(dispatch_layer);
+    if (it == m_dispatches.end()) {
+      return;
+    }
+
+    dispatch_meta = it->second;
+    m_dispatches.erase(it);
+
+    // add the callbacks for shutting down the dispatch layer to the on_finish callback
+    shut_down_dispatch(dispatch_meta, &on_finish);
+  }                            
 
   void shut_down_dispatch(DispatchLayer dispatch_layer,
                           Context* on_finish) override {
     auto cct = m_image_ctx->cct;
     ldout(cct, 5) << "dispatch_layer=" << dispatch_layer << dendl;
 
-    DispatchMeta dispatch_meta;
-    {
-      std::unique_lock locker{m_lock};
-      auto it = m_dispatches.find(dispatch_layer);
-      if (it == m_dispatches.end()) {
-        on_finish->complete(0);
-        return;
-      }
+    // The dispatch shutdown method will be called from the AsyncOpTracker when quiesced with the lock held  
+    auto locked_ctx = new LambdaContext([this, dispatch_layer, on_finish]() {
+      this->shut_down_dispatch_whilst_quiesced(dispatch_layer, on_finish);
+    });
 
-      dispatch_meta = it->second;
-      m_dispatches.erase(it);
-    }
+    m_op_tracker->wait_for_ops(on_finish, locked_ctx);
+  }
 
-    shut_down_dispatch(dispatch_meta, &on_finish);
-    on_finish->complete(0);
+  void finished(DispatchSpec* dispatch_spec) {
+    m_op_tracker->finish_op();
   }
 
   void send(DispatchSpec* dispatch_spec) {
@@ -101,59 +133,81 @@ public:
 
     auto dispatch_layer = dispatch_spec->dispatch_layer;
 
+    // If this is the first time into the send function then record this in the overall op_tracker
+    if (dispatch_spec->dispatch_result == DISPATCH_RESULT_INIT) {
+      m_op_tracker->start_op();
+    }
+    if (dispatch_spec->dispatch_result == DISPATCH_RESULT_REFRESH) {
+      ldout(cct, 20) << "rstart. dispatch_spec=" << dispatch_spec << dendl;
+      m_op_tracker->start_op();
+    }
+
     // apply the IO request to all layers -- this method will be re-invoked
     // by the dispatch layer if continuing / restarting the IO
     while (true) {
-      m_lock.lock_shared();
       dispatch_layer = dispatch_spec->dispatch_layer;
       auto it = m_dispatches.upper_bound(dispatch_layer);
       if (it == m_dispatches.end()) {
         // the request is complete if handled by all layers
         dispatch_spec->dispatch_result = DISPATCH_RESULT_COMPLETE;
-        m_lock.unlock_shared();
         break;
       }
 
       auto& dispatch_meta = it->second;
       auto dispatch = dispatch_meta.dispatch;
-      auto async_op_tracker = dispatch_meta.async_op_tracker;
       dispatch_spec->dispatch_result = DISPATCH_RESULT_INVALID;
-
-      // prevent recursive locking back into the dispatcher while handling IO
-      async_op_tracker->start_op();
-      m_lock.unlock_shared();
 
       // advance to next layer in case we skip or continue
       dispatch_spec->dispatch_layer = dispatch->get_dispatch_layer();
 
       bool handled = send_dispatch(dispatch, dispatch_spec);
-      async_op_tracker->finish_op();
+      // This will end up in ImageDispatchSpec::C_Dispatcher::complete() where it will look at the dispatch_spec result.
+      // If it is CONTINUE then it will call back into this function (for the next layer)
+      // If it is COMPLETE then it will call finish - in ImageDispatchSpec this will just delete the dispatchSpec
+
+      // Alternatively this will end up in ObjectDispatchSpec::C_Dispatcher::complete() where it will look at the dispatch_spec result.
+      // If it is CONTINUE then it will call back into this function (for the next layer)
+      // If it is COMPLETE then it will call finish - this will call the complete() method (and then delete the object dispatchSpec)
+      //                                              the complete() method will call AioCompletion::complete which in turn will call AioCompletion::notify_callbacks_complete()
+      //                                              this will call ImageDispatchSpec::C_Dispatcher::complete() which will delete the image dispatchSpec
 
       // handled ops will resume when the dispatch ctx is invoked
       if (handled) {
-        return;
-      }
+
+        // If this IO request was queued waiting for a refresh to complete then decrement the count of outstanding operations.
+        // Once the refresh has completed the request will be resubmitted and tracked again.
+        // This is required because if the refresh needs to add or remove dispatch layers then it can only do so when there are no 
+        // IOs in flight.  IOs that are queued waiting for the refresh to complete are not in flight.
+        if(dispatch_spec->dispatch_result == DISPATCH_RESULT_REFRESH) {
+          ldout(cct, 20) << "rfinish. dispatch_spec=" << dispatch_spec << dendl;
+          m_op_tracker->finish_op();
+        }
+
+        return;  
+        // layer is processing/already processed this request.  It will either complete the request or call back into this send method for the next layer
+        // If it completes the request it will call ImageDispatchSpec::C_Dispatcher::complete()
+      } 
+      // otherwise this layer processed the request synchronously (or had nothing to do) - go round again for the next layer
     }
 
-    // skipped through to the last layer
+    // skipped through to the last layer - call the C_Dispatcher.complete() function ourselves
     dispatch_spec->dispatcher_ctx.complete(0);
   }
 
 protected:
   struct DispatchMeta {
     Dispatch* dispatch = nullptr;
-    AsyncOpTracker* async_op_tracker = nullptr;
 
     DispatchMeta() {
     }
-    DispatchMeta(Dispatch* dispatch, AsyncOpTracker* async_op_tracker)
-      : dispatch(dispatch), async_op_tracker(async_op_tracker) {
+    DispatchMeta(Dispatch* dispatch)
+      : dispatch(dispatch) {
     }
   };
 
   ImageCtxT* m_image_ctx;
+  AsyncOpTracker* m_op_tracker = nullptr;
 
-  ceph::shared_mutex m_lock;
   std::map<DispatchLayer, DispatchMeta> m_dispatches;
 
   virtual bool send_dispatch(Dispatch* dispatch,
@@ -164,6 +218,7 @@ protected:
     Dispatcher* dispatcher;
     Context* on_finish;
     DispatchLayer dispatch_layer;
+    bool counted=false;
 
     C_LayerIterator(Dispatcher* dispatcher,
                     DispatchLayer start_layer,
@@ -171,29 +226,30 @@ protected:
     : dispatcher(dispatcher), on_finish(on_finish), dispatch_layer(start_layer) {
     }
 
+    // Called from Image/ObjectDispatcher::invalidate_cache and will also be called back asynchronously after a dispatcher has completed its work (invalidate cache)
     void complete(int r) override {
+
+      // If this is the first time into the complete function then record this in the op_tracker
+      if (!counted) {
+        dispatcher->m_op_tracker->start_op();
+        counted = true;
+      }
+
       while (true) {
-        dispatcher->m_lock.lock_shared();
         auto it = dispatcher->m_dispatches.upper_bound(dispatch_layer);
         if (it == dispatcher->m_dispatches.end()) {
-          dispatcher->m_lock.unlock_shared();
-          Context::complete(r);
+          dispatcher->m_op_tracker->finish_op();
+          Context::complete(r); // this calls the finish() method below
           return;
         }
 
         auto& dispatch_meta = it->second;
         auto dispatch = dispatch_meta.dispatch;
 
-        // prevent recursive locking back into the dispatcher while handling IO
-        dispatch_meta.async_op_tracker->start_op();
-        dispatcher->m_lock.unlock_shared();
-
         // next loop should start after current layer
         dispatch_layer = dispatch->get_dispatch_layer();
 
         auto handled = execute(dispatch, this);
-        dispatch_meta.async_op_tracker->finish_op();
-
         if (handled) {
           break;
         }
@@ -222,21 +278,14 @@ private:
   void shut_down_dispatch(DispatchMeta& dispatch_meta,
                           Context** on_finish) {
     auto dispatch = dispatch_meta.dispatch;
-    auto async_op_tracker = dispatch_meta.async_op_tracker;
 
     auto ctx = *on_finish;
-    ctx = new LambdaContext(
-      [dispatch, async_op_tracker, ctx](int r) {
+    ctx = new LambdaContext([dispatch, ctx](int r) {
         delete dispatch;
-        delete async_op_tracker;
-
         ctx->complete(r);
       });
-    ctx = new LambdaContext([dispatch, ctx](int r) {
+    *on_finish = new LambdaContext([dispatch, ctx](int r) {
         dispatch->shut_down(ctx);
-      });
-    *on_finish = new LambdaContext([async_op_tracker, ctx](int r) {
-        async_op_tracker->wait_for_ops(ctx);
       });
   }
 

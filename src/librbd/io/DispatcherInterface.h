@@ -29,6 +29,7 @@ public:
                                   Context* on_finish) = 0;
 
   virtual void send(DispatchSpec* dispatch_spec) = 0;
+  virtual void finished(DispatchSpec* dispatch_spec) = 0;
 };
 
 } // namespace io

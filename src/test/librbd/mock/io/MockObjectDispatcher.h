@@ -36,6 +36,7 @@ public:
   MOCK_METHOD2(prepare_copyup, int(uint64_t, SnapshotSparseBufferlist*));
 
   MOCK_METHOD1(send, void(ObjectDispatchSpec*));
+  MOCK_METHOD1(finished, void(ObjectDispatchSpec*));
 };
 
 } // namespace io

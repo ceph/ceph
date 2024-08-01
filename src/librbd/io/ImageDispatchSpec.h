@@ -112,7 +112,7 @@ public:
   ImageDispatcherInterface* image_dispatcher;
   ImageDispatchLayer dispatch_layer;
   std::atomic<uint32_t> image_dispatch_flags = 0;
-  DispatchResult dispatch_result = DISPATCH_RESULT_INVALID;
+  DispatchResult dispatch_result = DISPATCH_RESULT_INIT;
 
   AioCompletion* aio_comp;
   Extents image_extents;
