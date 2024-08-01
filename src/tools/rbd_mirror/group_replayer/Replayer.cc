@@ -44,6 +44,7 @@ Replayer<I>::Replayer(
     PoolMetaCache* pool_meta_cache,
     std::string local_group_id,
     std::string remote_group_id,
+    GroupCtx *local_group_ctx,
     std::list<std::pair<librados::IoCtx, ImageReplayer<I> *>> *image_replayers)
   : m_threads(threads),
     m_local_io_ctx(local_io_ctx),
@@ -54,6 +55,7 @@ Replayer<I>::Replayer(
     m_pool_meta_cache(pool_meta_cache),
     m_local_group_id(local_group_id),
     m_remote_group_id(remote_group_id),
+    m_local_group_ctx(local_group_ctx),
     m_image_replayers(image_replayers),
     m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
       "rbd::mirror::group_replayer::Replayer", this))) {
@@ -312,13 +314,19 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
         local_snap->snapshot_namespace);
     auto local_snap_ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
         &local_snap->snapshot_namespace);
-
     auto next_remote_snap = m_remote_group_snaps.end();
     if (snap_type == cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER ||
         local_snap_ns->is_non_primary() ||
         local_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
       for (auto remote_snap = m_remote_group_snaps.begin();
            remote_snap != m_remote_group_snaps.end(); ++remote_snap) {
+        auto remote_snap_ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
+            &remote_snap->snapshot_namespace);
+        m_remote_demoted = false;
+        if (remote_snap_ns &&
+            remote_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
+          m_remote_demoted = true;
+        }
         if (local_snap->id == remote_snap->id) {
           next_remote_snap = std::next(remote_snap);
           found = true;
@@ -404,6 +412,10 @@ out:
 
   ceph_assert(m_state == STATE_REPLAYING);
   m_state = STATE_IDLE;
+  if (m_remote_demoted) {
+    // stop group replayer
+    m_local_group_ctx->listener->stop();
+  }
   locker.unlock();
 }
 
@@ -633,7 +645,6 @@ void Replayer<I>::unlink_group_snapshots(
   }
   dout(10) << dendl;
   int r;
-  bool unlink_snap;
   for (auto &snap : m_local_group_snaps) {
     if (snap.id == remote_group_snap_id) {
       break;
@@ -656,7 +667,7 @@ void Replayer<I>::unlink_group_snapshots(
     }
     dout(10) << "attempting to unlink image snaps from group snap: "
              << snap.id << dendl;
-    unlink_snap = true;
+    bool retain = false;
     for (auto &spec : snap.snaps) {
       std::string image_header_oid = librbd::util::header_name(spec.image_id);
       cls::rbd::SnapshotInfo snap_info;
@@ -668,7 +679,6 @@ void Replayer<I>::unlink_group_snapshots(
         derr << "failed getting snap info for snap id: " << spec.snap_id
              << ", : " << cpp_strerror(r) << dendl;
       }
-      unlink_snap = false;
       for (auto it = m_image_replayers->begin();
            it != m_image_replayers->end(); ++it) {
         auto image_replayer = it->second;
@@ -676,7 +686,11 @@ void Replayer<I>::unlink_group_snapshots(
           continue;
         }
         auto local_image_id = image_replayer->get_local_image_id();
-        if (local_image_id.empty() || local_image_id != spec.image_id) {
+        if (local_image_id.empty()) {
+          retain = true;
+          continue;
+        }
+        if (local_image_id != spec.image_id) {
           continue;
         }
         dout(10) << "pruning: " << spec.snap_id << dendl;
@@ -684,11 +698,12 @@ void Replayer<I>::unlink_group_snapshots(
         break;
       }
     }
-    if (!unlink_snap) {
+    // ImageReplayer must be down, do it later.
+    if (retain) {
       continue;
     }
     dout(10) << "all image snaps are pruned, finally unlinking group snap: "
-      << snap.id << dendl;
+             << snap.id << dendl;
     r = librbd::cls_client::group_snap_remove(&m_local_io_ctx,
         librbd::util::group_header_name(m_local_group_id), snap.id);
     if (r < 0) {
