@@ -766,14 +766,11 @@ void Cache::add_to_dirty(CachedExtentRef ref)
 
 void Cache::remove_from_dirty(CachedExtentRef ref)
 {
-  if (ref->is_dirty()) {
-    ceph_assert(ref->primary_ref_list_hook.is_linked());
-    stats.dirty_bytes -= ref->get_length();
-    dirty.erase(dirty.s_iterator_to(*ref));
-    intrusive_ptr_release(&*ref);
-  } else {
-    ceph_assert(!ref->primary_ref_list_hook.is_linked());
-  }
+  assert(ref->is_dirty());
+  ceph_assert(ref->primary_ref_list_hook.is_linked());
+  stats.dirty_bytes -= ref->get_length();
+  dirty.erase(dirty.s_iterator_to(*ref));
+  intrusive_ptr_release(&*ref);
 }
 
 void Cache::remove_extent(CachedExtentRef ref)
