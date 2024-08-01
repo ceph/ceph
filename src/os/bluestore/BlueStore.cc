@@ -17379,14 +17379,6 @@ int BlueStore::_do_write_v2(
   o->extent_map.fault_range(db, offset, length);
   BlueStore::Writer wr(this, txc, &wctx, o);
   wr.do_write(offset, bl);
-  // equivalent of wctx_finish
-  // do_write updates allocations itself
-  // update statfs
-  txc->statfs_delta += wr.statfs_delta;
-  // update shared blobs
-  for (auto b: wr.shared_changed) {
-    txc->write_shared_blob(b);
-  }
   o->extent_map.compress_extent_map(offset, length);
   o->extent_map.dirty_range(offset, length);
   o->extent_map.maybe_reshard(offset, offset + length);

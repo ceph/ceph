@@ -1101,11 +1101,12 @@ std::pair<bool, uint32_t> BlueStore::Writer::_write_expand_l(
   bool     new_data_pad = true; // unless otherwise stated, we pad
   exmp_it it = onode->extent_map.seek_lextent(logical_offset);
   // it can be extent in which we are interested in
-  if (it == onode->extent_map.extent_map.end()) {
+  if (it == onode->extent_map.extent_map.end() ||
+    it->logical_offset >= logical_offset) {
     if (it == onode->extent_map.extent_map.begin()) {
       goto done;
     }
-    --it; //step back to first element
+    --it; //step back to the first extent to consider
   }
   do {
     if (it->logical_end() < off_stop) {
@@ -1247,6 +1248,8 @@ void BlueStore::Writer::_split_data(
   bufferlist& data,
   blob_vec& bd)
 {
+  ceph_assert(bd.empty());
+  bd.reserve(data.length() / wctx->target_blob_size + 2);
   auto lof = location;
   uint32_t end_offset = location + data.length();
   while (lof < end_offset) {
@@ -1371,6 +1374,12 @@ void BlueStore::Writer::do_write(
   if (onode->onode.size < ref_end)
     onode->onode.size = ref_end;
   _collect_released_allocated();
+  // update statfs
+  txc->statfs_delta += statfs_delta;
+  // update shared blobs
+  for (auto b: shared_changed) {
+    txc->write_shared_blob(b);
+  }
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;
 }
 
