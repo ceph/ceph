@@ -232,7 +232,7 @@ private:
     Ref<MOSDPGUpdateLogMissingReply> m);
 
 private:
-  crimson::common::Gated gate;
+  crimson::common::gate_per_shard gate;
 
   seastar::promise<> stop_acked;
   void got_stop_ack() {

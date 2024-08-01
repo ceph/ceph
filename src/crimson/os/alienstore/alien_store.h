@@ -10,6 +10,7 @@
 #include "os/ObjectStore.h"
 #include "osd/osd_types.h"
 
+#include "crimson/common/gated.h"
 #include "crimson/os/alienstore/thread_pool.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -111,9 +112,10 @@ public:
   }
 
 private:
+
   template <class... Args>
   auto do_with_op_gate(Args&&... args) const {
-    return seastar::with_gate(op_gate,
+    return op_gates.simple_dispatch("AlienStore::do_with_op_gate",
       // perfect forwarding in lambda's closure isn't available in C++17
       // using tuple as workaround; see: https://stackoverflow.com/a/49902823
       [args = std::make_tuple(std::forward<Args>(args)...)] () mutable {
@@ -130,7 +132,7 @@ private:
   uint64_t used_bytes = 0;
   std::unique_ptr<ObjectStore> store;
   std::unique_ptr<CephContext> cct;
-  mutable seastar::gate op_gate;
+  mutable crimson::common::gate_per_shard op_gates;
 
   /**
    * coll_map
