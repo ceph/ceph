@@ -749,6 +749,7 @@ class C_MaybeExpiredSegment : public MDSInternalContext {
   C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) :
     MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
   void finish(int res) override {
+    dout(10) << __func__ << ": ls=" << *ls << ", r=" << res << dendl;
     if (res < 0)
       mdlog->mds->handle_write_error(res);
     mdlog->_maybe_expired(ls, op_prio);
