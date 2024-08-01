@@ -59,6 +59,7 @@ void UnlinkPeerRequest<I>::handle_refresh_image(int r) {
 template <typename I>
 void UnlinkPeerRequest<I>::unlink_peer() {
   CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << dendl;
 
   m_image_ctx->image_lock.lock_shared();
   int r = -ENOENT;

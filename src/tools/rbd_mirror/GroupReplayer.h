@@ -175,6 +175,14 @@ private:
     Listener(GroupReplayer *group_replayer) : group_replayer(group_replayer) {
     }
 
+    void stop() {
+      Context *ctx = new LambdaContext(
+        [this](int r) {
+          return;
+        });
+      group_replayer->stop(ctx, false);
+    }
+
     void notify_group_snap_image_complete(
         int64_t local_pool_id,
         const std::string &local_image_id,
