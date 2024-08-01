@@ -685,7 +685,7 @@ private:
     CachedExtent,
     boost::intrusive::list_member_hook<>,
     &CachedExtent::primary_ref_list_hook>;
-  using list = boost::intrusive::list<
+  using primary_ref_list = boost::intrusive::list<
     CachedExtent,
     primary_ref_list_member_options>;
 

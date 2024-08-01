@@ -1380,7 +1380,7 @@ private:
    *
    * holds refs to dirty extents.  Ordered by CachedExtent::get_dirty_from().
    */
-  CachedExtent::list dirty;
+  CachedExtent::primary_ref_list dirty;
 
   using backref_extent_entry_query_set_t =
     std::set<
@@ -1428,7 +1428,7 @@ private:
     // current size (bytes)
     size_t contents = 0;
 
-    CachedExtent::list lru;
+    CachedExtent::primary_ref_list lru;
 
     void trim_to_capacity() {
       while (contents > capacity) {
