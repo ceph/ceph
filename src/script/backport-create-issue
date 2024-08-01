@@ -319,11 +319,13 @@ def mark_as_processed(r, issue):
     logging.debug("custom_fields: %s", list(issue['custom_fields']))
 
     tags_cf = next(filter(lambda x: x['id'] == CF_TAGS, issue['custom_fields']), None)
-
     if tags_cf is None:
         tags = ''
     else:
-        tags = tags_cf.value
+        try:
+            tags = tags_cf.value
+        except ResourceAttrError:
+            tags = None
         if tags is None:
             tags = ''
         else:
