@@ -1,0 +1,9 @@
+# created by cephadm
+/var/log/ceph/cephadm.log {
+    rotate 7
+    daily
+    compress
+    missingok
+    notifempty
+    su root root
+}
