@@ -623,7 +623,9 @@ void Replayer<I>::scan_remote_mirror_snapshots(
         ceph_assert(m_local_mirror_snap_ns.primary_mirror_uuid ==
                       m_state_builder->remote_mirror_uuid);
 
-        if (m_remote_snap_id_end == CEPH_NOSNAP) {
+        if (m_remote_snap_id_end == CEPH_NOSNAP &&
+            (!mirror_ns->group_spec.is_valid() &&
+             mirror_ns->group_snap_id.empty())) {
           // haven't found the end snap so treat this as a candidate for unlink
           unlink_snap_ids.insert(remote_snap_id);
         }
@@ -755,7 +757,9 @@ void Replayer<I>::scan_remote_mirror_snapshots(
          << "local_snap_ns=" << m_local_mirror_snap_ns << dendl;
     handle_replay_complete(locker, -EEXIST, "split-brain");
     return;
-  } else if (remote_demoted) {
+  } else if (remote_demoted &&
+      (!m_remote_mirror_snap_ns.group_spec.is_valid() &&
+       m_remote_mirror_snap_ns.group_snap_id.empty())) {
     dout(10) << "remote image demoted" << dendl;
     handle_replay_complete(locker, -EREMOTEIO, "remote image demoted");
     return;
@@ -1304,7 +1308,29 @@ void Replayer<I>::handle_notify_image_update(int r) {
     derr << "failed to notify local image update: " << cpp_strerror(r) << dendl;
   }
 
-  unlink_peer(m_remote_snap_id_start);
+  bool unlink = true;
+  auto remote_image_ctx = m_state_builder->remote_image_ctx;
+  for (auto snap_info_it = remote_image_ctx->snap_info.rbegin();
+       snap_info_it != remote_image_ctx->snap_info.rend(); ++snap_info_it) {
+    if (snap_info_it->first == m_remote_snap_id_start) {
+      const auto& snap_ns = snap_info_it->second.snap_namespace;
+      auto mirror_ns = std::get_if<
+        cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
+      if (mirror_ns == nullptr || !mirror_ns->complete) {
+        continue;
+      } else if (mirror_ns->group_spec.is_valid() ||
+          !mirror_ns->group_snap_id.empty()) {
+        unlink = false;
+      }
+      break;
+    }
+  }
+
+  if (unlink) {
+    unlink_peer(m_remote_snap_id_start);
+  } else{
+    finish_sync();
+  }
 }
 
 template <typename I>
