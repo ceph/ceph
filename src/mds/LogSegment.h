@@ -106,4 +106,9 @@ class LogSegment {
   MDSContext::vec expiry_waiters;
 };
 
+static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {
+  return out << "LogSegment(" << ls.seq << "/0x" << std::hex << ls.offset
+             << "~" << ls.end << std::dec << " events=" << ls.num_events << ")";
+}
+
 #endif
