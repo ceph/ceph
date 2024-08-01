@@ -371,7 +371,6 @@ public:
         });
       } else {
 	assert(!ret->is_mutable());
-	touch_extent(*ret);
         SUBDEBUGT(seastore_cache, "{} {}~{} is present on t without been \
           fully loaded, reading ... {}", t, T::TYPE, offset, length, *ret);
         auto bp = alloc_cache_buf(ret->get_length());
@@ -712,7 +711,6 @@ private:
         });
       } else {
 	assert(!ret->is_mutable());
-	touch_extent(*ret);
         SUBDEBUGT(seastore_cache, "{} {}~{} {} is present on t without been \
                   fully loaded, reading ...", t, type, offset, length, laddr);
         auto bp = alloc_cache_buf(ret->get_length());
