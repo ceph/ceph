@@ -397,6 +397,12 @@
                 Firefly (v. 0.80). See :ref:`Primary Affinity
                 <rados_ops_primary_affinity>`.
 
+        :ref:`Prometheus <mgr-prometheus>`
+                An open-source monitoring and alerting toolkit. Ceph offers a
+                :ref:`"Prometheus module" <mgr-prometheus>`, which provides a
+                Prometheus exporter that passes performance counters from a
+                collection point in ``ceph-mgr`` to Prometheus.
+
         Quorum	
                 Quorum is the state that exists when a majority of the
                 :ref:`Monitors<arch_monitor>` in the cluster are ``up``. A
