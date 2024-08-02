@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <fmt/format.h>
+
 #include "svc_bi_rados.h"
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
@@ -117,15 +119,15 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-static char bucket_obj_with_generation(char *buf, size_t len, const string& bucket_oid_base, uint64_t gen_id,
-                                    uint32_t shard_id)
+static std::string make_bucket_oid(std::string_view oid_base,
+                                   uint64_t gen, uint32_t shard)
 {
-  return snprintf(buf, len, "%s.%" PRIu64 ".%d", bucket_oid_base.c_str(), gen_id, shard_id);
-}
-
-static char bucket_obj_without_generation(char *buf, size_t len, const string& bucket_oid_base, uint32_t shard_id)
-{
-  return snprintf(buf, len, "%s.%d", bucket_oid_base.c_str(), shard_id);
+  if (gen > 0) {
+    return fmt::format("{}.{}.{}", oid_base, gen, shard);
+  } else {
+    // for backward compatibility, gen==0 is not added in the object name
+    return fmt::format("{}.{}", oid_base, shard);
+  }
 }
 
 static void get_bucket_index_objects(const string& bucket_oid_base,
@@ -136,30 +138,12 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
   auto& bucket_objects = *_bucket_objects;
   if (!num_shards) {
     bucket_objects[0] = bucket_oid_base;
-  } else {
-    char buf[bucket_oid_base.size() + 64];
-    if (shard_id < 0) {
-      for (uint32_t i = 0; i < num_shards; ++i) {
-        if (gen_id) {
-          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, i);
-        } else {
-          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, i);
-        }
-        bucket_objects[i] = buf;
-      }
-    } else {
-      if (std::cmp_greater(shard_id, num_shards)) {
-        return;
-      } else {
-        if (gen_id) {
-          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, shard_id);
-        } else {
-          // for backward compatibility, gen_id(0) will not be added in the object name
-          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, shard_id);
-        }
-        bucket_objects[shard_id] = buf;
-      }
+  } else if (shard_id < 0) {
+    for (uint32_t i = 0; i < num_shards; ++i) {
+      bucket_objects[i] = make_bucket_oid(bucket_oid_base, gen_id, i);
     }
+  } else {
+    bucket_objects[shard_id] = make_bucket_oid(bucket_oid_base, gen_id, shard_id);
   }
 }
 
@@ -172,20 +156,12 @@ static void get_bucket_instance_ids(const RGWBucketInfo& bucket_info,
 
   if (!num_shards) {
     (*result)[0] = plain_id;
-  } else {
-    char buf[16];
-    if (shard_id < 0) {
-      for (int i = 0; i < num_shards; ++i) {
-        snprintf(buf, sizeof(buf), ":%d", i);
-        (*result)[i] = plain_id + buf;
-      }
-    } else {
-      if (shard_id > num_shards) {
-        return;
-      }
-      snprintf(buf, sizeof(buf), ":%d", shard_id);
-      (*result)[shard_id] = plain_id + buf;
+  } else if (shard_id < 0) {
+    for (int i = 0; i < num_shards; ++i) {
+      (*result)[i] = fmt::format("{}:{}", plain_id, i);
     }
+  } else {
+    (*result)[shard_id] = fmt::format("{}:{}", plain_id, shard_id);
   }
 }
 
@@ -225,16 +201,7 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
   } else {
-    char buf[bucket_oid_base.size() + 64];
-    if (gen_id) {
-      bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, shard_id);
-      (*bucket_obj) = buf;
-	  ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
-    } else {
-      // for backward compatibility, gen_id(0) will not be added in the object name
-      bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, shard_id);
-      (*bucket_obj) = buf;
-    }
+    *bucket_obj = make_bucket_oid(bucket_oid_base, gen_id, shard_id);
   }
 }
 
@@ -255,13 +222,7 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(
         }
       } else {
         uint32_t sid = bucket_shard_index(obj_key, normal.num_shards);
-        char buf[bucket_oid_base.size() + 64];
-        if (gen_id) {
-          bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, sid);
-        } else {
-          bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, sid);
-        }
-        (*bucket_obj) = buf;
+        *bucket_obj = make_bucket_oid(bucket_oid_base, gen_id, sid);
         if (shard_id) {
           *shard_id = (int)sid;
         }
