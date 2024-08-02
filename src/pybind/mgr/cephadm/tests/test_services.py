@@ -406,7 +406,6 @@ omap_file_lock_retry_sleep_interval = 1.0
 omap_file_update_reloads = 10
 allowed_consecutive_spdk_ping_failures = 1
 spdk_ping_interval_in_seconds = 2.0
-ping_spdk_under_lock = False
 enable_monitor_client = True
 
 [gateway-logs]
@@ -441,7 +440,8 @@ rpc_socket_dir = /var/tmp/
 rpc_socket_name = spdk.sock
 timeout = 60.0
 bdevs_per_cluster = 32
-log_level = WARNING
+log_level=
+protocol_log_level = WARNING
 conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
