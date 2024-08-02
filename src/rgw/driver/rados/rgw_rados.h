@@ -1718,23 +1718,23 @@ struct get_obj_data {
   D3nGetObjData d3n_get_data;
   std::atomic_bool d3n_bypass_cache_write{false};
 
-  int flush(rgw::AioResultList&& results);
+  int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results);
 
   void cancel() {
     // wait for all completions to drain and ignore the results
     aio->drain();
   }
 
-  int drain() {
+  int drain(const DoutPrefixProvider* dpp) {
     auto c = aio->wait();
     while (!c.empty()) {
-      int r = flush(std::move(c));
+      int r = flush(dpp, std::move(c));
       if (r < 0) {
         cancel();
         return r;
       }
       c = aio->wait();
     }
-    return flush(std::move(c));
+    return flush(dpp, std::move(c));
   }
 };

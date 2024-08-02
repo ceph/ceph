@@ -367,7 +367,9 @@ int D4NFilterObject::D4NFilterReadOp::drain(const DoutPrefixProvider* dpp, optio
 }
 
 int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y) {
-  int r = rgw::check_for_errors(results);
+  constexpr auto is_error = [] (int r) { return r < 0; };
+  int r = rgw::check_for_errors(results, is_error, dpp,
+                                "failed to read cache object");
 
   if (r < 0) {
     return r;
