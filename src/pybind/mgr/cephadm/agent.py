@@ -190,16 +190,18 @@ class NodeProxyEndpoint:
         """
         nok_members: List[Dict[str, str]] = []
 
-        for member in data.keys():
-            _status = data[member]['status']['health'].lower()
-            if _status.lower() != 'ok':
-                state = data[member]['status']['state']
-                _member = dict(
-                    member=member,
-                    status=_status,
-                    state=state
-                )
-                nok_members.append(_member)
+        for sys_id in data.keys():
+            for member in data[sys_id].keys():
+                _status = data[sys_id][member]['status']['health'].lower()
+                if _status.lower() != 'ok':
+                    state = data[sys_id][member]['status']['state']
+                    _member = dict(
+                        sys_id=sys_id,
+                        member=member,
+                        status=_status,
+                        state=state
+                    )
+                    nok_members.append(_member)
 
         return nok_members
 
@@ -227,7 +229,7 @@ class NodeProxyEndpoint:
         """
 
         for component in data['patch']['status'].keys():
-            alert_name = f"HARDWARE_{component.upper()}"
+            alert_name = f'HARDWARE_{component.upper()}'
             self.mgr.remove_health_warning(alert_name)
             nok_members = self.get_nok_members(data['patch']['status'][component])
 
@@ -237,7 +239,7 @@ class NodeProxyEndpoint:
                     alert_name,
                     summary=f'{count} {component} member{"s" if count > 1 else ""} {"are" if count > 1 else "is"} not ok',
                     count=count,
-                    detail=[f"{member['member']} is {member['status']}: {member['state']}" for member in nok_members],
+                    detail=[f"[{member['sys_id']}]: {member['member']} is {member['status']}: {member['state']}" for member in nok_members],
                 )
 
     @cherrypy.expose
