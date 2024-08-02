@@ -2989,7 +2989,7 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
   }
   if (store->getRados()->get_gc() == nullptr) {
     // Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
-    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id(), y);
   } else {
     // use upload id as tag and do it synchronously
     auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
@@ -2999,7 +2999,7 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
         return -ERR_NO_SUCH_UPLOAD;
       }
       // Delete objects inline if send chain to gc fails
-      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
+      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id(), y);
     }
   }
   return 0;
@@ -3059,7 +3059,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 
   if (store->getRados()->get_gc() == nullptr) {
     //Delete objects inline if gc hasn't been initialised (in case when bypass gc is specified)
-    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
+    store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id(), y);
   } else {
     /* use upload id as tag and do it synchronously */
     auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
@@ -3069,7 +3069,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
         return -ERR_NO_SUCH_UPLOAD;
       }
       //Delete objects inline if send chain to gc fails
-      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id());
+      store->getRados()->delete_objs_inline(dpp, *leftover_chain, mp_obj.get_upload_id(), y);
     }
   }
 
