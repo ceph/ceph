@@ -7222,7 +7222,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
 
   state.cur_ioctx->locator_set_key(read_obj.loc);
 
-  r = state.cur_ioctx->operate(read_obj.oid, &op, NULL);
+  r = rgw_rados_operate(dpp, *state.cur_ioctx, read_obj.oid, &op, nullptr, y);
   ldpp_dout(dpp, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
