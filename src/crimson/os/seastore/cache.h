@@ -585,8 +585,8 @@ private:
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
-      const auto p_src = p_src_ext ? &p_src_ext->first : nullptr;
-      add_extent(ret, p_src);
+      add_extent(ret);
+      // touch_extent() should be included in on_cache
       on_cache(*ret);
       extent_init_func(*ret);
       return read_extent<T>(
@@ -1642,7 +1642,10 @@ private:
     const journal_seq_t &);
 
   /// Add extent to extents handling dirty and refcounting
-  void add_extent(CachedExtentRef ref, const Transaction::src_t* t_src);
+  ///
+  /// Note, it must follows with add_to_dirty() or touch_extent().
+  /// The only exception is RetiredExtentPlaceholder.
+  void add_extent(CachedExtentRef ref);
 
   /// Mark exising extent ref dirty -- mainly for replay
   void mark_dirty(CachedExtentRef ref);

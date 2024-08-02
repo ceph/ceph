@@ -97,8 +97,7 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
 	      TRANS_ID_NULL);
     DEBUGT("retire {}~{} as placeholder, add extent -- {}",
            t, addr, length, *ext);
-    const auto t_src = t.get_src();
-    add_extent(ext, &t_src);
+    add_extent(ext);
   }
   t.add_to_read_set(ext);
   t.add_to_retired_set(ext);
@@ -126,8 +125,7 @@ void Cache::retire_absent_extent_addr(
 	    TRANS_ID_NULL);
   DEBUGT("retire {}~{} as placeholder, add extent -- {}",
 	 t, addr, length, *ext);
-  const auto t_src = t.get_src();
-  add_extent(ext, &t_src);
+  add_extent(ext);
   t.add_to_read_set(ext);
   t.add_to_retired_set(ext);
 }
@@ -727,19 +725,12 @@ void Cache::register_metrics()
   );
 }
 
-void Cache::add_extent(
-    CachedExtentRef ref,
-    const Transaction::src_t* p_src=nullptr)
+void Cache::add_extent(CachedExtentRef ref)
 {
   assert(ref->is_valid());
   assert(ref->user_hint == PLACEMENT_HINT_NULL);
   assert(ref->rewrite_generation == NULL_GENERATION);
   extents.insert(*ref);
-  if (ref->is_dirty()) {
-    add_to_dirty(ref);
-  } else {
-    touch_extent(*ref, p_src);
-  }
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
@@ -1573,9 +1564,11 @@ void Cache::complete_commit(
     i->prior_instance.reset();
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
-    const auto t_src = t.get_src();
     i->invalidate_hints();
-    add_extent(i, &t_src);
+    add_extent(i);
+    assert(!i->is_dirty());
+    const auto t_src = t.get_src();
+    touch_extent(*i, &t_src);
     epm.commit_space_used(i->get_paddr(), i->get_length());
     if (is_backref_mapped_extent_node(i)) {
       DEBUGT("backref_list new {} len {}",
@@ -1691,8 +1684,13 @@ void Cache::complete_commit(
 	  i->get_length(),
 	  i->get_type(),
 	  start_seq));
-      const auto t_src = t.get_src();
-      add_extent(i, &t_src);
+      add_extent(i);
+      if (i->is_dirty()) {
+        add_to_dirty(i);
+      } else {
+        const auto t_src = t.get_src();
+        touch_extent(*i, &t_src);
+      }
     }
   }
   if (!backref_list.empty()) {
@@ -1868,6 +1866,7 @@ Cache::replay_delta(
           journal_seq, record_base, delta, *root);
     root->set_modify_time(modify_time);
     add_extent(root);
+    add_to_dirty(root);
     return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
       std::make_pair(true, root));
   } else {
@@ -1895,7 +1894,9 @@ Cache::replay_delta(
         delta.length,
         nullptr,
         [](CachedExtent &) {},
-        [](CachedExtent &) {}) :
+        [this](CachedExtent &ext) {
+          touch_extent(ext);
+        }) :
       _get_extent_if_cached(
 	delta.paddr)
     ).handle_error(
