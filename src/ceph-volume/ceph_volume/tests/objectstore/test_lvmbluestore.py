@@ -477,6 +477,7 @@ class TestLvmBlueStore:
         assert "Was unable to find any OSDs to activate" in stderr
         assert "Verify OSDs are present with" in stderr
 
+    @patch('ceph_volume.api.lvm.process.call', Mock(return_value=('', '', 0)))
     @patch('ceph_volume.systemd.systemctl.osd_is_active', return_value=True)
     def test_activate_all_osd_is_active(self,
                                         mock_lvm_direct_report,

@@ -119,7 +119,7 @@ class Device(object):
             self.symlink = self.path
             real_path = os.path.realpath(self.path)
             # check if we are not a device mapper
-            if "dm-" not in real_path:
+            if "dm-" not in real_path and not self.is_lv:
                 self.path = real_path
         if not sys_info.devices.get(self.path):
             sys_info.devices = disk.get_devices()
@@ -468,8 +468,9 @@ class Device(object):
         return self.device_type == 'mpath'
 
     @property
-    def is_lv(self):
-        return self.lv_api is not None
+    def is_lv(self) -> bool:
+        path = os.path.realpath(self.path)
+        return path in disk.get_lvm_mappers()
 
     @property
     def is_partition(self):
