@@ -1328,7 +1328,6 @@ class NvmeofServiceSpec(ServiceSpec):
                  verify_nqns: Optional[bool] = True,
                  allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
                  spdk_ping_interval_in_seconds: Optional[float] = 2.0,
-                 ping_spdk_under_lock: Optional[bool] = False,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1337,7 +1336,8 @@ class NvmeofServiceSpec(ServiceSpec):
                  spdk_path: Optional[str] = None,
                  tgt_path: Optional[str] = None,
                  spdk_timeout: Optional[float] = 60.0,
-                 spdk_log_level: Optional[str] = 'WARNING',
+                 spdk_log_level: Optional[str] = '',
+                 spdk_protocol_log_level: Optional[str] = 'WARNING',
                  rpc_socket_dir: Optional[str] = '/var/tmp/',
                  rpc_socket_name: Optional[str] = 'spdk.sock',
                  conn_retries: Optional[int] = 10,
@@ -1406,8 +1406,6 @@ class NvmeofServiceSpec(ServiceSpec):
         self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
         #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
         self.spdk_ping_interval_in_seconds = spdk_ping_interval_in_seconds
-        #: ``ping_spdk_under_lock`` whether or not we should perform SPDK ping under the RPC lock
-        self.ping_spdk_under_lock = ping_spdk_under_lock
         #: ``bdevs_per_cluster`` number of bdevs per cluster
         self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
@@ -1427,7 +1425,9 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``spdk_timeout`` SPDK connectivity timeout
         self.spdk_timeout = spdk_timeout
         #: ``spdk_log_level`` the SPDK log level
-        self.spdk_log_level = spdk_log_level or 'WARNING'
+        self.spdk_log_level = spdk_log_level
+        #: ``spdk_protocol_log_level`` the SPDK-GW protocol log level
+        self.spdk_protocol_log_level = spdk_protocol_log_level or 'WARNING'
         #: ``rpc_socket_dir`` the SPDK socket file directory
         self.rpc_socket_dir = rpc_socket_dir or '/var/tmp/'
         #: ``rpc_socket_name`` the SPDK socket file name
@@ -1488,22 +1488,33 @@ class NvmeofServiceSpec(ServiceSpec):
             raise SpecValidationError('Invalid transport. Valid values are tcp')
 
         if self.log_level:
-            if self.log_level not in ['debug', 'DEBUG',
-                                      'info', 'INFO',
-                                      'warning', 'WARNING',
-                                      'error', 'ERROR',
-                                      'critical', 'CRITICAL']:
+            if self.log_level.lower() not in ['debug',
+                                              'info',
+                                              'warning',
+                                              'error',
+                                              'critical']:
                 raise SpecValidationError(
                     'Invalid log level. Valid values are: debug, info, warning, error, critial')
 
         if self.spdk_log_level:
-            if self.spdk_log_level not in ['debug', 'DEBUG',
-                                           'info', 'INFO',
-                                           'warning', 'WARNING',
-                                           'error', 'ERROR',
-                                           'notice', 'NOTICE']:
+            if self.spdk_log_level.lower() not in ['debug',
+                                                   'info',
+                                                   'warning',
+                                                   'error',
+                                                   'notice']:
                 raise SpecValidationError(
-                    'Invalid SPDK log level. Valid values are: DEBUG, INFO, WARNING, ERROR, NOTICE')
+                    'Invalid SPDK log level. Valid values are: '
+                    'DEBUG, INFO, WARNING, ERROR, NOTICE')
+
+        if self.spdk_protocol_log_level:
+            if self.spdk_protocol_log_level.lower() not in ['debug',
+                                                            'info',
+                                                            'warning',
+                                                            'error',
+                                                            'notice']:
+                raise SpecValidationError(
+                    'Invalid SPDK protocol log level. Valid values are: '
+                    'DEBUG, INFO, WARNING, ERROR, NOTICE')
 
         if (
             self.spdk_ping_interval_in_seconds
