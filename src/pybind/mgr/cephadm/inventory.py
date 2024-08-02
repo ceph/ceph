@@ -1912,16 +1912,10 @@ class CertKeyStore():
 
     host_cert = [
         'grafana_cert',
-        'alertmanager_cert',
-        'prometheus_cert',
-        'node_exporter_cert',
     ]
 
     host_key = [
         'grafana_key',
-        'alertmanager_key',
-        'prometheus_key',
-        'node_exporter_key',
     ]
 
     service_name_key = [
@@ -1948,25 +1942,17 @@ class CertKeyStore():
             'nvmeof_server_cert': {},  # service-name -> cert
             'nvmeof_client_cert': {},  # service-name -> cert
             'nvmeof_root_ca_cert': {},  # service-name -> cert
-            'agent_endpoint_root_cert': Cert(),  # cert
-            'mgmt_gw_root_cert': Cert(),  # cert
-            'service_discovery_root_cert': Cert(),  # cert
+            'mgmt_gw_cert': Cert(),  # cert
+            'cephadm_root_ca_cert': Cert(),  # cert
             'grafana_cert': {},  # host -> cert
-            'alertmanager_cert': {},  # host -> cert
-            'prometheus_cert': {},  # host -> cert
-            'node_exporter_cert': {},  # host -> cert
         }
         # Similar to certs but for priv keys. Entries in known_certs
         # that don't have a key here are probably certs in PEM format
         # so there is no need to store a separate key
         self.known_keys = {
-            'agent_endpoint_key': PrivKey(),  # key
-            'service_discovery_key': PrivKey(),  # key
-            'mgmt_gw_root_key': PrivKey(),  # cert
+            'mgmt_gw_key': PrivKey(),  # cert
+            'cephadm_root_ca_key': PrivKey(),  # cert
             'grafana_key': {},  # host -> key
-            'alertmanager_key': {},  # host -> key
-            'prometheus_key': {},  # host -> key
-            'node_exporter_key': {},  # host -> key
             'iscsi_ssl_key': {},  # service-name -> key
             'ingress_ssl_key': {},  # service-name -> key
             'nvmeof_server_key': {},  # service-name -> key

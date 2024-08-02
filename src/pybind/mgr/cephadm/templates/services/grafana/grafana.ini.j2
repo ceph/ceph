@@ -8,15 +8,14 @@
   org_role = 'Viewer'
 {% endif %}
 [server]
-  domain = 'bootstrap.storage.lab'
+  domain = '{{ domain }}'
   protocol = {{ protocol }}
   cert_file = /etc/grafana/certs/cert_file
   cert_key = /etc/grafana/certs/cert_key
   http_port = {{ http_port }}
   http_addr = {{ http_addr }}
 {% if use_url_prefix %}
-  root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
-  serve_from_sub_path = true
+  root_url = %(protocol)s://%(domain)s/grafana/
 {% endif %}
 [snapshots]
   external_enabled = false

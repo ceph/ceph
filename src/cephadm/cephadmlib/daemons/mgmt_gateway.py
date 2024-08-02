@@ -104,9 +104,22 @@ class MgmtGateway(ContainerDaemonForm):
             raise OSError('data_dir is not a directory: %s' % (data_dir))
         logger.info('Writing mgmt-gateway config...')
         config_dir = os.path.join(data_dir, 'etc/')
-        makedirs(config_dir, uid, gid, 0o755)
-        recursive_chown(config_dir, uid, gid)
-        populate_files(config_dir, self.files, uid, gid)
+        ssl_dir = os.path.join(data_dir, 'etc/ssl')
+        for ddir in [config_dir, ssl_dir]:
+            makedirs(ddir, uid, gid, 0o755)
+            recursive_chown(ddir, uid, gid)
+        conf_files = {
+            fname: content
+            for fname, content in self.files.items()
+            if fname.endswith('.conf')
+        }
+        cert_files = {
+            fname: content
+            for fname, content in self.files.items()
+            if fname.endswith('.crt') or fname.endswith('.key')
+        }
+        populate_files(config_dir, conf_files, uid, gid)
+        populate_files(ssl_dir, cert_files, uid, gid)
 
     def _get_container_mounts(self, data_dir: str) -> Dict[str, str]:
         mounts: Dict[str, str] = {}
@@ -152,23 +165,6 @@ class MgmtGateway(ContainerDaemonForm):
                 os.path.join(
                     data_dir, 'etc/nginx_external_server.conf'
                 ): '/etc/nginx_external_server.conf:Z',
-                os.path.join(
-                    data_dir, 'etc/nginx_internal.crt'
-                ): '/etc/nginx/ssl/nginx_internal.crt:Z',
-                os.path.join(
-                    data_dir, 'etc/nginx_internal.key'
-                ): '/etc/nginx/ssl/nginx_internal.key:Z',
+                os.path.join(data_dir, 'etc/ssl'): '/etc/nginx/ssl/',
             }
         )
-
-        if 'nginx.crt' in self.files:
-            mounts.update(
-                {
-                    os.path.join(
-                        data_dir, 'etc/nginx.crt'
-                    ): '/etc/nginx/ssl/nginx.crt:Z',
-                    os.path.join(
-                        data_dir, 'etc/nginx.key'
-                    ): '/etc/nginx/ssl/nginx.key:Z',
-                }
-            )

@@ -6,6 +6,7 @@ import ipaddress
 import logging
 import re
 import shlex
+import socket
 from collections import defaultdict
 from configparser import ConfigParser
 from contextlib import contextmanager
@@ -15,6 +16,7 @@ from urllib.error import HTTPError
 from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
+from cephadm.cert_mgr import CertMgr
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -542,7 +544,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         # for serve()
         self.run = True
         self.event = Event()
-
         self.ssh = ssh.SSHManager(self)
 
         if self.get_store('pause'):
@@ -674,6 +675,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cert_key_store = CertKeyStore(self)
         self.cert_key_store.load()
 
+        self.cert_mgr = CertMgr(self, self.get_mgr_ip())
+
         # ensure the host lists are in sync
         for h in self.inventory.keys():
             if h not in self.cache.daemons:
@@ -768,6 +771,23 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def _get_cephadm_service(self, service_type: str) -> CephadmService:
         assert service_type in ServiceSpec.KNOWN_SERVICE_TYPES
         return self.cephadm_services[service_type]
+
+    def get_fqdn(self, hostname: str) -> str:
+        """Get a host's FQDN with its hostname.
+
+           If the FQDN can't be resolved, the address from the inventory will
+           be returned instead.
+        """
+        # TODO(redo): get fqdn from the inventory
+        addr = self.inventory.get_addr(hostname)
+        return socket.getfqdn(addr)
+
+    def _get_security_config(self) -> Tuple[bool, bool]:
+        # TODO(redo): enable when oauth2-proxy code is active
+        # oauth2_proxy_enabled = len(self.mgr.cache.get_daemons_by_service('oauth2-proxy')) > 0
+        mgmt_gw_enabled = len(self.cache.get_daemons_by_service('mgmt-gateway')) > 0
+        security_enabled = self.secure_monitoring_stack or mgmt_gw_enabled
+        return security_enabled, mgmt_gw_enabled
 
     def _get_cephadm_binary_path(self) -> str:
         import hashlib
@@ -2899,7 +2919,7 @@ Then run the following:
             server_port = ''
             try:
                 server_port = str(self.http_server.agent.server_port)
-                root_cert = self.http_server.agent.ssl_certs.get_root_cert()
+                root_cert = self.cert_mgr.get_root_ca()
             except Exception:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert,
@@ -2909,7 +2929,7 @@ Then run the following:
             server_port = ''
             try:
                 server_port = str(self.http_server.agent.server_port)
-                root_cert = self.http_server.agent.ssl_certs.get_root_cert()
+                root_cert = self.cert_mgr.get_root_ca()
             except Exception:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert])
@@ -2938,21 +2958,26 @@ Then run the following:
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
             deps += [d.name() for d in self.cache.get_daemons_by_service('mgmt-gateway')]
-            if self.secure_monitoring_stack:
+            security_enabled, _ = self._get_security_config()
+            if security_enabled:
                 if prometheus_user and prometheus_password:
                     deps.append(f'{hash(prometheus_user + prometheus_password)}')
                 if alertmanager_user and alertmanager_password:
                     deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'grafana':
             deps += get_daemon_names(['prometheus', 'loki', 'mgmt-gateway'])
-            if self.secure_monitoring_stack and prometheus_user and prometheus_password:
+            security_enabled, _ = self._get_security_config()
+            if security_enabled and prometheus_user and prometheus_password:
                 deps.append(f'{hash(prometheus_user + prometheus_password)}')
         elif daemon_type == 'alertmanager':
             deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway', 'mgmt-gateway'])
-            if self.secure_monitoring_stack and alertmanager_user and alertmanager_password:
+            security_enabled, _ = self._get_security_config()
+            if security_enabled and alertmanager_user and alertmanager_password:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
             deps += get_daemon_names(['loki'])
+        elif daemon_type in ['ceph-exporter', 'node-exporter']:
+            deps += get_daemon_names(['mgmt-gateway'])
         elif daemon_type == JaegerAgentService.TYPE:
             for dd in self.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
                 assert dd.hostname is not None
@@ -2967,7 +2992,8 @@ Then run the following:
             # this daemon type doesn't need deps mgmt
             pass
 
-        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana', 'mgmt-gateway']:
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana',
+                           'ceph-exporter']:
             deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
 
         return sorted(deps)
@@ -3082,6 +3108,21 @@ Then run the following:
         return (user, password)
 
     @handle_orch_error
+    def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
+        import socket
+        supported_moduels = ['dashboard', 'prometheus']
+        if module_name not in supported_moduels:
+            raise OrchestratorError(f'Unsupported modlue {module_name}. Supported moduels are: {supported_moduels}')
+
+        host_fqdns = [socket.getfqdn(self.get_hostname())]
+        node_ip = self.get_mgr_ip()
+        if module_name == 'dashboard':
+            host_fqdns.append('dashboard_servers')
+
+        cert, key = self.cert_mgr.generate_cert(host_fqdns, node_ip)
+        return {'cert': cert, 'key': key}
+
+    @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
@@ -3135,17 +3176,23 @@ Then run the following:
 
     @handle_orch_error
     def get_prometheus_access_info(self) -> Dict[str, str]:
+        security_enabled, _ = self._get_security_config()
+        if not security_enabled:
+            return {}
         user, password = self._get_prometheus_credentials()
         return {'user': user,
                 'password': password,
-                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+                'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:
+        security_enabled, _ = self._get_security_config()
+        if not security_enabled:
+            return {}
         user, password = self._get_alertmanager_credentials()
         return {'user': user,
                 'password': password,
-                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+                'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
     def cert_store_cert_ls(self) -> Dict[str, Any]:
@@ -3292,13 +3339,6 @@ Then run the following:
         self.tuned_profiles.rm_setting(profile_name, setting)
         self._kick_serve_loop()
         return f'Removed setting {setting} from tuned profile {profile_name}'
-
-    @handle_orch_error
-    def service_discovery_dump_cert(self) -> str:
-        root_cert = self.cert_key_store.get_cert('service_discovery_root_cert')
-        if not root_cert:
-            raise OrchestratorError('No certificate found for service discovery')
-        return root_cert
 
     def set_health_warning(self, name: str, summary: str, count: int, detail: List[str]) -> None:
         self.health_checks[name] = {

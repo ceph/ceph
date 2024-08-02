@@ -90,7 +90,7 @@ def get_dashboard_endpoints(svc: 'CephadmService') -> Tuple[List[str], Optional[
             if not port:
                 continue
             assert dd.hostname is not None
-            addr = svc._inventory_get_fqdn(dd.hostname)
+            addr = svc.mgr.get_fqdn(dd.hostname)
             dashboard_endpoints.append(f'{addr}:{port}')
 
     return dashboard_endpoints, protocol
@@ -124,7 +124,7 @@ def get_dashboard_urls(svc: 'CephadmService') -> List[str]:
         if dd.daemon_id == svc.mgr.get_mgr_id():
             continue
         assert dd.hostname is not None
-        addr = svc._inventory_get_fqdn(dd.hostname)
+        addr = svc.mgr.get_fqdn(dd.hostname)
         dashboard_urls.append(build_url(scheme=proto, host=addr, port=port).rstrip('/'))
 
     return dashboard_urls
@@ -383,15 +383,6 @@ class CephadmService(metaclass=ABCMeta):
             if err:
                 raise OrchestratorError(f"Unable to fetch keyring for {entity}: {err}")
         return simplified_keyring(entity, keyring)
-
-    def _inventory_get_fqdn(self, hostname: str) -> str:
-        """Get a host's FQDN with its hostname.
-
-           If the FQDN can't be resolved, the address from the inventory will
-           be returned instead.
-        """
-        addr = self.mgr.inventory.get_addr(hostname)
-        return socket.getfqdn(addr)
 
     def _set_value_on_dashboard(self,
                                 service_name: str,
@@ -1272,7 +1263,7 @@ class CephExporterService(CephService):
                                               'mon', 'allow r',
                                               'mgr', 'allow r',
                                               'osd', 'allow r'])
-        exporter_config = {}
+        exporter_config: Dict[str, Any] = {}
         if spec.sock_dir:
             exporter_config.update({'sock-dir': spec.sock_dir})
         if spec.port:
@@ -1282,10 +1273,29 @@ class CephExporterService(CephService):
         if spec.stats_period:
             exporter_config.update({'stats-period': f'{spec.stats_period}'})
 
+        security_enabled, mgmt_gw_enabled = self.mgr._get_security_config()
+        if security_enabled:
+            exporter_config.update({'https_enabled': True})
+            crt, key = self.get_certificates(daemon_spec)
+            exporter_config['files'] = {
+                'ceph-exporter.crt': crt,
+                'ceph-exporter.key': key
+            }
         daemon_spec.keyring = keyring
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
+
+        deps = []
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('mgmt-gateway')]
+        deps += [f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}']
+        daemon_spec.deps = deps
+
         return daemon_spec
+
+    def get_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
+        node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
+        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
+        return self.mgr.cert_mgr.generate_cert(host_fqdn, node_ip)
 
 
 class CephfsMirrorService(CephService):
@@ -1342,7 +1352,6 @@ class CephadmAgent(CephService):
         agent = self.mgr.http_server.agent
         try:
             assert agent
-            assert agent.ssl_certs.get_root_cert()
             assert agent.server_port
         except Exception:
             raise OrchestratorError(
@@ -1355,15 +1364,15 @@ class CephadmAgent(CephService):
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
 
-        listener_cert, listener_key = agent.ssl_certs.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
+        listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,
-            'root_cert.pem': agent.ssl_certs.get_root_cert(),
+            'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
             'listener.crt': listener_cert,
             'listener.key': listener_key,
         }
 
         return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
-                               agent.ssl_certs.get_root_cert(),
+                               self.mgr.cert_mgr.get_root_ca(),
                                str(self.mgr.get_module_option('device_enhanced_scan'))])

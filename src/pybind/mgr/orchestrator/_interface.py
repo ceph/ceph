@@ -527,14 +527,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def service_discovery_dump_cert(self) -> OrchResult:
-        """
-        Returns service discovery server root certificate
-
-        :return: service discovery root certificate
-        """
-        raise NotImplementedError()
-
     def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None, refresh: bool = False) -> OrchResult[List['ServiceDescription']]:
         """
         Describe a service (of any kind) that is already configured in
@@ -799,6 +791,10 @@ class Orchestrator(object):
 
     def set_prometheus_access_info(self, user: str, password: str) -> OrchResult[str]:
         """set prometheus access information"""
+        raise NotImplementedError()
+
+    def generate_certificates(self, module_name: str) -> OrchResult[Optional[Dict[str, str]]]:
+        """generate cert/key for the module with the name module_name"""
         raise NotImplementedError()
 
     def set_custom_prometheus_alerts(self, alerts_file: str) -> OrchResult[str]:

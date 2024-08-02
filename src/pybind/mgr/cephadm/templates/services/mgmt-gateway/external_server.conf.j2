@@ -58,18 +58,33 @@ server {
     location /grafana {
         rewrite ^/grafana/(.*) /$1 break;
         proxy_pass {{ grafana_scheme }}://grafana_servers;
+        # clear any Authorization header as Prometheus and Alertmanager are using basic-auth browser
+        # will send this header if Grafana is running on the same node as one of those services
+        proxy_set_header Authorization "";
     }
 {% endif %}
 
 {% if prometheus_endpoints %}
     location /prometheus {
         proxy_pass {{ prometheus_scheme }}://prometheus_servers;
+
+        proxy_ssl_certificate /etc/nginx/ssl/nginx_internal.crt;
+        proxy_ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
+        proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
     }
 {% endif %}
 
 {% if alertmanager_endpoints %}
     location /alertmanager {
         proxy_pass {{ alertmanager_scheme }}://alertmanager_servers;
+
+        proxy_ssl_certificate /etc/nginx/ssl/nginx_internal.crt;
+        proxy_ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
+        proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
     }
 {% endif %}
 }

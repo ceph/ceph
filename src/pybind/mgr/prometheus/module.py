@@ -10,13 +10,14 @@ import time
 import enum
 from packaging import version  # type: ignore
 from collections import namedtuple
+import tempfile
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
 
-from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
+from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable, IO
 
 LabelValues = Tuple[str, ...]
 Number = Union[int, float]
@@ -616,6 +617,8 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
+        self.key_file: IO[bytes]
+        self.cert_file: IO[bytes]
         self.metrics = self._setup_static_metrics()
         self.shutdown_event = threading.Event()
         self.collect_lock = threading.Lock()
@@ -1762,18 +1765,23 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_file_sd_config()
 
     def configure(self, server_addr: str, server_port: int) -> None:
-        # cephadm deployments have a TLS monitoring stack setup option.
-        # If the cephadm module is on and the setting is true (defaults to false)
-        # we should have prometheus be set up to interact with that
-        cephadm_secure_monitoring_stack = self.get_module_option_ex(
-            'cephadm', 'secure_monitoring_stack', False)
-        if cephadm_secure_monitoring_stack:
-            try:
-                self.setup_cephadm_tls_config(server_addr, server_port)
-                return
-            except Exception as e:
-                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                   'Falling back to default configuration')
+        # TODO(redo): this new check is hacky, we should provide an explit cmd
+        # from cephadm to get/check the security status
+
+        # if cephadm is configured with security then TLS must be used
+        cmd = {'prefix': 'orch prometheus get-credentials'}
+        ret, out, _ = self.mon_command(cmd)
+        if ret == 0 and out is not None:
+            access_info = json.loads(out)
+            if access_info:
+                try:
+                    self.setup_tls_using_cephadm(server_addr, server_port)
+                    return
+                except Exception as e:
+                    self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
+                                       'Falling back to default configuration')
+
+        # In any error fallback to plain http mode
         self.setup_default_config(server_addr, server_port)
 
     def setup_default_config(self, server_addr: str, server_port: int) -> None:
@@ -1789,28 +1797,29 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.set_uri(build_url(scheme='http', host=self.get_server_addr(),
                      port=server_port, path='/'))
 
-    def setup_cephadm_tls_config(self, server_addr: str, server_port: int) -> None:
-        from cephadm.ssl_cert_utils import SSLCerts
-        # the ssl certs utils uses a NamedTemporaryFile for the cert files
-        # generated with generate_cert_files function. We need the SSLCerts
-        # object to not be cleaned up in order to have those temp files not
-        # be cleaned up, so making it an attribute of the module instead
-        # of just a standalone object
-        self.cephadm_monitoring_tls_ssl_certs = SSLCerts()
-        host = self.get_mgr_ip()
-        try:
-            old_cert = self.get_store('root/cert')
-            old_key = self.get_store('root/key')
-            if not old_cert or not old_key:
-                raise Exception('No old credentials for mgr-prometheus endpoint')
-            self.cephadm_monitoring_tls_ssl_certs.load_root_credentials(old_cert, old_key)
-        except Exception:
-            self.cephadm_monitoring_tls_ssl_certs.generate_root_cert(host)
-            self.set_store('root/cert', self.cephadm_monitoring_tls_ssl_certs.get_root_cert())
-            self.set_store('root/key', self.cephadm_monitoring_tls_ssl_certs.get_root_key())
+    def setup_tls_using_cephadm(self, server_addr: str, server_port: int) -> None:
+        from mgr_util import verify_tls_files
+        cmd = {'prefix': 'orch certmgr generate-certificates',
+               'module_name': 'prometheus',
+               'format': 'json'}
+        ret, out, err = self.mon_command(cmd)
+        if ret != 0:
+            self.log.error(f'mon command to generate-certificates failed: {err}')
+            return
+        elif out is None:
+            self.log.error('mon command to generate-certificates failed to generate certificates')
+            return
 
-        cert_file_path, key_file_path = self.cephadm_monitoring_tls_ssl_certs.generate_cert_files(
-            self.get_hostname(), host)
+        cert_key = json.loads(out)
+        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file.write(cert_key['cert'].encode('utf-8'))
+        self.cert_file.flush()  # cert_tmp must not be gc'ed
+        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file.write(cert_key['key'].encode('utf-8'))
+        self.key_file.flush()  # pkey_tmp must not be gc'ed
+
+        verify_tls_files(self.cert_file.name, self.key_file.name)
+        cert_file_path, key_file_path = self.cert_file.name, self.key_file.name
 
         cherrypy.config.update({
             'server.socket_host': server_addr,

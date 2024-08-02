@@ -702,7 +702,7 @@ class CephadmServe:
         if service_type == 'agent':
             try:
                 assert self.mgr.http_server.agent
-                assert self.mgr.http_server.agent.ssl_certs.get_root_cert()
+                assert self.mgr.cert_mgr.get_root_ca()
             except Exception:
                 self.log.info(
                     'Delaying applying agent spec until cephadm endpoint root cert created')
@@ -1095,7 +1095,7 @@ class CephadmServe:
                 action = 'reconfig'
                 # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
                 # TODO(redo): check if we should just go always with redeploy (it's fast enough)
-                if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager']:
+                if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'ceph-exporter']:
                     diff = list(set(last_deps).symmetric_difference(set(deps)))
                     REDEPLOY_TRIGGERS = ['secure_monitoring_stack', 'mgmt-gateway']
                     if any(svc in e for e in diff for svc in REDEPLOY_TRIGGERS):

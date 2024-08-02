@@ -6,7 +6,7 @@ global:
 {% if not secure %}
   http_config:
     tls_config:
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
       ca_file: root_cert.pem
 {% else %}
       insecure_skip_verify: true
