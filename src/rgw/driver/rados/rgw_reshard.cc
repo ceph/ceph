@@ -5,6 +5,7 @@
 #include <sstream>
 #include <chrono>
 
+#include "bucket_index.h"
 #include "rgw_zone.h"
 #include "driver/rados/rgw_bucket.h"
 #include "rgw_asio_thread.h"
@@ -434,17 +435,21 @@ static int init_target_index(rgw::sal::RadosStore* store,
                              bool& support_logrecord,
                              const DoutPrefixProvider* dpp, optional_yield y)
 {
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  const rgw::SiteConfig& site = *store->svc()->site;
 
   int ret = 0;
   if (ret = fault.check("init_index");
       ret == 0) { // no fault injected, initialize index
-    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, true);
+    ret = rgwrados::bucket_index::init(dpp, y, rados, site,
+                                       bucket_info, index, true);
   }
   if (ret == -EOPNOTSUPP) {
     ldpp_dout(dpp, 0) << "WARNING: " << "init_index() does not supported logrecord, "
                       << "falling back to block reshard mode." << dendl;
     support_logrecord = false;
-    ret = store->svc()->bi->init_index(dpp, y, bucket_info, index, false);
+    ret = rgwrados::bucket_index::init(dpp, y, rados, site,
+                                       bucket_info, index, false);
   } else if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to initialize "
        "target index shard objects: " << cpp_strerror(ret) << dendl;

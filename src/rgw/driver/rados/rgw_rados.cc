@@ -23,6 +23,7 @@
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
 
+#include "bucket_index.h"
 #include "rgw_asio_thread.h"
 #include "rgw_cksum.h"
 #include "rgw_sal.h"
@@ -2359,7 +2360,9 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
     }
 
     if (zone_placement) {
-      ret = svc.bi->init_index(dpp, y, info, info.layout.current_index);
+      // create the bucket index shards
+      ret = rgwrados::bucket_index::init(dpp, y, *get_rados_handle(), *svc.site,
+                                         info, info.layout.current_index);
       if (ret < 0) {
         return ret;
       }
