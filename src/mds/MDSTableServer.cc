@@ -58,7 +58,9 @@ void MDSTableServer::handle_prepare(const cref_t<MMDSTableRequest> &req)
   dout(7) << "handle_prepare " << *req << dendl;
   mds_rank_t from = mds_rank_t(req->get_source().num());
 
-  ceph_assert(g_conf()->mds_kill_mdstable_at != 1);
+  //ceph_assert(g_conf()->mds_kill_mdstable_at != 1);
+  if (g_conf()->mds_kill_mdstable_at == 1)
+    _exit(120);
 
   projected_version++;
 
@@ -74,7 +76,9 @@ void MDSTableServer::_prepare_logged(const cref_t<MMDSTableRequest> &req, versio
   dout(7) << __func__ << ": req=" << *req << " tid " << tid << dendl;
   mds_rank_t from = mds_rank_t(req->get_source().num());
 
-  ceph_assert(g_conf()->mds_kill_mdstable_at != 2);
+  //ceph_assert(g_conf()->mds_kill_mdstable_at != 2);
+  if (g_conf()->mds_kill_mdstable_at == 2)
+    _exit(120);
 
   _note_prepare(from, req->reqid);
   bufferlist out;
@@ -144,7 +148,9 @@ void MDSTableServer::handle_commit(const cref_t<MMDSTableRequest> &req)
       return;
     }
 
-    ceph_assert(g_conf()->mds_kill_mdstable_at != 5);
+    //ceph_assert(g_conf()->mds_kill_mdstable_at != 5);
+    if (g_conf()->mds_kill_mdstable_at == 5)
+    _exit(120);
 
     projected_version++;
     committing_tids.insert(tid);
@@ -170,7 +176,9 @@ void MDSTableServer::_commit_logged(const cref_t<MMDSTableRequest> &req)
 {
   dout(7) << "_commit_logged, sending ACK" << dendl;
 
-  ceph_assert(g_conf()->mds_kill_mdstable_at != 6);
+  //ceph_assert(g_conf()->mds_kill_mdstable_at != 6);
+  if (g_conf()->mds_kill_mdstable_at == 6)
+    _exit(120);
   version_t tid = req->get_tid();
 
   pending_for_mds.erase(tid);
@@ -199,7 +207,9 @@ void MDSTableServer::handle_rollback(const cref_t<MMDSTableRequest> &req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
 
-  ceph_assert(g_conf()->mds_kill_mdstable_at != 8);
+  //ceph_assert(g_conf()->mds_kill_mdstable_at != 8);
+  if (g_conf()->mds_kill_mdstable_at == 8)
+    _exit(120);
   version_t tid = req->get_tid();
   ceph_assert(pending_for_mds.count(tid));
   ceph_assert(!committing_tids.count(tid));
