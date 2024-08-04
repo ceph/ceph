@@ -1421,21 +1421,34 @@ void RocksDBStore::get_statistics(Formatter *f)
 	     << dendl;
     return;
   }
-
+  
   if (cct->_conf->rocksdb_collect_compaction_stats) {
-    std::string stat_str;
-    bool status = db->GetProperty("rocksdb.stats", &stat_str);
-    if (status) {
-      f->open_object_section("rocksdb_statistics");
+    vector<rocksdb::ColumnFamilyHandle*> handles;
+    handles.push_back(default_cf);
+    for (auto cf : cf_handles) {
+      for (auto shard_cf : cf.second.handles) {
+        handles.push_back(shard_cf);
+      }
+    }
+    f->open_object_section("rocksdb_statistics");
+    for (auto handle : handles) {
+      std::string stat_str;
+      bool status = db->GetProperty(handle, "rocksdb.stats", &stat_str);
+      if (!status) {
+        derr << __func__ << " failed to get rocksdb.stats for the cf: " 
+             << handle->GetName() << dendl;
+        continue;
+      } 
       f->dump_string("rocksdb_compaction_statistics", "");
       vector<string> stats;
       split_stats(stat_str, '\n', stats);
       for (auto st :stats) {
         f->dump_string("", st);
-      }
-      f->close_section();
+      }  
     }
+    f->close_section();
   }
+
   if (cct->_conf->rocksdb_collect_extended_stats) {
     if (dbstats) {
       f->open_object_section("rocksdb_extended_statistics");
