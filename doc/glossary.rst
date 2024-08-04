@@ -42,6 +42,11 @@
                 Ceph is a distributed network storage and file system with
                 distributed metadata management and POSIX semantics.
 
+        `ceph-ansible <https://docs.ceph.com/projects/ceph-ansible/en/latest/index.html>`_
+                A GitHub repository, supported from the Jewel release to the
+                Quincy release, that facilitates the installation of a Ceph
+                cluster.
+                
 	Ceph Block Device
                 Also called "RADOS Block Device" and :term:`RBD`. A software
                 instrument that orchestrates the storage of block-based data in
