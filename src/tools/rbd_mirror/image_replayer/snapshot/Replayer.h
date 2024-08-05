@@ -291,7 +291,7 @@ private:
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
-  void prune_mirror_snapshot(uint64_t snap_id);
+  void prune_mirror_snapshot(Context* on_finish, uint64_t snap_id);
   void handle_prune_mirror_snapshot(int r);
 
   void copy_snapshots();
