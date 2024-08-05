@@ -52,7 +52,10 @@ void UnlinkPeerGroupRequest<I>::unlink_peer() {
     auto ns = std::get_if<cls::rbd::MirrorGroupSnapshotNamespace>(
         &it->snapshot_namespace);
     if (ns != nullptr) {
-      if (ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+      // FIXME: after relocate, on new primary the previous primary demoted
+      // snap is not getting deleted, until the next demotion.
+      if (ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY &&
+          ns->state != cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY) {
         continue;
       }
       count++;
