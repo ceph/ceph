@@ -327,6 +327,16 @@ public:
                          rgw::sal::DataProcessor *cb) override;
 };
 
+class RGWRestoreObj_ObjStore_S3 : public RGWRestoreObj_ObjStore {
+
+public:
+  RGWRestoreObj_ObjStore_S3() {}
+  ~RGWRestoreObj_ObjStore_S3() override {}
+
+  int get_params(optional_yield y) override;
+  void send_response() override;
+};
+
 class RGWDeleteObj_ObjStore_S3 : public RGWDeleteObj_ObjStore {
 public:
   RGWDeleteObj_ObjStore_S3() {}

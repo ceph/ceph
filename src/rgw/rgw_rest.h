@@ -318,6 +318,12 @@ public:
   ~RGWPutMetadataObject_ObjStore() override {}
 };
 
+class RGWRestoreObj_ObjStore : public RGWRestoreObj {
+public:
+  RGWRestoreObj_ObjStore() {}
+  ~RGWRestoreObj_ObjStore() override {}
+};
+
 class RGWDeleteObj_ObjStore : public RGWDeleteObj {
 public:
   RGWDeleteObj_ObjStore() {}
