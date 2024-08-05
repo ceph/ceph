@@ -129,8 +129,12 @@ public:
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
   }
-  inline const std::string& get_local_image_id() const {
-    return m_state_builder->local_image_id;
+  inline const std::string get_local_image_id() const {
+    std::string image_id;
+    if (m_state_builder) {
+      image_id = m_state_builder->local_image_id;
+    }
+    return image_id;
   }
 
   void start(Context *on_finish, bool manual = false, bool restart = false);
@@ -139,6 +143,8 @@ public:
   void flush();
 
   void print_status(Formatter *f);
+
+  void prune_snapshot(uint64_t snap_id);
 
 protected:
   /**

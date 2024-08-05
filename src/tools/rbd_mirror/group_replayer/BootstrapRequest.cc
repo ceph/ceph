@@ -970,11 +970,6 @@ template <typename I>
 void BootstrapRequest<I>::handle_move_local_image_to_trash(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (m_canceled) {
-    finish(-ECANCELED);
-    return;
-  }
-
   if (r < 0 && r != -ENOENT) {
     derr << "error moving mirror image to trash: " << cpp_strerror(r) << dendl;
     finish(r);
