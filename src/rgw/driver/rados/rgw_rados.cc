@@ -3213,6 +3213,30 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(RGW_ATTR_STORAGE_CLASS, bl);
   }
 
+  /* For temporary restored copies, storage-class returned
+   * in GET/list-objects should correspond to original
+   * cloudtier storage class. For GET its handled in its REST
+   * response by verifying RESTORE_TYPE in attrs. But the same
+   * cannot be done for list-objects response and hence this
+   * needs to be updated in bi entry itself.
+   */
+  auto attr_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+  if (attr_iter != attrs.end()) {
+    rgw::sal::RGWRestoreType rt;
+    bufferlist bl = attr_iter->second;
+    auto iter = bl.cbegin();
+    decode(rt, iter);
+
+    if (rt == rgw::sal::RGWRestoreType::Temporary) {
+      // temporary restore; set storage-class to cloudtier storage class
+      auto c_iter = attrs.find(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
+
+      if (c_iter != attrs.end()) {
+        storage_class = rgw_bl_str(c_iter->second);
+      }
+    }
+  }
+
   if (!op.size())
     return 0;
 

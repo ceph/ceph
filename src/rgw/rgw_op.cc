@@ -5246,6 +5246,73 @@ void RGWPutMetadataObject::execute(optional_yield y)
   op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield, rgw::sal::FLAG_LOG_OP);
 }
 
+int RGWRestoreObj::init_processing(optional_yield y)
+{
+  int op_ret = get_params(y);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  return RGWOp::init_processing(y);
+}
+
+int RGWRestoreObj::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, ARN(s->object->get_obj()),
+                                rgw::IAM::s3RestoreObject)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWRestoreObj::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWRestoreObj::execute(optional_yield y)
+{
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+  
+  s->object->set_atomic();
+  int op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to fetch get_obj_attrs op ret = " << op_ret << dendl;
+    return;
+  }
+  rgw::sal::Attrs attrs = s->object->get_attrs();
+  auto attr_iter = attrs.find(RGW_ATTR_MANIFEST);
+  if (attr_iter != attrs.end()) {
+    RGWObjManifest m;
+    decode(m, attr_iter->second);
+    RGWObjTier tier_config;
+    m.get_tier_config(&tier_config);
+    if (m.get_tier_type() == "cloud-s3") {
+      ldpp_dout(this, 20) << "execute: expiry days" << expiry_days <<dendl;
+      op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, true, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 4) << "Cannot get cloud tiered object: " << *s->object
+        <<". Failing with " << op_ret << dendl;
+        if (op_ret == -ERR_INVALID_OBJECT_STATE) {
+          s->err.message = "This object was transitioned to cloud-s3";
+        }
+      }
+    } else {
+      ldpp_dout(this, 20) << "not cloud tier object erroring" << dendl;
+      op_ret = -ERR_INVALID_OBJECT_STATE;
+    }
+  } else {
+    ldpp_dout(this, 20) << " manifest not found" << dendl;
+  }
+  ldpp_dout(this, 20) << "completed restore" << dendl;
+
+  return;
+} 
+
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 {
   RGWSLOInfo slo_info;
