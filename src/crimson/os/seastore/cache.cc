@@ -1342,7 +1342,7 @@ record_t Cache::prepare_record(
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
-    touch_extent(*i);
+    touch_extent(*i, &trans_src);
     DEBUGT("inplace rewrite ool block is commmitted -- {}", t, *i);
   }
 
@@ -1895,7 +1895,7 @@ Cache::replay_delta(
         nullptr,
         [](CachedExtent &) {},
         [this](CachedExtent &ext) {
-          touch_extent(ext);
+          touch_extent(ext, nullptr);
         }) :
       _get_extent_if_cached(
 	delta.paddr)

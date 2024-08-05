@@ -327,7 +327,8 @@ public:
     SUBDEBUGT(seastore_cache, "{} {} is present in cache -- {}",
               t, type, offset, *ret);
     t.add_to_read_set(ret);
-    touch_extent(*ret);
+    const auto t_src = t.get_src();
+    touch_extent(*ret, &t_src);
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
@@ -383,7 +384,8 @@ public:
                 t, T::TYPE, offset, length);
       auto f = [&t, this](CachedExtent &ext) {
         t.add_to_read_set(CachedExtentRef(&ext));
-        touch_extent(ext);
+        const auto t_src = t.get_src();
+        touch_extent(ext, &t_src);
       };
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
@@ -420,7 +422,8 @@ public:
 	      t, T::TYPE, offset, length);
     auto f = [&t, this](CachedExtent &ext) {
       t.add_to_read_set(CachedExtentRef(&ext));
-      touch_extent(ext);
+      const auto t_src = t.get_src();
+      touch_extent(ext, &t_src);
     };
     auto metric_key = std::make_pair(t.get_src(), T::TYPE);
     return trans_intr::make_interruptible(
@@ -494,7 +497,8 @@ public:
         // stable from trans-view
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
         if (t.maybe_add_to_read_set(p_extent)) {
-          touch_extent(*p_extent);
+          const auto t_src = t.get_src();
+          touch_extent(*p_extent, &t_src);
         }
       }
     } else {
@@ -510,7 +514,6 @@ public:
       }
     }
 
-    assert(p_extent->is_stable() || p_extent->is_exist_clean());
     // user should not see RETIRED_PLACEHOLDER extents
     ceph_assert(p_extent->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
     if (!p_extent->is_fully_loaded()) {
@@ -723,7 +726,8 @@ private:
                 t, type, offset, length, laddr);
       auto f = [&t, this](CachedExtent &ext) {
 	t.add_to_read_set(CachedExtentRef(&ext));
-	touch_extent(ext);
+	const auto t_src = t.get_src();
+	touch_extent(ext, &t_src);
       };
       auto src = t.get_src();
       return trans_intr::make_interruptible(
@@ -757,7 +761,8 @@ private:
 	      t, type, offset, length, laddr);
     auto f = [&t, this](CachedExtent &ext) {
       t.add_to_read_set(CachedExtentRef(&ext));
-      touch_extent(ext);
+      const auto t_src = t.get_src();
+      touch_extent(ext, &t_src);
     };
     auto src = t.get_src();
     return trans_intr::make_interruptible(
@@ -1350,7 +1355,7 @@ private:
   /// Update lru for access to ref
   void touch_extent(
       CachedExtent &ext,
-      const Transaction::src_t* p_src=nullptr)
+      const Transaction::src_t* p_src)
   {
     if (p_src &&
 	is_background_transaction(*p_src) &&
