@@ -72,12 +72,19 @@ we recommend that you build `.deb` or `.rpm` packages, or refer to
 ``ceph.spec.in`` or ``debian/rules`` to see which configuration options are
 specified for production builds.
 
-To build Ceph, make sure that you are in the top-level `ceph` directory that
-contains `do_cmake.sh` and `CONTRIBUTING.rst` and run the following commands:
+To build Ceph, follow this procedure: 
 
-	./do_cmake.sh
-	cd build
-	ninja
+1. Make sure that you are in the top-level `ceph` directory that
+   contains `do_cmake.sh` and `CONTRIBUTING.rst`.
+2. Run the `do_cmake.sh` script:
+
+    >``./do_cmake.sh``
+3. Move into the `build` directory:
+
+    >``cd build``
+4. Use the `ninja` buildsystem to build the development environment:
+
+    >``ninja``
 
 ``do_cmake.sh`` by default creates a "debug build" of Ceph, which can be up to
 five times slower than a non-debug build.  Pass
