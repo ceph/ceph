@@ -167,6 +167,11 @@ class Auth(RESTController, ControllerAuthMixin):
         oauth2_cookie = cherrypy.request.cookie['_oauth2_proxy'] if '_oauth2_proxy' in cherrypy.request.cookie else None
         if oauth2_cookie:
             self._delete_cookie('_oauth2_proxy', oauth2_cookie.value)
+            if token:
+                token_payload = json.loads(base64.urlsafe_b64decode(token.split(".")[1] + "===="))
+                if 'sub' in token_payload:
+                    mgr.ACCESS_CTRL_DB.delete_user(token_payload['sub'])
+                    mgr.ACCESS_CTRL_DB.save()
         redirect_url = '#/login'
         if mgr.SSO_DB.protocol == 'saml2':
             redirect_url = 'auth/saml2/slo'
@@ -184,7 +189,7 @@ class Auth(RESTController, ControllerAuthMixin):
                  parameters={'token': (str, 'Authentication Token')},
                  responses={201: AUTH_CHECK_SCHEMA})
     def check(self, token):
-        JwtManager._oauth2_token = False
+        JwtManager.oauth2_token = False
 
         def default_return():
            return {
@@ -210,7 +215,7 @@ class Auth(RESTController, ControllerAuthMixin):
             access_token = cherrypy.request.headers.get('X-Access-Token')
             if not access_token:
                 return default_return()
-            JwtManager._oauth2_token = True
+            JwtManager.oauth2_token = True
             token_payload = json.loads(base64.urlsafe_b64decode(access_token.split(".")[1] + "===="))
             if not 'sub' in token_payload:
                 return default_return()
