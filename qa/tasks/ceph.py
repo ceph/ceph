@@ -985,7 +985,9 @@ def cluster(ctx, config):
                 try:
                     remote.run(args=['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
                 except run.CommandFailedError:
-                    # Newer btfs-tools doesn't prompt for overwrite, use -f
+                    if fs != 'btrfs':
+                        raise
+                    # Newer btrfs-tools doesn't prompt for overwrite, use -f
                     if '-f' not in mount_options:
                         mkfs_options.append('-f')
                         mkfs = ['mkfs.%s' % fs] + mkfs_options
