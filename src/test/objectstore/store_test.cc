@@ -9847,6 +9847,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
       bstore->inject_zombie_spanning_blob(cid, hoid4, 23457);
     }
 
+    ch.reset(nullptr);
     bstore->umount();
     ASSERT_EQ(bstore->fsck(false), 1);
     ASSERT_LE(bstore->repair(false), 0);
