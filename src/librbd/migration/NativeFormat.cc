@@ -2,17 +2,12 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/migration/NativeFormat.h"
-#include "include/neorados/RADOS.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "librbd/Utils.h"
-#include "librbd/asio/ContextWQ.h"
-#include "librbd/io/ImageDispatchSpec.h"
 #include "json_spirit/json_spirit.h"
 #include "boost/lexical_cast.hpp"
-#include <sstream>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -65,22 +60,19 @@ int NativeFormat<I>::create_image_ctx(
     const json_spirit::mObject& source_spec_object,
     bool import_only, uint64_t src_snap_id, I** src_image_ctx) {
   auto cct = reinterpret_cast<CephContext*>(dst_io_ctx.cct());
+  std::string pool_name;
   int64_t pool_id = -1;
   std::string pool_namespace;
   std::string image_name;
   std::string image_id;
   std::string snap_name;
   uint64_t snap_id = CEPH_NOSNAP;
+  int r;
 
   if (auto it = source_spec_object.find(POOL_NAME_KEY);
       it != source_spec_object.end()) {
     if (it->second.type() == json_spirit::str_type) {
-      librados::Rados rados(dst_io_ctx);
-      pool_id = rados.pool_lookup(it->second.get_str().c_str());
-      if (pool_id < 0) {
-        lderr(cct) << "failed to lookup pool" << dendl;
-        return static_cast<int>(pool_id);
-      }
+      pool_name = it->second.get_str();
     } else {
       lderr(cct) << "invalid pool name" << dendl;
       return -EINVAL;
@@ -89,7 +81,7 @@ int NativeFormat<I>::create_image_ctx(
 
   if (auto it = source_spec_object.find(POOL_ID_KEY);
       it != source_spec_object.end()) {
-    if (pool_id != -1) {
+    if (!pool_name.empty()) {
       lderr(cct) << "cannot specify both pool name and pool id" << dendl;
       return -EINVAL;
     }
@@ -107,7 +99,7 @@ int NativeFormat<I>::create_image_ctx(
     }
   }
 
-  if (pool_id == -1) {
+  if (pool_name.empty() && pool_id == -1) {
     lderr(cct) << "missing pool name or pool id" << dendl;
     return -EINVAL;
   }
@@ -177,7 +169,7 @@ int NativeFormat<I>::create_image_ctx(
 
   // snapshot is required for import to keep source read-only
   if (import_only && snap_name.empty() && snap_id == CEPH_NOSNAP) {
-    lderr(cct) << "snapshot required for import" << dendl;
+    lderr(cct) << "snap name or snap id required for import" << dendl;
     return -EINVAL;
   }
 
@@ -190,11 +182,18 @@ int NativeFormat<I>::create_image_ctx(
 
   // TODO add support for external clusters
   librados::IoCtx src_io_ctx;
-  int r = util::create_ioctx(dst_io_ctx, "source image", pool_id,
-                             pool_namespace, &src_io_ctx);
+  if (!pool_name.empty()) {
+    r = rados_ptr->ioctx_create(pool_name.c_str(), src_io_ctx);
+  } else {
+    r = rados_ptr->ioctx_create2(pool_id, src_io_ctx);
+  }
   if (r < 0) {
+    lderr(cct) << "failed to open source image pool: " << cpp_strerror(r)
+               << dendl;
     return r;
   }
+
+  src_io_ctx.set_namespace(pool_namespace);
 
   if (!snap_name.empty() && snap_id == CEPH_NOSNAP) {
     *src_image_ctx = I::create(image_name, image_id, snap_name.c_str(),
