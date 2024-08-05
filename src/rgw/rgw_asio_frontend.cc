@@ -66,6 +66,44 @@ auto make_stack_allocator() {
   return boost::context::protected_fixedsize_stack{512*1024};
 }
 
+static constexpr std::chrono::milliseconds BACKOFF_MAX_WAIT(5000);
+
+class RGWAsioBackoff {
+  using Clock = ceph::coarse_mono_clock;
+  using Timer = boost::asio::basic_waitable_timer<Clock>;
+  Timer timer;
+
+  ceph::timespan cur_wait;
+  void update_wait_time();
+public:
+  explicit RGWAsioBackoff(boost::asio::io_context& context) :
+                          timer(context),
+                          cur_wait(std::chrono::milliseconds(1)) {
+  }
+
+  void backoff_sleep(boost::asio::yield_context yield);
+  void reset() {
+    cur_wait = std::chrono::milliseconds(1);
+  }
+};
+
+void RGWAsioBackoff::update_wait_time()
+{
+  if (cur_wait < BACKOFF_MAX_WAIT) {
+    cur_wait = cur_wait * 2;
+  }
+  if (cur_wait > BACKOFF_MAX_WAIT) {
+    cur_wait = BACKOFF_MAX_WAIT;
+  }
+}
+
+void RGWAsioBackoff::backoff_sleep(boost::asio::yield_context yield)
+{
+  update_wait_time();
+  timer.expires_after(cur_wait);
+  timer.async_wait(yield);
+}
+
 using namespace std;
 
 template <typename Stream>
@@ -439,6 +477,7 @@ class AsioFrontend {
 
   std::atomic<bool> going_down{false};
 
+  RGWAsioBackoff backoff;
   CephContext* ctx() const { return cct.get(); }
   std::optional<dmc::ClientCounters> client_counters;
   std::unique_ptr<dmc::ClientConfig> client_config;
@@ -451,7 +490,8 @@ class AsioFrontend {
 	       dmc::SchedulerCtx& sched_ctx,
 	       boost::asio::io_context& context)
     : env(env), conf(conf), context(context),
-      pause_mutex(context.get_executor())
+      pause_mutex(context.get_executor()),
+      backoff(context)
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
     switch(sched_t){
@@ -1023,9 +1063,19 @@ void AsioFrontend::accept(Listener& l, spawn::yield_context yield)
       return;
     } else if (ec) {
       ldout(ctx(), 1) << "accept failed: " << ec.message() << dendl;
+      if (ec == boost::system::errc::too_many_files_open ||
+          ec == boost::system::errc::too_many_files_open_in_system ||
+          ec == boost::system::errc::no_buffer_space ||
+          ec == boost::system::errc::not_enough_memory) {
+        // always retry accept() if we hit a resource limit
+        backoff.backoff_sleep(yield);
+        continue;
+      }
+      ldout(ctx(), 0) << "accept stopped due to error: " << ec.message() << dendl;
       return;
     }
 
+    backoff.reset();
     on_accept(l, std::move(l.socket));
   }
 }
