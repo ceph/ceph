@@ -557,14 +557,14 @@ options:
   type: str
   level: advanced
   default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
-    user version cas cmpomap queue 2pc_queue fifo
+    user version cas cmpomap cmpxattr queue 2pc_queue fifo
   with_legacy: true
 # list of object classes with default execute perm (allow all: *)
 - name: osd_class_default_list
   type: str
   level: advanced
   default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
-    user version cas cmpomap queue 2pc_queue fifo
+    user version cas cmpomap cmpxattr queue 2pc_queue fifo
   with_legacy: true
 - name: osd_agent_max_ops
   type: int

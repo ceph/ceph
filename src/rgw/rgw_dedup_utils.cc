@@ -1,4 +1,5 @@
 #include "rgw_dedup_utils.h"
+#include "common/ceph_crypto.h"
 
 namespace rgw::dedup {
   // convert a hex-string to a 64bit integer (max 16 hex digits)
@@ -110,4 +111,14 @@ namespace rgw::dedup {
     }
     bl->append(buff, n);
   }
+
+  //---------------------------------------------------------------------------
+  std::string calc_refcount_tag_hash(const std::string &bucket_name, const std::string &obj_name)
+  {
+    bufferlist bl;
+    bl.append(bucket_name);
+    bl.append(obj_name);
+    return crypto::digest<crypto::SHA1>(bl).to_str();
+  }
+
 } //namespace rgw::dedup

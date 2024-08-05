@@ -279,7 +279,13 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
   vector<OSDOp> nops(1);
   OSDOp& op = nops[0];
   int r;
-
+#if 1
+  // REMOVE-ME!!
+  // temp output to help dedbug dedup code
+  if (strcmp(name, "user.rgw.etag") == 0) {
+    std::cerr << __func__ << "::oid=" << (*pctx)->obs->oi.soid.oid << std::endl;
+  }
+#endif
   op.op.op = CEPH_OSD_OP_GETXATTR;
   op.op.xattr.name_len = strlen(name);
   op.indata.append(name, op.op.xattr.name_len);

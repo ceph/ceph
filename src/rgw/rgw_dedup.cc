@@ -26,7 +26,8 @@
 #include "cls/rgw/cls_rgw_const.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
-#include "cls/cmpomap/client.h"
+
+#include "cls/cmpxattr/client.h"
 #include "osd/osd_types.h"
 #include "common/ceph_crypto.h"
 
@@ -527,7 +528,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::dedup_object(const disk_record_t *p_src_rec,
 			       const disk_record_t *p_tgt_rec,
-			       bool                 is_shared_manifest_src)
+			       bool                 is_shared_manifest_src,
+			       bool                 src_has_sha256)
   {
     RGWObjManifest src_manifest;
     try {
@@ -549,7 +551,7 @@ namespace rgw::dedup {
 		      << p_src_rec->bucket_name << "/" << p_src_rec->obj_name << " -> "
 		      << p_tgt_rec->bucket_name << "/" << p_tgt_rec->obj_name << dendl;
 
-    using namespace ::cls::cmpomap;
+    using namespace ::cls::cmpxattr;
     bufferlist etag_bl;
     etag_to_bufferlist(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, p_tgt_rec->s.num_parts, &etag_bl);
     ldpp_dout(dpp, 0) << __func__ << "::num_parts=" << p_tgt_rec->s.num_parts
@@ -577,7 +579,7 @@ namespace rgw::dedup {
     }
 
     // TBD: need to read target object attributes (RGW_ATTR_TAIL_TAG/RGW_ATTR_TAG)
-    string ref_tag = rgw_obj::calc_refcount_tag_hash(p_tgt_rec->bucket_name, p_tgt_rec->obj_name);
+    string ref_tag = calc_refcount_tag_hash(p_tgt_rec->bucket_name, p_tgt_rec->obj_name);
     ldpp_dout(dpp, 0) << __func__ << "::ref_tag=" << ref_tag << dendl;
     ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
     if (ret == 0) {
@@ -631,11 +633,10 @@ namespace rgw::dedup {
       return 0;
     }
 
-    disk_block_id_t src_block_id;
-    record_id_t src_rec_id;
-    bool is_shared_manifest;
     key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, p_tgt_rec->s.size_4k_units, p_tgt_rec->s.num_parts);
-    int ret = d_table.get_block_id(&key, &src_block_id, &src_rec_id, &is_shared_manifest);
+    //int ret = d_table.get_block_id(&key, &src_block_id, &src_rec_id, &is_shared_manifest);
+    dedup_table_t::value_t val;
+    int ret = d_table.get_val(&key, &val);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
       stats.skipped_singleton++;
@@ -643,6 +644,10 @@ namespace rgw::dedup {
       return 0;
     }
 
+    disk_block_id_t src_block_id = val.block_idx;
+    record_id_t src_rec_id = val.rec_id;
+    bool is_shared_manifest = val.is_shared_manifest();
+    bool has_sha256 = val.has_valid_sha256();
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
       ldpp_dout(dpp, 0) << __func__ << "::skipped source-record" << dendl;
@@ -665,15 +670,21 @@ namespace rgw::dedup {
 	return 0;
       }
 
-      ret = dedup_object(&src_rec, p_tgt_rec, is_shared_manifest);
+      ret = dedup_object(&src_rec, p_tgt_rec, is_shared_manifest, has_sha256);
       if (ret == 0) {
 	stats.deduped_objects++;
-
+	if (!has_sha256) {
+	  // TBD: calculate SHA256 for SRC and set flag in table!!
+	}
 	// mark the SRC object as a providor of a shared manifest
 	if (!is_shared_manifest) {
 	  stats.set_shared_manifest++;
 	  // set the shared manifest flag in the dedup table
 	  d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
+	}
+	else {
+	  ldpp_dout(dpp, 0) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
+	  std::cerr << __func__ << "::SRC object already marked as shared_manifest" << std::endl;
 	}
       }
     }

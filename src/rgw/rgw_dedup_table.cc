@@ -164,10 +164,7 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int dedup_table_t::get_block_id(const key_t *p_key,
-				  disk_block_id_t *p_block_id,
-				  record_id_t *p_rec_id,
-				  bool *p_shared_manifest)
+  int dedup_table_t::get_val(const key_t *p_key, struct value_t *p_val /*OUT*/)
   {
     const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
@@ -176,10 +173,7 @@ namespace rgw::dedup {
       return -1;
     }
 
-    *p_block_id = val.block_idx;
-    *p_rec_id   = val.rec_id;
-    *p_shared_manifest = val.is_shared_manifest();
-
+    *p_val = val;
     return 0;
   }
 

@@ -50,24 +50,6 @@ namespace rgw::dedup {
 
   class dedup_table_t {
   public:
-    dedup_table_t(uint32_t entries_count, const DoutPrefixProvider* _dpp);
-    ~dedup_table_t();
-    uint32_t find_entry(const key_t *p_key);
-    int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
-		  bool shared_manifest, bool has_sha256);
-    int  get_block_id(const key_t *p_key,
-		      disk_block_id_t *p_block_id,
-		      record_id_t *p_rec_id,
-		      bool *p_shared_manifest);
-    int set_shared_manifest_mode(const key_t *p_key,
-				 disk_block_id_t block_id,
-				 record_id_t rec_id);
-    void count_duplicates(uint32_t *p_singleton_count, uint32_t *p_duplicate_count);
-    void remove_singletons_and_redistribute_keys();
-    void print_redistribute_stats();
-    void stat_counters_reset();
-
-  private:
     // 6 Bytes Value
     struct value_t {
       value_t() {
@@ -127,6 +109,22 @@ namespace rgw::dedup {
       disk_block_id_t block_idx;
     } __attribute__((__packed__));
 
+    dedup_table_t(uint32_t entries_count, const DoutPrefixProvider* _dpp);
+    ~dedup_table_t();
+    uint32_t find_entry(const key_t *p_key);
+    int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
+		  bool shared_manifest, bool has_sha256);
+    int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
+
+    int set_shared_manifest_mode(const key_t *p_key,
+				 disk_block_id_t block_id,
+				 record_id_t rec_id);
+    void count_duplicates(uint32_t *p_singleton_count, uint32_t *p_duplicate_count);
+    void remove_singletons_and_redistribute_keys();
+    void print_redistribute_stats();
+    void stat_counters_reset();
+
+  private:
     // 28 Bytes unified entries
     struct table_entry_t {
       key_t key;

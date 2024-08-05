@@ -83,7 +83,8 @@ namespace rgw::dedup {
 				   RGWObjManifest &tgt_manifest);
     int dedup_object(const disk_record_t *p_src_rec,
 		     const disk_record_t *p_tgt_rec,
-		     bool                 is_shared_manifest);
+		     bool                 is_shared_manifest_src,
+		     bool                 src_has_sha256);
 
     void init_rados_access_handles();
 

@@ -133,14 +133,14 @@ target_link_libraries(ceph-dedup-tool
 install(TARGETS ceph-dedup-tool DESTINATION bin)
 
 
-set(ceph_dedup_estimate_tool_srcs ceph_dedup_estimate.cc)
-add_executable(ceph-dedup-estimate-tool ${ceph_dedup_estimate_tool_srcs})
-target_link_libraries(ceph-dedup-estimate-tool
-  librados
-  global
-  cls_cas_client
-  cls_cas_internal)
-install(TARGETS ceph-dedup-estimate-tool DESTINATION bin)
+#set(ceph_dedup_estimate_tool_srcs ceph_dedup_estimate.cc)
+#add_executable(ceph-dedup-estimate-tool ${ceph_dedup_estimate_tool_srcs})
+#target_link_libraries(ceph-dedup-estimate-tool
+#  librados
+#  global
+#  cls_cas_client
+#  cls_cas_internal)
+#install(TARGETS ceph-dedup-estimate-tool DESTINATION bin)
 
 set(data_gen_tool_srcs data_gen.cc)
 add_executable(data-gen-tool ${data_gen_tool_srcs})

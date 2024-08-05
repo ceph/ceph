@@ -266,6 +266,7 @@ target_link_libraries(rgw_common
     global
     cls_2pc_queue_client
     cls_cmpomap_client
+    cls_cmpxattr_client
     cls_lock_client
     cls_log_client
     cls_otp_client
