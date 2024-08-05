@@ -1,4 +1,3 @@
-clusternodes: 2
 roles:
 - [mon.a, mds.a, mgr.x, osd.0, osd.1]
 - [mon.b, mds.b, mon.c, mgr.y, osd.2, osd.3]
