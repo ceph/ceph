@@ -97,6 +97,9 @@ public:
     return m_image_spec;
   }
 
+  void prune_snapshot(uint64_t snap_id) {
+  }
+
 private:
   /**
    * @verbatim
