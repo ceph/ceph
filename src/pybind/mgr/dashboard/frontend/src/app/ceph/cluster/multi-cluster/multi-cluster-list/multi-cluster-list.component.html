@@ -65,6 +65,13 @@
   </a>
 </ng-template>
 
+<ng-template #nameTpl
+             let-row="row">
+  <span>{{ row.cluster_alias }}</span>
+  <span *ngIf="row.cluster_alias === 'local-cluster'"
+        class="badge badge-info ms-2">Hub</span>
+</ng-template>
+
 <ng-template #durationTpl
              let-column="data.column"
              let-value="data.value"

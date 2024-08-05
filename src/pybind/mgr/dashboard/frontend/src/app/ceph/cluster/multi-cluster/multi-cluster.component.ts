@@ -16,6 +16,8 @@ import {
   MultiClusterPromqlsForPoolUtilization as PoolUltilizationQueries
 } from '~/app/shared/enum/dashboard-promqls.enum';
 import { SettingsService } from '~/app/shared/api/settings.service';
+import { MultiCluster } from '~/app/shared/models/multi-cluster';
+import { ShortenNamePipe } from '~/app/shared/pipes/shorten-name.pipe';
 
 @Component({
   selector: 'cd-multi-cluster',
@@ -90,13 +92,15 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   selectedTime: any;
   multiClusterQueries: any = {};
   managedByConfig$: Observable<any>;
+  clusterDetails: any[];
 
   constructor(
     private multiClusterService: MultiClusterService,
     private settingsService: SettingsService,
     private modalService: ModalService,
     private router: Router,
-    private prometheusService: PrometheusService
+    private prometheusService: PrometheusService,
+    private shortenNamePipe: ShortenNamePipe
   ) {
     this.multiClusterQueries = {
       cluster: {
@@ -164,6 +168,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.multiClusterService.subscribe((resp: any) => {
         this.isMultiCluster = Object.keys(resp['config']).length > 1;
+        this.clusterDetails = Object.values(resp['config']).flat();
         const hubUrl = resp['hub_url'];
         for (const key in resp['config']) {
           if (resp['config'].hasOwnProperty(key)) {
@@ -356,6 +361,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         if (cluster.cluster === this.localClusterName) {
           cluster.cluster_connection_status = 0;
         }
+        cluster.cluster = this.updateClusterName(cluster.cluster);
       });
       this.connectionErrorsCount = clusters.filter(
         (cluster) => cluster.cluster_connection_status === 1
@@ -390,6 +396,16 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     );
   }
 
+  updateClusterName(clusterFsid: string, shortenFsid: boolean = true): string {
+    const clusterDetail = this.clusterDetails.find(
+      (detail: MultiCluster) => detail.name === clusterFsid
+    );
+    if (clusterDetail) {
+      return this.shortenNamePipe.transform(clusterDetail, shortenFsid);
+    }
+    return clusterFsid;
+  }
+
   findClusterData(metrics: any, clusterName: string) {
     const clusterMetrics = this.findCluster(metrics, clusterName);
     return parseInt(clusterMetrics?.value[1] || 0);
@@ -409,7 +425,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     for (let i = 0; i < count; i++) {
       let label = '';
       if (query[i]) {
-        label = query[i]?.metric?.cluster;
+        label = this.updateClusterName(query[i]?.metric?.cluster);
         if (name) label = query[i]?.metric?.name + ' - ' + label;
       }
       labels.push(label);

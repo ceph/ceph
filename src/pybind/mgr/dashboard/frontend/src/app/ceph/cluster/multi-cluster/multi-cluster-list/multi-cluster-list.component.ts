@@ -33,6 +33,8 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   table: TableComponent;
   @ViewChild('urlTpl', { static: true })
   public urlTpl: TemplateRef<any>;
+  @ViewChild('nameTpl', { static: true })
+  public nameTpl: TemplateRef<any>;
   @ViewChild('durationTpl', { static: true })
   durationTpl: TemplateRef<any>;
   private subs = new Subscription();
@@ -124,7 +126,8 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
       {
         prop: 'cluster_alias',
         name: $localize`Alias`,
-        flexGrow: 2
+        flexGrow: 2,
+        cellTemplate: this.nameTpl
       },
       {
         prop: 'cluster_connection_status',

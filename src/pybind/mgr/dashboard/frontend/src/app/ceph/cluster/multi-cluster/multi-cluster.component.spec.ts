@@ -4,6 +4,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { MultiClusterComponent } from './multi-cluster.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { ShortenNamePipe } from '~/app/shared/pipes/shorten-name.pipe';
 
 describe('MultiClusterComponent', () => {
   let component: MultiClusterComponent;
@@ -13,7 +14,7 @@ describe('MultiClusterComponent', () => {
     await TestBed.configureTestingModule({
       imports: [HttpClientTestingModule, SharedModule],
       declarations: [MultiClusterComponent],
-      providers: [NgbActiveModal, DimlessBinaryPipe]
+      providers: [NgbActiveModal, DimlessBinaryPipe, ShortenNamePipe]
     }).compileComponents();
 
     fixture = TestBed.createComponent(MultiClusterComponent);

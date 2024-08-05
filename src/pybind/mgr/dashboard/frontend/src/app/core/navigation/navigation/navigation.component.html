@@ -19,11 +19,11 @@
                            *ngIf="clustersMap?.size > 1">
       <cds-header-menu [title]="currentClusterName"
                        data-testid="selected-cluster">
-        <ng-container *ngFor="let cluster of clustersMap | keyvalue; trackBy:trackByFn ">
+        <ng-container *ngFor="let cluster of sortedClusters; trackBy:trackByFn">
           <cds-header-item (click)="onClusterSelection(cluster.value)"
                            [class.disabled]="cluster.value.cluster_connection_status === 1"
                            data-testid="select-a-cluster">
-              {{ cluster.value.name }} - {{ cluster.value?.cluster_alias }} - {{ cluster.value?.user }}
+              {{ cluster.value | shortenName:false }}
           </cds-header-item>
         </ng-container>
       </cds-header-menu>
