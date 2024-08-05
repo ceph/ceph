@@ -27,6 +27,7 @@ set(rbd_mirror_internal
   Throttler.cc
   Types.cc
   group_replayer/BootstrapRequest.cc
+  group_replayer/Replayer.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc
   image_deleter/TrashRemoveRequest.cc
