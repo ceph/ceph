@@ -8,7 +8,6 @@
 #include "common/ceph_mutex.h"
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "include/rados/librados.hpp"
 #include "librbd/mirror/snapshot/Types.h"
 #include "tools/rbd_mirror/image_replayer/TimeRollingMean.h"
 #include <boost/accumulators/accumulators.hpp>
@@ -100,6 +99,11 @@ public:
     return m_image_spec;
   }
 
+  void prune_snapshot(uint64_t snap_id) {
+    std::unique_lock locker(m_lock);
+    m_prune_snap_ids.insert(snap_id);
+  }
+
 private:
   /**
    * @verbatim
@@ -122,10 +126,7 @@ private:
    * REFRESH_REMOTE_IMAGE                               |
    *    |                                               |
    *    | (unused non-primary snapshot)                 |
-   *    |\--------------> UNLINK_GROUP_SNAPSHOT         |
-   *    |                       | (skip if no group)    |
-   *    |                       v                       |
-   *    |                 PRUNE_NON_PRIMARY_SNAPSHOT---/|
+   *    |\--------------> PRUNE_NON_PRIMARY_SNAPSHOT---/|
    *    |                                               |
    *    | (interrupted sync)                            |
    *    |\--------------> GET_LOCAL_IMAGE_STATE ------\ |
@@ -264,15 +265,13 @@ private:
   utime_t m_snapshot_replay_start;
 
   uint32_t m_pending_snapshots = 0;
+  std::set<uint64_t> m_prune_snap_ids;
 
   bool m_remote_image_updated = false;
   bool m_updating_sync_point = false;
   bool m_sync_in_progress = false;
 
   PerfCounters *m_perf_counters = nullptr;
-
-  uint64_t m_prune_snap_id = CEPH_NOSNAP;
-  librados::IoCtx m_group_io_ctx;
 
   void load_local_image_meta();
   void handle_load_local_image_meta(int r);
@@ -286,10 +285,7 @@ private:
   void scan_local_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
   void scan_remote_mirror_snapshots(std::unique_lock<ceph::mutex>* locker);
 
-  void unlink_group_snapshot();
-  void handle_unlink_group_snapshot(int r);
-
-  void prune_non_primary_snapshot();
+  void prune_non_primary_snapshot(uint64_t snap_id);
   void handle_prune_non_primary_snapshot(int r);
 
   void copy_snapshots();
@@ -301,17 +297,8 @@ private:
   void get_local_image_state();
   void handle_get_local_image_state(int r);
 
-  void refresh_remote_group_snapshot_list();
-  void handle_refresh_remote_group_snapshot_list(int r);
-
-  void create_group_snap_start();
-  void handle_create_group_snap_start(int r);
-
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
-
-  void create_group_snap_finish();
-  void handle_create_group_snap_finish(int r);
 
   void update_mirror_image_state();
   void handle_update_mirror_image_state(int r);
@@ -330,6 +317,8 @@ private:
 
   void update_non_primary_snapshot(bool complete);
   void handle_update_non_primary_snapshot(bool complete, int r);
+
+  void notify_group_snap_image_complete();
 
   void notify_image_update();
   void handle_notify_image_update(int r);
