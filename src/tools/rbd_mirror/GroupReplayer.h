@@ -8,6 +8,7 @@
 #include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 #include "tools/rbd_mirror/Types.h"
+#include "tools/rbd_mirror/group_replayer/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/Types.h"
 #include <boost/optional.hpp>
 #include <string>
@@ -174,40 +175,13 @@ private:
     Listener(GroupReplayer *group_replayer) : group_replayer(group_replayer) {
     }
 
-    void list_remote_group_snapshots(Context *on_finish) override {
-      group_replayer->list_remote_group_snapshots(on_finish);
-    }
-
-    void create_mirror_snapshot_start(
-        const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
-        void *arg, int64_t *local_group_pool_id, std::string *local_group_id,
-        std::string *local_group_snap_id, Context *on_finish) override {
-      group_replayer->create_mirror_snapshot_start(
-          remote_group_snap_ns, static_cast<ImageReplayer<ImageCtxT> *>(arg),
-          local_group_pool_id, local_group_id, local_group_snap_id, on_finish);
-    }
-
-    void create_mirror_snapshot_finish(const std::string &remote_group_snap_id,
-                                       void *arg, uint64_t snap_id,
-                                       Context *on_finish) override {
-      group_replayer->create_mirror_snapshot_finish(
-          remote_group_snap_id, static_cast<ImageReplayer<ImageCtxT> *>(arg),
-          snap_id, on_finish);
-    }
-  };
-
-  struct C_GetRemoteGroupSnap : public Context {
-    GroupReplayer *group_replayer;
-    std::string group_snap_id;
-    bufferlist bl;
-
-    C_GetRemoteGroupSnap(GroupReplayer *group_replayer,
-                         const std::string &group_snap_id)
-      : group_replayer(group_replayer), group_snap_id(group_snap_id) {
-    }
-
-    void finish(int r) override {
-      group_replayer->handle_get_remote_group_snapshot(group_snap_id, bl, r);
+    void notify_group_snap_image_complete(
+        int64_t local_pool_id,
+        const std::string &local_image_id,
+        const std::string &remote_group_snap_id,
+        uint64_t local_snap_id) override {
+      group_replayer->m_replayer->notify_group_snap_image_complete(
+          local_pool_id, local_image_id, remote_group_snap_id, local_snap_id);
     }
   };
 
@@ -244,6 +218,7 @@ private:
   AdminSocketHook *m_asok_hook = nullptr;
 
   group_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
+  group_replayer::Replayer<ImageCtxT> *m_replayer = nullptr;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> m_image_replayers;
 
   Listener m_listener = {this};
@@ -283,12 +258,18 @@ private:
   void bootstrap_group();
   void handle_bootstrap_group(int r);
 
+  void create_group_replayer(Context *on_finish);
+  void handle_create_group_replayer(int r, Context *on_finish);
+
   void start_image_replayers();
   void handle_start_image_replayers(int r);
 
   bool finish_start_if_interrupted();
   bool finish_start_if_interrupted(ceph::mutex &lock);
   void finish_start(int r, const std::string &desc);
+
+  void stop_group_replayer(Context *on_finish);
+  void handle_stop_group_replayer(int r, Context *on_finish);
 
   void stop_image_replayers();
   void handle_stop_image_replayers(int r);
@@ -299,34 +280,6 @@ private:
 
   void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
                                       const std::string &desc);
-
-  void create_regular_group_snapshot(const std::string &remote_snap_name,
-                                     const std::string &remote_snap_id,
-                                     std::vector<cls::rbd::GroupImageStatus> *local_images,
-                                     Context *on_finish);
-  void handle_create_regular_group_snapshot(int r, Context *on_finish);
-  void list_remote_group_snapshots(Context *on_finish);
-  void handle_list_remote_group_snapshots(int r, Context *on_finish);
-  int local_group_image_list_by_id(std::vector<cls::rbd::GroupImageStatus> *image_ids);
-  void create_mirror_snapshot_start(
-      const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
-      ImageReplayer<ImageCtxT> *image_replayer, int64_t *local_group_pool_id,
-      std::string *local_group_id, std::string *local_group_snap_id,
-      Context *on_finish);
-  void handle_create_mirror_snapshot_start(
-      const std::string &remote_group_snap_id, int r);
-  void handle_get_remote_group_snapshot(
-      const std::string &remote_group_snap_id, bufferlist &out_bl, int r);
-  void maybe_create_mirror_snapshot(
-      std::unique_lock<ceph::mutex>& locker,
-      const std::string &remote_group_snap_id);
-
-  void create_mirror_snapshot_finish(
-      const std::string &remote_group_snap_id,
-      ImageReplayer<ImageCtxT> *image_replayer,
-      uint64_t snap_id, Context *on_finish);
-  void handle_create_mirror_snapshot_finish(
-      const std::string &remote_group_snap_id, int r);
 };
 
 } // namespace mirror
