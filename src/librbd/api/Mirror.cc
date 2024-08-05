@@ -3590,6 +3590,15 @@ int Mirror<I>::group_image_remove(IoCtx &group_ioctx,
                                   image_ctxs[i]->id, snap_ids[i]);
   }
 
+  auto it = std::find_if(
+      group_snap.snaps.begin(), group_snap.snaps.end(),
+      [image_id](const cls::rbd::ImageSnapshotSpec &s) {
+      return image_id == s.image_id;
+      });
+  if (it != group_snap.snaps.end()) {
+    group_snap.snaps.erase(it);
+  }
+
   std::string group_header_oid = librbd::util::group_header_name(group_id);
   if (ret_code < 0) {
     // undo

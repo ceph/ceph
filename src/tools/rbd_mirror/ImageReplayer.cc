@@ -209,39 +209,13 @@ struct ImageReplayer<I>::ReplayerListener
     image_replayer->handle_replayer_notification();
   }
 
-  void list_remote_group_snapshots(Context *on_finish) override {
-    if (local_group_ctx == nullptr) {
-      on_finish->complete(0);
-      return;
-    }
-
-    local_group_ctx->listener->list_remote_group_snapshots(on_finish);
-  }
-
-  void create_mirror_snapshot_start(
-      const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
-      int64_t *local_group_pool_id, std::string *local_group_id,
-      std::string *local_group_snap_id, Context *on_finish) override {
-    if (local_group_ctx == nullptr) {
-      on_finish->complete(0);
-      return;
-    }
-
-    local_group_ctx->listener->create_mirror_snapshot_start(
-        remote_group_snap_ns, image_replayer, local_group_pool_id,
-        local_group_id, local_group_snap_id, on_finish);
-  }
-
-  void create_mirror_snapshot_finish(const std::string &remote_group_snap_id,
-                                     uint64_t snap_id,
-                                     Context *on_finish) override {
-    if (local_group_ctx == nullptr) {
-      on_finish->complete(0);
-      return;
-    }
-
-    local_group_ctx->listener->create_mirror_snapshot_finish(
-        remote_group_snap_id, image_replayer, snap_id, on_finish);
+  void notify_group_snap_image_complete(
+      int64_t local_pool_id,
+      const std::string &local_image_id,
+      const std::string &remote_group_snap_id,
+      uint64_t local_snap_id) override {
+    local_group_ctx->listener->notify_group_snap_image_complete(local_pool_id,
+        local_image_id, remote_group_snap_id, local_snap_id);
   }
 };
 
@@ -278,7 +252,7 @@ template <typename I>
 ImageReplayer<I>::~ImageReplayer()
 {
   unregister_admin_socket_hook();
-  ceph_assert(m_state_builder == nullptr);
+  //ceph_assert(m_state_builder == nullptr);
   ceph_assert(m_on_start_finish == nullptr);
   ceph_assert(m_on_stop_contexts.empty());
   ceph_assert(m_bootstrap_request == nullptr);
@@ -309,6 +283,14 @@ void ImageReplayer<I>::add_peer(const Peer<I>& peer) {
   auto it = m_peers.find(peer);
   if (it == m_peers.end()) {
     m_peers.insert(peer);
+  }
+}
+
+template <typename I>
+void ImageReplayer<I>::prune_snapshot(uint64_t snap_id) {
+  std::unique_lock locker(m_lock);
+  if (m_replayer != nullptr) {
+    m_replayer->prune_snapshot(snap_id);
   }
 }
 
@@ -564,7 +546,7 @@ template <typename I>
 void ImageReplayer<I>::stop(Context *on_finish, bool manual, bool restart)
 {
   dout(10) << "on_finish=" << on_finish << ", manual=" << manual
-           << ", restart=" << restart << dendl;
+           << ", restart=" << restart << ", state=" << m_state << dendl;
 
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
@@ -648,7 +630,7 @@ void ImageReplayer<I>::on_stop_replay(int r, const std::string &desc)
 
   cancel_update_mirror_image_replay_status();
   set_state_description(r, desc);
-  update_mirror_image_status(true, boost::none);
+  update_mirror_image_status(false, boost::none);
   shut_down(0);
 }
 
@@ -936,7 +918,7 @@ void ImageReplayer<I>::set_mirror_image_status_update(
 
 template <typename I>
 void ImageReplayer<I>::shut_down(int r) {
-  dout(10) << "r=" << r << dendl;
+  dout(10) << "r=" << r << ", state=" << m_state << dendl;
 
   {
     std::lock_guard locker{m_lock};
@@ -985,6 +967,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
   bool resync_requested = false;
   bool delete_requested = false;
   bool unregister_asok_hook = false;
+  dout(10) << "r=" << r << dendl;
   {
     std::lock_guard locker{m_lock};
 
