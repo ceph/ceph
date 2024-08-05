@@ -2185,25 +2185,23 @@ int CrushWrapper::reclassify(
 
 int CrushWrapper::get_new_bucket_id()
 {
-  int id = -1;
-  while (crush->buckets[-1-id] &&
-	 -1-id < crush->max_buckets) {
-    id--;
-  }
-  if (-1-id == crush->max_buckets) {
-    ++crush->max_buckets;
-    crush->buckets = (struct crush_bucket**)realloc(
-      crush->buckets,
-      sizeof(crush->buckets[0]) * crush->max_buckets);
-    for (auto& i : choose_args) {
-      assert(i.second.size == (__u32)crush->max_buckets - 1);
-      ++i.second.size;
-      i.second.args = (struct crush_choose_arg*)realloc(
-	i.second.args,
-	sizeof(i.second.args[0]) * i.second.size);
+  for (int index = 0; index < crush->max_buckets; index++) {
+    if (crush->buckets[index] == nullptr) {
+      return -index - 1;
     }
   }
-  return id;
+  ++crush->max_buckets;
+  crush->buckets = (struct crush_bucket**)realloc(
+    crush->buckets,
+    sizeof(crush->buckets[0]) * crush->max_buckets);
+  for (auto& i : choose_args) {
+    assert(i.second.size == (__u32)crush->max_buckets - 1);
+    ++i.second.size;
+    i.second.args = (struct crush_choose_arg*)realloc(
+      i.second.args,
+      sizeof(i.second.args[0]) * i.second.size);
+  }
+  return -crush->max_buckets;
 }
 
 void CrushWrapper::reweight(CephContext *cct)
