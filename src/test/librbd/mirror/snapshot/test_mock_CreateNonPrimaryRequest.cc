@@ -195,8 +195,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, Success) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, false,
-                                             "mirror_uuid", 123, {{1, 2}}, -1, {},
-                                             {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -227,8 +227,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, SuccessDemoted) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, true,
-                                             "mirror_uuid", 123, {{1, 2}}, -1,
-                                             {}, {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -247,8 +247,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, RefreshError) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, false,
-                                             "mirror_uuid", 123, {{1, 2}}, -1,
-                                             {}, {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -270,8 +270,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, GetMirrorImageError) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, false,
-                                             "mirror_uuid", 123, {{1, 2}}, -1,
-                                             {}, {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -295,8 +295,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, CanNotError) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, false,
-                                             "mirror_uuid", 123, {{1, 2}}, -1,
-                                             {}, {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -322,8 +322,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, GetMirrorPeersError) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, true,
-                                             "mirror_uuid", 123, {{1, 2}}, -1,
-                                             {}, {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -348,8 +348,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, CreateSnapshotError) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, false,
-                                             "mirror_uuid", 123, {{1, 2}}, -1,
-                                             {}, {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -377,8 +377,8 @@ TEST_F(TestMockMirrorSnapshotCreateNonPrimaryRequest, WriteImageStateError) {
 
   C_SaferCond ctx;
   auto req = new MockCreateNonPrimaryRequest(&mock_image_ctx, false,
-                                             "mirror_uuid", 123, {{1, 2}}, -1,
-                                             {}, {}, {}, nullptr, &ctx);
+                                             "mirror_uuid", 123, {{1, 2}}, {},
+                                             nullptr, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }

@@ -2395,7 +2395,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     };
 
   r = image::snapshot::iterate(hctx, pre_check_lambda);
-  if (r < 0) {
+  if (r < 0 && r != -EEXIST) {
     return r;
   }
 
