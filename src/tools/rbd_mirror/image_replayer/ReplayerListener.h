@@ -12,15 +12,11 @@ struct ReplayerListener {
   virtual ~ReplayerListener() {}
 
   virtual void handle_notification() = 0;
-  virtual void list_remote_group_snapshots(Context *on_finish) = 0;
-
-  virtual void create_mirror_snapshot_start(
-      const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
-      int64_t *local_group_pool_id, std::string *local_group_id,
-      std::string *local_group_snap_id, Context *on_finish) = 0;
-  virtual void create_mirror_snapshot_finish(
-      const std::string &remote_group_snap_id, uint64_t snap_id,
-      Context *on_finish) = 0;
+  virtual void notify_group_snap_image_complete(
+      int64_t local_pool_id,
+      const std::string &local_image_id,
+      const std::string &remote_group_snap_id,
+      uint64_t local_snap_id) = 0;
 };
 
 } // namespace image_replayer
