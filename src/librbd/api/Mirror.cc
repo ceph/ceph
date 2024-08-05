@@ -3158,7 +3158,7 @@ int Mirror<I>::group_demote(IoCtx& group_ioctx,
 
     r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
                              &group_snap, quiesce_requests,
-                             cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
+                             cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
                              flags);
     if (r != 0) {
       return r;
