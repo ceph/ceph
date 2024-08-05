@@ -3,6 +3,7 @@
 
 #include "Replayer.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "common/Cond.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
@@ -217,6 +218,19 @@ void Replayer<I>::shut_down(Context* on_finish) {
     // TODO interrupt snapshot copy and image copy state machines even if remote
     // cluster is unreachable
     dout(10) << "shut down pending on completion of snapshot replay" << dendl;
+    return;
+  }
+
+  if (!m_prune_snap_ids.empty()) {
+    locker.unlock();
+
+    auto prune_snap_id = *m_prune_snap_ids.begin();
+    dout(5) << "pruning unused mirror snapshot " << prune_snap_id << dendl;
+    C_SaferCond ctx;
+    prune_mirror_snapshot(&ctx, prune_snap_id);
+    ctx.wait();
+    m_on_init_shutdown = nullptr;
+    shut_down(on_finish);
     return;
   }
   locker.unlock();
@@ -587,7 +601,7 @@ void Replayer<I>::scan_local_mirror_snapshots(
 
     auto prune_snap_id = *m_prune_snap_ids.begin();
     dout(5) << "pruning unused mirror snapshot " << prune_snap_id << dendl;
-    prune_mirror_snapshot(prune_snap_id);
+    prune_mirror_snapshot(nullptr, prune_snap_id);
     return;
   }
 
@@ -824,7 +838,8 @@ void Replayer<I>::scan_remote_mirror_snapshots(
 }
 
 template <typename I>
-void Replayer<I>::prune_mirror_snapshot(uint64_t snap_id) {
+void Replayer<I>::prune_mirror_snapshot(
+    Context* on_finish, uint64_t snap_id) {
   dout(10) << "snap_id=" << snap_id << dendl;
 
   auto local_image_ctx = m_state_builder->local_image_ctx;
@@ -850,6 +865,9 @@ void Replayer<I>::prune_mirror_snapshot(uint64_t snap_id) {
 
   auto ctx = create_context_callback<
     Replayer<I>, &Replayer<I>::handle_prune_mirror_snapshot>(this);
+  if (on_finish) {
+    ctx = on_finish;
+  }
   local_image_ctx->operations->snap_remove(snap_namespace, snap_name, ctx);
 }
 
