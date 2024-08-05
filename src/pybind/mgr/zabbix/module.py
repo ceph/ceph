@@ -131,7 +131,7 @@ class Module(MgrModule):
         self._zabbix_hosts = list()
         servers = cast(str, self.config['zabbix_host']).split(",")
         for server in servers:
-            uri = re.match("(?:(?:\[?)([a-z0-9-\.]+|[a-f0-9:\.]+)(?:\]?))(?:((?::))([0-9]{1,5}))?$", server)
+            uri = re.match(r"(?:(?:\[?)([a-z0-9-\.]+|[a-f0-9:\.]+)(?:\]?))(?:((?::))([0-9]{1,5}))?$", server)
             if uri:
                 zabbix_host, sep, opt_zabbix_port = uri.groups()
                 if sep == ':':
