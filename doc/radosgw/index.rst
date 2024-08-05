@@ -88,4 +88,5 @@ Cluster with one API and then retrieve that data with the other API.
    D3N Data Cache <d3n_datacache>
    Cloud Transition <cloud-transition>
    Metrics <metrics>
+   Bucket Logging <bucket_logging>
 
