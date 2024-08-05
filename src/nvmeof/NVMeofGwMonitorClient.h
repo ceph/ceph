@@ -61,6 +61,7 @@ protected:
   Client client;
   std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
   ceph::mutex lock = ceph::make_mutex("NVMeofGw::lock");
+  ceph::mutex beacon_lock = ceph::make_mutex("NVMeofGw::beacon_lock");
   SafeTimer timer;
 
   int orig_argc;
