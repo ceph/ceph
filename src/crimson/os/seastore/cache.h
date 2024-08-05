@@ -494,8 +494,9 @@ public:
       } else {
         // stable from trans-view
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
-        t.add_to_read_set(p_extent);
-        touch_extent(*p_extent);
+        if (t.maybe_add_to_read_set(p_extent)) {
+          touch_extent(*p_extent);
+        }
       }
     } else {
       assert(!extent->is_stable_writting());
