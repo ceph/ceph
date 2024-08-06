@@ -64,9 +64,6 @@ struct get_obj_data;
 #define PUT_OBJ_EXCL        0x02
 #define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
-#define RGW_OBJ_NS_MULTIPART "multipart"
-#define RGW_OBJ_NS_SHADOW    "shadow"
-
 static inline void prepend_bucket_marker(const rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -1493,7 +1490,9 @@ public:
                                         RGWFormatterFlusher& flusher);
 
   int bucket_set_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
-  int remove_objs_from_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, std::list<rgw_obj_index_key>& oid_list);
+  int remove_objs_from_index(const DoutPrefixProvider *dpp,
+			     RGWBucketInfo& bucket_info,
+			     const std::list<rgw_obj_index_key>& oid_list);
   int move_rados_obj(const DoutPrefixProvider *dpp,
                      librados::IoCtx& src_ioctx,
 		     const std::string& src_oid, const std::string& src_locator,
