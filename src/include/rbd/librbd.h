@@ -1651,7 +1651,8 @@ CEPH_RBD_API int rbd_mirror_group_resync(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_mirror_group_create_snapshot(rados_ioctx_t p,
                                                   const char *name,
                                                   uint32_t flags,
-                                                  char **snap_id);
+                                                  char *snap_id,
+                                                  size_t *max_snap_id_len);
 CEPH_RBD_API int rbd_mirror_group_get_info(
     rados_ioctx_t p, const char *name,
     rbd_mirror_group_info_t *mirror_group_info, size_t info_size);

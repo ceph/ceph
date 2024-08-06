@@ -7953,8 +7953,16 @@ extern "C" int rbd_mirror_group_resync(rados_ioctx_t group_p,
 extern "C" int rbd_mirror_group_create_snapshot(rados_ioctx_t group_p,
                                                 const char *group_name,
                                                 uint32_t flags,
-                                                char **snap_id)
+                                                char *snap_id,
+                                                size_t *max_snap_id_len)
 {
+  if (*max_snap_id_len < RBD_MAX_IMAGE_ID_LENGTH + 1) {
+    *max_snap_id_len = RBD_MAX_IMAGE_ID_LENGTH + 1;
+    return -ERANGE;
+  }
+
+  *max_snap_id_len = RBD_MAX_IMAGE_ID_LENGTH + 1;
+
   librados::IoCtx group_ioctx;
   librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
 
@@ -7965,9 +7973,7 @@ extern "C" int rbd_mirror_group_create_snapshot(rados_ioctx_t group_p,
     return r;
   }
 
-  if (snap_id != NULL) {
-    *snap_id = strdup(cpp_snap_id.c_str());
-  }
+  strcpy(snap_id, cpp_snap_id.c_str());
 
   return 0;
 }
