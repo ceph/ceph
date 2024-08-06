@@ -60,7 +60,7 @@ enum op_type {
 };
 
 struct Op {
-  time_t at;
+  uint64_t at;
   op_type type;
   uint64_t offset;
   uint64_t length;
@@ -71,7 +71,7 @@ struct Op {
   bufferlist read_bl;
 
   Op(
-    time_t at,
+    uint64_t at,
     op_type type,
     uint64_t offset,
     uint64_t length,
@@ -90,22 +90,6 @@ struct ParserContext {
     char *start; // starts and ends in new line or eof
     char *end;
     uint64_t max_buffer_size;
-};
-
-class MemoryStreamBuf : public std::streambuf {
-public:
-    MemoryStreamBuf(const char* start, const char* end) {
-        this->setg(const_cast<char*>(start), const_cast<char*>(start), const_cast<char*>(end));
-    }
-};
-
-class MemoryInputStream : public std::istream {
-    MemoryStreamBuf _buffer;
-public:
-    MemoryInputStream(const char* start, const char* end)
-        : std::istream(&_buffer), _buffer(start, end) {
-        rdbuf(&_buffer);
-    }
 };
 
 void gen_buffer(bufferlist& bl, uint64_t size) {
@@ -156,45 +140,109 @@ uint64_t timestamp_parser(std::string& date) {
   return timestamp;
 }
 
+uint64_t timestamp_parser2(const char* t) {
+  // expected format
+  // 2024-05-10 12:06:24.792232+00:00
+  // 0123456789012345678------------
+  static constexpr uint32_t time_len = sizeof("2024-05-10 12:06:24");
+  thread_local char previous_str[time_len]("0000-00-00 00:00:00");
+  thread_local uint64_t previous_time = 0;
+  int usec = atoi(t + 20);
+  if (usec < 0 || usec > 999999) return 0;
+  if (strncmp(t, previous_str, time_len) == 0) {
+    return previous_time * 1000000 + usec;
+  }
+  struct tm a_tm;
+  a_tm.tm_zone = 0;
+  a_tm.tm_isdst = 0;
+  int x;
+  x = atoi(t);
+  if (x < 2024 || x > 2100) return 0;
+  a_tm.tm_year = x;
+  x = atoi(t + 5);
+  if (x < 1 || x > 12) return 0;
+  a_tm.tm_mon = x - 1;
+  x = atoi(t + 8);
+  if (x < 1 || x > 31) return 0;
+  a_tm.tm_mday = x;
+  x = atoi(t + 11);
+  if (x < 0 || x > 23) return 0;
+  a_tm.tm_hour = x;
+  x = atoi(t + 14);
+  if (x < 0 || x > 59) return 0;
+  a_tm.tm_min = x;
+  x = atoi(t + 17);
+  if (x < 0 || x > 60) return 0;
+  a_tm.tm_sec = x;
+  time_t timep = mktime(&a_tm);
+  previous_time = timep;
+  memcpy(previous_str, t, time_len);
+  return previous_time * 1000000 + usec;
+}
+
+
+
 void parse_entry_point(shared_ptr<ParserContext> context) {
   cout << fmt::format("Starting parser thread start={:p} end={:p}", context->start, context->end) << endl;
-
-  string date, time, who, type, range, object, collection;
-  MemoryInputStream fstream(context->start, context->end);
+  assert(context->end[-1] == '\n');
   // we expect this input:
   // 2024-05-10 12:06:24.990831+00:00 client.607247697.0:5632274 write 4096~4096 2:d03a455a:::08b0f2fd5f20f504e76c2dd3d24683a1:head 2.1c0b
-  while (fstream >> date){
-    // cout << date << endl;
-    if (!(date.size() > 4 && isdigit(date[0]) && isdigit(date[1]) && isdigit(date[2]) && isdigit(date[3]) && date[4] == '-')) {
-      fstream.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+  char* pos = context->start;
+  char* end = context->end;
+  while (pos != end) {
+    char* line_end = pos;
+    auto go_after_space = [&](char* p) -> char* {
+      while ((p != line_end) && (*(p++) != ' ')) {}
+      return p;
+    };
+    while (*line_end != '\n')
+      line_end++;
+    char* date = pos;
+    char* time = go_after_space(date);
+    char* who = go_after_space(time);
+    char* type = go_after_space(who);
+    char* range = go_after_space(type);
+    char* object = go_after_space(range);
+    char* collection = go_after_space(object);
+    pos = line_end + 1;
+    if (collection >= line_end) 
       continue;
-
+    if (false) {
+      std::cout << 
+      std::string(date, time-date-1) << "/" <<
+      std::string(time, who-time-1) << "/" <<
+      std::string(who, type-who-1) << "/" <<
+      std::string(type, range-type-1) << "/" <<
+      std::string(range, object-range-1) << "/" <<
+      std::string(object, collection-object-1) << "/" <<
+      std::string(collection, line_end-collection-1) << "/" <<
+      std::endl;
     }
-    fstream >> time >> who >> type >> range >> object >> collection;
-
-    date += " " + time;
-    // cout << date << endl;
-    // FIXME: this is wrong  but it returns a reasonable bad timestamp :P
-    time_t at = timestamp_parser(date);
-
-    // cout << fmt::format("{} {} {} {} {} {} {}", date, at, who, type, range, object, collection) << endl;
-
-    shared_ptr<string> who_ptr = make_shared<string>(who);
+    if (who - date != sizeof("2024-05-10 12:06:24.990831+00:00"))
+      continue;
+    uint64_t at = timestamp_parser2(date);
+    if (at == 0)
+      continue;
+    char* who_end = (char*)memchr(who, '.', type-who-1);
+    if (who_end == nullptr)
+      continue;
+    who_end = (char*)memchr(who_end + 1, '.', type-who_end-1);
+    if (who_end == nullptr)
+      continue;
+    shared_ptr<string> who_ptr = make_shared<string>(who, who_end-who);
     auto who_it = context->who_cache.find(who_ptr);
     if (who_it == context->who_cache.end()) {
       context->who_cache.insert(who_ptr);
     } else {
       who_ptr = *who_it;
     }
-
-    shared_ptr<string> object_ptr = make_shared<string>(object);
+    shared_ptr<string> object_ptr = make_shared<string>(object, collection-object-1);
     auto object_it = context->object_cache.find(object_ptr);
     if (object_it == context->object_cache.end()) {
       context->object_cache.insert(object_ptr);
     } else {
       object_ptr = *object_it;
     }
-
     op_type ot;
     switch (type[0]) {
       case 'r': {
@@ -214,7 +262,7 @@ void parse_entry_point(shared_ptr<ParserContext> context) {
         break;
       }
       case 'w': {
-        if (type.size() > 6) {
+        if (range-type-1 > 6) {
           ot = WriteFull;
         } else {
           ot = Write;
@@ -222,29 +270,26 @@ void parse_entry_point(shared_ptr<ParserContext> context) {
         break;
       }
       default: {
-        cout << "invalid type " << type << endl;
+        cout << "invalid type " << std::string(type, range-type-1) << endl;
         exit(1);
       }
     }
-
-    shared_ptr<string> collection_ptr = make_shared<string>(collection);
+    shared_ptr<string> collection_ptr = make_shared<string>(collection, line_end-collection-1);
     auto collection_it = context->collection_cache.find(collection_ptr);
     if (collection_it == context->collection_cache.end()) {
       context->collection_cache.insert(collection_ptr);
     } else {
       collection_ptr = *collection_it;
     }
-
     uint64_t offset = 0, length = 0;
-    stringstream range_stream(range);
-    string offset_str, length_str;
-    getline(range_stream, offset_str, '~');
-    offset = stoll(offset_str);
+    char* endp;
+    offset = strtol(range,&endp,10);
 
     if (ot != Truncate) {
         // Truncate only has one number
-        getline(range_stream, length_str, '~');
-        length = stoll(length_str);
+        if (*endp != '~')
+          continue;
+        length = atoi(endp+1);
     }
 
     context->max_buffer_size = max(length, context->max_buffer_size);
@@ -344,7 +389,7 @@ int main(int argc, char** argv) {
   string ceph_conf_path("./ceph.conf");
   string pool("test_pool");
   bool skip_do_ops = false;
-
+  size_t sum_ops = 0;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
@@ -392,32 +437,35 @@ int main(int argc, char** argv) {
         cout << "error mapping buffer" << endl;
         exit(EXIT_FAILURE);
     }
-    uint64_t start_offset = 0;
     uint64_t step_size = file_stat.st_size / nparser_threads;
+    char* start = mapped_buffer;
     for (int i = 0; i < nparser_threads; i++) {
-      char* end = mapped_buffer + start_offset + step_size;
-      while(*end != '\n') {
-          end--;
-      }
+      char* end = start + step_size;
       if (i == nparser_threads - 1) {
           end = mapped_buffer + file_stat.st_size;
       }
+      while(*(end - 1) != '\n') {
+          end--;
+      }
       shared_ptr<ParserContext> context = make_shared<ParserContext>();
-      context->start = mapped_buffer + start_offset;
+      context->start = start;
       context->end = end;
       context->max_buffer_size = 0;
       parser_contexts.push_back(context);
       parser_threads.push_back(std::thread(parse_entry_point, context));
-      start_offset += (end - mapped_buffer - start_offset);
+      start = end;
     }
     for (auto& t : parser_threads) {
         t.join();
     }
     // reduce
     for (auto context : parser_contexts) {
+      sum_ops += context->ops.size();
+    }
+    ops.reserve(sum_ops);
+    for (auto context : parser_contexts) {
         ops.insert(ops.end(), context->ops.begin(), context->ops.end());
         max_buffer_size = max(context->max_buffer_size, max_buffer_size);
-        // context->ops.clear();
     }
     munmap(mapped_buffer, file_stat.st_size);
     complete_parser_contexts.insert(complete_parser_contexts.end(), parser_contexts.begin(), parser_contexts.end());
