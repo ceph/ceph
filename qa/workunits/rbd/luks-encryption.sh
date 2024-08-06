@@ -32,7 +32,6 @@ function expect_false() {
 
 function test_encryption_format() {
   local format=$1
-  clean_up_cryptsetup
 
   # format
   rbd encryption format testimg $format /tmp/passphrase
@@ -66,11 +65,10 @@ function test_encryption_format() {
   (( $(sudo blockdev --getsize64 $LIBRBD_DEV) == (32 << 20) ))
 
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  sudo cryptsetup close cryptsetupdev
 }
 
 function test_clone_encryption() {
-  clean_up_cryptsetup
-
   # write 1MB plaintext
   dd if=/tmp/testdata1 of=$RAW_DEV conv=fsync bs=1M count=1
 
@@ -109,7 +107,15 @@ function test_clone_encryption() {
   sudo cryptsetup open $RAW_FLAT_DEV --type luks cryptsetupdev -d /tmp/passphrase2
   dd if=/dev/mapper/cryptsetupdev of=/tmp/cmpdata bs=1M count=3
   cmp -n 3MB /tmp/cmpdata /tmp/testdata1
+  sudo cryptsetup close cryptsetupdev
   _sudo rbd device unmap -t nbd $RAW_FLAT_DEV
+
+  rbd rm testimg2
+  rbd snap unprotect testimg1@snap
+  rbd snap rm testimg1@snap
+  rbd rm testimg1
+  rbd snap unprotect testimg@snap
+  rbd snap rm testimg@snap
 }
 
 function test_clone_and_load_with_a_single_passphrase {
@@ -207,5 +213,8 @@ test_encryption_format luks1
 test_encryption_format luks2
 
 test_clone_encryption
+
+_sudo rbd device unmap -t nbd $RAW_DEV
+rbd rm testimg
 
 echo OK
