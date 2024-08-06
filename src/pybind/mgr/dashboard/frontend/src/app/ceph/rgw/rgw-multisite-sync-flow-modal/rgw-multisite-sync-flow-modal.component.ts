@@ -8,7 +8,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { catchError, switchMap } from 'rxjs/operators';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { RgwDaemon } from '../models/rgw-daemon';
-import { FlowType, RgwZonegroup } from '../models/rgw-multisite';
+import { FlowType, RgwZonegroup, ZoneType } from '../models/rgw-multisite';
 import { of } from 'rxjs';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import _ from 'lodash';
@@ -35,8 +35,8 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
   flowType = FlowType;
   icons = Icons;
   zones = new ZoneData(false, 'Filter Zones');
-  sourceZones = new ZoneData(false, 'Filter Zones');
-  destinationZones = new ZoneData(true, 'Filter or Add Zones');
+  sourceZone: string;
+  destinationZone: string;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -90,13 +90,9 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
             zones.push(new SelectOption(false, zone.name, ''));
           });
           this.zones.data.available = [...zones];
-          this.sourceZones.data.available = [...zones];
           if (this.editing) {
             if (this.groupType === FlowType.symmetrical) {
-              this.zones.data.selected = this.flowSelectedRow.zones;
-            } else {
-              this.destinationZones.data.selected = [this.flowSelectedRow.dest_zone];
-              this.sourceZones.data.selected = [this.flowSelectedRow.source_zone];
+              this.zones.data.selected = [...this.flowSelectedRow.zones];
             }
             this.zoneSelection();
           }
@@ -145,11 +141,6 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
       this.currentFormGroupContext.patchValue({
         zones: this.zones.data.selected
       });
-    } else {
-      this.currentFormGroupContext.patchValue({
-        source_zone: this.sourceZones.data.selected,
-        destination_zone: this.destinationZones.data.selected
-      });
     }
   }
 
@@ -162,8 +153,21 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
       this.currentFormGroupContext.setErrors({ cdSubmitButton: true });
       return;
     }
+
+    const zones: ZoneType = { added: [], removed: [] };
+    if (this.groupType == FlowType.symmetrical) {
+      if (this.editing) {
+        zones.removed = this.flowSelectedRow.zones.filter(
+          (zone: string) => !this.zones.data.selected.includes(zone)
+        );
+        zones.added = this.zones.data.selected.filter(
+          (zone: string) => !this.flowSelectedRow.zones.includes(zone)
+        );
+      }
+      zones.added = zones.added.length > 0 ? zones.added : this.zones.data.selected;
+    }
     this.rgwMultisiteService
-      .createEditSyncFlow(this.currentFormGroupContext.getRawValue())
+      .createEditSyncFlow({ ...this.currentFormGroupContext.getRawValue(), zones: zones })
       .subscribe(
         () => {
           const action = this.editing ? 'Modified' : 'Created';
@@ -171,7 +175,7 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
             NotificationType.success,
             $localize`${action} Sync Flow '${this.currentFormGroupContext.getValue('flow_id')}'`
           );
-          this.activeModal.close('success');
+          this.activeModal.close(NotificationType.success);
         },
         () => {
           // Reset the 'Submit' button.

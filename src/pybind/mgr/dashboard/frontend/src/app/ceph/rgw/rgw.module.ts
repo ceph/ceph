@@ -227,6 +227,7 @@ const routes: Routes = [
       {
         path: 'configuration',
         component: RgwMultisiteDetailsComponent,
+        data: { breadcrumbs: 'Configuration' },
         children: [
           {
             path: 'setup-multisite-replication',
@@ -238,6 +239,7 @@ const routes: Routes = [
       {
         path: 'sync-policy',
         component: RgwMultisiteSyncPolicyComponent,
+        data: { breadcrumbs: 'Sync-policy' },
         children: [
           {
             path: `${URLVerbs.CREATE}`,
