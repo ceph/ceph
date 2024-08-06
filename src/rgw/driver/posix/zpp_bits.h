@@ -3752,16 +3752,16 @@ struct bind_opaque
                 requires(decltype(in.remaining_data()) & data) {
                     (context.*Function)(data);
                 }) {
-                struct _
+                struct guard
                 {
                     decltype(in) archive;
                     decltype(in.remaining_data()) data;
-                    constexpr ~_()
+                    constexpr ~guard()
                     {
                         archive.position() += data.size();
                     }
-                } _{in, in.remaining_data()};
-                return (context.*Function)(_.data);
+                } guard{in, in.remaining_data()};
+                return (context.*Function)(guard.data);
             } else {
                 return (context.*Function)();
             }
@@ -3776,16 +3776,16 @@ struct bind_opaque
                 requires(decltype(in.remaining_data()) & data) {
                     Function(data);
                 }) {
-                struct _
+                struct guard
                 {
                     decltype(in) archive;
                     decltype(in.remaining_data()) data;
-                    constexpr ~_()
+                    constexpr ~guard()
                     {
                         archive.position() += data.size();
                     }
-                } _{in, in.remaining_data()};
-                return Function(_.data);
+                } guard{in, in.remaining_data()};
+                return Function(guard.data);
             } else {
                 return Function();
             }
