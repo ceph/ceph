@@ -36,11 +36,9 @@ bool configuration::decode_xml(XMLObj* obj) {
       throw RGWXMLDecoder::err("invalid bucket logging record type: '" + type + "'");
     }
     RGWXMLDecoder::decode_xml("RecordsBatchSize", records_batch_size, o);
-    if (iter = o->find("TargetObjectKeyFormat"); iter.get_next()) {
-      XMLObj* const oo = iter.get_next();
-      if (iter = oo->find("PartitionedPrefix"); iter.get_next()) {
+    if (iter = o->find("TargetObjectKeyFormat"); XMLObj* const oo = iter.get_next()) {
+      if (iter = oo->find("PartitionedPrefix"); XMLObj* const ooo = iter.get_next()) {
         obj_key_format = KeyFormat::Partitioned;
-        XMLObj* const ooo = iter.get_next();
         default_type = "DeliveryTime";
         RGWXMLDecoder::decode_xml("PartitionDateSource", type, default_type, ooo);
         if (type == "DeliveryTime") {
