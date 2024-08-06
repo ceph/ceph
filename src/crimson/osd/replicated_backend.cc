@@ -65,7 +65,14 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 	min_epoch,
 	tid,
 	osd_op_p.at_version);
-      m->set_data(encoded_txn);
+      if (pg.should_send_op(pg_shard, hoid)) {
+	m->set_data(encoded_txn);
+      } else {
+	ceph::os::Transaction t;
+	bufferlist bl;
+	encode(t, bl);
+	m->set_data(bl);
+      }
       pending_txn->second.acked_peers.push_back({pg_shard, eversion_t{}});
       encode(log_entries, m->logbl);
       m->pg_trim_to = osd_op_p.pg_trim_to;

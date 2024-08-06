@@ -1698,6 +1698,28 @@ bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
   return false;
 }
 
+bool PG::should_send_op(
+  pg_shard_t peer,
+  const hobject_t &hoid) const
+{
+  if (peer == get_primary())
+    return true;
+  bool should_send =
+    (hoid.pool != (int64_t)get_info().pgid.pool() ||
+    (has_backfill_state() && hoid <= get_last_backfill_started()) ||
+    hoid <= peering_state.get_peer_info(peer).last_backfill);
+  if (!should_send) {
+    ceph_assert(is_backfill_target(peer));
+    logger().debug("{} issue_repop shipping empty opt to osd."
+                   "{}, object {} beyond std::max(last_backfill_started, "
+                   "peer_info[peer].last_backfill {})",
+                   peer, hoid, peering_state.get_peer_info(peer).last_backfill);
+  }
+  return should_send;
+  // TODO: should consider async recovery cases in the future which are not supported
+  //       by crimson yet
+}
+
 PG::interruptible_future<std::optional<PG::complete_op_t>>
 PG::already_complete(const osd_reqid_t& reqid)
 {
