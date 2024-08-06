@@ -87,13 +87,6 @@ seastar::future<> BackgroundRecoveryT<T>::start()
           }, [](std::exception_ptr) {
             return seastar::make_ready_future<bool>(false);
           }, pg, epoch_started);
-        }).handle_exception_type([ref, this](const std::system_error& err) {
-	  LOG_PREFIX(BackgroundRecoveryT<T>::start);
-          if (err.code() == std::make_error_code(std::errc::interrupted)) {
-            DEBUGDPPI("recovery interruped: {}", *pg, err.what());
-            return seastar::now();
-          }
-          return seastar::make_exception_future<>(err);
         });
       });
   });

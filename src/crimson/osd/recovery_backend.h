@@ -45,9 +45,21 @@ public:
       backend{backend} {}
   virtual ~RecoveryBackend() {}
   std::pair<WaitForObjectRecovery&, bool> add_recovering(const hobject_t& soid) {
-    auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery{});
+    auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery(pg));
     assert(it->second);
     return {*(it->second), added};
+  }
+  seastar::future<> add_unfound(const hobject_t &soid) {
+    auto [it, added] = unfound.emplace(soid, seastar::shared_promise());
+    return it->second.get_shared_future();
+  }
+  void found_and_remove(const hobject_t &soid) {
+    auto it = unfound.find(soid);
+    if (it != unfound.end()) {
+      auto &found_promise = it->second;
+      found_promise.set_value();
+      unfound.erase(it);
+    }
   }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
     assert(is_recovering(soid));
@@ -82,13 +94,21 @@ public:
     std::int64_t min,
     std::int64_t max);
 
+  enum interrupt_cause_t : uint8_t {
+    INTERVAL_CHANGE,
+    MAX
+  };
   void on_peering_interval_change(ceph::os::Transaction& t) {
-    clean_up(t, "new peering interval");
+    clean_up(t, interrupt_cause_t::INTERVAL_CHANGE);
   }
 
   seastar::future<> stop() {
     for (auto& [soid, recovery_waiter] : recovering) {
       recovery_waiter->stop();
+    }
+    for (auto& [soid, promise] : unfound) {
+      promise.set_exception(
+	crimson::common::system_shutdown_exception());
     }
     return on_stop();
   }
@@ -124,10 +144,13 @@ public:
     public boost::intrusive_ref_counter<
       WaitForObjectRecovery, boost::thread_unsafe_counter>,
     public crimson::BlockerT<WaitForObjectRecovery> {
+      crimson::osd::PG &pg;
     std::optional<seastar::shared_promise<>> readable, recovered, pulled;
     std::map<pg_shard_t, seastar::shared_promise<>> pushes;
   public:
     static constexpr const char* type_name = "WaitForObjectRecovery";
+
+    WaitForObjectRecovery(crimson::osd::PG &pg) : pg(pg) {}
 
     crimson::osd::ObjectContextRef obc;
     std::optional<pull_info_t> pull_info;
@@ -204,28 +227,7 @@ public:
 	pushes.erase(it);
       }
     }
-    void interrupt(std::string_view why) {
-      if (readable) {
-	readable->set_exception(std::system_error(
-	  std::make_error_code(std::errc::interrupted), why.data()));
-	readable.reset();
-      }
-      if (recovered) {
-	recovered->set_exception(std::system_error(
-	  std::make_error_code(std::errc::interrupted), why.data()));
-	recovered.reset();
-      }
-      if (pulled) {
-	pulled->set_exception(std::system_error(
-	  std::make_error_code(std::errc::interrupted), why.data()));
-	pulled.reset();
-      }
-      for (auto& [pg_shard, pr] : pushes) {
-	pr.set_exception(std::system_error(
-	  std::make_error_code(std::errc::interrupted), why.data()));
-      }
-      pushes.clear();
-    }
+    void interrupt(interrupt_cause_t why);
     void stop();
     void dump_detail(Formatter* f) const {
     }
@@ -235,6 +237,7 @@ public:
   using WaitForObjectRecoveryRef = boost::intrusive_ptr<WaitForObjectRecovery>;
 protected:
   std::map<hobject_t, WaitForObjectRecoveryRef> recovering;
+  std::map<hobject_t, seastar::shared_promise<>> unfound;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
     eversion_t version) const;
@@ -249,7 +252,7 @@ protected:
     backend->clear_temp_objs();
   }
 
-  void clean_up(ceph::os::Transaction& t, std::string_view why);
+  void clean_up(ceph::os::Transaction& t, interrupt_cause_t why);
   virtual seastar::future<> on_stop() = 0;
 private:
   void handle_backfill_finish(
