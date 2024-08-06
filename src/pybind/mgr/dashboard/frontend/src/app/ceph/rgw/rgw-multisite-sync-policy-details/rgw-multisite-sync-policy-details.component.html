@@ -69,14 +69,6 @@
             </cd-table-actions>
           </div>
         </cd-table>
-        <cd-alert-panel
-          *ngIf="dirFlowSelection.hasSelection"
-          type="info"
-          title="Directional Flow 'edit' & 'delete' actions disabled"
-          i18n-title
-          i18n>
-          Due to some internal dependencies these actions are disabled, it will get enabled once the issue gets resolved.
-        </cd-alert-panel>
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="pipe">
@@ -118,6 +110,6 @@
 <ng-template #deleteTpl>
   <cd-alert-panel type="danger"
                   i18n>
-    Are you sure you want to delete these Flow?
+    Deleting {{ resourceType | upperFirst }} may disrupt data synchronization
   </cd-alert-panel>
 </ng-template>
