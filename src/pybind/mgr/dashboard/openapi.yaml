@@ -10891,6 +10891,8 @@ paths:
               required:
               - group_id
               - pipe_id
+              - source_zones
+              - destination_zones
               type: object
       responses:
         '200':

@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { RgwZonegroup } from '../models/rgw-multisite';
+import { RgwZonegroup, Zone } from '../models/rgw-multisite';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { catchError, switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -15,6 +15,7 @@ import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ZoneData } from '../models/rgw-multisite-zone-selector';
+import { SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-rgw-multisite-sync-pipe-modal',
@@ -36,7 +37,8 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
     private rgwDaemonService: RgwDaemonService,
     private rgwZonegroupService: RgwZonegroupService,
     private rgwMultisiteService: RgwMultisiteService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private succeededLabels: SucceededActionLabelsI18n
   ) {}
 
   ngOnInit(): void {
@@ -84,8 +86,13 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
           this.sourceZones.data.available = [...zones];
           if (this.editing) {
             this.pipeForm.get('pipe_id').disable();
-            this.sourceZones.data.selected = this.pipeSelectedRow.source.zones;
-            this.destZones.data.selected = this.pipeSelectedRow.dest.zones;
+            this.sourceZones.data.selected = [...this.pipeSelectedRow.source.zones];
+            this.destZones.data.selected = [...this.pipeSelectedRow.dest.zones];
+            const availableDestZone: SelectOption[] = [];
+            this.pipeSelectedRow.dest.zones.forEach((zone: string) => {
+              availableDestZone.push(new SelectOption(true, zone, ''));
+            });
+            this.destZones.data.available = availableDestZone;
             this.pipeForm.patchValue({
               pipe_id: this.pipeSelectedRow.id,
               source_zones: this.pipeSelectedRow.source.zones,
@@ -110,7 +117,18 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
     }
   }
 
+  getZoneData(zoneDataToFilter: string[], zoneDataForCondition: string[]) {
+    return zoneDataToFilter.filter((zone: string) => !zoneDataForCondition.includes(zone));
+  }
+
+  assignZoneValue(zone: string[], selectedZone: string[]) {
+    return zone.length > 0 ? zone : selectedZone;
+  }
+
   submit() {
+    const sourceZones: Zone = { added: [], removed: [] };
+    const destZones: Zone = { added: [], removed: [] };
+
     if (this.pipeForm.invalid) {
       return;
     }
@@ -119,20 +137,48 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
       this.pipeForm.setErrors({ cdSubmitButton: true });
       return;
     }
-    this.rgwMultisiteService.createEditSyncPipe(this.pipeForm.getRawValue()).subscribe(
-      () => {
-        const action = this.editing ? 'Modified' : 'Created';
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`${action} Sync Pipe '${this.pipeForm.getValue('pipe_id')}'`
-        );
-        this.activeModal.close('success');
-      },
-      () => {
-        // Reset the 'Submit' button.
-        this.pipeForm.setErrors({ cdSubmitButton: true });
-        this.activeModal.dismiss();
-      }
-    );
+
+    if (this.editing) {
+      destZones.removed = this.getZoneData(
+        this.pipeSelectedRow.dest.zones,
+        this.destZones.data.selected
+      );
+      destZones.added = this.getZoneData(
+        this.destZones.data.selected,
+        this.pipeSelectedRow.dest.zones
+      );
+      sourceZones.removed = this.getZoneData(
+        this.pipeSelectedRow.source.zones,
+        this.sourceZones.data.selected
+      );
+      sourceZones.added = this.getZoneData(
+        this.sourceZones.data.selected,
+        this.pipeSelectedRow.source.zones
+      );
+    }
+    sourceZones.added = this.assignZoneValue(sourceZones.added, this.sourceZones.data.selected);
+    destZones.added = this.assignZoneValue(destZones.added, this.destZones.data.selected);
+
+    this.rgwMultisiteService
+      .createEditSyncPipe({
+        ...this.pipeForm.getRawValue(),
+        source_zones: sourceZones,
+        destination_zones: destZones
+      })
+      .subscribe(
+        () => {
+          const action = this.editing ? this.succeededLabels.EDITED : this.succeededLabels.CREATED;
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`${action} Sync Pipe '${this.pipeForm.getValue('pipe_id')}'`
+          );
+          this.activeModal.close(NotificationType.success);
+        },
+        () => {
+          // Reset the 'Submit' button.
+          this.pipeForm.setErrors({ cdSubmitButton: true });
+          this.activeModal.dismiss();
+        }
+      );
   }
 }

@@ -220,11 +220,13 @@ const routes: Routes = [
       { path: '', redirectTo: 'configuration', pathMatch: 'full' },
       {
         path: 'configuration',
-        component: RgwMultisiteDetailsComponent
+        component: RgwMultisiteDetailsComponent,
+        data: { breadcrumbs: 'Configuration' }
       },
       {
         path: 'sync-policy',
         component: RgwMultisiteSyncPolicyComponent,
+        data: { breadcrumbs: 'Sync-policy' },
         children: [
           {
             path: `${URLVerbs.CREATE}`,
