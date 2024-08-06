@@ -6,6 +6,7 @@ overrides:
       - MON_DOWN
       - out of quorum
       - PG_AVAILABILITY
+      - PG_DEGRADED
 tasks:
 - install:
     branch: reef
