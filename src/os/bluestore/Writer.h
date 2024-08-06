@@ -66,7 +66,6 @@ public:
   write_divertor* test_write_divertor = nullptr;
   read_divertor* test_read_divertor = nullptr;
   std::vector<BlobRef> pruned_blobs;
-  std::set<SharedBlobRef> shared_changed;
   volatile_statfs statfs_delta;
 
 private:

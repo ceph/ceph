@@ -1339,7 +1339,7 @@ void BlueStore::Writer::do_write(
   statfs_delta.stored() += ref_end - location;
   exmp_it after_punch_it =
     bstore->_punch_hole_2(onode->c, onode, location, data_end - location,
-    released, pruned_blobs, shared_changed, statfs_delta);
+    released, pruned_blobs, txc->shared_blobs, statfs_delta);
   dout(25) << "after punch_hole_2: " << std::endl << onode->print(pp_mode) << dendl;
 
   // todo: if we align to disk block before splitting, we could do it in one go
@@ -1376,10 +1376,6 @@ void BlueStore::Writer::do_write(
   _collect_released_allocated();
   // update statfs
   txc->statfs_delta += statfs_delta;
-  // update shared blobs
-  for (auto b: shared_changed) {
-    txc->write_shared_blob(b);
-  }
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;
 }
 
