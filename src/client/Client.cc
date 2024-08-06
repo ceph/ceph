@@ -11312,7 +11312,7 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
 #endif
   /* We can't return bytes written larger than INT_MAX, clamp size to that */
   size = std::min(size, (loff_t)INT_MAX);
-  int r = _write(fh, offset, size, buf, NULL, false);
+  int r = _write(fh, offset, size, buf);
   ldout(cct, 3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
   return r;
 }
@@ -11322,23 +11322,36 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
+// NOTE: when called with zerocopy = true, the iovec SHOULD just consist of a
+// single entry with iov_len equal to the desired read length and iov_base
+// being a nullptr. The bufferlist pointer is used to return the data and the
+// caller is responsible for converting that into an iovec.
+//
+// Also, we don't try to support zerocopy with client_oc = true
 int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                        int iovcnt, int64_t offset,
                                        bool write, bool clamp_to_int,
                                        Context *onfinish, bufferlist *blp,
-                                       bool do_fsync, bool syncdataonly)
+                                       bool do_fsync, bool syncdataonly,
+                                       bool zerocopy)
 {
     ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
+    if (cct->_conf->client_oc && zerocopy) {
+      // we don't support zerocopy with Objectcacher enabled
+      return -CEPHFS_EINVAL;
+    }
 
 #if defined(__linux__) && defined(O_PATH)
     if (fh->flags & O_PATH)
         return -EBADF;
 #endif
-    if(iovcnt < 0) {
+    if(iovcnt < 0 || (zerocopy && blp == nullptr)) {
       return -EINVAL;
     }
     loff_t totallen = 0;
     for (int i = 0; i < iovcnt; i++) {
+        // NOTE: zero copy read has passed in an iov that is just used to
+        //       communicate the length.
         totallen += iov[i].iov_len;
     }
 
@@ -11352,7 +11365,8 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     }
 
     if (write) {
-        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt, onfinish, do_fsync, syncdataonly);
+        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt, onfinish,
+                           do_fsync, syncdataonly, zerocopy);
         ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
@@ -11364,16 +11378,18 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
           return r;
         }
 
-        client_lock.unlock();
-        copy_bufferlist_to_iovec(iov, iovcnt, blp ? blp : &bl, r);
-        client_lock.lock();
+	if (!zerocopy) {
+          client_lock.unlock();
+          copy_bufferlist_to_iovec(iov, iovcnt, blp ? blp : &bl, r);
+          client_lock.lock();
+        }
         return r;
     }
 }
 
 int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
                             int64_t offset, bool write, Context *onfinish,
-                            bufferlist *blp)
+                            bufferlist *blp, bool zerocopy)
 {
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied())
@@ -11387,7 +11403,7 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
     if (!fh)
       return -EBADF;
     return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
-                                  onfinish, blp);
+                                  onfinish, blp, zerocopy);
 }
 
 int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
@@ -11538,7 +11554,7 @@ bool Client::C_Write_Finisher::try_complete()
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 	                const struct iovec *iov, int iovcnt, Context *onfinish,
-	                bool do_fsync, bool syncdataonly)
+	                bool do_fsync, bool syncdataonly, bool zerocopy)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -11549,6 +11565,9 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   C_SaferCond *cond_iofinish = NULL;
 
   if (size < 1) { // zero bytes write is not supported by osd
+    return -EINVAL;
+  }
+  if (buf != nullptr && zerocopy) {
     return -EINVAL;
   }
 
@@ -11608,7 +11627,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     ceph_assert(in->inline_version > 0);
   }
 
-  // copy into fresh buffer (since our write may be resub, async)
+  // make a bufferlist, if not zerocopy make a copy
   bufferlist bl;
   if (buf) {
     if (size > 0)
@@ -11616,7 +11635,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   } else if (iov){
     for (int i = 0; i < iovcnt; i++) {
       if (iov[i].iov_len > 0) {
-        bl.append((const char *)iov[i].iov_base, iov[i].iov_len);
+        if (zerocopy) {
+          bl.push_back(buffer::create_static(iov[i].iov_len,
+                                             static_cast<char*>(iov[i].iov_base)));
+        } else {
+          bl.append(static_cast<const char*>(iov[i].iov_base), iov[i].iov_len);
+        }
       }
     }
   }
@@ -16071,7 +16095,7 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
 
-  int r = _write(fh, off, len, data, NULL, 0);
+  int r = _write(fh, off, len, data);
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
   return r;
@@ -16110,7 +16134,7 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
 int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   int iovcnt, int64_t offset, bool write,
                                   Context *onfinish, bufferlist *bl,
-                                  bool do_fsync, bool syncdataonly)
+                                  bool do_fsync, bool syncdataonly, bool zerocopy)
 {
     int64_t retval = -1;
 
@@ -16145,7 +16169,7 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
     }
 
     retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
-                                    onfinish, bl, do_fsync, syncdataonly);
+                                    onfinish, bl, do_fsync, syncdataonly, zerocopy);
     /* There are two scenarios with each having two cases to handle here
     1) async io
       1.a) r == 0:
