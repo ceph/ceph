@@ -4879,6 +4879,7 @@ out:
     cout <<  ostr.str() << std::endl;
   }
 
+  ch.reset(nullptr);
   int r = mount_readonly ? fs->umount_readonly() : fs->umount();
   if (r < 0) {
     cerr << "umount failed: " << cpp_strerror(r) << std::endl;
