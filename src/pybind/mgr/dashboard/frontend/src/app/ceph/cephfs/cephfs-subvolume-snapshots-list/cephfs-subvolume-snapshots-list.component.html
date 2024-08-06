@@ -1,0 +1,47 @@
+<ng-container *ngIf="isLoading">
+  <cd-loading-panel>
+    <span i18n>Loading snapshots...</span>
+  </cd-loading-panel>
+</ng-container>
+
+<div class="row"
+     *ngIf="isSubVolumesAvailable; else noGroupsTpl">
+  <div class="col-sm-2">
+    <cd-vertical-navigation title="Groups"
+                            [items]="subvolumeGroupList"
+                            inputIdentifier="group-filter"
+                            (emitActiveItem)="selectSubVolumeGroup($event)"></cd-vertical-navigation>
+  </div>
+  <div class="col-sm-2 vertical-line"
+       *ngIf="subVolumes$ | async">
+    <cd-vertical-navigation title="Subvolumes"
+                            [items]="subVolumesList"
+                            (emitActiveItem)="selectSubVolume($event)"
+                            inputIdentifier="subvol-filter"></cd-vertical-navigation>
+  </div>
+  <div class="col-8 vertical-line"
+       *ngIf="isSubVolumesAvailable">
+    <cd-table [data]="snapshots$ | async"
+              columnMode="flex"
+              [columns]="columns"
+              selectionType="single"
+              [hasDetails]="false"
+              (fetchData)="fetchData()"
+              (updateSelection)="updateSelection($event)">
+
+      <div class="table-actions btn-toolbar">
+        <cd-table-actions [permission]="permissions.cephfs"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="cephfs-snapshot-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
+  </div>
+</div>
+<ng-template #noGroupsTpl>
+  <cd-alert-panel type="info"
+                  i18n
+                  *ngIf="!isLoading">No subvolumes are present. Please create subvolumes to manage snapshots.</cd-alert-panel>
+</ng-template>
