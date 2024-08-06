@@ -26,71 +26,17 @@
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
-
+#include "ops_parser.h"
 namespace po = boost::program_options;
-
 
 using namespace std;
 using namespace ceph;
-
-// compare shared_ptr<string>
-struct StringPtrCompare
-{
-  int operator()(const shared_ptr<string>& lhs, const shared_ptr<string>& rhs) const {
-    if (lhs && rhs) {
-        // Compare the content of the strings
-        return *lhs < *rhs;
-    }
-    return lhs < rhs;
-  }
-};
-
 
 static set<shared_ptr<string>, StringPtrCompare> string_cache;
 static std::atomic<uint64_t> in_flight_ops(0);
 static std::condition_variable cv;
 static std::mutex in_flight_mutex;
 
-enum op_type {
-  Write,
-  WriteFull,
-  Read,
-  Truncate,
-  Zero
-};
-
-struct Op {
-  uint64_t at;
-  op_type type;
-  uint64_t offset;
-  uint64_t length;
-  shared_ptr<string> object;
-  shared_ptr<string> collection;
-  shared_ptr<string> who;
-  librados::AioCompletion *completion;
-  bufferlist read_bl;
-
-  Op(
-    uint64_t at,
-    op_type type,
-    uint64_t offset,
-    uint64_t length,
-    shared_ptr<string> object,
-    shared_ptr<string> collection,
-    shared_ptr<string> who
-  ) : at(at), type(type), offset(offset), length(length), object(object), collection(collection), who(who), completion(nullptr) {}
-
-};
-
-struct ParserContext {
-    set<shared_ptr<string>, StringPtrCompare> collection_cache;
-    set<shared_ptr<string>, StringPtrCompare> object_cache;
-    set<shared_ptr<string>, StringPtrCompare> who_cache;
-    vector<Op> ops;
-    char *start; // starts and ends in new line or eof
-    char *end;
-    uint64_t max_buffer_size;
-};
 
 void gen_buffer(bufferlist& bl, uint64_t size) {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size);
@@ -115,187 +61,6 @@ void completion_cb(librados::completion_t cb, void *arg) {
     in_flight_ops--;
   }
   cv.notify_one();
-}
-
-
-uint64_t timestamp_parser(std::string& date) {
-  uint64_t timestamp = 0;
-  uint64_t year, month, day, hour, minute, second;
-  // expeted format
-  // 2024-05-10 12:06:24.792232+00:00
-  // 0123456789012345678------------
-  year = std::stoull(date.substr(0, 4));
-  month = std::stoull(date.substr(5, 2));
-  day = std::stoull(date.substr(8, 2));
-  hour = std::stoull(date.substr(11, 2));
-  minute = std::stoull(date.substr(14, 2));
-  second = std::stoull(date.substr(17, 2));
-  //  SECONDS SINCE JAN 01 1970. (UTC), we don't care about timestamp timezone accuracy
-  timestamp += (year - 1970) * 365 * 24 * 60 * 60;
-  timestamp += (month * 30 * 24 * 60 * 60); // Yes, 30 day month is the best format ever and you cannot complain
-  timestamp += (day * 24 * 60 * 60);
-  timestamp += (hour * 60 * 60);
-  timestamp += (minute * 60);
-  timestamp += second;
-  return timestamp;
-}
-
-uint64_t timestamp_parser2(const char* t) {
-  // expected format
-  // 2024-05-10 12:06:24.792232+00:00
-  // 0123456789012345678------------
-  static constexpr uint32_t time_len = sizeof("2024-05-10 12:06:24");
-  thread_local char previous_str[time_len]("0000-00-00 00:00:00");
-  thread_local uint64_t previous_time = 0;
-  int usec = atoi(t + 20);
-  if (usec < 0 || usec > 999999) return 0;
-  if (strncmp(t, previous_str, time_len) == 0) {
-    return previous_time * 1000000 + usec;
-  }
-  struct tm a_tm;
-  a_tm.tm_zone = 0;
-  a_tm.tm_isdst = 0;
-  int x;
-  x = atoi(t);
-  if (x < 2024 || x > 2100) return 0;
-  a_tm.tm_year = x;
-  x = atoi(t + 5);
-  if (x < 1 || x > 12) return 0;
-  a_tm.tm_mon = x - 1;
-  x = atoi(t + 8);
-  if (x < 1 || x > 31) return 0;
-  a_tm.tm_mday = x;
-  x = atoi(t + 11);
-  if (x < 0 || x > 23) return 0;
-  a_tm.tm_hour = x;
-  x = atoi(t + 14);
-  if (x < 0 || x > 59) return 0;
-  a_tm.tm_min = x;
-  x = atoi(t + 17);
-  if (x < 0 || x > 60) return 0;
-  a_tm.tm_sec = x;
-  time_t timep = mktime(&a_tm);
-  previous_time = timep;
-  memcpy(previous_str, t, time_len);
-  return previous_time * 1000000 + usec;
-}
-
-
-
-void parse_entry_point(shared_ptr<ParserContext> context) {
-  cout << fmt::format("Starting parser thread start={:p} end={:p}", context->start, context->end) << endl;
-  assert(context->end[-1] == '\n');
-  // we expect this input:
-  // 2024-05-10 12:06:24.990831+00:00 client.607247697.0:5632274 write 4096~4096 2:d03a455a:::08b0f2fd5f20f504e76c2dd3d24683a1:head 2.1c0b
-  char* pos = context->start;
-  char* end = context->end;
-  while (pos != end) {
-    char* line_end = pos;
-    auto go_after_space = [&](char* p) -> char* {
-      while ((p != line_end) && (*(p++) != ' ')) {}
-      return p;
-    };
-    while (*line_end != '\n')
-      line_end++;
-    char* date = pos;
-    char* time = go_after_space(date);
-    char* who = go_after_space(time);
-    char* type = go_after_space(who);
-    char* range = go_after_space(type);
-    char* object = go_after_space(range);
-    char* collection = go_after_space(object);
-    pos = line_end + 1;
-    if (collection >= line_end) 
-      continue;
-    if (false) {
-      std::cout << 
-      std::string(date, time-date-1) << "/" <<
-      std::string(time, who-time-1) << "/" <<
-      std::string(who, type-who-1) << "/" <<
-      std::string(type, range-type-1) << "/" <<
-      std::string(range, object-range-1) << "/" <<
-      std::string(object, collection-object-1) << "/" <<
-      std::string(collection, line_end-collection-1) << "/" <<
-      std::endl;
-    }
-    if (who - date != sizeof("2024-05-10 12:06:24.990831+00:00"))
-      continue;
-    uint64_t at = timestamp_parser2(date);
-    if (at == 0)
-      continue;
-    char* who_end = (char*)memchr(who, '.', type-who-1);
-    if (who_end == nullptr)
-      continue;
-    who_end = (char*)memchr(who_end + 1, '.', type-who_end-1);
-    if (who_end == nullptr)
-      continue;
-    shared_ptr<string> who_ptr = make_shared<string>(who, who_end-who);
-    auto who_it = context->who_cache.find(who_ptr);
-    if (who_it == context->who_cache.end()) {
-      context->who_cache.insert(who_ptr);
-    } else {
-      who_ptr = *who_it;
-    }
-    shared_ptr<string> object_ptr = make_shared<string>(object, collection-object-1);
-    auto object_it = context->object_cache.find(object_ptr);
-    if (object_it == context->object_cache.end()) {
-      context->object_cache.insert(object_ptr);
-    } else {
-      object_ptr = *object_it;
-    }
-    op_type ot;
-    switch (type[0]) {
-      case 'r': {
-        ot = Read;
-        break;
-      }
-      case 's': {
-        ot = Read;
-        break;
-      }
-      case 'z': {
-        ot = Zero;
-        break;
-      }
-      case 't': {
-        ot = Truncate;
-        break;
-      }
-      case 'w': {
-        if (range-type-1 > 6) {
-          ot = WriteFull;
-        } else {
-          ot = Write;
-        }
-        break;
-      }
-      default: {
-        cout << "invalid type " << std::string(type, range-type-1) << endl;
-        exit(1);
-      }
-    }
-    shared_ptr<string> collection_ptr = make_shared<string>(collection, line_end-collection-1);
-    auto collection_it = context->collection_cache.find(collection_ptr);
-    if (collection_it == context->collection_cache.end()) {
-      context->collection_cache.insert(collection_ptr);
-    } else {
-      collection_ptr = *collection_it;
-    }
-    uint64_t offset = 0, length = 0;
-    char* endp;
-    offset = strtol(range,&endp,10);
-
-    if (ot != Truncate) {
-        // Truncate only has one number
-        if (*endp != '~')
-          continue;
-        length = atoi(endp+1);
-    }
-
-    context->max_buffer_size = max(length, context->max_buffer_size);
-
-    context->ops.push_back(Op(at, ot, offset, length, object_ptr, collection_ptr, who_ptr));
-  }
 }
 
 void worker_thread_entry(uint64_t id, uint64_t nworker_threads, vector<Op> &ops, uint64_t max_buffer_size, uint64_t io_depth, librados::IoCtx* io) {
@@ -452,7 +217,10 @@ int main(int argc, char** argv) {
       context->end = end;
       context->max_buffer_size = 0;
       parser_contexts.push_back(context);
-      parser_threads.push_back(std::thread(parse_entry_point, context));
+      auto op_action = [context](Op&& op) {
+        context->ops.push_back(op);
+      };
+      parser_threads.push_back(std::thread(parse_entry_point, context, op_action));
       start = end;
     }
     for (auto& t : parser_threads) {
