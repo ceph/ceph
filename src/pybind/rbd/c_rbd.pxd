@@ -194,6 +194,18 @@ cdef extern from "rbd/librbd.h" nogil:
         uint32_t site_statuses_count
         rbd_mirror_image_site_status_t *site_statuses
 
+    ctypedef enum rbd_mirror_group_state_t:
+        _RBD_MIRROR_GROUP_DISABLING "RBD_MIRROR_GROUP_DISABLING"
+        _RBD_MIRROR_GROUP_ENABLING "RBD_MIRROR_GROUP_ENABLING"
+        _RBD_MIRROR_GROUP_ENABLED "RBD_MIRROR_GROUP_ENABLED"
+        _RBD_MIRROR_GROUP_DISABLED "RBD_MIRROR_GROUP_DISABLED"
+
+    ctypedef struct rbd_mirror_group_info_t:
+        char *global_id
+        rbd_mirror_image_mode_t mirror_image_mode
+        rbd_mirror_group_state_t state
+        bint primary
+
     ctypedef enum rbd_lock_mode_t:
         _RBD_LOCK_MODE_EXCLUSIVE "RBD_LOCK_MODE_EXCLUSIVE"
         _RBD_LOCK_MODE_SHARED "RBD_LOCK_MODE_SHARED"
@@ -466,6 +478,20 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_mirror_image_info_list_cleanup(char **image_ids,
                                             rbd_mirror_image_info_t *info_entries,
                                             size_t num_entries)
+    int rbd_mirror_group_get_info(rados_ioctx_t gp_ioctx, const char *gp_name,
+                                  rbd_mirror_group_info_t *mirror_gp_info,
+                                  size_t info_size)
+    void rbd_mirror_group_get_info_cleanup(
+        rbd_mirror_group_info_t *mirror_gp_info)
+    int rbd_mirror_group_info_list(rados_ioctx_t gp_ioctx,
+                                   rbd_mirror_image_mode_t *mode_filter,
+                                   const char *start_id, size_t max,
+                                   char **group_ids,
+                                   rbd_mirror_group_info_t *info_entries,
+                                   size_t *num_entries);
+    void rbd_mirror_group_info_list_cleanup(
+        char **group_ids, rbd_mirror_group_info_t *info_entries,
+        size_t num_entries);
 
     int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
                               char *value, size_t *val_len)
