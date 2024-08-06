@@ -78,9 +78,6 @@
 [submodule "src/BLAKE3"]
 	path = src/BLAKE3
 	url = https://github.com/BLAKE3-team/BLAKE3.git
-[submodule "src/boost_redis"]
-	path = src/boost_redis
-	url = https://github.com/boostorg/redis.git
 [submodule "src/nvmeof/gateway"]
 	path = src/nvmeof/gateway
 	url = https://github.com/ceph/ceph-nvmeof.git
