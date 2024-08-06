@@ -46,7 +46,7 @@ for pidfile in $pfiles; do
   signal=""
   while ps -p $pid -o args= | grep -q -e $entity $extracheck ; do
     if [[ "$counter" -gt MAX_RETRIES ]]; then
-        signal="-9"
+        signal="-3"
     fi
     cmd="kill $signal $pid"
     printf "$cmd...\n"
