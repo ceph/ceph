@@ -211,12 +211,21 @@ class Device(object):
                         lv = _lv
                         break
         else:
+            filters = {}
             if self.path[0] == '/':
-                lv = lvm.get_single_lv(filters={'lv_path': self.path})
+                lv_mapper_path: str = self.path
+                field: str = 'lv_path'
+
+                if self.path.startswith('/dev/mapper') or self.path.startswith('/dev/dm-'):
+                    path = os.path.realpath(self.path) if self.path.startswith('/dev/mapper') else self.path
+                    lv_mapper_path = disk.get_lvm_mapper_path_from_dm(path)
+                    field = 'lv_dm_path'
+
+                filters = {field: lv_mapper_path}
             else:
                 vgname, lvname = self.path.split('/')
-                lv = lvm.get_single_lv(filters={'lv_name': lvname,
-                                                'vg_name': vgname})
+                filters = {'lv_name': lvname, 'vg_name': vgname}
+            lv = lvm.get_single_lv(filters=filters)
 
         if lv:
             self.lv_api = lv
