@@ -21,7 +21,7 @@ import sys
 from cpython cimport PyObject, ref, exc
 from libc cimport errno
 from libc.stdint cimport *
-from libc.stdlib cimport malloc, realloc, free
+from libc.stdlib cimport calloc, malloc, realloc, free
 from libc.string cimport strdup, memset
 cimport libcpp
 
@@ -99,6 +99,11 @@ RBD_MIRROR_IMAGE_DISABLING = _RBD_MIRROR_IMAGE_DISABLING
 RBD_MIRROR_IMAGE_ENABLED = _RBD_MIRROR_IMAGE_ENABLED
 RBD_MIRROR_IMAGE_DISABLED = _RBD_MIRROR_IMAGE_DISABLED
 RBD_MIRROR_IMAGE_CREATING = _RBD_MIRROR_IMAGE_CREATING
+
+RBD_MIRROR_GROUP_DISABLING = _RBD_MIRROR_GROUP_DISABLING
+RBD_MIRROR_GROUP_ENABLING = _RBD_MIRROR_GROUP_ENABLING
+RBD_MIRROR_GROUP_ENABLED = _RBD_MIRROR_GROUP_ENABLED
+RBD_MIRROR_GROUP_DISABLED = _RBD_MIRROR_GROUP_DISABLED
 
 MIRROR_IMAGE_STATUS_STATE_UNKNOWN = _MIRROR_IMAGE_STATUS_STATE_UNKNOWN
 MIRROR_IMAGE_STATUS_STATE_ERROR = _MIRROR_IMAGE_STATUS_STATE_ERROR
@@ -1702,6 +1707,17 @@ class RBD(object):
         """
         return MirrorImageInfoIterator(ioctx, mode_filter)
 
+    def mirror_group_info_list(self, ioctx, mode_filter=None):
+        """
+        Iterate over the mirror group ids of a pool.
+
+        :param ioctx: determines which RADOS pool is read
+        :param mode_filter: list groups in this group mirror mode
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`MirrorGroupInfoIterator`
+        """
+        return MirrorGroupInfoIterator(ioctx, mode_filter)
+
     def pool_metadata_get(self, ioctx, key):
         """
         Get pool metadata for the given key.
@@ -2957,6 +2973,37 @@ cdef class Group(object):
             ret = rbd_group_snap_rollback(self._ioctx, self._name, _name)
         if ret != 0:
             raise make_ex(ret, 'error rolling back group to snapshot', group_errno_to_exception)
+
+    def mirror_group_get_info(self):
+        """
+        Get mirror info of the group.
+
+        :returns: dict - contains the following keys:
+
+            * ``global_id`` (str) - group global id
+
+            * ``mode`` (int) - mirror mode
+
+            * ``state`` (int) - mirror state
+
+            * ``primary`` (bool) - is group primary
+        """
+        cdef rbd_mirror_group_info_t c_info
+        with nogil:
+            ret = rbd_mirror_group_get_info(self._ioctx, self._name, &c_info,
+                                            sizeof(c_info))
+        if ret != 0:
+            raise make_ex(ret,
+                          'error getting mirror info of group %s' % self._name,
+                          group_errno_to_exception)
+        info = {
+            'global_id'  : decode_cstr(c_info.global_id),
+            'image_mode' : int(c_info.mirror_image_mode),
+            'state'      : int(c_info.state),
+            'primary'    : c_info.primary,
+            }
+        rbd_mirror_group_get_info_cleanup(&c_info)
+        return info
 
 def requires_not_closed(f):
     def wrapper(self, *args, **kwargs):
@@ -6168,3 +6215,82 @@ cdef class GroupSnapIterator(object):
             rbd_group_snap_list2_cleanup(self.group_snaps,
                                          self.num_group_snaps)
             free(self.group_snaps)
+
+cdef class MirrorGroupInfoIterator(object):
+    """
+    Iterator over mirror group info in a pool.
+
+    Yields ``(group_id, info)`` tuple.
+    """
+
+    cdef:
+        rados_ioctx_t ioctx
+        rbd_mirror_image_mode_t mode_filter
+        rbd_mirror_image_mode_t *mode_filter_ptr
+        size_t max_read
+        char *last_read
+        char **gp_ids
+        rbd_mirror_group_info_t *gp_info_entries
+        size_t size
+
+    def __init__(self, ioctx, mode_filter):
+        self.ioctx = convert_ioctx(ioctx)
+        if mode_filter is not None:
+            self.mode_filter = mode_filter
+            self.mode_filter_ptr = &self.mode_filter
+        else:
+            self.mode_filter_ptr = NULL
+        self.max_read = 1024
+        self.last_read = strdup("")
+        self.gp_ids = <char **>calloc(sizeof(char *), self.max_read)
+        self.gp_info_entries = <rbd_mirror_group_info_t *>calloc(
+            sizeof(rbd_mirror_group_info_t), self.max_read)
+        self.size = 0
+
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while self.size > 0:
+            for i in range(self.size):
+                yield (decode_cstr(self.gp_ids[i]),
+                       {
+                           'global_id' : decode_cstr(self.gp_info_entries[i].global_id),
+                           'mode'      : int(self.gp_info_entries[i].mirror_image_mode),
+                           'state'     : int(self.gp_info_entries[i].state),
+                           'primary'   : self.gp_info_entries[i].primary,
+                       })
+            if self.size < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def __dealloc__(self):
+        rbd_mirror_group_info_list_cleanup(self.gp_ids, self.gp_info_entries,
+                                           self.size)
+        if self.last_read:
+            free(self.last_read)
+        if self.gp_ids:
+            free(self.gp_ids)
+        if self.gp_info_entries:
+            free(self.gp_info_entries)
+
+    def get_next_chunk(self):
+        if self.size > 0:
+            rbd_mirror_group_info_list_cleanup(self.gp_ids,
+                                               self.gp_info_entries, self.size)
+            self.size = 0
+
+        with nogil:
+            ret = rbd_mirror_group_info_list(self.ioctx, self.mode_filter_ptr,
+                                             self.last_read, self.max_read,
+                                             self.gp_ids, self.gp_info_entries,
+                                             &self.size)
+        if ret < 0:
+            raise make_ex(ret, 'error listing mirror group info',
+                          group_errno_to_exception)
+
+        free(self.last_read)
+        if self.size > 0:
+            last_read = cstr(self.gp_ids[self.size - 1], 'last_read')
+            self.last_read = strdup(last_read)
+        else:
+            self.last_read = strdup("")
