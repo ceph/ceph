@@ -1,0 +1,38 @@
+######################################################################
+# Example test for the RBD engine.
+#
+# Test job that demonstrates how to use the latency target
+# profiling. Fio will find the queue depth between 1..128
+# that fits within the latency constraints of this 4k random
+# read workload.
+#
+# NOTE: Make sure you define the env vars for volume name ${RBD_NAME},
+#       the number of FIO jobs ${NUM_JOBS} and the FIO iodepth ${IO_DEPTH}.
+######################################################################
+[global]
+#logging
+write_iops_log=${LOG_NAME}
+write_bw_log=${LOG_NAME}
+write_lat_log=${LOG_NAME}
+ioengine=rbd
+clientname=admin
+pool=rbd
+rw=randread
+rbdname=${RBD_NAME}
+bs=4k
+group_reporting=1
+#new_group
+#Use posix threads instead of fork
+thread=1
+random_generator=lfsr
+direct=1
+iodepth=128
+# Set max acceptable latency to 10msec
+latency_target=10000
+# profile over a 5s window
+latency_window=5000000
+# 99.9% of IOs must be below the target
+latency_percentile=99.9
+
+[randread]
+numjobs=${NUM_JOBS} # num concurrent clients/processes

@@ -1,0 +1,77 @@
+\documentclass[]{report}
+\usepackage{graphicx}
+\usepackage[a4paper, total={6.5in, 9.5in}]{geometry}
+\makeatletter
+\def\@makechapterhead#1{%
+  {\parindent \z@ \raggedright \normalfont
+    \ifnum \c@secnumdepth >\m@ne
+        \huge\bfseries \thechapter.\ % <-- Chapter # (without "Chapter")
+    \fi
+    \interlinepenalty\@M
+    #1\par\nobreak% <------------------ Chapter title
+    \vskip 20\p@% <------------------ Space between chapter title and first paragraph
+  }}
+\makeatother
+
+\begin{document}
+
+%\title{Automatic Generation of Ceph Performance Reports}
+%\author{Jos\'e J Palacios P\'erez}
+%\maketitle
+\input{title}
+
+\chapter{Classic vs Crimson 1OSD, single reactor, 4k random read}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.9\textwidth]{crimson_1osd_8fio_rc_1procs_randread_iops_vs_lat_vs_cpu_sys.png}
+\caption{System CPU utilisation}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\textwidth, scale=1]{crimson_1osd_8fio_rc_1procs_randread_iops_vs_lat_vs_cpu_usr.png}
+\caption{User CPU utilisation}
+\end{figure}
+
+%This is a table:
+%    \input{table-1}
+\chapter{Classic vs Crimson 1OSD, single reactor, 4k random write}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.9\textwidth]{crimson_1osd_8fio_rc_1procs_randwrite_iops_vs_lat_vs_cpu_sys.png}
+\caption{System CPU utilisation}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\textwidth, scale=1]{crimson_1osd_8fio_rc_1procs_randwrite_iops_vs_lat_vs_cpu_usr.png}
+\caption{User CPU utilisation}
+\end{figure}
+
+\chapter{Classic vs Crimson 1OSD, single reactor, 64k sequential read}
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\textwidth, scale=1]{crimson_1osd_8fio_rc_1procs_seqread_iops_vs_lat_vs_cpu_sys.png}
+\caption{System CPU utilisation}
+\end{figure}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.9\textwidth]{crimson_1osd_8fio_rc_1procs_seqread_iops_vs_lat_vs_cpu_usr.png}
+\caption{User CPU utilisation}
+\end{figure}
+
+\chapter{Classic vs Crimson 1OSD, single reactor, 64k sequential write}
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.9\textwidth]{crimson_1osd_8fio_rc_1procs_seqwrite_iops_vs_lat_vs_cpu_sys.png}
+\caption{System CPU utilisation}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\textwidth, scale=1]{crimson_1osd_8fio_rc_1procs_seqwrite_iops_vs_lat_vs_cpu_usr.png}
+\caption{User CPU utilisation}
+\end{figure}
+
+\end{document}

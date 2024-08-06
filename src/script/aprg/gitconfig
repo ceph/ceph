@@ -1,0 +1,148 @@
+# This is Git's per-user configuration file.
+[user]
+# Please adapt and uncomment the following lines:
+    name = Jose J Palacios-Perez
+    email = perezjos@uk.ibm.com
+
+[color]
+    ui = auto
+
+[color "branch"]
+    current = yellow reverse
+    local = yellow
+    remote = green
+
+[color "diff"]
+    meta = yellow bold
+    frag = magenta bold
+    old = red bold
+    new = green bold
+
+[color "status"]
+    added = yellow
+    changed = green
+    untracked = cyan
+
+#Highlight whitespace in diffs
+
+[color]
+    ui = true
+
+[color "diff"]
+    whitespace = red reverse
+
+[core]
+    whitespace=fix,-indent-with-non-tab,trailing-space,cr-at-eol
+
+#Add aliases to your ~/.gitconfig file:
+
+[alias]
+    st = status
+    ci = commit
+    br = branch
+    co = checkout
+    df = diff
+    dc = diff --cached
+    lg = log -p
+    lp = log --pretty=oneline
+    lol = log --graph --decorate --pretty=format:'%C(yellow) %h - %cE %Cred %cr %Creset: %s'
+    d = difftool
+    ls = ls-files
+    # list files which have changed since REVIEW_BASE
+    # (REVIEW_BASE defaults to 'master' in my zshrc)
+    files = !git diff --name-only $(git merge-base HEAD \"$REVIEW_BASE\")
+
+    # Same as above, but with a diff stat instead of just names
+    # (better for interactive use)
+    stat = !git diff --stat $(git merge-base HEAD \"$REVIEW_BASE\")
+
+      # Open all files changed since REVIEW_BASE in Vim tabs
+      # Then, run fugitive's :Gdiff in each tab, and finally
+      # tell vim-gitgutter to show +/- for changes since REVIEW_BASE
+      #review = !vim -p $(git files) +\"tabdo Gdiff $REVIEW_BASE\" +\"let g:gitgutter_diff_base = '$REVIEW_BASE'\"
+      review = !vim -p $(git files) +\"tabdo Gdiff $REVIEW_BASE\" 
+      #
+      # Same as the above, except specify names of files as arguments,
+      # instead of opening all files:
+      # git reviewone foo.js bar.js
+      reviewone = !vim -p +\"tabdo Gdiff $REVIEW_BASE\" +\"let g:gitgutter_diff_base = '$REVIEW_BASE'\"
+      # reviewone = !vim -p +\"tabdo Gdiff $REVIEW_BASE\"
+
+    # Log that shows titles of last 16 commits
+    l = "log -16 --color=always --all --topo-order --pretty='%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
+
+    # Log that starts a pager with titles of all the commits in your tree
+    ll = log --color=always --all --topo-order --pretty='%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit
+
+    # Log that shows the last 10 commits as a graph
+    lg = "log -10 --color=always --all --graph --topo-order --pretty='%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --date=relative"
+
+    # Log that shows all commits as a graph (using a pager)
+    lgl = "log --color=always --all --graph --topo-order --pretty='%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+
+    # Show outgoing commits
+    #out = "log @{u}.."
+
+    # Print the title of the current branch; sometimes useful for scripting
+    #currentbranch = "!git branch --contains HEAD | grep '*' | tr -s ' ' | cut -d ' ' -f2"
+
+    # Better diffs for prose
+    #wdiff = "diff --color-words"
+
+    # Safer pulls; don't do anything other than a fast forward on merge
+    #pull = "pull --ff-only"
+
+    # Amend last commit without modifying commit message
+    #amend = "!git log -n 1 --pretty=tformat:%s%n%n%b | git commit -F - --amend"
+
+    # Create a commit that will be automatically squashed as a fixup when you
+    # run `git rebase --autosquash`
+    #fixup = "commit --fixup=HEAD
+
+    # Push without LFS
+    # eg. git push --no-verify -vvv -f --progress svcdev3 SV-92470
+    pf  = push --no-verify -v -f --progress 
+
+    # Revert a change to a file in a commt:
+    # git show $COMMIT -- <file_path> | git apply -R
+[diff]
+    tool = vimdiff
+[merge]
+    tool = diffconflicts
+    conflictstyle = diff3
+[difftool]
+    prompt = false
+[alias]
+    d = difftool
+    lol = log --graph --decorate --pretty=format:'%C(yellow) %h - %cE %Cred %cr %Creset: %s'
+    sw = switch
+[core]
+    editor = vim
+    #excludesfile = /gsa/hurgsa/home/j/j/jjperez/.gitignore
+    excludesfile = ~/.gitignore
+    #autocrlf = input
+    autocrlf = input
+[mergetool]
+    prompt = false
+    keepBackup = false
+    tool = diffconflicts
+[http]
+    sslVerify = false
+[credential]
+    helper = store
+[lfs]
+    allowincompletepush = true
+[push]
+    default = current
+[branch]
+    autosetuprebase = always
+[mergetool "diffconflicts"]
+    ##cmd = vimdiff -c DiffConflictsWithHistory \"$MERGED\" \"$BASE\" \"$LOCAL\" \"$REMOTE\"
+    cmd = diffconflicts vimdiff $BASE $LOCAL $REMOTE $MERGED
+    trustExitCode = true
+    keepBackup = false
+[filter "lfs"]
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
+    required = true
