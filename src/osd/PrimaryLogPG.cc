@@ -6140,11 +6140,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 						  info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
-	osd_op.outdata = std::move(bl);
+	auto bl_length = bl.length();
+        osd_op.outdata = std::move(bl);
 	if (r < 0)
 	  result = r;
 	else
-	  ctx->delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
+	  ctx->delta_stats.num_rd_kb += shift_round_up(bl_length, 10);
 	ctx->delta_stats.num_rd++;
 	dout(10) << " map_extents done on object " << soid << dendl;
       }
