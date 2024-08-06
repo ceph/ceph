@@ -657,7 +657,8 @@ public:
                             int64_t offset, bool write,
                             Context *onfinish = nullptr,
                             bufferlist *blp = nullptr,
-                            bool do_fsync = false, bool syncdataonly = false);
+                            bool do_fsync = false, bool syncdataonly = false,
+                            bool zerocopy = false);
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
@@ -1700,17 +1701,20 @@ private:
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
           int64_t offset, uint64_t size, Inode *in);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
-          const struct iovec *iov, int iovcnt, Context *onfinish = nullptr,
-          bool do_fsync = false, bool syncdataonly = false);
+          const struct iovec *iov = nullptr, int iovcnt = 0,
+          Context *onfinish = nullptr,
+          bool do_fsync = false, bool syncdataonly = false,
+          bool zerocopy = false);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                  int iovcnt, int64_t offset,
                                  bool write, bool clamp_to_int,
                                  Context *onfinish = nullptr,
                                  bufferlist *blp = nullptr,
-                                 bool do_fsync = false, bool syncdataonly = false);
+                                 bool do_fsync = false, bool syncdataonly = false,
+                                 bool zerocopy = false);
   int _preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
                       int64_t offset, bool write, Context *onfinish = nullptr,
-                      bufferlist *blp = nullptr);
+                      bufferlist *blp = nullptr, bool zerocopy = false);
   int _flush(Fh *fh);
   void nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
   int _fsync(Fh *fh, bool syncdataonly);
