@@ -515,8 +515,7 @@ int RGWLCCloudStreamPut::init() {
 }
 
 bool RGWLCCloudStreamPut::keep_attr(const string& h) {
-  return (keep_headers.find(h) != keep_headers.end() ||
-      boost::algorithm::starts_with(h, "X_AMZ_"));
+  return (keep_headers.find(h) != keep_headers.end());
 }
 
 void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
@@ -532,6 +531,12 @@ void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
   for (auto& hi : rest_obj.attrs) {
     if (keep_attr(hi.first)) {
       attrs.insert(hi);
+    } else {
+      std::string s1 = boost::algorithm::to_lower_copy(hi.first);
+      const char* k = std::strstr(s1.c_str(), "x-amz");
+      if (k) {
+        attrs[k] = hi.second;
+      }
     }
   }
 
@@ -634,6 +639,8 @@ void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
 
   /* New attribute to specify its transitioned from RGW */
   attrs["x-amz-meta-rgwx-source"] = "rgw";
+  attrs["x-rgw-cloud"] = "true";
+  attrs["x-rgw-cloud-keep-attrs"] = "true";
 
   char buf[32];
   snprintf(buf, sizeof(buf), "%llu", (long long)obj_properties.versioned_epoch);

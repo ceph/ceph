@@ -170,6 +170,7 @@ public:
     bool get_op{false};
     bool rgwx_stat{false};
     bool sync_manifest{false};
+    bool sync_cloudtiered{false};
 
     bool skip_decrypt{true};
     RGWHTTPStreamRWRequest::ReceiveCB *cb{nullptr};
@@ -185,7 +186,8 @@ public:
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
+              bool skip_decrypt, bool sync_cloudtiered,
+              bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req,
                        std::string *etag,
                        ceph::real_time *mtime,

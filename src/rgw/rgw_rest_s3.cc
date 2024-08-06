@@ -301,6 +301,9 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     skip_decrypt = s->info.args.exists(RGW_SYS_PARAM_PREFIX "skip-decrypt");
   }
 
+  // multisite sync requests should fetch cloudtiered objects
+  sync_cloudtiered = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-cloudtiered");
+
   return RGWGetObj_ObjStore::get_params(y);
 }
 
