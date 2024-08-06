@@ -92,6 +92,9 @@ class ValidRawDevice(ValidDevice):
         super().get_device(dev_path)
         return self._format_device(self._is_valid_device())
 
+    def _format_device(self, device: Device) -> str:
+        return device.path
+
     def _is_valid_device(self, raise_sys_exit=True):
         out, err, rc = process.call([
 	    'ceph-bluestore-tool', 'show-label',

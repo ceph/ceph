@@ -1,6 +1,6 @@
 import pytest
 from ceph_volume.util import disk
-from mock.mock import patch, MagicMock
+from mock.mock import patch, Mock, MagicMock, mock_open
 
 
 class TestFunctions:
@@ -37,6 +37,11 @@ class TestFunctions:
     def test_is_partition(self):
         assert disk.is_partition('sda1')
 
+
+    @patch('os.path.exists', Mock(return_value=True))
+    def test_get_lvm_mapper_path_from_dm(self):
+        with patch('builtins.open', mock_open(read_data='test--foo--vg-test--foo--lv')):
+            assert disk.get_lvm_mapper_path_from_dm('/dev/dm-123') == '/dev/mapper/test--foo--vg-test--foo--lv'
 
 class TestLsblkParser(object):
 

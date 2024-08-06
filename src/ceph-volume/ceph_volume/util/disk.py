@@ -1104,3 +1104,28 @@ def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
         except KeyError:
             pass
     return result
+
+
+def get_lvm_mapper_path_from_dm(path: str, sys_block: str = '/sys/block') -> str:
+    """_summary_
+    Retrieve the logical volume path for a given device.
+
+    This function takes the path of a device and returns the corresponding
+    logical volume path by reading the 'dm/name' file within the sysfs
+    directory.
+
+    Args:
+        path (str): The device path for which to retrieve the logical volume path.
+        sys_block (str, optional): The base sysfs block directory. Defaults to '/sys/block'.
+
+    Returns:
+        str: The device mapper path in the form of '/dev/dm-X'.
+    """
+    result: str = ''
+    dev: str = os.path.basename(path)
+    sys_block_path: str = os.path.join(sys_block, dev, 'dm/name')
+    if os.path.exists(sys_block_path):
+        with open(sys_block_path, 'r') as f:
+            content: str = f.read()
+            result = f'/dev/mapper/{content}'
+    return result
