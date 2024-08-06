@@ -1,0 +1,268 @@
+<ng-template #emptyCluster>
+  <ng-container class="container h-75"
+                *ngIf="managedByConfig$ | async as managedByConfig">
+    <div class="row h-100 justify-content-center align-items-center">
+      <div class="blank-page">
+        <i class="mx-auto d-block"
+           [ngClass]="[icons.large, icons.wrench]">
+        </i>
+      <div class="mt-4 text-center"
+           *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
+        <h3 class="fw-bold">Connect Cluster</h3>
+        <h4 class="mt-3">Upgrade your current cluster to a multi-cluster setup effortlessly.
+            Click on the "Connect Cluster" button to begin the process.</h4>
+      </div>
+      <div class="mt-4 text-center"
+           *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length > 0">
+        <h4 class="mt-3">This cluster is already managed by cluster -
+          <a target="_blank"
+             [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
+             {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
+            <i class="fa fa-external-link"></i>
+          </a>
+        </h4>
+      </div>
+      <div class="mt-4"
+           *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0">
+        <div class="text-center">
+          <button class="btn btn-primary"
+                  (click)="openRemoteClusterInfoModal()">
+            <i class="mx-auto"
+               [ngClass]="icons.add">
+            </i> Connect Cluster
+          </button>
+        </div>
+      </div>
+      </div>
+    </div>
+  </ng-container>
+</ng-template>
+
+<ng-template #nametpl>
+  <div class="datatable-body-cell-label">
+    <span title="{{cluster}}">
+      <a href="#">
+        {{cluster}}
+      </a>
+    </span>
+  </div>
+</ng-template>
+
+<ng-template #loadingTpl>
+  <div class="container h-75">
+    <div class="row h-100 justify-content-center align-items-center">
+      <div class="blank-page">
+        <i class="mx-auto d-block"
+           [ngClass]="[icons.large3x, icons.spinner, icons.spin]">
+        </i>
+        <p class="text-center mt-3"
+           i18n>Loading data, Please wait...</p>
+      </div>
+    </div>
+  </div>
+</ng-template>
+
+<ng-container *ngIf="managedByConfig$ | async as managedByConfig">
+  <div class="container-fluid h-100 p-4"
+       *ngIf="isMultiCluster && managedByConfig['MANAGED_BY_CLUSTERS'].length === 0; else emptyCluster">
+    <ng-container *ngIf="!loading; else loadingTpl">
+      <cd-alert-panel type="info"
+                      spacingClass="mb-3"
+                      [showTitle]="false"
+                      size="slim"
+                      *ngIf="showDeletionMessage"
+                      (dismissed)="onDismissed()"
+                      [dismissible]="true"
+                      i18n>
+        <p>Please note that the data for the disconnected cluster will be visible for a duration of ~ 5 minutes. After this period, it will be automatically removed.</p>
+      </cd-alert-panel>
+      <cd-card-group>
+        <div class="col-lg-4">
+          <div class="row">
+            <cd-card cardTitle="Clusters"
+                     i18n-title
+                     class="col-sm-6 m-0 p-0 ps-4 pe-2"
+                     aria-label="Clusters"
+                     [fullHeight]="true"
+                     *ngIf="queriesResults.CLUSTER_COUNT && queriesResults.CLUSTER_COUNT[0]">
+              <span class="text-center">
+                <h3 *ngIf="queriesResults['HEALTH_ERROR_COUNT'][0][1] === '0' && queriesResults['HEALTH_OK_COUNT'][0][1] === '0' && queriesResults['HEALTH_WARNING_COUNT'][0][1] === '0'">{{ queriesResults.CLUSTER_COUNT[0][1] }}</h3>
+                <h3 class="text-danger"
+                    *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'">
+                  <i [ngClass]="icons.danger"></i>
+                  {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
+                </h3>
+                <h3 class="text-warning"
+                    *ngIf="queriesResults.HEALTH_WARNING_COUNT[0][1] !== '0'">
+                  <i [ngClass]="icons.warning"></i>
+                    {{ queriesResults.HEALTH_WARNING_COUNT[0][1] }}
+                </h3>
+                <h3 class="text-danger"
+                    *ngIf="queriesResults.HEALTH_ERROR_COUNT[0][1] !== '0'">
+                  <i [ngClass]="icons.danger"></i>
+                  {{ queriesResults.HEALTH_ERROR_COUNT[0][1] }}
+                </h3>
+                <h3 class="text-success"
+                    *ngIf="queriesResults.HEALTH_OK_COUNT[0][1] !== '0'">
+                  <i [ngClass]="icons.success"></i>
+                    {{ queriesResults.HEALTH_OK_COUNT[0][1] }}
+                </h3>
+              </span>
+            </cd-card>
+            <cd-card cardTitle="Alerts"
+                     i18n-title
+                     class="col-sm-6 m-0 p-0 ps-2 pe-2"
+                     aria-label="Alerts"
+                     [fullHeight]="true"
+                     *ngIf="queriesResults['ALERTS_COUNT'] && queriesResults['ALERTS_COUNT'][0]">
+              <span class="text-center">
+                <h3 *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0][1] === '0' && queriesResults['WARNING_ALERTS_COUNT'][0][1] === '0'">
+                    {{ queriesResults['ALERTS_COUNT'][0][1] }}
+                </h3>
+                <h3 class="text-danger"
+                    *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0][1] !== '0'">
+                  <i [ngClass]="icons.danger"></i>
+                  {{ queriesResults['CRITICAL_ALERTS_COUNT'][0][1] }}
+                </h3>
+                <h3 class="text-warning"
+                    *ngIf="queriesResults['WARNING_ALERTS_COUNT'][0][1] !== '0'">
+                  <i [ngClass]="icons.warning"></i>
+                    {{ queriesResults['WARNING_ALERTS_COUNT'][0][1] }}
+                </h3>
+              </span>
+            </cd-card>
+          </div>
+          <div class="row pt-3">
+            <cd-card cardTitle="Connection Errors"
+                     i18n-title
+                     class="col-sm-6 m-0 p-0 ps-4 pe-2"
+                     aria-label="Connection Errors">
+              <span class="text-center">
+                <h3 [ngClass]="{'text-danger': connectionErrorsCount > 0}">
+                  <i [ngClass]="icons.danger"
+                     *ngIf="connectionErrorsCount > 0"></i>
+                  {{ connectionErrorsCount }}
+                </h3>
+              </span>
+            </cd-card>
+            <cd-card cardTitle="Hosts"
+                     i18n-title
+                     class="col-sm-6 m-0 p-0 ps-2 pe-2"
+                     aria-label="Total number of hosts"
+                     *ngIf="queriesResults['TOTAL_HOSTS'] && queriesResults['TOTAL_HOSTS'][0]">
+              <span class="text-center">
+                <h3>{{ queriesResults['TOTAL_HOSTS'][0][1] }}</h3>
+              </span>
+            </cd-card>
+          </div>
+
+          <div class="row pt-3">
+            <cd-card cardTitle="Capacity"
+                     i18n-title
+                     class="col-sm-12 m-0 p-0 ps-4 pe-2"
+                     aria-label="Capacity card"
+                     *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'] && queriesResults['TOTAL_CLUSTERS_CAPACITY'][0] && queriesResults['TOTAL_USED_CAPACITY'] && queriesResults['TOTAL_USED_CAPACITY'][0]">
+              <ng-container class="ms-4 me-4">
+                <cd-dashboard-pie [data]="{max: queriesResults['TOTAL_CLUSTERS_CAPACITY'][0][1], current: queriesResults['TOTAL_USED_CAPACITY'][0][1]}"
+                                  lowThreshold=".95"
+                                  highThreshold=".99">
+                </cd-dashboard-pie>
+              </ng-container>
+            </cd-card>
+          </div>
+        </div>
+
+        <div class="col-sm-8 ps-2">
+          <cd-card [cardTitle]="'Top ' + COUNT_OF_UTILIZATION_CHARTS + ' Cluster Utilization'"
+                   i18n-title
+                   [fullHeight]="true"
+                   aria-label="Cluster Utilization card"
+                   *ngIf="clusters">
+            <div class="ms-4 me-4 mt-0">
+              <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event, 'clusterUtilization')">
+              </cd-dashboard-time-selector>
+              <cd-dashboard-area-chart  chartTitle="Capacity"
+                                        [labelsArray]="capacityLabels"
+                                        isMultiCluster="true"
+                                        dataUnits="B"
+                                        [dataArray]="capacityValues"
+                                        [truncateLabel]="true"
+                                        *ngIf="capacityLabels && capacityValues">
+              </cd-dashboard-area-chart>
+              <cd-dashboard-area-chart chartTitle="IOPS"
+                                       [labelsArray]="iopsLabels"
+                                       isMultiCluster="true"
+                                       dataUnits=""
+                                       decimals="0"
+                                       [dataArray]="iopsValues"
+                                       [truncateLabel]="true"
+                                       *ngIf="iopsLabels && iopsValues">
+              </cd-dashboard-area-chart>
+              <cd-dashboard-area-chart chartTitle="Throughput"
+                                       [labelsArray]="throughputLabels"
+                                       isMultiCluster="true"
+                                       dataUnits="B/s"
+                                       decimals="2"
+                                       [dataArray]="throughputValues"
+                                       [truncateLabel]="true"
+                                       *ngIf="throughputLabels && throughputLabels">
+              </cd-dashboard-area-chart>
+            </div>
+          </cd-card>
+        </div>
+      </cd-card-group>
+
+      <cd-card-group>
+        <div class="col-lg-12 mt-3 m-0 p-0 ps-4 pe-4">
+          <cd-table [data]="clusters"
+                    [columns]="columns"
+                    [limit]="5"
+                    *ngIf="clusters">
+          </cd-table>
+        </div>
+      </cd-card-group>
+
+      <cd-card-group>
+        <div class="col-lg-12 mb-4 m-0 p-0 ps-4 pe-4">
+          <div class="row">
+            <cd-card [cardTitle]="'Top ' + COUNT_OF_UTILIZATION_CHARTS + ' Pools Utilization'"
+                     i18n-title
+                     aria-label="Pools Utilization card"
+                     *ngIf="clusters">
+              <div class="ms-4 me-4 mt-0">
+                <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event, 'poolUtilization')">
+                </cd-dashboard-time-selector>
+                <cd-dashboard-area-chart  chartTitle="Capacity"
+                                          [labelsArray]="poolCapacityLabels"
+                                          dataUnits="B"
+                                          isMultiCluster="true"
+                                          [dataArray]="poolCapacityValues"
+                                          *ngIf="poolCapacityLabels && poolCapacityValues"
+                                          [truncateLabel]="true">
+                </cd-dashboard-area-chart>
+                <cd-dashboard-area-chart chartTitle="IOPS"
+                                         [labelsArray]="poolIOPSLabels"
+                                         dataUnits=""
+                                         decimals="0"
+                                         isMultiCluster="true"
+                                         [dataArray]="poolIOPSValues"
+                                         *ngIf="poolIOPSLabels && poolIOPSValues"
+                                         [truncateLabel]="true">
+                </cd-dashboard-area-chart>
+                <cd-dashboard-area-chart chartTitle="Client Throughput"
+                                         [labelsArray]="poolThroughputLabels"
+                                         dataUnits="B/s"
+                                         decimals="2"
+                                         isMultiCluster="true"
+                                         [dataArray]="poolThroughputValues"
+                                         *ngIf="poolThroughputLabels && poolThroughputValues"
+                                         [truncateLabel]="true">
+                </cd-dashboard-area-chart>
+              </div>
+            </cd-card>
+          </div>
+        </div>
+      </cd-card-group>
+    </ng-container>
+  </div>
+</ng-container>
