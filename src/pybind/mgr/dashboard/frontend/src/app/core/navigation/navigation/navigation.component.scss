@@ -32,6 +32,13 @@ cds-header-item {
   margin-left: 6rem;
 }
 
+::ng-deep .cds--header__menu-title[aria-expanded='true'] + .cds--header__menu {
+  max-height: 300px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: auto;
+}
+
 ::ng-deep cd-navigation .cd-navbar-top {
   .cd-navbar-brand {
     background: vv.$secondary;
