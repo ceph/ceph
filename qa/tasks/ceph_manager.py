@@ -870,11 +870,16 @@ class OSDThrasher(Thrasher):
             self.ceph_manager.raw_cluster_cmd('osd', 'primary-affinity',
                                               str(osd), str(1))
 
-    def do_join(self):
+    def stop(self):
+        """
+        Stop the thrasher
+        """
+        self.stopping = True
+
+    def join(self):
         """
         Break out of this Ceph loop
         """
-        self.stopping = True
         self.thread.get()
         if self.sighup_delay:
             self.log("joining the do_sighup greenlet")
@@ -888,6 +893,13 @@ class OSDThrasher(Thrasher):
         if self.noscrub_toggle_delay:
             self.log("joining the do_noscrub_toggle greenlet")
             self.noscrub_toggle_thread.join()
+
+    def stop_and_join(self):
+        """
+        Stop and join the thrasher
+        """
+        self.stop()
+        return self.join()
 
     def grow_pool(self):
         """

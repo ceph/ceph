@@ -157,12 +157,25 @@ class MonitorThrasher(Thrasher):
         """
         self.logger.info(x)
 
-    def do_join(self):
+    def stop(self):
+        """
+        Stop the thrashing process.
+        """
+        self.stopping = True
+
+    def join(self):
         """
         Break out of this processes thrashing loop.
         """
         self.stopping.set()
         self.thread.get()
+
+    def stop_and_join(self):
+        """
+        Stop the thrashing process and join the thread.
+        """
+        self.stop()
+        return self.join()
 
     def should_thrash_store(self):
         """
@@ -450,6 +463,6 @@ def task(ctx, config):
         yield
     finally:
         log.info('joining mon_thrasher')
-        thrash_proc.do_join()
+        thrash_proc.stop_and_join()
         mons = _get_mons(ctx)
         manager.wait_for_mon_quorum_size(len(mons))
