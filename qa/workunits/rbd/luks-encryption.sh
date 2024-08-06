@@ -28,7 +28,6 @@ function drop_caches {
 
 function test_encryption_format() {
   local format=$1
-  clean_up_cryptsetup
 
   # format
   rbd encryption format testimg $format /tmp/passphrase
@@ -49,10 +48,13 @@ function test_encryption_format() {
   dd if=/tmp/testdata2 of=/dev/mapper/cryptsetupdev conv=fsync bs=1M
   dd if=$LIBRBD_DEV of=/tmp/cmpdata iflag=direct bs=4M count=4
   cmp -n 16MB /tmp/cmpdata /tmp/testdata2
+
+  _sudo rbd device unmap -t nbd $LIBRBD_DEV
+  sudo cryptsetup close cryptsetupdev
 }
 
 function get_nbd_device_paths {
-	rbd device list -t nbd | tail -n +2 | egrep "\s+rbd\s+testimg\s+" | awk '{print $5;}'
+  rbd device list -t nbd | tail -n +2 | egrep "\s+rbd\s+testimg" | awk '{print $5;}'
 }
 
 function clean_up_cryptsetup() {
@@ -62,8 +64,8 @@ function clean_up_cryptsetup() {
 function clean_up {
   sudo rm -f $TMP_FILES
   clean_up_cryptsetup
-	for device in $(get_nbd_device_paths); do
-	  _sudo rbd device unmap -t nbd $device
+  for device in $(get_nbd_device_paths); do
+    _sudo rbd device unmap -t nbd $device
   done
 	rbd ls | grep testimg > /dev/null && rbd rm testimg || true
 }
@@ -98,5 +100,8 @@ RAW_DEV=$(_sudo rbd -p rbd map testimg -t nbd)
 
 test_encryption_format luks1
 test_encryption_format luks2
+
+_sudo rbd device unmap -t nbd $RAW_DEV
+rbd rm testimg
 
 echo OK
