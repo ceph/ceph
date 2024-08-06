@@ -5696,7 +5696,15 @@ bool Server::xlock_policylock(const MDRequestRef& mdr, CInode *in, bool want_lay
 CInode* Server::try_get_auth_inode(const MDRequestRef& mdr, inodeno_t ino)
 {
   CInode *in = mdcache->get_inode(ino);
-  if (!in || in->state_test(CInode::STATE_PURGING)) {
+  /*
+   * The inode maybe exported to another rank, we need to retry to
+   * find the ino and then forward it to the auth mds.
+   */
+  if (!in) {
+    dout(10) << "failed on cephfs_estale but attempting recovery" << dendl;
+    mdcache->find_ino_peers(ino, new C_MDS_TryFindInode(this, mdr, mdcache, ino));
+    return nullptr;
+  } else if (in->state_test(CInode::STATE_PURGING)) {
     respond_to_request(mdr, -CEPHFS_ESTALE);
     return nullptr;
   }
