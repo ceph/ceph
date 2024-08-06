@@ -179,6 +179,9 @@ RBD_ENCRYPTION_ALGORITHM_AES256 = _RBD_ENCRYPTION_ALGORITHM_AES256
 
 RBD_WRITE_ZEROES_FLAG_THICK_PROVISION = _RBD_WRITE_ZEROES_FLAG_THICK_PROVISION
 
+RBD_MAX_SNAP_ID_SIZE = 15
+
+
 class Error(Exception):
     pass
 
@@ -2973,6 +2976,36 @@ cdef class Group(object):
             ret = rbd_group_snap_rollback(self._ioctx, self._name, _name)
         if ret != 0:
             raise make_ex(ret, 'error rolling back group to snapshot', group_errno_to_exception)
+
+    def mirror_group_create_snapshot(self, flags=0):
+        """
+        Create mirror group snapshot.
+
+        :param flags: create snapshot flags
+        :type flags: int
+        :returns: str - group snapshot ID
+        """
+        cdef:
+            uint32_t _flags = flags
+            char *snap_id = NULL
+            size_t max_snap_id_size = RBD_MAX_SNAP_ID_SIZE
+            int ret = -errno.ERANGE
+        try:
+            while ret == -errno.ERANGE:
+                snap_id = <char *>realloc_chk(snap_id, max_snap_id_size)
+                with nogil:
+                    ret = rbd_mirror_group_create_snapshot(self._ioctx,
+                                                           self._name,
+                                                           _flags, snap_id,
+                                                           &max_snap_id_size)
+            if ret != 0:
+                raise make_ex(ret,
+                              'error creating snapshot of group %s' % self._name,
+                              group_errno_to_exception)
+
+            return decode_cstr(snap_id)
+        finally:
+            free(snap_id)
 
     def mirror_group_get_info(self):
         """

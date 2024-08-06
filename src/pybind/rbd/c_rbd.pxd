@@ -478,6 +478,10 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_mirror_image_info_list_cleanup(char **image_ids,
                                             rbd_mirror_image_info_t *info_entries,
                                             size_t num_entries)
+    int rbd_mirror_group_create_snapshot(rados_ioctx_t gp_ioctx,
+                                         const char *gp_name, uint32_t flags,
+                                         char *snap_id,
+                                         size_t *max_snap_id_len)
     int rbd_mirror_group_get_info(rados_ioctx_t gp_ioctx, const char *gp_name,
                                   rbd_mirror_group_info_t *mirror_gp_info,
                                   size_t info_size)
