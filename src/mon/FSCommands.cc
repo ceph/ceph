@@ -598,6 +598,11 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 
       ss << fsp->get_mds_map().get_fs_name();
 
+      if (!is_down && fsp->get_mds_map().get_max_mds() > 0) {
+        ss << " is already online";
+        return 0;
+      }
+
       modify_filesystem(fsmap, fsv,
           [is_down](auto&& fs)
       {
