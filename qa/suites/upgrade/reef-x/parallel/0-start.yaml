@@ -31,3 +31,5 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
+    log-ignorelist:
+        - PG_DEGRADED
