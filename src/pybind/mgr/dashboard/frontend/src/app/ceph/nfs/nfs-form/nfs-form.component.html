@@ -244,7 +244,8 @@
                    formControlName="path"
                    [ngbTypeahead]="pathDataSource"
                    (selectItem)="pathChangeHandler()"
-                   (blur)="pathChangeHandler()">
+                   (blur)="pathChangeHandler()"
+                   readonly>
             <cd-help-text>
             <p i18n>A path in a CephFS file system.</p>
           </cd-help-text>

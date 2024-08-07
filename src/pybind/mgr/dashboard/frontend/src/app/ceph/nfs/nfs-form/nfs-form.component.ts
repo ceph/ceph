@@ -181,7 +181,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
   }
 
   volumeChangeHandler() {
-    this.pathChangeHandler();
     const fs_name = this.nfsForm.getValue('fsal').fs_name;
     this.getSubVolGrp(fs_name);
   }
@@ -249,7 +248,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   updatePath(path: string) {
     this.nfsForm.patchValue({ path: path });
-    this.pathChangeHandler();
   }
 
   createForm() {
@@ -521,13 +519,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
     );
   }
 
-  pathChangeHandler() {
-    if (!this.isEdit) {
-      this.nfsForm.patchValue({
-        pseudo: this.generatePseudo()
-      });
-    }
-  }
 
   private getBucketTypeahead(path: string): Observable<any> {
     if (_.isString(path) && path !== '/' && path !== '') {
@@ -544,23 +535,6 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
   }
 
-  private generatePseudo() {
-    const pseudoControl = this.nfsForm.get('pseudo');
-    let newPseudo = pseudoControl?.dirty && this.nfsForm.getValue('pseudo');
-
-    if (!newPseudo) {
-      const path = this.nfsForm.getValue('path');
-      newPseudo = `/${getPathfromFsal(this.storageBackend)}`;
-
-      if (_.isString(path) && !_.isEmpty(path)) {
-        newPseudo += '/' + path;
-      } else if (!_.isEmpty(this.nfsForm.getValue('fsal').user_id)) {
-        newPseudo += '/' + this.nfsForm.getValue('fsal').user_id;
-      }
-    }
-
-    return newPseudo;
-  }
 
   submitAction() {
     let action: Observable<any>;
