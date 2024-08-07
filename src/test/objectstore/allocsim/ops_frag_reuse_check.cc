@@ -108,12 +108,16 @@ void fragment_check(const vector<Op>& ops)
         }
         read_check(x.offset, x.length);
         break;
-      case Zero:
-        break;
       case Truncate:
+        writes++;
+        cut(x.offset, 100000000);
         break;
       case WriteFull:
+        writes++;
+        plaster.clear();
+        plaster.emplace(x.offset, x.length);
         break;
+      case Zero:
       case Write:
         writes++;
         cut(x.offset, x.length);
