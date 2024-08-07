@@ -490,7 +490,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
       break;
     case BDEV_DB:
     case BDEV_NEWDB:
-      reserved = DB_SUPER_RESERVED;
+      reserved = SUPER_RESERVED;
       break;
     case BDEV_SLOW:
       reserved = 0;
@@ -544,6 +544,13 @@ uint64_t BlueFS::get_block_device_size(unsigned id) const
   if (id < bdev.size() && bdev[id])
     return bdev[id]->get_size();
   return 0;
+}
+
+BlockDevice* BlueFS::get_block_device(unsigned id) const
+{
+  if (id < bdev.size() && bdev[id])
+    return bdev[id];
+  return nullptr;
 }
 
 void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)

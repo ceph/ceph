@@ -4411,6 +4411,40 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_bdev_label_multi
+  type: bool
+  level: advanced
+  desc: Keep multiple copies of block device label.
+  long_desc: Having multiple labels is only useful in error conditions.
+    The label located at offset 0 has been known to be sometimes overwritten by unknown causes,
+    but without it OSD cannot run.
+  default: true
+  flags:
+  - create
+  with_legacy: false
+- name: bluestore_bdev_label_require_all
+  type: bool
+  level: advanced
+  desc: Require all copies to match.
+  long_desc: Under normal conditions, all copies should be the same.
+    Clearing this flag allows to run OSD if at least one of labels
+    could be properly read.
+  default: true
+  see_also:
+  - bluestore_bdev_label_multi
+  flags:
+  - runtime
+  with_legacy: false
+- name: bluestore_bdev_label_multi_upgrade
+  type: bool
+  level: advanced
+  desc: Let repair upgrade to multi label.
+  long_desc: By default single label is preserved.
+    Setting this variable before running fsck-repair upgrades single label into multi label.
+  default: false
+  flags:
+  - startup
+  with_legacy: false
 # whether preallocate space if block/db_path/wal_path is file rather that block device.
 - name: bluestore_block_preallocate_file
   type: bool
@@ -5332,12 +5366,6 @@ options:
   type: bool
   level: dev
   default: false
-  with_legacy: true
-- name: bluestore_debug_prefill
-  type: float
-  level: dev
-  desc: simulate fragmentation
-  default: 0
   with_legacy: true
 - name: bluestore_debug_prefragment_max
   type: size

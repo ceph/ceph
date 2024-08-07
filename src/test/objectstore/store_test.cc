@@ -12,6 +12,7 @@
  *
  */
 
+#include <fcntl.h>
 #include <glob.h>
 #include <stdio.h>
 #include <string.h>
@@ -25,6 +26,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "global/global_context.h"
 #include "os/ObjectStore.h"
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
@@ -194,6 +196,81 @@ class StoreTestDeferredSetup : public StoreTest {
 protected:
   void DeferredSetup() {
     StoreTest::SetUp();
+  }
+};
+
+
+class MultiLabelTest : public StoreTestDeferredSetup {
+  public:
+  std::string get_data_dir() {
+    return data_dir;
+  }
+  bool mounted = false;
+  int mount() {
+    int r = store->mount();
+    if (r == 0) mounted = true;
+    return r;
+  }
+  void umount() {
+    ASSERT_TRUE(mounted);
+    store->umount();
+    mounted = false;
+  }
+  bool bdev_supports_label() {
+    BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+    if (!bstore) return false;
+    auto bdev = bstore->get_bdev();
+    if (!bdev) return false;
+    return bdev->supported_bdev_label();
+  }
+  bool corrupt_disk_at(uint64_t position) {
+    int fd = -1;
+    auto close_fd = make_scope_guard([&] {
+      if (fd != -1) ::close(fd); });
+    string block_file = get_data_dir() + "/block";
+    fd = ::open(block_file.c_str(), O_RDWR|O_CLOEXEC);
+    if (fd < 0) return false;
+    char data_fill[100] = {55};
+    int r = ::pwrite(fd, data_fill, 100, position);
+    if (r != 100) return false;
+    r = ::fsync(fd);
+    if (r != 0) return false;
+    return true;
+  }
+  bool read_bdev_label(bluestore_bdev_label_t* label, uint64_t position) {
+    string bdev_path = get_data_dir() + "/block";
+    unique_ptr<BlockDevice> bdev(BlockDevice::create(
+      g_ceph_context, bdev_path, nullptr, nullptr, nullptr, nullptr));
+    int r = bdev->open(bdev_path);
+    if (r < 0)
+      return r;
+    r = BlueStore::debug_read_bdev_label(g_ceph_context, bdev.get(), bdev_path, label, position);
+    bdev->close();
+    return r;
+  }
+  bool write_bdev_label(const bluestore_bdev_label_t& label, uint64_t position) {
+    string bdev_path = get_data_dir() + "/block";
+    unique_ptr<BlockDevice> bdev(BlockDevice::create(
+      g_ceph_context, bdev_path, nullptr, nullptr, nullptr, nullptr));
+    int r = bdev->open(bdev_path);
+    if (r < 0)
+      return r;
+    r = BlueStore::debug_write_bdev_label(g_ceph_context, bdev.get(), bdev_path, label, position);
+    bdev->close();
+    return r;
+  }
+  protected:
+  void DeferredSetup() {
+    StoreTest::SetUp();
+    mounted = true;
+  }
+  void TearDown() override {
+    if (mounted) {
+      store->umount();
+    }
+    StoreTest::RemoveTestObjectStore();
+    store = nullptr;
+    StoreTest::TearDown();
   }
 };
 
@@ -7094,6 +7171,11 @@ INSTANTIATE_TEST_SUITE_P(
     "bluestore"));
 #endif
 
+INSTANTIATE_TEST_SUITE_P(
+  ObjectStore,
+  MultiLabelTest,
+  ::testing::Values(
+    "bluestore"));
 
 struct deferred_test_t {
   uint32_t bdev_block_size;
@@ -10847,6 +10929,327 @@ TEST_P(StoreTest, mergeRegionTest) {
     r = store->read(ch, hoid, 0, final_len, bl);
     ASSERT_EQ(final_len, static_cast<uint64_t>(r));
   }
+}
+
+TEST_P(MultiLabelTest, MultiSelectableOff) {
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "false");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bluestore_bdev_label_t label;
+  int r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(label.meta.end(), label.meta.find("multi"));
+}
+
+TEST_P(MultiLabelTest, MultiSelectableOn) {
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bluestore_bdev_label_t label;
+  int r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  auto it = label.meta.find("multi");
+  ASSERT_NE(label.meta.end(), it);
+  ASSERT_EQ(it->second, "yes");
+}
+
+TEST_P(MultiLabelTest, DetectCorruptedFirst) {
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101L * 1024 * 1024 * 1024).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bool corrupt = corrupt_disk_at(0);
+  ASSERT_EQ(corrupt, true);
+  ASSERT_EQ(store->fsck(false), 1);
+}
+
+TEST_P(MultiLabelTest, FixCorruptedFirst) {
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101L * 1024 * 1024 * 1024).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bool corrupt = corrupt_disk_at(0);
+  ASSERT_EQ(corrupt, true);
+  ASSERT_EQ(store->fsck(false), 1);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+}
+
+TEST_P(MultiLabelTest, FixCorruptedTwo) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bool corrupt = corrupt_disk_at(0);
+  ASSERT_EQ(corrupt, true);
+  corrupt = corrupt_disk_at(_1G);
+  ASSERT_EQ(corrupt, true);
+  ASSERT_EQ(store->fsck(false), 2);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+}
+
+TEST_P(MultiLabelTest, FixCorruptedThree) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bool corrupt = corrupt_disk_at(0);
+  ASSERT_EQ(corrupt, true);
+  corrupt = corrupt_disk_at(_1G);
+  ASSERT_EQ(corrupt, true);
+  corrupt = corrupt_disk_at(_1G * 10);
+  ASSERT_EQ(corrupt, true);
+  ASSERT_EQ(store->fsck(false), 3);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+}
+
+TEST_P(MultiLabelTest, CantFixCorruptedAll) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bool corrupt = corrupt_disk_at(0);
+  ASSERT_EQ(corrupt, true);
+  corrupt = corrupt_disk_at(_1G);
+  ASSERT_EQ(corrupt, true);
+  corrupt = corrupt_disk_at(_1G * 10);
+  ASSERT_EQ(corrupt, true);
+  corrupt = corrupt_disk_at(_1G * 100);
+  ASSERT_EQ(corrupt, true);
+  ASSERT_NE(store->fsck(false), 0);
+  ASSERT_NE(store->repair(false), 0);
+  ASSERT_NE(store->fsck(false), 0);
+}
+
+TEST_P(MultiLabelTest, SkipInvalidUUID) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101L * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  int r;
+  bluestore_bdev_label_t label;
+  r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  label.meta["epoch"] = "1";
+  uuid_d new_id;
+  new_id.generate_random();
+  label.osd_uuid = new_id;
+  r = write_bdev_label(label, 0);
+  ASSERT_EQ(r, 0);
+
+  ASSERT_EQ(store->fsck(false), 1);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+  mount();
+}
+
+TEST_P(MultiLabelTest, FailAllInvalidUUID) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  SetVal(g_conf(), "bluestore_bdev_label_require_all", "false");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  int r;
+  bluestore_bdev_label_t label;
+  r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  label.meta["epoch"] = "1";
+  uuid_d new_id;
+  new_id.generate_random();
+  label.osd_uuid = new_id;
+  r = write_bdev_label(label, 0);
+  ASSERT_EQ(r, 0);
+  r = write_bdev_label(label, _1G);
+  ASSERT_EQ(r, 0);
+  r = write_bdev_label(label, 10 * _1G);
+  ASSERT_EQ(r, 0);
+  r = write_bdev_label(label, 100 * _1G);
+  ASSERT_EQ(r, 0);
+
+  ASSERT_EQ(store->fsck(false), -2); // this is complete failure
+  ASSERT_EQ(store->repair(false), -2);
+  r = mount();
+  ASSERT_NE(r, 0);
+}
+
+TEST_P(MultiLabelTest, SelectNewestLabel) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  bluestore_bdev_label_t label;
+  int r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  auto it = label.meta.find("epoch");
+  ASSERT_NE(it, label.meta.end());
+  it->second += "1"; //APPEND "1", not add
+  label.meta["canary"]="alive";
+  r = write_bdev_label(label, _1G);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(store->fsck(false), 3);
+  ASSERT_EQ(store->repair(false), 0);
+  r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(label.meta["canary"], "alive");
+}
+
+TEST_P(MultiLabelTest, UpgradeToMultiLabel) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size", stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "false");
+  SetVal(g_conf(), "bluestore_bdev_label_multi_upgrade", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+  bluestore_bdev_label_t label;
+  int r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  auto it = label.meta.find("epoch");
+  ASSERT_NE(it, label.meta.end());
+  ASSERT_EQ(label.meta["multi"], "yes");
+}
+
+TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithBlueFS) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  static constexpr uint64_t _1M = uint64_t(1)*1024*1024;
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  SetVal(g_conf(), "bluestore_block_size", stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "false");
+  SetVal(g_conf(), "bluestore_bdev_label_multi_upgrade", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  //fill BlueFS with data
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  for (size_t i = 0; i < 128; i++) {
+    std::string name = to_string(i);
+    bstore->inject_bluefs_file("db", name, 16 * _1M);
+  }
+  umount();
+  ASSERT_EQ(store->repair(false), 1);
+  ASSERT_EQ(store->fsck(false), 1);
+  bluestore_bdev_label_t label;
+  int r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  auto it = label.meta.find("epoch");
+  ASSERT_NE(it, label.meta.end());
+  ASSERT_EQ(label.meta["multi"], "yes");
+}
+
+TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  static constexpr uint64_t _1M = uint64_t(1)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(10 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  SetVal(g_conf(), "bluestore_block_size", stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "false");
+  SetVal(g_conf(), "bluestore_bdev_label_multi_upgrade", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  //fill with object data
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    int r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist bl;
+    bl.append(std::string(_1M, '0'));
+    for (int m = 0; m < 128 + 10; m++) {
+      for (int n = 0; n < 16; n++) {
+        ObjectStore::Transaction t;
+        std::string name = "OBJ-"+to_string(m)+"-"+to_string(n);
+        ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)));
+        t.write(cid, hoid, 0, bl.length(), bl);
+        int r = queue_transaction(store, ch, std::move(t));
+        ASSERT_EQ(r, 0);
+      }
+    }
+  }
+  umount();
+  // Need to do 2 passes of repair:
+  // - the first one moves offending objects away
+  // - the second can then fix bdev labels
+  store->repair(false);
+  ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
+  bluestore_bdev_label_t label;
+  int r = read_bdev_label(&label, 0);
+  ASSERT_EQ(r, 0);
+  auto it = label.meta.find("epoch");
+  ASSERT_NE(it, label.meta.end());
+  ASSERT_EQ(label.meta["multi"], "yes");
 }
 
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
