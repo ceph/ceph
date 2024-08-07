@@ -142,9 +142,10 @@ struct NqnState {
     // constructors
     NqnState(const std::string& _nqn, const ana_state_t& _ana_state):
         nqn(_nqn), ana_state(_ana_state)  {}
-    NqnState(const std::string& _nqn, const SmState& sm_state, const NvmeGwMonState & gw_created) : nqn(_nqn)  {
+    NqnState(const std::string& _nqn, const SmState& sm_state, const NvmeGwMonState & gw_created, bool encode_gmap_last) : nqn(_nqn) {
         uint32_t i = 0;
-        for (auto& state_itr: sm_state) {
+        if (encode_gmap_last) {
+          for (auto& state_itr: sm_state) {
             if (state_itr.first > i) {
                 uint32_t num_to_add = state_itr.first - i;
                 for (uint32_t j = 0; j<num_to_add; j++) { // add fake elements to the ana_state in order to preserve vector index == correct ana_group_id
@@ -163,24 +164,26 @@ struct NqnState {
             state_pair.second = gw_created.blocklist_data.at(state_itr.first).osd_epoch;
             ana_state.push_back(state_pair);
             i ++;
+          }
         }
-    }
-    NqnState(const std::string& _nqn, const SmState& sm_state, const NvmeGwMonState & gw_created, uint8_t bc) : nqn(_nqn) {
-#define MAX_SUPPORTED_ANA_GROUPS 16
-      std::pair<gw_exported_states_per_group_t, epoch_t> state_pair[MAX_SUPPORTED_ANA_GROUPS];
-      for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
-        state_pair[i].first = gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
-        state_pair[i].second = 0;
-      }
-      for (auto& state_itr: sm_state) {
-         state_pair[state_itr.first].first = (sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
-             || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
-                        ? gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE
-                                : gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
-      }
-      for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
-        ana_state.push_back(state_pair[i]);
-      }
+        else {
+#define MAX_SUPPORTED_ANA_GROUPS 16 // ths define is used for backward compatibility
+          std::pair<gw_exported_states_per_group_t, epoch_t> state_pair[MAX_SUPPORTED_ANA_GROUPS];
+          for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
+            state_pair[i].first = gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
+            state_pair[i].second = 0;
+          }
+          for (auto& state_itr: sm_state) {
+            state_pair[state_itr.first].first = (sm_state.at(state_itr.first) == gw_states_per_group_t::GW_ACTIVE_STATE
+                   || sm_state.at(state_itr.first) == gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL)
+                             ? gw_exported_states_per_group_t::GW_EXPORTED_OPTIMIZED_STATE
+                                     : gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE;
+            state_pair[state_itr.first].second = gw_created.blocklist_data.at(state_itr.first).osd_epoch;
+          }
+          for (int i= 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
+            ana_state.push_back(state_pair[i]);
+          }
+        }
     }
 };
 

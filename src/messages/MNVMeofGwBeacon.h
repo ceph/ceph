@@ -24,7 +24,7 @@
 
 class MNVMeofGwBeacon final : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
 protected:
