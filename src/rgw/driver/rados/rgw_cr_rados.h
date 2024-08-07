@@ -16,8 +16,6 @@
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
-#include <string_view>
-using namespace std;
 
 struct rgw_http_param_pair;
 class RGWRESTConn;
@@ -1725,12 +1723,12 @@ struct bucket_list_entry {
   rgw_obj_key key;
   bool is_latest;
   real_time mtime;
-  string etag;
+  std::string etag;
   uint64_t size;
-  string storage_class;
+  std::string storage_class;
   rgw_bucket_entry_owner owner;
   uint64_t versioned_epoch;
-  string rgw_tag;
+  std::string rgw_tag;
 
   bucket_list_entry() : delete_marker(false), is_latest(false), size(0), versioned_epoch(0) {}
 
@@ -1739,7 +1737,7 @@ struct bucket_list_entry {
     JSONDecoder::decode_json("Key", key.name, obj);
     JSONDecoder::decode_json("VersionId", key.instance, obj);
     JSONDecoder::decode_json("IsLatest", is_latest, obj);
-    string mtime_str;
+    std::string mtime_str;
     JSONDecoder::decode_json("RgwxMtime", mtime_str, obj);
 
     struct tm t;
@@ -1773,12 +1771,12 @@ struct bucket_list_entry {
 };
 
 struct bucket_unordered_list_result {
-  string name;
-  string prefix;
+  std::string name;
+  std::string prefix;
   int max_keys;
   bool is_truncated;
   bool allow_unordered;
-  list<bucket_list_entry> entries;
+  std::list<bucket_list_entry> entries;
 
   bucket_unordered_list_result() : max_keys(0), is_truncated(false) {}
 
@@ -1800,7 +1798,7 @@ class RGWStatRemoteBucketCR: public RGWCoroutine {
   const rgw_bucket& bucket;
   RGWHTTPManager* http;
   std::vector<rgw_zone_id> zids;
-  vector<bucket_unordered_list_result>& peer_result;
+  std::vector<bucket_unordered_list_result>& peer_result;
 
 public:
   RGWStatRemoteBucketCR(const DoutPrefixProvider *dpp,
