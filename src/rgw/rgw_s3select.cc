@@ -287,6 +287,7 @@ RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
   m_object_size_for_processing(0),
   m_parquet_type(false),
   m_json_type(false),
+  m_outputFormat(OutputFormat::CSV),
   chunk_number(0),
   m_requested_range(0),
   m_scan_offset(1024),
@@ -530,10 +531,6 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
 						fp_s3select_result_format,
 						fp_result_header_format,
 						fp_debug_mesg);
-  const char* s3select_processTime_error = "s3select-ProcessingTime-Error";
-  const char* s3select_syntax_error = "s3select-Syntax-Error";
-  const char* s3select_resource_id = "resourcse-id";
-  const char* s3select_json_error = "json-Format-Error";
   json_object::csv_definitions json;
 
   m_aws_response_handler.init_response();
