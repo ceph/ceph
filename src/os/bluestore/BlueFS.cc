@@ -3961,8 +3961,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
   if (alloc_len < 0 || alloc_len < need) {
     if (alloc[id]) {
-      if (alloc_len > 0) {
+      if (extents.size()) {
         alloc[id]->release(extents);
+	extents.clear();
       }
       if (!was_cooldown && shared) {
         auto delay_s = cct->_conf->bluefs_failed_shared_alloc_cooldown;

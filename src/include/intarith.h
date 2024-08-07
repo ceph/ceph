@@ -58,6 +58,18 @@ constexpr inline T p2align(T x, T align) {
 }
 
 /*
+ * return whether x is aligned with (align)
+ * eg, p2aligned(1200, 1024) ==> false
+ * eg, p2aligned(1024, 1024) ==> true
+ * eg, p2aligned(0x1234, 0x100) ==> false
+ * eg, p2aligned(0x5600, 0x100) ==> true
+ */
+template<typename T>
+constexpr inline bool p2aligned(T x, T align) {
+  return p2align(x, align) == x;
+}
+
+/*
  * return x % (mod) align
  * eg, p2phase(0x1234, 0x100) == 0x34 (x-0x12*align)
  * eg, p2phase(0x5600, 0x100) == 0x00 (x-0x56*align)

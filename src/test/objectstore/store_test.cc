@@ -10232,6 +10232,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
 
   SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
+  //stick with a specific allocator as we did some tricks
+  // with allocated extents and rely on specific offset numbers below.
+  SetVal(g_conf(), "bluestore_allocator", "avl");
 
   const size_t block_size = 0x1000;
   StartDeferred(block_size);
