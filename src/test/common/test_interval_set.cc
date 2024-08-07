@@ -598,3 +598,98 @@ TYPED_TEST(IntervalSetTest, span_of) {
   ASSERT_EQ( iset1.num_intervals(), 0);
   ASSERT_EQ( iset1.size(), 0);
 }
+
+TYPED_TEST(IntervalSetTest, align) {
+  typedef typename TestFixture::ISet ISet;
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(1, 2);
+    iset1.align(8);
+    iset2.insert(0,8);
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(1, 2);
+    iset1.insert(4, 2);
+
+    iset1.align(8);
+    iset2.insert(0,8);
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(7, 2);
+    iset1.insert(15, 2);
+
+    iset1.align(8);
+    iset2.insert(0,24);
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(8, 2);
+    iset1.insert(12, 2);
+
+    iset1.align(8);
+    iset2.insert(8,8);
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(8, 2);
+    iset1.insert(12, 2);
+
+    iset1.align(8);
+    iset2.insert(8,8);
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(0, 1);
+    iset1.insert(23, 1);
+    iset1.insert(40, 1);
+
+    iset1.align(8);
+    iset2.insert(0, 8);
+    iset2.insert(16, 8);
+    iset2.insert(40, 8);
+
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(4, 2);
+    iset1.insert(12, 2);
+
+    iset1.align(8);
+    iset2.insert(0,16);
+    ASSERT_TRUE(iset1 == iset2);
+  }
+
+  // Example given in review comment.
+  // https://github.com/ceph/ceph/pull/59729#discussion_r1755591959
+  {
+    ISet iset1, iset2;
+
+    iset1.insert(4, 1);
+    iset1.insert(8, 10);
+
+    iset1.align(10);
+    iset2.insert(0,20);
+    ASSERT_TRUE(iset1 == iset2);
+  }
+}
