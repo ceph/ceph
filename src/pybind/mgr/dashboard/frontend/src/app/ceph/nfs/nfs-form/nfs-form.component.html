@@ -73,6 +73,7 @@
                       label="Volume"
                       cdRequiredField="Volume"
                       id="fs_name"
+                      (change)="volumeChangeHandler()"
                       [invalid]="nfsForm.controls.fsal.controls.fs_name.invalid && (nfsForm.controls.fsal.controls.fs_name.dirty)"
                       [invalidText]="fsNameError"
                       [skeleton]="allFsNames === null"
@@ -164,12 +165,11 @@
                     i18n>
           <option *ngIf="allsubvolgrps === null"
                   value="">Loading...</option>
-          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length === 0"
-                  value="">-- No CephFS subvolume group available --</option>
-          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length > 0"
+          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length >= 0"
                   value="">-- Select the CephFS subvolume group --</option>
           <option *ngFor="let subvol_grp of allsubvolgrps"
-                  [value]="subvol_grp.name">{{ subvol_grp.name }}</option>
+                  [value]="subvol_grp.name"
+                  [selected]="subvol_grp.name === nfsForm.get('subvolume_group').value">{{ subvol_grp.name }}</option>
           <option [value]="defaultSubVolGroup">{{ defaultSubVolGroup }}</option>
         </cds-select>
       </div>
@@ -183,6 +183,8 @@
                   id="subvolume"
                   [skeleton]="allsubvols === null"
                   (change)="setSubVolPath()"
+                  [invalid]="nfsForm.controls.subvolume.invalid && (nfsForm.controls.subvolume.dirty)"
+                  [invalidText]="subvolumeError"
                   i18n>
         <option *ngIf="allsubvols === null"
                 value="">Loading...</option>
@@ -191,8 +193,17 @@
         <option *ngIf="allsubvols !== null && allsubvols.length > 0"
                 value="">-- Select the CephFS subvolume --</option>
         <option *ngFor="let subvolume of allsubvols"
-                [value]="subvolume.name">{{ subvolume.name }}</option>
+                [value]="subvolume.name"
+                [selected]="subvolume.name === nfsForm.get('subvolume').value">{{ subvolume.name }}</option>
       </cds-select>
+      <ng-template #subvolumeError>
+        <span
+                  *ngIf="nfsForm.getValue('subvolume_group') === defaultSubVolGroup && !nfsForm.getValue('subvolume')"
+                  class="invalid-feedback"
+                  i18n>
+                  This field is required.
+        </span>
+      </ng-template>
     </div>
 
       <!-- Path -->
@@ -220,6 +231,9 @@
           <span class="invalid-feedback"
                 *ngIf="nfsForm.showError('path', formDir, 'required')"
                 i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="nfsForm.get('path').hasError('isIsolatedSlash') && nfsForm.get('path').touched"
+                i18n>Export on CephFS volume "<code>/</code>" not allowed.</span>
           <span class="invalid-feedback"
                 *ngIf="nfsForm.showError('path', formDir, 'pattern')"
                 i18n>Path need to start with a '/' and can be followed by a word</span>
