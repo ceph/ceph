@@ -674,7 +674,12 @@ void MDBalancer::queue_merge(CDir *dir)
       }
       bool all = true;
       for (auto& sib : sibs) {
-        if (!sib->is_auth() || !sib->should_merge()) {
+	auto is_auth = sib->is_auth();
+	auto should_merge = sib->should_merge();
+
+	dout(20) << ": sib=" << *sib << ", is_auth=" << is_auth << ", should_merge="
+		 << should_merge << dendl;
+        if (!is_auth || !should_merge) {
           all = false;
           break;
         }
