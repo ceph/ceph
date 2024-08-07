@@ -2009,6 +2009,21 @@ class TestCephadm(object):
         CephadmServe(cephadm_module)._write_client_files({}, 'host2')
         CephadmServe(cephadm_module)._write_client_files({}, 'host3')
 
+    @mock.patch('cephadm.CephadmOrchestrator.mon_command')
+    @mock.patch("cephadm.inventory.HostCache.get_host_client_files")
+    def test_dont_write_etc_ceph_client_files_when_turned_off(self, _get_client_files, _mon_command, cephadm_module):
+        cephadm_module.keys.update(ClientKeyringSpec('keyring1', PlacementSpec(label='keyring1'), include_ceph_conf=False))
+        cephadm_module.inventory.add_host(HostSpec('host1', '1.2.3.1', labels=['keyring1']))
+        cephadm_module.cache.update_host_daemons('host1', {})
+
+        _mon_command.return_value = (0, 'my-keyring', '')
+
+        client_files = CephadmServe(cephadm_module)._calc_client_files()
+
+        assert 'host1' in client_files
+        assert '/etc/ceph/ceph.keyring1.keyring' in client_files['host1']
+        assert '/etc/ceph/ceph.conf' not in client_files['host1']
+
     def test_etc_ceph_init(self):
         with with_cephadm_module({'manage_etc_ceph_ceph_conf': True}) as m:
             assert m.manage_etc_ceph_ceph_conf is True
