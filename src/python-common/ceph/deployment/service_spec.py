@@ -1432,6 +1432,7 @@ class GrafanaSpec(MonitoringSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  port: Optional[int] = None,
                  initial_admin_password: Optional[str] = None,
                  anonymous_access: bool = True,
@@ -1449,6 +1450,12 @@ class GrafanaSpec(MonitoringSpec):
 
         self.initial_admin_password = initial_admin_password
         self.anonymous_access = anonymous_access
+
+        # whether ports daemons for this service bind to should
+        # bind to only hte networks listed in networks param, or
+        # to all networks. Defaults to false which is saying to bind
+        # on all networks.
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
         if not self.anonymous_access and not self.initial_admin_password:
             err_msg = ('Either initial_admin_password must be set or anonymous_access '
@@ -1487,6 +1494,7 @@ class PrometheusSpec(MonitoringSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  port: Optional[int] = None,
                  retention_time: Optional[str] = None,
                  retention_size: Optional[str] = None,
@@ -1504,6 +1512,7 @@ class PrometheusSpec(MonitoringSpec):
 
         self.retention_time = retention_time.strip() if retention_time else None
         self.retention_size = retention_size.strip() if retention_size else None
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
 
 yaml.add_representer(PrometheusSpec, ServiceSpec.yaml_representer)

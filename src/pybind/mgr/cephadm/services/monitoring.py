@@ -75,12 +75,23 @@ class GrafanaService(CephadmService):
 
         spec: GrafanaSpec = cast(
             GrafanaSpec, self.mgr.spec_store.active_specs[daemon_spec.service_name])
+
+        grafana_port = daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT
+        grafana_ip = daemon_spec.ip if daemon_spec.ip else ''
+
+        if spec.only_bind_port_on_networks and spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec)
+            if ip_to_bind_to:
+                daemon_spec.port_ips = {str(grafana_port): ip_to_bind_to}
+                grafana_ip = ip_to_bind_to
+
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
                 'anonymous_access': spec.anonymous_access,
                 'initial_admin_password': spec.initial_admin_password,
-                'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
-                'http_addr': daemon_spec.ip if daemon_spec.ip else ''
+                'http_port': grafana_port,
+                'http_addr': grafana_ip
             })
 
         if 'dashboard' in self.mgr.get('mgr_map')['modules'] and spec.initial_admin_password:
@@ -379,6 +390,18 @@ class PrometheusService(CephadmService):
             'haproxy_targets': haproxy_targets,
             'nodes': nodes,
         }
+
+        ip_to_bind_to = ''
+        if prom_spec.only_bind_port_on_networks and prom_spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, prom_spec) or ''
+            if ip_to_bind_to:
+                if prom_spec.port:
+                    port = prom_spec.port
+                else:
+                    port = self.DEFAULT_SERVICE_PORT
+                daemon_spec.port_ips = {str(port): ip_to_bind_to}
+
         r: Dict[str, Any] = {
             'files': {
                 'prometheus.yml':
@@ -386,7 +409,8 @@ class PrometheusService(CephadmService):
                         'services/prometheus/prometheus.yml.j2', context)
             },
             'retention_time': retention_time,
-            'retention_size': retention_size
+            'retention_size': retention_size,
+            'ip_to_bind_to': ip_to_bind_to
         }
 
         # include alerts, if present in the container

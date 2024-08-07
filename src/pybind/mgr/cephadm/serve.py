@@ -294,6 +294,7 @@ class CephadmServe:
         self.mgr.update_failed_daemon_health_check()
 
     def _check_host(self, host: str) -> Optional[str]:
+        print('this is not possible')
         if host not in self.mgr.inventory:
             return None
         self.log.debug(' checking %s' % host)
@@ -1226,6 +1227,7 @@ class CephadmServe:
                 image = ''
                 start_time = datetime_now()
                 ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
+                port_ips: Dict[str, str] = daemon_spec.port_ips if daemon_spec.port_ips else {}
 
                 if daemon_spec.daemon_type == 'container':
                     spec = cast(CustomContainerSpec,
@@ -1238,6 +1240,11 @@ class CephadmServe:
                 if len(ports) > 0:
                     daemon_spec.extra_args.extend([
                         '--tcp-ports', ' '.join(map(str, ports))
+                    ])
+
+                if port_ips:
+                    daemon_spec.extra_args.extend([
+                        '--port-ips', json.dumps(port_ips)
                     ])
 
                 # osd deployments needs an --osd-uuid arg
