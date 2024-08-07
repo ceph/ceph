@@ -1,7 +1,9 @@
-#include <string>
-#include <stack>
-#include <memory>
 #include <gtest/gtest.h>
+
+#include <memory>
+#include <stack>
+#include <string>
+
 #include "common/config_fwd.h"
 
 class ObjectStore;
@@ -12,16 +14,15 @@ class StoreTestFixture : virtual public ::testing::Test {
   std::stack<std::pair<std::string, std::string>> saved_settings;
   ConfigProxy* conf = nullptr;
 
-protected:
+ protected:
   const std::string data_dir;
 
-public:
+ public:
   std::unique_ptr<ObjectStore> store;
   ObjectStore::CollectionHandle ch;
 
   explicit StoreTestFixture(const std::string& type)
-    : type(type), data_dir(type + ".test_temp_dir")
-  {}
+      : type(type), data_dir(type + ".test_temp_dir") {}
 
   void SetUp() override;
   void TearDown() override;
@@ -31,12 +32,9 @@ public:
     StoreTestFixture& s;
     size_t pos;
 
-    SettingsBookmark(StoreTestFixture& _s, size_t p) : s(_s), pos(p)
-    {}
+    SettingsBookmark(StoreTestFixture& _s, size_t p) : s(_s), pos(p) {}
 
-    ~SettingsBookmark() {
-      s.PopSettings(pos);
-    }
+    ~SettingsBookmark() { s.PopSettings(pos); }
   };
   SettingsBookmark BookmarkSettings() {
     return SettingsBookmark(*this, saved_settings.size());
@@ -44,10 +42,6 @@ public:
   void PopSettings(size_t);
   void CloseAndReopen();
   void RemoveTestObjectStore();
-  const std::string get_type() const {
-    return type;
-  }
-  const std::string get_data_dir() const {
-    return data_dir;
-  }
+  const std::string get_type() const { return type; }
+  const std::string get_data_dir() const { return data_dir; }
 };

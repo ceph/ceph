@@ -11,7 +11,7 @@
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
-#undef  dout_prefix
+#undef dout_prefix
 #define dout_prefix *_dout << "BtreeAllocator "
 
 /*
@@ -19,10 +19,8 @@
  * a suitable block to allocate. This will search the specified B-tree
  * looking for a block that matches the specified criteria.
  */
-uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
-					   uint64_t size,
-					   uint64_t align)
-{
+uint64_t BtreeAllocator::_pick_block_after(uint64_t* cursor, uint64_t size,
+                                           uint64_t align) {
   auto rs_start = range_tree.lower_bound(*cursor);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
     uint64_t offset = rs->first;
@@ -32,7 +30,8 @@ uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
     }
   }
   if (*cursor == 0) {
-    // If we already started from beginning, don't bother with searching from beginning
+    // If we already started from beginning, don't bother with searching from
+    // beginning
     return -1ULL;
   }
   // If we reached end, start from beginning till cursor.
@@ -46,12 +45,10 @@ uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
   return -1ULL;
 }
 
-uint64_t BtreeAllocator::_pick_block_fits(uint64_t size,
-                                        uint64_t align)
-{
+uint64_t BtreeAllocator::_pick_block_fits(uint64_t size, uint64_t align) {
   // instead of searching from cursor, just pick the smallest range which fits
   // the needs
-  auto rs_start = range_size_tree.lower_bound(range_value_t{0,size});
+  auto rs_start = range_size_tree.lower_bound(range_value_t{0, size});
   for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
     uint64_t offset = rs->start;
     if (offset + size <= rs->start + rs->size) {
@@ -61,8 +58,7 @@ uint64_t BtreeAllocator::_pick_block_fits(uint64_t size,
   return -1ULL;
 }
 
-void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size)
-{
+void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size) {
   ceph_assert(size != 0);
 
   uint64_t end = start + size;
@@ -75,7 +71,8 @@ void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size)
     rs_before = std::prev(rs_after);
   }
 
-  bool merge_before = (rs_before != range_tree.end() && rs_before->second == start);
+  bool merge_before =
+      (rs_before != range_tree.end() && rs_before->second == start);
   bool merge_after = (rs_after != range_tree.end() && rs_after->first == end);
 
   if (merge_before && merge_after) {
@@ -121,9 +118,8 @@ void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size)
   num_free += size;
 }
 
-void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
-  BtreeAllocator::range_tree_t::iterator& rs)
-{
+void BtreeAllocator::_process_range_removal(
+    uint64_t start, uint64_t end, BtreeAllocator::range_tree_t::iterator& rs) {
   bool left_over = (rs->first != start);
   bool right_over = (rs->second != end);
 
@@ -163,8 +159,7 @@ void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
   num_free -= (end - start);
 }
 
-void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size)
-{
+void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size) {
   uint64_t end = start + size;
 
   ceph_assert(size != 0);
@@ -172,7 +167,8 @@ void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size)
 
   // Make sure we completely overlap with someone
   auto rs = range_tree.lower_bound(start);
-  if ((rs == range_tree.end() || rs->first > start) && rs != range_tree.begin()) {
+  if ((rs == range_tree.end() || rs->first > start) &&
+      rs != range_tree.begin()) {
     --rs;
   }
   ceph_assert(rs != range_tree.end());
@@ -182,9 +178,9 @@ void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size)
   _process_range_removal(start, end, rs);
 }
 
-void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
-  std::function<void(uint64_t, uint64_t, bool)> cb)
-{
+void BtreeAllocator::_try_remove_from_tree(
+    uint64_t start, uint64_t size,
+    std::function<void(uint64_t, uint64_t, bool)> cb) {
   uint64_t end = start + size;
 
   ceph_assert(size != 0);
@@ -197,12 +193,11 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   }
 
   do {
-
-    //FIXME: this is apparently wrong since _process_range_removal might
-    // invalidate existing iterators.
-    // Not a big deal so far since this method is not in use - it's called
-    // when making Hybrid allocator from a regular one. Which isn't an option
-    // for BtreeAllocator for now.
+    // FIXME: this is apparently wrong since _process_range_removal might
+    //  invalidate existing iterators.
+    //  Not a big deal so far since this method is not in use - it's called
+    //  when making Hybrid allocator from a regular one. Which isn't an option
+    //  for BtreeAllocator for now.
     auto next_rs = rs;
     ++next_rs;
 
@@ -222,18 +217,15 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   }
 }
 
-int64_t BtreeAllocator::_allocate(
-  uint64_t want,
-  uint64_t unit,
-  uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
-  PExtentVector* extents)
-{
+int64_t BtreeAllocator::_allocate(uint64_t want, uint64_t unit,
+                                  uint64_t max_alloc_size,
+                                  int64_t hint,  // unused, for now!
+                                  PExtentVector* extents) {
   uint64_t allocated = 0;
   while (allocated < want) {
     uint64_t offset, length;
-    int r = _allocate(std::min(max_alloc_size, want - allocated),
-                      unit, &offset, &length);
+    int r = _allocate(std::min(max_alloc_size, want - allocated), unit, &offset,
+                      &length);
     if (r < 0) {
       // Allocation failed.
       break;
@@ -245,12 +237,8 @@ int64_t BtreeAllocator::_allocate(
   return allocated ? allocated : -ENOSPC;
 }
 
-int BtreeAllocator::_allocate(
-  uint64_t size,
-  uint64_t unit,
-  uint64_t *offset,
-  uint64_t *length)
-{
+int BtreeAllocator::_allocate(uint64_t size, uint64_t unit, uint64_t* offset,
+                              uint64_t* length) {
   uint64_t max_size = 0;
   if (auto p = range_size_tree.rbegin(); p != range_size_tree.rend()) {
     max_size = p->size;
@@ -272,12 +260,12 @@ int BtreeAllocator::_allocate(
    * If we're running low on space switch to using the size
    * sorted B-tree (best-fit).
    */
-  if (force_range_size_alloc ||
-      max_size < range_size_alloc_threshold ||
+  if (force_range_size_alloc || max_size < range_size_alloc_threshold ||
       free_pct < range_size_alloc_free_pct) {
     do {
       start = _pick_block_fits(size, unit);
-      dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
+      dout(20) << __func__ << " best fit=" << start << " size=" << size
+               << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
       }
@@ -296,7 +284,8 @@ int BtreeAllocator::_allocate(
        */
       uint64_t* cursor = &lbas[cbits(size) - 1];
       start = _pick_block_after(cursor, size, unit);
-      dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
+      dout(20) << __func__ << " first fit=" << start << " size=" << size
+               << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
       }
@@ -316,82 +305,62 @@ int BtreeAllocator::_allocate(
   return 0;
 }
 
-void BtreeAllocator::_release(const interval_set<uint64_t>& release_set)
-{
+void BtreeAllocator::_release(const interval_set<uint64_t>& release_set) {
   for (auto p = release_set.begin(); p != release_set.end(); ++p) {
     const auto offset = p.get_start();
     const auto length = p.get_len();
     ceph_assert(offset + length <= uint64_t(device_size));
-    ldout(cct, 10) << __func__ << std::hex
-      << " offset 0x" << offset
-      << " length 0x" << length
-      << std::dec << dendl;
+    ldout(cct, 10) << __func__ << std::hex << " offset 0x" << offset
+                   << " length 0x" << length << std::dec << dendl;
     _add_to_tree(offset, length);
   }
 }
 
 void BtreeAllocator::_release(const PExtentVector& release_set) {
   for (auto& e : release_set) {
-    ldout(cct, 10) << __func__ << std::hex
-      << " offset 0x" << e.offset
-      << " length 0x" << e.length
-      << std::dec << dendl;
+    ldout(cct, 10) << __func__ << std::hex << " offset 0x" << e.offset
+                   << " length 0x" << e.length << std::dec << dendl;
     _add_to_tree(e.offset, e.length);
   }
 }
 
-void BtreeAllocator::_shutdown()
-{
+void BtreeAllocator::_shutdown() {
   range_size_tree.clear();
   range_tree.clear();
 }
 
-BtreeAllocator::BtreeAllocator(CephContext* cct,
-			       int64_t device_size,
-			       int64_t block_size,
-			       uint64_t max_mem,
-			       std::string_view name) :
-  Allocator(name, device_size, block_size),
-  range_size_alloc_threshold(
-    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
-  range_size_alloc_free_pct(
-    cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
-  range_count_cap(max_mem / sizeof(range_seg_t)),
-  cct(cct)
-{}
+BtreeAllocator::BtreeAllocator(CephContext* cct, int64_t device_size,
+                               int64_t block_size, uint64_t max_mem,
+                               std::string_view name)
+    : Allocator(name, device_size, block_size),
+      range_size_alloc_threshold(
+          cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
+      range_size_alloc_free_pct(
+          cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_free_pct")),
+      range_count_cap(max_mem / sizeof(range_seg_t)),
+      cct(cct) {}
 
-BtreeAllocator::BtreeAllocator(CephContext* cct,
-			       int64_t device_size,
-			       int64_t block_size,
-			       std::string_view name) :
-  BtreeAllocator(cct, device_size, block_size, 0 /* max_mem */, name)
-{}
+BtreeAllocator::BtreeAllocator(CephContext* cct, int64_t device_size,
+                               int64_t block_size, std::string_view name)
+    : BtreeAllocator(cct, device_size, block_size, 0 /* max_mem */, name) {}
 
-BtreeAllocator::~BtreeAllocator()
-{
-  shutdown();
-}
+BtreeAllocator::~BtreeAllocator() { shutdown(); }
 
-int64_t BtreeAllocator::allocate(
-  uint64_t want,
-  uint64_t unit,
-  uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
-  PExtentVector* extents)
-{
-  ldout(cct, 10) << __func__ << std::hex
-                 << " want 0x" << want
-                 << " unit 0x" << unit
-                 << " max_alloc_size 0x" << max_alloc_size
-                 << " hint 0x" << hint
-                 << std::dec << dendl;
+int64_t BtreeAllocator::allocate(uint64_t want, uint64_t unit,
+                                 uint64_t max_alloc_size,
+                                 int64_t hint,  // unused, for now!
+                                 PExtentVector* extents) {
+  ldout(cct, 10) << __func__ << std::hex << " want 0x" << want << " unit 0x"
+                 << unit << " max_alloc_size 0x" << max_alloc_size << " hint 0x"
+                 << hint << std::dec << dendl;
   ceph_assert(std::has_single_bit(unit));
   ceph_assert(want % unit == 0);
 
   if (max_alloc_size == 0) {
     max_alloc_size = want;
   }
-  if (constexpr auto cap = std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
+  if (constexpr auto cap =
+          std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
       max_alloc_size >= cap) {
     max_alloc_size = p2align(uint64_t(cap), (uint64_t)block_size);
   }
@@ -404,79 +373,62 @@ void BtreeAllocator::release(const interval_set<uint64_t>& release_set) {
   _release(release_set);
 }
 
-uint64_t BtreeAllocator::get_free()
-{
+uint64_t BtreeAllocator::get_free() {
   std::lock_guard l(lock);
   return num_free;
 }
 
-double BtreeAllocator::get_fragmentation()
-{
+double BtreeAllocator::get_fragmentation() {
   std::lock_guard l(lock);
   return _get_fragmentation();
 }
 
-void BtreeAllocator::dump()
-{
+void BtreeAllocator::dump() {
   std::lock_guard l(lock);
   _dump();
 }
 
-void BtreeAllocator::_dump() const
-{
+void BtreeAllocator::_dump() const {
   ldout(cct, 0) << __func__ << " range_tree: " << dendl;
   for (auto& rs : range_tree) {
-    ldout(cct, 0) << std::hex
-      << "0x" << rs.first << "~" << rs.second
-      << std::dec
-      << dendl;
+    ldout(cct, 0) << std::hex << "0x" << rs.first << "~" << rs.second
+                  << std::dec << dendl;
   }
 
   ldout(cct, 0) << __func__ << " range_size_tree: " << dendl;
   for (auto& rs : range_size_tree) {
-    ldout(cct, 0) << std::hex
-      << "0x" << rs.size << "@" << rs.start
-      << std::dec
-      << dendl;
+    ldout(cct, 0) << std::hex << "0x" << rs.size << "@" << rs.start << std::dec
+                  << dendl;
   }
 }
 
-void BtreeAllocator::foreach(std::function<void(uint64_t offset, uint64_t length)> notify)
-{
+void BtreeAllocator::foreach (
+    std::function<void(uint64_t offset, uint64_t length)> notify) {
   std::lock_guard l(lock);
   for (auto& rs : range_tree) {
     notify(rs.first, rs.second - rs.first);
   }
 }
 
-void BtreeAllocator::init_add_free(uint64_t offset, uint64_t length)
-{
-  if (!length)
-    return;
+void BtreeAllocator::init_add_free(uint64_t offset, uint64_t length) {
+  if (!length) return;
   std::lock_guard l(lock);
   ceph_assert(offset + length <= uint64_t(device_size));
-  ldout(cct, 10) << __func__ << std::hex
-                 << " offset 0x" << offset
-                 << " length 0x" << length
-                 << std::dec << dendl;
+  ldout(cct, 10) << __func__ << std::hex << " offset 0x" << offset
+                 << " length 0x" << length << std::dec << dendl;
   _add_to_tree(offset, length);
 }
 
-void BtreeAllocator::init_rm_free(uint64_t offset, uint64_t length)
-{
-  if (!length)
-    return;
+void BtreeAllocator::init_rm_free(uint64_t offset, uint64_t length) {
+  if (!length) return;
   std::lock_guard l(lock);
   ceph_assert(offset + length <= uint64_t(device_size));
-  ldout(cct, 10) << __func__ << std::hex
-                 << " offset 0x" << offset
-                 << " length 0x" << length
-                 << std::dec << dendl;
+  ldout(cct, 10) << __func__ << std::hex << " offset 0x" << offset
+                 << " length 0x" << length << std::dec << dendl;
   _remove_from_tree(offset, length);
 }
 
-void BtreeAllocator::shutdown()
-{
+void BtreeAllocator::shutdown() {
   std::lock_guard l(lock);
   _shutdown();
 }

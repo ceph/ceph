@@ -7,49 +7,37 @@
 #include <mutex>
 
 #include "Allocator.h"
-#include "os/bluestore/bluestore_types.h"
+#include "common/debug.h"
 #include "fastbmap_allocator_impl.h"
 #include "include/mempool.h"
-#include "common/debug.h"
+#include "os/bluestore/bluestore_types.h"
 
 class BitmapAllocator : public Allocator,
-  public AllocatorLevel02<AllocatorLevel01Loose> {
+                        public AllocatorLevel02<AllocatorLevel01Loose> {
   CephContext* cct;
-public:
+
+ public:
   BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit,
-		  std::string_view name);
-  ~BitmapAllocator() override
-  {
-  }
+                  std::string_view name);
+  ~BitmapAllocator() override {}
 
-  const char* get_type() const override
-  {
-    return "bitmap";
-  }
-  int64_t allocate(
-    uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, PExtentVector *extents) override;
+  const char* get_type() const override { return "bitmap"; }
+  int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
+                   uint64_t max_alloc_size, int64_t hint,
+                   PExtentVector* extents) override;
 
-  void release(
-    const interval_set<uint64_t>& release_set) override;
+  void release(const interval_set<uint64_t>& release_set) override;
 
   using Allocator::release;
 
-  uint64_t get_free() override
-  {
-    return get_available();
-  }
+  uint64_t get_free() override { return get_available(); }
 
   void dump() override;
-  void foreach(
-    std::function<void(uint64_t offset, uint64_t length)> notify) override
-  {
+  void foreach (
+      std::function<void(uint64_t offset, uint64_t length)> notify) override {
     foreach_internal(notify);
   }
-  double get_fragmentation() override
-  {
-    return get_fragmentation_internal();
-  }
+  double get_fragmentation() override { return get_fragmentation_internal(); }
 
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;

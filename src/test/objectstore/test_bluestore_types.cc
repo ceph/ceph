@@ -1,10 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <sstream>
+
 #include "common/ceph_argparse.h"
 #include "common/ceph_time.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "include/types.h"
 #include "os/bluestore/AvlAllocator.h"
@@ -12,9 +15,6 @@
 #include "os/bluestore/bluestore_types.h"
 #include "os/bluestore/simple_bitmap.h"
 #include "perfglue/heap_profiler.h"
-#include "gtest/gtest.h"
-
-#include <sstream>
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -866,8 +866,8 @@ TEST(Blob, put_ref) {
     ASSERT_EQ(0x7000u, r[0].length);
     ASSERT_EQ(2u, r[1].offset);
     ASSERT_EQ(0x3000u,
-              r[1].length); // we have 0x1000 bytes less due to
-                            // alignment caused by min_alloc_size = 0x2000
+              r[1].length);  // we have 0x1000 bytes less due to
+                             // alignment caused by min_alloc_size = 0x2000
   }
   {
     BlueStore store(g_ceph_context, "", 0x4000);
@@ -1234,8 +1234,7 @@ TEST(ExtentMap, compress_extent_map) {
 }
 
 class ExtentMapFixture : virtual public ::testing::Test {
-
-public:
+ public:
   BlueStore store;
   BlueStore::OnodeCacheShard *oc;
   BlueStore::BufferCacheShard *bc;
@@ -1243,7 +1242,7 @@ public:
 
   static constexpr uint32_t au_size = 4096;
   uint32_t blob_size = 65536;
-  size_t csum_order = 12; // 1^12 = 4096 bytes
+  size_t csum_order = 12;  // 1^12 = 4096 bytes
 
   struct au {
     uint32_t chksum;
@@ -1254,14 +1253,13 @@ public:
   // test onode that glues some simplifications in representation
   // with actual BlueStore's onode
   struct t_onode {
-    BlueStore::OnodeRef onode;  // actual BS onode
-    std::vector<uint32_t> data; // map to AUs
+    BlueStore::OnodeRef onode;   // actual BS onode
+    std::vector<uint32_t> data;  // map to AUs
     static constexpr uint32_t empty = std::numeric_limits<uint32_t>::max();
   };
   void print(std::ostream &out, t_onode &onode) {
     for (size_t i = 0; i < onode.data.size(); ++i) {
-      if (i != 0)
-        out << " ";
+      if (i != 0) out << " ";
       if (onode.data[i] == t_onode::empty) {
         out << "-";
       } else {
@@ -1325,8 +1323,7 @@ public:
     uint32_t end = (off + len) / au_size;
     fillup(onode, end);
     while (i < end && i < onode.data.size()) {
-      if (onode.data[i] != t_onode::empty)
-        release(onode.data[i]);
+      if (onode.data[i] != t_onode::empty) release(onode.data[i]);
       onode.data[i] = t_onode::empty;
       i++;
     }
@@ -1353,10 +1350,10 @@ public:
 
     // below simulation of write performed by BlueStore::do_write()
     auto helper_blob_write =
-        [&](uint32_t log_off,   // logical offset of blob to put to onode
-            uint32_t empty_aus, // amount of unreferenced aus in the beginning
-            uint32_t first_au,  // first au that will be referenced
-            uint32_t num_aus // number of aus, first, first+1.. first+num_au-1
+        [&](uint32_t log_off,    // logical offset of blob to put to onode
+            uint32_t empty_aus,  // amount of unreferenced aus in the beginning
+            uint32_t first_au,   // first au that will be referenced
+            uint32_t num_aus  // number of aus, first, first+1.. first+num_au-1
         ) {
           uint32_t blob_length = (empty_aus + num_aus) * au_size;
           BlueStore::BlobRef b(coll->new_blob());
@@ -1605,7 +1602,7 @@ TEST(ExtentMap, dup_extent_map) {
   BlueStore::BufferCacheShard *bc =
       BlueStore::BufferCacheShard::create(&store, "lru", NULL);
 
-  size_t csum_order = 12; // 1^12 = 4096 bytes
+  size_t csum_order = 12;  // 1^12 = 4096 bytes
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   std::unique_ptr<ceph::Formatter> formatter(Formatter::create("json"));
 
@@ -1651,7 +1648,7 @@ TEST(ExtentMap, dup_extent_map) {
     onode1->extent_map.dup_esb(&store, &txc, coll, onode1, onode2, ext1_offs,
                                ext1_len, ext1_offs);
 
-    em1.dump(formatter.get()); // see the log if any
+    em1.dump(formatter.get());  // see the log if any
     formatter->flush(std::cout);
     std::cout << std::endl;
     em2.dump(formatter.get());
@@ -1688,7 +1685,7 @@ TEST(ExtentMap, dup_extent_map) {
 
     onode1->extent_map.dup_esb(&store, &txc, coll, onode1, onode3, clone_offs,
                                clone_len, clone_offs);
-    em1.dump(formatter.get()); // see the log if any
+    em1.dump(formatter.get());  // see the log if any
     formatter->flush(std::cout);
     std::cout << std::endl;
     em3.dump(formatter.get());
@@ -1733,7 +1730,7 @@ TEST(ExtentMap, dup_extent_map) {
 
     onode2->extent_map.dup_esb(&store, &txc, coll, onode2, onode4, clone_offs,
                                clone_len, clone_offs);
-    em2.dump(formatter.get()); // see the log if any
+    em2.dump(formatter.get());  // see the log if any
     formatter->flush(std::cout);
     std::cout << std::endl;
     em4.dump(formatter.get());
@@ -1892,13 +1889,13 @@ TEST(GarbageCollector, BasicTest) {
     em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b1));
     b1->get_ref(coll.get(), 0, 0x8000);
     em.extent_map.insert(
-        *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2)); // new extent
+        *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2));  // new extent
     b2->get_ref(coll.get(), 0x8000, 0x8000);
     em.extent_map.insert(
-        *new BlueStore::Extent(0x10000, 0, 0x20000, b3)); // new extent
+        *new BlueStore::Extent(0x10000, 0, 0x20000, b3));  // new extent
     b3->get_ref(coll.get(), 0, 0x20000);
     em.extent_map.insert(
-        *new BlueStore::Extent(0x30000, 0, 0xf000, b4)); // new extent
+        *new BlueStore::Extent(0x30000, 0, 0xf000, b4));  // new extent
     b4->get_ref(coll.get(), 0, 0xf000);
     em.extent_map.insert(*new BlueStore::Extent(0x3f000, 0x3f000, 0x1000, b1));
     b1->get_ref(coll.get(), 0x3f000, 0x1000);
@@ -1960,7 +1957,7 @@ TEST(GarbageCollector, BasicTest) {
     em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x3000, b1));
     b1->get_ref(coll.get(), 0, 0x3000);
     em.extent_map.insert(
-        *new BlueStore::Extent(0x3000, 0, 0x4000, b2)); // new extent
+        *new BlueStore::Extent(0x3000, 0, 0x4000, b2));  // new extent
     b2->get_ref(coll.get(), 0, 0x4000);
 
     old_extents.push_back(
@@ -2021,13 +2018,13 @@ TEST(GarbageCollector, BasicTest) {
     em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b0));
     b0->get_ref(coll.get(), 0, 0x8000);
     em.extent_map.insert(
-        *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2)); // new extent
+        *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2));  // new extent
     b2->get_ref(coll.get(), 0x8000, 0x8000);
     em.extent_map.insert(
-        *new BlueStore::Extent(0x10000, 0, 0x20000, b3)); // new extent
+        *new BlueStore::Extent(0x10000, 0, 0x20000, b3));  // new extent
     b3->get_ref(coll.get(), 0, 0x20000);
     em.extent_map.insert(
-        *new BlueStore::Extent(0x30000, 0, 0xf000, b4)); // new extent
+        *new BlueStore::Extent(0x30000, 0, 0xf000, b4));  // new extent
     b4->get_ref(coll.get(), 0, 0xf000);
     em.extent_map.insert(*new BlueStore::Extent(0x3f000, 0x1f000, 0x1000, b1));
     b1->get_ref(coll.get(), 0x1f000, 0x1000);
@@ -2165,11 +2162,11 @@ TEST(BlueStoreRepairer, StoreSpaceTracker) {
 TEST(bluestore_blob_t, unused) {
   {
     bluestore_blob_t b;
-    uint64_t min_alloc_size = 64 << 10; // 64 kB
+    uint64_t min_alloc_size = 64 << 10;  // 64 kB
 
     // _do_write_small 0x0~1000
     uint64_t offset = 0x0;
-    uint64_t length = 0x1000; // 4kB
+    uint64_t length = 0x1000;  // 4kB
     uint64_t suggested_boff = 0;
     PExtentVector extents;
     extents.emplace_back(0x1a560000, min_alloc_size);
@@ -2196,11 +2193,11 @@ TEST(bluestore_blob_t, unused) {
 
   {
     bluestore_blob_t b;
-    uint64_t min_alloc_size = 64 << 10; // 64 kB
+    uint64_t min_alloc_size = 64 << 10;  // 64 kB
 
     // _do_write_small 0x11000~1000
     uint64_t offset = 0x11000;
-    uint64_t length = 0x1000; // 4kB
+    uint64_t length = 0x1000;  // 4kB
     uint64_t suggested_boff = 0x11000;
     PExtentVector extents;
     extents.emplace_back(0x1a560000, min_alloc_size);
@@ -2222,7 +2219,7 @@ TEST(bluestore_blob_t, unused) {
   {
     // reuse blob
     bluestore_blob_t b;
-    uint64_t min_alloc_size = 64 << 10; // 64 kB
+    uint64_t min_alloc_size = 64 << 10;  // 64 kB
 
     // _do_write_small 0x2a000~1000
     // and 0x1d000~1000
@@ -2231,7 +2228,7 @@ TEST(bluestore_blob_t, unused) {
     // be aligned with unused_granularity
     uint64_t offset0 = 0x2a000;
     uint64_t offset = 0x1d000;
-    uint64_t length = 0x1000; // 4kB
+    uint64_t length = 0x1000;  // 4kB
     PExtentVector extents;
     extents.emplace_back(0x410000, min_alloc_size);
     b.allocated(p2align(offset0, min_alloc_size), min_alloc_size, extents);
@@ -2263,7 +2260,7 @@ TEST(bluestore_blob_t, unused) {
 TEST(bluestore_blob_t, wrong_map_bl_in_51682) {
   {
     bluestore_blob_t b;
-    uint64_t min_alloc_size = 4 << 10; // 64 kB
+    uint64_t min_alloc_size = 4 << 10;  // 64 kB
 
     b.allocated_test(bluestore_pextent_t(0x17ba000, 4 * min_alloc_size));
     b.allocated_test(bluestore_pextent_t(0x17bf000, 4 * min_alloc_size));
@@ -2415,7 +2412,7 @@ TEST(SimpleBitmap, basic) {
   std::unique_ptr<extent_t[]> ext_arr =
       std::make_unique<extent_t[]>(MAX_EXTENTS_COUNT);
   ASSERT_TRUE(ext_arr != nullptr);
-  const uint64_t BIT_COUNT = 4ULL << 30; // 4Gb = 512MB
+  const uint64_t BIT_COUNT = 4ULL << 30;  // 4Gb = 512MB
   SimpleBitmap sbmap(g_ceph_context, BIT_COUNT);
 
   // use current time as seed for random generator
@@ -2529,7 +2526,7 @@ static int test_intersections(unsigned test_idx, SimpleBitmap &sbmap,
 
 //---------------------------------------------------------------------------------
 TEST(SimpleBitmap, intersection) {
-  const uint64_t MAP_SIZE = 1ULL << 30; // 1G
+  const uint64_t MAP_SIZE = 1ULL << 30;  // 1G
   SimpleBitmap sbmap(g_ceph_context, MAP_SIZE);
 
   // use current time as seed for random generator
@@ -2637,7 +2634,7 @@ TEST(SimpleBitmap, boundaries) {
   // use current time as seed for random generator
   std::srand(std::time(nullptr));
 
-  uint64_t bit_count = 32 << 20; // 32Mb = 4MB
+  uint64_t bit_count = 32 << 20;  // 32Mb = 4MB
   unsigned count = 0;
   for (unsigned i = 0; i < 64; i++) {
     SimpleBitmap sbmap(g_ceph_context, bit_count + i);
@@ -2655,7 +2652,7 @@ TEST(SimpleBitmap, boundaries) {
 
 //---------------------------------------------------------------------------------
 TEST(SimpleBitmap, boundaries2) {
-  const uint64_t bit_count_base = 64 << 10; // 64Kb = 8MB
+  const uint64_t bit_count_base = 64 << 10;  // 64Kb = 8MB
   const extent_t null_extent = {0, 0};
 
   for (unsigned i = 0; i < 64; i++) {
@@ -2759,8 +2756,8 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
     bluestore_blob_use_tracker_t *t1 = new bluestore_blob_use_tracker_t;
 
     t1->init(1024 * 1024, 4096);
-    ASSERT_EQ(256, allocated_items() - other_items0);  // = 1M / 4K
-    ASSERT_EQ(1024, allocated_bytes() - other_bytes0); // = 1M / 4K * 4
+    ASSERT_EQ(256, allocated_items() - other_items0);   // = 1M / 4K
+    ASSERT_EQ(1024, allocated_bytes() - other_bytes0);  // = 1M / 4K * 4
 
     delete t1;
     ASSERT_EQ(allocated_items(), other_items0);
@@ -2772,8 +2769,8 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
     t1->init(1024 * 1024, 4096);
     t1->add_tail(2048 * 1024, 4096);
     // proper stats update after tail add
-    ASSERT_EQ(512, allocated_items() - other_items0);  // = 2M / 4K
-    ASSERT_EQ(2048, allocated_bytes() - other_bytes0); // = 2M / 4K * 4
+    ASSERT_EQ(512, allocated_items() - other_items0);   // = 2M / 4K
+    ASSERT_EQ(2048, allocated_bytes() - other_bytes0);  // = 2M / 4K * 4
 
     delete t1;
     ASSERT_EQ(allocated_items(), other_items0);
@@ -2785,8 +2782,8 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
     t1->init(1024 * 1024, 4096);
     t1->prune_tail(512 * 1024);
     // no changes in stats after pruning
-    ASSERT_EQ(256, allocated_items() - other_items0);  // = 1M / 4K
-    ASSERT_EQ(1024, allocated_bytes() - other_bytes0); // = 1M / 4K * 4
+    ASSERT_EQ(256, allocated_items() - other_items0);   // = 1M / 4K
+    ASSERT_EQ(1024, allocated_bytes() - other_bytes0);  // = 1M / 4K * 4
 
     delete t1;
     ASSERT_EQ(allocated_items(), other_items0);
@@ -2800,14 +2797,15 @@ TEST(bluestore_blob_use_tracker_t, mempool_stats_test) {
 
     // t1 keeps the same amount of entries + t2 has got half of them
     t1->split(512 * 1024, t2);
-    ASSERT_EQ(256 + 128, allocated_items() - other_items0);  //= 1M / 4K*1.5
-    ASSERT_EQ(1024 + 512, allocated_bytes() - other_bytes0); //= 1M / 4K*4*1.5
+    ASSERT_EQ(256 + 128, allocated_items() - other_items0);   //= 1M / 4K*1.5
+    ASSERT_EQ(1024 + 512, allocated_bytes() - other_bytes0);  //= 1M / 4K*4*1.5
 
     // t1 & t2 release everything, then t2 get one less entry than t2 had had
     // before
     t1->split(4096, t2);
-    ASSERT_EQ(127, allocated_items() - other_items0);     // = 512K / 4K - 1
-    ASSERT_EQ(127 * 4, allocated_bytes() - other_bytes0); // = 512L / 4K * 4 - 4
+    ASSERT_EQ(127, allocated_items() - other_items0);  // = 512K / 4K - 1
+    ASSERT_EQ(127 * 4,
+              allocated_bytes() - other_bytes0);  // = 512L / 4K * 4 - 4
     delete t1;
     delete t2;
     ASSERT_EQ(allocated_items(), other_items0);

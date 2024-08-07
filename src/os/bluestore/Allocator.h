@@ -14,19 +14,18 @@
 
 #include <functional>
 #include <ostream>
-#include "include/ceph_assert.h"
+
 #include "bluestore_types.h"
+#include "include/ceph_assert.h"
 
 class Allocator {
-public:
-  Allocator(std::string_view name,
-	    int64_t _capacity,
-	    int64_t _block_size);
+ public:
+  Allocator(std::string_view name, int64_t _capacity, int64_t _block_size);
   virtual ~Allocator();
 
   /*
-  * returns allocator type name as per names in config
-  */
+   * returns allocator type name as per names in config
+   */
   virtual const char* get_type() const = 0;
 
   /*
@@ -35,15 +34,16 @@ public:
    * a. alloc unit
    * b. max_alloc_size.
    * as no extent can be lesser than block_size and greater than max_alloc size.
-   * Apart from that extents can vary between these lower and higher limits according
-   * to free block search algorithm and availability of contiguous space.
+   * Apart from that extents can vary between these lower and higher limits
+   * according to free block search algorithm and availability of contiguous
+   * space.
    */
   virtual int64_t allocate(uint64_t want_size, uint64_t block_size,
-			   uint64_t max_alloc_size, int64_t hint,
-			   PExtentVector *extents) = 0;
+                           uint64_t max_alloc_size, int64_t hint,
+                           PExtentVector* extents) = 0;
 
-  int64_t allocate(uint64_t want_size, uint64_t block_size,
-		   int64_t hint, PExtentVector *extents) {
+  int64_t allocate(uint64_t want_size, uint64_t block_size, int64_t hint,
+                   PExtentVector* extents) {
     return allocate(want_size, block_size, want_size, hint, extents);
   }
 
@@ -53,38 +53,24 @@ public:
   void release(const PExtentVector& release_set);
 
   virtual void dump() = 0;
-  virtual void foreach(
-    std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
+  virtual void foreach (
+      std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;
-  virtual double get_fragmentation()
-  {
-    return 0.0;
-  }
+  virtual double get_fragmentation() { return 0.0; }
   virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
 
-  static Allocator *create(
-    CephContext* cct,
-    std::string_view type,
-    int64_t size,
-    int64_t block_size,
-    const std::string_view name = ""
-    );
-
+  static Allocator* create(CephContext* cct, std::string_view type,
+                           int64_t size, int64_t block_size,
+                           const std::string_view name = "");
 
   const std::string& get_name() const;
-  int64_t get_capacity() const
-  {
-    return device_size;
-  }
-  int64_t get_block_size() const
-  {
-    return block_size;
-  }
+  int64_t get_capacity() const { return device_size; }
+  int64_t get_block_size() const { return block_size; }
 
   // The following code build Allocator's free extents histogram.
   // Which is a set of N buckets to track extents layout.
@@ -107,20 +93,19 @@ public:
 
     // returns upper bound of the bucket
     static size_t get_max(size_t bucket, size_t num_buckets) {
-      return
-        bucket < num_buckets - 1 ?
-          base << (mux * bucket) :
-          std::numeric_limits<uint64_t>::max();
+      return bucket < num_buckets - 1 ? base << (mux * bucket)
+                                      : std::numeric_limits<uint64_t>::max();
     };
   };
 
   typedef std::vector<free_state_hist_bucket> FreeStateHistogram;
   void build_free_state_histogram(size_t alloc_unit, FreeStateHistogram& hist);
 
-private:
+ private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;
-protected:
+
+ protected:
   const int64_t device_size = 0;
   const int64_t block_size = 0;
 };

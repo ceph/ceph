@@ -14,9 +14,9 @@
 
 #include "simple_bitmap.h"
 
-#include "include/ceph_assert.h"
 #include "bluestore_types.h"
 #include "common/debug.h"
+#include "include/ceph_assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -26,31 +26,27 @@
 static struct extent_t null_extent = {0, 0};
 
 //----------------------------------------------------------------------------
-//throw bad_alloc
-SimpleBitmap::SimpleBitmap(CephContext *_cct, uint64_t num_bits) :cct(_cct)
-{
-  m_num_bits   = num_bits;
+// throw bad_alloc
+SimpleBitmap::SimpleBitmap(CephContext *_cct, uint64_t num_bits) : cct(_cct) {
+  m_num_bits = num_bits;
   m_word_count = bits_to_words(num_bits);
   if (num_bits & BITS_IN_WORD_MASK) {
     m_word_count++;
   }
-  m_arr = new uint64_t [m_word_count];
+  m_arr = new uint64_t[m_word_count];
   clear_all();
 }
 
 //----------------------------------------------------------------------------
-SimpleBitmap::~SimpleBitmap()
-{
-  delete [] m_arr;
-}
+SimpleBitmap::~SimpleBitmap() { delete[] m_arr; }
 
 //----------------------------------------------------------------------------
-bool SimpleBitmap::set(uint64_t offset, uint64_t length)
-{
-  dout(20) <<" [" << std::hex << offset << ", " << length << "]" << dendl;
+bool SimpleBitmap::set(uint64_t offset, uint64_t length) {
+  dout(20) << " [" << std::hex << offset << ", " << length << "]" << dendl;
 
   if (offset + length > m_num_bits) {
-    derr << __func__ << "::offset + length = " << offset + length << " exceeds map size = " << m_num_bits << dendl;
+    derr << __func__ << "::offset + length = " << offset + length
+         << " exceeds map size = " << m_num_bits << dendl;
     ceph_assert(offset + length <= m_num_bits);
     return false;
   }
@@ -58,34 +54,34 @@ bool SimpleBitmap::set(uint64_t offset, uint64_t length)
   auto [word_index, first_bit_set] = split(offset);
   // special case optimization
   if (length == 1) {
-    uint64_t set_mask  = 1ULL << first_bit_set;
+    uint64_t set_mask = 1ULL << first_bit_set;
     m_arr[word_index] |= set_mask;
     return true;
   }
 
   // handle the first word which might be incomplete
   if (first_bit_set != 0) {
-    uint64_t   set_mask      = FULL_MASK << first_bit_set;
-    uint64_t   first_bit_clr = first_bit_set + length;
+    uint64_t set_mask = FULL_MASK << first_bit_set;
+    uint64_t first_bit_clr = first_bit_set + length;
     if (first_bit_clr <= BITS_IN_WORD) {
       if (first_bit_clr < BITS_IN_WORD) {
-	uint64_t clr_bits = BITS_IN_WORD - first_bit_clr;
-	uint64_t clr_mask = FULL_MASK >> clr_bits;
-	set_mask     &= clr_mask;
+        uint64_t clr_bits = BITS_IN_WORD - first_bit_clr;
+        uint64_t clr_mask = FULL_MASK >> clr_bits;
+        set_mask &= clr_mask;
       }
       m_arr[word_index] |= set_mask;
       return true;
     } else {
       // set all bits in this word starting from first_bit_set
       m_arr[word_index] |= set_mask;
-      word_index ++;
+      word_index++;
       length -= (BITS_IN_WORD - first_bit_set);
     }
   }
 
   // set a range of full words
   uint64_t full_words_count = bits_to_words(length);
-  uint64_t end              = word_index + full_words_count;
+  uint64_t end = word_index + full_words_count;
   for (; word_index < end; word_index++) {
     m_arr[word_index] = FULL_MASK;
   }
@@ -101,10 +97,10 @@ bool SimpleBitmap::set(uint64_t offset, uint64_t length)
 }
 
 //----------------------------------------------------------------------------
-bool SimpleBitmap::clr(uint64_t offset, uint64_t length)
-{
+bool SimpleBitmap::clr(uint64_t offset, uint64_t length) {
   if (offset + length > m_num_bits) {
-    derr << __func__ << "::offset + length = " << offset + length << " exceeds map size = " << m_num_bits << dendl;
+    derr << __func__ << "::offset + length = " << offset + length
+         << " exceeds map size = " << m_num_bits << dendl;
     ceph_assert(offset + length <= m_num_bits);
     return false;
   }
@@ -112,8 +108,8 @@ bool SimpleBitmap::clr(uint64_t offset, uint64_t length)
   auto [word_index, first_bit_clr] = split(offset);
   // special case optimization
   if (length == 1) {
-    uint64_t set_mask   = 1ULL << first_bit_clr;
-    uint64_t clr_mask   = ~set_mask;
+    uint64_t set_mask = 1ULL << first_bit_clr;
+    uint64_t clr_mask = ~set_mask;
     m_arr[word_index] &= clr_mask;
 
     return true;
@@ -121,30 +117,28 @@ bool SimpleBitmap::clr(uint64_t offset, uint64_t length)
 
   // handle the first word when we we are unaligned on word boundaries
   if (first_bit_clr != 0) {
-    uint64_t clr_mask      = ~(FULL_MASK << first_bit_clr);
+    uint64_t clr_mask = ~(FULL_MASK << first_bit_clr);
     uint64_t first_bit_set = first_bit_clr + length;
     // special case - we only work on a single word
     if (first_bit_set <= BITS_IN_WORD) {
       if (first_bit_set < BITS_IN_WORD) {
-	uint64_t set_mask = FULL_MASK << first_bit_set;
-	clr_mask         |= set_mask;
+        uint64_t set_mask = FULL_MASK << first_bit_set;
+        clr_mask |= set_mask;
       }
-      m_arr[word_index]     &= clr_mask;
+      m_arr[word_index] &= clr_mask;
       return true;
-    }
-    else {
+    } else {
       // clear all bits in this word starting from first_bit_clr
       // and continue to the next word
       m_arr[word_index] &= clr_mask;
-      word_index ++;
+      word_index++;
       length -= (BITS_IN_WORD - first_bit_clr);
     }
   }
 
-
   // clear a range of full words
   uint64_t full_words_count = bits_to_words(length);
-  uint64_t end              = word_index + full_words_count;
+  uint64_t end = word_index + full_words_count;
   for (; word_index < end; word_index++) {
     m_arr[word_index] = 0;
   }
@@ -160,22 +154,22 @@ bool SimpleBitmap::clr(uint64_t offset, uint64_t length)
 }
 
 //----------------------------------------------------------------------------
-extent_t SimpleBitmap::get_next_set_extent(uint64_t offset)
-{
-  if (offset >= m_num_bits ) {
+extent_t SimpleBitmap::get_next_set_extent(uint64_t offset) {
+  if (offset >= m_num_bits) {
     return null_extent;
   }
 
   auto [word_idx, bits_to_clear] = split(offset);
-  uint64_t word     = m_arr[word_idx];
+  uint64_t word = m_arr[word_idx];
   word &= (FULL_MASK << bits_to_clear);
 
   // if there are no set bits in this word
   if (word == 0) {
-      // skip past all clear words
-    while (++word_idx < m_word_count && !m_arr[word_idx]);
+    // skip past all clear words
+    while (++word_idx < m_word_count && !m_arr[word_idx])
+      ;
 
-    if (word_idx < m_word_count ) {
+    if (word_idx < m_word_count) {
       word = m_arr[word_idx];
     } else {
       return null_extent;
@@ -183,21 +177,22 @@ extent_t SimpleBitmap::get_next_set_extent(uint64_t offset)
   }
 
   // ffs is 1 based, must dec by one as we are zero based
-  int           ffs = __builtin_ffsll(word) - 1;
-  extent_t      ext;
+  int ffs = __builtin_ffsll(word) - 1;
+  extent_t ext;
   ext.offset = words_to_bits(word_idx) + ffs;
-  if (ext.offset >= m_num_bits ) {
+  if (ext.offset >= m_num_bits) {
     return null_extent;
   }
 
   // set all bits from current to LSB
-  uint64_t      clr_mask = FULL_MASK << ffs;
-  uint64_t      set_mask = ~clr_mask;
+  uint64_t clr_mask = FULL_MASK << ffs;
+  uint64_t set_mask = ~clr_mask;
   word |= set_mask;
 
   // skipped past fully set words
   if (word == FULL_MASK) {
-    while ( (++word_idx < m_word_count) && (m_arr[word_idx] == FULL_MASK) );
+    while ((++word_idx < m_word_count) && (m_arr[word_idx] == FULL_MASK))
+      ;
 
     if (word_idx < m_word_count) {
       word = m_arr[word_idx];
@@ -209,33 +204,33 @@ extent_t SimpleBitmap::get_next_set_extent(uint64_t offset)
   }
 
   ceph_assert(word != FULL_MASK);
-  int      ffz     = __builtin_ffsll(~word) - 1;
+  int ffz = __builtin_ffsll(~word) - 1;
   uint64_t zoffset = words_to_bits(word_idx) + ffz;
-  ext.length       = (zoffset - ext.offset);
+  ext.length = (zoffset - ext.offset);
 
   return ext;
 }
 
 //----------------------------------------------------------------------------
-extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset)
-{
-  if (offset >= m_num_bits ) {
+extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset) {
+  if (offset >= m_num_bits) {
     return null_extent;
   }
 
   uint64_t word_idx = offset_to_index(offset);
-  uint64_t word     = m_arr[word_idx];
+  uint64_t word = m_arr[word_idx];
 
   // set all bit set before offset
   offset &= BITS_IN_WORD_MASK;
   if (offset != 0) {
     uint64_t bits_to_set = BITS_IN_WORD - offset;
-    uint64_t set_mask    = FULL_MASK >> bits_to_set;
+    uint64_t set_mask = FULL_MASK >> bits_to_set;
     word |= set_mask;
   }
   if (word == FULL_MASK) {
     // skipped past fully set words
-    while ( (++word_idx < m_word_count) && (m_arr[word_idx] == FULL_MASK) );
+    while ((++word_idx < m_word_count) && (m_arr[word_idx] == FULL_MASK))
+      ;
 
     if (word_idx < m_word_count) {
       word = m_arr[word_idx];
@@ -245,10 +240,10 @@ extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset)
     }
   }
 
-  int      ffz = __builtin_ffsll(~word) - 1;
+  int ffz = __builtin_ffsll(~word) - 1;
   extent_t ext;
   ext.offset = words_to_bits(word_idx) + ffz;
-  if (ext.offset >= m_num_bits ) {
+  if (ext.offset >= m_num_bits) {
     return null_extent;
   }
 
@@ -257,7 +252,8 @@ extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset)
 
   // skip past all clear words
   if (word == 0) {
-    while ( (++word_idx < m_word_count) && (m_arr[word_idx] == 0) );
+    while ((++word_idx < m_word_count) && (m_arr[word_idx] == 0))
+      ;
 
     if (word_idx < m_word_count) {
       word = m_arr[word_idx];
@@ -269,8 +265,8 @@ extent_t SimpleBitmap::get_next_clr_extent(uint64_t offset)
   }
 
   // ffs is 1 based, must dec by one as we are zero based
-  int           ffs     = __builtin_ffsll(word) - 1;
-  uint64_t      soffset = words_to_bits(word_idx) + ffs;
+  int ffs = __builtin_ffsll(word) - 1;
+  uint64_t soffset = words_to_bits(word_idx) + ffs;
   ext.length = (soffset - ext.offset);
   return ext;
 }
