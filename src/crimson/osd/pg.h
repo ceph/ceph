@@ -64,6 +64,7 @@ namespace crimson::osd {
 class OpsExecuter;
 class BackfillRecovery;
 class SnapTrimEvent;
+class PglogBasedRecovery;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -418,6 +419,10 @@ public:
   }
   void on_backfill_canceled() final {
     ceph_assert(0 == "Not implemented");
+  }
+
+  void on_recovery_cancelled() final {
+    cancel_pglog_based_recovery_op();
   }
 
   void on_recovery_reserved() final {
@@ -822,6 +827,10 @@ public:
     return can_discard_replica_op(m, m.get_map_epoch());
   }
 
+  void set_pglog_based_recovery_op(PglogBasedRecovery *op) final;
+  void reset_pglog_based_recovery_op() final;
+  void cancel_pglog_based_recovery_op();
+
 private:
   // instead of seastar::gate, we use a boolean flag to indicate
   // whether the system is shutting down, as we don't need to track
@@ -829,6 +838,7 @@ private:
   bool stopping = false;
 
   PGActivationBlocker wait_for_active_blocker;
+  PglogBasedRecovery* pglog_based_recovery_op = nullptr;
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;
