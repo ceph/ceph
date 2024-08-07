@@ -154,7 +154,6 @@ int main(int argc, char** argv) {
   string ceph_conf_path("./ceph.conf");
   string pool("test_pool");
   bool skip_do_ops = false;
-  size_t sum_ops = 0;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
@@ -184,61 +183,8 @@ int main(int argc, char** argv) {
   
   vector<string> input_files = vm["input-files"].as<vector<string>>();
 
-  vector<shared_ptr<ParserContext>> complete_parser_contexts; // list of ALL parser contexts so that shared_ptrs do not die.
-  for (auto &file : input_files) {
-    // Parse input file
-    vector<std::thread> parser_threads;
-    vector<shared_ptr<ParserContext>> parser_contexts;
-    cout << fmt::format("parsing file {}", file) << endl;
-    int fd = open(file.c_str(), O_RDONLY);
-    if (fd == -1) {
-        cout << "Error opening file" << endl;
-        exit(EXIT_FAILURE);
-    }
-    struct stat file_stat;
-    fstat(fd, &file_stat);
-    char* mapped_buffer = (char*)mmap(NULL, file_stat.st_size, PROT_READ, MAP_SHARED, fd, 0);
-    if (mapped_buffer == nullptr) {
-        cout << "error mapping buffer" << endl;
-        exit(EXIT_FAILURE);
-    }
-    uint64_t step_size = file_stat.st_size / nparser_threads;
-    char* start = mapped_buffer;
-    for (int i = 0; i < nparser_threads; i++) {
-      char* end = start + step_size;
-      if (i == nparser_threads - 1) {
-          end = mapped_buffer + file_stat.st_size;
-      }
-      while(*(end - 1) != '\n') {
-          end--;
-      }
-      shared_ptr<ParserContext> context = make_shared<ParserContext>();
-      context->start = start;
-      context->end = end;
-      context->max_buffer_size = 0;
-      parser_contexts.push_back(context);
-      auto op_action = [context](Op&& op) {
-        context->ops.push_back(op);
-      };
-      parser_threads.push_back(std::thread(parse_entry_point, context, op_action));
-      start = end;
-    }
-    for (auto& t : parser_threads) {
-        t.join();
-    }
-    // reduce
-    for (auto context : parser_contexts) {
-      sum_ops += context->ops.size();
-    }
-    ops.reserve(sum_ops);
-    for (auto context : parser_contexts) {
-        ops.insert(ops.end(), context->ops.begin(), context->ops.end());
-        max_buffer_size = max(context->max_buffer_size, max_buffer_size);
-    }
-    munmap(mapped_buffer, file_stat.st_size);
-    complete_parser_contexts.insert(complete_parser_contexts.end(), parser_contexts.begin(), parser_contexts.end());
-  }
-  
+  parse_files(input_files, nparser_threads, ops, max_buffer_size);
+
   cout << "Sorting ops by date..." << endl;
   sort(ops.begin(), ops.end(), op_comparison_by_date);
   cout << "Sorting ops by date done" << endl;

@@ -68,4 +68,10 @@ void parse_entry_point(
   std::function<void(Op&&)> op_action
   );
 
+void parse_files(
+  const std::vector<std::string>& input_files,
+  int nparser_threads,
+  std::vector<Op>& ops,
+  uint64_t& max_buffer_size);
+
 #endif
