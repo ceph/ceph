@@ -113,6 +113,20 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  void sha256_to_bufferlist(uint64_t sha256a,
+			    uint64_t sha256b,
+			    uint64_t sha256c,
+			    uint64_t sha256d,
+			    ceph::bufferlist *bl)
+  {
+    // add one extra byte for the null termination
+    char buff[64+1];
+    snprintf(buff, sizeof(buff), "%016lx%016lx%016lx%016lx", sha256a, sha256b, sha256c, sha256d);
+    // append the hex string including the null termination
+    bl->append(buff, sizeof(buff));
+  }
+
+  //---------------------------------------------------------------------------
   std::string calc_refcount_tag_hash(const std::string &bucket_name, const std::string &obj_name)
   {
     bufferlist bl;

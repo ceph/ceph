@@ -119,7 +119,6 @@ namespace rgw::dedup {
       // overflow!
       return -1;
     }
-
     value_t val(block_id, rec_id, shared_manifest, valid_sha256);
     const std::lock_guard<std::mutex> lock(table_mtx);
     uint32_t idx = find_entry(p_key);
@@ -127,12 +126,15 @@ namespace rgw::dedup {
       hash_tab[idx].key = *p_key;
       hash_tab[idx].val = val;
       ldpp_dout(dpp, 0) << __func__ << "::add new entry" << dendl;
+      ceph_assert(hash_tab[idx].val.count == 1);
     }
     else {
       ceph_assert(hash_tab[idx].key == *p_key);
-      if (!hash_tab[idx].val.is_shared_manifest() && shared_manifest) {
+      hash_tab[idx].val.count ++;
+      if (!hash_tab[idx].val.has_shared_manifest() && shared_manifest) {
 	// replace value!
 	ldpp_dout(dpp, 0) << __func__ << "::Replace with shared_manifest" << dendl;
+	val.count = hash_tab[idx].val.count;
 	val.clear_singleton();
 	hash_tab[idx].val = val;
       }
@@ -141,7 +143,9 @@ namespace rgw::dedup {
 	// This is the second record with the same key -> clear singleton state
 	hash_tab[idx].val.clear_singleton();
       }
+      ceph_assert(hash_tab[idx].val.count > 1);
     }
+    ldpp_dout(dpp, 0) << __func__ << "::DUP COUNT=" << hash_tab[idx].val.count << dendl;
     return 0;
   }
   
@@ -178,8 +182,9 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void dedup_table_t::count_duplicates(uint32_t *p_singleton_count,
-				       uint32_t *p_duplicate_count)
+  void dedup_table_t::count_duplicates(uint64_t *p_singleton_count,
+				       uint64_t *p_unique_count,
+				       uint64_t *p_duplicate_count)
   {
     for (uint32_t tab_idx = 0; tab_idx < entries_count; tab_idx++) {
       if (!hash_tab[tab_idx].val.is_occupied()) {
@@ -190,7 +195,8 @@ namespace rgw::dedup {
 	(*p_singleton_count)++;
       }
       else {
-	(*p_duplicate_count)++;
+	(*p_duplicate_count) += (hash_tab[tab_idx].val.count -1);
+	(*p_unique_count) ++;
       }
     }
   }

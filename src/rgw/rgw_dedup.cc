@@ -52,6 +52,7 @@
 using namespace librados;
 using namespace std;
 using namespace rgw::dedup;
+using namespace ::cls::cmpxattr;
 #include "rgw_sal_rados.h"
 #include "rgw_dedup_table.h"
 #include "rgw_dedup_utils.h"
@@ -436,15 +437,14 @@ namespace rgw::dedup {
   {
     key_t key(p_rec->s.md5_high, p_rec->s.md5_low, p_rec->s.size_4k_units,
 	      p_rec->s.num_parts);
-    bool valid_sha256 = p_rec->s.flags & RGW_DEDUP_FLAG_SHA256;
-    bool shared_manifest = p_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST;
-
+    bool has_valid_sha256 = p_rec->has_valid_sha256();
+    bool has_shared_manifest = p_rec->has_shared_manifest();
     ldpp_dout(dpp, 0) << __func__ << "::bucket=" << p_rec->bucket_name
 		      << ", obj=" << p_rec->obj_name << ", block_id="
 		      << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
-		      << ", shared_manifest=" << shared_manifest << dendl;
+		      << ", shared_manifest=" << has_shared_manifest << dendl;
 
-    return d_table.add_entry(&key, block_id, rec_id, shared_manifest, valid_sha256);
+    return d_table.add_entry(&key, block_id, rec_id, has_shared_manifest, has_valid_sha256);
   }
 
   //---------------------------------------------------------------------------
@@ -526,9 +526,25 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static void init_cmp_pairs(const disk_record_t *p_rec,
+			     const bufferlist    &etag_bl,
+			     ComparisonMap       *p_cmp_pairs)
+  {
+    (*p_cmp_pairs)[RGW_ATTR_ETAG] = etag_bl;
+    (*p_cmp_pairs)[RGW_ATTR_MANIFEST] = p_rec->manifest_bl;
+
+    if (p_rec->s.flags.has_valid_sha256() ) {
+      bufferlist bl;
+      sha256_to_bufferlist(p_rec->s.sha256[0], p_rec->s.sha256[1],
+			   p_rec->s.sha256[2], p_rec->s.sha256[3], &bl);
+      (*p_cmp_pairs)[RGW_ATTR_SHA256] = bl;
+    }
+  }
+
+  //---------------------------------------------------------------------------
   int Background::dedup_object(const disk_record_t *p_src_rec,
 			       const disk_record_t *p_tgt_rec,
-			       bool                 is_shared_manifest_src,
+			       bool                 has_shared_manifest_src,
 			       bool                 src_has_sha256)
   {
     RGWObjManifest src_manifest;
@@ -551,7 +567,6 @@ namespace rgw::dedup {
 		      << p_src_rec->bucket_name << "/" << p_src_rec->obj_name << " -> "
 		      << p_tgt_rec->bucket_name << "/" << p_tgt_rec->obj_name << dendl;
 
-    using namespace ::cls::cmpxattr;
     bufferlist etag_bl;
     etag_to_bufferlist(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, p_tgt_rec->s.num_parts, &etag_bl);
     ldpp_dout(dpp, 0) << __func__ << "::num_parts=" << p_tgt_rec->s.num_parts
@@ -561,8 +576,9 @@ namespace rgw::dedup {
     // TBD1: used shorter hash (64bit instead of 160bit)
     crypto::digest<crypto::SHA1>(p_src_rec->manifest_bl).encode(shared_manifest_hash_bl);
     librados::ObjectWriteOperation src_op, tgt_op;
-    ComparisonMap src_cmp_pairs = {{RGW_ATTR_ETAG, etag_bl},{RGW_ATTR_MANIFEST, p_src_rec->manifest_bl}};
-    ComparisonMap tgt_cmp_pairs = {{RGW_ATTR_ETAG, etag_bl},{RGW_ATTR_MANIFEST, p_tgt_rec->manifest_bl}};
+    ComparisonMap src_cmp_pairs, tgt_cmp_pairs;
+    init_cmp_pairs(p_src_rec, etag_bl, &src_cmp_pairs);
+    init_cmp_pairs(p_tgt_rec, etag_bl, &tgt_cmp_pairs);
     map<string, bufferlist> src_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl}};
     map<string, bufferlist> tgt_set_pairs = {{RGW_ATTR_SHARE_MANIFEST, shared_manifest_hash_bl},
 					     {RGW_ATTR_MANIFEST, p_src_rec->manifest_bl}};
@@ -594,7 +610,7 @@ namespace rgw::dedup {
       // free tail objects based on TGT manifest
       free_tail_objs_by_manifest(ref_tag, tgt_oid, tgt_manifest);
 
-      if(!is_shared_manifest_src) {
+      if(!has_shared_manifest_src) {
 	ldpp_dout(dpp, 0) << __func__ << "::send SRC CLS" << dendl;
 	ret = src_ioctx.operate(src_oid, &src_op);
 	if (ret < 0) {
@@ -625,8 +641,10 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 0) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
 		      << ", obj=" << p_tgt_rec->obj_name
 		      << ", block_id=" << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
-		      << ", md5_shard=" << md5_shard << dendl;
-    if (p_tgt_rec->s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
+		      << ", md5_shard=" << (int)md5_shard << dendl;
+
+    stats.total_objects ++;
+    if (p_tgt_rec->s.flags.has_shared_manifest()) {
       // record holds a shared_manifest object so can't be a dedup target
       ldpp_dout(dpp, 0) << __func__ << "::skipped shared_manifest" << dendl;
       stats.skipped_shared_manifest++;
@@ -634,7 +652,6 @@ namespace rgw::dedup {
     }
 
     key_t key(p_tgt_rec->s.md5_high, p_tgt_rec->s.md5_low, p_tgt_rec->s.size_4k_units, p_tgt_rec->s.num_parts);
-    //int ret = d_table.get_block_id(&key, &src_block_id, &src_rec_id, &is_shared_manifest);
     dedup_table_t::value_t val;
     int ret = d_table.get_val(&key, &val);
     if (ret != 0) {
@@ -646,8 +663,8 @@ namespace rgw::dedup {
 
     disk_block_id_t src_block_id = val.block_idx;
     record_id_t src_rec_id = val.rec_id;
-    bool is_shared_manifest = val.is_shared_manifest();
-    bool has_sha256 = val.has_valid_sha256();
+    bool has_shared_manifest = val.has_shared_manifest();
+    bool src_has_sha256 = val.has_valid_sha256();
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
       ldpp_dout(dpp, 0) << __func__ << "::skipped source-record" << dendl;
@@ -670,21 +687,42 @@ namespace rgw::dedup {
 	return 0;
       }
 
-      ret = dedup_object(&src_rec, p_tgt_rec, is_shared_manifest, has_sha256);
+      if (!src_has_sha256) {
+	// TBD:  if SRC has no valid SHA256 -> read the full object and calc it
+	// TBD2: after calculation need to store the SHA256 on the disk-record
+	// TBD3  after storing SHA256 on disk-record -> update flags in dedup-table
+	ldpp_dout(dpp, 0) << __func__ << "::No Valid SHA256 for: "
+			  << src_rec.bucket_name << " / " << src_rec.obj_name << dendl;
+      }
+
+      if (!p_tgt_rec->s.flags.has_valid_sha256() ) {
+	// TBD:  if TGT has no valid SHA256 ->
+	//              read the full object, calc SHA256 adding it to in-memory record
+      }
+
+      // temporary code until SHA256 support is added
+      if (src_has_sha256 && p_tgt_rec->s.flags.has_valid_sha256()) {
+	if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
+	  derr << __func__ << "::SHA256 mismatch" << dendl;
+	  stats.skipped_bad_sha256++;
+	  return 0;
+	}
+      }
+
+      ret = dedup_object(&src_rec, p_tgt_rec, has_shared_manifest, src_has_sha256);
       if (ret == 0) {
 	stats.deduped_objects++;
-	if (!has_sha256) {
+	if (!src_has_sha256) {
 	  // TBD: calculate SHA256 for SRC and set flag in table!!
 	}
 	// mark the SRC object as a providor of a shared manifest
-	if (!is_shared_manifest) {
+	if (!has_shared_manifest) {
 	  stats.set_shared_manifest++;
 	  // set the shared manifest flag in the dedup table
 	  d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
 	}
 	else {
 	  ldpp_dout(dpp, 0) << __func__ << "::SRC object already marked as shared_manifest" << dendl;
-	  std::cerr << __func__ << "::SRC object already marked as shared_manifest" << std::endl;
 	}
       }
     }
@@ -770,9 +808,10 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) <<__func__ << "::Finished processing slab at seq_number=" << seq_number << dendl;
     }
     if (step == STEP_BUILD_TABLE) {
-      uint32_t singleton_count = 0, duplicate_count = 0;
-      d_table.count_duplicates(&singleton_count, &duplicate_count);
-      ldpp_dout(dpp, 1) <<__func__ << "::dedup::singleton_count=" << singleton_count
+      uint64_t singleton_count = 0, unique_count = 0, duplicate_count = 0;
+      d_table.count_duplicates(&singleton_count, &unique_count, &duplicate_count);
+      ldpp_dout(dpp, 1) <<__func__ << "::STATS::singleton_count=" << singleton_count
+			<< ", unique_count=" << unique_count
 			<< ", duplicate_count=" << duplicate_count << dendl;
     }
     return 0;
@@ -987,29 +1026,26 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 0) <<__func__ << "::shallow scan -> return" << dendl;
       return ret;
     }
-#if 0
-    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-      for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	p_disk_arr[md5_shard][worker_id]->flush_disk_records(store, rados);
-      }
-    }
-#endif
+
     ldpp_dout(dpp, 0) <<__func__ << "::Worker Flow!!" << dendl;
     if (deep_scan && obj_count) {
       uint32_t rec_count = 0;
-      ldpp_dout(dpp, 0) <<__func__ << "::scanned objects count = " << obj_count << dendl;
       for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
 	for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	  //build_dedup_table(md5_shard, worker_id);
 	  run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, &rec_count);
 	}
       }
       ldpp_dout(dpp, 0) <<__func__ << "::BUILD_TABLE::scanned records count = " << rec_count << dendl;
+      d_table.count_duplicates(&stats.singleton_count, &stats.unique_count, &stats.duplicate_count);
+
+      ldpp_dout(dpp, 1) <<__func__ << "::STATS::singleton_count=" << stats.singleton_count
+			<< ", unique_count=" << stats.unique_count
+			<< ", duplicate_count=" << stats.duplicate_count << dendl;
+
       d_table.remove_singletons_and_redistribute_keys();
       rec_count = 0;
       for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
 	for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	  //dedup_objects(md5_shard, worker_id);
 	  run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, &rec_count);
 	}
       }
@@ -1083,11 +1119,19 @@ namespace rgw::dedup {
     if (skipped_total + s.records_searched != s.records_inserts) {
       out << "\n\n***ERR:(Skipped total + Searched Records) != Insert Records!!***\n\n\n";
     }
-    out << "Deduped Objects         = " << s.deduped_objects << "\n";
-    out << "Set Shared-Manifest     = " << s.set_shared_manifest << "\n";
+    out << "Set Shared-Manifest      = " << s.set_shared_manifest << "\n";
+    out << "Total Objs               = " << s.total_objects << "\n";
+    out << "Deduped Obj (this cycle) = " << s.deduped_objects << "\n";
+    out << "Singleton Obj            = " << s.singleton_count << "\n";
+    out << "Unique Obj               = " << s.unique_count << "\n";
+    out << "Duplicate Obj            = " << s.duplicate_count << "\n";
 
     if (unlikely(s.skipped_duplicate)) {
       out << "\n\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n\n\n";
+    }
+
+    if (unlikely(s.skipped_bad_sha256)) {
+      out << "\n\n***ERR:Skipped SHA256 = " << s.skipped_bad_sha256 << "***\n\n\n";
     }
 
     return out;

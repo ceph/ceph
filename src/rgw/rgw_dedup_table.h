@@ -8,11 +8,6 @@
 //#include "rgw_common.h"
 #include "rgw_dedup_store.h"
 namespace rgw::dedup {
-  static constexpr uint8_t RGW_DEDUP_FLAG_SHA256          = 0x01;
-  static constexpr uint8_t RGW_DEDUP_FLAG_SHARED_MANIFEST = 0x02;
-  static constexpr uint8_t RGW_DEDUP_FLAG_SINGLETON       = 0x04;
-  static constexpr uint8_t RGW_DEDUP_FLAG_OCCUPIED        = 0x08;
-  static constexpr uint8_t RGW_DEDUP_FLAG_PG_VER          = 0x10;
 
   // 22 Bytes key
   struct key_t {
@@ -54,59 +49,45 @@ namespace rgw::dedup {
     struct value_t {
       value_t() {
 	this->block_idx = 0xFFFFFFFF;
+	this->count  = 0;
+	this->pad_16 = 0;
 	this->rec_id = 0xFF;
-	this->flags = 0;
+	this->flags.clear();
+	
       }
 
       value_t(disk_block_id_t block_id, record_id_t rec_id, bool shared_manifest, bool valid_sha256) {
 	this->block_idx = block_id;
+	this->count  = 1;
+	this->pad_16 = 0;
 	this->rec_id = rec_id;
-	this->flags = (RGW_DEDUP_FLAG_SINGLETON | RGW_DEDUP_FLAG_OCCUPIED);
+	this->flags.clear();
+	this->flags.set_singleton_occupied();
 	if (shared_manifest) {
-	  set_shared_manifest();
+	  flags.set_shared_manifest();
 	}
 	if (valid_sha256) {
-	  set_valid_sha256();
+	  flags.set_valid_sha256();
 	}
       }
 
-      void clear_flags() {
-	this->flags = 0;
-      }
-      bool has_valid_sha256() const {
-	return ((this->flags & RGW_DEDUP_FLAG_SHA256) != 0);
-      }
-      void set_valid_sha256() {
-	this->flags |= RGW_DEDUP_FLAG_SHA256;
-      }
-      bool is_shared_manifest() const {
-	return ((this->flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) != 0);
-      }
-      void set_shared_manifest() {
-	this->flags |= RGW_DEDUP_FLAG_SHARED_MANIFEST;
-      }
-      bool is_singleton() const {
-	return ((this->flags & RGW_DEDUP_FLAG_SINGLETON) != 0);
-      }
-      void clear_singleton() {
-	this->flags &= ~RGW_DEDUP_FLAG_SINGLETON;
-      }
-      bool is_occupied() const {
-	return ((this->flags & RGW_DEDUP_FLAG_OCCUPIED) != 0);
-      }
-      void set_occupied() {
-	this->flags |= RGW_DEDUP_FLAG_OCCUPIED;
-      }
-      void clear_occupied() {
-	this->flags &= ~RGW_DEDUP_FLAG_OCCUPIED;
-      }
-      void set_singleton_occupied() {
-	this->flags |= (RGW_DEDUP_FLAG_OCCUPIED | RGW_DEDUP_FLAG_SINGLETON);
-      }
+      inline void clear_flags() { flags.clear(); }
+      inline bool has_valid_sha256() const { return flags.has_valid_sha256(); }
+      inline void set_valid_sha256() { this->flags.set_valid_sha256(); }
+      inline bool has_shared_manifest() const {return flags.has_shared_manifest(); }
+      inline void set_shared_manifest() { this->flags.set_shared_manifest(); }
+      inline bool is_singleton() const { return flags.is_singleton(); }
+      inline void clear_singleton() { this->flags.clear_singleton(); }
+      inline bool is_occupied() const { return flags.is_occupied(); }
+      inline void set_occupied() { this->flags.set_occupied();  }
+      inline void clear_occupied() { this->flags.clear_occupied(); }
+      inline void set_singleton_occupied() { this->flags.set_singleton_occupied(); }
 
-      uint8_t  flags;
-      record_id_t rec_id;
       disk_block_id_t block_idx;
+      uint16_t        count;
+      uint16_t        pad_16;     
+      record_id_t     rec_id;	// TBD use 16bits rec_id
+      dedup_flags_t   flags;
     } __attribute__((__packed__));
 
     dedup_table_t(uint32_t entries_count, const DoutPrefixProvider* _dpp);
@@ -119,7 +100,9 @@ namespace rgw::dedup {
     int set_shared_manifest_mode(const key_t *p_key,
 				 disk_block_id_t block_id,
 				 record_id_t rec_id);
-    void count_duplicates(uint32_t *p_singleton_count, uint32_t *p_duplicate_count);
+    void count_duplicates(uint64_t *p_singleton_count,
+			  uint64_t *p_unique_count,
+			  uint64_t *p_duplicate_count);
     void remove_singletons_and_redistribute_keys();
     void print_redistribute_stats();
     void stat_counters_reset();

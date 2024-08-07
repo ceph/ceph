@@ -283,7 +283,7 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
   // REMOVE-ME!!
   // temp output to help dedbug dedup code
   if (strcmp(name, "user.rgw.etag") == 0) {
-    std::cerr << __func__ << "::oid=" << (*pctx)->obs->oi.soid.oid << std::endl;
+    std::cerr << std::endl << __func__ << "::oid=" << (*pctx)->obs->oi.soid.oid << std::endl;
   }
 #endif
   op.op.op = CEPH_OSD_OP_GETXATTR;

@@ -21,8 +21,11 @@ namespace rgw::dedup {
   disk_record_t::disk_record_t(const char *buff)
   {
     disk_record_t *p_rec = (disk_record_t*)buff;
-
-    this->s.flags           = CEPHTOH_16(p_rec->s.flags);
+    ceph_assert(p_rec->s.pad8  == 0);
+    ceph_assert(p_rec->s.pad16 == 0);
+    //this->s.flags           = CEPHTOH_16((uint16_t)p_rec->s.flags);
+    this->s.flags           = p_rec->s.flags;
+    this->s.pad8            = 0;
     this->s.num_parts       = CEPHTOH_16(p_rec->s.num_parts);
     this->s.size_4k_units   = CEPHTOH_32(p_rec->s.size_4k_units);
 
@@ -34,9 +37,10 @@ namespace rgw::dedup {
       this->s.sha256[i] = CEPHTOH_64(p_rec->s.sha256[i]);
     }
 
+    this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
     this->s.obj_name_len    = CEPHTOH_16(p_rec->s.obj_name_len);
     this->s.bucket_name_len = CEPHTOH_16(p_rec->s.bucket_name_len);
-    this->s.manifest_len    = CEPHTOH_16(p_rec->s.manifest_len);
+    this->s.pad16           = 0;
 
     const char *p = buff + sizeof(this->s);
     this->obj_name = std::string(p, this->s.obj_name_len);
@@ -51,22 +55,29 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   size_t disk_record_t::serialize(char *buff) const
   {
-    disk_record_t *p_rec = (disk_record_t*)buff;
-    p_rec->s.flags            = HTOCEPH_16(this->s.flags);
-    p_rec->s.num_parts        = HTOCEPH_16(this->s.num_parts);
-    p_rec->s.size_4k_units    = HTOCEPH_32(this->s.size_4k_units);
+    ceph_assert(this->s.pad8  == 0);
+    ceph_assert(this->s.pad16 == 0);
 
-    p_rec->s.md5_high         = HTOCEPH_64(this->s.md5_high);
-    p_rec->s.md5_low          = HTOCEPH_64(this->s.md5_low);
-    p_rec->s.version          = HTOCEPH_64(this->s.version);
-    p_rec->s.shared_manifest  = HTOCEPH_64(this->s.shared_manifest);
+    disk_record_t *p_rec = (disk_record_t*)buff;
+    //p_rec->s.flags         = HTOCEPH_16((uint16_t)this->s.flags);
+    p_rec->s.flags           = this->s.flags;
+    p_rec->s.pad8            = 0;
+
+    p_rec->s.num_parts       = HTOCEPH_16(this->s.num_parts);
+    p_rec->s.size_4k_units   = HTOCEPH_32(this->s.size_4k_units);
+
+    p_rec->s.md5_high        = HTOCEPH_64(this->s.md5_high);
+    p_rec->s.md5_low         = HTOCEPH_64(this->s.md5_low);
+    p_rec->s.version         = HTOCEPH_64(this->s.version);
+    p_rec->s.shared_manifest = HTOCEPH_64(this->s.shared_manifest);
     for (int i = 0; i < 4; i++) {
       p_rec->s.sha256[i] = HTOCEPH_64(this->s.sha256[i]);
     }
 
+    p_rec->s.manifest_len    = HTOCEPH_16(manifest_bl.length());
     p_rec->s.obj_name_len    = HTOCEPH_16(this->obj_name.length());
     p_rec->s.bucket_name_len = HTOCEPH_16(this->bucket_name.length());
-    p_rec->s.manifest_len    = HTOCEPH_16(manifest_bl.length());
+    p_rec->s.pad16           = 0;
 
     char *p = buff + sizeof(this->s);
     unsigned len = this->obj_name.length();
@@ -109,7 +120,7 @@ namespace rgw::dedup {
     stream << "num_parts = " << rec.s.num_parts << "\n";
     stream << "obj_size  = " << 4*rec.s.size_4k_units <<" KiB"  << "\n";
     stream << "MD5       = " << std::hex << rec.s.md5_high << rec.s.md5_low << "\n";
-    if (rec.s.flags & RGW_DEDUP_FLAG_SHA256) {
+    if (rec.has_valid_sha256()) {
       stream << "SHA256    = ";
       for (int i =0; i < 4; i++) {
 	stream << rec.s.sha256[i];
@@ -120,7 +131,7 @@ namespace rgw::dedup {
       stream << "SHA256 is undefined\n";
     }
 
-    if (rec.s.flags & RGW_DEDUP_FLAG_SHARED_MANIFEST) {
+    if (rec.has_shared_manifest()) {
       stream << "Shared Manifest Object\n";
     }
     else {
@@ -227,13 +238,14 @@ namespace rgw::dedup {
 					   uint64_t                obj_size)
   {
     p_rec->s.flags           = 0;
+    p_rec->s.pad8            = 0;
     p_rec->s.version         = 0;
     p_rec->s.size_4k_units   = uint32_t(obj_size/(4*1024));
     p_rec->obj_name          = p_obj->get_name();
     p_rec->s.obj_name_len    = p_rec->obj_name.length();
     p_rec->bucket_name       = p_bucket->get_name();
     p_rec->s.bucket_name_len = p_rec->bucket_name.length();
-
+    p_rec->s.pad16           = 0;
     const rgw::sal::Attrs& attrs = p_obj->get_attrs();
     p_rec->s.md5_high  = p_parsed_etag->md5_high;
     p_rec->s.md5_low   = p_parsed_etag->md5_low;
@@ -306,7 +318,20 @@ namespace rgw::dedup {
       for (const char *p = buff; p < buff+sizeof(buff); p += HEX_UNIT_SIZE) {
 	p_rec->s.sha256[idx++] = hex2int(p, p+HEX_UNIT_SIZE);
       }
-      p_rec->s.flags |= RGW_DEDUP_FLAG_SHA256;
+      p_rec->s.flags.set_valid_sha256();
+#if 0
+      bufferlist sha_bl;
+      sha256_to_bufferlist(p_rec->s.sha256[0], p_rec->s.sha256[1],
+			   p_rec->s.sha256[2], p_rec->s.sha256[3], &sha_bl);
+      if (sha256 == sha_bl.to_str()) {
+	ldpp_dout(dpp, 1)  << __func__ << "::Valid SHA256!!" << dendl;
+      }
+      else {
+	ldpp_dout(dpp, 1)  << __func__ << "::>>Invalid SHA256<<" << dendl;
+	ldpp_dout(dpp, 1)  << "SHA256(A):|:" << sha256 << ":|:" << dendl;
+	ldpp_dout(dpp, 1)  << "SHA256(B):|:" << sha_bl.to_str() << ":|:" << dendl;
+      }
+#endif
     }
     else {
       memset(p_rec->s.sha256, 0, sizeof(p_rec->s.sha256));
@@ -318,7 +343,7 @@ namespace rgw::dedup {
       const std::string shared_manifest = itr->second.to_str();
       shared_manifest.copy(buff, sizeof(buff), 0);
       p_rec->s.shared_manifest = hex2int(buff, buff+HEX_UNIT_SIZE);
-      p_rec->s.flags |= RGW_DEDUP_FLAG_SHARED_MANIFEST;
+      p_rec->s.flags.set_shared_manifest();
     }
     else {
       memset(&p_rec->s.shared_manifest, 0, sizeof(p_rec->s.shared_manifest));

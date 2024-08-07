@@ -124,6 +124,11 @@ namespace rgw::dedup {
       uint64_t skipped_singleton = 0;
       uint64_t skipped_source_record = 0;
       uint64_t skipped_duplicate = 0;
+      uint64_t skipped_bad_sha256 = 0;
+      uint64_t total_objects = 0;
+      uint64_t singleton_count = 0;
+      uint64_t duplicate_count = 0;
+      uint64_t unique_count = 0;
       uint64_t deduped_objects = 0;
       uint64_t set_shared_manifest = 0;
     }stats;
