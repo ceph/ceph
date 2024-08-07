@@ -170,13 +170,24 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap) {
     }
 }
 
+ bool NVMeofGwMon::encode_last_gw_version(MonSession *session , std::string gw_id) {
+  uint64_t features = mon.get_quorum_con_features();
+  bool is_mon_last = is_last_version(features);
+  features = session->con->get_features();
+  bool is_gw_last = is_last_version(features);
+  bool gw_map_encode_last = (!is_mon_last|| !is_gw_last)? false : true;
+  dout(10) << "Versions: mon_last " << is_mon_last << " gw last " << is_gw_last << " GW " << gw_id << ", sub " << session->con->get_peer_addr() << dendl;
+  return gw_map_encode_last;
+}
+
 void NVMeofGwMon::check_sub(Subscription *sub)
 {
     dout(10) << "sub->next , map-epoch " << sub->next << " " << map.epoch << dendl;
     if (sub->next <= map.epoch)
     {
-      dout(10) << "Sending map to subscriber " << sub->session->con << " " << sub->session->con->get_peer_addr()  << dendl;
-      sub->session->con->send_message2(make_message<MNVMeofGwMap>(map));
+      bool gw_map_version_last = encode_last_gw_version(sub->session);
+      dout(10) << "Sending map to subscriber " << sub->session->con->get_peer_addr() << " gmap version last" << gw_map_version_last  << dendl;
+      sub->session->con->send_message2(make_message<MNVMeofGwMap>(map, gw_map_version_last));
 
       if (sub->onetime) {
         mon.session_map.remove_sub(sub);
@@ -413,8 +424,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op) {
     NvmeGroupKey group_key = std::make_pair(m->get_gw_pool(),  m->get_gw_group());
     gw_availability_t  avail = m->get_availability();
     bool propose = false;
-    //MonSession *session = op->get_session();
-    ConnectionRef con = op->get_connection();
+    MonSession *session = op->get_session();
     bool nonce_propose = false;
     bool timer_propose = false;
     bool gw_created = true;
@@ -422,9 +432,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op) {
     auto& group_gws = map.created_gws[group_key];
     auto gw = group_gws.find(gw_id);
     const BeaconSubsystems& sub = m->get_subsystems();
-    entity_addrvec_t vec =  entity_addrvec_t(con->get_peer_addr());
-    //dout(4) << "GW " << gw_id << " conn peer addr " << vec << " version " << m->version << dendl;
-    pending_map.peer_addr_2_version[vec] = (uint32_t)m->version;
+    bool gw_map_version_last = encode_last_gw_version(session, gw_id);
 
     if (avail == gw_availability_t::GW_CREATED) {
         if (gw == group_gws.end()) {
@@ -455,7 +463,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op) {
                ack_map.created_gws[group_key][gw_id] = pending_map.created_gws[group_key][gw_id];
                ack_map.epoch = map.epoch;
                dout(4) << " Force gw to exit: Sending ack_map to GW: " << gw_id << dendl;
-               auto msg = make_message<MNVMeofGwMap>(ack_map);
+               auto msg = make_message<MNVMeofGwMap>(ack_map, gw_map_version_last);
                mon.send_reply(op, msg.detach());
                goto false_return;
            }
@@ -525,7 +533,7 @@ set_propose:
        }
        ack_map.epoch = map.epoch;
        dout(20) << "ack_map " << ack_map <<dendl;
-       auto msg = make_message<MNVMeofGwMap>(ack_map);
+       auto msg = make_message<MNVMeofGwMap>(ack_map, gw_map_version_last);
        mon.send_reply(op, msg.detach());
     }
     else {

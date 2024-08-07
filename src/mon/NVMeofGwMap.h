@@ -41,10 +41,9 @@ public:
     Monitor*                            mon           = NULL;
     epoch_t                             epoch         = 0;      // epoch is for Paxos synchronization  mechanizm
     bool                                delay_propose = false;
-    std::map<entity_addrvec_t , uint32_t>   peer_addr_2_version;
     std::map<NvmeGroupKey, NvmeGwMonStates>  created_gws;
     std::map<NvmeGroupKey, NvmeGwTimers> fsm_timers;// map that handles timers started by all Gateway FSMs
-    void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
+    void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap, bool gw_version_last) const;
 
     int   cfg_add_gw                    (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
     int   cfg_delete_gw                 (const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
@@ -78,16 +77,10 @@ public:
 
     void encode(ceph::buffer::list &bl, uint64_t features) const {
       uint8_t version = 1;
-      if (HAVE_FEATURE(features, SERVER_SQUID)) {
-        version = 2;
-      }
       ENCODE_START(version, 1, bl);
       dout(20) << "encode version " << version  << version << " features " << features << dendl;
       using ceph::encode;
       encode(epoch, bl);// global map epoch
-      if (version >= 2) {
-        encode(peer_addr_2_version, bl, features);
-      }
       encode(created_gws, bl, features); //Encode created GWs
       encode(fsm_timers, bl, features);
       ENCODE_FINISH(bl);
@@ -98,9 +91,6 @@ public:
       DECODE_START(2, bl);
       dout(20) << "decode version " << struct_v   << dendl;
       decode(epoch, bl);
-      if (struct_v >= 2) {
-        decode(peer_addr_2_version, bl);
-      }
       decode(created_gws, bl);
       decode(fsm_timers, bl);
       DECODE_FINISH(bl);
