@@ -86,6 +86,11 @@ config_uri
     Supported URI schemes include ``http:``, ``https:``, ``rados:``, and
     ``rados:mon-config-key:``.
 
+user_sources
+    A list of strings with (standard or de-facto) URI values that will
+    be used to identify where credentials for authentication are located.
+    See ``config_uri`` for the supported list of URI schemes.
+
 join_sources
     A list of strings with (standard or de-facto) URI values that will
     be used to identify where authentication data that will be used to
