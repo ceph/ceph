@@ -715,6 +715,19 @@ void ECCommon::ReadPipeline::kick_reads()
   }
 }
 
+bool ECCommon::ec_align_t::operator==(const ec_align_t &other) const {
+  return offset == other.offset && size == other.size && flags == other.flags;
+}
+
+bool ECCommon::shard_read_t::operator==(const shard_read_t &other) const {
+  return extents==other.extents && subchunk==other.subchunk;
+}
+
+bool ECCommon::read_request_t::operator==(const read_request_t &other) const {
+  return to_read == other.to_read &&
+    shard_reads == other.shard_reads &&
+    want_attrs == other.want_attrs;
+}
 
 void ECCommon::RMWPipeline::start_rmw(OpRef op)
 {

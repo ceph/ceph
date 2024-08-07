@@ -217,6 +217,7 @@ struct ECCommon {
       : offset(p.first), size(p.second), flags(flags) {}
     ec_align_t(uint64_t offset, uint64_t size, uint32_t flags)
       : offset(offset), size(size), flags(flags) {}
+    bool operator==(const ec_align_t &other) const;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
 
@@ -245,6 +246,7 @@ struct ECCommon {
   struct shard_read_t {
     extent_set extents;
     std::vector<std::pair<int, int>> subchunk;
+    bool operator==(const shard_read_t &other) const;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const shard_read_t &rhs);
 
@@ -256,6 +258,7 @@ struct ECCommon {
       const std::list<ec_align_t> &to_read,
       bool want_attrs)
       : to_read(to_read), want_attrs(want_attrs) {}
+    bool operator==(const read_request_t &other) const;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
