@@ -25,7 +25,7 @@ Concepts
    a temporary placement group acting set that is used while backfilling the
    primary OSD. Assume that the acting set is ``[0,1,2]`` and we are
    ``active+clean``. Now assume that something happens and the acting set
-   becomes ``[2,1,2]``. Under these circumstances, OSD ``3`` is empty and can't
+   becomes ``[3,1,2]``. Under these circumstances, OSD ``3`` is empty and can't
    serve reads even though it is the primary. ``osd.3`` will respond by
    requesting a *PG temp* of ``[1,2,3]`` to the monitors using a ``MOSDPGTemp``
    message, and ``osd.1`` will become the primary temporarily. ``osd.1`` will
