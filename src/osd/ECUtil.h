@@ -71,9 +71,6 @@ public:
     return (offset / stripe_width) * chunk_size;
   }
   uint64_t chunk_aligned_logical_size_to_chunk_size(uint64_t len) const {
-    [[maybe_unused]] const auto residue_in_stripe = len % stripe_width;
-    ceph_assert(residue_in_stripe % chunk_size == 0);
-    ceph_assert(stripe_width % chunk_size == 0);
     // this rounds up
     return ((len + stripe_width - 1) / stripe_width) * chunk_size;
   }
@@ -99,12 +96,15 @@ public:
       tmp_len);
     return std::make_pair(off, len);
   }
-  std::pair<uint64_t, uint64_t> offset_length_to_data_chunk_indices(
+  std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> offset_length_to_data_chunk_extents(
     uint64_t off, uint64_t len) const {
     assert(chunk_size > 0);
     const auto first_chunk_idx = (off / chunk_size);
     const auto last_chunk_idx = (chunk_size - 1 + off + len) / chunk_size;
-    return {first_chunk_idx, last_chunk_idx};
+    const auto first_chunk_offset =  first_chunk_idx * chunk_size;
+    const auto first_shard_offset = off - first_chunk_offset + first_chunk_offset/stripe_width;
+    const auto last_chunk_len = len==0?0:off + len - (last_chunk_idx - 1) * chunk_size;
+    return {first_chunk_idx, last_chunk_idx, first_shard_offset, last_chunk_len};
   }
   bool offset_length_is_same_stripe(
     uint64_t off, uint64_t len) const {
