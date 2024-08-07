@@ -92,7 +92,7 @@ describe('NfsFormComponent', () => {
       clients: [],
       cluster_id: 'mynfs',
       fsal: { fs_name: '', name: 'CEPH' },
-      path: '/',
+      path: '',
       protocolNfsv4: true,
       protocolNfsv3: true,
       pseudo: '',
@@ -100,7 +100,7 @@ describe('NfsFormComponent', () => {
       security_label: false,
       squash: 'no_root_squash',
       subvolume: '',
-      subvolume_group: '',
+      subvolume_group: '_nogroup',
       transportTCP: true,
       transportUDP: true
     });
