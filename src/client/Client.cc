@@ -338,10 +338,13 @@ vinodeno_t Client::_map_faked_ino(ino_t ino)
   vinodeno_t vino;
   if (ino == 1)
     vino = root->vino();
-  else if (faked_ino_map.count(ino))
-    vino = faked_ino_map[ino];
-  else
-    vino = vinodeno_t(0, CEPH_NOSNAP);
+  else {
+    auto it = faked_ino_map.find(ino);
+   if (it != faked_ino_map.end())
+     vino = it->second;
+   else
+     vino = vinodeno_t(0, CEPH_NOSNAP);
+  }
   ldout(cct, 10) << __func__ << " " << ino << " -> " << vino << dendl;
   return vino;
 }
@@ -1014,12 +1017,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 {
   Inode *in;
   bool was_new = false;
-  if (inode_map.count(st->vino)) {
-    in = inode_map[st->vino];
+  auto [it, b] = inode_map.try_emplace(st->vino);
+  if (!b) {
+    in = it->second;
     ldout(cct, 12) << __func__ << " had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
   } else {
     in = new Inode(this, st->vino, &st->layout);
-    inode_map[st->vino] = in;
+    it->second = in;
 
     if (use_faked_inos())
       _assign_faked_ino(in);
@@ -1171,8 +1175,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   if (need_snapdir_attr_refresh && in->is_dir() && in->snapid == CEPH_NOSNAP) {
     vinodeno_t vino(in->ino, CEPH_SNAPDIR);
-    if (inode_map.count(vino)) {
-      refresh_snapdir_attrs(inode_map[vino], in);
+    auto it = inode_map.find(vino);
+    if (it != inode_map.end()) {
+      refresh_snapdir_attrs(it->second, in);
     }
   }
 
@@ -1188,8 +1193,9 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
 				    Dentry *old_dentry)
 {
   Dentry *dn = NULL;
-  if (dir->dentries.count(dname))
-    dn = dir->dentries[dname];
+  auto it = dir->dentries.find(dname);
+  if (it != dir->dentries.end())
+    dn = it->second;
 
   ldout(cct, 12) << __func__ << " '" << dname << "' vino " << in->vino()
 		 << " in dir " << dir->parent_inode->vino() << " dn " << dn
@@ -1431,8 +1437,9 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
         effective_dir = dir_other;
       }
       Dentry *dn;
-      if (effective_dir->dentries.count(dname)) {
-	Dentry *olddn = effective_dir->dentries[dname];
+      auto it = effective_dir->dentries.find(dname);
+      if (it != effective_dir->dentries.end()) {
+	Dentry *olddn = it->second;
 	if (olddn->inode != in) {
 	  // replace incorrect dentry
 	  unlink(olddn, true, true);  // keep dir, dentry
@@ -1611,11 +1618,14 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
                           (op == CEPH_MDS_OP_RENAME) ? request->old_dentry() : NULL);
     } else {
       Dentry *dn = NULL;
-      if (diri->dir && diri->dir->dentries.count(dname)) {
-	dn = diri->dir->dentries[dname];
-	if (dn->inode) {
-	  clear_dir_complete_and_ordered(diri, false);
-	  unlink(dn, true, true);  // keep dir, dentry
+      if (diri->dir) {
+        auto it = diri->dir->dentries.find(dname);
+        if (it != diri->dir->dentries.end()) {
+	  dn = it->second;
+	  if (dn->inode) {
+	    clear_dir_complete_and_ordered(diri, false);
+	    unlink(dn, true, true);  // keep dir, dentry
+	  }
 	}
       }
       if (dlease.duration_ms > 0) {
@@ -1632,8 +1642,9 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     // fake it for snap lookup
     vinodeno_t vino = ist.vino;
     vino.snapid = CEPH_SNAPDIR;
-    ceph_assert(inode_map.count(vino));
-    diri = inode_map[vino];
+    auto it = inode_map.find(vino);
+    ceph_assert(it != inode_map.end());
+    diri = it->second;
     
     string dname = request->path.last_dentry();
     
@@ -1644,10 +1655,13 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       Dir *dir = diri->open_dir();
       insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session);
     } else {
-      if (diri->dir && diri->dir->dentries.count(dname)) {
-	Dentry *dn = diri->dir->dentries[dname];
-	if (dn->inode)
-	  unlink(dn, true, true);  // keep dir, dentry
+      if (diri->dir) {
+        auto it = diri->dir->dentries.find(dname);
+        if (it != diri->dir->dentries.end()) {
+	  Dentry *dn = it->second;
+	  if (dn->inode)
+	    unlink(dn, true, true);  // keep dir, dentry
+	}
       }
     }
   }
@@ -1763,13 +1777,16 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
           auto r = ceph::util::generate_random_number<uint64_t>(0, repmap.size()-1);
           mds = repmap.at(r);
         }
-      } else if (in->fragmap.count(fg)) {
-	mds = in->fragmap[fg];
-	if (phash_diri)
-	  *phash_diri = in;
-      } else if (in->auth_cap) {
-	req->send_to_auth = true;
-	mds = in->auth_cap->session->mds_num;
+      } else {
+        auto it = in->fragmap.find(fg);
+        if (it != in->fragmap.end()) {
+	  mds = it->second;
+	  if (phash_diri)
+	    *phash_diri = in;
+        } else if (in->auth_cap) {
+	  req->send_to_auth = true;
+	  mds = in->auth_cap->session->mds_num;
+	}
       }
       if (mds >= 0) {
 	ldout(cct, 10) << __func__ << " from dirfragtree hash" << dendl;
@@ -2668,12 +2685,13 @@ void Client::handle_client_request_forward(const MConstRef<MClientRequestForward
   }
   ceph_tid_t tid = fwd->get_tid();
 
-  if (mds_requests.count(tid) == 0) {
+  auto it = mds_requests.find(tid);
+  if ( it == mds_requests.end()) {
     ldout(cct, 10) << __func__ << " no pending request on tid " << tid << dendl;
     return;
   }
 
-  MetaRequest *request = mds_requests[tid];
+  MetaRequest *request = it->second;
   ceph_assert(request);
 
   /*
@@ -2736,12 +2754,13 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
   ceph_tid_t tid = reply->get_tid();
   bool is_safe = reply->is_safe();
 
-  if (mds_requests.count(tid) == 0) {
+  auto it = mds_requests.find(tid);
+  if (it == mds_requests.end()) {
     lderr(cct) << __func__ << " no pending request on tid " << tid
 	       << " safe is:" << is_safe << dendl;
     return;
   }
-  MetaRequest *request = mds_requests.at(tid);
+  MetaRequest *request = it->second;
 
   ldout(cct, 20) << __func__ << " got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
@@ -3209,10 +3228,10 @@ void Client::send_reconnect(MetaSession *session)
 		 snap_follows,
 		 flockbl);
 
-      if (did_snaprealm.count(in->snaprealm->ino) == 0) {
+      auto [it, inserted] = did_snaprealm.emplace(in->snaprealm->ino);
+      if (inserted) {
 	ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 	m->add_snaprealm(in->snaprealm->ino, in->snaprealm->seq, in->snaprealm->parent);
-	did_snaprealm.insert(in->snaprealm->ino);
       }
     }
   }
@@ -3373,18 +3392,24 @@ void Client::handle_lease(const MConstRef<MClientLease>& m)
 
   Inode *in;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
-  if (inode_map.count(vino) == 0) {
+  auto it = inode_map.find(vino);
+  if (it == inode_map.end()) {
     ldout(cct, 10) << " don't have vino " << vino << dendl;
     goto revoke;
   }
-  in = inode_map[vino];
+  in = it->second;
 
   if (m->get_mask() & CEPH_LEASE_VALID) {
-    if (!in->dir || in->dir->dentries.count(m->dname) == 0) {
-      ldout(cct, 10) << " don't have dir|dentry " << m->get_ino() << "/" << m->dname <<dendl;
+    if (!in->dir) {
+      ldout(cct, 10) << " don't have dir " << m->get_ino() << "/" << m->dname <<dendl;
       goto revoke;
     }
-    Dentry *dn = in->dir->dentries[m->dname];
+    auto it = in->dir->dentries.find(m->dname);
+    if (it == in->dir->dentries.end()) {
+      ldout(cct, 10) << " don't have dentry " << m->get_ino() << "/" << m->dname <<dendl;
+      goto revoke;
+    }
+    Dentry *dn = it->second;
     ldout(cct, 10) << " revoked DN lease on " << dn << dendl;
     dn->lease_mds = -1;
   }
@@ -4074,7 +4099,7 @@ void Client::check_caps(Inode *in, unsigned flags)
 }
 
 
-void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
+void Client::queue_cap_snap(Inode *in, const SnapContext& old_snapc)
 {
   int used = get_caps_used(in);
   int dirty = in->caps_dirty();
@@ -5095,11 +5120,12 @@ SnapRealm *Client::get_snap_realm(inodeno_t r)
 
 SnapRealm *Client::get_snap_realm_maybe(inodeno_t r)
 {
-  if (snap_realms.count(r) == 0) {
+  auto it = snap_realms.find(r);
+  if ( it == snap_realms.end()) {
     ldout(cct, 20) << __func__ << " " << r << " fail" << dendl;
     return NULL;
   }
-  SnapRealm *realm = snap_realms[r];
+  SnapRealm *realm = it->second;
   ldout(cct, 20) << __func__ << " " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
@@ -5198,10 +5224,11 @@ void Client::update_snap_trace(MetaSession *session, const bufferlist& bl, SnapR
 	       p != realm->pchildren.end();
 	       ++p)
 	    q.push_back(*p);
-
-	  if (dirty_realms.count(realm) == 0) {
+          auto it =
+            dirty_realms.lower_bound(realm);
+	  if (it->first != realm) {
 	    realm->nref++;
-	    dirty_realms[realm] = realm->get_snap_context();
+	    dirty_realms.emplace_hint(it, realm, realm->get_snap_context());
 	  }
 	}
       }
@@ -5284,8 +5311,9 @@ void Client::handle_snap(const MConstRef<MClientSnap>& m)
     ldout(cct, 10) << " splitting off " << *realm << dendl;
     for (auto& ino : m->split_inos) {
       vinodeno_t vino(ino, CEPH_NOSNAP);
-      if (inode_map.count(vino)) {
-	Inode *in = inode_map[vino];
+      auto it = inode_map.find(vino);
+      if (it != inode_map.end()) {
+	Inode *in = it->second;
 	if (!in->snaprealm || in->snaprealm == realm)
 	  continue;
 	if (in->snaprealm->created > info.created()) {
@@ -5344,10 +5372,9 @@ void Client::handle_quota(const MConstRef<MClientQuota>& m)
   ldout(cct, 10) << __func__ << " " << *m << " from mds." << mds << dendl;
 
   vinodeno_t vino(m->ino, CEPH_NOSNAP);
-  if (inode_map.count(vino)) {
-    Inode *in = NULL;
-    in = inode_map[vino];
-
+  auto it = inode_map.find(vino);
+  if (it != inode_map.end()) {
+    Inode *in = it->second;
     if (in) {
       in->quota = m->quota;
       in->rstat = m->rstat;
@@ -7305,16 +7332,17 @@ bool Client::_dentry_valid(const Dentry *dn)
 
   // is dn lease valid?
   utime_t now = ceph_clock_now();
-  if (dn->lease_mds >= 0 && dn->lease_ttl > now &&
-      mds_sessions.count(dn->lease_mds)) {
-    auto s = mds_sessions.at(dn->lease_mds);
-    if (s->cap_ttl > now && s->cap_gen == dn->lease_gen) {
-      dlease_hit();
-      return true;
-    }
+  if (dn->lease_mds >= 0 && dn->lease_ttl > now) {
+    if (auto it = mds_sessions.find(dn->lease_mds); it != mds_sessions.end()) {
+      auto s = it->second;
+      if (s->cap_ttl > now && s->cap_gen == dn->lease_gen) {
+        dlease_hit();
+        return true;
+      }
 
-    ldout(cct, 20) << " bad lease, cap_ttl " << s->cap_ttl << ", cap_gen " << s->cap_gen
-                   << " vs lease_gen " << dn->lease_gen << dendl;
+      ldout(cct, 20) << " bad lease, cap_ttl " << s->cap_ttl << ", cap_gen " << s->cap_gen
+                     << " vs lease_gen " << dn->lease_gen << dendl;
+    }
   }
 
   dlease_miss();
@@ -7374,9 +7402,13 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   }
 
 relookup:
-  if (dir->dir &&
-      dir->dir->dentries.count(dname)) {
-    dn = dir->dir->dentries[dname];
+
+  if (dir->dir) {
+    auto it = dir->dir->dentries.find(dname);
+    dn = it != dir->dir->dentries.end() ? it->second : nullptr;
+  }
+
+  if (dn) {
 
     ldout(cct, 20) << __func__ << " have " << *dn << " from mds." << dn->lease_mds
         << " ttl " << dn->lease_ttl << " seq " << dn->lease_seq << dendl;
@@ -7461,8 +7493,9 @@ Dentry *Client::get_or_create(Inode *dir, const char* name)
   // lookup
   ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
   dir->open_dir();
-  if (dir->dir->dentries.count(name))
-    return dir->dir->dentries[name];
+  auto it = dir->dir->dentries.find(name);
+  if (it != dir->dir->dentries.end())
+    return it->second;
   else // otherwise link up a new one
     return link(dir->dir, name, NULL, NULL);
 }
@@ -8035,10 +8068,11 @@ int Client::_getvxattr(
 
 bool Client::make_absolute_path_string(Inode *in, std::string& path)
 {
-  if (!metadata.count("root") || !in)
+  auto it = metadata.find("root");
+  if (it == metadata.end() || !in)
     return false;
 
-  path = metadata["root"].data();
+  path = it->second.data();
   if (!in->make_path_string(path)) {
     path.clear();
     return false;
@@ -8314,8 +8348,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     in->change_attr++;
     if (in->is_dir() && in->snapid == CEPH_NOSNAP) {
       vinodeno_t vino(in->ino, CEPH_SNAPDIR);
-      if (inode_map.count(vino)) {
-        refresh_snapdir_attrs(inode_map[vino], in);
+      auto it = inode_map.find(vino);
+      if (it != inode_map.end()) {
+        refresh_snapdir_attrs(it->second, in);
       }
     }
     return 0;
@@ -10058,8 +10093,8 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
     // allocate a integer file descriptor
     ceph_assert(fh);
     r = get_fd();
-    ceph_assert(fd_map.count(r) == 0);
-    fd_map[r] = fh;
+    auto [it, b] = fd_map.try_emplace(r, fh);
+    ceph_assert(b);
   }
   
  out:
@@ -13054,16 +13089,17 @@ Inode *Client::open_snapdir(Inode *diri)
 {
   Inode *in;
   vinodeno_t vino(diri->ino, CEPH_SNAPDIR);
-  if (!inode_map.count(vino)) {
+  auto [it, b] = inode_map.try_emplace(vino, nullptr);
+  if (b) {
     in = new Inode(this, vino, &diri->layout);
     refresh_snapdir_attrs(in, diri);
     diri->flags |= I_SNAPDIR_OPEN;
-    inode_map[vino] = in;
+    it->second = in;
     if (use_faked_inos())
       _assign_faked_ino(in);
     ldout(cct, 10) << "open_snapdir created snapshot inode " << *in << dendl;
   } else {
-    in = inode_map[vino];
+    in = it->second;
     ldout(cct, 10) << "open_snapdir had snapshot inode " << *in << dendl;
   }
   return in;
@@ -13771,11 +13807,12 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   if (r == 0) {
     string n(name);
     r = -CEPHFS_ENODATA;
-    if (in->xattrs.count(n)) {
-      r = in->xattrs[n].length();
+    auto it = in->xattrs.find(n);
+    if (it != in->xattrs.end()) {
+      r = it->second.length();
       if (r > 0 && size != 0) {
 	if (size >= (unsigned)r)
-	  memcpy(value, in->xattrs[n].c_str(), r);
+	  memcpy(value, it->second.c_str(), r);
 	else
 	  r = -CEPHFS_ERANGE;
       }
@@ -16325,8 +16362,7 @@ int Client::ll_release(Fh *fh)
 
   std::scoped_lock lock(client_lock);
 
-  if (ll_unclosed_fh_set.count(fh))
-    ll_unclosed_fh_set.erase(fh);
+  ll_unclosed_fh_set.erase(fh);
   return _release_fh(fh);
 }
 
@@ -17022,8 +17058,9 @@ int Client::check_pool_perm(Inode *in, int need)
 int Client::_posix_acl_permission(Inode *in, const UserPerm& perms, unsigned want)
 {
   if (acl_type == POSIX_ACL) {
-    if (in->xattrs.count(ACL_EA_ACCESS)) {
-      const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
+    auto it = in->xattrs.find(ACL_EA_ACCESS);
+    if (it != in->xattrs.end()) {
+      const bufferptr& access_acl = it->second;
 
       return posix_acl_permits(access_acl, in->uid, in->gid, perms, want);
     }
@@ -17041,8 +17078,9 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
     goto out;
 
   if (acl_type == POSIX_ACL) {
-    if (in->xattrs.count(ACL_EA_ACCESS)) {
-      const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
+    auto it = in->xattrs.find(ACL_EA_ACCESS);
+    if (it != in->xattrs.end()) {
+      const bufferptr& access_acl = it->second;
       bufferptr acl(access_acl.c_str(), access_acl.length());
       r = posix_acl_access_chmod(acl, mode);
       if (r < 0)
@@ -17071,10 +17109,11 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
     goto out;
 
   if (acl_type == POSIX_ACL) {
-    if (dir->xattrs.count(ACL_EA_DEFAULT)) {
+    auto it = dir->xattrs.find(ACL_EA_DEFAULT);
+    if (it != dir->xattrs.end()) {
       map<string, bufferptr> xattrs;
 
-      const bufferptr& default_acl = dir->xattrs[ACL_EA_DEFAULT];
+      const bufferptr& default_acl = it->second;
       bufferptr acl(default_acl.c_str(), default_acl.length());
       r = posix_acl_inherit_mode(acl, mode);
       if (r < 0)
@@ -17089,7 +17128,7 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
       }
 
       if (S_ISDIR(*mode))
-	xattrs[ACL_EA_DEFAULT] = dir->xattrs[ACL_EA_DEFAULT];
+	xattrs[ACL_EA_DEFAULT] = it->second;
 
       r = xattrs.size();
       if (r > 0)
