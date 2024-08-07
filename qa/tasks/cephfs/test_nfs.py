@@ -810,10 +810,14 @@ class TestNFS(MgrTestCase):
         """
         Test that cluster info doesn't throw junk data for non-existent cluster
         """
-        cluseter_ls = self._nfs_cmd('cluster', 'ls')
-        self.assertNotIn('foo', cluseter_ls, 'cluster foo exists')
-        cluster_info = self._nfs_cmd('cluster', 'info', 'foo')
-        self.assertIn('cluster does not exist', cluster_info)
+        cluster_ls = self._nfs_cmd('cluster', 'ls')
+        self.assertNotIn('foo', cluster_ls, 'cluster foo exists')
+        try:
+            self._nfs_cmd('cluster', 'info', 'foo')
+            self.fail("nfs cluster info foo returned successfully for non-existent cluster")
+        except CommandFailedError as e:
+            if e.exitstatus != errno.ENOENT:
+                raise
 
     def test_nfs_export_with_invalid_path(self):
         """
