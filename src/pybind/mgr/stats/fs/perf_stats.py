@@ -141,6 +141,7 @@ class FSPerfStats(object):
         self.module = module
         self.log = module.log
         self.prev_rank0_gid = None
+        self.mx_last_updated = 0.0
         # report processor thread
         self.report_processor = Thread(target=self.run)
         self.report_processor.start()
