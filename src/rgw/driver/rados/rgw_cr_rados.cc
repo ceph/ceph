@@ -1214,7 +1214,7 @@ RGWStatRemoteBucketCR::RGWStatRemoteBucketCR(const DoutPrefixProvider *dpp,
             std::vector<bucket_unordered_list_result>& peer_result)
       : RGWCoroutine(store->ctx()), dpp(dpp), store(store),
       source_zone(source_zone), bucket(bucket), http(http),
-      zids(zids), peer_result(peer_result) {}
+      zids(std::move(zids)), peer_result(peer_result) {}
   
 int RGWStatRemoteBucketCR::operate(const DoutPrefixProvider *dpp) {
   reenter(this) {
