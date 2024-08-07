@@ -1,3 +1,11 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
+      - POOL_APP_NOT_ENABLED
+      - mon down
+      - mons down
+      - out of quorum
 roles:
 - - host.a
   - osd.0
