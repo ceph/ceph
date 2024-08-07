@@ -11,6 +11,7 @@
 
 namespace crimson::osd {
   class ShardServices;
+  class PglogBasedRecovery;
 };
 
 class RecoveryBackend;
@@ -38,4 +39,7 @@ public:
   virtual void publish_stats_to_osd() = 0;
   virtual OSDriver &get_osdriver() = 0;
   virtual SnapMapper &get_snap_mapper() = 0;
+  virtual void set_pglog_based_recovery_op(
+    crimson::osd::PglogBasedRecovery *op) = 0;
+  virtual void reset_pglog_based_recovery_op() = 0;
 };

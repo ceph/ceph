@@ -5827,6 +5827,7 @@ PeeringState::Recovering::react(const DeferRecovery &evt)
   ps->state_set(PG_STATE_RECOVERY_WAIT);
   pl->cancel_local_background_io_reservation();
   release_reservations(true);
+  pl->on_recovery_cancelled();
   pl->schedule_event_after(
     std::make_shared<PGPeeringEvent>(
       ps->get_osdmap_epoch(),
@@ -5844,6 +5845,7 @@ PeeringState::Recovering::react(const UnfoundRecovery &evt)
   ps->state_set(PG_STATE_RECOVERY_UNFOUND);
   pl->cancel_local_background_io_reservation();
   release_reservations(true);
+  pl->on_recovery_cancelled();
   return transit<NotRecovering>();
 }
 

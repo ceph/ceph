@@ -419,6 +419,7 @@ public:
     virtual void on_backfill_reserved() = 0;
     virtual void on_backfill_canceled() = 0;
     virtual void on_recovery_reserved() = 0;
+    virtual void on_recovery_cancelled() = 0;
 
     // ================recovery space accounting ================
     virtual bool try_reserve_recovery_space(

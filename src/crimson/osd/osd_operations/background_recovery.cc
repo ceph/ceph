@@ -158,6 +158,8 @@ PglogBasedRecovery::PglogBasedRecovery(
 PglogBasedRecovery::interruptible_future<bool>
 PglogBasedRecovery::do_recovery()
 {
+  LOG_PREFIX(PglogBasedRecovery::do_recovery);
+  DEBUGDPPI("{}: {}", *pg, __func__, *this);
   if (pg->has_reset_since(epoch_started)) {
     return seastar::make_ready_future<bool>(false);
   }
@@ -167,6 +169,7 @@ PglogBasedRecovery::do_recovery()
 			       interruptor>([this] (auto&& trigger) {
       return pg->get_recovery_handler()->start_recovery_ops(
 	trigger,
+	*this,
 	crimson::common::local_conf()->osd_recovery_max_single_start);
     });
   });

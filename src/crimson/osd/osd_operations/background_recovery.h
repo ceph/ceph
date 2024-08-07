@@ -91,8 +91,20 @@ public:
     RecoveryBackend::RecoveryBlockingEvent
   > tracking_events;
 
+  void cancel() {
+    cancelled = true;
+  }
+
+  bool is_cancelled() const {
+    return cancelled;
+  }
+
+  epoch_t get_epoch_started() const {
+    return epoch_started;
+  }
 private:
   interruptible_future<bool> do_recovery() override;
+  bool cancelled = false;
 };
 
 class BackfillRecovery final : public BackgroundRecoveryT<BackfillRecovery> {
