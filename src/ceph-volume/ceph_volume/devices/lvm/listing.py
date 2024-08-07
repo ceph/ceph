@@ -153,7 +153,9 @@ class List(object):
         elif arg[0] == '/':
             lv = api.get_lvs_from_path(arg)
         else:
-            lv = [api.get_single_lv(filters={'lv_name': arg.split('/')[1]})]
+            vg_name, lv_name = arg.split('/')
+            lv = [api.get_single_lv(filters={'lv_name': lv_name,
+                                             'vg_name': vg_name})]
 
         report = self.create_report(lv)
 
