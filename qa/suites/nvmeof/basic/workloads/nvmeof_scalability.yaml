@@ -11,29 +11,29 @@ tasks:
       cli_image: quay.io/ceph/nvmeof-cli:1.2
 
 - cephadm.wait_for_service:
-    service: nvmeof.mypool
-
-- workunit:
-    no_coverage_and_limits: true
-    clients:
-      client.2:
-        - rbd/nvmeof_setup_subsystem.sh
-    env:
-      RBD_POOL: mypool
-      RBD_IMAGE_PREFIX: myimage
+    service: nvmeof.mypool      
 
 - workunit:
     no_coverage_and_limits: true
     timeout: 30m
     clients:
       client.2:
+        - rbd/nvmeof_setup_subsystem.sh
         - rbd/nvmeof_basic_tests.sh
         - rbd/nvmeof_fio_test.sh --rbd_iostat
-      client.3:
-        - rbd/nvmeof_basic_tests.sh
-        - rbd/nvmeof_namespace_test.sh
     env:
       RBD_POOL: mypool
+      RBD_IMAGE_PREFIX: myimage
       IOSTAT_INTERVAL: '10'
-      RUNTIME: '120'
-      NEW_NAMESPACES_COUNT: '5'
+      RUNTIME: '60'
+
+- workunit:
+    no_coverage_and_limits: true
+    timeout: 30m
+    clients:
+      client.2:
+        - rbd/nvmeof_scalability_test.sh nvmeof.a
+        - rbd/nvmeof_scalability_test.sh nvmeof.b 
+    env:
+      SCALING_DELAYS: '50'
+

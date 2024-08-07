@@ -17,7 +17,7 @@ from tasks.thrasher import Thrasher
 log = logging.getLogger(__name__)
 
 conf_file = '/etc/ceph/nvmeof.env'
-
+gw_yaml_file = '/etc/ceph/nvmeof-gw.yaml'
 
 class Nvmeof(Task):
     """
@@ -143,6 +143,9 @@ class Nvmeof(Task):
 
         for role, i in daemons.items():
             remote, id_ = i
+            _shell(self.ctx, self.cluster_name, remote, [
+                'ceph', 'orch', 'ls', 'nvmeof', '--export', run.Raw('>'), gw_yaml_file
+            ])
             self.ctx.daemons.register_daemon(
                 remote, 'nvmeof', id_,
                 cluster=self.cluster_name,
