@@ -1396,9 +1396,8 @@ int RGWOp::init_quota()
     return 0;
   }
 
-  /* only interested in object related ops */
-  if (rgw::sal::Bucket::empty(s->bucket.get())
-      || rgw::sal::Object::empty(s->object.get())) {
+  /* Need a bucket to get quota */
+  if (rgw::sal::Bucket::empty(s->bucket.get())) {
     return 0;
   }
 
