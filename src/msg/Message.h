@@ -425,7 +425,7 @@ public:
   bool empty_payload() const { return payload.length() == 0; }
   ceph::buffer::list& get_payload() { return payload; }
   const ceph::buffer::list& get_payload() const { return payload; }
-  void set_payload(ceph::buffer::list& bl) {
+  void set_payload(ceph::buffer::list&& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
     payload = std::move(bl);
@@ -433,7 +433,7 @@ public:
       byte_throttler->take(payload.length());
   }
 
-  void set_middle(ceph::buffer::list& bl) {
+  void set_middle(ceph::buffer::list&& bl) {
     if (byte_throttler)
       byte_throttler->put(middle.length());
     middle = std::move(bl);
@@ -554,9 +554,9 @@ extern Message *decode_message(CephContext *cct,
                                int crcflags,
                                ceph_msg_header& header,
                                ceph_msg_footer& footer,
-                               ceph::buffer::list& front,
-                               ceph::buffer::list& middle,
-                               ceph::buffer::list& data,
+                               ceph::buffer::list&& front,
+                               ceph::buffer::list&& middle,
+                               const ceph::buffer::list& data,
                                Message::ConnectionRef conn);
 inline std::ostream& operator<<(std::ostream& out, const Message& m) {
   m.print(out);
