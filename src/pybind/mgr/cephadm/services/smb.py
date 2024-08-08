@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SMBService(CephService):
     TYPE = 'smb'
+    DEFAULT_EXPORTER_PORT = 9922
     smb_pool = '.smb'  # minor layering violation. try to clean up later.
 
     def config(self, spec: ServiceSpec) -> None:
@@ -79,6 +80,11 @@ class SMBService(CephService):
                 smb_spec, daemon_spec.daemon_id, ceph_users
             )
         )
+        config_blobs['metrics_image'] = (
+            self.mgr.container_image_samba_metrics
+        )
+        config_blobs['metrics_port'] = SMBService.DEFAULT_EXPORTER_PORT
+
         logger.debug('smb generate_config: %r', config_blobs)
         self._configure_cluster_meta(smb_spec, daemon_spec)
         return config_blobs, []
