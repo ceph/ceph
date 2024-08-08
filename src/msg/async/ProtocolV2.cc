@@ -1398,8 +1398,8 @@ CtPtr ProtocolV2::handle_message() {
 	                 ceph_le32(0), ceph_le64(0), current_header.flags};
 
   Message *message = decode_message(cct, 0, header, footer,
-      msg_frame.front(),
-      msg_frame.middle(),
+      std::move(msg_frame.front()),
+      std::move(msg_frame.middle()),
       msg_frame.data(),
       connection);
   if (!message) {
