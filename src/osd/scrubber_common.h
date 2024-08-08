@@ -310,7 +310,7 @@ struct requested_scrub_t {
   /**
    * Set from:
    *  - scrub_requested() with need_auto param set, which only happens in
-   *  - scrub_finish() - if deep_scrub_on_error is set, and we have errors
+   *  - scrub_finish() - if can_autorepair is set, and we have errors
    *
    * If set, will prevent the OSD from casually postponing our scrub. When
    * scrubbing starts, will cause must_scrub, must_deep_scrub and auto_repair to
@@ -324,8 +324,6 @@ struct requested_scrub_t {
    * Affects PG_STATE_DEEP_SCRUB.
    */
   bool must_deep_scrub{false};
-
-  bool deep_scrub_on_error{false};
 
   /**
    * If set, we should see must_deep_scrub & must_scrub, too
@@ -354,10 +352,9 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx)
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{}{}{}{}{})",
+                          "(plnd:{}{}{}{}{}{})",
                           rs.must_repair ? " must_repair" : "",
                           rs.auto_repair ? " auto_repair" : "",
-                          rs.deep_scrub_on_error ? " deep_scrub_on_error" : "",
                           rs.must_deep_scrub ? " must_deep_scrub" : "",
                           rs.must_scrub ? " must_scrub" : "",
                           rs.need_auto ? " need_auto" : "",
@@ -478,7 +475,9 @@ struct ScrubPgIF {
       Scrub::ScrubPGPreconds pg_cond,
       const requested_scrub_t& requested_flags) = 0;
 
-  virtual void set_op_parameters(const requested_scrub_t&) = 0;
+  virtual void set_op_parameters(
+      Scrub::ScrubPGPreconds pg_cond,
+      const requested_scrub_t&) = 0;
 
   /// stop any active scrubbing (on interval end) and unregister from
   /// the OSD scrub queue

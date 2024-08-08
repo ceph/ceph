@@ -67,8 +67,6 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
     out << " MUST_REPAIR";
   if (sf.auto_repair)
     out << " planned AUTO_REPAIR";
-  if (sf.deep_scrub_on_error)
-    out << " planned DEEP_SCRUB_ON_ERROR";
   if (sf.must_deep_scrub)
     out << " MUST_DEEP_SCRUB";
   if (sf.must_scrub)
@@ -1697,7 +1695,9 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
 			      cost);
 }
 
-void PgScrubber::set_op_parameters(const requested_scrub_t& request)
+void PgScrubber::set_op_parameters(
+    ScrubPGPreconds pg_cond,
+    const requested_scrub_t& request)
 {
   dout(10) << fmt::format("{}: @ input: {}", __func__, request) << dendl;
 
@@ -1714,6 +1714,17 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
   m_flags.priority = (request.must_scrub || request.need_auto)
 		       ? get_pg_cct()->_conf->osd_requested_scrub_priority
 		       : m_pg->get_scrub_priority();
+
+  // 'deep-on-error' is set for periodic shallow scrubs, if allowed
+  // by the environment
+  if (m_active_target->is_shallow() && pg_cond.can_autorepair &&
+      m_active_target->urgency() == urgency_t::periodic_regular) {
+    m_flags.deep_scrub_on_error = true;
+    dout(10) << fmt::format(
+		    "{}: auto repair with scrubbing, rescrub if errors found",
+		    __func__)
+	     << dendl;
+  }
 
   state_set(PG_STATE_SCRUBBING);
 
@@ -1741,7 +1752,6 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
   // The publishing here is required for tests synchronization.
   // The PG state flags were modified.
   m_pg->publish_stats_to_osd();
-  m_flags.deep_scrub_on_error = request.deep_scrub_on_error;
 }
 
 
@@ -2184,8 +2194,6 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 			       m_planned_scrub.must_scrub || m_flags.required;
   m_planned_scrub.must_repair = m_planned_scrub.must_repair || m_is_repair;
   m_planned_scrub.need_auto = m_planned_scrub.need_auto || m_flags.auto_repair;
-  m_planned_scrub.deep_scrub_on_error =
-      m_planned_scrub.deep_scrub_on_error || m_flags.deep_scrub_on_error;
 
   // copy the aborted target
   const auto aborted_target = *m_active_target;
@@ -2275,7 +2283,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 		    "{}: cannot scrub (not clean). Registered?{:c}", __func__,
 		    m_scrub_job->is_registered() ? 'Y' : 'n')
 	     << dendl;
-    requeue_penalized(trgt.level(), delay_cause_t::pg_state, clock_now);
+    requeue_penalized(s_or_d, delay_cause_t::pg_state, clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -2284,7 +2292,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     // (on the transition from NotTrimming to Trimming/WaitReservation),
     // i.e. some time before setting 'snaptrim'.
     dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
-    requeue_penalized(trgt.level(), delay_cause_t::pg_state, clock_now);
+    requeue_penalized(s_or_d, delay_cause_t::pg_state, clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -2295,13 +2303,13 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
       if (!pg_cond.allow_shallow) {
 	// can't scrub at all
 	dout(10) << __func__ << ": shallow not allowed" << dendl;
-	requeue_penalized(trgt.level(), delay_cause_t::flags, clock_now);
+	requeue_penalized(s_or_d, delay_cause_t::flags, clock_now);
 	return schedule_result_t::target_specific_failure;
       }
     } else if (!pg_cond.allow_deep) {
       // can't scrub at all
       dout(10) << __func__ << ": deep not allowed" << dendl;
-      requeue_penalized(trgt.level(), delay_cause_t::flags, clock_now);
+      requeue_penalized(s_or_d, delay_cause_t::flags, clock_now);
       return schedule_result_t::target_specific_failure;
     }
   }
@@ -2315,7 +2323,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     // scrub until this is solved.
       dout(10) << __func__ << ": Regular scrub skipped due to deep-scrub errors"
 	       << dendl;
-      requeue_penalized(trgt.level(), delay_cause_t::pg_state, clock_now);
+      requeue_penalized(s_or_d, delay_cause_t::pg_state, clock_now);
       return schedule_result_t::target_specific_failure;
     } else {
       // we will honor the request anyway, but will report the issue
@@ -2333,8 +2341,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 	     << ": skipping this PG as repairing was not explicitly "
 		"requested for it"
 	     << dendl;
-    requeue_penalized(
-	trgt.level(), delay_cause_t::scrub_params, clock_now);
+    requeue_penalized(s_or_d, delay_cause_t::scrub_params, clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -2342,8 +2349,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
   // be retried by the OSD later on.
   if (!reserve_local(trgt)) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
-    requeue_penalized(
-	trgt.level(), delay_cause_t::local_resources, clock_now);
+    requeue_penalized(s_or_d, delay_cause_t::local_resources, clock_now);
     return schedule_result_t::osd_wide_failure;
   }
 
@@ -2354,7 +2360,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
   state_clear(PG_STATE_REPAIR);
 
   m_active_target = trgt;
-  set_op_parameters(m_planned_scrub);
+  set_op_parameters(pg_cond, m_planned_scrub);
   // dequeue the PG's "other" target
   m_osds->get_scrub_services().remove_from_osd_queue(m_pg_id);
   m_scrub_job->clear_both_targets_queued();
