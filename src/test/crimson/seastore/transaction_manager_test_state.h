@@ -219,7 +219,7 @@ protected:
   }
 
   void restart() {
-    restart_fut().get0();
+    restart_fut().get();
   }
 
   seastar::future<> tm_setup() {
@@ -372,8 +372,8 @@ protected:
   }
 
   void submit_transaction(TransactionRef t) {
-    submit_transaction_fut(*t).unsafe_get0();
-    epm->run_background_work_until_halt().get0();
+    submit_transaction_fut(*t).unsafe_get();
+    epm->run_background_work_until_halt().get();
   }
 };
 
