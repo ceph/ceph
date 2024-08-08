@@ -71,7 +71,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 ## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
 
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
-00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 101
+00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 101 --force-priority
 08 20 * * 1        $CW $SS     64 --ceph main --suite       orch -p 950
 16 20 * * 2        $CW $SS    128 --ceph main --suite        rbd -p 950
 24 20 1 * *        $CW $SS    512 --ceph main --suite         fs -p 700
