@@ -15,8 +15,8 @@ interrupt_cond<crimson::osd::IOInterruptCondition>;
 
 namespace crimson::osd {
 
-IOInterruptCondition::IOInterruptCondition(Ref<PG>& pg)
-  : pg(pg), e(pg->get_osdmap_epoch()) {}
+IOInterruptCondition::IOInterruptCondition(Ref<PG>& pg, epoch_t epoch_started)
+  : pg(pg), epoch_started(epoch_started) {}
 
 IOInterruptCondition::~IOInterruptCondition() {
   // for the sake of forward declaring PG (which is a detivate of
@@ -26,9 +26,9 @@ IOInterruptCondition::~IOInterruptCondition() {
 bool IOInterruptCondition::new_interval_created() {
   LOG_PREFIX(IOInterruptCondition::new_interval_created);
   const epoch_t interval_start = pg->get_interval_start_epoch();
-  bool ret = e < interval_start;
+  bool ret = epoch_started < interval_start;
   if (ret) {
-    DEBUGDPP("stored interval e{} < interval_start e{}", *pg, e, interval_start);
+    DEBUGDPP("stored epoch_started e{} < interval_start e{}", *pg, epoch_started, interval_start);
   }
   return ret;
 }

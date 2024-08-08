@@ -86,7 +86,7 @@ seastar::future<> BackgroundRecoveryT<T>::start()
             return do_recovery();
           }, [](std::exception_ptr) {
             return seastar::make_ready_future<bool>(false);
-          }, pg);
+          }, pg, epoch_started);
         }).handle_exception_type([ref, this](const std::system_error& err) {
 	  LOG_PREFIX(BackgroundRecoveryT<T>::start);
           if (err.code() == std::make_error_code(std::errc::interrupted)) {
