@@ -73,15 +73,15 @@ public:
   uint64_t get_op() override { return rgw::IAM::iamGetRole; }
 };
 
-class RGWModifyRole : public RGWRoleWrite {
+class RGWModifyRoleTrustPolicy : public RGWRoleWrite {
   bufferlist bl_post_body;
 public:
-  RGWModifyRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
+  RGWModifyRoleTrustPolicy(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
   int get_params();
-  const char* name() const override { return "modify_role"; }
-  RGWOpType get_type() override { return RGW_OP_MODIFY_ROLE; }
-  uint64_t get_op() override { return rgw::IAM::iamModifyRole; }
+  const char* name() const override { return "modify_role_trust_policy"; }
+  RGWOpType get_type() override { return RGW_OP_MODIFY_ROLE_TRUST_POLICY; }
+  uint64_t get_op() override { return rgw::IAM::iamModifyRoleTrustPolicy; }
 };
 
 class RGWListRoles : public RGWRoleRead {

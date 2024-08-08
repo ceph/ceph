@@ -438,7 +438,7 @@ void RGWGetRole::execute(optional_yield y)
   }
 }
 
-int RGWModifyRole::get_params()
+int RGWModifyRoleTrustPolicy::get_params()
 {
   role_name = s->info.args.get("RoleName");
   trust_policy = s->info.args.get("PolicyDocument");
@@ -456,7 +456,7 @@ int RGWModifyRole::get_params()
   return 0;
 }
 
-void RGWModifyRole::execute(optional_yield y)
+void RGWModifyRoleTrustPolicy::execute(optional_yield y)
 {
   op_ret = get_params();
   if (op_ret < 0) {
