@@ -11405,8 +11405,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     return 0;
   }
 
-  if (off + len > in->size) {
-    len = in->size - off;    
+  if (off + len > effective_size) {
+    len = effective_size - off;
   }
 
   auto target_len = std::min(len, effective_size - off);
