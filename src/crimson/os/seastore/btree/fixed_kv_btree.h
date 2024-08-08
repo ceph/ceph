@@ -1383,6 +1383,9 @@ private:
       "looking up root on {}",
       c.trans,
       *root_block);
+
+    // checking the lba root node must be atomic with creating
+    // and linking the absent root node
     auto [found, fut] = get_root_node(c);
 
     auto on_found_internal =

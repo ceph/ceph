@@ -680,7 +680,7 @@ TransactionManager::get_extents_if_live(
   laddr_t laddr,
   extent_len_t len)
 {
-  LOG_PREFIX(TransactionManager::get_extent_if_live);
+  LOG_PREFIX(TransactionManager::get_extents_if_live);
   TRACET("{} {}~{} {}", t, type, laddr, len, paddr);
 
   // This only works with segments to check if alive,

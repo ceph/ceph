@@ -437,6 +437,11 @@ public:
    * Mostly the same as Cache::get_extent(), with the only difference
    * that get_absent_extent won't search the transaction's context for
    * the specific CachedExtent
+   *
+   * The extent in query is supposed to be absent in Cache.
+   *
+   * User is responsible to call get_extent_viewable_by_trans()
+   * *atomically* prior to call this method.
    */
   template <typename T>
   get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
@@ -471,18 +476,46 @@ public:
     CachedExtentRef extent)
   {
     assert(extent->is_valid());
-    auto p_extent = extent->get_transactional_view(t);
-    if (!p_extent->is_pending_in_trans(t.get_trans_id())) {
-      t.add_to_read_set(p_extent);
-      if (!p_extent->is_mutation_pending()) {
-	touch_extent(*p_extent);
+    CachedExtent* p_extent;
+    if (extent->is_stable()) {
+      p_extent = extent->get_transactional_view(t);
+      if (p_extent != extent.get()) {
+        assert(!extent->is_stable_writting());
+        assert(p_extent->is_pending_in_trans(t.get_trans_id()));
+        assert(!p_extent->is_stable_writting());
+        if (p_extent->is_mutable()) {
+          assert(p_extent->is_fully_loaded());
+          assert(!p_extent->is_pending_io());
+          return get_extent_ertr::make_ready_future<CachedExtentRef>(
+            CachedExtentRef(p_extent));
+        } else {
+          assert(p_extent->is_exist_clean());
+        }
+      } else {
+        // stable from trans-view
+        assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
+        if (t.maybe_add_to_read_set(p_extent)) {
+          touch_extent(*p_extent);
+        }
+      }
+    } else {
+      assert(!extent->is_stable_writting());
+      assert(extent->is_pending_in_trans(t.get_trans_id()));
+      if (extent->is_mutable()) {
+        assert(extent->is_fully_loaded());
+        assert(!extent->is_pending_io());
+        return get_extent_ertr::make_ready_future<CachedExtentRef>(extent);
+      } else {
+        assert(extent->is_exist_clean());
+        p_extent = extent.get();
       }
     }
+
+    assert(p_extent->is_stable() || p_extent->is_exist_clean());
     // user should not see RETIRED_PLACEHOLDER extents
     ceph_assert(p_extent->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
     if (!p_extent->is_fully_loaded()) {
       assert(!p_extent->is_mutable());
-      touch_extent(*p_extent);
       LOG_PREFIX(Cache::get_extent_viewable_by_trans);
       SUBDEBUG(seastore_cache,
         "{} {}~{} is present without been fully loaded, reading ... -- {}",
@@ -784,6 +817,9 @@ public:
    * and read in the extent at location offset~length.
    *
    * The extent in query is supposed to be absent in Cache.
+   *
+   * User is responsible to call get_extent_viewable_by_trans()
+   * *atomically* prior to call this method.
    */
   template <typename Func>
   get_extent_by_type_ret get_absent_extent_by_type(

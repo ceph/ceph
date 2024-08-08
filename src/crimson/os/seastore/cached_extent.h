@@ -343,6 +343,8 @@ public:
       : "nullopt";
     out << "CachedExtent(addr=" << this
 	<< ", type=" << get_type()
+	<< ", trans=" << pending_for_transaction
+	<< ", pending_io=" << is_pending_io()
 	<< ", version=" << version
 	<< ", dirty_from_or_retired_at=" << dirty_from_or_retired_at
 	<< ", modify_time=" << sea_time_point_printer_t{modify_time}
@@ -440,14 +442,18 @@ public:
       state == extent_state_t::DIRTY;
   }
 
+  bool is_stable_writting() const {
+    // MUTATION_PENDING and under-io extents are already stable and visible,
+    // see prepare_record().
+    //
+    // XXX: It might be good to mark this case as DIRTY from the definition,
+    // which probably can make things simpler.
+    return is_mutation_pending() && is_pending_io();
+  }
+
   /// Returns true if extent is stable and shared among transactions
   bool is_stable() const {
-    return is_stable_written() ||
-	   // MUTATION_PENDING and under-io extents are to-be-stable extents,
-	   // for the sake of caveats that checks the correctness of extents
-	   // states, we consider them stable.
-           (is_mutation_pending() &&
-            is_pending_io());
+    return is_stable_written() || is_stable_writting();
   }
 
   bool is_data_stable() const {

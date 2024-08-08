@@ -333,12 +333,12 @@ public:
     sea_time_point modify_time) = 0;
 
   /**
-   * get_extent_if_live
+   * get_extents_if_live
    *
    * Returns extent at specified location if still referenced by
    * lba_manager and not removed by t.
    *
-   * See TransactionManager::get_extent_if_live and
+   * See TransactionManager::get_extents_if_live and
    * LBAManager::get_physical_extent_if_live.
    */
   using get_extents_if_live_iertr = base_iertr;
