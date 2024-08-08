@@ -92,19 +92,20 @@ To build Ceph, follow this procedure:
 
     ``ninja``
 
-   [Ninja](https://ninja-build.org/) is the build system used by the Ceph
-   project to build test builds.  The number of jobs used by `ninja` is 
-   derived from the number of CPU cores of the building host if unspecified. 
-   Use the `-j` option to limit the job number if build jobs are running 
-   out of memory. If you attempt to run `ninja` and receive a message that 
-   reads `g++: fatal error: Killed signal terminated program cc1plus`, then 
-   you have run out of memory.
-
-   Using the `-j` option with an argument appropriate to the hardware on which 
-   the `ninja` command is run is expected to result in a successful build. For
-   example, to limit the job number to 3, run the command `ninja -j 3`. On
-   average, each `ninja` job run in parallel needs approximately 2.5 GiB 
-   of RAM.
+   > [!TIP]
+   > [Ninja](https://ninja-build.org/) is the build system used by the Ceph
+   > project to build test builds.  The number of jobs used by `ninja` is 
+   > derived from the number of CPU cores of the building host if unspecified. 
+   > Use the `-j` option to limit the job number if build jobs are running 
+   > out of memory. If you attempt to run `ninja` and receive a message that 
+   > reads `g++: fatal error: Killed signal terminated program cc1plus`, then 
+   > you have run out of memory.
+   >
+   > Using the `-j` option with an argument appropriate to the hardware on
+   > which the `ninja` command is run is expected to result in a successful
+   > build. For example, to limit the job number to 3, run the command `ninja
+   > -j 3`. On average, each `ninja` job run in parallel needs approximately
+   > 2.5 GiB of RAM.
 
 This documentation assumes that your build directory is a subdirectory of the
 `ceph.git` checkout. If the build directory is located elsewhere, point
