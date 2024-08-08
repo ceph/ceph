@@ -1320,6 +1320,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     if (!pending_map.modules.count(module)) {
       ss << "module '" << module << "' is not enabled";
     }
+    dout(8) << __func__ << " disabling module " << module << " from new " << dendl;
     pending_map.modules.erase(module);
   } else {
     ss << "Command '" << prefix << "' not implemented!";
