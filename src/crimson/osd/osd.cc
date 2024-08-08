@@ -238,9 +238,9 @@ seastar::future<> OSD::mkfs(
 
   co_await store.write_meta("ready", "ready");
 
-  fmt::print("created object store {} for osd.{} fsid {}\n",
-	     local_conf().get_val<std::string>("osd_data"),
-	     whoami, cluster_fsid);
+  INFO("created object store {} for osd.{} fsid {}\n",
+       local_conf().get_val<std::string>("osd_data"),
+       whoami, cluster_fsid);
   co_await store.umount();
 
   co_await store.stop();
