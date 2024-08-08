@@ -126,18 +126,15 @@ protected:
   // Open state
   ceph_msg_connect connect_msg;
   ceph_msg_connect_reply connect_reply;
-  ceph::buffer::list authorizer_buf;  // auth(orizer) payload read off the wire
+  ceph::buffer::ptr authorizer_buf;  // auth(orizer) payload read off the wire
   ceph::buffer::list authorizer_more;  // connect-side auth retry (we added challenge)
 
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
   utime_t throttle_stamp;
-  unsigned msg_left;
   uint64_t cur_msg_size;
   ceph_msg_header current_header;
-  ceph::buffer::list data_buf;
-  ceph::buffer::list::iterator data_blp;
-  ceph::buffer::list front, middle, data;
+  ceph::buffer::ptr front, middle, data;
 
   bool replacing;  // when replacing process happened, we will reply connect
                    // side with RETRY tag and accept side will clear replaced
@@ -170,7 +167,6 @@ protected:
   CONTINUATION_DECL(ProtocolV1, throttle_dispatch_queue);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_front);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_middle);
-  CONTINUATION_DECL(ProtocolV1, read_message_data);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_data);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_message_footer);
 
@@ -191,7 +187,6 @@ protected:
   CtPtr handle_message_front(char *buffer, int r);
   CtPtr read_message_middle();
   CtPtr handle_message_middle(char *buffer, int r);
-  CtPtr read_message_data_prepare();
   CtPtr read_message_data();
   CtPtr handle_message_data(char *buffer, int r);
   CtPtr read_message_footer();

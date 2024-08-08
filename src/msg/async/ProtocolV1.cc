@@ -39,7 +39,7 @@ const int ASYNC_COALESCE_THRESHOLD = 256;
 
 using namespace std;
 
-static void alloc_aligned_buffer(ceph::buffer::list &data, unsigned len, unsigned off) {
+static ceph::bufferptr alloc_aligned_buffer(unsigned len, unsigned off) {
   // create a buffer to read into that matches the data alignment
   unsigned alloc_len = 0;
   unsigned left = len;
@@ -52,8 +52,9 @@ static void alloc_aligned_buffer(ceph::buffer::list &data, unsigned len, unsigne
   }
   alloc_len += left;
   ceph::bufferptr ptr(ceph::buffer::create_small_page_aligned(alloc_len));
-  if (head) ptr.set_offset(CEPH_PAGE_SIZE - head);
-  data.push_back(std::move(ptr));
+  if (head)
+    ptr.set_offset(CEPH_PAGE_SIZE - head);
+  return ptr;
 }
 
 /**
@@ -67,7 +68,6 @@ ProtocolV1::ProtocolV1(AsyncConnection *connection)
       keepalive(false),
       connect_seq(0),
       peer_global_seq(0),
-      msg_left(0),
       cur_msg_size(0),
       replacing(false),
       is_reset_from_peer(false),
@@ -89,7 +89,7 @@ void ProtocolV1::connect() {
   this->state = START_CONNECT;
 
   // reset connect state variables
-  authorizer_buf.clear();
+  authorizer_buf = ceph::bufferptr{};
   // FIPS zeroization audit 20191115: these memsets are not security related.
   memset(&connect_msg, 0, sizeof(connect_msg));
   memset(&connect_reply, 0, sizeof(connect_reply));
@@ -655,10 +655,9 @@ CtPtr ProtocolV1::handle_message_header(char *buffer, int r) {
   }
 
   // Reset state
-  data_buf.clear();
-  front.clear();
-  middle.clear();
-  data.clear();
+  front = ceph::buffer::ptr{};
+  middle = ceph::buffer::ptr{};
+  data = ceph::buffer::ptr{};
 
   state = THROTTLE_MESSAGE;
   return CONTINUE(throttle_message);
@@ -762,7 +761,7 @@ CtPtr ProtocolV1::read_message_front() {
   unsigned front_len = current_header.front_len;
   if (front_len) {
     if (!front.length()) {
-      front.push_back(ceph::buffer::create(front_len));
+      front = ceph::buffer::create(front_len);
     }
     return READB(front_len, front.c_str(), handle_message_front);
   }
@@ -787,13 +786,13 @@ CtPtr ProtocolV1::read_message_middle() {
 
   if (current_header.middle_len) {
     if (!middle.length()) {
-      middle.push_back(ceph::buffer::create(current_header.middle_len));
+      middle = ceph::buffer::create(current_header.middle_len);
     }
     return READB(current_header.middle_len, middle.c_str(),
                  handle_message_middle);
   }
 
-  return read_message_data_prepare();
+  return read_message_data();
 }
 
 CtPtr ProtocolV1::handle_message_middle(char *buffer, int r) {
@@ -806,10 +805,10 @@ CtPtr ProtocolV1::handle_message_middle(char *buffer, int r) {
 
   ldout(cct, 20) << __func__ << " got middle " << middle.length() << dendl;
 
-  return read_message_data_prepare();
+  return read_message_data();
 }
 
-CtPtr ProtocolV1::read_message_data_prepare() {
+CtPtr ProtocolV1::read_message_data() {
   ldout(cct, 20) << __func__ << dendl;
 
   unsigned data_len = current_header.data_len;
@@ -817,47 +816,10 @@ CtPtr ProtocolV1::read_message_data_prepare() {
 
   if (data_len) {
     // get a buffer
-#if 0
-    // rx_buffers is broken by design... see
-    //  http://tracker.ceph.com/issues/22480
-    map<ceph_tid_t, pair<ceph::buffer::list, int> >::iterator p =
-        connection->rx_buffers.find(current_header.tid);
-    if (p != connection->rx_buffers.end()) {
-      ldout(cct, 10) << __func__ << " seleting rx buffer v " << p->second.second
-                     << " at offset " << data_off << " len "
-                     << p->second.first.length() << dendl;
-      data_buf = p->second.first;
-      // make sure it's big enough
-      if (data_buf.length() < data_len)
-        data_buf.push_back(buffer::create(data_len - data_buf.length()));
-      data_blp = data_buf.begin();
-    } else {
-      ldout(cct, 20) << __func__ << " allocating new rx buffer at offset "
-                     << data_off << dendl;
-      alloc_aligned_buffer(data_buf, data_len, data_off);
-      data_blp = data_buf.begin();
-    }
-#else
     ldout(cct, 20) << __func__ << " allocating new rx buffer at offset "
 		   << data_off << dendl;
-    alloc_aligned_buffer(data_buf, data_len, data_off);
-    data_blp = data_buf.begin();
-#endif
-  }
-
-  msg_left = data_len;
-
-  return CONTINUE(read_message_data);
-}
-
-CtPtr ProtocolV1::read_message_data() {
-  ldout(cct, 20) << __func__ << " msg_left=" << msg_left << dendl;
-
-  if (msg_left > 0) {
-    auto bp = data_blp.get_current_ptr();
-    unsigned read_len = std::min(bp.length(), msg_left);
-
-    return READB(read_len, bp.c_str(), handle_message_data);
+    data = alloc_aligned_buffer(data_len, data_off);
+    return READB(data_len, data.c_str(), handle_message_data);
   }
 
   return read_message_footer();
@@ -871,15 +833,9 @@ CtPtr ProtocolV1::handle_message_data(char *buffer, int r) {
     return _fault();
   }
 
-  auto bp = data_blp.get_current_ptr();
-  unsigned read_len = std::min(bp.length(), msg_left);
-  ceph_assert(read_len <
-	      static_cast<unsigned>(std::numeric_limits<int>::max()));
-  data_blp += read_len;
-  data.append(bp, 0, read_len);
-  msg_left -= read_len;
+  ldout(cct, 20) << __func__ << " got data " << data.length() << dendl;
 
-  return CONTINUE(read_message_data);
+  return read_message_footer();
 }
 
 CtPtr ProtocolV1::read_message_footer() {
@@ -895,6 +851,12 @@ CtPtr ProtocolV1::read_message_footer() {
   }
 
   return READ(len, handle_message_footer);
+}
+
+static ceph::bufferlist to_bl(ceph::bufferptr&& ptr) {
+  ceph::bufferlist bl;
+  bl.push_back(std::move(ptr));
+  return bl;
 }
 
 CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
@@ -935,9 +897,9 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                                     messenger->crcflags,
                                     current_header,
                                     footer,
-                                    std::move(front),
-                                    std::move(middle),
-                                    std::move(data),
+                                    to_bl(std::move(front)),
+                                    to_bl(std::move(middle)),
+                                    to_bl(std::move(data)),
                                     connection);
   if (!message) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
@@ -1065,10 +1027,9 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
  out:
   // clean up local buffer references
-  data_buf.clear();
-  front.clear();
-  middle.clear();
-  data.clear();
+  front = ceph::buffer::ptr{};
+  middle = ceph::buffer::ptr{};
+  data = ceph::buffer::ptr{};
 
   if (need_dispatch_writer && connection->is_connected()) {
     connection->center->dispatch_event_external(connection->write_handler);
@@ -1955,8 +1916,7 @@ CtPtr ProtocolV1::handle_connect_message_1(char *buffer, int r) {
 
 CtPtr ProtocolV1::wait_connect_message_auth() {
   ldout(cct, 20) << __func__ << dendl;
-  authorizer_buf.clear();
-  authorizer_buf.push_back(ceph::buffer::create(connect_msg.authorizer_len));
+  authorizer_buf = ceph::buffer::create(connect_msg.authorizer_len);
   return READB(connect_msg.authorizer_len, authorizer_buf.c_str(),
                handle_connect_message_auth);
 }
@@ -2058,7 +2018,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
                                       authorizer_reply);
   }
 
-  ceph::buffer::list auth_bl_copy = authorizer_buf;
+  ceph::bufferptr auth_bp_copy = authorizer_buf;
   auto am = auth_meta;
   am->auth_method = connect_msg.authorizer_protocol;
   if (!HAVE_FEATURE((uint64_t)connect_msg.features, CEPHX_V2)) {
@@ -2068,7 +2028,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   connection->lock.unlock();
   ldout(cct,10) << __func__ << " authorizor_protocol "
 		<< connect_msg.authorizer_protocol
-		<< " len " << auth_bl_copy.length()
+		<< " len " << auth_bp_copy.length()
 		<< dendl;
   bool more = (bool)auth_meta->authorizer_challenge;
   int r = messenger->auth_server->handle_auth_request(
@@ -2076,7 +2036,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     am.get(),
     more,
     am->auth_method,
-    auth_bl_copy,
+    to_bl(std::move(auth_bp_copy)),
     &authorizer_reply);
   if (r < 0) {
     connection->lock.lock();
