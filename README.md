@@ -79,29 +79,32 @@ To build Ceph, follow this procedure:
    contains `do_cmake.sh` and `CONTRIBUTING.rst`.
 2. Run the `do_cmake.sh` script:
 
-    >``./do_cmake.sh``
+    ``./do_cmake.sh``
+
+   ``do_cmake.sh`` by default creates a "debug build" of Ceph, which can be 
+   up to five times slower than a non-debug build. Pass 
+   ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to ``do_cmake.sh`` to create a 
+   non-debug build.
 3. Move into the `build` directory:
 
-    >``cd build``
+    ``cd build``
 4. Use the `ninja` buildsystem to build the development environment:
 
-    >``ninja``
+    ``ninja``
 
-``do_cmake.sh`` by default creates a "debug build" of Ceph, which can be up to
-five times slower than a non-debug build.  Pass
-``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to ``do_cmake.sh`` to create a non-debug
-build.
+   [Ninja](https://ninja-build.org/) is the build system used by the Ceph
+   project to build test builds.  The number of jobs used by `ninja` is 
+   derived from the number of CPU cores of the building host if unspecified. 
+   Use the `-j` option to limit the job number if build jobs are running 
+   out of memory. If you attempt to run `ninja` and receive a message that 
+   reads `g++: fatal error: Killed signal terminated program cc1plus`, then 
+   you have run out of memory.
 
-[Ninja](https://ninja-build.org/) is the buildsystem used by the Ceph project
-to build test builds.  The number of jobs used by `ninja` is derived from the
-number of CPU cores of the building host if unspecified. Use the `-j` option to
-limit the job number if the build jobs are running out of memory. If you
-attempt to run `ninja` and receive a message that reads `g++: fatal error:
-Killed signal terminated program cc1plus`, then you have run out of memory.
-Using the `-j` option with an argument appropriate to the hardware on which the
-`ninja` command is run is expected to result in a successful build. For example,
-to limit the job number to 3, run the command `ninja -j 3`. On average, each
-`ninja` job run in parallel needs approximately 2.5 GiB of RAM.
+   Using the `-j` option with an argument appropriate to the hardware on which 
+   the `ninja` command is run is expected to result in a successful build. For
+   example, to limit the job number to 3, run the command `ninja -j 3`. On
+   average, each `ninja` job run in parallel needs approximately 2.5 GiB 
+   of RAM.
 
 This documentation assumes that your build directory is a subdirectory of the
 `ceph.git` checkout. If the build directory is located elsewhere, point
