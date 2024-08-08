@@ -46,7 +46,11 @@ class CircularJournalSpace : public JournalAllocator {
 
   roll_ertr::future<> roll() final;
 
-  write_ret write(ceph::bufferlist&& to_write) final;
+  journal_seq_t get_written_to() const final {
+    return written_to;
+  }
+
+  write_ertr::future<> write(ceph::bufferlist&& to_write) final;
 
   void update_modify_time(record_t& record) final {}
 
@@ -69,7 +73,7 @@ class CircularJournalSpace : public JournalAllocator {
   CircularJournalSpace(RBMDevice * device);
 
   struct cbj_header_t;
-  using write_ertr = Journal::submit_record_ertr;
+  using submit_ertr = Journal::submit_record_ertr;
   /*
    * device_write_bl
    *
@@ -77,7 +81,8 @@ class CircularJournalSpace : public JournalAllocator {
    * @param bufferlist to write
    *
    */
-  write_ertr::future<> device_write_bl(rbm_abs_addr offset, ceph::bufferlist &bl);
+  submit_ertr::future<>
+  device_write_bl(rbm_abs_addr offset, ceph::bufferlist &bl);
 
   using read_ertr = crimson::errorator<
     crimson::ct_error::input_output_error,
@@ -100,7 +105,7 @@ class CircularJournalSpace : public JournalAllocator {
 
   ceph::bufferlist encode_header();
 
-  write_ertr::future<> write_header();
+  submit_ertr::future<> write_header();
 
 
   /**
@@ -139,9 +144,6 @@ class CircularJournalSpace : public JournalAllocator {
    *
    */
 
-  journal_seq_t get_written_to() const {
-    return written_to;
-  }
   rbm_abs_addr get_rbm_addr(journal_seq_t seq) const {
     return convert_paddr_to_abs_addr(seq.offset);
   }

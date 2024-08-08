@@ -28,8 +28,7 @@ SegmentedOolWriter::SegmentedOolWriter(
 {
 }
 
-SegmentedOolWriter::alloc_write_ertr::future<>
-SegmentedOolWriter::write_record(
+void SegmentedOolWriter::write_record(
   Transaction& t,
   record_t&& record,
   std::list<LogicalCachedExtentRef>&& extents,
@@ -47,24 +46,36 @@ SegmentedOolWriter::write_record(
   stats.md_bytes += record.size.get_raw_mdlength();
   stats.num_records += 1;
 
-  return record_submitter.submit(
+  auto ret = record_submitter.submit(
     std::move(record),
-    with_atomic_roll_segment
-  ).safe_then([this, FNAME, &t, extents=std::move(extents)
-              ](record_locator_t ret) mutable {
-    DEBUGT("{} finish with {} and {} extents",
+    with_atomic_roll_segment);
+  DEBUGT("{} start at {} with {} extents ...",
+         t, segment_allocator.get_name(),
+         ret.record_base_regardless_md,
+         extents.size());
+  paddr_t extent_addr = ret.record_base_regardless_md.offset;
+  for (auto& extent : extents) {
+    TRACET("{} extent will be written at {} -- {}",
            t, segment_allocator.get_name(),
-           ret, extents.size());
-    paddr_t extent_addr = ret.record_block_base;
-    for (auto& extent : extents) {
-      TRACET("{} ool extent written at {} -- {}",
-             t, segment_allocator.get_name(),
-             extent_addr, *extent);
-      t.update_delayed_ool_extent_addr(extent, extent_addr);
-      extent_addr = extent_addr.as_seg_paddr().add_offset(
-          extent->get_length());
-    }
+           extent_addr, *extent);
+    t.update_delayed_ool_extent_addr(extent, extent_addr);
+    extent_addr = extent_addr.as_seg_paddr().add_offset(
+        extent->get_length());
+  }
+  // t might be destructed inside write_future
+  auto write_future = seastar::with_gate(write_guard,
+    [this, FNAME, tid=t.get_trans_id(),
+     record_base=ret.record_base_regardless_md,
+     submit_fut=std::move(ret.future)]() mutable {
+    return std::move(submit_fut
+    ).safe_then([this, FNAME, tid, record_base](record_locator_t ret) {
+      TRACE("trans.{} {} finish {}=={}",
+            tid, segment_allocator.get_name(), ret, record_base);
+      // ool won't write metadata, so the paddrs must be equal
+      assert(ret.record_block_base == record_base.offset);
+    });
   });
+  t.get_handle().add_write_future(std::move(write_future));
 }
 
 SegmentedOolWriter::alloc_write_iertr::future<>
@@ -101,19 +112,15 @@ SegmentedOolWriter::do_write(
       DEBUGT("{} extents={} submit {} extents and roll, unavailable ...",
              t, segment_allocator.get_name(),
              extents.size(), num_extents);
-      auto fut_write = alloc_write_ertr::now();
       if (num_extents > 0) {
         assert(record_submitter.check_action(record.size) !=
                action_t::ROLL);
-        fut_write = write_record(
+        write_record(
             t, std::move(record), std::move(pending_extents),
             true/* with_atomic_roll_segment */);
       }
       return trans_intr::make_interruptible(
-        record_submitter.roll_segment(
-        ).safe_then([fut_write=std::move(fut_write)]() mutable {
-          return std::move(fut_write);
-        })
+        record_submitter.roll_segment()
       ).si_then([this, &t, &extents] {
         return do_write(t, extents);
       });
@@ -144,15 +151,12 @@ SegmentedOolWriter::do_write(
       DEBUGT("{} extents={} submit {} extents ...",
              t, segment_allocator.get_name(),
              extents.size(), pending_extents.size());
-      return trans_intr::make_interruptible(
-        write_record(t, std::move(record), std::move(pending_extents))
-      ).si_then([this, &t, &extents] {
-        if (!extents.empty()) {
-          return do_write(t, extents);
-        } else {
-          return alloc_write_iertr::now();
-        }
-      });
+      write_record(t, std::move(record), std::move(pending_extents));
+      if (!extents.empty()) {
+        return do_write(t, extents);
+      } else {
+        return alloc_write_iertr::now();
+      }
     }
     // SUBMIT_NOT_FULL: evaluate the next extent
   }
@@ -162,8 +166,8 @@ SegmentedOolWriter::do_write(
          t, segment_allocator.get_name(),
          num_extents);
   assert(num_extents > 0);
-  return trans_intr::make_interruptible(
-    write_record(t, std::move(record), std::move(pending_extents)));
+  write_record(t, std::move(record), std::move(pending_extents));
+  return alloc_write_iertr::now();
 }
 
 SegmentedOolWriter::alloc_write_iertr::future<>
@@ -498,6 +502,7 @@ ExtentPlacementManager::write_delayed_ool_extents(
       assert(extent->is_valid());
     });
 #endif
+    assert(writer->get_type() == backend_type_t::SEGMENTED);
     return writer->alloc_write_ool_extents(t, extents);
   });
 }
@@ -524,6 +529,7 @@ ExtentPlacementManager::write_preallocated_ool_extents(
     return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
       auto writer = p.first;
       auto& extents = p.second;
+      assert(writer->get_type() == backend_type_t::RANDOM_BLOCK);
       return writer->alloc_write_ool_extents(t, extents);
     });
   });
@@ -985,13 +991,11 @@ RandomBlockOolWriter::alloc_write_ool_extents(
   if (extents.empty()) {
     return alloc_write_iertr::now();
   }
-  return seastar::with_gate(write_guard, [this, &t, &extents] {
-    return do_write(t, extents);
-  });
+  do_write(t, extents);
+  return alloc_write_iertr::now();
 }
 
-RandomBlockOolWriter::alloc_write_iertr::future<>
-RandomBlockOolWriter::do_write(
+void RandomBlockOolWriter::do_write(
   Transaction& t,
   std::list<CachedExtentRef>& extents)
 {
@@ -999,13 +1003,15 @@ RandomBlockOolWriter::do_write(
   assert(!extents.empty());
   DEBUGT("start with {} allocated extents",
          t, extents.size());
-  return trans_intr::do_for_each(extents,
-    [this, &t, FNAME](auto& ex) {
+  std::vector<write_info_t> writes;
+  writes.reserve(extents.size());
+  for (auto& ex : extents) {
     auto paddr = ex->get_paddr();
     assert(paddr.is_absolute());
     RandomBlockManager * rbm = rb_cleaner->get_rbm(paddr); 
     assert(rbm);
-    TRACE("extent {}, allocated addr {}", fmt::ptr(ex.get()), paddr);
+    TRACE("write extent {}, paddr {} ...",
+          fmt::ptr(ex.get()), paddr);
     auto& stats = t.get_ool_write_stats();
     stats.extents.num += 1;
     stats.extents.bytes += ex->get_length();
@@ -1029,29 +1035,36 @@ RandomBlockOolWriter::do_write(
       trans_stats.data_bytes += ex->get_length();
       w_stats.data_bytes += ex->get_length();
     }
-    return trans_intr::make_interruptible(
-      rbm->write(paddr + offset,
-	bp
-      ).handle_error(
-	alloc_write_iertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "Invalid error when writing record"}
-      )
-    ).si_then([this, &t, &ex, paddr, FNAME] {
-      TRACET("ool extent written at {} -- {}",
-	     t, paddr, *ex);
-      if (ex->is_initial_pending()) {
-	t.mark_allocated_extent_ool(ex);
-      } else if (can_inplace_rewrite(t, ex)) {
-        assert(ex->is_logical());
-	t.mark_inplace_rewrite_extent_ool(
-          ex->template cast<LogicalCachedExtent>());
-      } else {
-	ceph_assert("impossible");
-      }
-      return alloc_write_iertr::now();
+    writes.push_back(write_info_t{paddr + offset, std::move(bp), rbm});
+
+    if (ex->is_initial_pending()) {
+      t.mark_allocated_extent_ool(ex);
+    } else if (can_inplace_rewrite(t, ex)) {
+      assert(ex->is_logical());
+      t.mark_inplace_rewrite_extent_ool(
+        ex->template cast<LogicalCachedExtent>());
+    } else {
+      ceph_assert("impossible");
+    }
+  }
+
+  // t might be destructed inside write_future
+  auto write_future = seastar::with_gate(write_guard,
+    [writes=std::move(writes)]() mutable {
+    return seastar::do_with(std::move(writes),
+      [](auto& writes) {
+      return crimson::do_for_each(writes,
+        [](auto& info) {
+        return info.rbm->write(info.offset, info.bp
+        ).handle_error(
+          alloc_write_ertr::pass_further{},
+          crimson::ct_error::assert_all{
+            "Invalid error when writing record"}
+        );
+      });
     });
   });
+  t.get_handle().add_write_future(std::move(write_future));
 }
 
 }

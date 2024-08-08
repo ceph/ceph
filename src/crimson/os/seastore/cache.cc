@@ -1322,7 +1322,7 @@ record_t Cache::prepare_record(
     }
   }
 
-  for (auto &i: t.written_ool_block_list) {
+  for (auto &i: t.ool_block_list) {
     TRACET("fresh ool extent -- {}", t, *i);
     ceph_assert(i->is_valid());
     assert(!i->is_inline());
@@ -1340,7 +1340,7 @@ record_t Cache::prepare_record(
     }
   }
 
-  for (auto &i: t.written_inplace_ool_block_list) {
+  for (auto &i: t.inplace_ool_block_list) {
     if (!i->is_valid()) {
       continue;
     }
@@ -1422,13 +1422,13 @@ record_t Cache::prepare_record(
 
   ceph_assert(t.get_fresh_block_stats().num ==
               t.inline_block_list.size() +
-              t.written_ool_block_list.size() +
+              t.ool_block_list.size() +
               t.num_delayed_invalid_extents +
 	      t.num_allocated_invalid_extents);
 
   auto& ool_stats = t.get_ool_write_stats();
-  ceph_assert(ool_stats.extents.num == t.written_ool_block_list.size() +
-    t.written_inplace_ool_block_list.size());
+  ceph_assert(ool_stats.extents.num == t.ool_block_list.size() +
+    t.inplace_ool_block_list.size());
 
   if (record.is_empty()) {
     SUBINFOT(seastore_t,
