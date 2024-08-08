@@ -2565,7 +2565,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     encode(upload_info, bl);
     obj_op.meta.data = &bl;
 
-    ret = obj_op.write_meta(dpp, bl.length(), 0, attrs, y);
+    ret = obj_op.write_meta(dpp, bl.length(), 0, attrs, y, false);
   } while (ret == -EEXIST);
 
   return ret;
