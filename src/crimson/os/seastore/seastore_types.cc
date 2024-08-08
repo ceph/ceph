@@ -371,6 +371,7 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
              << ", dirty_tail=" << header.dirty_tail
              << ", alloc_tail=" << header.alloc_tail
              << ", segment_nonce=" << header.segment_nonce
+	     << ", modify_time=" << mod_time_point_printer_t{header.modify_time}
              << ")";
 }
 
