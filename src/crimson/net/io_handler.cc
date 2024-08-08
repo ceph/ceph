@@ -1039,8 +1039,15 @@ IOHandler::read_message(
     ceph_msg_footer footer{ceph_le32(0), ceph_le32(0),
                            ceph_le32(0), ceph_le64(0), current_header.flags};
 
-    Message *message = decode_message(nullptr, 0, header, footer,
-        msg_frame.front(), msg_frame.middle(), msg_frame.data(), nullptr);
+    Message *message = decode_message(
+        nullptr,
+        0,
+        header,
+        footer,
+        std::move(msg_frame.front()),
+        std::move(msg_frame.middle()),
+        std::as_const(msg_frame.data()),
+        nullptr);
     if (!message) {
       logger().warn("{} decode message failed", conn);
       abort_in_fault();

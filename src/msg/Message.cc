@@ -311,9 +311,9 @@ Message *decode_message(CephContext *cct,
                         int crcflags,
                         ceph_msg_header& header,
                         ceph_msg_footer& footer,
-                        ceph::bufferlist& front,
-                        ceph::bufferlist& middle,
-                        ceph::bufferlist& data,
+                        ceph::bufferlist&& front,
+                        ceph::bufferlist&& middle,
+                        const ceph::bufferlist& data,
                         Message::ConnectionRef conn)
 {
 #ifdef WITH_SEASTAR
@@ -980,8 +980,8 @@ Message *decode_message(CephContext *cct,
   m->set_connection(std::move(conn));
   m->set_header(header);
   m->set_footer(footer);
-  m->set_payload(front);
-  m->set_middle(middle);
+  m->set_payload(std::move(front));
+  m->set_middle(std::move(middle));
   m->set_data(data);
 
   try {
@@ -1101,5 +1101,5 @@ Message *decode_message(CephContext *cct, int crcflags, ceph::bufferlist::const_
   decode(fr, p);
   decode(mi, p);
   decode(da, p);
-  return decode_message(cct, crcflags, h, f, fr, mi, da, nullptr);
+  return decode_message(cct, crcflags, h, f, std::move(fr), std::move(mi), std::move(da), nullptr);
 }

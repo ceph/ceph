@@ -4831,7 +4831,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   stringstream ss;
   f->flush(ss);
   encode(ss.str(), payload);
-  reply->set_payload(payload);
+  reply->set_payload(std::move(payload));
   dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
   m->get_connection()->send_message(reply);
 }
