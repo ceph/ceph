@@ -360,7 +360,7 @@ class Cluster(_RBase):
     # embedded orchestration placement spec
     placement: Optional[WrappedPlacementSpec] = None
     # control if the cluster is really a cluster
-    clustering: SMBClustering = SMBClustering.DEFAULT
+    clustering: Optional[SMBClustering] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -398,11 +398,15 @@ class Cluster(_RBase):
     def cleaned_custom_smb_global_options(self) -> Optional[Dict[str, str]]:
         return validation.clean_custom_options(self.custom_smb_global_options)
 
+    @property
+    def clustering_mode(self) -> SMBClustering:
+        return self.clustering if self.clustering else SMBClustering.DEFAULT
+
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""
-        if self.clustering == SMBClustering.ALWAYS:
+        if self.clustering_mode == SMBClustering.ALWAYS:
             return True
-        if self.clustering == SMBClustering.NEVER:
+        if self.clustering_mode == SMBClustering.NEVER:
             return False
         # do clustering automatically, based on the placement spec's count value
         count = 0

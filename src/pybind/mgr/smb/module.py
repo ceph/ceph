@@ -17,7 +17,12 @@ from . import (
     sqlite_store,
     utils,
 )
-from .enums import AuthMode, JoinSourceType, UserGroupSourceType
+from .enums import (
+    AuthMode,
+    JoinSourceType,
+    SMBClustering,
+    UserGroupSourceType,
+)
 from .proto import AccessAuthorizer, ConfigStore, Simplified
 
 if TYPE_CHECKING:
@@ -151,6 +156,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         define_user_pass: Optional[List[str]] = None,
         custom_dns: Optional[List[str]] = None,
         placement: Optional[str] = None,
+        clustering: Optional[SMBClustering] = None,
     ) -> results.Result:
         """Create an smb cluster"""
         domain_settings = None
@@ -245,6 +251,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             user_group_settings=user_group_settings,
             custom_dns=custom_dns,
             placement=pspec,
+            clustering=clustering,
         )
         to_apply.append(cluster)
         return self._handler.apply(to_apply, create_only=True).squash(cluster)
