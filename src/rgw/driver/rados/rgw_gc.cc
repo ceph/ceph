@@ -71,17 +71,18 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
 
   if (cct->_conf->rgw_max_chunk_size) {
     cls_rgw_obj_chain broken_chain;
+    cls_rgw_gc_set_entry_op op;
+    op.info.tag = tag;
+    size_t base_encoded_size = op.estimate_encoded_size();
+    size_t total_encoded_size = base_encoded_size;
+
     ldpp_dout(this, 20) << "RGWGC::send_split_chain - rgw_max_chunk_size is: " << cct->_conf->rgw_max_chunk_size << dendl;
 
     for (auto it = chain.objs.begin(); it != chain.objs.end(); it++) {
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - adding obj with name: " << it->key << dendl;
       broken_chain.objs.emplace_back(*it);
-      cls_rgw_gc_obj_info info;
-      info.tag = tag;
-      info.chain = broken_chain;
-      cls_rgw_gc_set_entry_op op;
-      op.info = info;
-      size_t total_encoded_size = op.estimate_encoded_size();
+      total_encoded_size += it->estimate_encoded_size();
+
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - total_encoded_size is: " << total_encoded_size << dendl;
 
       if (total_encoded_size > cct->_conf->rgw_max_chunk_size) { //dont add to chain, and send to gc
@@ -95,6 +96,7 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
           return {ret, {broken_chain}};
         }
         broken_chain.objs.clear();
+        total_encoded_size = base_encoded_size;
       }
     }
     if (!broken_chain.objs.empty()) { //when the chain is smaller than or equal to rgw_max_chunk_size
