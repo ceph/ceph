@@ -394,7 +394,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ_"),
                                    STR_LEN_ENTRY("HTTP_X_ACCOUNT_"),
                                    {NULL, 0} };
 
-void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta)
+void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta, const int prot_flags)
 {
   x_meta_map.clear();
   crypt_attribute_map.clear();
@@ -414,18 +414,8 @@ void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_met
         if (found_bad_meta && strncmp(name, "META_", name_len) == 0)
           *found_bad_meta = true;
 
-        char name_low[meta_prefixes[0].len + name_len + 1];
-        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
-        int j;
-        for (j = 0; name_low[j]; j++) {
-          if (name_low[j] == '_')
-            name_low[j] = '-';
-          else if (name_low[j] == '-')
-            name_low[j] = '_';
-          else
-            name_low[j] = tolower(name_low[j]);
-        }
-        name_low[j] = 0;
+        string name_low = lowercase_dash_http_attr(string(meta_prefixes[0].str + 5) + name,
+                                                   !(prot_flags & RGW_REST_SWIFT));
 
         auto it = x_meta_map.find(name_low);
         if (it != x_meta_map.end()) {
@@ -437,7 +427,7 @@ void req_info::init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_met
         } else {
           x_meta_map[name_low] = val;
         }
-        if (strncmp(name_low, "x-amz-server-side-encryption", 20) == 0) {
+        if (strncmp(name_low.c_str(), "x-amz-server-side-encryption", 20) == 0) {
           crypt_attribute_map[name_low] = val;
         }
       }
@@ -2197,7 +2187,7 @@ bool match_policy(std::string_view pattern, std::string_view input,
  * make attrs look-like-this
  * converts underscores to dashes
  */
-string lowercase_dash_http_attr(const string& orig)
+string lowercase_dash_http_attr(const string& orig, bool bidirection)
 {
   const char *s = orig.c_str();
   char buf[orig.size() + 1];
@@ -2207,6 +2197,12 @@ string lowercase_dash_http_attr(const string& orig)
     switch (*s) {
       case '_':
         buf[i] = '-';
+        break;
+      case '-':
+        if (bidirection)
+          buf[i] = '_';
+        else
+          buf[i] = tolower(*s);
         break;
       default:
         buf[i] = tolower(*s);
@@ -2219,7 +2215,7 @@ string lowercase_dash_http_attr(const string& orig)
  * make attrs Look-Like-This
  * converts underscores to dashes
  */
-string camelcase_dash_http_attr(const string& orig)
+string camelcase_dash_http_attr(const string& orig, bool convert2dash)
 {
   const char *s = orig.c_str();
   char buf[orig.size() + 1];
@@ -2231,7 +2227,7 @@ string camelcase_dash_http_attr(const string& orig)
     switch (*s) {
       case '_':
       case '-':
-        buf[i] = '-';
+        buf[i] = convert2dash ? '-' : *s;
         last_sep = true;
         break;
       default:
