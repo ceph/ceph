@@ -1,7 +1,8 @@
 teuthology:
   postmerge:
-    # Don't run this test on tiny clusters
-    - if yaml.clusternodes < 4 then reject() end
+    - |
+      -- Don't run this test on tiny clusters
+      if py_len(yaml.roles) < 4 then reject() end
 overrides:
   ceph:
     log-ignorelist:

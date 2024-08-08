@@ -1,4 +1,3 @@
-clusternodes: 1
 overrides:
   ceph-deploy:
     conf:
