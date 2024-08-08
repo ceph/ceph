@@ -23,7 +23,6 @@ bool configuration::decode_xml(XMLObj* obj) {
     RGWXMLDecoder::decode_xml("TargetBucket", target_bucket, o, throw_if_missing);
     RGWXMLDecoder::decode_xml("TargetPrefix", target_prefix, o);
     // TODO: decode grant
-    uint32_t default_obj_roll_time{300};
     RGWXMLDecoder::decode_xml("ObjectRollTime", obj_roll_time, default_obj_roll_time, o);
     std::string default_type{"Short"};
     std::string type;
@@ -108,13 +107,13 @@ void configuration::dump_xml(Formatter *f) const {
   }
   switch (event_type) {
     case EventType::Read:
-      ::encode_xml("RecordType", "Read", f);
+      ::encode_xml("EventType", "Read", f);
       break;
     case EventType::Write:
-      ::encode_xml("RecordType", "Write", f);
+      ::encode_xml("EventType", "Write", f);
       break;
     case EventType::ReadWrite:
-      ::encode_xml("RecordType", "ReadWrite", f);
+      ::encode_xml("EventType", "ReadWrite", f);
       break;
   }
   f->close_section(); // TargetObjectKeyFormat
@@ -122,63 +121,64 @@ void configuration::dump_xml(Formatter *f) const {
 }
 
 void configuration::dump(Formatter *f) const {
+  Formatter::ObjectSection s(*f, "bucketLoggingStatus");
   if (!enabled) {
     return;
   }
-  Formatter::ObjectSection s(*f, "loggingEnabled");
-  encode_json("targetBucket", target_bucket, f);
-  encode_json("targetPrefix", target_prefix, f);
-  encode_json("objectRollTime", obj_roll_time, f);
-  switch (record_type) {
-    case RecordType::Standard:
-      encode_json("recordType", "Standard", f);
-      break;
-    case RecordType::Short:
-      encode_json("recordType", "Short", f);
-      break;
-  }
-  encode_json("recordsBatchSize", records_batch_size, f);
   {
-    Formatter::ObjectSection s(*f, "targetObjectKeyFormat");
-    switch (obj_key_format) {
-      case KeyFormat::Partitioned:
-      {
-        Formatter::ObjectSection s(*f, "partitionedPrefix");
-        switch (date_source) {
-          case PartitionDateSource::DeliveryTime:
-            encode_json("PartitionDateSource", "DeliveryTime", f);
-            break;
-          case PartitionDateSource::EventTime:
-            encode_json("PartitionDateSource", "EventTime", f);
-            break;
-        }
-      }
-      break;
-      case KeyFormat::Simple:
-      {
-        Formatter::ObjectSection s(*f, "simplePrefix");
-      }
-      break;
+    Formatter::ObjectSection s(*f, "loggingEnabled");
+    encode_json("targetBucket", target_bucket, f);
+    encode_json("targetPrefix", target_prefix, f);
+    encode_json("objectRollTime", obj_roll_time, f);
+    switch (record_type) {
+      case RecordType::Standard:
+        encode_json("recordType", "Standard", f);
+        break;
+      case RecordType::Short:
+        encode_json("recordType", "Short", f);
+        break;
     }
-  }
-  switch (event_type) {
-    case EventType::Read:
-      encode_json("RecordType", "Read", f);
-      break;
-    case EventType::Write:
-      encode_json("RecordType", "Write", f);
-      break;
-    case EventType::ReadWrite:
-      encode_json("RecordType", "ReadWrite", f);
-      break;
+    encode_json("recordsBatchSize", records_batch_size, f);
+    {
+      Formatter::ObjectSection s(*f, "targetObjectKeyFormat");
+      switch (obj_key_format) {
+        case KeyFormat::Partitioned:
+        {
+          Formatter::ObjectSection s(*f, "partitionedPrefix");
+          switch (date_source) {
+            case PartitionDateSource::DeliveryTime:
+              encode_json("PartitionDateSource", "DeliveryTime", f);
+              break;
+            case PartitionDateSource::EventTime:
+              encode_json("PartitionDateSource", "EventTime", f);
+              break;
+          }
+        }
+        break;
+        case KeyFormat::Simple:
+        {
+          Formatter::ObjectSection s(*f, "simplePrefix");
+        }
+        break;
+      }
+    }
+    switch (event_type) {
+      case EventType::Read:
+        encode_json("RecordType", "Read", f);
+        break;
+      case EventType::Write:
+        encode_json("RecordType", "Write", f);
+        break;
+      case EventType::ReadWrite:
+        encode_json("RecordType", "ReadWrite", f);
+        break;
+    }
   }
 }
 
 std::string configuration::to_json_str() const {
   JSONFormatter f;
-  f.open_object_section("bucketLoggingStatus");
   dump(&f);
-  f.close_section();
   std::stringstream ss;
   f.flush(ss);
   return ss.str();

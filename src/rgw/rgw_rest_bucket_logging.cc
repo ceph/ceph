@@ -149,6 +149,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       return;
     }
     rgw::bucketlogging::configuration configuration;
+    configuration.default_obj_roll_time = get_cct()->_conf->rgw_bucket_logging_obj_roll_time;
     try {
       RGWXMLDecoder::decode_xml("BucketLoggingStatus", configuration, &parser, true);
     } catch (RGWXMLDecoder::err& err) {
@@ -165,14 +166,6 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       return;
     }
 
-    // TODO: should we delay this check to the actual writing of the logs?
-    std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, configuration.target_bucket),
-                                 &target_bucket, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
-      return;
-    }
 
     auto& attrs = bucket->get_attrs();
     if (!configuration.enabled) {
@@ -180,6 +173,13 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
         attrs.erase(iter);
       }
     } else {
+      std::unique_ptr<rgw::sal::Bucket> target_bucket;
+      op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, configuration.target_bucket),
+                                   &target_bucket, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to get target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
+        return;
+      }
       const auto& target_attrs = target_bucket->get_attrs();
       if (target_attrs.find(RGW_ATTR_BUCKET_LOGGING) != target_attrs.end()) {
         // target bucket must not have logging set on it
@@ -202,12 +202,9 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       return;
     }
 
-    if (configuration.enabled) {
-      ldpp_dout(this, 20) << "INFO: wrote logging configuration to bucket '" << bucket->get_name() << "' configuration: " <<
-        configuration.to_json_str() << dendl;
-    } else {
-      ldpp_dout(this, 20) << "INFO: removed logging configuration from bucket '" << bucket->get_name() << "'" << dendl;
-    }
+    ldpp_dout(this, 20) << "INFO: " << (configuration.enabled ? "wrote" : "removed")
+      << " logging configuration. bucket '" << bucket->get_name() << "'. configuration: " <<
+      configuration.to_json_str() << dendl;
   }
 };
 

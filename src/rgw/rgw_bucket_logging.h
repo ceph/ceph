@@ -58,6 +58,7 @@ enum class EventType {Read, Write, ReadWrite};
 enum class PartitionDateSource {DeliveryTime, EventTime};
 
 struct configuration {
+  uint32_t default_obj_roll_time = 300;
   bool enabled = false;
   std::string target_bucket;
   KeyFormat obj_key_format = KeyFormat::Simple;
