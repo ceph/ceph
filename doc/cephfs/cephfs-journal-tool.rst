@@ -108,7 +108,6 @@ Example: header get/set
       "layout": { "stripe_unit": 4194304,
           "stripe_count": 4194304,
           "object_size": 4194304,
-          "cas_hash": 4194304,
           "object_stripe_unit": 4194304,
           "pg_pool": 4194304}}
 
