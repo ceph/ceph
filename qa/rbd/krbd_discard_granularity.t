@@ -5,7 +5,7 @@
   $ blockdev --getiomin $DEV
   65536
   $ blockdev --getioopt $DEV
-  65536
+  4194304
   $ cat /sys/block/${DEV#/dev/}/queue/discard_granularity
   65536
   $ sudo rbd unmap $DEV
@@ -14,7 +14,7 @@
   $ blockdev --getiomin $DEV
   512
   $ blockdev --getioopt $DEV
-  512
+  4194304
   $ cat /sys/block/${DEV#/dev/}/queue/discard_granularity
   512
   $ sudo rbd unmap $DEV
