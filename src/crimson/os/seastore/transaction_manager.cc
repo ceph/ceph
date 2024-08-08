@@ -699,13 +699,26 @@ TransactionManager::get_extents_if_live(
             auto pin_paddr = pin->get_val();
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
             auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
-            auto pin_len = pin->get_length();
+            // auto pin_len = pin->get_length();
             if (pin_paddr_seg_id != paddr_seg_id) {
               return seastar::now();
             }
-            // Only extent split can happen during the lookup
-            ceph_assert(pin_seg_paddr >= paddr &&
-                        pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
+
+            // pin may be out of the range paddr~len, consider the following scene:
+            // 1. Trans.A writes the final record of Segment S, in which it overwrite
+            //    another extent E in the same segment S;
+            // 2. Before Trans.A "complete_commit", Trans.B tries to rewrite new
+            //    records and roll the segments, which closes Segment S;
+            // 3. Before Trans.A "complete_commit", a new cleaner Transaction C tries
+            //    to clean the segment;
+            //
+            // In this scenario, C might see a part of extent E's laddr space mapped
+            // to another location within the same segment S.
+            //
+            // FIXME: this assert should be re-enabled once we have space reclaiming
+            //        recognize committed segments: https://tracker.ceph.com/issues/66941
+            // ceph_assert(pin_seg_paddr >= paddr &&
+            //             pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
             return read_pin_by_type(t, std::move(pin), type
             ).si_then([&list](auto ret) {
               list.emplace_back(std::move(ret));
