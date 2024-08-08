@@ -111,6 +111,13 @@ public:
    * This appears to be called with nothing locked.
    */
   virtual objectstore_perf_stat_t get_cur_stats() = 0;
+  /**
+   * Propagate Object Store performance counters with the actual values
+   *
+   *
+   * Intended primarily for testing purposes
+   */
+  virtual void refresh_perf_counters() = 0;
 
   /**
    * Fetch Object Store performance counters.
