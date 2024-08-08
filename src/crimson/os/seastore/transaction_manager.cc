@@ -29,7 +29,8 @@ TransactionManager::TransactionManager(
   CacheRef _cache,
   LBAManagerRef _lba_manager,
   ExtentPlacementManagerRef &&_epm,
-  BackrefManagerRef&& _backref_manager)
+  BackrefManagerRef&& _backref_manager,
+  shard_stats_t& _shard_stats)
   : cache(std::move(_cache)),
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
@@ -37,7 +38,8 @@ TransactionManager::TransactionManager(
     backref_manager(std::move(_backref_manager)),
     full_extent_integrity_check(
       crimson::common::get_conf<bool>(
-        "seastore_full_integrity_check"))
+        "seastore_full_integrity_check")),
+    shard_stats(_shard_stats)
 {
   epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -55,6 +57,12 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
     journal->get_trimmer().set_journal_head(start_seq);
     return epm->open_for_write();
   }).safe_then([this, FNAME]() {
+    ++(shard_stats.io_num);
+    ++(shard_stats.pending_io_num);
+    // For submit_transaction_direct()
+    ++(shard_stats.processing_inlock_io_num);
+    ++(shard_stats.repeat_io_num);
+
     return with_transaction_intr(
       Transaction::src_t::MUTATE,
       "mkfs_tm",
@@ -76,7 +84,13 @@ TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
         return mkfs_ertr::now();
       }),
       mkfs_ertr::pass_further{}
-    );
+    ).finally([this] {
+      assert(shard_stats.pending_io_num);
+      --(shard_stats.pending_io_num);
+      // XXX: it's wrong to assume no failure,
+      // but failure leads to fatal error
+      --(shard_stats.processing_postlock_io_num);
+    });
   }).safe_then([this] {
     return close();
   }).safe_then([FNAME] {
@@ -419,6 +433,10 @@ TransactionManager::do_submit_transaction(
       journal->get_trimmer().get_dirty_tail());
 
     tref.get_handle().maybe_release_collection_lock();
+    if (tref.get_src() == Transaction::src_t::MUTATE) {
+      --(shard_stats.processing_inlock_io_num);
+      ++(shard_stats.processing_postlock_io_num);
+    }
 
     SUBTRACET(seastore_t, "submitting record", tref);
     return journal->submit_record(std::move(record), tref.get_handle()
@@ -734,6 +752,7 @@ TransactionManager::~TransactionManager() {}
 TransactionManagerRef make_transaction_manager(
     Device *primary_device,
     const std::vector<Device*> &secondary_devices,
+    shard_stats_t& shard_stats,
     bool is_test)
 {
   auto epm = std::make_unique<ExtentPlacementManager>();
@@ -873,7 +892,8 @@ TransactionManagerRef make_transaction_manager(
     std::move(cache),
     std::move(lba_manager),
     std::move(epm),
-    std::move(backref_manager));
+    std::move(backref_manager),
+    shard_stats);
 }
 
 }

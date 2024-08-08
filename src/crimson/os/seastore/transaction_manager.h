@@ -65,7 +65,8 @@ public:
     CacheRef cache,
     LBAManagerRef lba_manager,
     ExtentPlacementManagerRef &&epm,
-    BackrefManagerRef&& backref_manager);
+    BackrefManagerRef&& backref_manager,
+    shard_stats_t& shard_stats);
 
   /// Writes initial metadata to disk
   using mkfs_ertr = base_ertr;
@@ -660,6 +661,10 @@ public:
    * ExtentCallbackInterface
    */
 
+  shard_stats_t& get_shard_stats() {
+    return shard_stats;
+  }
+
   /// weak transaction should be type READ
   TransactionRef create_transaction(
       Transaction::src_t src,
@@ -831,6 +836,8 @@ private:
   WritePipeline write_pipeline;
 
   bool full_extent_integrity_check = true;
+
+  shard_stats_t& shard_stats;
 
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
@@ -1008,5 +1015,6 @@ using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 TransactionManagerRef make_transaction_manager(
     Device *primary_device,
     const std::vector<Device*> &secondary_devices,
+    shard_stats_t& shard_stats,
     bool is_test);
 }
