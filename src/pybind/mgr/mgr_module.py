@@ -2512,7 +2512,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=10,
+                timeout=60,
             )
             stdout = result.stdout.decode('utf-8')
             stderr = result.stderr.decode('utf-8')

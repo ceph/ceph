@@ -6,6 +6,7 @@ import { RouterModule, Routes } from '@angular/router';
 import {
   NgbNavModule,
   NgbPopoverModule,
+  NgbProgressbar,
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
@@ -79,7 +80,8 @@ import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-ta
     TreeModule,
     DataTableModule,
     DashboardV3Module,
-    NgbTypeaheadModule
+    NgbTypeaheadModule,
+    NgbProgressbar
   ],
   exports: [
     RgwDaemonListComponent,
