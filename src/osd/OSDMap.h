@@ -880,6 +880,12 @@ public:
     return allow_crimson;
   }
 
+  bool is_osd_pool_default_crimson_set(CephContext *cct) const {
+    bool value = false;
+    cct->_conf->get_value("osd_pool_default_crimson", value);
+    return value;
+  }
+
   bool exists(int osd) const {
     //assert(osd >= 0);
     return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);

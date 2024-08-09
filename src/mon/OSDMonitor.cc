@@ -28,6 +28,7 @@
 #include "mon/MgrStatMonitor.h"
 #include "mon/AuthMonitor.h"
 #include "mon/KVMonitor.h"
+#include "mon/HealthMonitor.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/Session.h"
@@ -3509,15 +3510,33 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     const auto &otype = type_iter->second;
     // m->metadata["osd_type"] must be "crimson", classic doesn't send osd_type
     if (otype == "crimson") {
-      if (!osdmap.get_allow_crimson()) {
-	mon.clog->info()
-	  << "Disallowing boot of crimson-osd without allow_crimson "
-	  << "OSDMap flag.  Run ceph osd set-allow-crimson to set "
-	  << "allow_crimson flag.  Note that crimson-osd is "
-	  << "considered unstable and may result in crashes or "
-	  << "data loss.  Its usage should be restricted to "
-	  << "testing and development.";
-	goto ignore;
+      cmdmap_t cmdmap;
+      bool crimson_pools_are_configured = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
+                                        osdmap.is_osd_pool_default_crimson_set(cct);
+      bool all_mandatory_crimson_flags_are_set = osdmap.is_osd_pool_default_crimson_set(cct) &&
+                                  osdmap.get_allow_crimson() &&
+                                  g_ceph_context->check_experimental_feature_enabled("crimson");
+      if (!all_mandatory_crimson_flags_are_set){
+        ostringstream ss, ss2;
+        health_check_map_t next;
+        ss << "Mandatory crimson flags are not all set.";
+        auto& d = next.add("CRIMSON_FLAGS_OFF", HEALTH_WARN, ss.str(), 1);
+        ss2 << "At least one of the three mandatory crimson flags are not set."
+            << "If OSDs are 'in' but 'down', this will most likely be the reason why."
+            << "See the 'enabling crimson' section in the crimson documentation"
+            << "for more information.";
+        d.detail.push_back(ss2.str());
+      }
+      else if (!crimson_pools_are_configured){
+        ostringstream ss, ss2;
+        health_check_map_t next;
+        ss << "Crimson is not configured for making pools.";
+        auto& d = next.add("CRIMSON_OSDS_DOWN", HEALTH_WARN, ss.str(), 1);
+        ss2 << "Crimson OSDs are down because relevant flags are not enabled."
+            << "If OSDs are 'in' but 'down', this will most likely be the reason why."
+            << "See the 'enabling crimson' section in the crimson documentation"
+            << "for more information.";
+        d.detail.push_back(ss2.str());
       }
     } else {
       derr << __func__ << ": osd " << m->get_orig_source_inst()

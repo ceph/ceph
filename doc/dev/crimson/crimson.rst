@@ -152,6 +152,13 @@ The last causes pools to be created by default with the ``crimson`` flag.
 Crimson pools are restricted to operations supported by Crimson.
 ``Crimson-osd`` won't instantiate PGs from non-Crimson pools.
 
+.. note::
+   If OSDs are deployed in a Crimson build without these necessary configurations,
+   the OSDs will not be able to go up and the Ceph cluster will show a ``HEALTH_WARN``
+   due to ``CRIMSON_OSDS_DOWN``, explaining further that "Crimson is not configured for making pools."
+   There is also the additional ``CRIMSON_FLAGS_OFF`` warning which is triggered when
+   these three flags are not set. 
+
 vstart.sh
 =========
 
