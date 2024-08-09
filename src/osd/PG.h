@@ -625,6 +625,7 @@ public:
 
   void on_backfill_reserved() override;
   void on_backfill_canceled() override;
+  void on_recovery_cancelled() override {}
   void on_recovery_reserved() override;
 
   bool is_forced_recovery_or_backfill() const {

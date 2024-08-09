@@ -1654,6 +1654,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   peering_state.state_clear(PG_STATE_SNAPTRIM);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
   snap_mapper.reset_backend();
+  reset_pglog_based_recovery_op();
 }
 
 void PG::context_registry_on_change() {
@@ -1771,4 +1772,18 @@ PG::already_complete(const osd_reqid_t& reqid)
   }
 }
 
+void PG::set_pglog_based_recovery_op(PglogBasedRecovery *op) {
+  ceph_assert(!pglog_based_recovery_op);
+  pglog_based_recovery_op = op;
+}
+
+void PG::reset_pglog_based_recovery_op() {
+  pglog_based_recovery_op = nullptr;
+}
+
+void PG::cancel_pglog_based_recovery_op() {
+  ceph_assert(pglog_based_recovery_op);
+  pglog_based_recovery_op->cancel();
+  reset_pglog_based_recovery_op();
+}
 }
