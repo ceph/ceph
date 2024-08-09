@@ -5662,6 +5662,10 @@ void OSD::maybe_update_heartbeat_peers()
 
 
   // build heartbeat from set
+  auto min_down = cct->_conf.get_val<uint64_t>("mon_osd_min_down_reporters");
+  auto subtree = cct->_conf.get_val<string>("mon_osd_reporter_subtree_level");
+  set<string> peers_by_subtree;
+  set<int> want;
   if (is_active()) {
     vector<PGRef> pgs;
     _get_pgs(&pgs);
@@ -5669,13 +5673,20 @@ void OSD::maybe_update_heartbeat_peers()
       pg->with_heartbeat_peers([&](int peer) {
 	  if (get_osdmap()->is_up(peer)) {
 	    _add_heartbeat_peer(peer);
+	    if (peers_by_subtree.size() < min_down && peer != whoami) {
+              auto reporter_loc = get_osdmap()->crush->get_full_location(peer);
+              if (auto iter = reporter_loc.find(subtree); iter != reporter_loc.end()) {
+                peers_by_subtree.insert(iter->second);
+                want.insert(peer);
+              }
+	    }
 	  }
 	});
     }
   }
 
   // include next and previous up osds to ensure we have a fully-connected set
-  set<int> want, extras;
+  set<int> extras;
   const int next = get_osdmap()->get_next_up_osd_after(whoami);
   if (next >= 0)
     want.insert(next);
@@ -5685,11 +5696,8 @@ void OSD::maybe_update_heartbeat_peers()
 
   // make sure we have at least **min_down** osds coming from different
   // subtree level (e.g., hosts) for fast failure detection.
-  auto min_down = cct->_conf.get_val<uint64_t>("mon_osd_min_down_reporters");
-  auto subtree = cct->_conf.get_val<string>("mon_osd_reporter_subtree_level");
-  auto limit = std::max(min_down, (uint64_t)cct->_conf->osd_heartbeat_min_peers);
   get_osdmap()->get_random_up_osds_by_subtree(
-    whoami, subtree, limit, want, &want);
+    whoami, subtree, min_down - peers_by_subtree.size(), want, &want);
 
   for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
     dout(10) << " adding neighbor peer osd." << *p << dendl;
