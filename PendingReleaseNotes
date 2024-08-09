@@ -80,6 +80,10 @@
   affected and to clean them up accordingly.
 * mgr/snap-schedule: For clusters with multiple CephFS file systems, all the
   snap-schedule commands now expect the '--fs' argument.
+* The `mon_cluster_log_file_level` and `mon_cluster_log_to_syslog_level` options
+  have been removed. Henceforth, users should use the new generic option
+  `mon_cluster_log_level` to control the cluster log level verbosity for the cluster
+  log file as well as for all external entities.
 * RGW: Fixed a S3 Object Lock bug with PutObjectRetention requests that specify
   a RetainUntilDate after the year 2106. This date was truncated to 32 bits when
   stored, so a much earlier date was used for object lock enforcement. This does
