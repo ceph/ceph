@@ -11562,13 +11562,19 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // copy into fresh buffer (since our write may be resub, async)
   bufferlist bl;
+  ssize_t total_appended = 0;
   if (buf) {
     if (size > 0)
       bl.append(buf, size);
   } else if (iov){
     for (int i = 0; i < iovcnt; i++) {
       if (iov[i].iov_len > 0) {
-        bl.append((const char *)iov[i].iov_base, iov[i].iov_len);
+        if (total_appended >= static_cast<ssize_t>(size)) {
+          break;
+        } else { 
+          bl.append((const char *)iov[i].iov_base, iov[i].iov_len);
+          total_appended += iov[i].iov_len;
+        }
       }
     }
   }
