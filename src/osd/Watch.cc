@@ -393,7 +393,14 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
     last_ping = ceph_clock_now();
     register_cb();
   } else {
-    unregister_cb();
+    if (!con->get_priv()) {
+      // if session is already nullptr
+      // !will_ping should also register WatchTimeout
+      conn = ConnectionRef();
+      register_cb();
+    } else {
+      unregister_cb();
+    }
   }
 }
 
