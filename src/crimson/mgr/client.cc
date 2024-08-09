@@ -165,6 +165,10 @@ void Client::report()
     }
     return with_stats.get_stats(
     ).then([this](auto &&pg_stats) {
+      if (!conn) {
+        logger().warn("report: no conn available; before sending stats, report skipped");
+        return seastar::now();
+      }
       return conn->send(std::move(pg_stats));
     });
   });
