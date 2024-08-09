@@ -127,7 +127,6 @@ ARN::ARN(const rgw_obj& o)
   : partition(Partition::aws),
     service(Service::s3),
     region(),
-    account(o.bucket.tenant),
     resource(o.bucket.name)
 {
   resource.push_back('/');
@@ -138,14 +137,12 @@ ARN::ARN(const rgw_bucket& b)
   : partition(Partition::aws),
     service(Service::s3),
     region(),
-    account(b.tenant),
     resource(b.name) { }
 
 ARN::ARN(const rgw_bucket& b, const std::string& o)
   : partition(Partition::aws),
     service(Service::s3),
     region(),
-    account(b.tenant),
     resource(b.name) {
   resource.push_back('/');
   resource.append(o);
