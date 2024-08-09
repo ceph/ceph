@@ -30,7 +30,7 @@ class SeastoreSuper final: public Super {
   }
   void write_root_laddr(context_t c, laddr_t addr) override {
     LOG_PREFIX(OTree::Seastore);
-    SUBDEBUGT(seastore_onode, "update root {:#x} ...", c.t, addr);
+    SUBDEBUGT(seastore_onode, "update root {} ...", c.t, addr);
     root_addr = addr;
     tm.write_onode_root(c.t, addr);
   }
@@ -102,10 +102,10 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 
   read_iertr::future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr) override {
-    SUBTRACET(seastore_onode, "reading at {:#x} ...", t, addr);
+    SUBTRACET(seastore_onode, "reading at {} ...", t, addr);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
-        SUBDEBUGT(seastore_onode, "reading at {:#x}: trigger eagain", t, addr);
+        SUBDEBUGT(seastore_onode, "reading at {}: trigger eagain", t, addr);
         t.test_set_conflict();
         return read_iertr::make_ready_future<NodeExtentRef>();
       }
@@ -113,7 +113,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     return tm.read_extent<SeastoreNodeExtent>(t, addr
     ).si_then([addr, &t](auto&& e) -> read_iertr::future<NodeExtentRef> {
       SUBTRACET(seastore_onode,
-          "read {}B at {:#x} -- {}",
+          "read {}B at {} -- {}",
           t, e->get_length(), e->get_laddr(), *e);
       assert(e->get_laddr() == addr);
       std::ignore = addr;
@@ -123,7 +123,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, laddr_t hint, extent_len_t len) override {
-    SUBTRACET(seastore_onode, "allocating {}B with hint {:#x} ...", t, len, hint);
+    SUBTRACET(seastore_onode, "allocating {}B with hint {} ...", t, len, hint);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         SUBDEBUGT(seastore_onode, "allocating {}B: trigger eagain", t, len);
@@ -134,7 +134,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     return tm.alloc_non_data_extent<SeastoreNodeExtent>(t, hint, len
     ).si_then([len, &t](auto extent) {
       SUBDEBUGT(seastore_onode,
-          "allocated {}B at {:#x} -- {}",
+          "allocated {}B at {} -- {}",
           t, extent->get_length(), extent->get_laddr(), *extent);
       if (!extent->is_initial_pending()) {
         SUBERRORT(seastore_onode,
@@ -157,12 +157,12 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     auto addr = extent->get_laddr();
     auto len = extent->get_length();
     SUBDEBUGT(seastore_onode,
-        "retiring {}B at {:#x} -- {} ...",
+        "retiring {}B at {} -- {} ...",
         t, len, addr, *extent);
     if constexpr (INJECT_EAGAIN) {
       if (trigger_eagain()) {
         SUBDEBUGT(seastore_onode,
-            "retiring {}B at {:#x} -- {} : trigger eagain",
+            "retiring {}B at {} -- {} : trigger eagain",
             t, len, addr, *extent);
         t.test_set_conflict();
         return retire_iertr::now();
@@ -170,7 +170,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
     }
     return tm.remove(t, extent).si_then([addr, len, &t] (unsigned cnt) {
       assert(cnt == 0);
-      SUBTRACET(seastore_onode, "retired {}B at {:#x} ...", t, len, addr);
+      SUBTRACET(seastore_onode, "retired {}B at {} ...", t, len, addr);
     });
   }
 
@@ -185,7 +185,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.read_onode_root(t).si_then([this, &t, &tracker](auto root_addr) {
-      SUBTRACET(seastore_onode, "got root {:#x}", t, root_addr);
+      SUBTRACET(seastore_onode, "got root {}", t, root_addr);
       return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
     });
   }
