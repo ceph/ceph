@@ -141,6 +141,7 @@ private:
   struct SnapSyncStat {
     uint64_t nr_failures = 0; // number of consecutive failures
     boost::optional<monotime> last_failed; // lat failed timestamp
+    boost::optional<std::string> last_failed_reason;
     bool failed = false; // hit upper cap for consecutive failures
     boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
     boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
@@ -177,6 +178,7 @@ private:
     sync_stat.nr_failures = 0;
     sync_stat.failed = false;
     sync_stat.last_failed = boost::none;
+    sync_stat.last_failed_reason = boost::none;
   }
 
   void _set_last_synced_snap(const std::string &dir_root, uint64_t snap_id,
