@@ -260,8 +260,21 @@ SSDs (including NVMe OSDs). Hybrid HDD+SDD or HDD-only OSDs are not recommended
 due to the long time it takes for them to recover after connectivity between
 data centers has been restored. This reduces the potential for data loss.
 
-In the future, stretch mode might support erasure-coded pools and might support
-deployments that have more than two data centers.
+.. warning:: Device class is currently not supported in stretch mode.
+   For example, the following rule containing ``device class`` will not work::
+
+      rule stretch_replicated_rule {
+                 id 2
+                 type replicated class hdd
+                 step take default
+                 step choose firstn 0 type datacenter
+                 step chooseleaf firstn 2 type host
+                 step emit
+      }
+
+In the future, stretch mode could support erasure-coded pools,
+enable deployments across multiple data centers,
+and accommodate various device classes.
 
 Other commands
 ==============
