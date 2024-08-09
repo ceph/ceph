@@ -52,6 +52,8 @@ class PaxosService {
 
   bool need_immediate_propose = false;
 
+  bool insufficient_space = false;
+
 protected:
   /**
    * Services implementing us used to depend on the Paxos version, back when
@@ -152,7 +154,8 @@ public:
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
       full_prefix_name("full"), full_latest_name("latest"),
-      cached_first_committed(0), cached_last_committed(0)
+      cached_first_committed(0), cached_last_committed(0),
+      last_to_remove(0)
   {
   }
 
@@ -477,6 +480,8 @@ public:
   /**
    * @}
    */
+
+  version_t last_to_remove;
 
   /**
    * Callback list to be used for waiting for the next proposal to commit.
@@ -850,6 +855,24 @@ public:
    */
   version_t get_last_committed() const{
     return cached_last_committed;
+  }
+
+  /**
+   * Get the quantity of last to remove
+   *
+   * @returns Our last to remove quantity
+   */
+  version_t get_last_to_remove() const {
+    return last_to_remove;
+  }
+
+  /**
+   * Check if the store.db disk space is insufficient
+   *
+   * @returns true if insufficient space; false otherwise
+   * */
+  bool is_insufficient_space() const {
+    return insufficient_space;
   }
 
   /**

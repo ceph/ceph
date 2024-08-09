@@ -603,6 +603,7 @@ bool HealthMonitor::check_member_health()
     ss2 << "mon." << mon.name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
+    insufficient_space = true;
   } else if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% low on available space";
@@ -610,6 +611,9 @@ bool HealthMonitor::check_member_health()
     ss2 << "mon." << mon.name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
+    insufficient_space = true;
+  } else {
+    insufficient_space = false;
   }
   if (stats.store_stats.bytes_total >= g_conf()->mon_data_size_warn) {
     stringstream ss, ss2;
@@ -620,6 +624,9 @@ bool HealthMonitor::check_member_health()
 	<< " >= mon_data_size_warn ("
 	<< byte_u_t(g_conf()->mon_data_size_warn) << ")";
     d.detail.push_back(ss2.str());
+    insufficient_space = true;
+  } else {
+    insufficient_space = false;
   }
 
   // OSD_NO_DOWN_OUT_INTERVAL
