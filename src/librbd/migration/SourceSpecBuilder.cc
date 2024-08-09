@@ -12,6 +12,10 @@
 #include "librbd/migration/RawFormat.h"
 #include "librbd/migration/RawSnapshot.h"
 
+#if defined(HAVE_LIBNBD)
+#include "librbd/migration/NBDStream.h"
+#endif
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::migration::SourceSpecBuilder: " << this \
@@ -125,6 +129,10 @@ int SourceSpecBuilder<I>::build_stream(
     stream->reset(HttpStream<I>::create(m_image_ctx, stream_obj));
   } else if (type == "s3") {
     stream->reset(S3Stream<I>::create(m_image_ctx, stream_obj));
+#if defined(HAVE_LIBNBD)
+  } else if (type == "nbd") {
+    stream->reset(NBDStream<I>::create(m_image_ctx, stream_obj));
+#endif
   } else {
     lderr(cct) << "unknown or unsupported stream type '" << type << "'"
                << dendl;

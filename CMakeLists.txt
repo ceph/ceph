@@ -197,6 +197,7 @@ endif()
 find_package(Backtrace)
 
 option(WITH_RBD "Enable RADOS Block Device related targets" ON)
+option(WITH_LIBNBD "Enable NBD source in live migration" ON)
 
 if(LINUX)
   find_package(udev REQUIRED)
@@ -257,6 +258,12 @@ endif()
 if(WITH_RBD AND LINUX)
   find_package(libcryptsetup 2.0.5 REQUIRED)
   set(HAVE_LIBCRYPTSETUP ${LIBCRYPTSETUP_FOUND})
+endif()
+
+# libnbd 
+if(WITH_LIBNBD)
+  find_package(libnbd-dev REQUIRED)
+  set(HAVE_LIBNBD ${LIBNBD-DEV_FOUND})
 endif()
 
 include(CMakeDependentOption)

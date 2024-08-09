@@ -12,6 +12,7 @@ IMAGES="${IMAGE1} ${IMAGE2} ${IMAGE3}"
 cleanup() {
     cleanup_tempdir
     remove_images
+    remove_nbd_server
 }
 
 setup_tempdir() {
@@ -61,6 +62,10 @@ remove_images() {
     do
         remove_image ${image}
     done
+}
+
+remove_nbd_server() {
+    (kill -9 $(ps aux | grep qemu-nbd | head -n1 | awk '{ print $2 }')) >/dev/null 2>&1
 }
 
 show_diff()
@@ -340,6 +345,48 @@ EOF
     remove_image "${dest_image}"
 }
 
+
+test_import_nbd_stream() {
+    local base_image=$1
+    local dest_image=$2
+
+    if ! qemu-img convert -f raw -O qcow2 rbd:rbd/${base_image} ${TEMPDIR}/${base_image}.qcow2; then
+        echo "skipping NBD test"
+        return 0
+    fi
+ 
+    if ! qemu-nbd --format=qcow2 ${TEMPDIR}/${base_image}.qcow2 --shared=10 -t --fork; then
+        echo "skipping NBD test"
+        return 0
+    fi
+
+    cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "raw",
+  "stream": {
+    "type": "nbd",
+    "server": "localhost",
+    "port": "10809"
+  }
+}
+EOF
+    cat ${TEMPDIR}/spec.json
+
+    cat ${TEMPDIR}/spec.json | rbd migration prepare --import-only \
+	--source-spec-path - ${dest_image}
+    compare_images ${base_image} ${dest_image}
+    rbd migration abort ${dest_image}
+
+    rbd migration prepare --import-only \
+	--source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+    rbd migration execute ${dest_image}
+    rbd migration commit ${dest_image}
+
+    compare_images ${base_image} ${dest_image}
+
+    remove_image "${dest_image}"
+}
+
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls 2>&1 | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
@@ -353,5 +400,6 @@ test_import_native_format ${IMAGE1} ${IMAGE2}
 test_import_qcow_format ${IMAGE1} ${IMAGE2}
 test_import_qcow2_format ${IMAGE2} ${IMAGE3}
 test_import_raw_format ${IMAGE1} ${IMAGE2}
+test_import_nbd_stream ${IMAGE1} ${IMAGE2}
 
 echo OK
