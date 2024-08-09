@@ -11037,6 +11037,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     int sid = newcrush.get_item_id(source);
     int did = newcrush.get_item_id(dest);
+    if (sid == did) {
+        ss << "source " << source << "and dest " << dest << "are identical";
+        err = -EINVAL;
+        goto reply_no_propose;
+    }
     int sparent;
     if (newcrush.get_immediate_parent_id(sid, &sparent) == 0 && !force) {
       ss << "source item " << source << " is not an orphan bucket; pass --yes-i-really-mean-it to proceed anyway";
