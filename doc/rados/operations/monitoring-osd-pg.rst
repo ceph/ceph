@@ -419,7 +419,10 @@ conditions change.
 Ceph provides a number of settings to manage the load spike associated with the
 reassignment of PGs to an OSD (especially a new OSD). The ``osd_max_backfills``
 setting specifies the maximum number of concurrent backfills to and from an OSD
-(default: 1). The ``backfill_full_ratio`` setting allows an OSD to refuse a
+(default: 1; note you cannot change this if the `mClock`_ scheduler is active,
+unless you set ``osd_mclock_override_recovery_settings = true``, see
+`mClock backfill`_).
+The ``backfill_full_ratio`` setting allows an OSD to refuse a
 backfill request if the OSD is approaching its full ratio (default: 90%). This
 setting can be changed with the ``ceph osd set-backfillfull-ratio`` command. If
 an OSD refuses a backfill request, the ``osd_backfill_retry_interval`` setting
@@ -545,6 +548,8 @@ performing the migration. For details, see the `Architecture`_ section.
 .. _data placement: ../data-placement
 .. _pool: ../pools
 .. _placement group: ../placement-groups
+.. _mClock: ../../configuration/mclock-config-ref.rst
+.. _mClock backfill: ../../configuration/mclock-config-ref.rst#recovery-backfill-options
 .. _Architecture: ../../../architecture
 .. _OSD Not Running: ../../troubleshooting/troubleshooting-osd#osd-not-running
 .. _Troubleshooting PG Errors: ../../troubleshooting/troubleshooting-pg#troubleshooting-pg-errors
