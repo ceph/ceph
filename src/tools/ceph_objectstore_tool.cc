@@ -87,6 +87,10 @@ struct action_on_object_t {
 int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
 
   unsigned LIST_AT_A_TIME = 100;
   ghobject_t next;
@@ -444,6 +448,7 @@ int get_log(CephContext *cct, ObjectStore *fs, __u8 struct_ver,
   try {
     auto ch = fs->open_collection(coll_t(pgid));
     if (!ch) {
+      cerr << "pgid " << pgid << " does not exist" << std::endl;
       return -ENOENT;
     }
     ostringstream oss;
@@ -746,6 +751,10 @@ int do_trim_pg_log_dups(ObjectStore *store, const coll_t &coll,
   ghobject_t oid = pgid.make_pgmeta_oid();
   struct stat st;
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "pgid " << pgid << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   int r = store->stat(ch, oid, &st);
   ceph_assert(r == 0);
   ceph_assert(st.st_size == 0);
@@ -830,6 +839,10 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
   footer ft;
 
   auto ch = store->open_collection(cid);
+  if (!ch) {
+    cerr << "Collection " << cid << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   int ret = store->stat(ch, obj, &st);
   if (ret < 0)
     return ret;
@@ -947,6 +960,10 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 {
   ghobject_t next;
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   while (!next.is_max()) {
     vector<ghobject_t> objects;
     int r = store->collection_list(ch, next, ghobject_t::get_max(), 300,
@@ -984,6 +1001,9 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     }
   }
   auto ch = store->open_collection(coll_t::meta());
+  if (!ch) {
+    return -ENOENT;
+  }
   const ghobject_t inc_oid = OSD::get_inc_osdmap_pobject_name(e);
   if (!store->exists(ch, inc_oid)) {
     cerr << "inc-osdmap (" << inc_oid << ") does not exist." << std::endl;
@@ -1004,6 +1024,10 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
 int get_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl)
 {
   auto ch = store->open_collection(coll_t::meta());
+  if (!ch) {
+    cerr << "Collection " << coll_t::meta() << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   if (store->read(ch,
 		  OSD::get_inc_osdmap_pobject_name(e),
 		  0, 0, bl) < 0) {
@@ -1027,6 +1051,10 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     }
   }
   auto ch = store->open_collection(coll_t::meta());
+  if (!ch) {
+    cerr << "Collection " << coll_t::meta() << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   const ghobject_t full_oid = OSD::get_osdmap_pobject_name(e);
   if (!store->exists(ch, full_oid)) {
     cerr << "osdmap (" << full_oid << ") does not exist." << std::endl;
@@ -1234,6 +1262,10 @@ int get_attrs(
   as.decode(ebliter);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   if (debug)
     cerr << "\tattrs: len " << as.data.size() << std::endl;
   t->setattrs(coll, hoid, as.data);
@@ -1425,6 +1457,10 @@ int ObjectStoreTool::get_object(ObjectStore *store,
   ceph_assert(g_ceph_context);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
     object_t oid = ob.hoid.hobj.oid;
     object_locator_t loc(ob.hoid.hobj);
@@ -1433,7 +1469,8 @@ int ObjectStoreTool::get_object(ObjectStore *store,
 
     spg_t coll_pgid;
     if (coll.is_pg(&coll_pgid) == false) {
-      cerr << "INTERNAL ERROR: Bad collection during import" << std::endl;
+      cerr << "INTERNAL ERROR: Bad collection during import: "
+           << coll_pgid << " does not exist" << std::endl;
       return -EFAULT;
     }
     if (coll_pgid.shard != ob.hoid.shard_id) {
@@ -2153,6 +2190,10 @@ int do_remove_object(ObjectStore *store, coll_t coll,
 		     ghobject_t &ghobj, bool all, bool force, enum rmtype type)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   spg_t pg;
   coll.is_pg_prefix(&pg);
   OSDriver driver(
@@ -2226,6 +2267,10 @@ int do_remove_object(ObjectStore *store, coll_t coll,
 int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   map<string,bufferptr,less<>> aset;
   int r = store->getattrs(ch, ghobj, aset);
   if (r < 0) {
@@ -2245,6 +2290,10 @@ int do_list_attrs(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 int do_list_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, ghobj);
   if (!iter) {
     cerr << "omap_get_iterator: " << cpp_strerror(ENOENT) << std::endl;
@@ -2268,6 +2317,10 @@ int do_list_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 int do_get_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   struct stat st;
   mysize_t total;
 
@@ -2348,6 +2401,10 @@ int do_set_bytes(ObjectStore *store, coll_t coll,
   } while(true);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   if (!dry_run)
     store->queue_transaction(ch, std::move(*t));
   return 0;
@@ -2356,6 +2413,10 @@ int do_set_bytes(ObjectStore *store, coll_t coll,
 int do_get_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   bufferptr bp;
 
   int r = store->getattr(ch, ghobj, key.c_str(), bp);
@@ -2396,6 +2457,10 @@ int do_set_attr(ObjectStore *store, coll_t coll,
   t->setattr(coll, ghobj, key,  bl);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   store->queue_transaction(ch, std::move(*t));
   return 0;
 }
@@ -2415,6 +2480,10 @@ int do_rm_attr(ObjectStore *store, coll_t coll,
   t->rmattr(coll, ghobj, key);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   store->queue_transaction(ch, std::move(*t));
   return 0;
 }
@@ -2422,6 +2491,10 @@ int do_rm_attr(ObjectStore *store, coll_t coll,
 int do_get_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   set<string> keys;
   map<string, bufferlist> out;
 
@@ -2476,6 +2549,10 @@ int do_set_omap(ObjectStore *store, coll_t coll,
   t->omap_setkeys(coll, ghobj, attrset);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   store->queue_transaction(ch, std::move(*t));
   return 0;
 }
@@ -2495,6 +2572,10 @@ int do_rm_omap(ObjectStore *store, coll_t coll,
   t->omap_rmkey(coll, ghobj, key);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   store->queue_transaction(ch, std::move(*t));
   return 0;
 }
@@ -2502,6 +2583,10 @@ int do_rm_omap(ObjectStore *store, coll_t coll,
 int do_get_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   bufferlist hdrbl;
 
   int r = store->omap_get_header(ch, ghobj, &hdrbl, true);
@@ -2542,6 +2627,10 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll,
   t->omap_setheader(coll, ghobj, hdrbl);
 
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   store->queue_transaction(ch, std::move(*t));
   return 0;
 }
@@ -2571,6 +2660,10 @@ struct do_fix_lost : public action_on_object_t {
 int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss, bool silent = false)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   bufferlist attr;
   int r = store->getattr(ch, ghobj, SS_ATTR, attr);
   if (r < 0) {
@@ -2594,6 +2687,10 @@ int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss,
 int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter* formatter)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   int r = 0;
   formatter->open_object_section("obj");
   formatter->open_object_section("id");
@@ -2673,6 +2770,10 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
 int corrupt_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter* formatter)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   bufferlist attr;
   int r = store->getattr(ch, ghobj, OI_ATTR, attr);
   if (r < 0) {
@@ -2697,6 +2798,10 @@ int corrupt_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter* 
     encode(oi, attr, -1);  /* fixme: using full features */
     t.setattr(coll, ghobj, OI_ATTR, attr);
     auto ch = store->open_collection(coll);
+    if (!ch) {
+      cerr << "Collection " << coll << " does not exist" << std::endl;
+      return -ENOENT;
+    }
     r = store->queue_transaction(ch, std::move(t));
     if (r < 0) {
       cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
@@ -2712,6 +2817,10 @@ int set_size(
   bool corrupt)
 {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   if (ghobj.hobj.is_snapdir()) {
     cerr << "Can't set the size of a snapdir" << std::endl;
     return -EINVAL;
@@ -2800,6 +2909,10 @@ int set_size(
       t.setattr(coll, head, SS_ATTR, snapattr);
     }
     auto ch = store->open_collection(coll);
+    if (!ch) {
+      cerr << "Collection " << coll << " does not exist" << std::endl;
+      return -ENOENT;
+    }
     r = store->queue_transaction(ch, std::move(t));
     if (r < 0) {
       cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
@@ -2812,6 +2925,10 @@ int set_size(
 
 int clear_data_digest(ObjectStore *store, coll_t coll, ghobject_t &ghobj) {
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   bufferlist attr;
   int r = store->getattr(ch, ghobj, OI_ATTR, attr);
   if (r < 0) {
@@ -2836,6 +2953,10 @@ int clear_data_digest(ObjectStore *store, coll_t coll, ghobject_t &ghobj) {
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, OI_ATTR, attr);
     auto ch = store->open_collection(coll);
+    if (!ch) {
+      cerr << "Collection " << coll << " does not exist" << std::endl;
+      return -ENOENT;
+    }
     r = store->queue_transaction(ch, std::move(t));
     if (r < 0) {
       cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
@@ -2883,6 +3004,10 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, SS_ATTR, bl);
     auto ch = store->open_collection(coll);
+    if (!ch) {
+      cerr << "Collection " << coll << " does not exist" << std::endl;
+      return -ENOENT;
+    }
     int r = store->queue_transaction(ch, std::move(t));
     if (r < 0) {
       cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
@@ -2982,6 +3107,10 @@ int remove_clone(
   ObjectStore::Transaction t;
   t.setattr(coll, ghobj, SS_ATTR, bl);
   auto ch = store->open_collection(coll);
+  if (!ch) {
+    cerr << "Collection " << coll << " does not exist" << std::endl;
+    return -ENOENT;
+  }
   int r = store->queue_transaction(ch, std::move(t));
   if (r < 0) {
     cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
@@ -3043,7 +3172,14 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
   for (auto cid : collections) {
     cout << i++ << "/" << num << " " << cid << std::endl;
     auto ch = src->open_collection(cid);
+    if (!ch) {
+      cerr << "Collection " << cid << " does not exist" << std::endl;
+      return -ENOENT;
+    }
     auto dch = dst->create_new_collection(cid);
+    if (!dch) {
+      return -ENOENT;
+    }
     {
       ObjectStore::Transaction t;
       int bits = src->collection_bits(ch);
@@ -3074,7 +3210,7 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
       if (ls.empty()) {
 	break;
       }
-      
+
       for (auto& oid : ls) {
 	//cout << "  " << cid << " " << oid << std::endl;
 	if (n % 100 == 0) {
@@ -4657,7 +4793,7 @@ int main(int argc, char **argv)
 	fs->queue_transaction(ch, std::move(*t));
       }
       cout << "Reseting last_complete succeeded" << std::endl;
-   
+
     } else if (op == "pg-log-inject-dups") {
         if (!vm.count("file") || file == "-") {
           cerr << "Must provide file containing JSON dups entries" << std::endl;
