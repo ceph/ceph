@@ -14,3 +14,6 @@ tasks:
       vault_transit:
         key_path: my-key-1
         key_path2: my-key-2
+      vault_transit_forced_sse:
+        key_path: my-key-1
+        key_path2: my-key-2
