@@ -48,24 +48,26 @@ class CloneIndex(Index):
             raise IndexException(-e.args[0], e.args[1])
 
     def get_oldest_clone_entry(self, exclude=[]):
-        min_ctime_entry = None
-        exclude_tracking_ids = [v[0] for v in exclude]
-        log.debug("excluded tracking ids: {0}".format(exclude_tracking_ids))
-        for entry in list_one_entry_at_a_time(self.fs, self.path):
-            dname = entry.d_name
-            dpath = os.path.join(self.path, dname)
-            st = self.fs.lstat(dpath)
-            if dname not in exclude_tracking_ids and stat.S_ISLNK(st.st_mode):
-                if min_ctime_entry is None or st.st_ctime < min_ctime_entry[1].st_ctime:
-                    min_ctime_entry = (dname, st)
-        if min_ctime_entry:
-            try:
+        try:
+            min_ctime_entry = None
+            exclude_tracking_ids = [v[0] for v in exclude]
+            log.debug("excluded tracking ids: {0}".format(exclude_tracking_ids))
+            for entry in list_one_entry_at_a_time(self.fs, self.path):
+                dname = entry.d_name
+                dpath = os.path.join(self.path, dname)
+                st = self.fs.lstat(dpath)
+                if dname not in exclude_tracking_ids and stat.S_ISLNK(st.st_mode):
+                    if min_ctime_entry is None or st.st_ctime < min_ctime_entry[1].st_ctime:
+                        min_ctime_entry = (dname, st)
+            if min_ctime_entry:
                 linklen = min_ctime_entry[1].st_size
                 sink_path = self.fs.readlink(os.path.join(self.path, min_ctime_entry[0]), CloneIndex.PATH_MAX)
                 return (min_ctime_entry[0], sink_path[:linklen])
-            except cephfs.Error as e:
-                raise IndexException(-e.args[0], e.args[1])
-        return None
+            return None
+        except cephfs.Error as e:
+            log.debug('Exception cephfs.Error has been caught. Printing '
+                      f'the exception - {e}')
+            raise IndexException(-e.args[0], e.args[1])
 
     def find_clone_entry_index(self, sink_path):
         try:
