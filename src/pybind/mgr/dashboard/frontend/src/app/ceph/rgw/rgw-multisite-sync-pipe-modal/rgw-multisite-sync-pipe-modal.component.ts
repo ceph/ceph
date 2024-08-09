@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { RgwZonegroup } from '../models/rgw-multisite';
+import { RgwZonegroup, ZoneType } from '../models/rgw-multisite';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { catchError, switchMap } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -84,8 +84,13 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
           this.sourceZones.data.available = [...zones];
           if (this.editing) {
             this.pipeForm.get('pipe_id').disable();
-            this.sourceZones.data.selected = this.pipeSelectedRow.source.zones;
-            this.destZones.data.selected = this.pipeSelectedRow.dest.zones;
+            this.sourceZones.data.selected = [...this.pipeSelectedRow.source.zones];
+            this.destZones.data.selected = [...this.pipeSelectedRow.dest.zones];
+            const availableDestZone: SelectOption[] = [];
+            this.pipeSelectedRow.dest.zones.forEach((zone: string) => {
+              availableDestZone.push(new SelectOption(true, zone, ''));
+            });
+            this.destZones.data.available = availableDestZone;
             this.pipeForm.patchValue({
               pipe_id: this.pipeSelectedRow.id,
               source_zones: this.pipeSelectedRow.source.zones,
@@ -110,6 +115,10 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
     }
   }
 
+  getZoneTypeData(zoneDataToFilter: string[], zoneDataForCondition: string[]) {
+    return zoneDataToFilter.filter((zone: string) => !zoneDataForCondition.includes(zone));
+  }
+
   submit() {
     if (this.pipeForm.invalid) {
       return;
@@ -119,20 +128,51 @@ export class RgwMultisiteSyncPipeModalComponent implements OnInit {
       this.pipeForm.setErrors({ cdSubmitButton: true });
       return;
     }
-    this.rgwMultisiteService.createEditSyncPipe(this.pipeForm.getRawValue()).subscribe(
-      () => {
-        const action = this.editing ? 'Modified' : 'Created';
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`${action} Sync Pipe '${this.pipeForm.getValue('pipe_id')}'`
-        );
-        this.activeModal.close('success');
-      },
-      () => {
-        // Reset the 'Submit' button.
-        this.pipeForm.setErrors({ cdSubmitButton: true });
-        this.activeModal.dismiss();
-      }
-    );
+
+    const sourceZones: ZoneType = { added: [], removed: [] };
+    const destZones: ZoneType = { added: [], removed: [] };
+    if (this.editing) {
+      destZones.removed = this.getZoneTypeData(
+        this.pipeSelectedRow.dest.zones,
+        this.destZones.data.selected
+      );
+      destZones.added = this.getZoneTypeData(
+        this.destZones.data.selected,
+        this.pipeSelectedRow.dest.zones
+      );
+      sourceZones.removed = this.getZoneTypeData(
+        this.pipeSelectedRow.source.zones,
+        this.sourceZones.data.selected
+      );
+      sourceZones.added = this.getZoneTypeData(
+        this.sourceZones.data.selected,
+        this.pipeSelectedRow.source.zones
+      );
+    }
+    sourceZones.added =
+      sourceZones.added.length > 0 ? sourceZones.added : this.sourceZones.data.selected;
+    destZones.added = destZones.added.length > 0 ? destZones.added : this.destZones.data.selected;
+
+    this.rgwMultisiteService
+      .createEditSyncPipe({
+        ...this.pipeForm.getRawValue(),
+        source_zones: sourceZones,
+        destination_zones: destZones
+      })
+      .subscribe(
+        () => {
+          const action = this.editing ? 'Modified' : 'Created';
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`${action} Sync Pipe '${this.pipeForm.getValue('pipe_id')}'`
+          );
+          this.activeModal.close(NotificationType.success);
+        },
+        () => {
+          // Reset the 'Submit' button.
+          this.pipeForm.setErrors({ cdSubmitButton: true });
+          this.activeModal.dismiss();
+        }
+      );
   }
 }

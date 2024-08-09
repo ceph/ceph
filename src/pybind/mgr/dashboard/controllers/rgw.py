@@ -200,13 +200,13 @@ class RgwMultisiteController(RESTController):
     @EndpointDoc("Create or update the sync flow")
     @CreatePermission
     def create_sync_flow(self, flow_id: str, flow_type: str, group_id: str,
-                         source_zone: Optional[List[str]] = None,
-                         destination_zone: Optional[List[str]] = None,
-                         zones: Optional[List[str]] = None,
+                         source_zone: Optional[str] = None,
+                         destination_zone: Optional[str] = None,
+                         zones: Optional[Dict[str, List]] = None,
                          bucket_name=''):
         multisite_instance = RgwMultisite()
         return multisite_instance.create_sync_flow(group_id, flow_id, flow_type, zones,
-                                                   bucket_name, source_zone, destination_zone)
+                                                   source_zone, destination_zone, bucket_name)
 
     @Endpoint(method='DELETE', path='/sync-flow')
     @EndpointDoc("Remove the sync flow")
@@ -222,15 +222,15 @@ class RgwMultisiteController(RESTController):
     @EndpointDoc("Create or update the sync pipe")
     @CreatePermission
     def create_sync_pipe(self, group_id: str, pipe_id: str,
+                         source_zones: Dict[str, Any],
+                         destination_zones: Dict[str, Any],
                          source_bucket: str = '',
-                         source_zones: Optional[List[str]] = None,
-                         destination_zones: Optional[List[str]] = None,
                          destination_bucket: str = '',
                          bucket_name: str = ''):
         multisite_instance = RgwMultisite()
         return multisite_instance.create_sync_pipe(group_id, pipe_id, source_zones,
-                                                   destination_zones, source_bucket,
-                                                   destination_bucket, bucket_name)
+                                                   destination_zones, bucket_name,
+                                                   source_bucket, destination_bucket)
 
     @Endpoint(method='DELETE', path='/sync-pipe')
     @EndpointDoc("Remove the sync pipe")
