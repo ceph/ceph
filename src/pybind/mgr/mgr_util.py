@@ -3,7 +3,6 @@ import os
 if 'UNITTEST' in os.environ:
     import tests  # noqa
 
-import bcrypt
 import cephfs
 import contextlib
 import datetime
@@ -874,6 +873,8 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
 
 
 def password_hash(password: Optional[str], salt_password: Optional[str] = None) -> Optional[str]:
+    import bcrypt
+
     if not password:
         return None
     if not salt_password:
