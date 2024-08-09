@@ -16,6 +16,8 @@ else:  # pragma: no cover
 class CephFSStorageProvider(_StrEnum):
     KERNEL_MOUNT = 'kcephfs'
     SAMBA_VFS = 'samba-vfs'
+    SAMBA_VFS_CLASSIC = 'samba-vfs/classic'
+    SAMBA_VFS_NEW = 'samba-vfs/new'
 
 
 class SubSystem(_StrEnum):

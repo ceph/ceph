@@ -1024,7 +1024,11 @@ def _generate_share(
     share: resources.Share, resolver: PathResolver, cephx_entity: str
 ) -> Dict[str, Dict[str, str]]:
     assert share.cephfs is not None
-    assert share.cephfs.provider == CephFSStorageProvider.SAMBA_VFS
+    assert share.cephfs.provider in (
+        CephFSStorageProvider.SAMBA_VFS,
+        CephFSStorageProvider.SAMBA_VFS_CLASSIC,
+        CephFSStorageProvider.SAMBA_VFS_NEW,
+    )
     assert cephx_entity, "cephx entity name missing"
     # very annoyingly, samba's ceph module absolutely must NOT have the
     # "client." bit in front. JJM has been tripped up by this multiple times -
@@ -1039,11 +1043,16 @@ def _generate_share(
         share.cephfs.subvolume,
         share.cephfs.path,
     )
+    ceph_vfs = {
+        CephFSStorageProvider.SAMBA_VFS: 'ceph_new',
+        CephFSStorageProvider.SAMBA_VFS_CLASSIC: 'ceph',
+        CephFSStorageProvider.SAMBA_VFS_NEW: 'ceph_new',
+    }[share.checked_cephfs.provider]
     cfg = {
         # smb.conf options
         'options': {
             'path': path,
-            "vfs objects": "acl_xattr ceph",
+            "vfs objects": f"acl_xattr {ceph_vfs}",
             'acl_xattr:security_acl_name': 'user.NTACL',
             'ceph:config_file': '/etc/ceph/ceph.conf',
             'ceph:filesystem': share.cephfs.volume,
