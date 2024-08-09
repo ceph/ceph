@@ -219,4 +219,48 @@ describe('NavigationComponent', () => {
       });
     }
   });
+
+  describe('Test Side Navigation Text', () => {
+    it('should display correct text for navigation items', () => {
+      fixture.detectChanges();
+
+      const expectedTexts = {
+        '.tc_menuitem_dashboard': 'Dashboard',
+        '.tc_submenuitem_multiCluster_overview': 'Overview',
+        '.tc_submenuitem_multiCluster_manage_clusters': 'Manage Clusters',
+        '.tc_submenuitem_cluster_pool': 'Pools',
+        '.tc_submenuitem_cluster_hosts': 'Hosts',
+        '.tc_submenuitem_cluster_inventory': 'Physical Disks',
+        '.tc_submenuitem_admin_services': 'Services',
+        '.tc_submenuitem_cluster_monitor': 'Monitors',
+        '.tc_submenuitem_cluster_osds': 'OSDs',
+        '.tc_submenuitem_cluster_crush': 'CRUSH Map',
+        '.tc_submenuitem_admin_configuration': 'Configuration',
+        '.tc_submenuitem_admin_modules': 'Manager Modules',
+        '.tc_submenuitem_admin_users': 'Ceph Users',
+        '.tc_submenuitem_admin_upgrade': 'Upgrade',
+        '.tc_submenuitem_observe_log': 'Logs',
+        '.tc_submenuitem_observe_monitoring': 'Alerts',
+        '.tc_submenuitem_block_images': 'Images',
+        '.tc_submenuitem_block_mirroring': 'Mirroring',
+        '.tc_submenuitem_block_iscsi': 'iSCSI',
+        '.tc_submenuitem_block_nvme': 'NVMe/TCP',
+        '.tc_submenuitem_rgw_overview': 'Overview',
+        '.tc_submenuitem_rgw_buckets': 'Buckets',
+        '.tc_submenuitem_rgw_users': 'Users',
+        '.tc_submenuitem_rgw_multi-site': 'Multi-site',
+        '.tc_submenuitem_rgw_daemons': 'Gateways',
+        '.tc_submenuitem_rgw_nfs': 'NFS',
+        '.tc_submenuitem_rgw_configuration': 'Configuration',
+        '.tc_submenuitem_file_cephfs': 'File Systems',
+        '.tc_submenuitem_file_nfs': 'NFS'
+      };
+
+      for (const [selector, expectedText] of Object.entries(expectedTexts)) {
+        const element = fixture.debugElement.query(By.css(selector));
+        expect(element).toBeTruthy();
+        expect(element.nativeElement.textContent.trim()).toBe(expectedText);
+      }
+    });
+  });
 });
