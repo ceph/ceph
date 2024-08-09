@@ -1775,6 +1775,28 @@ class TestFsAuthorize(CephFSTestCase):
         self._remount(keyring)
         self.captester.run_mds_cap_tests(PERM)
 
+    def test_fs_read_and_single_path_rw(self):
+        """
+        Tests the file creation using 'touch' cmd on a specific path
+        which has 'rw' caps and 'r' caps on the rest of the fs.
+
+        The mds auth caps with 'rw' caps on a specific path and 'r' caps
+        on the rest of the fs has an issue. The file creation using 'touch'
+        cmd on the fuse client used to fail while doing setattr.
+        Please see https://tracker.ceph.com/issues/67212
+
+        The new file creation test using 'touch' cmd is added to
+        'MdsCapTester.run_mds_cap_tests' which eventually gets
+        called by '_remount_and_run_tests'
+        """
+        FS_AUTH_CAPS = (('/', 'r'), ('/dir2', 'rw'))
+        self.mount_a.run_shell('mkdir -p ./dir2')
+        self.captesters = (CapTester(self.mount_a, '/'),
+                           CapTester(self.mount_a, '/dir2'))
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        self._remount_and_run_tests(FS_AUTH_CAPS, keyring)
+
     def test_multiple_path_r(self):
         PERM = 'r'
         FS_AUTH_CAPS = (('/dir1/dir12', PERM), ('/dir2/dir22', PERM))
