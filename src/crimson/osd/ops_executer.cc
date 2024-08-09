@@ -974,6 +974,7 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     0
   };
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
+  cloning_ctx->log_entry.clean_regions.mark_data_region_dirty(0, initial_obs.oi.size);
 
   return cloning_ctx;
 }

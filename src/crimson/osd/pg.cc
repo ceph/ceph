@@ -26,7 +26,9 @@
 
 #include "os/Transaction.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
+#include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyanstore/cyan_store.h"
@@ -47,6 +49,8 @@ using std::ostream;
 using std::set;
 using std::string;
 using std::vector;
+
+SET_SUBSYS(osd);
 
 namespace {
   seastar::logger& logger() {
@@ -1394,14 +1398,10 @@ void PG::update_stats(const pg_stat_t &stat) {
 
 PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 {
-  if (__builtin_expect(stopping, false)) {
-    return seastar::make_exception_future<>(
-	crimson::common::system_shutdown_exception());
-  }
-
-  logger().debug("{}: {}", __func__, *req);
+  LOG_PREFIX(PG::handle_rep_op);
+  DEBUGDPP("{}", *this, *req);
   if (can_discard_replica_op(*req)) {
-    return seastar::now();
+    co_return;
   }
 
   ceph::os::Transaction txn;
@@ -1411,6 +1411,11 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   std::vector<pg_log_entry_t> log_entries;
   decode(log_entries, p);
   update_stats(req->pg_stats);
+
+  co_await update_snap_map(
+    log_entries,
+    txn);
+
   log_operation(std::move(log_entries),
                 req->pg_trim_to,
                 req->version,
@@ -1418,18 +1423,71 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
                 !txn.empty(),
                 txn,
                 false);
-  logger().debug("PG::handle_rep_op: do_transaction...");
-  return interruptor::make_interruptible(shard_services.get_store().do_transaction(
-	coll_ref, std::move(txn))).then_interruptible(
-      [req, lcod=peering_state.get_info().last_complete, this] {
-      peering_state.update_last_complete_ondisk(lcod);
-      const auto map_epoch = get_osdmap_epoch();
-      auto reply = crimson::make_message<MOSDRepOpReply>(
-        req.get(), pg_whoami, 0,
-	map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
-      reply->set_last_complete_ondisk(lcod);
-      return shard_services.send_to_osd(req->from.osd, std::move(reply), map_epoch);
-    });
+  DEBUGDPP("{} do_transaction", *this, *req);
+  co_await interruptor::make_interruptible(
+    shard_services.get_store().do_transaction(coll_ref, std::move(txn))
+  );
+
+  const auto &lcod = peering_state.get_info().last_complete;
+  peering_state.update_last_complete_ondisk(lcod);
+  const auto map_epoch = get_osdmap_epoch();
+  auto reply = crimson::make_message<MOSDRepOpReply>(
+    req.get(), pg_whoami, 0,
+    map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+  reply->set_last_complete_ondisk(lcod);
+  co_await interruptor::make_interruptible(
+    shard_services.send_to_osd(req->from.osd, std::move(reply), map_epoch)
+  );
+  co_return;
+}
+
+PG::interruptible_future<> PG::update_snap_map(
+  const std::vector<pg_log_entry_t> &log_entries,
+  ObjectStore::Transaction& t)
+{
+  LOG_PREFIX(PG::update_snap_map);
+  for (auto i = log_entries.cbegin(); i != log_entries.cend(); ++i) {
+    OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+    if (i->soid.snap < CEPH_MAXSNAP) {
+      if (i->is_delete()) {
+	co_await OpsExecuter::snap_map_remove(
+	  i->soid,
+	  snap_mapper,
+	  osdriver,
+	  t);
+      } else if (i->is_update()) {
+	ceph_assert(i->snaps.length() > 0);
+	vector<snapid_t> snaps;
+	bufferlist snapbl = i->snaps;
+	auto p = snapbl.cbegin();
+	try {
+	  decode(snaps, p);
+	} catch (...) {
+	  ERRORDPP("Failed to decode snaps on {}", *this, *i);
+	  snaps.clear();
+	}
+	set<snapid_t> _snaps(snaps.begin(), snaps.end());
+	
+	if (i->is_clone() || i->is_promote()) {
+	  co_await OpsExecuter::snap_map_clone(
+	    i->soid,
+	    _snaps,
+	    snap_mapper,
+	    osdriver,
+	    t);
+	} else if (i->is_modify()) {
+	  co_await OpsExecuter::snap_map_modify(
+	    i->soid,
+	    _snaps,
+	    snap_mapper,
+	    osdriver,
+	    t);
+	} else {
+	  ceph_assert(i->is_clean());
+	}
+      }
+    }
+  }
 }
 
 void PG::log_operation(

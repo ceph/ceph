@@ -272,6 +272,7 @@ private:
     OSDriver& osdriver,
     ceph::os::Transaction& txn);
 
+public:
   static interruptible_future<> snap_map_remove(
     const hobject_t& soid,
     SnapMapper& snap_mapper,
@@ -290,6 +291,7 @@ private:
     OSDriver& osdriver,
     ceph::os::Transaction& txn);
 
+private:
   // this gizmo could be wrapped in std::optional for the sake of lazy
   // initialization. we don't need it for ops that doesn't have effect
   // TODO: verify the init overhead of chunked_fifo

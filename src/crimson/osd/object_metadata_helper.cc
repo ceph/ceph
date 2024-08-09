@@ -28,6 +28,12 @@ subsets_t calc_clone_subsets(
   if (size) {
     subsets.data_subset.insert(0, size);
   }
+  assert(missing.get_items().contains(soid));
+  const pg_missing_item &missing_item = missing.get_items().at(soid);
+  // let data_subset store only the modified content of the object.
+  subsets.data_subset.intersection_of(missing_item.clean_regions.get_dirty_regions());
+  logger().debug("{} {} data_subset {}",
+                 __func__, soid, subsets.data_subset);
 
   // TODO: make sure CEPH_FEATURE_OSD_CACHEPOOL is not supported in Crimson
   // Skips clone subsets if caching was enabled (allow_incomplete_clones).
@@ -140,7 +146,7 @@ subsets_t calc_head_subsets(
     subsets.data_subset.insert(0, obj_size);
   }
   assert(missing.get_items().contains(head));
-  const pg_missing_item missing_item = missing.get_items().at(head);
+  const pg_missing_item &missing_item = missing.get_items().at(head);
   // let data_subset store only the modified content of the object.
   subsets.data_subset.intersection_of(missing_item.clean_regions.get_dirty_regions());
   logger().debug("{} {} data_subset {}",
