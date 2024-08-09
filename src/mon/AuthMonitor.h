@@ -159,6 +159,7 @@ private:
 public:
   uint64_t _assign_global_id(); ///< called under mon->auth_lock
   void _set_mon_num_rank(int num, int rank); ///< called under mon->auth_lock
+  void _reset_last_allocated_id();
 
 private:
   bool prepare_used_pending_keys(MonOpRequestRef op);
