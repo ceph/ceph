@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <fmt/format.h>
+
 #include "svc_mdlog.h"
 #include "svc_zone.h"
 #include "svc_sys_obj.h"

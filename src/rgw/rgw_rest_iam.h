@@ -83,7 +83,7 @@ int retry_raced_role_write(const DoutPrefixProvider* dpp, optional_yield y,
   int r = f();
   for (int i = 0; i < 10 && r == -ECANCELED; ++i) {
     role->get_objv_tracker().clear();
-    r = role->get_by_id(dpp, y);
+    r = role->load_by_id(dpp, y);
     if (r >= 0) {
       r = f();
     }

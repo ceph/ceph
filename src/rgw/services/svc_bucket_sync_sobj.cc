@@ -70,8 +70,7 @@ int RGWSI_Bucket_Sync_SObj::do_start(optional_yield, const DoutPrefixProvider *d
   return 0;
 }
 
-void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
-                                               const std::set<rgw_zone_id>& zones,
+void RGWSI_Bucket_Sync_SObj::get_hint_entities(const std::set<rgw_zone_id>& zones,
                                                const std::set<rgw_bucket>& buckets,
                                                std::set<rgw_sync_bucket_entity> *hint_entities,
                                                optional_yield y, const DoutPrefixProvider *dpp)
@@ -82,7 +81,7 @@ void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
 
   for (auto& b : buckets) {
     RGWBucketInfo hint_bucket_info;
-    int ret = svc.bucket_sobj->read_bucket_info(ctx, b, &hint_bucket_info,
+    int ret = svc.bucket_sobj->read_bucket_info(b, &hint_bucket_info,
                                                 nullptr, nullptr, boost::none,
                                                 y, dpp);
     if (ret < 0) {
@@ -100,8 +99,7 @@ void RGWSI_Bucket_Sync_SObj::get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
   }
 }
 
-int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
-                                                 rgw_sync_bucket_entity& self_entity,
+int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(rgw_sync_bucket_entity& self_entity,
                                                  RGWBucketSyncPolicyHandlerRef& handler,
                                                  RGWBucketSyncPolicyHandlerRef& zone_policy_handler,
                                                  std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
@@ -119,8 +117,8 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
 
   std::set<rgw_sync_bucket_entity> hint_entities;
 
-  get_hint_entities(ctx, source_zones, handler->get_source_hints(), &hint_entities, y, dpp);
-  get_hint_entities(ctx, target_zones, handler->get_target_hints(), &hint_entities, y, dpp);
+  get_hint_entities(source_zones, handler->get_source_hints(), &hint_entities, y, dpp);
+  get_hint_entities(target_zones, handler->get_target_hints(), &hint_entities, y, dpp);
 
   std::set<rgw_sync_bucket_pipe> resolved_sources;
   std::set<rgw_sync_bucket_pipe> resolved_dests;
@@ -140,7 +138,7 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
     if (iter != temp_map.end()) {
       hint_bucket_handler = iter->second;
     } else {
-      int r = do_get_policy_handler(ctx, zid, hint_bucket, temp_map, &hint_bucket_handler, y, dpp);
+      int r = do_get_policy_handler(zid, hint_bucket, temp_map, &hint_bucket_handler, y, dpp);
       if (r < 0) {
         ldpp_dout(dpp, 20) << "could not get bucket sync policy handler for hint bucket=" << hint_bucket << " ... skipping" << dendl;
         continue;
@@ -158,8 +156,7 @@ int RGWSI_Bucket_Sync_SObj::resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                                                  std::optional<rgw_zone_id> zone,
+int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(std::optional<rgw_zone_id> zone,
                                                   std::optional<rgw_bucket> _bucket,
                                                   std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                                                   RGWBucketSyncPolicyHandlerRef *handler,
@@ -175,8 +172,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
 
   if (bucket.bucket_id.empty()) {
     RGWBucketEntryPoint ep_info;
-    int ret = svc.bucket_sobj->read_bucket_entrypoint_info(ctx.ep,
-                                                           RGWSI_Bucket::get_entrypoint_meta_key(bucket),
+    int ret = svc.bucket_sobj->read_bucket_entrypoint_info(RGWSI_Bucket::get_entrypoint_meta_key(bucket),
                                                            &ep_info,
                                                            nullptr, /* objv_tracker */
                                                            nullptr, /* mtime */
@@ -217,8 +213,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
 
-  int r = svc.bucket_sobj->read_bucket_instance_info(ctx.bi,
-                                                     bucket_key,
+  int r = svc.bucket_sobj->read_bucket_instance_info(bucket_key,
                                                      &bucket_info,
                                                      nullptr,
                                                      &attrs,
@@ -250,7 +245,7 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
 
   rgw_sync_bucket_entity self_entity(zone.value_or(svc.zone->zone_id()), bucket);
 
-  r = resolve_policy_hints(ctx, self_entity,
+  r = resolve_policy_hints(self_entity,
                            e.handler,
                            zone_policy_handler,
                            temp_map, y, dpp);
@@ -268,15 +263,14 @@ int RGWSI_Bucket_Sync_SObj::do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                                               std::optional<rgw_zone_id> zone,
+int RGWSI_Bucket_Sync_SObj::get_policy_handler(std::optional<rgw_zone_id> zone,
                                                std::optional<rgw_bucket> _bucket,
                                                RGWBucketSyncPolicyHandlerRef *handler,
                                                optional_yield y,
                                                const DoutPrefixProvider *dpp)
 {
   std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef> temp_map;
-  return do_get_policy_handler(ctx, zone, _bucket, temp_map, handler, y, dpp);
+  return do_get_policy_handler(zone, _bucket, temp_map, handler, y, dpp);
 }
 
 static bool diff_sets(std::set<rgw_bucket>& orig_set,

@@ -1,211 +1,157 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include <errno.h>
-
-#include <string>
-#include <map>
-#include <boost/algorithm/string.hpp>
-
-#include "common/errno.h"
-#include "common/Formatter.h"
-#include "common/ceph_json.h"
 #include "rgw_otp.h"
-#include "rgw_zone.h"
+#include <list>
+#include <fmt/format.h>
+#include "services/svc_cls.h"
+#include "services/svc_mdlog.h"
+#include "services/svc_sys_obj.h"
 #include "rgw_metadata.h"
-
-#include "include/types.h"
-
-#include "rgw_common.h"
-#include "rgw_tools.h"
-
-#include "services/svc_zone.h"
-#include "services/svc_meta.h"
-#include "services/svc_meta_be.h"
-#include "services/svc_meta_be_otp.h"
-#include "services/svc_otp.h"
-
-#define dout_subsys ceph_subsys_rgw
-
-using namespace std;
+#include "rgw_metadata_lister.h"
+#include "rgw_zone.h"
 
 
-class RGWOTPMetadataHandler;
-
-class RGWOTPMetadataObject : public RGWMetadataObject {
-  friend class RGWOTPMetadataHandler;
-
-  otp_devices_list_t devices;
+class MetadataObject : public RGWMetadataObject {
 public:
-  RGWOTPMetadataObject() {}
-  RGWOTPMetadataObject(otp_devices_list_t&& _devices, const obj_version& v, const real_time m) {
-    devices = std::move(_devices);
-    objv = v;
-    mtime = m;
-  }
+  std::list<rados::cls::otp::otp_info_t> devices;
 
-  void dump(Formatter *f) const override {
+  MetadataObject(std::list<rados::cls::otp::otp_info_t> devices,
+                 const obj_version& v, ceph::real_time m)
+    : RGWMetadataObject(v, m), devices(std::move(devices))
+  {}
+
+  void dump(Formatter* f) const override {
     encode_json("devices", devices, f);
   }
-
-  otp_devices_list_t& get_devs() {
-    return devices;
-  }
 };
 
+class MetadataHandler : public RGWMetadataHandler {
+  RGWSI_SysObj& sysobj;
+  RGWSI_Cls::MFA& mfa;
+  RGWSI_MDLog& mdlog;
+  const RGWZoneParams& zone;
+ public:
+  MetadataHandler(RGWSI_SysObj& sysobj, RGWSI_Cls::MFA& mfa,
+                  RGWSI_MDLog& mdlog, const RGWZoneParams& zone)
+    : sysobj(sysobj), mfa(mfa), mdlog(mdlog), zone(zone) {}
 
-class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
-  friend class RGWOTPCtl;
+  std::string get_type() override { return "otp"; }
 
-  struct Svc {
-    RGWSI_Zone *zone;
-    RGWSI_MetaBackend *meta_be;
-    RGWSI_OTP *otp;
-  } svc;
-
-  int init(RGWSI_Zone *zone,
-           RGWSI_MetaBackend *_meta_be,
-           RGWSI_OTP *_otp) {
-    base_init(zone->ctx(), _otp->get_be_handler().get());
-    svc.zone = zone;
-    svc.meta_be = _meta_be;
-    svc.otp = _otp;
-    return 0;
-  }
-
-  int call(std::function<int(RGWSI_OTP_BE_Ctx& ctx)> f) {
-    return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-      RGWSI_OTP_BE_Ctx ctx(op->ctx());
-      return f(ctx);
-    });
-  }
-
-  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) override {
-    otp_devices_list_t devices;
+  RGWMetadataObject* get_meta_obj(JSONObj* obj,
+                                  const obj_version& objv,
+                                  const ceph::real_time& mtime) override
+  {
+    std::list<rados::cls::otp::otp_info_t> devices;
     try {
-      JSONDecoder::decode_json("devices", devices, jo);
-    } catch (JSONDecoder::err& e) {
+      JSONDecoder::decode_json("devices", devices, obj);
+    } catch (const JSONDecoder::err&) {
       return nullptr;
     }
-
-    return new RGWOTPMetadataObject(std::move(devices), objv, mtime);
+    return new MetadataObject(std::move(devices), objv, mtime);
   }
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y, const DoutPrefixProvider *dpp) override {
-    RGWObjVersionTracker objv_tracker;
+  int get(std::string& entry, RGWMetadataObject** obj,
+          optional_yield y, const DoutPrefixProvider* dpp) override
+  {
+    std::list<rados::cls::otp::otp_info_t> devices;
+    RGWObjVersionTracker objv;
+    ceph::real_time mtime;
 
-    std::unique_ptr<RGWOTPMetadataObject> mdo(new RGWOTPMetadataObject);
-
-    
-    RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
-
-    int ret = svc.otp->read_all(be_ctx,
-                                entry,
-                                &mdo->get_devs(),
-                                &mdo->get_mtime(),
-                                &objv_tracker,
-                                y,
-                                dpp);
-    if (ret < 0) {
-      return ret;
+    int r = mfa.list_mfa(dpp, entry, &devices, &objv, &mtime, y);
+    if (r < 0) {
+      return r;
     }
 
-    mdo->objv = objv_tracker.read_version;
-
-    *obj = mdo.release();
-
+    *obj = new MetadataObject(std::move(devices), objv.read_version, mtime);
     return 0;
   }
 
-  int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
-             RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-             optional_yield y,
-             const DoutPrefixProvider *dpp,
-             RGWMDLogSyncType type, bool from_remote_zone) override {
-    RGWOTPMetadataObject *obj = static_cast<RGWOTPMetadataObject *>(_obj);
-
-    RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
-
-    int ret = svc.otp->store_all(dpp, be_ctx,
-                                 entry,
-                                 obj->devices,
-                                 obj->mtime,
-                                 &objv_tracker,
-                                 y);
-    if (ret < 0) {
-      return ret;
+  int put(std::string& entry, RGWMetadataObject* obj,
+          RGWObjVersionTracker& objv, optional_yield y,
+          const DoutPrefixProvider* dpp,
+          RGWMDLogSyncType type, bool from_remote_zone) override
+  {
+    auto otp_obj = static_cast<MetadataObject*>(obj);
+    int r = mfa.set_mfa(dpp, entry, otp_obj->devices, true,
+                        &objv, obj->get_mtime(), y);
+    if (r < 0) {
+      return r;
     }
-
-    return STATUS_APPLIED;
+    return mdlog.complete_entry(dpp, y, "otp", entry, &objv);
   }
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
-                optional_yield y, const DoutPrefixProvider *dpp) override {
-    RGWSI_MBOTP_RemoveParams params;
-
-    RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
-
-    return svc.otp->remove_all(dpp, be_ctx,
-                               entry,
-                               &objv_tracker,
-                               y);
+  int remove(std::string& entry, RGWObjVersionTracker& objv,
+             optional_yield y, const DoutPrefixProvider* dpp) override
+  {
+    int r = rgw_delete_system_obj(dpp, &sysobj, zone.otp_pool, entry, &objv, y);
+    if (r < 0) {
+      return r;
+    }
+    return mdlog.complete_entry(dpp, y, "otp", entry, &objv);
   }
 
-public:
-  RGWOTPMetadataHandler() {}
+  int mutate(const std::string& entry,
+             const ceph::real_time& mtime,
+             RGWObjVersionTracker* objv,
+             optional_yield y,
+             const DoutPrefixProvider* dpp,
+             RGWMDLogStatus op_type,
+             std::function<int()> f) override
+  {
+    int r = f();
+    if (r < 0) {
+      return r;
+    }
+    return mdlog.complete_entry(dpp, y, "otp", entry, objv);
+  }
 
-  string get_type() override { return "otp"; }
+
+  int list_keys_init(const DoutPrefixProvider* dpp,
+                     const std::string& marker, void** phandle) override
+  {
+    auto lister = std::make_unique<RGWMetadataLister>(sysobj.get_pool(zone.otp_pool));
+    int r = lister->init(dpp, marker, ""); // no prefix
+    if (r < 0) {
+      return r;
+    }
+    *phandle = lister.release();
+    return 0;
+  }
+
+  int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
+                     std::list<std::string>& keys, bool* truncated) override
+  {
+    auto lister = static_cast<RGWMetadataLister*>(handle);
+    return lister->get_next(dpp, max, keys, truncated);
+  }
+
+  void list_keys_complete(void* handle) override
+  {
+    delete static_cast<RGWMetadataLister*>(handle);
+  }
+
+  std::string get_marker(void* handle) override
+  {
+    auto lister = static_cast<RGWMetadataLister*>(handle);
+    return lister->get_marker();
+  }
 };
 
 
-RGWOTPCtl::RGWOTPCtl(RGWSI_Zone *zone_svc,
-		     RGWSI_OTP *otp_svc)
+// public interface
+namespace rgwrados::otp {
+
+std::string get_meta_key(const rgw_user& user)
 {
-  svc.zone = zone_svc;
-  svc.otp = otp_svc;
+  return fmt::format("otp:user:{}", user.to_str());
 }
 
-
-void RGWOTPCtl::init(RGWOTPMetadataHandler *_meta_handler)
+auto create_metadata_handler(RGWSI_SysObj& sysobj, RGWSI_Cls& cls,
+                             RGWSI_MDLog& mdlog, const RGWZoneParams& zone)
+    -> std::unique_ptr<RGWMetadataHandler>
 {
-  meta_handler = _meta_handler;
-  be_handler = meta_handler->get_be_handler();
+  return std::make_unique<MetadataHandler>(sysobj, cls.mfa, mdlog, zone);
 }
 
-int RGWOTPCtl::read_all(const rgw_user& uid,
-                        RGWOTPInfo *info,
-                        optional_yield y,
-                        const DoutPrefixProvider *dpp,
-                        const GetParams& params)
-{
-  info->uid = uid;
-  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->read_all(ctx, uid, &info->devices, params.mtime, params.objv_tracker, y, dpp);
-  });
-}
-
-int RGWOTPCtl::store_all(const DoutPrefixProvider *dpp, 
-                         const RGWOTPInfo& info,
-                         optional_yield y,
-                         const PutParams& params)
-{
-  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->store_all(dpp, ctx, info.uid, info.devices, params.mtime, params.objv_tracker, y);
-  });
-}
-
-int RGWOTPCtl::remove_all(const DoutPrefixProvider *dpp,
-                          const rgw_user& uid,
-                          optional_yield y,
-                          const RemoveParams& params)
-{
-  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->remove_all(dpp, ctx, uid, params.objv_tracker, y);
-  });
-}
-
-
-RGWMetadataHandler *RGWOTPMetaHandlerAllocator::alloc()
-{
-  return new RGWOTPMetadataHandler();
-}
+} // namespace rgwrados::otp

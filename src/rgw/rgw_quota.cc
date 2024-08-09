@@ -29,7 +29,6 @@
 #include "rgw_user.h"
 
 #include "services/svc_sys_obj.h"
-#include "services/svc_meta.h"
 
 #include <atomic>
 

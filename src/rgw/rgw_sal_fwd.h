@@ -45,7 +45,6 @@ namespace sal {
   class ZoneGroup;
   class Zone;
   class LuaManager;
-  struct RGWRoleInfo;
   class RGWRole;
   struct RoleList;
   struct GroupList;

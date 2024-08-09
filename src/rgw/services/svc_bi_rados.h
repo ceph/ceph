@@ -121,8 +121,10 @@ public:
     return bucket_shard_index(sharding_key, num_shards);
   }
 
-  int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,const rgw::bucket_index_layout_generation& idx_layout) override;
-  int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout) override;
+  int init_index(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+                 const rgw::bucket_index_layout_generation& idx_layout) override;
+  int clean_index(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+                  const rgw::bucket_index_layout_generation& idx_layout) override;
 
   /* RADOS specific */
 

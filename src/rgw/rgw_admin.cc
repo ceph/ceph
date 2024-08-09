@@ -73,7 +73,6 @@ extern "C" {
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_meta_be_otp.h"
 #include "services/svc_user.h"
 #include "services/svc_zone.h"
 
@@ -6839,7 +6838,7 @@ int main(int argc, const char **argv)
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id, path,
                                                                  assume_role_doc, description, max_session_duration);
-      ret = role->create(dpp(), true, "", null_yield);
+      ret = role->create(dpp(), "", null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -6868,7 +6867,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_name(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -6898,12 +6897,13 @@ int main(int argc, const char **argv)
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_name(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
       role->update_trust_policy(assume_role_doc);
-      ret = role->update(dpp(), null_yield);
+      constexpr bool exclusive = false;
+      ret = role->store_info(dpp(), exclusive, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -6993,12 +6993,13 @@ int main(int argc, const char **argv)
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_name(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
       role->set_perm_policy(policy_name, perm_policy_doc);
-      ret = role->update(dpp(), null_yield);
+      constexpr bool exclusive = false;
+      ret = role->store_info(dpp(), exclusive, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7012,7 +7013,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_name(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7032,7 +7033,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      int ret = role->get(dpp(), null_yield);
+      int ret = role->load_by_name(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7056,7 +7057,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_name(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7064,7 +7065,8 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      ret = role->update(dpp(), null_yield);
+      constexpr bool exclusive = false;
+      ret = role->store_info(dpp(), exclusive, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7093,7 +7095,7 @@ int main(int argc, const char **argv)
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_id(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7108,7 +7110,8 @@ int main(int argc, const char **argv)
         cout << "That managed policy is already attached." << std::endl;
         return EEXIST;
       }
-      ret = role->update(dpp(), null_yield);
+      constexpr bool exclusive = false;
+      ret = role->store_info(dpp(), exclusive, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7127,7 +7130,7 @@ int main(int argc, const char **argv)
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_id(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7140,7 +7143,8 @@ int main(int argc, const char **argv)
       }
       policies.arns.erase(i);
 
-      ret = role->update(dpp(), null_yield);
+      constexpr bool exclusive = false;
+      ret = role->store_info(dpp(), exclusive, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7154,7 +7158,7 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_id(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7170,7 +7174,7 @@ int main(int argc, const char **argv)
       }
 
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
-      ret = role->get(dpp(), null_yield);
+      ret = role->load_by_name(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -7179,7 +7183,8 @@ int main(int argc, const char **argv)
         ret = -EINVAL;
         return ret;
       }
-      ret = role->update(dpp(), null_yield);
+      constexpr bool exclusive = false;
+      ret = role->store_info(dpp(), exclusive, null_yield);
       if (ret < 0) {
         return -ret;
       }
@@ -10812,13 +10817,13 @@ next:
     }
 
     real_time mtime = real_clock::now();
-    string oid = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.get_mfa_oid(user->get_id());
 
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user->get_id()),
-					     mtime, &objv_tracker,
-					     null_yield, dpp(),
-					     MDLOG_STATUS_WRITE,
-					     [&] {
+    int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(
+        rgwrados::otp::get_meta_key(user->get_id()),
+        mtime, &objv_tracker,
+        null_yield, dpp(),
+        MDLOG_STATUS_WRITE,
+        [&] {
       return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.create_mfa(dpp(), user->get_id(), config, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
@@ -10850,11 +10855,12 @@ next:
 
     real_time mtime = real_clock::now();
 
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user->get_id()),
-					     mtime, &objv_tracker,
-					     null_yield, dpp(),
-					     MDLOG_STATUS_WRITE,
-					     [&] {
+    int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(
+        rgwrados::otp::get_meta_key(user->get_id()),
+        mtime, &objv_tracker,
+        null_yield, dpp(),
+        MDLOG_STATUS_WRITE,
+        [&] {
       return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.remove_mfa(dpp(), user->get_id(), totp_serial, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
@@ -10997,11 +11003,12 @@ next:
     /* now update the backend */
     real_time mtime = real_clock::now();
 
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user->get_id()),
-				         mtime, &objv_tracker,
-				         null_yield, dpp(),
-				         MDLOG_STATUS_WRITE,
-				         [&] {
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(
+        rgwrados::otp::get_meta_key(user->get_id()),
+        mtime, &objv_tracker,
+        null_yield, dpp(),
+        MDLOG_STATUS_WRITE,
+        [&] {
       return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.create_mfa(dpp(), user->get_id(), config, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {

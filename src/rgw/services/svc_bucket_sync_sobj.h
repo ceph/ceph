@@ -19,7 +19,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_meta_be.h"
 #include "svc_bucket_sync.h"
 
 class RGWSI_Zone;
@@ -63,20 +62,17 @@ class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
     }
   };
 
-  void get_hint_entities(RGWSI_Bucket_X_Ctx& ctx,
-                         const std::set<rgw_zone_id>& zone_names,
+  void get_hint_entities(const std::set<rgw_zone_id>& zone_names,
                          const std::set<rgw_bucket>& buckets,
                          std::set<rgw_sync_bucket_entity> *hint_entities,
                          optional_yield y, const DoutPrefixProvider *);
-  int resolve_policy_hints(RGWSI_Bucket_X_Ctx& ctx,
-                           rgw_sync_bucket_entity& self_entity,
+  int resolve_policy_hints(rgw_sync_bucket_entity& self_entity,
                            RGWBucketSyncPolicyHandlerRef& handler,
                            RGWBucketSyncPolicyHandlerRef& zone_policy_handler,
                            std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                            optional_yield y,
                            const DoutPrefixProvider *dpp);
-  int do_get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                            std::optional<rgw_zone_id> zone,
+  int do_get_policy_handler(std::optional<rgw_zone_id> zone,
                             std::optional<rgw_bucket> _bucket,
                             std::map<optional_zone_bucket, RGWBucketSyncPolicyHandlerRef>& temp_map,
                             RGWBucketSyncPolicyHandlerRef *handler,
@@ -99,8 +95,7 @@ public:
             RGWSI_Bucket_SObj *_bucket_sobj_svc);
 
 
-  int get_policy_handler(RGWSI_Bucket_X_Ctx& ctx,
-                         std::optional<rgw_zone_id> zone,
+  int get_policy_handler(std::optional<rgw_zone_id> zone,
                          std::optional<rgw_bucket> bucket,
                          RGWBucketSyncPolicyHandlerRef *handler,
                          optional_yield y,
