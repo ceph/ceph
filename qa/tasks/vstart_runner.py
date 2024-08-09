@@ -812,6 +812,9 @@ class LocalCephManager(CephManager):
         # since it doesn't accept "shell" as parameter.
         self.run_ceph_w_prefix = ['exec', 'sudo', CEPH_CMD]
 
+    def get_ceph_cmd(self, **kwargs):
+        return [CEPH_CMD]
+
     def find_remote(self, daemon_type, daemon_id):
         """
         daemon_type like 'mds', 'osd'
