@@ -128,6 +128,7 @@ void Filesystem::dump(Formatter *f) const
 void FSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
+  f->dump_string("btime", fmt::format("{}", btime));
   // Use 'default' naming to match 'set-default' CLI
   f->dump_int("default_fscid", legacy_client_fscid);
 
@@ -161,6 +162,7 @@ void FSMap::dump(Formatter *f) const
 FSMap &FSMap::operator=(const FSMap &rhs)
 {
   epoch = rhs.epoch;
+  btime = rhs.btime;
   next_filesystem_id = rhs.next_filesystem_id;
   legacy_client_fscid = rhs.legacy_client_fscid;
   default_compat = rhs.default_compat;
@@ -201,6 +203,7 @@ void FSMap::generate_test_instances(std::list<FSMap*>& ls)
 void FSMap::print(ostream& out) const
 {
   out << "e" << epoch << std::endl;
+  out << "btime " << fmt::format("{}", btime) << std::endl;
   out << "enable_multiple, ever_enabled_multiple: " << enable_multiple << ","
       << ever_enabled_multiple << std::endl;
   out << "default compat: " << default_compat << std::endl;
@@ -291,6 +294,7 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
 {
   if (f) {
     f->dump_unsigned("epoch", get_epoch());
+    f->dump_string("btime", fmt::format("{}", btime));
     for (const auto &p : filesystems) {
       auto& fs = p.second;
       f->dump_unsigned("id", fs->fscid);
@@ -646,6 +650,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
   encode(standby_daemons, bl, features);
   encode(standby_epochs, bl);
   encode(ever_enabled_multiple, bl);
+  encode(btime, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -674,6 +679,9 @@ void FSMap::decode(bufferlist::const_iterator& p)
   decode(standby_epochs, p);
   if (struct_v >= 7) {
     decode(ever_enabled_multiple, p);
+  }
+  if (struct_v >= 8) {
+    decode(btime, p);
   }
   DECODE_FINISH(p);
 }
