@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(unittest_exporter
   test_exporter.cc
   "${CMAKE_SOURCE_DIR}/src/exporter/util.cc"

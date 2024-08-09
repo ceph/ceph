@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_library(journal_test_mock STATIC mock/MockJournaler.cc)
 target_link_libraries(journal_test_mock
   PUBLIC GMock::GMock)

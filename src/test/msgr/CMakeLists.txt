@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # ceph_test_async_driver
 add_executable(ceph_test_async_driver
   test_async_driver.cc

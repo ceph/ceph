@@ -4,7 +4,7 @@ project(ceph
   VERSION 19.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy CMP0127 CMP0135)
+foreach(policy CMP0118 CMP0127 CMP0135)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
   endif()

@@ -1,3 +1,4 @@
+add_ceph_options()
 
 add_executable(unittest_ceph_immutable_obj_cache
   test_main.cc

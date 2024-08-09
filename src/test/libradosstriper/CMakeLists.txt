@@ -1,3 +1,4 @@
+add_ceph_options()
 #
 # Note: only compiled if WITH_LIBRADOSSTRIPER is defined.
 #

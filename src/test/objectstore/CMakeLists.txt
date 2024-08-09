@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(ceph_perf_objectstore 
   ObjectStoreTransactionBenchmark.cc)
 target_link_libraries(ceph_perf_objectstore os osdc global ${UNITTEST_LIBS})

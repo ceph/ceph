@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_library(compressor_objs OBJECT Compressor.cc)
 add_dependencies(compressor_objs common-objs)
 target_link_libraries(compressor_objs legacy-option-headers)

@@ -1,3 +1,5 @@
+add_ceph_options()
+
 set(ceph_immutable_object_cache_files
   ObjectCacheStore.cc
   CacheController.cc

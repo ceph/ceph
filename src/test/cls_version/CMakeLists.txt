@@ -1,3 +1,5 @@
+add_ceph_options()
+
 # ceph_test_cls_version
 add_executable(ceph_test_cls_version
   test_cls_version.cc

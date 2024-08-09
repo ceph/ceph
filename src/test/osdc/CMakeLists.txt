@@ -1,3 +1,5 @@
+add_ceph_options()
+
 add_executable(ceph_test_objectcacher_stress
   object_cacher_stress.cc
   FakeWriteback.cc

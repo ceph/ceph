@@ -1,4 +1,5 @@
 # Lazy omap stat collection tests
+add_ceph_options()
 
 add_executable(ceph_test_lazy_omap_stats
   main.cc
