@@ -166,6 +166,11 @@ public:
     return false;
   }
 
+  bool is_root() const override {
+    ceph_abort();
+    return false;
+  }
+
   virtual uint32_t get_perm_mask() const override {
     ceph_abort();
     return 0;
