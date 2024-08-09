@@ -99,7 +99,7 @@ function TEST_erasure_crush_stripe_unit_padded() {
     local dir=$1
     # setting osd_pool_erasure_code_stripe_unit modifies the stripe_width
     # and it is padded as required by the default plugin
-    profile+=" plugin=jerasure"
+    profile+=" plugin=isa"
     profile+=" technique=reed_sol_van"
     k=4
     profile+=" k=$k"
