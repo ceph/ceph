@@ -28,6 +28,7 @@
 #endif
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/expected.hpp"
 #include "include/object.h"
 #include "os/ObjectStore.h"
 #include "osd/OSDMap.h"
