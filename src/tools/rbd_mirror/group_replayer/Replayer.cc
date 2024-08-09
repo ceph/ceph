@@ -730,6 +730,7 @@ void Replayer<I>::update_image_snapshot(
   if (r < 0) {
     derr << "failed getting snap info for snap id: " << spec.snap_id
          << ", : " << cpp_strerror(r) << dendl;
+    return;
   }
   auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
       &snap_info.snapshot_namespace);
@@ -779,43 +780,50 @@ void Replayer<I>::mirror_regular_snapshot(
       remote_group_snap_name,
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
 
-  std::vector<cls::rbd::ImageSnapshotSpec> local_image_snap_specs;
-  local_image_snap_specs = std::vector<cls::rbd::ImageSnapshotSpec>(
-      local_images->size(), cls::rbd::ImageSnapshotSpec());
-  for (auto& image : *local_images) {
-    std::string image_header_oid = librbd::util::header_name(
-        image.spec.image_id);
-    ::SnapContext snapc;
-    int r = librbd::cls_client::get_snapcontext(&m_local_io_ctx,
-                                                image_header_oid, &snapc);
-    if (r < 0) {
-      derr << "get snap context failed: " << cpp_strerror(r) << dendl;
-      on_finish->complete(r);
-      return;
-    }
+  auto itr = std::find_if(
+      m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
+      [remote_group_snap_id](const cls::rbd::GroupSnapshot &s) {
+      return s.id == remote_group_snap_id;
+      });
 
-    auto image_snap_name = ".group." + std::to_string(image.spec.pool_id) +
-                           "_" + m_remote_group_id + "_" + remote_group_snap_id;
-    // stored in reverse order
-    for (auto snap_id : snapc.snaps) {
-      cls::rbd::SnapshotInfo snap_info;
-      r = librbd::cls_client::snapshot_get(&m_local_io_ctx, image_header_oid,
-                                           snap_id, &snap_info);
+  std::vector<cls::rbd::ImageSnapshotSpec> local_image_snap_specs;
+  if (itr != m_remote_group_snaps.end()) {
+    local_image_snap_specs.reserve(itr->snaps.size());
+    for (auto& image : *local_images) {
+      std::string image_header_oid = librbd::util::header_name(
+          image.spec.image_id);
+      ::SnapContext snapc;
+      int r = librbd::cls_client::get_snapcontext(&m_local_io_ctx,
+          image_header_oid, &snapc);
       if (r < 0) {
-        derr << "failed getting snap info for snap id: " << snap_id
-             << ", : " << cpp_strerror(r) << dendl;
+        derr << "get snap context failed: " << cpp_strerror(r) << dendl;
         on_finish->complete(r);
         return;
       }
 
-      // extract { pool_id, snap_id, image_id }
-      if (snap_info.name == image_snap_name) {
-        cls::rbd::ImageSnapshotSpec snap_spec;
-        snap_spec.pool = image.spec.pool_id;
-        snap_spec.image_id = image.spec.image_id;
-        snap_spec.snap_id = snap_info.id;
+      auto image_snap_name = ".group." + std::to_string(image.spec.pool_id) +
+        "_" + m_remote_group_id + "_" + remote_group_snap_id;
+      // stored in reverse order
+      for (auto snap_id : snapc.snaps) {
+        cls::rbd::SnapshotInfo snap_info;
+        r = librbd::cls_client::snapshot_get(&m_local_io_ctx, image_header_oid,
+            snap_id, &snap_info);
+        if (r < 0) {
+          derr << "failed getting snap info for snap id: " << snap_id
+            << ", : " << cpp_strerror(r) << dendl;
+          on_finish->complete(r);
+          return;
+        }
 
-        local_image_snap_specs.push_back(snap_spec);
+        // extract { pool_id, snap_id, image_id }
+        if (snap_info.name == image_snap_name) {
+          cls::rbd::ImageSnapshotSpec snap_spec;
+          snap_spec.pool = image.spec.pool_id;
+          snap_spec.image_id = image.spec.image_id;
+          snap_spec.snap_id = snap_info.id;
+
+          local_image_snap_specs.push_back(snap_spec);
+        }
       }
     }
   }
