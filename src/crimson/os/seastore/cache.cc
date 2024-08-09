@@ -44,7 +44,7 @@ Cache::Cache(
 	  "seastore_cache_lru_size"))
 {
   LOG_PREFIX(Cache::Cache);
-  INFO("created, lru_size={}", lru.get_capacity());
+  INFO("created, lru_capacity={}B", lru.get_capacity_bytes());
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
@@ -509,14 +509,14 @@ void Cache::register_metrics()
       sm::make_counter(
 	"cache_lru_size_bytes",
 	[this] {
-	  return lru.get_current_contents_bytes();
+	  return lru.get_current_size_bytes();
 	},
 	sm::description("total bytes pinned by the lru")
       ),
       sm::make_counter(
-	"cache_lru_size_extents",
+	"cache_lru_num_extents",
 	[this] {
-	  return lru.get_current_contents_extents();
+	  return lru.get_current_num_extents();
 	},
 	sm::description("total extents pinned by the lru")
       ),
@@ -1747,8 +1747,8 @@ Cache::close_ertr::future<> Cache::close()
        stats.dirty_bytes,
        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
        get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
-       lru.get_current_contents_extents(),
-       lru.get_current_contents_bytes(),
+       lru.get_current_num_extents(),
+       lru.get_current_size_bytes(),
        extents.size(),
        extents.get_bytes());
   root.reset();

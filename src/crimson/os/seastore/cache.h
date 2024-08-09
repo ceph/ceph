@@ -1429,7 +1429,7 @@ private:
     const size_t capacity = 0;
 
     // current size (bytes)
-    size_t contents = 0;
+    size_t current_size = 0;
 
     CachedExtent::primary_ref_list lru;
 
@@ -1437,25 +1437,25 @@ private:
       assert(extent.is_stable_clean() && !extent.is_placeholder());
       assert(extent.primary_ref_list_hook.is_linked());
       assert(lru.size() > 0);
-      assert(contents >= extent.get_length());
+      assert(current_size >= extent.get_length());
 
       lru.erase(lru.s_iterator_to(extent));
-      contents -= extent.get_length();
+      current_size -= extent.get_length();
       intrusive_ptr_release(&extent);
     }
 
   public:
     LRU(size_t capacity) : capacity(capacity) {}
 
-    size_t get_capacity() const {
+    size_t get_capacity_bytes() const {
       return capacity;
     }
 
-    size_t get_current_contents_bytes() const {
-      return contents;
+    size_t get_current_size_bytes() const {
+      return current_size;
     }
 
-    size_t get_current_contents_extents() const {
+    size_t get_current_num_extents() const {
       return lru.size();
     }
 
@@ -1473,17 +1473,17 @@ private:
       if (extent.primary_ref_list_hook.is_linked()) {
         // present, move to top (back)
         assert(lru.size() > 0);
-        assert(contents >= extent.get_length());
+        assert(current_size >= extent.get_length());
         lru.erase(lru.s_iterator_to(extent));
         lru.push_back(extent);
       } else {
         // absent, add to top (back)
-        contents += extent.get_length();
+        current_size += extent.get_length();
         intrusive_ptr_add_ref(&extent);
         lru.push_back(extent);
 
         // trim to capacity
-        while (contents > capacity) {
+        while (current_size > capacity) {
           do_remove_from_lru(lru.front());
         }
       }
