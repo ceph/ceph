@@ -70,7 +70,7 @@ public:
   }
 
   void send() {
-    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
 
@@ -96,11 +96,12 @@ private:
 
     // I need to seal off the current segment, and then mark all
     // previous segments for expiry
-    auto sle = mdcache->create_subtree_map();
+    auto* sle = mdcache->create_subtree_map();
     mdlog->submit_entry(sle);
+    sb = sle;
 
     Context *ctx = new LambdaContext([this](int r) {
-        handle_flush_mdlog(r);
+        handle_clear_mdlog(r);
       });
 
     // Flush initially so that all the segments older than our new one
@@ -109,34 +110,8 @@ private:
     mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, ctx));
   }
 
-  void handle_flush_mdlog(int r) {
-    dout(20) << __func__ << ": r=" << r << dendl;
-
-    if (r != 0) {
-      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
-      complete(r);
-      return;
-    }
-
-    clear_mdlog();
-  }
-
-  void clear_mdlog() {
-    dout(20) << __func__ << dendl;
-
-    Context *ctx = new LambdaContext([this](int r) {
-        handle_clear_mdlog(r);
-      });
-
-    // Because we may not be the last wait_for_safe context on MDLog,
-    // and subsequent contexts might wake up in the middle of our
-    // later trim_all and interfere with expiry (by e.g. marking
-    // dirs/dentries dirty on previous log segments), we run a second
-    // wait_for_safe here. See #10368
-    mdlog->wait_for_safe(new MDSInternalContextWrapper(mds, ctx));
-  }
-
   void handle_clear_mdlog(int r) {
+    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
     dout(20) << __func__ << ": r=" << r << dendl;
 
     if (r != 0) {
@@ -152,7 +127,7 @@ private:
     // Put all the old log segments into expiring or expired state
     dout(5) << __func__ << ": beginning segment expiry" << dendl;
 
-    int ret = mdlog->trim_all();
+    int ret = mdlog->trim_to(sb->get_seq());
     if (ret != 0) {
       *ss << "Error " << ret << " (" << cpp_strerror(ret) << ") while trimming log";
       complete(ret);
@@ -176,36 +151,21 @@ private:
             << " segments to expire" << dendl;
 
     if (!expiry_gather.has_subs()) {
-      trim_segments();
+      trim_expired_segments();
       return;
     }
 
     Context *ctx = new LambdaContext([this](int r) {
-        handle_expire_segments(r);
+        ceph_assert(r == 0); // MDLog is not allowed to raise errors via
+                             // wait_for_expiry
+        trim_expired_segments();
       });
     expiry_gather.set_finisher(new MDSInternalContextWrapper(mds, ctx));
     expiry_gather.activate();
   }
 
-  void handle_expire_segments(int r) {
-    dout(20) << __func__ << ": r=" << r << dendl;
-
-    ceph_assert(r == 0); // MDLog is not allowed to raise errors via
-                         // wait_for_expiry
-    trim_segments();
-  }
-
-  void trim_segments() {
-    dout(20) << __func__ << dendl;
-
-    Context *ctx = new C_OnFinisher(new LambdaContext([this](int) {
-          std::lock_guard locker(mds->mds_lock);
-          trim_expired_segments();
-        }), mds->finisher);
-    ctx->complete(0);
-  }
-
   void trim_expired_segments() {
+    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
     dout(5) << __func__ << ": expiry complete, expire_pos/trim_pos is now "
             << std::hex << mdlog->get_journaler()->get_expire_pos() << "/"
             << mdlog->get_journaler()->get_trimmed_pos() << dendl;
@@ -249,6 +209,7 @@ private:
 
   MDCache *mdcache;
   MDLog *mdlog;
+  SegmentBoundary* sb = nullptr;
   std::ostream *ss;
   Context *on_finish;
 

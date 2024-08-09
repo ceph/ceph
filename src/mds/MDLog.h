@@ -147,7 +147,10 @@ public:
   }
 
   void trim_expired_segments();
-  int trim_all();
+  int trim_all() {
+    return trim_to(0);
+  }
+  int trim_to(SegmentBoundary::seq_t);
 
   void create(MDSContext *onfinish);  // fresh, empty log! 
   void open(MDSContext *onopen);      // append() or replay() to follow!
