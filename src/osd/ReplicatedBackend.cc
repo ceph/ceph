@@ -832,6 +832,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
       ceph_assert(j != bc->pulling.end());
       ObjectContextRef obc = j->second.obc;
       bc->clear_pull(j, false /* already did it */);
+      ceph_assert(obc);
       int started = bc->start_pushes(i.hoid, obc, h);
       if (started < 0) {
 	bc->pushing[i.hoid].clear();
@@ -1851,7 +1852,9 @@ bool ReplicatedBackend::handle_pull_response(
       pull_info.lock_manager);
   }
 
-
+  // if `first` is true, obc was just set above. Otherwise, we should be
+  // able to reuse it.
+  ceph_assert(pull_info.obc);
   interval_set<uint64_t> usable_intervals;
   bufferlist usable_data;
   trim_pushed_data(pull_info.recovery_info.copy_subset,
