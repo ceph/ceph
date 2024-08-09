@@ -8,6 +8,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/Utils.h"
 #include "librbd/image/AttachParentRequest.h"
+#include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/DetachParentRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -48,7 +49,7 @@ void SetHeadRequest<I>::send_set_size() {
   m_image_ctx->image_lock.lock_shared();
   if (m_image_ctx->size == m_size) {
     m_image_ctx->image_lock.unlock_shared();
-    send_detach_parent();
+    send_detach_child();
     return;
   }
   m_image_ctx->image_lock.unlock_shared();
@@ -101,6 +102,49 @@ void SetHeadRequest<I>::handle_set_size(int r) {
       }
     }
     m_image_ctx->size = m_size;
+  }
+
+  send_detach_child();
+}
+
+template <typename I>
+void SetHeadRequest<I>::send_detach_child() {
+  m_image_ctx->image_lock.lock_shared();
+  if (!m_image_ctx->parent_md.spec.exists() ||
+      m_image_ctx->parent_md.spec == m_parent_spec) {
+    m_image_ctx->image_lock.unlock_shared();
+    send_detach_parent();
+    return;
+  }
+
+  m_image_ctx->image_lock.unlock_shared();
+
+  ldout(m_cct, 20) << dendl;
+
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
+  if (finish_op_ctx == nullptr) {
+    lderr(m_cct) << "lost exclusive lock" << dendl;
+    finish(r);
+    return;
+  }
+
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
+      handle_detach_child(r);
+      finish_op_ctx->complete(0);
+    });
+  auto req = image::DetachChildRequest<I>::create(*m_image_ctx, ctx);
+  req->send();
+}
+
+template <typename I>
+void SetHeadRequest<I>::handle_detach_child(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to detach child: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
   }
 
   send_detach_parent();

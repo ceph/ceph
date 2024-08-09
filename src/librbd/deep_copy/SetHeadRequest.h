@@ -46,6 +46,9 @@ private:
    * SET_SIZE
    *    |
    *    v (skip if not needed)
+   * DETACH_CHILD
+   *    |
+   *    v (skip if not needed)
    * DETACH_PARENT
    *    |
    *    v (skip if not needed)
@@ -67,6 +70,9 @@ private:
 
   void send_set_size();
   void handle_set_size(int r);
+
+  void send_detach_child();
+  void handle_detach_child(int r);
 
   void send_detach_parent();
   void handle_detach_parent(int r);
