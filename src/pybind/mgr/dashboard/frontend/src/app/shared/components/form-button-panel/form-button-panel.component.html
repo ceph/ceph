@@ -1,4 +1,4 @@
-<cds-button-set *ngIf="!modalForm; else modalFooter">
+<ng-container *ngIf="!modalForm; else modalFooter">
   <cd-submit-button *ngIf="showSubmit"
                     (submitAction)="submitAction()"
                     [disabled]="disabled"
@@ -9,10 +9,16 @@
   <cd-back-button *ngIf="showCancel"
                   (backAction)="backAction()"
                   [name]="cancelText"></cd-back-button>
-</cds-button-set>
+</ng-container>
 
 <ng-template #modalFooter>
   <cds-modal-footer>
+    <cd-back-button *ngIf="showCancel"
+                    (backAction)="backAction()"
+                    [name]="cancelText"
+                    [modalForm]="modalForm"
+                    [showSubmit]="showSubmit"
+                    class="w-100"></cd-back-button>
     <cd-submit-button *ngIf="showSubmit"
                       (submitAction)="submitAction()"
                       [disabled]="disabled"
@@ -22,11 +28,5 @@
                       [modalForm]="modalForm"
                       [buttonType]="submitBtnType"
                       class="w-100">{{ submitText }}</cd-submit-button>
-    <cd-back-button *ngIf="showCancel"
-                    (backAction)="backAction()"
-                    [name]="cancelText"
-                    [modalForm]="modalForm"
-                    [showSubmit]="showSubmit"
-                    class="w-100"></cd-back-button>
   </cds-modal-footer>
 </ng-template>

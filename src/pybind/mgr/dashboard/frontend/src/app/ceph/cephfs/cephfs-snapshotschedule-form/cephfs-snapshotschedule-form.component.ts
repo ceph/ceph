@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, Inject, OnInit } from '@angular/core';
 import { AbstractControl, FormArray, FormControl, FormGroup, Validators } from '@angular/forms';
 import { NgbActiveModal, NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 import { padStart, uniq } from 'lodash';
@@ -42,16 +42,8 @@ const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
   styleUrls: ['./cephfs-snapshotschedule-form.component.scss']
 })
 export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnInit {
-  fsName!: string;
-  path!: string;
-  schedule!: string;
-  retention!: string;
-  start!: string;
-  status!: string;
   subvol!: string;
   group!: string;
-  id!: number;
-  isEdit = false;
   icons = Icons;
   repeatFrequencies = Object.entries(RepeatFrequency);
   retentionFrequencies = Object.entries(RetentionFrequency);
@@ -78,7 +70,16 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
     private taskWrapper: TaskWrapperService,
     private cd: ChangeDetectorRef,
     public directoryStore: DirectoryStoreService,
-    private subvolumeService: CephfsSubvolumeService
+    private subvolumeService: CephfsSubvolumeService,
+
+    @Inject('fsName') public fsName: string,
+    @Inject('id') public id: number,
+    @Inject('path') public path: string,
+    @Inject('schedule') public schedule: string,
+    @Inject('retention') public retention: string,
+    @Inject('start') public start: string,
+    @Inject('status') public status: string,
+    @Inject('isEdit') public isEdit = false
   ) {
     super();
     this.resource = $localize`Snapshot schedule`;
@@ -337,7 +338,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
             fs: this.fsName,
             path: values.directory,
             snap_schedule: this.parseSchedule(values?.repeatInterval, values?.repeatFrequency),
-            start: this.parseDatetime(values?.startDate, values?.startTime)
+            start: new Date(values.startDate.replace(/\//g, '-').replace(' ', 'T')).toISOString().slice(0, 19)
           };
 
           const retentionPoliciesValues = this.parseRetentionPolicies(values?.retentionPolicies);
@@ -353,7 +354,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
           if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
             snapScheduleObj['group'] = this.subvolumeGroup;
           }
-
+          console.log(snapScheduleObj)
           this.taskWrapper
             .wrapTaskAroundCall({
               task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.CREATE, {
@@ -366,7 +367,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
                 this.snapScheduleForm.setErrors({ cdSubmitButton: true });
               },
               complete: () => {
-                this.activeModal.close();
+                this.closeModal();
               }
             });
         }

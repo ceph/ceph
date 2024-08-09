@@ -12,7 +12,6 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CephfsSubvolumegroupFormComponent } from '../cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { Permissions } from '~/app/shared/models/permissions';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -62,7 +61,7 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   constructor(
     private cephfsSubvolumeGroup: CephfsSubvolumeGroupService,
     private actionLabels: ActionLabelsI18n,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private cdsModalService: ModalCdsService
@@ -172,8 +171,7 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
         subvolumegroupName: this.selection?.first()?.name,
         pools: this.pools,
         isEdit: edit
-      },
-      { size: 'lg' }
+      }
     );
   }
 

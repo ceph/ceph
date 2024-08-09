@@ -15,23 +15,7 @@ import {
 import { ClickOutsideModule } from 'ng-click-outside';
 import { NgChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
-import {
-  UIShellModule,
-  ButtonModule,
-  NotificationModule,
-  IconModule,
-  IconService,
-  TooltipModule,
-  GridModule,
-  AccordionModule,
-  LoadingModule,
-  ModalModule,
-  InputModule,
-  CheckboxModule,
-  DatePickerModule,
-  TimePickerModule,
-  TimePickerSelectModule
-} from 'carbon-components-angular';
+import { UIShellModule, ButtonModule, NotificationModule, IconModule, IconService, TooltipModule, GridModule, AccordionModule, LoadingModule, ModalModule, InputModule, CheckboxModule, DatePickerModule, TimePickerModule, TimePickerSelectModule, NumberModule, DropdownModule, SelectModule } from 'carbon-components-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
 import { DirectivesModule } from '../directives/directives.module';
@@ -107,10 +91,13 @@ import InfoIcon from '@carbon/icons/es/information/16';
     LoadingModule,
     ModalModule,
     InputModule,
+    NumberModule,
     CheckboxModule,
     DatePickerModule,
     TimePickerModule,
-    TimePickerSelectModule
+    TimePickerSelectModule,
+    DropdownModule,
+    SelectModule
   ],
   declarations: [
     SparklineComponent,
