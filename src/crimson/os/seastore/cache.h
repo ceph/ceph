@@ -1433,22 +1433,15 @@ private:
 
     CachedExtent::primary_ref_list lru;
 
-    void trim_to_capacity() {
-      while (contents > capacity) {
-	assert(lru.size() > 0);
-	remove_from_lru(lru.front());
-      }
-    }
-
-    void add_to_lru(CachedExtent &extent) {
+    void do_remove_from_lru(CachedExtent &extent) {
       assert(extent.is_stable_clean() && !extent.is_placeholder());
-      
-      if (!extent.primary_ref_list_hook.is_linked()) {
-	contents += extent.get_length();
-	intrusive_ptr_add_ref(&extent);
-	lru.push_back(extent);
-      }
-      trim_to_capacity();
+      assert(extent.primary_ref_list_hook.is_linked());
+      assert(lru.size() > 0);
+      assert(contents >= extent.get_length());
+
+      lru.erase(lru.s_iterator_to(extent));
+      contents -= extent.get_length();
+      intrusive_ptr_release(&extent);
     }
 
   public:
@@ -1470,10 +1463,7 @@ private:
       assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
-	lru.erase(lru.s_iterator_to(extent));
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
-	intrusive_ptr_release(&extent);
+        do_remove_from_lru(extent);
       }
     }
 
@@ -1481,19 +1471,29 @@ private:
       assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
-	lru.erase(lru.s_iterator_to(extent));
-	intrusive_ptr_release(&extent);
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
+        // present, move to top (back)
+        assert(lru.size() > 0);
+        assert(contents >= extent.get_length());
+        lru.erase(lru.s_iterator_to(extent));
+        lru.push_back(extent);
+      } else {
+        // absent, add to top (back)
+        contents += extent.get_length();
+        intrusive_ptr_add_ref(&extent);
+        lru.push_back(extent);
+
+        // trim to capacity
+        while (contents > capacity) {
+          do_remove_from_lru(lru.front());
+        }
       }
-      add_to_lru(extent);
     }
 
     void clear() {
       LOG_PREFIX(Cache::LRU::clear);
       for (auto iter = lru.begin(); iter != lru.end();) {
 	SUBDEBUG(seastore_cache, "clearing {}", *iter);
-	remove_from_lru(*(iter++));
+	do_remove_from_lru(*(iter++));
       }
     }
 
