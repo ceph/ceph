@@ -362,11 +362,11 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "List client sessions based on a filter");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session evict name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("session evict name=filters,type=CephString,n=N,req=true",
 				     asok_hook,
 				     "Evict client session(s) based on a filter");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("client evict name=filters,type=CephString,n=N,req=false",
+  r = admin_socket->register_command("client evict name=filters,type=CephString,n=N,req=true",
 				     asok_hook,
 				     "Evict client session(s) based on a filter");
   ceph_assert(r == 0);
