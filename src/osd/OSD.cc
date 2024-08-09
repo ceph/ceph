@@ -7767,6 +7767,8 @@ MPGStats* OSD::collect_pg_stats()
 
   osd_stat_t cur_stat = service.get_osd_stat();
   cur_stat.os_perf_stat = store->get_cur_stats();
+  cur_stat.num_deletes_in_pgs = service.get_num_deletes_in_pgs();
+  cur_stat.num_deleting_pgs = logger->get(l_osd_pg_removing);
 
   auto m = new MPGStats(monc->get_fsid(), get_osdmap_epoch());
   m->osd_stat = cur_stat;
@@ -7792,6 +7794,8 @@ MPGStats* OSD::collect_pg_stats()
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
       });
   }
+  pool_set.emplace(-1); // add "meta" pool explicitly as
+                        //it's not retrievable from pg stats
   store_statfs_t st;
   bool per_pool_stats = true;
   bool per_pool_omap_stats = false;
