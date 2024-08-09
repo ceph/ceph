@@ -13313,6 +13313,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      *    marked as purged in the Monitor will be removed. Mostly useful
      *    for cases in which the snapid is leaked in the client side.
      *    See: https://tracker.ceph.com/issues/64646
+     *  * (Experimental) purged-snaps-only: Adding this flag will result
+     *    in the reremoval of snapids in the given range.
+     *    Only the snapids which are *already* marked as purged in the
+     *    Monitor will be removed again. This may be useful for cases in
+     *    which we would like to trigger OSD snap trimming again.
      */
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
@@ -13353,6 +13358,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool dry_run = false;
     cmd_getval(cmdmap, "dry_run", dry_run);
 
+    bool purged_snaps_only = false;
+    cmd_getval(cmdmap, "purged_snaps_only", purged_snaps_only);
+
     // don't redelete past pool's snap_seq
     auto snapid_limit = std::min(upper_snapid_bound, (int64_t)p->get_snap_seq());
 
@@ -13369,16 +13377,28 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       int res = lookup_purged_snap(pool, i, &before_begin, &before_end);
       if (res == 0) {
         ss << "snapids: " << i << " was already marked as purged. ";
+        // Reremove the already purged_snaps
+        if (purged_snaps_only) {
+          force_removed_snapids.insert(i);
+        }
       } else {
-        // Remove non purged_snaps
-        // See: https://tracker.ceph.com/issues/64646
-        force_removed_snapids.insert(i);
+        if (!purged_snaps_only) {
+          // Remove non purged_snaps
+          // See: https://tracker.ceph.com/issues/64646
+          force_removed_snapids.insert(i);
+        }
       }
     }
 
     for (const auto i : force_removed_snapids) {
       if (!dry_run) {
         pending_inc.new_removed_snaps[pool].insert(snapid_t(i));
+        if (purged_snaps_only) {
+          // Kludge: In order to make this compatible with
+          // OSDMap::apply_incremental use of interval_set,
+          // specifically the erasure from removed_snaps_queue.
+          pending_inc.new_purged_snaps[pool].insert(snapid_t(i));
+        }
       }
     }
 
