@@ -1106,6 +1106,8 @@ public:
     DEDUP_CDC_CHUNK_SIZE,
     PG_NUM_MAX, // max pg_num
     READ_RATIO, // read ration for the read balancer work [0-100]
+    DEEP_SCRUB_DEFRAGMENT, // perform defragmentation when deep-scrubbing
+    DEEP_SCRUB_RECOMPRESS, // perform recompression when deep-scrubbing
   };
 
   enum type_t {
