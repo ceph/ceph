@@ -168,8 +168,7 @@ private:
   void add_grp_id(
     NvmeGwMonState &gw_state, NvmeGwTimerState &timer, const NvmeAnaGrpId grpid);
   void remove_grp_id(
-    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    const NvmeAnaGrpId grpid);
+    NvmeGwMonState &gw_state, NvmeGwTimerState &timer, const NvmeAnaGrpId grpid);
   void fsm_handle_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);

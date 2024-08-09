@@ -61,11 +61,11 @@ void NVMeofGwMap::add_grp_id(
 }
 
 void NVMeofGwMap::remove_grp_id(
-  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid)
+  NvmeGwMonState &gw_state, NvmeGwTimerState &timer, const NvmeAnaGrpId grpid)
 {
-  created_gws[group_key][gw_id].sm_state.erase(grpid);
-  created_gws[group_key][gw_id].blocklist_data.erase(grpid);
-  fsm_timers[group_key][gw_id].data.erase(grpid);
+  gw_state.sm_state.erase(grpid);
+  gw_state.blocklist_data.erase(grpid);
+  timer.data.erase(grpid);
 }
 
 int NVMeofGwMap::cfg_add_gw(
@@ -139,8 +139,8 @@ int NVMeofGwMap::cfg_delete_gw(
 	   << gw_to_remove.ana_grp_id << dendl;
 
   // Remove ana group owned by gw_id from other gateways in the group
-  for (auto &[id, gw_state]: group_gws) {
-    remove_grp_id(id, group_key, gw_state.ana_grp_id);
+  for (auto &[id, state]: group_gws) {
+    remove_grp_id(state, fsm_timers[group_key][id], state.ana_grp_id);
   }
 
   fsm_timers[group_key].erase(gw_id);
