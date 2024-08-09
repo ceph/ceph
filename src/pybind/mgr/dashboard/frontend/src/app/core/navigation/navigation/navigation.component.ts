@@ -40,13 +40,9 @@ export class NavigationComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   clustersMap: Map<string, any> = new Map<string, any>();
-  selectedCluster: {
-    name: string;
-    cluster_alias: string;
-    user: string;
-    cluster_connection_status?: number;
-  };
+  selectedCluster: MultiCluster;
   currentClusterName: string;
+  sortedClusters: { key: string; value: MultiCluster }[];
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -64,23 +60,30 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.subs.add(
-      this.multiClusterService.subscribe((resp: object) => {
-        const clustersConfig = resp['config'];
+      this.multiClusterService.subscribe((resp: any) => {
+        const clustersConfig = resp.config;
         if (clustersConfig) {
-          this.clustersMap.clear();
-          Object.keys(clustersConfig).forEach((clusterKey: string) => {
-            const clusterDetailsList = clustersConfig[clusterKey];
-            clusterDetailsList.forEach((clusterDetails: MultiCluster) => {
-              const clusterUser = clusterDetails['user'];
-              const clusterUrl = clusterDetails['url'];
+          const clusters: { key: string; value: MultiCluster }[] = [];
+          Object.keys(clustersConfig).forEach((clusterKey) => {
+            clustersConfig[clusterKey].forEach((clusterDetails: MultiCluster) => {
+              const clusterUser = clusterDetails.user;
+              const clusterUrl = clusterDetails.url;
               const clusterUniqueKey = `${clusterUrl}-${clusterUser}`;
-              this.clustersMap.set(clusterUniqueKey, clusterDetails);
-              this.checkClusterConnectionStatus();
+              clusters.push({ key: clusterUniqueKey, value: clusterDetails });
             });
           });
+          this.sortedClusters = this.multiClusterService.sortByPriorityValue(
+            clusters,
+            'cluster_alias',
+            'local-cluster'
+          );
+          this.clustersMap.clear();
+          this.sortedClusters.forEach((cluster) =>
+            this.clustersMap.set(cluster.key, cluster.value)
+          );
           this.selectedCluster =
-            this.clustersMap.get(`${resp['current_url']}-${resp['current_user']}`) || {};
-          this.currentClusterName = `${this.selectedCluster?.name} - ${this.selectedCluster?.cluster_alias} - ${this.selectedCluster?.user}`;
+            this.clustersMap.get(`${resp.current_url}-${resp.current_user}`) || {};
+          this.currentClusterName = this.getFormattedClusterName(this.selectedCluster, true);
         }
       })
     );
@@ -96,6 +99,14 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.checkClusterConnectionStatus();
       })
     );
+  }
+
+  getFormattedClusterName(cluster: MultiCluster, shortenFsid: boolean): string {
+    if (shortenFsid) {
+      return `${cluster?.cluster_alias} (${this.multiClusterService.shortenName(cluster?.name)})`;
+    } else {
+      return `${cluster?.cluster_alias} (${cluster?.name})`;
+    }
   }
 
   ngOnDestroy(): void {

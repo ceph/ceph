@@ -75,25 +75,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
 
   createForm() {
     this.remoteClusterForm = new CdFormGroup({
-      username: new FormControl('', [
-        CdValidators.custom('uniqueUrlandUser', (username: string) => {
-          let remoteClusterUrl = '';
-          if (
-            this.remoteClusterForm &&
-            this.remoteClusterForm.getValue('remoteClusterUrl') &&
-            this.remoteClusterForm.getValue('remoteClusterUrl').endsWith('/')
-          ) {
-            remoteClusterUrl = this.remoteClusterForm.getValue('remoteClusterUrl').slice(0, -1);
-          } else if (this.remoteClusterForm) {
-            remoteClusterUrl = this.remoteClusterForm.getValue('remoteClusterUrl');
-          }
-          return (
-            this.remoteClusterForm &&
-            this.clusterUrls?.includes(remoteClusterUrl) &&
-            this.clusterUsers?.includes(username)
-          );
-        })
-      ]),
+      username: new FormControl('', []),
       password: new FormControl(
         null,
         CdValidators.custom('requiredNotEdit', (value: string) => {
@@ -115,6 +97,12 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           }),
           CdValidators.custom('hubUrlCheck', (remoteClusterUrl: string) => {
             return this.action === 'connect' && remoteClusterUrl?.includes(this.hubUrl);
+          }),
+          CdValidators.custom('uniqueUrl', (remoteClusterUrl: string) => {
+            if (remoteClusterUrl && remoteClusterUrl.endsWith('/')) {
+              remoteClusterUrl = remoteClusterUrl.slice(0, -1);
+            }
+            return this.clusterUrls?.includes(remoteClusterUrl);
           }),
           Validators.required
         ]

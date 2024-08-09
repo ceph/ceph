@@ -33,7 +33,7 @@
           <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
-                   placeholder="https://localhost:4202"
+                   placeholder="https://172.20.0.1:8443"
                    id="remoteClusterUrl"
                    name="remoteClusterUrl"
                    formControlName="remoteClusterUrl">
@@ -48,6 +48,10 @@
             <span class="invalid-feedback"
                   *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'hubUrlCheck')"
                   i18n>The hub cluster cannot be connected.
+            </span>
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'uniqueUrl')"
+                  i18n>A cluster with the chosen url is already connected.
             </span>
           </div>
         </div>
@@ -88,10 +92,6 @@
             <span class="invalid-feedback"
                   *ngIf="remoteClusterForm.showError('username', frm, 'required')"
                   i18n>This field is required.
-            </span>
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('username', frm, 'uniqueUrlandUser')"
-                  i18n>A cluster with the chosen user is already connected.
             </span>
           </div>
         </div>
