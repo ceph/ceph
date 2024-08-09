@@ -260,6 +260,15 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   exposed via the new `--snap-id` option for `rbd clone` command.
 * RBD: The output of `rbd snap ls --all` command now includes the original
   type for trashed snapshots.
+* CephFS: "ceph fs clone status" command will now print statistics about clone
+  progress in terms of how much data has been cloned (in both percentage as
+  well as bytes) and how many files have been cloned.
+* CephFS: "ceph status" command will now print a progress bar when cloning is
+  ongoing. If clone jobs are more than the cloner threads, it will print one
+  more progress bar that shows total amount of progress made by both ongoing
+  as well as pending clones. Both progress are accompanied by messages that
+  show number of clone jobs in the respective categories and the amount of
+  progress made by each of them.
 
 >=18.0.0
 
