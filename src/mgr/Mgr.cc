@@ -525,7 +525,7 @@ void Mgr::handle_osd_map()
   cluster_state.with_osdmap_and_pgmap([this, &names_exist](const OSDMap &osd_map,
 							   const PGMap &pg_map) {
     for (int osd_id = 0; osd_id < osd_map.get_max_osd(); ++osd_id) {
-      if (!osd_map.exists(osd_id) || (osd_map.is_out(osd_id) && osd_map.is_down(osd_id))) {
+      if (!osd_map.exists(osd_id)) {
         continue;
       }
 
@@ -537,9 +537,16 @@ void Mgr::handle_osd_map()
       if (daemon_state.is_updating(k)) {
         continue;
       }
+        
+      DaemonStatePtr daemon = daemon_state.get(k);
+        
+      if (daemon && osd_map.is_out(osd_id) && osd_map.is_down(osd_id)) {
+        std::lock_guard l(daemon->lock);
+        daemon->daemon_health_metrics.clear();
+      }
 
       bool update_meta = false;
-      if (daemon_state.exists(k)) {
+      if (daemon) {
         if (osd_map.get_up_from(osd_id) == osd_map.get_epoch()) {
           dout(4) << "Mgr::handle_osd_map: osd." << osd_id
 		  << " joined cluster at " << "e" << osd_map.get_epoch()
