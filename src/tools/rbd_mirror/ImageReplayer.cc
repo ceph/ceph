@@ -904,13 +904,12 @@ void ImageReplayer<I>::set_mirror_image_status_update(
           m_local_group_ctx->global_group_id, m_remote_image_peer.io_ctx.get_id(),
           m_global_image_id, status, force);
     }
-  } else {
-    m_local_status_updater->set_mirror_image_status(m_global_image_id, status,
-                                                    force);
-    if (m_remote_image_peer.mirror_status_updater != nullptr) {
-      m_remote_image_peer.mirror_status_updater->set_mirror_image_status(
+  }
+  m_local_status_updater->set_mirror_image_status(m_global_image_id, status,
+      force);
+  if (m_remote_image_peer.mirror_status_updater != nullptr) {
+    m_remote_image_peer.mirror_status_updater->set_mirror_image_status(
         m_global_image_id, status, force);
-    }
   }
 
   m_in_flight_op_tracker.finish_op();
