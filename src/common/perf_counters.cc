@@ -150,7 +150,9 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
         f->open_array_section(key_name);
         (*l)->dump_formatted_generic(f, schema, histograms, true, "");
       } else {
-        (*l)->dump_formatted_generic(f, schema, histograms, true, "");
+        if (!schema) {
+          (*l)->dump_formatted_generic(f, schema, histograms, true, "");
+        }
       }
     }
     if (!m_loggers.empty()) {
@@ -379,7 +381,7 @@ void PerfCounters::reset()
 void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     bool histograms, bool dump_labeled, const std::string &counter) const
 {
-  if (dump_labeled) {
+  if (dump_labeled && !schema) {
     f->open_object_section(""); // should be enclosed by array
     f->open_object_section("labels");
     for (auto label : ceph::perf_counters::key_labels(m_name)) {
@@ -390,6 +392,12 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     }
     f->close_section(); // labels
     f->open_object_section("counters");
+  } else if (dump_labeled && schema) {
+    // counter schema only dumps the schema for the key
+    // of labeled counters not every labeled counters
+    // schema
+    auto key = ceph::perf_counters::key_name(m_name);
+    f->open_object_section(key);
   } else {
     auto labels = ceph::perf_counters::key_labels(m_name);
     // do not dump counters when counter instance is labeled and dump_labeled is not set
@@ -506,7 +514,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       }
     }
   }
-  if (dump_labeled) {
+  if (dump_labeled && !schema) {
     f->close_section(); // counters
   }
   f->close_section();
