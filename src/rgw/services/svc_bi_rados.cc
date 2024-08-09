@@ -1,15 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <concepts>
+
 #include "svc_bi_rados.h"
 #include "svc_bilog_rados.h"
 #include "svc_zone.h"
 
+#include "rgw_aio_throttle.h"
+#include "rgw_asio_thread.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
 #include "rgw_datalog.h"
 
 #include "cls/rgw/cls_rgw_client.h"
+
+#include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -320,6 +326,27 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const DoutPrefixProvider *d
   return 0;
 }
 
+// log an error message for each entry that matches the given predicate and
+// return the last matching error code
+static int check_for_errors(const rgw::AioResultList& completed,
+                            std::invocable<int> auto pred,
+                            const DoutPrefixProvider* dpp,
+                            std::string_view log_message)
+{
+  int r = 0;
+  auto is_error = [&pred] (const rgw::AioResult& e) { return pred(e.result); };
+
+  auto i = std::find_if(completed.begin(), completed.end(), is_error);
+  while (i != completed.end()) {
+    r = i->result;
+    ldpp_dout(dpp, 4) << log_message << ' ' << i->obj
+        << " with " << cpp_strerror(r) << dendl;
+
+    i = std::find_if(std::next(i), completed.end(), is_error);
+  }
+  return r;
+}
+
 int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
                                              const RGWBucketInfo& bucket_info,
                                              const rgw::bucket_index_layout_generation& idx_layout,
@@ -328,37 +355,76 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
                                              map<int, string> *bucket_instance_ids,
                                              optional_yield y)
 {
-  librados::IoCtx index_pool;
+  librados::IoCtx ioctx;
   map<int, string> oids;
-  int r = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &oids, bucket_instance_ids);
-  if (r < 0)
-    return r;
+  int ret = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &ioctx, &oids, bucket_instance_ids);
+  if (ret < 0)
+    return ret;
 
-  map<int, struct rgw_cls_list_ret> list_results;
-  for (auto& iter : oids) {
-    list_results.emplace(iter.first, rgw_cls_list_ret());
+  std::vector<bufferlist> buffers;
+  buffers.resize(oids.size());
+
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  constexpr auto is_error = [] (int r) { return r < 0; };
+  constexpr std::string_view error_message =
+      "failed to read header for index object";
+
+  auto bl = buffers.begin();
+  for (auto oid = oids.cbegin();
+       bl != buffers.end() && oid != oids.cend();
+       ++bl, ++oid) {
+    librados::ObjectReadOperation op;
+    cls_rgw_get_dir_header(op, *bl);
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid->second;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    ret = check_for_errors(c, is_error, dpp, error_message);
+    if (ret < 0) {
+      break;
+    }
   }
 
-  r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results,
-			      cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0)
-    return r;
-
-  map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
-  for(; iter != list_results.end(); ++iter) {
-    headers->push_back(std::move(iter->second.dir.header));
-  }
-  return 0;
-}
-
-int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
-{
-  librados::IoCtx index_pool;
-
-  string dir_oid = dir_oid_prefix;
-  int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
+  auto c = aio->drain();
+  int r = check_for_errors(c, is_error, dpp, error_message);
   if (r < 0) {
     return r;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  headers->resize(buffers.size());
+  bl = buffers.begin();
+  for (auto header = headers->begin();
+       header != headers->end() && bl != buffers.end();
+       ++header, ++bl) {
+    ret = cls_rgw_get_dir_header_decode(*bl, *header);
+    if (ret < 0) {
+      ldpp_dout(dpp, 4) << "failed to decode index shard header" << dendl;
+      return ret;
+    }
+  }
+
+  return ret;
+}
+
+int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,
+                                        optional_yield y,
+                                        const RGWBucketInfo& bucket_info,
+                                        const rgw::bucket_index_layout_generation& idx_layout)
+{
+  librados::IoCtx ioctx;
+
+  string dir_oid = dir_oid_prefix;
+  int ret = open_bucket_index_pool(dpp, bucket_info, &ioctx);
+  if (ret < 0) {
+    return ret;
   }
 
   dir_oid.append(bucket_info.bucket.bucket_id);
@@ -366,19 +432,74 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,RGWBucketI
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
-  return CLSRGWIssueBucketIndexInit(index_pool,
-				    bucket_objs,
-				    cct->_conf->rgw_bucket_index_max_aio)();
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  // ignore EEXIST errors from exclusive create
+  constexpr auto is_error = [] (int r) { return r < 0 && r != -EEXIST; };
+  constexpr std::string_view error_message =
+      "failed to init index object";
+
+  // track all completions so we can roll back on error
+  rgw::AioResultList completed;
+
+  for (const auto& [_, oid] : bucket_objs) {
+    librados::ObjectWriteOperation op;
+    op.create(true);
+    cls_rgw_bucket_init_index(op);
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    ret = check_for_errors(c, is_error, dpp, error_message);
+
+    completed.splice(completed.end(), c);
+
+    if (ret < 0) {
+      break;
+    }
+  }
+
+  auto c = aio->drain();
+  if (ret == 0) {
+    // check for errors from drain()
+    ret = check_for_errors(c, is_error, dpp, error_message);
+    if (ret == 0) {
+      return 0;
+    }
+  }
+  completed.splice(completed.end(), c);
+
+  // on error, delete any objects that were successfully created
+  for (const rgw::AioResult& e : completed) {
+    if (e.result < 0) {
+      continue;
+    }
+
+    librados::ObjectWriteOperation op;
+    op.remove();
+
+    std::ignore = aio->get(e.obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+  }
+  std::ignore = aio->drain();
+
+  return ret;
 }
 
-int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
+int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp,
+                                         optional_yield y,
+                                         const RGWBucketInfo& bucket_info,
+                                         const rgw::bucket_index_layout_generation& idx_layout)
 {
-  librados::IoCtx index_pool;
+  librados::IoCtx ioctx;
 
   std::string dir_oid = dir_oid_prefix;
-  int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
-  if (r < 0) {
-    return r;
+  int ret = open_bucket_index_pool(dpp, bucket_info, &ioctx);
+  if (ret < 0) {
+    return ret;
   }
 
   dir_oid.append(bucket_info.bucket.bucket_id);
@@ -387,9 +508,36 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucke
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards,
                            idx_layout.gen, &bucket_objs);
 
-  return CLSRGWIssueBucketIndexClean(index_pool,
-				     bucket_objs,
-				     cct->_conf->rgw_bucket_index_max_aio)();
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  // ignore ENOENT errors
+  constexpr auto is_error = [] (int r) { return r < 0 && r != -ENOENT; };
+  constexpr std::string_view error_message =
+      "failed to remove index object";
+
+  for (const auto& [_, oid] : bucket_objs) {
+    librados::ObjectWriteOperation op;
+    op.remove();
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    int r = check_for_errors(c, is_error, dpp, error_message);
+    if (ret == 0) {
+      ret = r;
+    }
+  }
+
+  auto c = aio->drain();
+  int r = check_for_errors(c, is_error, dpp, error_message);
+  if (r < 0) {
+    return r;
+  }
+  return ret;
 }
 
 int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
@@ -496,4 +644,154 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
   }
 
   return 0;
+}
+
+int RGWSI_BucketIndex_RADOS::set_tag_timeout(const DoutPrefixProvider* dpp,
+                                             optional_yield y,
+                                             const RGWBucketInfo& bucket_info,
+                                             const rgw::bucket_index_layout_generation& layout,
+                                             uint64_t timeout)
+{
+  librados::IoCtx ioctx;
+  map<int, string> bucket_objs;
+  int ret = open_bucket_index(dpp, bucket_info, std::nullopt, layout, &ioctx, &bucket_objs, nullptr);
+  if (ret < 0)
+    return ret;
+
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+  constexpr uint64_t id = 0; // ids unused
+
+  constexpr auto is_error = [] (int r) { return r < 0; };
+  constexpr std::string_view error_message =
+      "failed to set tag timeout for index object";
+
+  for (const auto& [_, oid] : bucket_objs) {
+    librados::ObjectWriteOperation op;
+    cls_rgw_bucket_set_tag_timeout(op, timeout);
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid;
+
+    auto c = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    int r = check_for_errors(c, is_error, dpp, error_message);
+    if (ret == 0) {
+      ret = r;
+    }
+  }
+
+  auto c = aio->drain();
+  int r = check_for_errors(c, is_error, dpp, error_message);
+  if (r < 0) {
+    return r;
+  }
+  return ret;
+}
+
+// transfer matching entries from one list to another
+static void transfer_if(rgw::AioResultList& from,
+                        rgw::AioResultList& to,
+                        std::invocable<int> auto pred)
+{
+  auto is_error = [&pred] (const rgw::AioResult& e) { return pred(e.result); };
+  auto i = std::find_if(from.begin(), from.end(), is_error);
+  while (i != from.end()) {
+    auto& entry = *i;
+    auto next = from.erase(i);
+    to.push_back(entry);
+    i = std::find_if(next, from.end(), is_error);
+  }
+}
+
+int RGWSI_BucketIndex_RADOS::list_objects(const DoutPrefixProvider* dpp,
+                                          optional_yield y,
+                                          librados::IoCtx& ioctx,
+                                          const std::map<int, std::string>& shard_oids,
+                                          const cls_rgw_obj_key& start_obj,
+                                          const std::string& filter_prefix,
+                                          const std::string& delimiter,
+                                          uint32_t num_entries,
+                                          bool list_versions,
+                                          std::map<int, rgw_cls_list_ret>& list_results)
+{
+  int ret = 0;
+
+  // issue up to max_aio requests in parallel
+  auto aio = rgw::make_throttle(cct->_conf->rgw_bucket_index_max_aio, y);
+  constexpr uint64_t cost = 1; // 1 throttle unit per request
+
+  constexpr auto is_retry = [] (int r) { return r == RGWBIAdvanceAndRetryError; };
+  constexpr auto is_error = [is_retry] (int r) { return r < 0 && !is_retry(r); };
+  constexpr std::string_view error_message = "failed to list index object";
+
+  // track requests that fail with RGWBIAdvanceAndRetryError for retry
+  rgw::AioResultList retries;
+
+  // issue one round of requests to each shard object
+  for (const auto& [shard, oid] : shard_oids) {
+    const uint64_t id = shard; // associate each request with its shard
+    auto& result = list_results[id];
+    // if we have results from a previous call, resume from its marker
+    const cls_rgw_obj_key& marker =
+        !result.marker.empty() ? result.marker : start_obj;
+
+    librados::ObjectReadOperation op;
+    cls_rgw_bucket_list_op(op, marker, filter_prefix, delimiter,
+                           num_entries, list_versions, &result);
+
+    rgw_raw_obj obj; // obj.pool is empty and unused
+    obj.oid = oid;
+
+    auto completions = aio->get(obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, id);
+    ret = check_for_errors(completions, is_error, dpp, error_message);
+    if (ret < 0) {
+      break;
+    }
+    transfer_if(completions, retries, is_retry);
+  }
+
+  // issue retries and poll for completions until done or error
+  while (ret == 0) {
+    // loop over retries, erasing as we go. more may be appended in the meantime
+    using deleter = std::default_delete<rgw::AioResultEntry>;
+    for (auto i = retries.begin(); i != retries.end();
+         i = retries.erase_and_dispose(i, deleter{})) {
+      // resume listing from the last marker received
+      auto& result = list_results[i->id];
+      const cls_rgw_obj_key& marker = result.marker;
+
+      librados::ObjectReadOperation op;
+      cls_rgw_bucket_list_op(op, marker, filter_prefix, delimiter,
+                             num_entries, list_versions, &result);
+
+      auto completions = aio->get(i->obj, rgw::Aio::librados_op(ioctx, std::move(op), y), cost, i->id);
+      ret = check_for_errors(completions, is_error, dpp, error_message);
+      if (ret < 0) {
+        break; // break twice
+      }
+      transfer_if(completions, retries, is_retry);
+    }
+    if (ret < 0) {
+      break;
+    }
+
+    // wait for the next completion
+    auto c = aio->wait();
+    if (c.empty()) {
+      break; // done!
+    }
+    ret = check_for_errors(c, is_error, dpp, error_message);
+    if (ret < 0) {
+      break;
+    }
+    transfer_if(c, retries, is_retry);
+  }
+
+  auto c = aio->drain();
+  int r = check_for_errors(c, is_error, dpp, error_message);
+  if (r < 0) {
+    return r;
+  }
+  return ret;
 }

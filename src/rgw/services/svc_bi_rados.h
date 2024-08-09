@@ -22,6 +22,7 @@
 
 #include "svc_bi.h"
 #include "svc_tier_rados.h"
+#include "cls/rgw/cls_rgw_ops.h"
 
 struct rgw_bucket_dir_header;
 
@@ -65,14 +66,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                               const rgw::bucket_index_normal_layout& normal,
                               uint64_t gen_id, const std::string& obj_key,
                               std::string* bucket_obj, int* shard_id);
-
-  int cls_bucket_head(const DoutPrefixProvider *dpp,
-		      const RGWBucketInfo& bucket_info,
-                      const rgw::bucket_index_layout_generation& idx_layout,
-                      int shard_id,
-                      std::vector<rgw_bucket_dir_header> *headers,
-                      std::map<int, std::string> *bucket_instance_ids,
-                      optional_yield y);
 
 public:
 
@@ -121,10 +114,22 @@ public:
     return bucket_shard_index(sharding_key, num_shards);
   }
 
-  int init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,const rgw::bucket_index_layout_generation& idx_layout) override;
-  int clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout) override;
+  int init_index(const DoutPrefixProvider *dpp, optional_yield y,
+                 const RGWBucketInfo& bucket_info,
+                 const rgw::bucket_index_layout_generation& idx_layout) override;
+  int clean_index(const DoutPrefixProvider *dpp, optional_yield y,
+                  const RGWBucketInfo& bucket_info,
+                  const rgw::bucket_index_layout_generation& idx_layout) override;
 
   /* RADOS specific */
+
+  int cls_bucket_head(const DoutPrefixProvider *dpp,
+		      const RGWBucketInfo& bucket_info,
+                      const rgw::bucket_index_layout_generation& idx_layout,
+                      int shard_id,
+                      std::vector<rgw_bucket_dir_header> *headers,
+                      std::map<int, std::string> *bucket_instance_ids,
+                      optional_yield y);
 
   int read_stats(const DoutPrefixProvider *dpp,
                  const RGWBucketInfo& bucket_info,
@@ -161,4 +166,20 @@ public:
                         librados::IoCtx* index_pool,
                         std::map<int, std::string> *bucket_objs,
                         std::map<int, std::string> *bucket_instance_ids);
+
+  int set_tag_timeout(const DoutPrefixProvider* dpp, optional_yield y,
+                      const RGWBucketInfo& bucket_info,
+                      const rgw::bucket_index_layout_generation& idx_layout,
+                      uint64_t timeout);
+
+  int list_objects(const DoutPrefixProvider* dpp,
+                   optional_yield y,
+                   librados::IoCtx& ioctx,
+                   const std::map<int, std::string>& shard_oids,
+                   const cls_rgw_obj_key& start_obj,
+                   const std::string& filter_prefix,
+                   const std::string& delimiter,
+                   uint32_t num_entries,
+                   bool list_versions,
+                   std::map<int, rgw_cls_list_ret>& list_results);
 };

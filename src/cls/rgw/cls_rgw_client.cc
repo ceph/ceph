@@ -186,69 +186,20 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   return true;
 }
 
-// note: currently only called by testing code
 void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
 {
   bufferlist in;
   o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX, in);
 }
 
-static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
-				       const int shard_id,
-				       const string& oid,
-				       BucketIndexAioManager *manager) {
-  bufferlist in;
-  librados::ObjectWriteOperation op;
-  op.create(true);
-  op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX, in);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-static bool issue_bucket_index_clean_op(librados::IoCtx& io_ctx,
-					const int shard_id,
-					const string& oid,
-					BucketIndexAioManager *manager) {
-  bufferlist in;
-  librados::ObjectWriteOperation op;
-  op.remove();
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
-					    const int shard_id,
-					    const string& oid,
-					    uint64_t timeout,
-					    BucketIndexAioManager *manager) {
-  bufferlist in;
+void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& op, uint64_t timeout)
+{
   rgw_cls_tag_timeout_op call;
   call.tag_timeout = timeout;
+
+  bufferlist in;
   encode(call, in);
-  ObjectWriteOperation op;
   op.exec(RGW_CLASS, RGW_BUCKET_SET_TAG_TIMEOUT, in);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketIndexInit::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bucket_index_init_op(io_ctx, shard_id, oid, &manager);
-}
-
-void CLSRGWIssueBucketIndexInit::cleanup()
-{
-  // Do best effort removal
-  for (auto citer = objs_container.begin(); citer != iter; ++citer) {
-    io_ctx.remove(citer->second);
-  }
-}
-
-int CLSRGWIssueBucketIndexClean::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bucket_index_clean_op(io_ctx, shard_id, oid, &manager);
-}
-
-int CLSRGWIssueSetTagTimeout::issue_op(const int shard_id, const string& oid)
-{
-  return issue_bucket_set_tag_timeout_op(io_ctx, shard_id, oid, tag_timeout, &manager);
 }
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
@@ -329,54 +280,6 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
   op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
 	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
 }
-
-static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
-				 const int shard_id,
-				 const std::string& oid,
-				 const cls_rgw_obj_key& start_obj,
-				 const std::string& filter_prefix,
-				 const std::string& delimiter,
-				 uint32_t num_entries,
-				 bool list_versions,
-				 BucketIndexAioManager *manager,
-				 rgw_cls_list_ret *pdata)
-{
-  librados::ObjectReadOperation op;
-  cls_rgw_bucket_list_op(op,
-			 start_obj, filter_prefix, delimiter,
-                         num_entries, list_versions, pdata);
-  return manager->aio_operate(io_ctx, shard_id, oid, &op);
-}
-
-int CLSRGWIssueBucketList::issue_op(const int shard_id, const string& oid)
-{
-  // set the marker depending on whether we've already queried this
-  // shard and gotten a RGWBIAdvanceAndRetryError (defined
-  // constant) return value; if we have use the marker in the return
-  // to advance the search, otherwise use the marker passed in by the
-  // caller
-  cls_rgw_obj_key marker;
-  auto iter = result.find(shard_id);
-  if (iter != result.end()) {
-    marker = iter->second.marker;
-  } else {
-    marker = start_obj;
-  }
-
-  return issue_bucket_list_op(io_ctx, shard_id, oid,
-			      marker, filter_prefix, delimiter,
-			      num_entries, list_versions, &manager,
-			      &result[shard_id]);
-}
-
-
-void CLSRGWIssueBucketList::reset_container(std::map<int, std::string>& objs)
-{
-  objs_container.swap(objs);
-  iter = objs_container.begin();
-  objs.clear();
-}
-
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
 {
@@ -717,16 +620,6 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
   o.exec(RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates);
 }
 
-int CLSRGWIssueGetDirHeader::issue_op(const int shard_id, const string& oid)
-{
-  cls_rgw_obj_key empty_key;
-  string empty_prefix;
-  string empty_delimiter;
-  return issue_bucket_list_op(io_ctx, shard_id, oid,
-			      empty_key, empty_prefix, empty_delimiter,
-			      0, false, &manager, &result[shard_id]);
-}
-
 static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager)
 {
   bufferlist in;
@@ -751,6 +644,24 @@ static bool issue_bi_log_stop(librados::IoCtx& io_ctx, const int shard_id, const
 int CLSRGWIssueBucketBILogStop::issue_op(const int shard_id, const string& oid)
 {
   return issue_bi_log_stop(io_ctx, shard_id, oid, &manager);
+}
+
+void cls_rgw_get_dir_header(librados::ObjectReadOperation& op,
+                            bufferlist& out)
+{
+  op.omap_get_header(&out, nullptr);
+}
+
+int cls_rgw_get_dir_header_decode(const bufferlist& out,
+                                  rgw_bucket_dir_header& header)
+{
+  try {
+    auto p = out.cbegin();
+    decode(header, p);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+  return 0;
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
