@@ -317,6 +317,147 @@ public:
     });
   }
 
+  alloc_extents_ret clone_mappings(
+    Transaction &t,
+    laddr_t hint,
+    const lba_pin_list_t &pins,
+    bool inc_ref) final
+  {
+    LOG_PREFIX(BtreeLBAManager::clone_mappings);
+    SUBTRACET(seastore_lba, "laddr: {}, {} pins",
+      t, hint, pins.size());
+    std::vector<alloc_mapping_info_t> alloc_infos;
+    std::list<std::pair<laddr_t, extent_len_t>> ranges;
+    laddr_t start = L_ADDR_NULL;
+    extent_len_t len = 0;
+    laddr_t offset = 0; // the laddr from which to pad
+    for (auto &pin : pins) {
+#ifndef NDEBUG
+      if (!offset) {
+	offset = pin->get_key();
+      }
+      assert(offset == pin->get_key());
+      offset += pin->get_length();
+#endif
+      alloc_infos.emplace_back(alloc_mapping_info_t{
+	pin->get_length(),
+	(pladdr_t)(pin->is_indirect()
+	  ? (pladdr_t)pin->get_intermediate_key()
+	  : (pin->get_val().is_zero()
+	      ? (pladdr_t)P_ADDR_ZERO
+	      : (pladdr_t)pin->get_key())),
+	(uint32_t)0,
+	(LogicalCachedExtent*)nullptr});
+
+      if (!pin->is_indirect() && pin->get_val().is_zero()) {
+	continue;
+      }
+      // calc the laddr ranges that are to increase refcount
+      if (pin->is_indirect() ||
+	  !pin->get_val().is_zero()) {
+	auto pin_start = pin->is_indirect() ?
+	  pin->get_intermediate_base() :
+	  pin->get_key();
+	auto pin_length = pin->is_indirect() ?
+	  pin->get_intermediate_length() :
+	  pin->get_length();
+	if (start == L_ADDR_NULL) {
+	  assert(len == 0);
+	  start = pin_start;
+	  len = pin_length;
+	} else {
+	  if (start + len == pin_start) {
+	    len += pin_length;
+	  } else {
+	    ranges.emplace_back(start, len);
+	    start = pin_start;
+	    len = pin_length;
+	  }
+	}
+      }
+    }
+    if (start != L_ADDR_NULL) {
+      assert(len != 0);
+      ranges.emplace_back(start, len);
+    }
+
+    return seastar::do_with(
+      std::move(alloc_infos),
+      std::vector<LBAMappingRef>(),
+      std::move(ranges),
+      [&t, hint, this, inc_ref, &pins]
+      (auto &alloc_infos, auto &ret, auto &ranges) {
+      return _alloc_extents(
+	t,
+	hint,
+	alloc_infos,
+	EXTENT_DEFAULT_REF_COUNT
+      ).si_then([this, &ret, &t, &pins, &ranges, inc_ref](auto mappings) {
+	auto it = pins.begin();
+	for (auto &mapping : mappings) {
+	  if (!mapping->is_indirect()) {
+	    it++;
+	    continue;
+	  }
+	  auto &pin = *it;
+	  auto bmapping = pin->duplicate();
+	  auto &base_mapping = static_cast<BtreeLBAMapping&>(*bmapping);
+	  if (base_mapping.is_indirect()) {
+	    assert(mapping->get_intermediate_key() >=
+	      base_mapping.get_intermediate_base());
+	    assert(
+	      (mapping->get_intermediate_length()
+		+ mapping->get_intermediate_key()) <=
+	      (base_mapping.get_intermediate_base()
+		+ base_mapping.get_intermediate_length()));
+	    base_mapping.adjust_mutable_indirect_attrs(
+	      mapping->get_key(),
+	      mapping->get_length(),
+	      mapping->get_intermediate_key());
+	  } else {
+	    assert(mapping->get_intermediate_key() >=
+	      base_mapping.get_key());
+	    assert(
+	      (mapping->get_intermediate_length()
+		+ mapping->get_intermediate_key()) <=
+	      (base_mapping.get_key()
+		+ base_mapping.get_length()));
+	    base_mapping.make_indirect(
+	      mapping->get_key(),
+	      mapping->get_length(),
+	      mapping->get_intermediate_key());
+	  }
+	  ret.emplace_back(std::move(bmapping));
+	  it++;
+	}
+	ceph_assert(it == pins.end());
+	if (inc_ref) {
+	  return trans_intr::do_for_each(
+	    ranges,
+	    [&t, this](auto &range) {
+	    return _update_mappings(
+	      t,
+	      range,
+	      [range](const lba_map_val_t &in) {
+	      lba_map_val_t out = in;
+	      assert(in.len <= range.second);
+	      out.refcount += 1;
+	      return out;
+	    });
+	  });
+	}
+	return _update_mappings_iertr::now();
+      }).si_then([&ret] {
+	return seastar::make_ready_future<
+	  std::vector<LBAMappingRef>>(
+	    std::move(ret));
+      }).handle_error_interruptible(
+	crimson::ct_error::enoent::assert_failure{"unexpected enoent"},
+	alloc_extent_iertr::pass_further{}
+      );
+    });
+  }
+
   alloc_extent_ret clone_mapping(
     Transaction &t,
     laddr_t laddr,
@@ -634,6 +775,13 @@ private:
     laddr_t addr,
     update_func_t &&f,
     LogicalCachedExtent*);
+
+  using _update_mappings_iertr = _update_mapping_iertr;
+  using _update_mappings_ret = _update_mapping_iertr::future<>;
+  _update_mappings_ret _update_mappings(
+    Transaction &t,
+    std::pair<laddr_t, extent_len_t> range,
+    update_func_t &&f);
 
   alloc_extents_ret _alloc_extents(
     Transaction &t,
