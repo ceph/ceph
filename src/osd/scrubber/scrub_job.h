@@ -47,6 +47,7 @@ struct scrub_schedule_t {
 struct sched_params_t {
   utime_t proposed_time{};
   must_scrub_t is_must{must_scrub_t::not_mandatory};
+  bool observes_max_scrubs{true};
 };
 
 /**
@@ -143,6 +144,13 @@ class ScrubJob {
   CephContext* cct;
 
   bool high_priority{false};
+
+  /**
+   * If cleared: the scrub can be initiated even if the local OSD has reached
+   * osd_max_scrubs. Only 'false' for those high-priority scrubs that were
+   * operator initiated.
+   */
+  bool observes_max_concurrency{true};
 
   ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
 
