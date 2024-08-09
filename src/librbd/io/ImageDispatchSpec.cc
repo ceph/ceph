@@ -19,6 +19,7 @@ void ImageDispatchSpec::C_Dispatcher::complete(int r) {
       image_dispatch_spec->dispatch_layer - 1);
     [[fallthrough]];
   case DISPATCH_RESULT_CONTINUE:
+  case DISPATCH_RESULT_REFRESH:
     if (r < 0) {
       // bubble dispatch failure through AioCompletion
       image_dispatch_spec->dispatch_result = DISPATCH_RESULT_COMPLETE;
@@ -32,12 +33,14 @@ void ImageDispatchSpec::C_Dispatcher::complete(int r) {
     finish(r);
     break;
   case DISPATCH_RESULT_INVALID:
+  case DISPATCH_RESULT_INIT:
     ceph_abort();
     break;
   }
 }
 
 void ImageDispatchSpec::C_Dispatcher::finish(int r) {
+  image_dispatch_spec->image_dispatcher->finished(this->image_dispatch_spec);
   delete image_dispatch_spec;
 }
 
