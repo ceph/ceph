@@ -416,7 +416,7 @@ void ImageMap<I>::update_images_added(
     const std::string &mirror_uuid,
     const MirrorEntities &entities) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
-          << "entities=[" << entities << "]" << dendl;
+          << "entities={ " << entities << " }" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   for (auto &entity : entities) {
@@ -435,7 +435,7 @@ void ImageMap<I>::update_images_removed(
     const std::string &mirror_uuid,
     const MirrorEntities &entities) {
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
-          << "entities=[" << entities << "]" << dendl;
+          << "entities={ " << entities << " }" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   Updates to_remove;
