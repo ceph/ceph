@@ -520,6 +520,7 @@ int MultipartObjectProcessor::complete(
 
   RGWRados::Object::Write obj_op(&op_target);
   obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.manifest = &manifest;
   obj_op.meta.mtime = mtime;
   obj_op.meta.owner = owner;
   obj_op.meta.bucket_owner = bucket_info.owner;
