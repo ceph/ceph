@@ -49,6 +49,7 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 
 //forward declaration
 struct ECSubWrite;
+struct ECSubRead;
 struct PGLog;
 
 // ECListener -- an interface decoupling the pipelines from
@@ -231,6 +232,12 @@ struct ECCommon {
     ECSubWrite &op,
     const ZTracer::Trace &trace,
     ECListener& eclistener
+    ) = 0;
+
+  virtual void handle_sub_read_n_reply(
+    pg_shard_t from,
+    ECSubRead &op,
+    const ZTracer::Trace &trace
     ) = 0;
 
   virtual void objects_read_and_reconstruct(
@@ -426,6 +433,7 @@ struct ECCommon {
     const ECUtil::stripe_info_t& sinfo;
     // TODO: lay an interface down here
     ECListener* parent;
+    ECCommon& ec_backend;
 
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -435,11 +443,13 @@ struct ECCommon {
     ReadPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
-                ECListener* parent)
+                ECListener* parent,
+		ECCommon& ec_backend)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
-        parent(parent) {
+        parent(parent),
+        ec_backend(ec_backend) {
     }
 
     /**
@@ -493,6 +503,14 @@ struct ECCommon {
       ); ///< @return error code, 0 on success
 
     void schedule_recovery_work();
+
+    void handle_sub_read_n_reply(
+      pg_shard_t from,
+      ECSubRead &op,
+      const ZTracer::Trace &trace
+    ) {
+      ec_backend.handle_sub_read_n_reply(from, op, trace);
+    }
   };
 
   /**
