@@ -32,12 +32,14 @@ void ImageDispatchSpec::C_Dispatcher::complete(int r) {
     finish(r);
     break;
   case DISPATCH_RESULT_INVALID:
+  case DISPATCH_RESULT_INIT:
     ceph_abort();
     break;
   }
 }
 
 void ImageDispatchSpec::C_Dispatcher::finish(int r) {
+  image_dispatch_spec->image_dispatcher->finished(this->image_dispatch_spec);
   delete image_dispatch_spec;
 }
 
