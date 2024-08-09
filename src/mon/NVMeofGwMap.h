@@ -138,6 +138,14 @@ public:
    * @param [out] propose_pending set to true if map is mutated
    */
   void update_active_timers(bool &propose_pending);
+
+  /**
+   * handle_abandoned_ana_groups
+   *
+   * Check for and reassign any unhandled ana groups.
+   *
+   * @param [out] propose_pending set to true if map is mutated
+   */
   void handle_abandoned_ana_groups(bool &propose_pending);
   void handle_removed_subsystems(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,

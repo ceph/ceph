@@ -248,21 +248,14 @@ void NVMeofGwMap::process_gw_map_ka(
 void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
 {
   propose = false;
-  for (auto& group_state: created_gws) {
-    auto& group_key = group_state.first;
-    auto& gws_states = group_state.second;
-
-    for (auto& gw_state : gws_states) { // loop for GWs inside nqn group
-      auto& gw_id = gw_state.first;
-      NvmeGwMonState& state = gw_state.second;
-
+  for (auto& [group_key, gws_states]: created_gws) {
+    for (auto& [gw_id, state]: gws_states) { // loop for GWs inside nqn group
       // 1. Failover missed : is there is a GW in unavailable state?
       // if yes, is its ANA group handled by some other GW?
       if (state.availability == gw_availability_t::GW_UNAVAILABLE &&
 	  state.ana_grp_id != REDUNDANT_GW_ANA_GROUP_ID) {
 	auto found_gw_for_ana_group = false;
-	for (auto& gw_state2 : gws_states) {
-	  NvmeGwMonState& state2 = gw_state2.second;
+	for (auto& [gw_id2, state2]: gws_states) {
 	  if (state2.availability == gw_availability_t::GW_AVAILABLE &&
 	      (state2.sm_state[state.ana_grp_id] ==
 	       gw_states_per_group_t::GW_ACTIVE_STATE)) {
@@ -274,7 +267,7 @@ void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
 	if (found_gw_for_ana_group == false) {
 	  dout(10) << "Was not found the GW " << " that handles ANA grp "
 		   << (int)state.ana_grp_id << " find candidate "<< dendl;
-	  for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
+	  for (auto& state_itr: state.sm_state) {
 	    find_failover_candidate(gw_id, group_key, state_itr.first, propose);
 	  }
 	}
