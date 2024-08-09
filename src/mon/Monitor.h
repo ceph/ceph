@@ -99,12 +99,32 @@ enum {
   l_mon_election_call,
   l_mon_election_win,
   l_mon_election_lose,
+  l_mon_backup_running,
+  l_mon_backup_started,
+  l_mon_backup_success,
+  l_mon_backup_failed,
+  l_mon_backup_duration,
+  l_mon_backup_last_success,
+  l_mon_backup_last_success_id,
+  l_mon_backup_last_failed,
+  l_mon_backup_last_size,
+  l_mon_backup_last_files,
+  l_mon_backup_cleanup_started,
+  l_mon_backup_cleanup_running,
+  l_mon_backup_cleanup_success,
+  l_mon_backup_cleanup_failed,
+  l_mon_backup_cleanup_size,
+  l_mon_backup_cleanup_kept,
+  l_mon_backup_cleanup_duration,
+  l_mon_backup_cleanup_freed,
+  l_mon_backup_cleanup_deleted,
   l_mon_last,
 };
 
 class PaxosService;
 
 class AdminSocketHook;
+class MonitorBackupManager;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -1036,6 +1056,9 @@ private:
 
   OpTracker op_tracker;
 
+  MonitorBackupManager *backup_manager;
+  bool mon_backup_requested;
+
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
@@ -1080,6 +1103,14 @@ private:
 		       ceph::Formatter *f,
 		       std::ostream& err,
 		       std::ostream& out);
+
+  // Notify monitor that it should create a new database backup
+  void should_backup() {
+    mon_backup_requested = true;
+  }
+  // Execute mon database backup
+  int backup(bool full = false);
+  int backup_cleanup();
 
 private:
   // don't allow copying
