@@ -1755,7 +1755,7 @@ static constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
 static constexpr uint32_t MATCH_POLICY_ARN = 0x04;
 static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 
-extern bool match_policy(std::string_view pattern, std::string_view input,
+extern bool match_policy(const std::string& pattern, const std::string& input,
                          uint32_t flag);
 
 extern std::string camelcase_dash_http_attr(const std::string& orig, bool convert2dash = true);
