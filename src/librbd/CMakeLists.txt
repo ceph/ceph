@@ -77,6 +77,7 @@ set(librbd_internal_srcs
   exclusive_lock/PostAcquireRequest.cc
   exclusive_lock/PreReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
+  group/ListSnapshotsRequest.cc
   image/AttachChildRequest.cc
   image/AttachParentRequest.cc
   image/CloneRequest.cc

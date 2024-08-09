@@ -2757,28 +2757,65 @@ int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
 
   return 0;
 }
+
+void group_snap_list_start(librados::ObjectReadOperation *op,
+                           const cls::rbd::GroupSnapshot &start,
+                           uint64_t max_return)
+{
+  bufferlist bl;
+  encode(start, bl);
+  encode(max_return, bl);
+
+  op->exec("rbd", "group_snap_list", bl);
+}
+
+int group_snap_list_finish(bufferlist::const_iterator *iter,
+                           std::vector<cls::rbd::GroupSnapshot> *snapshots)
+{
+  try {
+    decode(*snapshots, *iter);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
                     const cls::rbd::GroupSnapshot &start,
                     uint64_t max_return,
                     std::vector<cls::rbd::GroupSnapshot> *snapshots)
 {
-  using ceph::encode;
-  using ceph::decode;
-  bufferlist inbl, outbl;
-  encode(start, inbl);
-  encode(max_return, inbl);
+  librados::ObjectReadOperation op;
+  group_snap_list_start(&op, start, max_return);
 
-  int r = ioctx->exec(oid, "rbd", "group_snap_list", inbl, outbl);
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
   if (r < 0) {
     return r;
   }
-  auto iter = outbl.cbegin();
+
+  auto it = out_bl.cbegin();
+  return group_snap_list_finish(&it, snapshots);
+}
+
+void group_snap_list_order_start(librados::ObjectReadOperation *op,
+                                 const std::string &start,
+                                 uint64_t max_return)
+{
+  bufferlist bl;
+  encode(start, bl);
+  encode(max_return, bl);
+  op->exec("rbd", "group_snap_list_order", bl);
+}
+
+int group_snap_list_order_finish(bufferlist::const_iterator *iter,
+                                 std::map<std::string, uint64_t> *snap_order)
+{
   try {
-    decode(*snapshots, iter);
+    decode(*snap_order, *iter);
   } catch (const ceph::buffer::error &err) {
     return -EBADMSG;
   }
-
   return 0;
 }
 
@@ -2786,24 +2823,17 @@ int group_snap_list_order(librados::IoCtx *ioctx, const std::string &oid,
                           const std::string &start, uint64_t max_return,
                           std::map<std::string, uint64_t> *snap_order)
 {
-  using ceph::encode;
-  using ceph::decode;
-  bufferlist inbl, outbl;
-  encode(start, inbl);
-  encode(max_return, inbl);
+  librados::ObjectReadOperation op;
+  group_snap_list_order_start(&op, start, max_return);
 
-  int r = ioctx->exec(oid, "rbd", "group_snap_list_order", inbl, outbl);
+  bufferlist out_bl;
+  int r = ioctx->operate(oid, &op, &out_bl);
   if (r < 0) {
     return r;
   }
-  auto iter = outbl.cbegin();
-  try {
-    decode(*snap_order, iter);
-  } catch (const ceph::buffer::error &err) {
-    return -EBADMSG;
-  }
 
-  return 0;
+  auto it = out_bl.cbegin();
+  return group_snap_list_order_finish(&it, snap_order);
 }
 
 // rbd_trash functions
