@@ -2892,3 +2892,71 @@ def test_sync_single_bucket_to_multiple():
     remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
     remove_sync_policy_group(c1, "sync-group")
     return
+
+@attr('copy_object')
+def test_copy_object_same_bucket():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+
+    objname = 'dummy'
+
+    # upload a dummy object and wait for sync.
+    k = new_key(primary, bucket, objname)
+    k.set_contents_from_string('foo')
+    zonegroup_meta_checkpoint(zonegroup)
+
+    zonegroup_data_checkpoint(zonegroup_conns)
+    log.debug('created object=%s', objname)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # copy object on primary zone
+    primary.s3_client.copy_object(Bucket=bucket.name,
+        CopySource=bucket.name + '/'+ objname,
+        Key= objname + '-copy1')
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # copy object on secondary zone
+    secondary.s3_client.copy_object(Bucket=bucket.name,
+        Key= objname + '-copy2', 
+        CopySource=bucket.name + '/'+ objname)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+@attr('copy_object')
+def test_copy_object_different_bucket():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    source_bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', source_bucket.name)
+
+    objname = 'dummy'
+
+    # upload a dummy object and wait for sync.
+    k = new_key(primary, source_bucket, objname)
+    k.set_contents_from_string('foo')
+    zonegroup_meta_checkpoint(zonegroup)
+    
+    zonegroup_bucket_checkpoint(zonegroup_conns, source_bucket.name)
+    
+    # create destination bucket
+    dest_bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', dest_bucket.name)
+    
+    zonegroup_meta_checkpoint(zonegroup)
+            
+    # copy object on primary zone
+    primary.s3_client.copy_object(Bucket = dest_bucket.name,
+        Key = objname + '-copy',
+        CopySource = source_bucket.name + '/' + objname)
+    
+    zonegroup_bucket_checkpoint(zonegroup_conns, dest_bucket.name)
