@@ -15,7 +15,7 @@
 #include "include/encoding.h"
 #include <stdint.h>
 
-void encode(QuiesceDbVersion const& v, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceDbVersion const& v, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(v.epoch, bl, features);
@@ -23,7 +23,7 @@ void encode(QuiesceDbVersion const& v, bufferlist& bl, uint64_t features = 0)
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceDbVersion& v, bufferlist::const_iterator& p)
+inline void decode(QuiesceDbVersion& v, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(v.epoch, p);
@@ -31,33 +31,33 @@ void decode(QuiesceDbVersion& v, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceState const & state, bufferlist& bl, uint64_t features=0)
+inline void encode(QuiesceState const & state, bufferlist& bl, uint64_t features=0)
 {
   static_assert(QuiesceState::QS__MAX <= UINT8_MAX);
   uint8_t v = (uint8_t)state;
   encode(v, bl, features);
 }
 
-void decode(QuiesceState & state, bufferlist::const_iterator& p)
+inline void decode(QuiesceState & state, bufferlist::const_iterator& p)
 {
   uint8_t v = 0;
   decode(v, p);
   state = (QuiesceState)v;
 }
 
-void encode(QuiesceTimeInterval const & interval, bufferlist& bl, uint64_t features=0)
+inline void encode(QuiesceTimeInterval const & interval, bufferlist& bl, uint64_t features=0)
 {
   encode(interval.count(), bl, features);
 }
 
-void decode(QuiesceTimeInterval & interval, bufferlist::const_iterator& p)
+inline void decode(QuiesceTimeInterval & interval, bufferlist::const_iterator& p)
 {
   QuiesceClock::rep count;
   decode(count, p);
   interval = QuiesceTimeInterval { count };
 }
 
-void encode(RecordedQuiesceState const& rstate, bufferlist& bl, uint64_t features = 0)
+inline void encode(RecordedQuiesceState const& rstate, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(rstate.state, bl, features);
@@ -65,7 +65,7 @@ void encode(RecordedQuiesceState const& rstate, bufferlist& bl, uint64_t feature
   ENCODE_FINISH(bl);
 }
 
-void decode(RecordedQuiesceState& rstate, bufferlist::const_iterator& p)
+inline void decode(RecordedQuiesceState& rstate, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(rstate.state, p);
@@ -73,7 +73,7 @@ void decode(RecordedQuiesceState& rstate, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceSet::MemberInfo const& member, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceSet::MemberInfo const& member, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(member.rstate, bl, features);
@@ -81,7 +81,7 @@ void encode(QuiesceSet::MemberInfo const& member, bufferlist& bl, uint64_t featu
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceSet::MemberInfo& member, bufferlist::const_iterator& p)
+inline void decode(QuiesceSet::MemberInfo& member, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(member.rstate, p);
@@ -89,7 +89,7 @@ void decode(QuiesceSet::MemberInfo& member, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceSet const& set, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceSet const& set, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(set.version, bl, features);
@@ -100,7 +100,7 @@ void encode(QuiesceSet const& set, bufferlist& bl, uint64_t features = 0)
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceSet& set, bufferlist::const_iterator& p)
+inline void decode(QuiesceSet& set, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(set.version, p);
@@ -111,7 +111,7 @@ void decode(QuiesceSet& set, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceDbRequest const& req, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceDbRequest const& req, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(req.control.raw, bl, features);
@@ -124,7 +124,7 @@ void encode(QuiesceDbRequest const& req, bufferlist& bl, uint64_t features = 0)
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceDbRequest& req, bufferlist::const_iterator& p)
+inline void decode(QuiesceDbRequest& req, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(req.control.raw, p);
@@ -137,7 +137,7 @@ void decode(QuiesceDbRequest& req, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceDbListing const& listing, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceDbListing const& listing, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(listing.db_version, bl, features);
@@ -146,7 +146,7 @@ void encode(QuiesceDbListing const& listing, bufferlist& bl, uint64_t features =
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceDbListing& listing, bufferlist::const_iterator& p)
+inline void decode(QuiesceDbListing& listing, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(listing.db_version, p);
@@ -155,7 +155,7 @@ void decode(QuiesceDbListing& listing, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceDbPeerListing const& listing, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceDbPeerListing const& listing, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(listing.origin, bl, features);
@@ -163,7 +163,7 @@ void encode(QuiesceDbPeerListing const& listing, bufferlist& bl, uint64_t featur
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceDbPeerListing& listing, bufferlist::const_iterator& p)
+inline void decode(QuiesceDbPeerListing& listing, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(listing.origin, p);
@@ -171,7 +171,7 @@ void decode(QuiesceDbPeerListing& listing, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceMap::RootInfo const& root, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceMap::RootInfo const& root, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(root.state, bl, features);
@@ -179,7 +179,7 @@ void encode(QuiesceMap::RootInfo const& root, bufferlist& bl, uint64_t features 
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceMap::RootInfo& root, bufferlist::const_iterator& p)
+inline void decode(QuiesceMap::RootInfo& root, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(root.state, p);
@@ -187,7 +187,7 @@ void decode(QuiesceMap::RootInfo& root, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceMap const& map, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceMap const& map, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(map.db_version, bl, features);
@@ -195,7 +195,7 @@ void encode(QuiesceMap const& map, bufferlist& bl, uint64_t features = 0)
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceMap& map, bufferlist::const_iterator& p)
+inline void decode(QuiesceMap& map, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(map.db_version, p);
@@ -203,7 +203,7 @@ void decode(QuiesceMap& map, bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void encode(QuiesceDbPeerAck const& ack, bufferlist& bl, uint64_t features = 0)
+inline void encode(QuiesceDbPeerAck const& ack, bufferlist& bl, uint64_t features = 0)
 {
   ENCODE_START(1, 1, bl);
   encode(ack.origin, bl, features);
@@ -211,7 +211,7 @@ void encode(QuiesceDbPeerAck const& ack, bufferlist& bl, uint64_t features = 0)
   ENCODE_FINISH(bl);
 }
 
-void decode(QuiesceDbPeerAck& ack, bufferlist::const_iterator& p)
+inline void decode(QuiesceDbPeerAck& ack, bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(ack.origin, p);
