@@ -1939,10 +1939,16 @@ def test_ps_s3_lifecycle_on_master():
 
     # start lifecycle processing
     admin(['lc', 'process'], get_config_cluster())
-    print('wait for 20s for the lifecycle...')
-    time.sleep(20)
-
+    print('polling on bucket object to check if lifecycle deleted them...')
+    max_loops = 100
     no_keys = list(bucket.list())
+    while len(no_keys) > 0 and max_loops > 0:
+        print('waiting 5 secs to check if lifecycle kicked in')
+        time.sleep(5)
+        no_keys = list(bucket.list())
+        max_loops = max_loops - 1
+
+    assert len(no_keys) == 0, "lifecycle didn't delete the objects after 500 seconds"
     wait_for_queue_to_drain(topic_name)
     assert_equal(len(no_keys), 0)
     event_keys = []
