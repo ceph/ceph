@@ -585,7 +585,7 @@ Relevant tracker: https://tracker.ceph.com/issues/55521
   functionality configuration changes are required.  See the current
   documentation (radosgw/vault) for more details.
 
-* Scubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
+* Scrubs are more aggressive in trying to find more simultaneous possible PGs within osd_max_scrubs limitation.
   It is possible that increasing osd_scrub_sleep may be necessary to maintain client responsiveness.
 
 * Version 2 of the cephx authentication protocol (``CEPHX_V2`` feature bit) is
