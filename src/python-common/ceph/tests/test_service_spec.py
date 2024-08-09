@@ -1295,3 +1295,20 @@ def test_extra_args_handling(y, ec_args, ee_args, ec_final_args, ee_final_args):
         for args in spec_obj.extra_entrypoint_args:
             ee_res.extend(args.to_args())
         assert ee_res == ee_final_args
+
+
+def test_multiple_labels_to_from_string_and_json():
+    placement = PlacementSpec(labels=['foo', 'bar'], count_per_label=2)
+    from_json_placement = PlacementSpec.from_json({'labels': ['foo', 'bar'], 'count_per_label': 2})
+    from_string_placement = PlacementSpec.from_string('labels:foo,bar;count-per-label:2')
+    assert placement == from_json_placement
+    assert placement == from_string_placement
+    assert PlacementSpec.from_json(placement.to_json()) == placement
+    assert PlacementSpec.from_string(placement.pretty_str()) == placement
+    assert all(label in placement.labels for label in ['foo', 'bar'])
+    assert all(label in from_json_placement.labels for label in ['foo', 'bar'])
+    assert all(label in from_string_placement.labels for label in ['foo', 'bar'])
+    assert placement.count_per_label == 2
+    assert from_json_placement.count_per_label == 2
+    assert from_string_placement.count_per_label == 2
+

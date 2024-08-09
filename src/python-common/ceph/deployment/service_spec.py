@@ -250,20 +250,25 @@ class PlacementSpec(object):
 
     def __init__(self,
                  label: Optional[str] = None,
+                 labels: Optional[List[str]] = None,
                  hosts: Union[List[str], List[HostPlacementSpec], None] = None,
                  count: Optional[int] = None,
                  count_per_host: Optional[int] = None,
+                 count_per_label: Optional[int] = None,
                  host_pattern: HostPatternType = None,
                  ):
         # type: (...) -> None
         self.label = label
         self.hosts = []  # type: List[HostPlacementSpec]
 
+        self.labels = labels
+
         if hosts:
             self.set_hosts(hosts)
 
         self.count = count  # type: Optional[int]
         self.count_per_host = count_per_host   # type: Optional[int]
+        self.count_per_label: Optional[int] = count_per_label
 
         #: fnmatch patterns to select hosts. Can also be a single host.
         self.host_pattern: HostPattern = HostPattern.to_host_pattern(host_pattern)
@@ -273,19 +278,23 @@ class PlacementSpec(object):
     def is_empty(self) -> bool:
         return (
             self.label is None
+            and not self.labels
             and not self.hosts
             and not self.host_pattern
             and self.count is None
             and self.count_per_host is None
+            and self.count_per_label is None
         )
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, PlacementSpec):
             return self.label == other.label \
+                   and self.labels == other.labels \
                    and self.hosts == other.hosts \
                    and self.count == other.count \
                    and self.host_pattern == other.host_pattern \
-                   and self.count_per_host == other.count_per_host
+                   and self.count_per_host == other.count_per_host \
+                   and self.count_per_label == other.count_per_label
         return NotImplemented
 
     def set_hosts(self, hosts: Union[List[str], List[HostPlacementSpec]]) -> None:
@@ -307,6 +316,10 @@ class PlacementSpec(object):
             return [h.hostname for h in self.hosts if h.hostname in all_hosts]
         if self.label:
             all_hosts = [hs.hostname for hs in hostspecs if self.label in hs.labels]
+        elif self.labels:
+            all_hosts = [
+                hs.hostname for hs in hostspecs if any(l in hs.labels for l in self.labels)
+            ]
         else:
             all_hosts = [hs.hostname for hs in hostspecs]
         if self.host_pattern:
@@ -316,6 +329,8 @@ class PlacementSpec(object):
     def get_target_count(self, hostspecs: Iterable[HostSpec]) -> int:
         if self.count:
             return self.count
+        if self.labels and self.count_per_label:
+            return len(self.labels) * self.count_per_label
         return len(self.filter_matching_hostspecs(hostspecs)) * (self.count_per_host or 1)
 
     def pretty_str(self) -> str:
@@ -331,8 +346,12 @@ class PlacementSpec(object):
             kv.append('count:%d' % self.count)
         if self.count_per_host:
             kv.append('count-per-host:%d' % self.count_per_host)
+        if self.count_per_label:
+            kv.append(f'count-per-label:{self.count_per_label}')
         if self.label:
             kv.append('label:%s' % self.label)
+        if self.labels:
+            kv.append(f'labels:{",".join([s for s in self.labels])}')
         if self.host_pattern:
             kv.append(self.host_pattern.pretty_str())
         return ';'.join(kv)
@@ -345,6 +364,10 @@ class PlacementSpec(object):
             kv.append('count_per_host=%d' % self.count_per_host)
         if self.label:
             kv.append('label=%s' % repr(self.label))
+        if self.labels:
+            kv.append(f'labels={self.labels}')
+        if self.count_per_label:
+            kv.append(f'count_per_label={self.count_per_label}')
         if self.hosts:
             kv.append('hosts={!r}'.format(self.hosts))
         if self.host_pattern:
@@ -368,20 +391,24 @@ class PlacementSpec(object):
         r: Dict[str, Any] = {}
         if self.label:
             r['label'] = self.label
+        if self.labels:
+            r['labels'] = self.labels
         if self.hosts:
             r['hosts'] = [host.to_json() for host in self.hosts]
         if self.count:
             r['count'] = self.count
         if self.count_per_host:
             r['count_per_host'] = self.count_per_host
+        if self.count_per_label:
+            r['count_per_label'] = self.count_per_label
         if self.host_pattern:
             r['host_pattern'] = self.host_pattern.to_json()
         return r
 
     def validate(self) -> None:
-        if self.hosts and self.label:
+        if self.hosts and (self.label or self.labels):
             # TODO: a less generic Exception
-            raise SpecValidationError('Host and label are mutually exclusive')
+            raise SpecValidationError('Host and label(s) are mutually exclusive')
         if self.count is not None:
             try:
                 intval = int(self.count)
@@ -391,22 +418,27 @@ class PlacementSpec(object):
                 raise SpecValidationError("num/count must be an integer value")
             if self.count < 1:
                 raise SpecValidationError("num/count must be >= 1")
-        if self.count_per_host is not None:
-            try:
-                intval = int(self.count_per_host)
-            except (ValueError, TypeError):
-                raise SpecValidationError("count-per-host must be a numeric value")
-            if self.count_per_host != intval:
-                raise SpecValidationError("count-per-host must be an integer value")
-            if self.count_per_host < 1:
-                raise SpecValidationError("count-per-host must be >= 1")
+            if self.count_per_label:
+                raise SpecValidationError('"count" and "count-per-label" are mutually exclusive')
+        for attr in ['count_per_label', 'count_per_host']:
+            val = getattr(self, attr, None)
+            if val is not None:
+                try:
+                    intval = int(val)
+                except (ValueError, TypeError):
+                    raise SpecValidationError(f"{attr.replace('_', '-')} must be a numeric value")
+                if val != intval:
+                    raise SpecValidationError(f"{attr.replace('_', '-')} must be an integer value")
+                if val < 1:
+                    raise SpecValidationError(f"{attr.replace('_', '-')} must be >= 1")
         if self.count_per_host is not None and not (
                 self.label
                 or self.hosts
                 or self.host_pattern
+                or self.labels
         ):
             raise SpecValidationError(
-                "count-per-host must be combined with label or hosts or host_pattern"
+                "count-per-host must be combined with label(s) or hosts or host_pattern"
             )
         if self.count is not None and self.count_per_host is not None:
             raise SpecValidationError("cannot combine count and count-per-host")
@@ -424,6 +456,14 @@ class PlacementSpec(object):
             # to a HostPattern type, so no type checking is needed here.
             if self.hosts:
                 raise SpecValidationError('cannot combine host patterns and hosts')
+
+        if self.labels:
+            if self.label:
+                raise SpecValidationError('cannot combine "labels" and "label" fields')
+
+        if self.count_per_label:
+            if not self.labels:
+                raise SpecValidationError('"count_per_label" field requires setting "labels" field')
 
         for h in self.hosts:
             h.validate()
@@ -471,6 +511,17 @@ pattern_type=PatternType.regex))
         PlacementSpec(host_pattern=HostPattern(pattern='data[1-3]', \
 pattern_type=PatternType.fnmatch))
 
+        You can specify multiple labels using `labels:<label1>,<label2>`
+
+        >>> PlacementSpec.from_string('labels:[mon,rgw]')
+        PlacementSpec(labels=['mon', 'rgw'])
+
+        You can specify how a count of daemon per label with multiple labels \
+`labels:<label1>,<label2>;count-per-label:2`
+
+        >>> PlacementSpec.from_string('labels:[mon,rgw];count-per-label:2')
+        PlacementSpec(labels=['mon', 'rgw'], count_per_label=2)
+
         >>> PlacementSpec.from_string(None)
         PlacementSpec()
         """
@@ -494,6 +545,7 @@ pattern_type=PatternType.fnmatch))
 
         count = None
         count_per_host = None
+        count_per_label = None
         if strings:
             try:
                 count = int(strings[0])
@@ -516,20 +568,39 @@ pattern_type=PatternType.fnmatch))
                     break
                 except ValueError:
                     pass
+        for s in strings:
+            if s.startswith('count-per-label:'):
+                try:
+                    count_per_label = int(s[len('count-per-label:'):])
+                    strings.remove(s)
+                    break
+                except ValueError:
+                    pass
 
         advanced_hostspecs = [h for h in strings if
                               (':' in h or '=' in h or not any(c in '[]?*:=' for c in h)) and
                               'label:' not in h and
+                              'labels:' not in h and
                               'regex:' not in h]
         for a_h in advanced_hostspecs:
             strings.remove(a_h)
 
-        labels = [x for x in strings if 'label:' in x]
-        if len(labels) > 1:
-            raise SpecValidationError('more than one label provided: {}'.format(labels))
-        for l in labels:
+        label = [x for x in strings if 'label:' in x]
+        if len(label) > 1:
+            raise SpecValidationError('"label" parameter specified multiple times')
+        for l in label:
             strings.remove(l)
-        label = labels[0][6:] if labels else None
+        label = label[0][6:] if label else None
+
+        labels: Optional[List[str]] = None
+        labels_str: List[str] = [x for x in strings if 'labels:' in x]
+        if len(labels_str) > 1:
+            raise SpecValidationError('"labels" parameter specified multiple times')
+        for l in labels_str:
+            strings.remove(l)
+        labels_str = labels_str[0][7:] if labels_str else None
+        if labels_str:
+            labels = labels_str.strip('[').strip(']').split(',')
 
         host_patterns = strings
         host_pattern: Optional[HostPattern] = None
@@ -543,8 +614,10 @@ pattern_type=PatternType.fnmatch))
 
         ps = PlacementSpec(count=count,
                            count_per_host=count_per_host,
+                           count_per_label=count_per_label,
                            hosts=advanced_hostspecs,
                            label=label,
+                           labels=labels,
                            host_pattern=host_pattern)
         return ps
 
