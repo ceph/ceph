@@ -3,7 +3,7 @@ import logging
 import traceback
 import threading
 
-from mgr_module import MgrModule, Option
+from mgr_module import MgrModule, Option, NotifyType
 import orchestrator
 
 from .fs.volume import VolumeClient
@@ -529,6 +529,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.periodic_async_work = False
         self.snapshot_clone_no_wait = None
         self.lock = threading.Lock()
+        self.has_fs_map = False
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
         self.config_notify()
@@ -538,6 +539,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def shutdown(self):
         self.vc.shutdown()
+
+    def notify(self, notify_type: NotifyType, notify_id: str) -> None:
+        if notify_type != NotifyType.fs_map:
+            return
+        self.has_fs_map = self.get('fs_map') is not None
 
     def config_notify(self):
         """
