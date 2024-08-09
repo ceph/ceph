@@ -8523,9 +8523,16 @@ void PrimaryLogPG::_do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
   map<snapid_t, interval_set<uint64_t> >::iterator iter =
     snapset.clone_overlap.lower_bound(snapid);
   ceph_assert(iter != snapset.clone_overlap.end());
-  interval_set<uint64_t> overlaps = iter->second;
+  auto last_clone_iter = --snapset.clone_overlap.end();
+
+  interval_set<uint64_t> rollback_overlaps;
+  rollback_overlaps.insert(0, rollback_to->obs.oi.size);
+  last_clone_iter->second.swap(rollback_overlaps);
+
+  interval_set<uint64_t> overlaps;
+  overlaps.insert(0, rollback_to->obs.oi.size);
   for ( ;
-	iter != snapset.clone_overlap.end();
+	iter != last_clone_iter;
 	++iter)
     overlaps.intersection_of(iter->second);
 
