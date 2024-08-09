@@ -93,6 +93,7 @@ Administration
     CephFS Top Utility <cephfs-top>
     Scheduled Snapshots <snap-schedule>
     CephFS Snapshot Mirroring <cephfs-mirroring>
+    MDS Partitioner<mds-partitioner>
 
 .. raw:: html
 
