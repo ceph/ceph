@@ -1018,13 +1018,15 @@ public:
 			       std::vector<rgw_bucket_dir_entry> *result,
 			       std::map<std::string, bool> *common_prefixes,
 			       bool *is_truncated,
-                               optional_yield y);
+                               optional_yield y,
+                               bool requires_nonempty_result = true);
       int list_objects_unordered(const DoutPrefixProvider *dpp,
                                  int64_t max,
 				 std::vector<rgw_bucket_dir_entry> *result,
 				 std::map<std::string, bool> *common_prefixes,
 				 bool *is_truncated,
-                                 optional_yield y);
+                                 optional_yield y,
+                                 bool requires_nonempty_result = true);
 
     public:
 
@@ -1053,13 +1055,14 @@ public:
 		       std::vector<rgw_bucket_dir_entry> *result,
 		       std::map<std::string, bool> *common_prefixes,
 		       bool *is_truncated,
-                       optional_yield y) {
+                       optional_yield y,
+                       bool requires_nonempty_result = true) {
 	if (params.allow_unordered) {
 	  return list_objects_unordered(dpp, max, result, common_prefixes,
-					is_truncated, y);
+					is_truncated, y, requires_nonempty_result);
 	} else {
 	  return list_objects_ordered(dpp, max, result, common_prefixes,
-				      is_truncated, y);
+				      is_truncated, y, requires_nonempty_result);
 	}
       }
       rgw_obj_key& get_next_marker() {
@@ -1490,7 +1493,8 @@ public:
 			      bool* cls_filtered,
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
-			      RGWBucketListNameFilter force_check_filter = {});
+			      RGWBucketListNameFilter force_check_filter = {},
+                              bool requires_nonempty_result = true);
   int cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
                                 RGWBucketInfo& bucket_info,
                                 const rgw::bucket_index_layout_generation& idx_layout,
@@ -1503,7 +1507,8 @@ public:
 				bool *is_truncated,
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
-				RGWBucketListNameFilter force_check_filter = {});
+				RGWBucketListNameFilter force_check_filter = {},
+                                const bool requires_nonempty_result = true);
   int cls_bucket_head(const DoutPrefixProvider *dpp,
 		      const RGWBucketInfo& bucket_info,
 		      const rgw::bucket_index_layout_generation& idx_layout,

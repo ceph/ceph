@@ -835,7 +835,7 @@ class Bucket {
     /** Get an @a Object belonging to this bucket */
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) = 0;
     /** List the contents of this bucket */
-    virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) = 0;
+    virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y, bool requires_nonempty_result = true) = 0;
     /** Get the cached attributes associated with this bucket */
     virtual Attrs& get_attrs(void) = 0;
     /** Set the cached attributes on this bucket */

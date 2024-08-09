@@ -820,7 +820,8 @@ std::unique_ptr<Object> RadosBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<RadosObject>(this->store, k, this);
 }
 
-int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y)
+int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y,
+                      bool requires_nonempty_result)
 {
   RGWRados::Bucket target(store->getRados(), get_info());
   if (params.shard_id >= 0) {
@@ -840,7 +841,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
-  int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
+  int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y, requires_nonempty_result);
   if (ret >= 0) {
     results.next_marker = list_op.get_next_marker();
     params.marker = results.next_marker;

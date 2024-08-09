@@ -801,9 +801,9 @@ std::unique_ptr<Object> FilterBucket::get_object(const rgw_obj_key& k)
 }
 
 int FilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
-		       ListResults& results, optional_yield y)
+		       ListResults& results, optional_yield y, bool requires_nonempty_result)
 {
-  return next->list(dpp, params, max, results, y);
+  return next->list(dpp, params, max, results, y, requires_nonempty_result);
 }
 
 int FilterBucket::remove(const DoutPrefixProvider* dpp,

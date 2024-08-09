@@ -354,7 +354,7 @@ namespace rgw::sal {
     return std::make_unique<DBObject>(this->store, k, this);
   }
 
-  int DBBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max, ListResults& results, optional_yield y)
+  int DBBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max, ListResults& results, optional_yield y, bool requires_nonempty_result)
   {
     int ret = 0;
 

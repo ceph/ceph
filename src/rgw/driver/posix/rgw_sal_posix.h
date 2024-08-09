@@ -496,7 +496,7 @@ public:
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
   virtual int list(const DoutPrefixProvider* dpp, ListParams&, int,
-		   ListResults&, optional_yield y) override;
+		   ListResults&, optional_yield y, bool requires_nonempty_result = true) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				    Attrs& new_attrs, optional_yield y) override;
   virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,

@@ -949,6 +949,7 @@ protected:
   std::vector<rgw_bucket_dir_entry> objs;
   std::map<std::string, bool> common_prefixes;
   std::optional<RGWStorageStats> stats; // initialized if need_container_stats()
+  bool requires_nonempty_result{true};
 
   int default_max{0};
   bool is_truncated{false};

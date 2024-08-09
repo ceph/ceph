@@ -2230,7 +2230,7 @@ int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
-		      int max, ListResults& results, optional_yield y)
+		      int max, ListResults& results, optional_yield y, bool requires_nonempty_result)
 {
   int count{0};
   bool in_prefix{false};
