@@ -953,7 +953,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
         if (shard >= max_shards) {
           return;
         }
-        uint64_t shard_count;
+        uint64_t shard_count = 0;
         int r = ::check_index_unlinked(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, yield);
         if (r < 0) {
           ldpp_dout(dpp, -1) << "ERROR: error processing shard " << shard << 
