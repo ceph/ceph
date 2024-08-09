@@ -16,6 +16,12 @@ using boost::container::flat_set;
 using rgw::auth::Identity;
 using rgw::auth::Principal;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
+
 class CctCleaner {
   CephContext* cct;
 public:

@@ -23,6 +23,11 @@
 
 using namespace std;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
 
 std::unique_ptr<BlockCrypt> AES_256_CBC_create(const DoutPrefixProvider *dpp, CephContext* cct, const uint8_t* key, size_t len);
 

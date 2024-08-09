@@ -27,7 +27,7 @@
 
 using namespace std;
 
-RGWHTTPManager *rgw_http_manager;
+extern RGWHTTPManager *rgw_http_manager;
 
 struct RGWCurlHandle;
 
@@ -259,7 +259,7 @@ CURL *rgw_http_req_data::get_easy_handle() const
   return **curl_handle;
 }
 
-static RGWCurlHandles *handles;
+extern RGWCurlHandles *handles;
 
 static RGWCurlHandle *do_curl_easy_init()
 {
@@ -284,6 +284,7 @@ void rgw_release_all_curl_handles()
 {
   handles->flush_curl_handles();
   delete handles;
+  handles = nullptr;
 }
 
 void RGWIOProvider::assign_io(RGWIOIDProvider& io_id_provider, int io_type)
@@ -1197,6 +1198,7 @@ void rgw_http_client_cleanup()
 {
   rgw_http_manager->stop();
   delete rgw_http_manager;
+  rgw_http_manager = nullptr;
   curl_global_cleanup();
 }
 

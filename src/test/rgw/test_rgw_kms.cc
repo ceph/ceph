@@ -14,6 +14,11 @@ using ::testing::ActionInterface;
 using ::testing::MakeAction;
 using ::testing::StrEq;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
 
 class MockTransitSecretEngine : public TransitSecretEngine {
 

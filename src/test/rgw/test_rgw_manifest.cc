@@ -384,6 +384,11 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
 }
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
 
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);

@@ -20,6 +20,13 @@
 #include <gtest/gtest.h>
 
 using namespace std;
+
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
+
 namespace {
 
 // construct a period with the given fields
