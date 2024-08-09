@@ -70,7 +70,8 @@ from orchestrator import DaemonDescription, OrchestratorError
   "service_type": "rgw",
   "service_id": "default-rgw-realm.eu-central-1.1",
   "rgw_realm": "default-rgw-realm",
-  "rgw_zone": "eu-central-1"
+  "rgw_zone": "eu-central-1",
+  "rgw_op_counters_dump_expiration": "600"
 },
 {
   "service_type": "osd",
