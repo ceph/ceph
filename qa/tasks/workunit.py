@@ -441,8 +441,10 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     remote.run(logger=log.getChild(role), args=args, timeout=(60*60))
     finally:
         log.info('Stopping %s on %s...', tests, role)
+        # N.B. unlike before, don't cleanup path under variable "scratch_tmp"
+        # here! If the mount is broken then rm will hang. For context, see
+        # commit d4b8f94cf8d95ebb277b550fc6ebc3468052a39c.
         args=['sudo', 'rm', '-rf', '--', workunits_file, clonedir]
-        # N.B. don't cleanup scratch_tmp! If the mount is broken then rm will hang.
         remote.run(
             logger=log.getChild(role),
             args=args,
