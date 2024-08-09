@@ -1,8 +1,3 @@
-mgrmodules:
-  sequential:
-    - exec:
-        mon.a:
-          - ceph mgr module enable snap_schedule
 overrides:
   ceph:
     mgr-modules:
