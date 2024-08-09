@@ -17,6 +17,7 @@ overrides:
         debug ms: 1
       mon:
         mon warn on pool no app: false
+        mon client hunt on resend: false
       osd:
         osd class load list: "*"
         osd class default list: "*"
