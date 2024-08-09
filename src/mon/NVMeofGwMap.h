@@ -129,6 +129,14 @@ public:
   int process_gw_map_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     bool &propose_pending);
+
+  /**
+   * update_active_timers
+   *
+   * Check timers in fsm_timers and handle any that have expired.
+   *
+   * @param [out] propose_pending set to true if map is mutated
+   */
   void update_active_timers(bool &propose_pending);
   void handle_abandoned_ana_groups(bool &propose_pending);
   void handle_removed_subsystems(
