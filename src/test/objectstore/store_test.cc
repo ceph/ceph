@@ -4364,7 +4364,7 @@ public:
   gen_type *rng;
   ObjectStore *store;
   ObjectStore::CollectionHandle ch;
-
+  std::vector<ObjectStore::Transaction> tt;
   ceph::mutex lock = ceph::make_mutex("State lock");
   ceph::condition_variable cond;
 
@@ -4378,6 +4378,24 @@ public:
     }
   };
 
+  int queue_transactions()
+  {
+    int result = 0;
+    if (!tt.empty()) {
+      result = store->queue_transactions(ch, tt);
+      tt.clear();
+    }
+    return result;
+  }
+  int maybe_queue_transactions()
+  {
+    int result = 0;
+    if ((rand() % 7) == 0 || tt.size() > 10) {
+      result = store->queue_transactions(ch, tt);
+      tt.clear();
+    }
+    return result;
+  }
   class C_SyntheticOnReadable : public Context {
   public:
     SyntheticWorkloadState *state;
@@ -4495,6 +4513,7 @@ public:
   }
   void shutdown() {
     ghobject_t next;
+    queue_transactions();
     while (1) {
       vector<ghobject_t> objects;
       int r = collection_list(store, ch, next, ghobject_t::get_max(), 10,
@@ -4515,6 +4534,7 @@ public:
     queue_transaction(store, ch, std::move(t));
   }
   void statfs(store_statfs_t& stat) {
+    queue_transactions();
     store->statfs(&stat);
   }
 
@@ -4550,6 +4570,7 @@ public:
 
   void wait_for_done() {
     std::unique_lock locker{lock};
+    queue_transactions();
     cond.wait(locker, [this] { return in_flight == 0; });
   }
 
@@ -4623,7 +4644,7 @@ public:
     wait_for_ready(locker);
     ghobject_t new_obj = object_gen->create_object(rng);
     available_objects.erase(new_obj);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
     t.touch(cid, new_obj);
     boost::uniform_int<> u(17, 22);
     boost::uniform_int<> v(12, 17);
@@ -4636,7 +4657,7 @@ public:
     if (!contents.count(new_obj))
       contents[new_obj] = Object();
     t.register_on_applied(new C_SyntheticOnReadable(this, new_obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -4659,7 +4680,7 @@ public:
     new_obj.generation++;
     available_objects.erase(new_obj);
 
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
     t.collection_move_rename(cid, old_obj, cid, new_obj);
     ++in_flight;
     in_flight_objects.insert(old_obj);
@@ -4668,7 +4689,7 @@ public:
     contents[new_obj].data = contents[old_obj].data;
     contents.erase(old_obj);
     t.register_on_applied(new C_SyntheticOnStash(this, old_obj, new_obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -4692,7 +4713,7 @@ public:
     new_obj.hobj.set_hash(old_obj.hobj.get_hash());
     available_objects.erase(new_obj);
 
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
     t.clone(cid, old_obj, new_obj);
     ++in_flight;
     in_flight_objects.insert(old_obj);
@@ -4701,7 +4722,7 @@ public:
     contents[new_obj].data = contents[old_obj].data;
 
     t.register_on_applied(new C_SyntheticOnClone(this, old_obj, new_obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -4751,7 +4772,7 @@ public:
 	 << " (size " << srcdata.length() << ") to "
 	 << dstoff << "~" << len << std::endl;
 
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
     t.clone_range(cid, old_obj, new_obj, srcoff, len, dstoff);
     ++in_flight;
     in_flight_objects.insert(old_obj);
@@ -4783,7 +4804,7 @@ public:
     }
 
     t.register_on_applied(new C_SyntheticOnClone(this, old_obj, new_obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -4797,7 +4818,7 @@ public:
 
     ghobject_t new_obj = get_uniform_random_object(locker);
     available_objects.erase(new_obj);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
 
     boost::uniform_int<> u1(0, max_object_len - max_write_len);
     boost::uniform_int<> u2(0, max_write_len);
@@ -4832,7 +4853,7 @@ public:
     ++in_flight;
     in_flight_objects.insert(new_obj);
     t.register_on_applied(new C_SyntheticOnReadable(this, new_obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -4845,7 +4866,7 @@ public:
 
     ghobject_t obj = get_uniform_random_object(locker);
     available_objects.erase(obj);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
 
     boost::uniform_int<> choose(0, max_object_len);
     size_t len = choose(*rng);
@@ -4866,7 +4887,7 @@ public:
     }
 
     t.register_on_applied(new C_SyntheticOnReadable(this, obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -4879,7 +4900,7 @@ public:
 
     ghobject_t new_obj = get_uniform_random_object(locker);
     available_objects.erase(new_obj);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
 
     boost::uniform_int<> u1(0, max_object_len - max_write_len);
     boost::uniform_int<> u2(0, max_write_len);
@@ -4907,12 +4928,13 @@ public:
     ++in_flight;
     in_flight_objects.insert(new_obj);
     t.register_on_applied(new C_SyntheticOnReadable(this, new_obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
   void read() {
     EnterExit ee("read");
+    queue_transactions();
     boost::uniform_int<> u1(0, max_object_len/2);
     boost::uniform_int<> u2(0, max_object_len);
     uint64_t offset = u1(*rng);
@@ -4962,7 +4984,7 @@ public:
 
     ghobject_t obj = get_uniform_random_object(locker);
     available_objects.erase(obj);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
 
     boost::uniform_int<> u0(1, max_attr_size);
     boost::uniform_int<> u1(4, max_attr_name_len);
@@ -4997,7 +5019,7 @@ public:
     ++in_flight;
     in_flight_objects.insert(obj);
     t.register_on_applied(new C_SyntheticOnReadable(this, obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -5010,7 +5032,7 @@ public:
 
     ghobject_t obj = get_next_object(locker);
     available_objects.erase(obj);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
 
     map<string, bufferlist, less<>> attrs;
     set<string> keys;
@@ -5026,12 +5048,13 @@ public:
     ++in_flight;
     in_flight_objects.insert(obj);
     t.register_on_applied(new C_SyntheticOnReadable(this, obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
   void getattrs() {
     EnterExit ee("getattrs");
+    queue_transactions();
     ghobject_t obj;
     map<string, bufferlist> expected;
     {
@@ -5061,6 +5084,7 @@ public:
 
   void getattr() {
     EnterExit ee("getattr");
+    queue_transactions();
     ghobject_t obj;
     int r;
     int retry;
@@ -5118,19 +5142,20 @@ public:
     }
 
     available_objects.erase(obj);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
     t.rmattr(cid, obj, it->first);
 
     contents[obj].attrs.erase(it->first);
     ++in_flight;
     in_flight_objects.insert(obj);
     t.register_on_applied(new C_SyntheticOnReadable(this, obj));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
   void fsck(bool deep) {
     std::unique_lock locker{lock};
+    queue_transactions();
     EnterExit ee("fsck");
     cond.wait(locker, [this] { return in_flight == 0; });
     ch.reset();
@@ -5144,6 +5169,7 @@ public:
   void scan() {
     std::unique_lock locker{lock};
     EnterExit ee("scan");
+    queue_transactions();
     cond.wait(locker, [this] { return in_flight == 0; });
     vector<ghobject_t> objects;
     set<ghobject_t> objects_set, objects_set2;
@@ -5201,6 +5227,7 @@ public:
 
   void stat() {
     EnterExit ee("stat");
+    queue_transactions();
     ghobject_t hoid;
     uint64_t expected;
     {
@@ -5235,14 +5262,14 @@ public:
     if (!can_unlink())
       return -ENOENT;
     ghobject_t to_remove = get_uniform_random_object(locker);
-    ObjectStore::Transaction t;
+    ObjectStore::Transaction& t = tt.emplace_back();
     t.remove(cid, to_remove);
     ++in_flight;
     available_objects.erase(to_remove);
     in_flight_objects.insert(to_remove);
     contents.erase(to_remove);
     t.register_on_applied(new C_SyntheticOnReadable(this, to_remove));
-    int status = store->queue_transaction(ch, std::move(t));
+    int status = maybe_queue_transactions();
     return status;
   }
 
@@ -5281,35 +5308,36 @@ void StoreTestBase::doSyntheticTest(
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
     }
-    boost::uniform_int<> true_false(0, 999);
+    boost::uniform_int<> true_false(0, 9999);
     int val = true_false(rng);
-    if (val > 998) {
+    if (val > 9998) {
       test_obj.fsck(true);
-    } else if (val > 997) {
+    } else if (val > 9997) {
       test_obj.fsck(false);
-    } else if (val > 970) {
+    } else if (val > 9900) {
       test_obj.scan();
-    } else if (val > 950) {
+    } else if (val > 9500) {
       test_obj.stat();
-    } else if (val > 850) {
+    } else if (val > 8500) {
       test_obj.zero();
-    } else if (val > 800) {
+    } else if (val > 8000) {
       test_obj.unlink();
-    } else if (val > 550) {
+    } else if (val > 5500) {
       test_obj.write();
-    } else if (val > 500) {
+    } else if (val > 5000) {
       test_obj.clone();
-    } else if (val > 450) {
+    } else if (val > 4500) {
       test_obj.clone_range();
-    } else if (val > 300) {
+    } else if (val > 3000) {
       test_obj.stash();
-    } else if (val > 100) {
+    } else if (val > 1000) {
       test_obj.read();
     } else {
       test_obj.truncate();
     }
   }
   test_obj.wait_for_done();
+  test_obj.fsck(true);
   test_obj.shutdown();
 }
 
@@ -5338,7 +5366,7 @@ void StoreTestBase::doSyntheticLimitedTest(
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
     }
-    boost::uniform_int<> true_false(0, 9999 /*999*/);
+    boost::uniform_int<> true_false(0, 99999 /*999*/);
     int val = true_false(rng);
     auto option = [&](int range) -> bool {
       if (val == -1) {
@@ -5352,21 +5380,22 @@ void StoreTestBase::doSyntheticLimitedTest(
 	return false;
       }
     };
-    if (option(1)) test_obj.fsck(true);
-    if (option(1)) test_obj.fsck(false);
-    if (option(1)) test_obj.scan();
-    if (option(497)) test_obj.stat();
-    if (option(1000)) test_obj.zero();
-    if (option(1500)) test_obj.read();
-    if (option(1500)) test_obj.write();
-    if (option(500)) test_obj.truncate();
-    if (option(1000)) test_obj.clone_range();
-    if (option(1000)) test_obj.stash();
-    if (option(1500)) test_obj.unlink();
-    if (option(1500)) test_obj.clone();
+    if (option(3)) test_obj.fsck(true);
+    if (option(3)) test_obj.fsck(false);
+    if (option(94)) test_obj.scan();
+    if (option(4900)) test_obj.stat();
+    if (option(10000)) test_obj.zero();
+    if (option(15000)) test_obj.read();
+    if (option(15000)) test_obj.write();
+    if (option(5000)) test_obj.truncate();
+    if (option(10000)) test_obj.clone_range();
+    if (option(10000)) test_obj.stash();
+    if (option(15000)) test_obj.unlink();
+    if (option(15000)) test_obj.clone();
     ceph_assert(val == -1);
   }
   test_obj.wait_for_done();
+  test_obj.fsck(true);
   test_obj.shutdown();
 }
 
