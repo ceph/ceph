@@ -4119,43 +4119,6 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
   if (mask & CEPH_STAT_RSTAT)
     want_auth = true; // set want_auth for CEPH_STAT_RSTAT mask
 
-  if (!mdr->is_batch_head() && mdr->can_batch()) {
-    CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
-    int r = mdcache->path_traverse(mdr, cf, mdr->get_filepath(),
-				   (want_auth ? MDS_TRAVERSE_WANT_AUTH : 0),
-				   &mdr->dn[0], &mdr->in[0]);
-    if (r > 0)
-      return; // delayed
-
-    if (r < 0) {
-      // fall-thru. let rdlock_path_pin_ref() check again.
-    } else if (is_lookup) {
-      CDentry* dn = mdr->dn[0].back();
-      mdr->pin(dn);
-      auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
-      if (em.second) {
-	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
-      } else {
-	dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
-	em.first->second->add_request(mdr);
-        mdr->mark_event("joining batch lookup");
-	return;
-      }
-    } else {
-      CInode *in = mdr->in[0];
-      mdr->pin(in);
-      auto em = in->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
-      if (em.second) {
-	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
-      } else {
-	dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
-	em.first->second->add_request(mdr);
-        mdr->mark_event("joining batch getattr");
-	return;
-      }
-    }
-  }
-
   CInode *ref = rdlock_path_pin_ref(mdr, want_auth, false);
   if (!ref)
     return;
@@ -4217,8 +4180,49 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
     }
   }
 
-  if (!mds->locker->acquire_locks(mdr, lov))
+  if (!mds->locker->acquire_locks(mdr, lov)) {
+    if (!mdr->is_batch_head() && mdr->can_batch()) {
+      dout(20) << " dropping locks and try to batch request " << *mdr << dendl;
+      mds->locker->drop_locks(mdr.get());
+      mdr->drop_local_auth_pins();
+
+      CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
+      int r = mdcache->path_traverse(mdr, cf, mdr->get_filepath(),
+	  (want_auth ? MDS_TRAVERSE_WANT_AUTH : 0),
+	  &mdr->dn[0], &mdr->in[0]);
+      if (r > 0)
+	return; // delayed
+
+      if (r < 0) {
+	// fall-thru. let rdlock_path_pin_ref() check again.
+      } else if (is_lookup) {
+	CDentry* dn = mdr->dn[0].back();
+	mdr->pin(dn);
+	auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
+	if (em.second) {
+	  em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
+	} else {
+	  dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
+	  em.first->second->add_request(mdr);
+	  mdr->mark_event("joining batch lookup");
+	  return;
+	}
+      } else {
+	CInode *in = mdr->in[0];
+	mdr->pin(in);
+	auto em = in->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
+	if (em.second) {
+	  em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
+	} else {
+	  dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
+	  em.first->second->add_request(mdr);
+	  mdr->mark_event("joining batch getattr");
+	  return;
+	}
+      }
+    }
     return;
+  }
 
   if (!check_access(mdr, ref, MAY_READ))
     return;
@@ -4517,13 +4521,14 @@ void Server::handle_client_open(const MDRequestRef& mdr)
     return;
   }
 
+  Session *session = mds->get_session(req);
   if (cur->get_inode()->inline_data.version != CEPH_INLINE_NONE &&
-      !mdr->session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
+      !session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     dout(7) << "old client cannot open inline data file " << *cur << dendl;
     respond_to_request(mdr, -CEPHFS_EPERM);
     return;
   }
-  
+
   // snapped data is read only
   if (mdr->snapid != CEPH_NOSNAP &&
       ((cmode & CEPH_FILE_MODE_WR) || req->may_write())) {
@@ -4534,32 +4539,62 @@ void Server::handle_client_open(const MDRequestRef& mdr)
 
   MutationImpl::LockOpVec lov;
   lov.add_rdlock(&cur->snaplock);
+  if ((flags & CEPH_O_TRUNC) && !mdr->has_completed) {
+    ceph_assert(cur->is_auth());
+    lov.add_xlock(&cur->filelock);
+  } else {
+    // sync filelock if snapped.
+    //  this makes us wait for writers to flushsnaps, ensuring we get accurate metadata,
+    //  and that data itself is flushed so that we can read the snapped data off disk.
+    if (mdr->snapid != CEPH_NOSNAP && !cur->is_dir()) {
+      lov.add_rdlock(&cur->filelock);
+    }
+  }
 
   unsigned mask = req->head.args.open.mask;
+  int issued = 0;
   if (mask) {
     Capability *cap = cur->get_client_cap(mdr->get_client());
-    int issued = 0;
     if (cap && (mdr->snapid == CEPH_NOSNAP || mdr->snapid <= cap->client_follows))
       issued = cap->issued();
     // permission bits, ACL/security xattrs
     if ((mask & CEPH_CAP_AUTH_SHARED) && (issued & CEPH_CAP_AUTH_EXCL) == 0)
       lov.add_rdlock(&cur->authlock);
-    if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0)
-      lov.add_rdlock(&cur->xattrlock);
 
     mdr->getattr_caps = mask;
   }
 
+  bool do_fscrypt_check = false;
+  if (!session->info.has_feature(CEPHFS_FEATURE_ALTERNATE_NAME)) {
+    lov.add_rdlock(&cur->authlock);
+    do_fscrypt_check = true;
+  }
+
+  if (mask) {
+    if ((mask & CEPH_CAP_XATTR_SHARED) && (issued & CEPH_CAP_XATTR_EXCL) == 0)
+      lov.add_rdlock(&cur->xattrlock);
+  }
+
+  if (!mds->locker->acquire_locks(mdr, lov))
+    return;
+
+  if (do_fscrypt_check && (cmode & CEPH_FILE_MODE_WR) &&
+      !cur->get_inode()->fscrypt_auth.empty()) {
+    dout(10) << "blocking open write in encrypted node " << *cur << dendl;
+    respond_to_request(mdr, -CEPHFS_EROFS);
+    return;
+  }
+
   // O_TRUNC
   if ((flags & CEPH_O_TRUNC) && !mdr->has_completed) {
-    ceph_assert(cur->is_auth());
-
-    lov.add_xlock(&cur->filelock);
-    if (!mds->locker->acquire_locks(mdr, lov))
-      return;
-
     if (!check_access(mdr, cur, MAY_WRITE))
       return;
+
+    if (do_fscrypt_check && !cur->get_inode()->fscrypt_auth.empty()) {
+      dout(10) << "blocking open trunc in encrypted node " << *cur << dendl;
+      respond_to_request(mdr, -CEPHFS_EROFS);
+      return;
+    }
 
     // wait for pending truncate?
     const auto& pi = cur->get_projected_inode();
@@ -4571,20 +4606,10 @@ void Server::handle_client_open(const MDRequestRef& mdr)
       cur->add_waiter(CInode::WAIT_TRUNC, new C_MDS_RetryRequest(mdcache, mdr));
       return;
     }
-    
+
     do_open_truncate(mdr, cmode);
     return;
   }
-
-  // sync filelock if snapped.
-  //  this makes us wait for writers to flushsnaps, ensuring we get accurate metadata,
-  //  and that data itself is flushed so that we can read the snapped data off disk.
-  if (mdr->snapid != CEPH_NOSNAP && !cur->is_dir()) {
-    lov.add_rdlock(&cur->filelock);
-  }
-
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
 
   mask = MAY_READ;
   if (cmode & CEPH_FILE_MODE_WR)
