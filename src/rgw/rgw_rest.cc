@@ -1462,7 +1462,6 @@ int RGWPostObj_ObjStore::get_params(optional_yield y)
   return 0;
 }
 
-
 int RGWPutACLs_ObjStore::get_params(optional_yield y)
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;

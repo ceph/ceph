@@ -3435,6 +3435,97 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   return res;
 }
 
+struct RestoreObjectRequest {
+  std::optional<int> days;
+
+  void decode_xml(XMLObj *obj) {
+    RGWXMLDecoder::decode_xml("Days", days, obj);
+  }
+
+  void dump_xml(Formatter *f) const {
+    encode_xml("Days", days, f);
+  }
+};
+
+int RGWRestoreObj_ObjStore_S3::get_params(optional_yield y)
+{
+  s->object->set_atomic();
+  int op_ret = s->object->get_obj_attrs(y, this);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to fetch get_obj_attrs op ret = " << op_ret << dendl;
+    return;
+  }
+
+  // check if the object is already restored with attrs as object set to 'CLOUD_RESTORED'
+  bufferlist bl;
+  if (s->object->get_attrs(RGW_ATTR_RESTORE_STATUS, bl)) {
+    std::string restore_status=rgw_bl_str(bl);
+    if (restore_status == "CloudRestored") {
+      ldpp_dout(this, 0) << "Object is already restored" << dendl;
+    }
+  }
+  
+  std::string expected_bucket_owner;
+
+  if (s->info.env->get("x-amz-expected-bucket-owner") != nullptr) {
+    expected_bucket_owner = s->info.env->get("x-amz-expected-bucket-owner");
+  }
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+
+  RGWXMLDecoder::XMLParser parser;
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = read_all_input(s, max_size, false);
+
+  if (r < 0) {
+    return r;
+  }
+
+  if(!parser.init()) {
+    return -EINVAL;
+  }
+
+   if (!parser.parse(data.c_str(), data.length(), 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RestoreObjectRequest request;
+
+  try {
+    RGWXMLDecoder::decode_xml("RestoreRequest", request, &parser);
+  }
+  catch (RGWXMLDecoder::err &err) {
+    ldpp_dout(this, 5) << "Malformed restore request: " << err << dendl;
+    return -EINVAL;
+  }
+
+  std::optional<int> expiry_days;
+  if (request.days) {
+    expiry_days = request.days.value();
+    ldpp_dout(this, 10) << "expiry_days=" << expiry_days << dendl;
+  } else {
+    expiry_days=nullopt;
+  }
+
+  return 0;
+}
+
+
+void RGWRestoreObj_ObjStore_S3::send_response()
+{
+  if (op_ret < 0)
+  {
+    set_req_state_err(s, op_ret);
+    dump_errno(s);
+    end_header(s, this);
+    return;
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+}
 int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
 {
   const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
@@ -4894,6 +4985,9 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
   if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
   
+  if (s->info.args.exists("restore"))
+    return new RGWRestoreObj_ObjStore_S3;
+  
   if (is_select_op())
     return rgw::s3select::create_s3select_op();
 
@@ -5945,6 +6039,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
 	case RGW_OP_PUT_BUCKET_TAGGING:
 	case RGW_OP_PUT_BUCKET_REPLICATION:
         case RGW_OP_PUT_LC:
+        case RGW_OP_RESTORE_OBJ:
         case RGW_OP_SET_REQUEST_PAYMENT:
         case RGW_OP_PUBSUB_NOTIF_CREATE:
         case RGW_OP_PUBSUB_NOTIF_DELETE:
