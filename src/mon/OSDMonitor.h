@@ -735,6 +735,10 @@ public:
                                           const cmdmap_t& cmdmap,
                                           std::stringstream& ss,
                                           bool *modified);
+  int prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
+                               std::stringstream& ss);
+  int prepare_command_pool_stretch_unset(const cmdmap_t& cmdmap,
+                                std::stringstream& ss);
   int _command_pool_application(const std::string &prefix,
 				const cmdmap_t& cmdmap,
 				std::stringstream& ss,
