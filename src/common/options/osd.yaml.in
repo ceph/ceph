@@ -1126,6 +1126,15 @@ options:
   default: 21500
   flags:
   - runtime
+- name: osd_mclock_backfill_must_be_recovery
+  type: bool
+  level: advanced
+  desc: if enabled, osd_recovery_op_priority use backgroud_recovery
+    when pg is only backfilling
+  default: false
+  with_legacy: true
+  flags:
+  - runtime
 - name: osd_mclock_force_run_benchmark_on_init
   type: bool
   level: advanced
