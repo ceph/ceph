@@ -160,6 +160,13 @@
   See https://docs.ceph.com/en/latest/rados/operations/balancer/ for more information.
 * CephFS: Full support for subvolumes and subvolume groups is now available
   for snap_schedule Manager module.
+* CephFS: fixes to the implementation of the ``root_squash`` mechanism enabled
+  via cephx ``mds`` caps on a client credential require a new client feature
+  bit, ``client_mds_auth_caps``. Clients using credentials with ``root_squash``
+  without this feature will trigger the MDS to raise a HEALTH_ERR on the
+  cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
+  and the new feature bit for more information.
+
 
 >=18.0.0
 
