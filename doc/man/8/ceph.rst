@@ -19,6 +19,8 @@ Synopsis
 
 | **ceph** **daemon** *<name>* \| *<path>* *<command>* ...
 
+| **ceph** **daemonhistogram** *<daemons>* *<histogram_name>* [batch|live [*interval* [ *count* ] ] ]
+
 | **ceph** **daemonperf** *<name>* \| *<path>* [ *interval* [ *count* ] ]
 
 | **ceph** **df** *{detail}*
@@ -319,6 +321,28 @@ Example::
 
 	ceph daemon osd.0 help
 
+
+daemonhistogram
+---------------
+
+Visualize Ceph daemons' performance histogram. To be executed from daemon's host.
+
+Usage::
+
+	ceph daemonhistogram {daemons} {histogram_name} [ {mode} [{interval} [{count}]]]
+
+Parameters::
+
+ * daemons -  Daemons to collect data from. This can be either 'daemon_type.all' specification to use every daemon of a specific type. Or {daemon_names|socket_paths}*}. Or a comma separated list of daemon ids or admin socket paths.
+ * histogram_name - Performance histogram name, formatted as <component>.<name>. List of possible values is available via 'ceph daemon <daemon_name> perf histogram schema' command
+ * mode - output mode, either live(default) or batch.
+ * interval - period (in seconds) to update the histogram, 1 sec if omitted
+ * count - how many times to print, infinite if omitted
+
+Example::
+
+	ceph daemonhistogram osd.all osd.op_w_latency_in_bytes_histogram live 5 12
+	ceph daemonhistogram osd.1,osd.3,osd.5 osd.op_r_latency_out_bytes_histogram batch 2
 
 daemonperf
 ----------
