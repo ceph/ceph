@@ -3933,6 +3933,10 @@ int OSD::init()
   // load up pgs (as they previously existed)
   load_pgs();
 
+  // fix omap
+  store->fix_omap();
+  dout(2) << "fix_omap success" << dendl;
+
   dout(2) << "superblock: I am osd." << superblock.whoami << dendl;
 
   if (cct->_conf.get_val<bool>("osd_compact_on_start")) {
