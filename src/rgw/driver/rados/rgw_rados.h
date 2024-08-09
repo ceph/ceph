@@ -1241,12 +1241,14 @@ public:
 
   int check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);
 
+  int store_delete_bucket_info_flag(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, optional_yield y, const DoutPrefixProvider *dpp);
+
   /**
    * Delete a bucket.
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty = true);
+  int delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty = true);
 
   void wakeup_meta_sync_shards(std::set<int>& shard_ids);
 

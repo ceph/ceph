@@ -410,7 +410,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
 
   bucket_meta_handler->init(svc.bucket, bucket.get());
-  bi_meta_handler->init(svc.zone, svc.bucket, svc.bi);
+  bi_meta_handler->init(svc.zone, svc.bucket, svc.bi, svc.datalog_rados);
 
   meta.topic_cache = std::make_unique<RGWChainedCacheImpl<rgwrados::topic::cache_entry>>();
   meta.topic_cache->init(svc.cache);

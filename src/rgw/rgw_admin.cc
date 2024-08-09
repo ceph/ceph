@@ -178,6 +178,7 @@ void usage()
   cout << "  bucket sync disable              disable bucket sync\n";
   cout << "  bucket sync enable               enable bucket sync\n";
   cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
+  cout << "  bucket list-deleted              list buckets that have orphaned objects associated\n";
   cout << "  bi get                           retrieve bucket index object entries\n";
   cout << "  bi put                           store bucket index object entries\n";
   cout << "  bi list                          list raw bucket index entries\n";
@@ -377,6 +378,7 @@ void usage()
   cout << "   --end-date=<date>                 end date in the format yyyy-mm-dd\n";
   cout << "   --bucket-id=<bucket-id>           bucket id\n";
   cout << "   --bucket-new-name=<bucket>        for bucket link: optional new name\n";
+  cout << "   --remove-deleted                  remove entries from deleted_bucket omap list\n";
   cout << "   --shard-id=<shard-id>             optional for:\n";
   cout << "                                       mdlog list\n";
   cout << "                                       data sync status\n";
@@ -699,6 +701,7 @@ enum class OPT {
   BUCKET_RESHARD,
   BUCKET_CHOWN,
   BUCKET_RADOS_LIST,
+  BUCKET_LIST_DELETED,
   BUCKET_SHARD_OBJECTS,
   BUCKET_OBJECT_SHARD,
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
@@ -933,6 +936,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket chown", OPT::BUCKET_CHOWN },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
+  { "bucket list-deleted", OPT::BUCKET_LIST_DELETED },
   { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
@@ -3422,6 +3426,7 @@ int main(int argc, const char **argv)
   map<int, string> temp_url_keys;
   string bucket_id;
   string new_bucket_name;
+  int remove_deleted = false;
   std::unique_ptr<Formatter> formatter;
   std::unique_ptr<Formatter> zone_formatter;
   int purge_data = false;
@@ -3870,6 +3875,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &remove_deleted, NULL, "--remove-deleted", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
@@ -7357,6 +7364,37 @@ int main(int argc, const char **argv)
       std::cerr << "************************************"
 	"************************************" << std::endl;
       return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::BUCKET_LIST_DELETED) {
+
+    std::set<std::string> bucket_entries;
+
+    int ret = list_deleted_buckets(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
+                                   bucket_entries, null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: list_deleted_buckets() returned: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    formatter->open_array_section("entries");
+    for (auto& each: bucket_entries) {
+      encode_json("entry", each, formatter.get());
+      formatter->flush(cout);
+      }
+
+    formatter->close_section();
+    formatter->flush(cout);
+
+    if (remove_deleted) {
+      cout << "INFO: removing bucket entries from omap" << std::endl;
+      ret = remove_deleted_buckets(dpp(), static_cast<rgw::sal::RadosStore*>(driver),
+                                   bucket_entries, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: remove_deleted_buckets() returned: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 

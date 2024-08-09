@@ -178,6 +178,7 @@ std::string_view to_string(const BucketLogType& t)
 {
   switch (t) {
   case BucketLogType::InIndex: return "InIndex";
+  case BucketLogType::Deleted: return "Deleted";
   default: return "Unknown";
   }
 }
@@ -185,6 +186,10 @@ bool parse(std::string_view str, BucketLogType& t)
 {
   if (boost::iequals(str, "InIndex")) {
     t = BucketLogType::InIndex;
+    return true;
+  }
+  if (boost::iequals(str, "Deleted")) {
+    t = BucketLogType::Deleted;
     return true;
   }
   return false;
@@ -237,6 +242,8 @@ void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f)
   case BucketLogType::InIndex:
     encode(l.in_index, bl);
     break;
+  case BucketLogType::Deleted:
+    break;
   }
   ENCODE_FINISH(bl);
 }
@@ -247,6 +254,8 @@ void decode(bucket_log_layout& l, bufferlist::const_iterator& bl)
   switch (l.type) {
   case BucketLogType::InIndex:
     decode(l.in_index, bl);
+    break;
+  case BucketLogType::Deleted:
     break;
   }
   DECODE_FINISH(bl);
@@ -263,7 +272,9 @@ void encode_json_impl(const char *name, const bucket_log_layout& l, ceph::Format
 void decode_json_obj(bucket_log_layout& l, JSONObj *obj)
 {
   JSONDecoder::decode_json("type", l.type, obj);
-  JSONDecoder::decode_json("in_index", l.in_index, obj);
+  if (l.type == BucketLogType::InIndex) {
+    JSONDecoder::decode_json("in_index", l.in_index, obj);
+  }
 }
 
 // bucket_log_layout_generation
