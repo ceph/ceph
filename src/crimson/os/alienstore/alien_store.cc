@@ -128,13 +128,6 @@ seastar::future<> AlienStore::stop()
     return seastar::now();
   }
   return tp->submit([this] {
-    {
-      std::lock_guard l(coll_map_lock);
-      for (auto [cid, ch]: coll_map) {
-	static_cast<AlienCollection*>(ch.get())->collection.reset();
-      }
-      coll_map.clear();
-    }
     store.reset();
     cct.reset();
     g_ceph_context = nullptr;
@@ -182,6 +175,13 @@ seastar::future<> AlienStore::umount()
   }
   return op_gate.close().then([this] {
     return tp->submit([this] {
+      {
+	std::lock_guard l(coll_map_lock);
+	for (auto [cid, ch]: coll_map) {
+	  static_cast<AlienCollection*>(ch.get())->collection.reset();
+	}
+	coll_map.clear();
+      }
       return store->umount();
     });
   }).then([] (int r) {
