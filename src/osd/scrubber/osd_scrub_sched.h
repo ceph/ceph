@@ -29,7 +29,7 @@
   ┌───────────────────────────▼────────────┐
   │                                        │
   │                                        │
-  │  ScrubQContainer    to_scrub <>────────┼────────┐
+  │  not_before_queue_t to_scrub <>────────┼────────┐
   │                                        │        │
   │                                        │        │
   │  OSD_wide resource counters            │        │
@@ -52,12 +52,12 @@
     │      ┌─────▼──────┐
     │      │Copy of     │
     │      │job's       ├┐
-    │      │sched params││
-    │      │(*)         │┼┐
+    │      │sched targts││
+    │      │            │┼┐
     │      │            │┼┘◄────────────────────────┐
     └──────┤            ││                          │
-           │            ││   (*) for now - a copy   │
-           │            ││       of the whole SJ    │
+           │            ││                          │
+           │            ││                          │
            │            ││                          │
            └┬───────────┼│                          │
             └─┼┼┼┼┼┼┼┼┼┼┼│                          │
@@ -72,9 +72,12 @@
   │               │ScrubJob             │           │
   │               │                     │           │
   │               │     ┌───────────────┤           │
-  │               │     │Sched params   ├───────────┘
+  │               │     │Sched target   ├───────────┘
   └───────────────┤     └───────────────┤
-                  │                     │
+                  │                     │           ^
+                  │     ┌───────────────┤           |
+                  │     │Sched target   ├───────────┘
+                  │     └───────────────┤
                   └─────────────────────┘
 
 
@@ -110,6 +113,7 @@ ScrubQueue interfaces (main functions):
 #include <optional>
 
 #include "common/AsyncReserver.h"
+#include "common/not_before_queue.h"
 #include "utime.h"
 #include "osd/scrubber/scrub_job.h"
 #include "osd/PG.h"
@@ -164,7 +168,12 @@ class ScrubQueue {
   void remove_from_osd_queue(spg_t pgid);
 
   /// A predicate over the entries in the queue
-  using EntryPred = std::function<bool(const Scrub::ScrubJob&)>;
+  using EntryPred =
+      std::function<bool(const ::Scrub::SchedEntry&, bool only_eligibles)>;
+
+  /// a predicate to check entries against some common temporary restrictions
+  using EligibilityPred = std::function<
+      bool(const Scrub::SchedEntry&, const Scrub::OSDRestrictions&, utime_t)>;
 
   /**
    * the set of all PGs named by the entries in the queue (but only those
@@ -173,10 +182,18 @@ class ScrubQueue {
   std::set<spg_t> get_pgs(const EntryPred&) const;
 
   /**
-   * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
-   * scrubbed by the OSD.
+   * Add the scrub job (both SchedTargets) to the list of jobs (i.e. list of
+   * PGs) to be periodically scrubbed by the OSD.
    */
-  void enqueue_target(const Scrub::ScrubJob& sjob);
+  void enqueue_scrub_job(const Scrub::ScrubJob& sjob);
+
+  /**
+   * copy the scheduling element (the SchedEntry sub-object) part of
+   * the SchedTarget to the queue.
+   */
+  void enqueue_target(const Scrub::SchedTarget& trgt);
+
+  void dequeue_target(spg_t pgid, scrub_level_t s_or_d);
 
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
@@ -184,7 +201,7 @@ class ScrubQueue {
   void dump_scrubs(ceph::Formatter* f) const;
 
   void for_each_job(
-      std::function<void(const Scrub::ScrubJob&)> fn,
+      std::function<void(const Scrub::SchedEntry&)> fn,
       int max_jobs) const;
 
   /// counting the number of PGs stuck while scrubbing, waiting for objects
@@ -193,14 +210,15 @@ class ScrubQueue {
   int get_blocked_pgs_count() const;
 
   /**
-   * find the nearest scrub-job (later on - scrub target) that is ready to
+   * find the nearest scheduling entry that is ready to
    * to be scrubbed (taking 'restrictions' into account).
    * The selected entry in the queue is dequeued and returned.
-   * A nullptr is returned if no eligible entry is found.
+   * nullopt is returned if no such entry exists.
    */
-  std::unique_ptr<Scrub::ScrubJob> pop_ready_pg(
-      Scrub::OSDRestrictions restrictions,  // note: 4B in size! (copy)
-      utime_t time_now);
+  std::optional<Scrub::SchedEntry> pop_ready_entry(
+    EligibilityPred eligibility_pred,
+    Scrub::OSDRestrictions restrictions,
+    utime_t time_now);
 
  private:
   CephContext* cct;
@@ -219,7 +237,7 @@ class ScrubQueue {
    */
   mutable ceph::mutex jobs_lock = ceph::make_mutex("ScrubQueue::jobs_lock");
 
-  Scrub::ScrubQContainer to_scrub;   ///< scrub jobs (i.e. PGs) to scrub
+  not_before_queue_t<Scrub::SchedEntry> to_scrub;
 
   /**
    * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is
@@ -232,6 +250,12 @@ class ScrubQueue {
    * existence of such a situation in the scrub-queue log messages.
    */
   std::atomic_int_fast16_t blocked_scrubs_cnt{0};
+
+  /**
+   * remove the entry from the queue.
+   * returns: true if it was there, false otherwise.
+   */
+  bool remove_entry_unlocked(spg_t pgid, scrub_level_t s_or_d);
 
 protected: // used by the unit-tests
   /**

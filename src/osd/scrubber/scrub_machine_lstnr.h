@@ -162,7 +162,11 @@ struct ScrubMachineListener {
   /// the part that actually finalizes a scrub
   virtual void scrub_finish() = 0;
 
-  /// notify the scrubber about a scrub failure
+  /**
+   * The scrub session was aborted. We must restore the scheduling object
+   * that triggered the scrub back to the queue - but we may have to update
+   * it with changes requested (e.g. by an operator command).
+   */
   virtual void on_mid_scrub_abort(Scrub::delay_cause_t cause) = 0;
 
   /**
@@ -246,6 +250,6 @@ struct ScrubMachineListener {
   /// delay next retry of this PG after a replica reservation failure
   virtual void flag_reservations_failure() = 0;
 
-  /// is this scrub more than just regular periodic scrub?
-  [[nodiscard]] virtual bool is_high_priority() const = 0;
+  /// is this scrub's urgency high enough, or must it reserve its replicas?
+  [[nodiscard]] virtual bool is_reservation_required() const = 0;
 };

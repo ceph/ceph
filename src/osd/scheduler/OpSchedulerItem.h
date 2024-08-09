@@ -373,18 +373,6 @@ class PGScrubResched : public PGScrubItem {
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-/**
- *  called when a repair process completes, to initiate scrubbing. No local/remote
- *  resources are allocated.
- */
-class PGScrubAfterRepair : public PGScrubItem {
- public:
-  PGScrubAfterRepair(spg_t pg, epoch_t epoch_queued)
-      : PGScrubItem{pg, epoch_queued, "PGScrubAfterRepair"}
-  {}
-  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
-};
-
 class PGScrubPushesUpdate : public PGScrubItem {
  public:
   PGScrubPushesUpdate(spg_t pg, epoch_t epoch_queued)
