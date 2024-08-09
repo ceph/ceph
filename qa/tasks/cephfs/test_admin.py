@@ -2659,3 +2659,26 @@ class TestMDSFail(TestAdminCommands):
                               errmsgs=health_warn)
         self.run_ceph_cmd(f'mds fail {mds1_id} --yes-i-really-mean-it')
         self.run_ceph_cmd(f'mds fail {mds2_id} --yes-i-really-mean-it')
+
+    def test_nonexistent_MDSs_name(self):
+        non_existent_MDSs_name = 'zzz'
+
+        proc = self.run_ceph_cmd(f'mds fail {non_existent_MDSs_name}',
+                                 check_status=False)
+        stderr = proc.stderr.getvalue().lower()
+
+        self.assertEqual(proc.exitstatus, 0)
+        self.assertIn('error', stderr)
+        errmsg = (f"MDS named '{non_existent_MDSs_name}' does not exist, is "
+                   "not up or you lack the permission to see.")
+        self.assertIn(errmsg.lower(), stderr)
+
+    # NOTE: this test checks idempotenct of "mds fail" as well as that
+    # run_ceph_cmd() raises CommandFailedError when errno is zero (due to
+    # idempotency) but stderr has error message, specifically error message
+    # beginning with "error".
+    def test_nonexistent_MDSs_name_2(self):
+        non_existent_MDSs_name = 'zzz'
+        with self.assertRaises(CommandFailedError) as cm:
+            self.run_ceph_cmd(f'mds fail {non_existent_MDSs_name}')
+        self.assertEqual(cm.exception.exitstatus, 0)
