@@ -11,6 +11,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/group/ListSnapshotsRequest.h"
 #include "librbd/internal.h"
 #include "librbd/io/AioCompletion.h"
 
@@ -54,35 +55,16 @@ snap_t get_group_snap_id(I* ictx,
 }
 
 int group_snap_list(librados::IoCtx& group_ioctx, const std::string& group_id,
-		    std::vector<cls::rbd::GroupSnapshot> *cls_snaps)
+                    std::vector<cls::rbd::GroupSnapshot> *cls_snaps,
+                    bool try_to_sort, bool fail_if_not_sorted)
 {
-  CephContext *cct = (CephContext *)group_ioctx.cct();
-
-  string group_header_oid = util::group_header_name(group_id);
-
-  const int max_read = 1024;
-  cls::rbd::GroupSnapshot snap_last;
-  int r;
-
-  for (;;) {
-    vector<cls::rbd::GroupSnapshot> snaps_page;
-
-    r = cls_client::group_snap_list(&group_ioctx, group_header_oid,
-				    snap_last, max_read, &snaps_page);
-
-    if (r < 0) {
-      lderr(cct) << "error reading snap list from group: "
-	<< cpp_strerror(-r) << dendl;
-      return r;
-    }
-    cls_snaps->insert(cls_snaps->end(), snaps_page.begin(), snaps_page.end());
-    if (snaps_page.size() < max_read) {
-      break;
-    }
-    snap_last = *snaps_page.rbegin();
-  }
-
-  return 0;
+  C_SaferCond cond;
+  auto req = group::ListSnapshotsRequest<>::create(group_ioctx, group_id,
+                                                   try_to_sort,
+                                                   fail_if_not_sorted,
+                                                   cls_snaps, &cond);
+  req->send();
+  return cond.wait();
 }
 
 std::string calc_ind_image_snap_name(uint64_t pool_id,
@@ -592,7 +574,7 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
   string group_header_oid = util::group_header_name(group_id);
 
   std::vector<cls::rbd::GroupSnapshot> snaps;
-  r = group_snap_list(io_ctx, group_id, &snaps);
+  r = group_snap_list(io_ctx, group_id, &snaps, false, false);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error listing group snapshots" << dendl;
     return r;
@@ -1190,7 +1172,7 @@ int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
   }
 
   std::vector<cls::rbd::GroupSnapshot> snaps;
-  r = group_snap_list(group_ioctx, group_id, &snaps);
+  r = group_snap_list(group_ioctx, group_id, &snaps, false, false);
   if (r < 0) {
     return r;
   }
@@ -1231,7 +1213,7 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
   }
 
   std::vector<cls::rbd::GroupSnapshot> group_snaps;
-  r = group_snap_list(group_ioctx, group_id, &group_snaps);
+  r = group_snap_list(group_ioctx, group_id, &group_snaps, false, false);
   if (r < 0) {
     return r;
   }
@@ -1260,6 +1242,7 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
 
 template <typename I>
 int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
+                        bool try_to_sort, bool fail_if_not_sorted,
 			std::vector<group_snap_info2_t> *group_snaps)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
@@ -1274,7 +1257,8 @@ int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
   }
 
   std::vector<cls::rbd::GroupSnapshot> cls_group_snaps;
-  r = group_snap_list(group_ioctx, group_id, &cls_group_snaps);
+  r = group_snap_list(group_ioctx, group_id, &cls_group_snaps, try_to_sort,
+                      fail_if_not_sorted);
   if (r < 0) {
     return r;
   }
@@ -1310,7 +1294,7 @@ int Group<I>::snap_get_info(librados::IoCtx& group_ioctx,
   }
 
   std::vector<cls::rbd::GroupSnapshot> cls_group_snaps;
-  r = group_snap_list(group_ioctx, group_id, &cls_group_snaps);
+  r = group_snap_list(group_ioctx, group_id, &cls_group_snaps, false, false);
   if (r < 0) {
     return r;
   }
@@ -1352,7 +1336,7 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
   }
 
   std::vector<cls::rbd::GroupSnapshot> snaps;
-  r = group_snap_list(group_ioctx, group_id, &snaps);
+  r = group_snap_list(group_ioctx, group_id, &snaps, false, false);
   if (r < 0) {
     return r;
   }

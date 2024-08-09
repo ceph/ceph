@@ -5,12 +5,15 @@
 #include "test/librbd/test_support.h"
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
+#include "librbd/api/Group.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 
 #include <boost/scope_exit.hpp>
 #include <chrono>
 #include <vector>
+#include <set>
+#include <algorithm>
 
 void register_test_groups() {
 }
@@ -748,4 +751,85 @@ TEST_F(TestGroup, snap_list2PP)
   ASSERT_EQ(0U, gp_snaps2.size());
   ASSERT_EQ(0, m_rbd.group_remove(m_ioctx, gp_name));
   ASSERT_EQ(0, _rados.pool_delete(pool_name2.c_str()));
+}
+
+TEST_F(TestGroup, snap_list_internal)
+{
+  REQUIRE_FORMAT_V2();
+
+  // Check that the listing works with different
+  // values for try_to_sort and fail_if_not_sorted
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  const char *group_name = "gp_snaplist_internalPP";
+
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.group_create(ioctx, group_name));
+
+  std::vector<librbd::group_snap_info2_t> gp_snaps;
+  std::vector<librbd::group_snap_info2_t>::size_type i = 0;
+
+  // No snaps present
+  ASSERT_EQ(0, librbd::api::Group<>::snap_list(ioctx, group_name, true, true,
+                                               &gp_snaps));
+  ASSERT_EQ(0U, gp_snaps.size());
+
+  ASSERT_EQ(0, librbd::api::Group<>::snap_list(ioctx, group_name, false, false,
+                                               &gp_snaps));
+  ASSERT_EQ(0U, gp_snaps.size());
+
+  for (int i = 0; i < 5; i++) {
+    std::string id = "snap" + stringify(i);
+    ASSERT_EQ(0, librbd::api::Group<>::snap_create(ioctx, group_name,
+                                                   id.c_str(), 0));
+  }
+
+  ASSERT_EQ(0, librbd::api::Group<>::snap_list(ioctx, group_name, true, true,
+                                               &gp_snaps));
+  ASSERT_EQ(5U, gp_snaps.size());
+
+  // Verify that the sorted list is correct
+  for (i = 0; i < gp_snaps.size(); i++){
+    std::string name = "snap" + stringify(i);
+    ASSERT_EQ(name, gp_snaps[i].name);
+  }
+
+  // Sort on group snap ids to simulate the unsorted list.
+  std::vector<librbd::group_snap_info2_t> snaps_sorted_by_id = gp_snaps;
+  std::sort(snaps_sorted_by_id.begin(),
+            snaps_sorted_by_id.end(),
+            [](const librbd::group_snap_info2_t &a,
+	           const librbd::group_snap_info2_t &b) {
+	      return a.id < b.id;
+	    });
+
+  // Remove the sort_order key for one of the snaps.
+  std::set<std::string> keys = {"snap_order_" + gp_snaps[1].id};
+  std::string group_id;
+  ASSERT_EQ(0, librbd::api::Group<>::get_id(ioctx, group_name, &group_id));
+
+  std::string group_header = "rbd_group_header." + group_id;
+  ASSERT_EQ(0, ioctx.omap_rm_keys(group_header, keys));
+
+  //This should fail.
+  ASSERT_EQ(-EINVAL, librbd::api::Group<>::snap_list(ioctx, group_name, true,
+                                                     true, &gp_snaps));
+
+  // Should work if fail_if_not_sorted is false
+  ASSERT_EQ(0, librbd::api::Group<>::snap_list(ioctx, group_name, true, false,
+                                               &gp_snaps));
+  ASSERT_EQ(5U, gp_snaps.size());
+
+  ASSERT_EQ(0, librbd::api::Group<>::snap_list(ioctx, group_name, false, false,
+                                               &gp_snaps));
+  ASSERT_EQ(5U, gp_snaps.size());
+
+  //Compare unsorted listing
+  for (i = 0; i < gp_snaps.size(); i++){
+    ASSERT_EQ(snaps_sorted_by_id[i].id, gp_snaps[i].id);
+  }
+
+  ASSERT_EQ(0, rbd.group_remove(ioctx, group_name));
 }
