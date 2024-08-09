@@ -5944,6 +5944,32 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
   return 0;
 }
 
+std::pair<int64_t, std::string> Server::make_float_max_byte_parseable(string val)
+{
+  string before_decimal;
+  string after_decimal;
+  int64_t dec_len;
+  
+  size_t dec_index = val.find_first_of(".");
+  size_t unit_index = val.find_first_not_of("0123456789-+.");
+  if ((unit_index == std::string::npos) && (dec_index != std::string::npos)) {
+    return std::make_pair(-CEPHFS_EINVAL, "Invalid Byte value");
+  }
+  dec_len = unit_index - dec_index - 1;
+  if ((dec_len == 0) || (dec_index == val.length() - 1)) {
+    return std::make_pair(-CEPHFS_EINVAL, "Invalid Float value");
+  }
+  else if (dec_index == std::string::npos) {
+    return std::make_pair(-1, val);
+  }
+  
+  before_decimal = val.substr(0, dec_index);
+  after_decimal = val.substr(dec_index + 1, val.length() - dec_index - 1);
+  before_decimal.append(after_decimal);
+  
+  return std::make_pair(dec_len, before_decimal);
+}
+
 int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
 {
   dout(20) << "parse_quota_vxattr name " << name << " value '" << value << "'" << dendl;
@@ -5971,7 +5997,16 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
       }
     } else if (name == "quota.max_bytes") {
       string cast_err;
-      int64_t q = strict_iec_cast<int64_t>(value, &cast_err);
+      std::pair<int64_t, string> act_value = make_float_max_byte_parseable(value);
+      if (act_value.first == -CEPHFS_EINVAL) {
+        dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
+        << act_value.second << dendl;
+        return -CEPHFS_EINVAL;        
+      }
+      int64_t q = strict_iec_cast<int64_t>(act_value.second, &cast_err);
+      if (act_value.first != -1)  {
+        q = q / (std::pow(10, act_value.first));
+      }
       if(!cast_err.empty()) {
         dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
         << cast_err << dendl;
