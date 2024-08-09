@@ -42,6 +42,13 @@ class JobThread(threading.Thread):
                             log.info("thread [{0}] terminating due to reconfigure".format(thread_name))
                             self.async_job.threads.remove(self)
                             return
+
+                        # the codeblock after this one adds missing jobs. no
+                        # need to add new jobs since purging is disabled.
+                        if not self.async_job.should_purge_trash():
+                            self.async_job.threads.clear()
+                            return
+
                         timo = self.async_job.wakeup_timeout
                         if timo is not None:
                             vols = [e['name'] for e in list_volumes(self.vc.mgr)]
@@ -54,6 +61,10 @@ class JobThread(threading.Thread):
                             break
                         self.async_job.cv.wait(timeout=timo)
                     self.async_job.register_async_job(vol_job[0], vol_job[1], thread_id)
+
+                # don't exceute jobs since purging has been disabled.
+                if not self.async_job.should_purge_trash():
+                    return
 
                 # execute the job (outside lock)
                 self.async_job.execute_job(vol_job[0], vol_job[1], should_cancel=lambda: thread_id.should_cancel())
@@ -70,9 +81,15 @@ class JobThread(threading.Thread):
                 log.warning("traceback: {0}".format("".join(
                     traceback.format_exception(exc_type, exc_value, exc_traceback))))
             finally:
+                if not self.async_job.should_purge_trash():
+                    return
+
                 # when done, unregister the job
                 if vol_job:
                     with lock_timeout_log(self.async_job.lock):
+                        # if purging of trash has been disabled, don't
+                        # unregister the job so that purge jobs can continue
+                        # running when purging of trash is enabled
                         self.async_job.unregister_async_job(vol_job[0], vol_job[1], thread_id)
                 time.sleep(1)
         log.error("thread [{0}] reached exception limit, bailing out...".format(thread_name))
@@ -136,6 +153,8 @@ class AsyncJobs(threading.Thread):
         self.wakeup_timeout = None
 
         self.threads = []
+        if not self.should_purge_trash():
+            return
         for i in range(self.nr_concurrent_jobs):
             self.threads.append(JobThread(self, volume_client, name="{0}.{1}".format(self.name_pfx, i)))
             self.threads[-1].start()
@@ -156,6 +175,12 @@ class AsyncJobs(threading.Thread):
         log.debug("tick thread {} starting".format(self.name))
         with lock_timeout_log(self.lock):
             while not self.stopping.is_set():
+                # don't add any new threads to "self.threads".
+                if not self.should_purge_trash():
+                    self.threads.clear()
+                    self.cv.wait(timeout=5)
+                    continue
+
                 c = len(self.threads)
                 if c > self.nr_concurrent_jobs:
                     # Decrease concurrency: notify threads which are waiting for a job to terminate.
