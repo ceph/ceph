@@ -64,6 +64,8 @@ class MetadataManager(object):
     CLONE_FAILURE_META_KEY_ERRNO = "errno"
     CLONE_FAILURE_META_KEY_ERROR_MSG = "error_msg"
 
+    CLONE_CANCELLED_SECTION = "CANCELLED_CLONE"
+
     def __init__(self, fs, config_path, mode):
         self.fs = fs
         self.mode = mode
