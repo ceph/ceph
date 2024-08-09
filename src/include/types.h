@@ -530,13 +530,8 @@ struct shard_id_t {
 
   const static shard_id_t NO_SHARD;
 
-  void encode(ceph::buffer::list &bl) const {
-    using ceph::encode;
-    encode(id, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator &bl) {
-    using ceph::decode;
-    decode(id, bl);
+  DENC(shard_id_t, v, p) {
+    denc(v.id, p);
   }
   void dump(ceph::Formatter *f) const {
     f->dump_int("id", id);
@@ -548,7 +543,7 @@ struct shard_id_t {
   bool operator==(const shard_id_t&) const = default;
   auto operator<=>(const shard_id_t&) const = default;
 };
-WRITE_CLASS_ENCODER(shard_id_t)
+WRITE_CLASS_DENC(shard_id_t)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
 
 #if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \

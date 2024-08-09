@@ -451,7 +451,7 @@ void PG::prepare_write(pg_info_t &info,
     ceph_assert(ret == 0);
   }
   pglog.write_log_and_missing(
-    t, &km, coll_ref->get_cid(), pgmeta_oid,
+    shard_services.get_cct(), t, &km, coll_ref->get_cid(), pgmeta_oid,
     peering_state.get_pgpool().info.require_rollback());
   if (!km.empty()) {
     t.omap_setkeys(coll_ref->get_cid(), pgmeta_oid, km);
