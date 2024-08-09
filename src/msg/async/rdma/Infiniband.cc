@@ -1109,7 +1109,13 @@ void Infiniband::init()
   memory_manager->create_tx_pool(cct->_conf->ms_async_rdma_buffer_size, tx_queue_len);
 
   if (support_srq) {
-    srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
+    while (!srq) {
+      srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
+      if (!srq) {
+        lderr(cct) << __func__ << " failed to create srq. " << cpp_strerror(errno) << dendl;
+        sleep(5);
+      }
+    }
     post_chunks_to_rq(rx_queue_len, NULL); //add to srq
   }
 }
@@ -1254,9 +1260,9 @@ Infiniband::CompletionQueue* Infiniband::create_comp_queue(
 
 Infiniband::QueuePair::~QueuePair()
 {
-  ldout(cct, 20) << __func__ << " destroy Queue Pair, qp number: " << qp->qp_num << " left SQ WR " << recv_queue.size() << dendl;
+  ldout(cct, 20) << __func__ << " destroy Queue Pair: " << this  << " left SQ WR " << recv_queue.size() << dendl;
   if (qp) {
-    ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
+    ldout(cct, 20) << __func__ << " destroy qp=" << qp << " qp number=" << qp->qp_num  << dendl;
     ceph_assert(!ibv_destroy_qp(qp));
   }
 

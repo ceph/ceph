@@ -721,6 +721,13 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
   } else {
     p = new RDMAConnectedSocketImpl(cct, ib, dispatcher, this);
   }
+
+  if (!p->get_qp()) {
+    lderr(cct) << __func__ << " p->qp is null: " << cpp_strerror(errno) << dendl;
+    delete p;
+    return -1;
+  }
+
   int r = p->try_connect(addr, opts);
 
   if (r < 0) {
