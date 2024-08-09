@@ -1,7 +1,0 @@
----
-
-devices:
-  - '/dev/sdb'
-dedicated_devices:
-  - '/dev/sdc'
-osd_scenario: "non-collocated"
