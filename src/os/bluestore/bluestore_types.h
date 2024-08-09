@@ -24,6 +24,7 @@
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
+#include "include/intarith.h"
 #include "common/hobject.h"
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
@@ -262,6 +263,7 @@ struct bluestore_blob_use_tracker_t {
   //
   uint32_t au_size;  // Allocation (=tracking) unit size,
                      // == 0 if uninitialized
+  uint32_t au_size_exponent; // power of 2 exponent of au_size
   uint32_t num_au;   // Amount of allocation units tracked
                      // == 0 if single unit or the whole blob is tracked
   uint32_t alloc_au; // Amount of allocation units allocated
@@ -272,7 +274,7 @@ struct bluestore_blob_use_tracker_t {
   };
   
   bluestore_blob_use_tracker_t()
-    : au_size(0), num_au(0), alloc_au(0), bytes_per_au(nullptr) {
+    : au_size(0), au_size_exponent(0), num_au(0), alloc_au(0), bytes_per_au(nullptr) {
   }
   bluestore_blob_use_tracker_t(const bluestore_blob_use_tracker_t& tracker);
   bluestore_blob_use_tracker_t& operator=(const bluestore_blob_use_tracker_t& rhs);
@@ -286,6 +288,7 @@ struct bluestore_blob_use_tracker_t {
     alloc_au = 0;
     bytes_per_au = 0;
     au_size = 0;
+    au_size_exponent = 0;
   }
 
   uint32_t get_referenced_bytes() const {
@@ -444,6 +447,7 @@ struct bluestore_blob_use_tracker_t {
   void decode(ceph::buffer::ptr::const_iterator& p) {
     clear();
     denc_varint(au_size, p);
+    au_size_exponent = std::countr_zero(au_size);
     if (au_size) {
       uint32_t _num_au;
       denc_varint(_num_au, p);
