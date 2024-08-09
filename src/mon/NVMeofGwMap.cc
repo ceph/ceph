@@ -53,14 +53,11 @@ void NVMeofGwMap::to_gmap(
 }
 
 void NVMeofGwMap::add_grp_id(
-  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid)
+  NvmeGwMonState &gw_state, NvmeGwTimerState &timer, const NvmeAnaGrpId grpid)
 {
-  Tmdata tm_data;
-  Blocklist_data blklist_data;
-  created_gws[group_key][gw_id].sm_state[grpid] =
-    gw_states_per_group_t::GW_STANDBY_STATE;
-  fsm_timers[group_key][gw_id].data[grpid] = tm_data;
-  created_gws[group_key][gw_id].blocklist_data[grpid] = blklist_data;
+  gw_state.sm_state[grpid] = gw_states_per_group_t::GW_STANDBY_STATE;
+  gw_state.blocklist_data[grpid];
+  timer.data[grpid];
 }
 
 void NVMeofGwMap::remove_grp_id(
@@ -99,17 +96,19 @@ int NVMeofGwMap::cfg_add_gw(
   }
   if (!was_allocated) allocated.insert(i);
 
+  auto &group_gws = created_gws[group_key];
+
   dout(10) << "allocated ANA groupId " << i << " for GW " << gw_id << dendl;
   // add new allocated grp_id to maps of created gateways
-  for (auto& itr: created_gws[group_key]) {
-    add_grp_id(itr.first, group_key, i);
+  for (auto &[id, state]: group_gws) {
+    add_grp_id(state, fsm_timers[group_key][id], i);
   }
-  NvmeGwMonState gw_created(i);
-  created_gws[group_key][gw_id] = gw_created;
-  created_gws[group_key][gw_id].performed_full_startup = true;
+  auto [iter, _] = group_gws.emplace(gw_id, i);
+  auto &gw_created = iter->second;
+  gw_created.performed_full_startup = true;
   for (NvmeAnaGrpId elem: allocated) {
     // add all existed grp_ids to newly created gateway
-    add_grp_id(gw_id, group_key, elem);
+    add_grp_id(gw_created, fsm_timers[group_key][gw_id], elem);
     dout(4) << "adding group " << elem << " to gw " << gw_id << dendl;
   }
   dout(10) << __func__ << " Created GWS:  " << created_gws  <<  dendl;

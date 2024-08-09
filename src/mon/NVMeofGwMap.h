@@ -73,6 +73,20 @@ public:
 
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
 
+  /**
+   * cfg_add_gw
+   *
+   * Adds a new gateway with id gw_id to group group_key.
+   * - Allocates a new NvmeAnaGrpId for the new gateway
+   * - Adds the newly allocated NvmeAnaGrpId to all existing gateways
+   *   in group_key in state gw_states_per_group_t::GW_STANDBY_STATE
+   * - Adds newly allocated NvmeAnaGrpId along with those for gateways
+   *   already in the group to the newly added gateway.
+   *
+   * @param [in] gw_id     id of gateway to add
+   * @param [in] group_key key for group to
+   * @return -EEXIST if gw_id is already present in group, 0 otherwise
+   */
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
 
   /**
@@ -152,8 +166,7 @@ public:
     NvmeAnaGrpId anagrpid, uint8_t value);
 private:
   void add_grp_id(
-    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    const NvmeAnaGrpId grpid);
+    NvmeGwMonState &gw_state, NvmeGwTimerState &timer, const NvmeAnaGrpId grpid);
   void remove_grp_id(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     const NvmeAnaGrpId grpid);
