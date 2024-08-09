@@ -1538,10 +1538,9 @@ int CrushWrapper::adjust_item_weight_in_bucket(
       continue;
     }
     crush_choose_arg *arg = &cmap.args[-1 - bucket_id];
-    if (!arg->weight_set) {
+    if (!arg->weight_set || !arg->weight_set_positions) {
       continue;
     }
-    ceph_assert(arg->weight_set_positions > 0);
     vector<int> w(arg->weight_set_positions);
     for (unsigned i = 0; i < b->size; ++i) {
       for (unsigned j = 0; j < arg->weight_set_positions; ++j) {
@@ -2895,6 +2894,8 @@ int CrushWrapper::device_class_clone(
     auto& n = cmap.args[-1-bno];
     n.ids_size = 0; // FIXME: implement me someday
     n.weight_set_positions = o.weight_set_positions;
+    if (n.weight_set_positions == 0)
+      continue;
     n.weight_set = static_cast<crush_weight_set*>(calloc(
       n.weight_set_positions, sizeof(crush_weight_set)));
     for (size_t s = 0; s < n.weight_set_positions; ++s) {
