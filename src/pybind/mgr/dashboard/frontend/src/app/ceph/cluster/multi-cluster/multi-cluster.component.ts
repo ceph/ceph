@@ -51,7 +51,8 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     POOLS: 0,
     OSDS: 0,
     CLUSTER_ALERTS: 0,
-    version: ''
+    version: '',
+    FEDERATE_UP_METRIC: 0
   };
   alerts: any;
 
@@ -89,6 +90,8 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   selectedTime: any;
   multiClusterQueries: any = {};
   managedByConfig$: Observable<any>;
+  clusterDetailsArray: any[];
+  prometheusConnectionError: any[] = [];
 
   constructor(
     private multiClusterService: MultiClusterService,
@@ -176,6 +179,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.multiClusterService.subscribe((resp: any) => {
         this.isMultiCluster = Object.keys(resp['config']).length > 1;
+        this.clusterDetailsArray = Object.values(resp['config']).flat();
         const hubUrl = resp['hub_url'];
         for (const key in resp['config']) {
           if (resp['config'].hasOwnProperty(key)) {
@@ -255,7 +259,8 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       'POOL_IOPS_UTILIZATION',
       'POOL_THROUGHPUT_UTILIZATION',
       'HOSTS',
-      'CLUSTER_ALERTS'
+      'CLUSTER_ALERTS',
+      'FEDERATE_UP_METRIC'
     ];
 
     let validSelectedQueries = allMultiClusterQueries;
@@ -346,6 +351,10 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       const osds = this.findClusterData(this.queriesResults?.OSDS, clusterName);
       const status = this.findClusterData(this.queriesResults?.HEALTH_STATUS, clusterName);
       const available_capacity = totalCapacity - usedCapacity;
+      const federateMetrics = this.queriesResults?.FEDERATE_UP_METRIC.filter(
+        (metric: any) => metric.metric.job === 'federate'
+      );
+      this.checkFederateMetricsStatus(federateMetrics);
 
       clusters.push({
         cluster: clusterName.trim(),
@@ -400,6 +409,59 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     this.poolThroughputValues = this.getQueryValues(
       this.queriesResults.POOL_THROUGHPUT_UTILIZATION
     );
+  }
+
+  checkFederateMetricsStatus(federateMetrics: any) {
+    this.prometheusConnectionError = [];
+    federateMetrics.forEach((entry1: { metric: { instance: any }; value: any }) => {
+      const instanceIpPort = entry1.metric.instance;
+      const instanceIp = instanceIpPort.split(':')[0];
+      const instancePort = instanceIpPort.split(':')[1];
+      const prometheus_federation_status = entry1.value[1];
+
+      this.clusterDetailsArray.forEach((entry2) => {
+        if (entry2['name'] !== this.localClusterName) {
+          const prometheusUrl = entry2['prometheus_url']
+            .replace('http://', '')
+            .replace('https://', '');
+          const prometheusIp = prometheusUrl.split(':')[0];
+          const prometheusPort = prometheusUrl.split(':')[1];
+
+          if (
+            instanceIp === prometheusIp &&
+            instancePort === prometheusPort &&
+            prometheus_federation_status === '0'
+          ) {
+            this.prometheusConnectionError.push({
+              cluster_name: entry2.name,
+              cluster_alias: entry2.cluster_alias,
+              url: entry2.url,
+              user: entry2.user,
+              ssl_verify: entry2.ssl_verify,
+              ssl_certificate: entry2.ssl_certificate
+            });
+          }
+        }
+      });
+    });
+  }
+
+  openReconnectClusterForm(cluster: any) {
+    const initialState = {
+      action: 'reconnect',
+      cluster: cluster
+    };
+    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
+      size: 'lg'
+    });
+    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
+      this.loading = true;
+      setTimeout(() => {
+        const currentRoute = this.router.url.split('?')[0];
+        this.multiClusterService.refreshMultiCluster(currentRoute);
+        this.getPrometheusData(this.prometheusService.lastHourDateObject);
+      }, this.PROMETHEUS_DELAY);
+    });
   }
 
   findClusterData(metrics: any, clusterName: string) {
