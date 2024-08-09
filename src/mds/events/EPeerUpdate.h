@@ -33,6 +33,7 @@ struct link_rollback {
   utime_t old_dir_mtime;
   utime_t old_dir_rctime;
   bufferlist snapbl;
+  inodeno_t referent_ino;
 
   link_rollback() : ino(0), was_inc(false) {}
 
@@ -73,6 +74,7 @@ struct rename_rollback {
     std::string dname;
     char remote_d_type;
     utime_t old_ctime;
+    inodeno_t referent_ino;
 
     drec() : remote_d_type((char)S_IFREG) {}
 

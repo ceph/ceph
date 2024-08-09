@@ -962,6 +962,7 @@ private:
 		    const filepath& path, int flags,
 		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr, CDir **pdir = nullptr);
 
+  int load_referent_inodes(CInode *in, MDSContextFactory& cf);
   int maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
 				    MDSCacheObject *p);
 
@@ -980,6 +981,9 @@ private:
   void _open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSContext *fin,
 				  bool want_xlocked, int r);
 
+  void open_remote_referent(inodeno_t ino, MDSContext *fin, bool want_xlocked=false);
+  void _open_remote_referent_finish(inodeno_t ino, MDSContext *fin,
+				    bool want_xlocked, int r);
   void make_trace(std::vector<CDentry*>& trace, CInode *in);
 
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,
@@ -1026,8 +1030,8 @@ private:
   // -- namespace --
   void encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl);
   void decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p);
-  void send_dentry_link(CDentry *dn, const MDRequestRef& mdr);
-  void send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr);
+  void send_dentry_link(CDentry *dn, const MDRequestRef& mdr, bool ignore_rename_witness=true, bool linkmerge=false);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr, bool ignore_rmdir_witness=true);
 
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSContext *c) {
     uncommitted_fragments.at(dirfrag).waiters.push_back(c);

@@ -79,6 +79,12 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     out << ")";
   }
 
+  if (dn.get_linkage()->is_referent()) {
+    out << " REFERENT REMOTE(";
+    out << dn.get_linkage()->get_remote_d_type_string();
+    out << ")";
+  }
+
   if (!dn.lock.is_sync_and_unlocked())
     out << " " << dn.lock;
   if (!dn.versionlock.is_sync_and_unlocked())
@@ -265,14 +271,19 @@ void CDentry::make_path(filepath& fp, bool projected) const
  * active (no longer projected).  if the passed dnl is projected,
  * don't link in, and do that work later in pop_projected_linkage().
  */
-void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
+void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *remote_in, CInode *referent_in)
 {
-  ceph_assert(dnl->is_remote());
-  ceph_assert(in->ino() == dnl->get_remote_ino());
-  dnl->inode = in;
+  ceph_assert(dnl->is_remote() || dnl->is_referent());
+  ceph_assert(remote_in->ino() == dnl->get_remote_ino());
+  dnl->inode = remote_in;
+
+  if (referent_in) {
+    ceph_assert(referent_in->get_remote_ino() == dnl->get_remote_ino());
+    dnl->referent_inode = referent_in;
+  }
 
   if (dnl == &linkage)
-    in->add_remote_parent(this);
+    remote_in->add_remote_parent(this);
 
   // check for reintegration
   dir->mdcache->eval_remote(this);
@@ -280,7 +291,7 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 
 void CDentry::unlink_remote(CDentry::linkage_t *dnl)
 {
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent());
   ceph_assert(dnl->inode);
   
   if (dnl == &linkage)
@@ -300,6 +311,20 @@ void CDentry::push_projected_linkage()
   }
 }
 
+void CDentry::push_projected_linkage(CInode *referent_inode, inodeno_t remote_ino)
+{
+  ceph_assert(remote_ino);
+  ceph_assert(referent_inode);
+
+  linkage_t *p = _project_linkage();
+  p->referent_inode = referent_inode;
+  //flushing dirty_inode in try_to_expire
+  referent_inode->push_projected_parent(this);
+  referent_inode->set_remote_ino(remote_ino);
+
+  p->remote_ino = remote_ino;
+  p->remote_d_type = referent_inode->d_type();
+}
 
 void CDentry::push_projected_linkage(CInode *inode)
 {
@@ -333,12 +358,19 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
    * much).
    */
 
-  if (n.remote_ino) {
+  if (n.is_remote()) {
     dir->link_remote_inode(this, n.remote_ino, n.remote_d_type);
     if (n.inode) {
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);
     }
+  } else if (n.is_referent()){
+    dir->link_referent_inode(this, n.referent_inode, n.remote_ino, n.remote_d_type);
+    if (n.inode) {
+      linkage.inode = n.inode;
+      linkage.inode->add_remote_parent(this);
+    }
+    n.referent_inode->pop_projected_parent();
   } else {
     if (n.inode) {
       dir->link_primary_inode(this, n.inode);
@@ -365,6 +397,7 @@ int CDentry::get_num_dir_auth_pins() const
   ceph_assert(!is_projected());
   if (get_linkage()->is_primary())
     return auth_pins + get_linkage()->get_inode()->get_num_auth_pins();
+  //TODO - Do we need to adjust authpins for a referent inode ?
   return auth_pins;
 }
 
@@ -446,7 +479,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
     encode(c, bl);
     encode(linkage.get_inode()->ino(), bl);
   }
-  else if (linkage.is_remote()) {
+  else if (linkage.is_remote() || linkage.is_referent()) {
     c = 2;
     encode(c, bl);
     encode(linkage.get_remote_ino(), bl);
@@ -599,6 +632,33 @@ void CDentry::decode_remote(char icode, inodeno_t& ino, unsigned char& d_type,
   } else ceph_assert(0);
 }
 
+void CDentry::encode_referent(inodeno_t& ino, unsigned char d_type,
+                              std::string_view alternate_name,
+                              bufferlist &bl)
+{
+  bl.append('r');  // remote link
+
+  // marker, name, ino
+  ENCODE_START(2, 1, bl);
+  encode(ino, bl);
+  encode(d_type, bl);
+  encode(alternate_name, bl);
+  ENCODE_FINISH(bl);
+}
+
+void CDentry::decode_referent(char icode, inodeno_t& ino, unsigned char& d_type,
+                             mempool::mds_co::string& alternate_name,
+                             ceph::buffer::list::const_iterator& bl)
+{
+  if (icode == 'r') {
+    DECODE_START(2, bl);
+    decode(ino, bl);
+    decode(d_type, bl);
+    if (struct_v >= 2)
+      decode(alternate_name, bl);
+    DECODE_FINISH(bl);
+  } else ceph_assert(0);
+}
 void CDentry::dump(Formatter *f) const
 {
   ceph_assert(f != NULL);
@@ -622,6 +682,7 @@ void CDentry::dump(Formatter *f) const
   
   f->dump_bool("is_primary", get_linkage()->is_primary());
   f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_referent", get_linkage()->is_referent());
   f->dump_bool("is_null", get_linkage()->is_null());
   f->dump_bool("is_new", is_new());
   if (get_linkage()->get_inode()) {
@@ -632,6 +693,8 @@ void CDentry::dump(Formatter *f) const
 
   if (linkage.is_remote()) {
     f->dump_string("remote_type", linkage.get_remote_d_type_string());
+  } else if (linkage.is_referent()) {
+    f->dump_string("referent_type", linkage.get_remote_d_type_string());
   } else {
     f->dump_string("remote_type", "");
   }
