@@ -97,7 +97,7 @@ class JwtManager(object):
         return decoded_message
 
     @classmethod
-    def gen_token(cls, username, ttl: Optional[int] = None):
+    def gen_token(cls, username, ttl: Optional[int] = None, payload: Optional[dict] = None):
         if not cls._secret:
             cls.init()
         if ttl is None:
@@ -105,13 +105,14 @@ class JwtManager(object):
         else:
             ttl = int(ttl) * 60 * 60  # convert hours to seconds
         now = int(time.time())
-        payload = {
-            'iss': 'ceph-dashboard',
-            'jti': str(uuid.uuid4()),
-            'exp': now + ttl,
-            'iat': now,
-            'username': username
-        }
+        if payload is None:
+            payload = {
+                'iss': 'ceph-dashboard',
+                'jti': str(uuid.uuid4()),
+                'exp': now + ttl,
+                'iat': now,
+                'username': username
+            }
         return cls.encode(payload, cls._secret)  # type: ignore
 
     @classmethod
