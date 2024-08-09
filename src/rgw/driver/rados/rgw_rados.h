@@ -1547,7 +1547,8 @@ public:
 
   void update_gc_chain(const DoutPrefixProvider *dpp, rgw_obj head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
   std::tuple<int, std::optional<cls_rgw_obj_chain>> send_chain_to_gc(cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
-  void delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain, const std::string& tag);
+  void delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
+                          const std::string& tag, optional_yield y);
   int gc_operate(const DoutPrefixProvider *dpp, std::string& oid, librados::ObjectWriteOperation *op, optional_yield y);
   int gc_aio_operate(const std::string& oid, librados::AioCompletion *c,
                      librados::ObjectWriteOperation *op);
