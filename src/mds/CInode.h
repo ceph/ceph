@@ -305,6 +305,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
     bool last_scrub_dirty = false; /// are our stamps dirty with respect to disk state?
     bool scrub_in_progress = false; /// are we currently scrubbing?
+    bool uninline_in_progress = false; /// are we currently uninlining?
 
     fragset_t queued_frags;
 
@@ -437,7 +438,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   }
 
   bool scrub_is_in_progress() const {
-    return (scrub_infop && scrub_infop->scrub_in_progress);
+    return (scrub_infop && (scrub_infop->scrub_in_progress || scrub_infop->uninline_in_progress));
   }
   /**
    * Start scrubbing on this inode. That could be very short if it's
@@ -448,6 +449,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * directory's get_projected_version())
    */
   void scrub_initialize(ScrubHeaderRef& header);
+  void uninline_initialize();
   /**
    * Call this once the scrub has been completed, whether it's a full
    * recursive scrub on a directory or simply the data on a file (or
@@ -456,6 +458,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * be complete()ed.
    */
   void scrub_finished();
+  void uninline_finished();
+  void common_finished();
 
   void scrub_aborted();
 
@@ -1058,6 +1062,15 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
                            MDSContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       ceph::Formatter *f);
+  bool has_inline_data() {
+    if (is_normal() && is_file()) {
+      auto pin = get_projected_inode();
+      if (pin->inline_data.version != CEPH_INLINE_NONE) {
+	return true;
+      }
+    }
+    return false;
+  }
 
   //bool hack_accessed = false;
   //utime_t hack_load_stamp;

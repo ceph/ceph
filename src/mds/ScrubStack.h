@@ -22,6 +22,8 @@
 #include "ScrubHeader.h"
 
 #include "common/LogClient.h"
+#include "common/Cond.h"
+#include "common/ceph_time.h"
 #include "include/elist.h"
 #include "messages/MMDSScrub.h"
 #include "messages/MMDSScrubStats.h"
@@ -36,7 +38,9 @@ public:
     clog(clog),
     finisher(finisher_),
     scrub_stack(member_offset(MDSCacheObject, item_scrub)),
-    scrub_waiting(member_offset(MDSCacheObject, item_scrub)) {}
+    scrub_waiting(member_offset(MDSCacheObject, item_scrub)) {
+      _mds_scrub_stats_review_period = g_conf().get_val<uint64_t>("mds_scrub_stats_review_period");
+    }
   ~ScrubStack() {
     ceph_assert(scrub_stack.empty());
     ceph_assert(!scrubs_in_progress);
@@ -103,6 +107,14 @@ public:
 
   bool remove_inode_if_stacked(CInode *in);
 
+  void move_uninline_failures_to_damage_table();
+
+  void init_scrub_counters(std::string_view path, std::string_view tag);
+  void purge_scrub_counters(std::string_view tag);
+  void purge_old_scrub_counters(); // on tick
+  void handle_conf_change(const std::set<std::string>& changed);
+
+
   MDCache *mdcache;
 
 protected:
@@ -132,10 +144,21 @@ protected:
   // check if any mds is aborting scrub after mds.0 starts
   bool scrub_any_peer_aborting = true;
 
+  struct scrub_counters_t {
+    ceph::coarse_real_clock::time_point start_time = coarse_real_clock::now();
+    std::string origin_path;
+    uint64_t uninline_started = 0;
+    uint64_t uninline_passed = 0;
+    uint64_t uninline_failed = 0;
+    uint64_t uninline_skipped = 0;
+  };
   struct scrub_stat_t {
     unsigned epoch_acked = 0;
     std::set<std::string> scrubbing_tags;
     bool aborting = false;
+    std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
+    std::unordered_map<_inodeno_t, std::string> paths;
+    std::unordered_map<std::string, scrub_counters_t> counters; // map(scrub_tag -> counters)
   };
   std::vector<scrub_stat_t> mds_scrub_stats;
 
@@ -154,6 +177,9 @@ private:
   friend std::ostream &operator<<(std::ostream &os, const State &state);
 
   friend class C_InodeValidated;
+  friend class C_IO_DataUninlined;
+  friend class C_MDC_DataUninlinedSubmitted;
+  friend class MDCache;
 
   int _enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top);
   /**
@@ -267,6 +293,7 @@ private:
 
   void handle_scrub(const cref_t<MMDSScrub> &m);
   void handle_scrub_stats(const cref_t<MMDSScrubStats> &m);
+  void uninline_data(CInode *in, Context *fin);
 
   State state = STATE_IDLE;
   bool clear_stack = false;
@@ -274,6 +301,8 @@ private:
   // list of pending context completions for asynchronous scrub
   // control operations.
   std::vector<Context *> control_ctxs;
+
+  uint64_t _mds_scrub_stats_review_period = 1; // 1 day
 };
 
 #endif /* SCRUBSTACK_H_ */

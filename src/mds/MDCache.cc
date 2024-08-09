@@ -9894,6 +9894,9 @@ void MDCache::dispatch_request(const MDRequestRef& mdr)
     case CEPH_MDS_OP_RDLOCK_FRAGSSTATS:
       rdlock_dirfrags_stats_work(mdr);
       break;
+    case CEPH_MDS_OP_UNINLINE_DATA:
+      uninline_data_work(mdr);
+      break;
     default:
       ceph_abort();
     }
@@ -13172,6 +13175,190 @@ void MDCache::enqueue_scrub_work(const MDRequestRef& mdr)
   mds->server->respond_to_request(mdr, r);
 }
 
+class C_MDC_DataUninlinedSubmitted : public MDCacheLogContext {
+  MDRequestRef mdr;
+
+  public:
+  C_MDC_DataUninlinedSubmitted(MDRequestRef r, MDSRank *mds) :
+    MDCacheLogContext(mds->mdcache), mdr(r) {}
+
+  void finish(int r) {
+    auto mds = get_mds(); // to keep dout happy
+    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+
+    ceph_assert(in != nullptr);
+
+    dout(20) << "(uninline_data) log submission "
+	     << (r ? "failed" : "succeeded")
+	     << "; r=" << r
+	     << " (" << cpp_strerror(r) << ") for " << *in << dendl;
+
+    // journaling must not fail
+    ceph_assert(r == 0);
+
+    in->mdcache->logger->inc(l_mdc_uninline_succeeded);
+    auto h = in->get_scrub_header();
+    h->record_uninline_passed();
+    in->uninline_finished();
+    mdr->apply();
+    mds->server->respond_to_request(mdr, r);
+  }
+};
+
+struct C_IO_DataUninlined : public MDSIOContext {
+  MDRequestRef mdr;
+
+  public:
+  C_IO_DataUninlined(MDRequestRef r, MDSRank *mds) : MDSIOContext(mds), mdr(r) {}
+
+  virtual void print(std::ostream& os) const {
+    os << "data uninlined";
+  }
+
+  void finish(int r) override {
+    auto mds = get_mds(); // to keep dout/derr happy
+    auto in = mds->server->rdlock_path_pin_ref(mdr, true);
+
+    // return faster if operation has failed (non-zero) status
+    if (r) {
+      derr << "(uninline_data) mutation failed: r=" << r
+	   << " (" << cpp_strerror(r) << ") for " << *in << dendl;
+      in->mdcache->logger->inc(l_mdc_uninline_write_failed);
+      ceph_assert(in->get_scrub_header());
+      auto h = in->get_scrub_header();
+      h->record_uninline_failed();
+      std::string path;
+      in->make_path_string(path);
+      h->record_uninline_status(in->ino(), r, path);
+      in->uninline_finished();
+      mds->server->respond_to_request(mdr, r);
+      return;
+    }
+
+    dout(20) << "(uninline_data) mutation succeeded for " << *in << dendl;
+
+    // journal the inode changes
+    MDLog *mdlog = mds->mdlog;
+
+    dout(20) << "(uninline_data) writing to journal for " << *in << dendl;
+
+    EUpdate *le = new EUpdate(mdlog, "uninline");
+    mdr->ls = mdlog->get_current_segment();
+
+    auto pi = in->project_inode(mdr);
+    pi.inode->version = in->pre_dirty();
+    pi.inode->inline_data.free_data();
+    pi.inode->inline_data.version = CEPH_INLINE_NONE;
+    pi.inode->ctime = mdr->get_op_stamp();
+    if (mdr->get_op_stamp() > pi.inode->rstat.rctime) {
+      pi.inode->rstat.rctime = mdr->get_op_stamp();
+    }
+    pi.inode->change_attr++;
+
+    in->mdcache->predirty_journal_parents(mdr, &le->metablob, in, nullptr,
+					  PREDIRTY_PRIMARY);
+    in->mdcache->journal_dirty_inode(mdr.get(), &le->metablob, in);
+
+    mdr->committing = true;
+
+    string event_str("submit entry: ");
+    event_str += __func__;
+    mdr->mark_event(event_str);
+
+    auto fin = new C_MDC_DataUninlinedSubmitted(mdr, mds);
+    mdlog->submit_entry(le, fin);
+  }
+};
+
+void MDCache::uninline_data_work(MDRequestRef mdr)
+{
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
+
+  if (!in) {
+    return;
+  }
+
+  MutationImpl::LockOpVec lov;
+  lov.add_xlock(&in->authlock);
+  lov.add_xlock(&in->filelock);
+  lov.add_xlock(&in->versionlock);
+
+  if (!mds->locker->acquire_locks(mdr, lov)) {
+    dout(20) << "(uninline_data) acquire_locks failed; will retry later for " << *in << dendl;
+    return; // lock not available immediately
+  }
+
+  if (!in->has_inline_data()) {
+    dout(20) << "(uninline_data) inode doesn't have inline data anymore " << *in << dendl;
+    in->uninline_finished();
+    mds->server->respond_to_request(mdr, 0);
+    return;
+  }
+  if (MDS_INO_IS_MDSDIR(in->get_scrub_header()->get_origin())) {
+    in->get_scrub_header()->record_uninline_skipped();
+    mds->server->respond_to_request(mdr, 0);
+    return;
+  }
+
+  logger->inc(l_mdc_uninline_started);
+  auto h = in->get_scrub_header();
+  h->record_uninline_started();
+  in->uninline_initialize();
+
+  auto ino = [&]() { return in->ino(); };
+  auto pi = in->get_projected_inode();
+  auto objecter = mds->objecter;
+
+  dout(20) << "(uninline_data) testing inline_data.version for " << *in << dendl;
+  ceph_assert(objecter);
+  ceph_assert(pi->inline_data.version != CEPH_INLINE_NONE);
+
+  object_t oid = InodeStoreBase::get_object_name(ino(), frag_t(), "");
+  SnapContext snapc;
+  SnapRealm *snaprealm = in->find_snaprealm();
+  auto& snapc_ref = (snaprealm ? snaprealm->get_snap_context() : snapc);
+
+  ObjectOperation create_ops;
+  create_ops.create(false);
+
+  dout(20) << "(uninline_data) dispatching objecter to create \""
+	   << mdr->get_filepath() << "\" for " << *in << dendl;
+
+  objecter->mutate(oid,
+		   OSDMap::file_to_object_locator(pi->layout),
+		   create_ops,
+		   snapc_ref,
+		   ceph::real_clock::now(),
+		   0,
+		   nullptr);
+
+  bufferlist inline_version_bl;
+
+  in->encode(inline_version_bl, pi->inline_data.version);
+
+  ObjectOperation uninline_ops;
+  uninline_ops.cmpxattr("inline_version",
+			CEPH_OSD_CMPXATTR_OP_GT,
+			CEPH_OSD_CMPXATTR_MODE_U64,
+			inline_version_bl);
+
+  if (pi->inline_data.length() > 0) {
+    dout(10) << "(uninline_data) moving inline data for \"" << mdr->get_filepath() << "\" to file for " << *in << dendl;
+    bufferlist inline_data;
+    pi->inline_data.get_data(inline_data);
+    uninline_ops.write(0, inline_data, pi->truncate_size, pi->truncate_seq);
+  }
+  uninline_ops.setxattr("inline_version", std::to_string(CEPH_INLINE_NONE));
+
+  objecter->mutate(oid,
+		   OSDMap::file_to_object_locator(pi->layout),
+		   uninline_ops,
+		   snapc_ref,
+		   ceph::real_clock::now(),
+		   0,
+		   new C_IO_DataUninlined(mdr, mds));
+}
+
 struct C_MDC_RespondInternalRequest : public MDCacheLogContext {
   MDRequestRef mdr;
   C_MDC_RespondInternalRequest(MDCache *c, const MDRequestRef& m) :
@@ -13544,6 +13731,14 @@ void MDCache::register_perfcounters()
                         "Internal Request type frag stats");
     pcb.add_u64_counter(l_mdss_ireq_inodestats, "ireq_inodestats",
                         "Internal Request type inode stats");
+
+    // uninline op stats
+    pcb.add_u64_counter(l_mdc_uninline_started, "uninline_started",
+                        "Internal Counter type uninline started");
+    pcb.add_u64_counter(l_mdc_uninline_succeeded, "uninline_succeeded",
+                        "Internal Counter type uninline succeeded");
+    pcb.add_u64_counter(l_mdc_uninline_write_failed, "uninline_write_failed",
+                        "Internal Counter type uninline write failed");
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());
