@@ -230,3 +230,28 @@ TEST(ECCommon, get_min_want_to_read_shards)
     ASSERT_TRUE(want_to_read == (std::set<int>{0, 1, 2, 3}));
   }
 }
+
+TEST(ECCommon, get_min_want_to_read_shards_bug67087)
+{
+  const uint64_t swidth = 4096;
+  const uint64_t ssize = 4;
+
+  ECUtil::stripe_info_t s(ssize, swidth);
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+  ASSERT_EQ(s.get_chunk_size(), 1024);
+
+  const std::vector<int> chunk_mapping = {}; // no remapping
+
+  std::set<int> want_to_read;
+
+  // multitple calls with the same want_to_read can happen during
+  // multi-region reads.
+  {
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      512, 512, s, chunk_mapping, &want_to_read);
+    ASSERT_EQ(want_to_read, std::set<int>{0});
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      512+16*1024, 512, s, chunk_mapping, &want_to_read);
+    ASSERT_EQ(want_to_read, std::set<int>{0});
+  }
+}
