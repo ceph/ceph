@@ -1571,9 +1571,10 @@ public:
 	    if (debug_verify_stored_missing) {
 	      auto miter = missing.get_items().find(i->soid);
 	      if (i->is_delete()) {
-		ceph_assert(miter == missing.get_items().end() ||
-		       (miter->second.need == i->version &&
-			miter->second.have == eversion_t()));
+		if (miter != missing.get_items().end()) {
+		  ceph_assert(miter->second.need == i->version);
+	          ceph_assert(miter->second.have == eversion_t() || miter->second.have == i->prior_version);
+	        }
 	      } else {
 		ceph_assert(miter != missing.get_items().end());
 		ceph_assert(miter->second.need == i->version);
