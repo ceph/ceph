@@ -91,6 +91,17 @@ constexpr inline T p2nphase(T x, T align) {
 }
 
 /*
+ * return how much space is left in this block,
+ * when perfectly aligned, return whole block
+ * eg, p2remain(0x1234, 0x100) == 0xcc
+ * eg, p2remain(0x5600, 0x100) == 0x100
+ */
+template<typename T>
+constexpr inline T p2remain(T x, T align) {
+  return align - p2phase(x, align);
+}
+
+/*
  * return x rounded up to an align boundary
  * eg, p2roundup(0x1234, 0x100) == 0x1300 (0x13*align)
  * eg, p2roundup(0x5600, 0x100) == 0x5600 (0x56*align)
