@@ -379,6 +379,15 @@ if(WITH_QATZIP)
   set(HAVE_QATZIP TRUE)
 endif(WITH_QATZIP)
 
+CMAKE_DEPENDENT_OPTION(WITH_UADK "Enable UADK" ON
+        "CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+if(WITH_UADK)
+  include(Builduadk)
+  build_uadk()
+  set(HAVE_UADK TRUE)
+  message("HAVE_UADK " ${HAVE_UADK})
+endif(WITH_UADK)
+
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
 

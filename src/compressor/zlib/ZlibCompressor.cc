@@ -20,6 +20,9 @@
 #ifdef HAVE_QATZIP
   #include "compressor/QatAccel.h"
 #endif
+#ifdef HAVE_UADK
+  #include "compressor/UadkAccel.h"
+#endif
 // -----------------------------------------------------------------------------
 
 #include <zlib.h>
@@ -59,6 +62,9 @@ _prefix(std::ostream* _dout)
 #ifdef HAVE_QATZIP
 QatAccel ZlibCompressor::qat_accel;
 #endif
+#ifdef HAVE_UADK
+UadkAccel ZlibCompressor::uadk_accel;
+#endif
 
 ZlibCompressor::ZlibCompressor(CephContext *cct, bool isal)
   : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct)
@@ -68,6 +74,12 @@ ZlibCompressor::ZlibCompressor(CephContext *cct, bool isal)
     qat_enabled = true;
   else
     qat_enabled = false;
+#endif
+#ifdef HAVE_UADK
+  if (cct->_conf->uadk_compressor_enabled && uadk_accel.init())
+    uadk_enabled = true;
+  else
+    uadk_enabled = false;
 #endif
 }
 
@@ -193,6 +205,10 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out, std::optiona
   if (qat_enabled)
     return qat_accel.compress(in, out, compressor_message);
 #endif
+#ifdef HAVE_UADK
+  if (uadk_enabled)
+    return uadk_accel.compress(in, out);
+#endif
 #if (__x86_64__ && defined(HAVE_NASM_X64_AVX2)) || defined(__aarch64__)
   if (isal_enabled)
     return isal_compress(in, out, compressor_message);
@@ -209,6 +225,10 @@ int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_
   // QAT can only decompress with existing header, only for 'QZ_DEFLATE_GZIP_EXT'
   if (qat_enabled && compressor_message.has_value() && *compressor_message == GZIP_WRAPPER + MAX_WBITS)
     return qat_accel.decompress(p, compressed_size, out, compressor_message);
+#endif
+#ifdef HAVE_UADK
+  if (uadk_enabled && (!compressor_message || *compressor_message == ZLIB_DEFAULT_WIN_SIZE))
+    return uadk_accel.decompress(p, compressed_size, out);
 #endif
 
   int ret;
