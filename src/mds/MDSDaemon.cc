@@ -509,8 +509,10 @@ int MDSDaemon::init()
   dout(10) << sizeof(Capability) << "\tCapability" << dendl;
   dout(10) << sizeof(xlist<void*>::item) << "\txlist<>::item" << dendl;
 
-  messenger->add_dispatcher_tail(&beacon);
-  messenger->add_dispatcher_tail(this);
+  // Ensure beacons are processed ahead of most other dispatchers.
+  messenger->add_dispatcher_head(&beacon, Dispatcher::PRIORITY_HIGH);
+  // order last as MDSDaemon::ms_dispatch2 first acquires the mds_lock
+  messenger->add_dispatcher_head(this, Dispatcher::PRIORITY_LOW);
 
   // init monc
   monc->set_messenger(messenger);
@@ -915,6 +917,7 @@ void MDSDaemon::respawn()
 
 bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 {
+  dout(25) << __func__ << ": processing " << m << dendl;
   std::lock_guard l(mds_lock);
   if (stopping) {
     return false;
