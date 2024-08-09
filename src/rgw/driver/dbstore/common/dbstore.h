@@ -104,15 +104,15 @@ struct DBOpObjectDataInfo {
 
 struct DBOpLCHeadInfo {
   std::string index;
-  rgw::sal::StoreLifecycle::StoreLCHead head;
+  rgw::sal::LCHead head;
 };
 
 struct DBOpLCEntryInfo {
   std::string index;
-  rgw::sal::StoreLifecycle::StoreLCEntry entry;
+  rgw::sal::LCEntry entry;
   // used for list query
   std::string min_marker;
-  std::list<rgw::sal::StoreLifecycle::StoreLCEntry> list_entries;
+  std::list<rgw::sal::LCEntry> list_entries;
 };
 
 struct DBOpInfo {
@@ -1979,15 +1979,15 @@ class DB {
         RGWObjState *astate, void *arg);
 
     int get_entry(const std::string& oid, const std::string& marker,
-		  std::unique_ptr<rgw::sal::Lifecycle::LCEntry>* entry);
+		  rgw::sal::LCEntry& entry);
     int get_next_entry(const std::string& oid, const std::string& marker,
-		  std::unique_ptr<rgw::sal::Lifecycle::LCEntry>* entry);
-    int set_entry(const std::string& oid, rgw::sal::Lifecycle::LCEntry& entry);
+		  rgw::sal::LCEntry& entry);
+    int set_entry(const std::string& oid, const rgw::sal::LCEntry& entry);
     int list_entries(const std::string& oid, const std::string& marker,
-			   uint32_t max_entries, std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>& entries);
-    int rm_entry(const std::string& oid, rgw::sal::Lifecycle::LCEntry& entry);
-    int get_head(const std::string& oid, std::unique_ptr<rgw::sal::Lifecycle::LCHead>* head);
-    int put_head(const std::string& oid, rgw::sal::Lifecycle::LCHead& head);
+			   uint32_t max_entries, std::vector<rgw::sal::LCEntry>& entries);
+    int rm_entry(const std::string& oid, const rgw::sal::LCEntry& entry);
+    int get_head(const std::string& oid, rgw::sal::LCHead& head);
+    int put_head(const std::string& oid, const rgw::sal::LCHead& head);
     int delete_stale_objs(const DoutPrefixProvider *dpp, const std::string& bucket,
                           uint32_t min_wait);
     int createGC(const DoutPrefixProvider *_dpp);
