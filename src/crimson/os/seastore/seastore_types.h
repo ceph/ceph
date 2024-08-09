@@ -1197,40 +1197,81 @@ constexpr size_t BACKREF_NODE_SIZE = 4096;
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+constexpr bool is_data_type(extent_types_t type) {
+  return type == extent_types_t::OBJECT_DATA_BLOCK ||
+         type == extent_types_t::TEST_BLOCK;
+}
+
+constexpr bool is_logical_metadata_type(extent_types_t type) {
+  return type >= extent_types_t::OMAP_INNER &&
+         type <= extent_types_t::COLL_BLOCK;
+}
+
 constexpr bool is_logical_type(extent_types_t type) {
-  switch (type) {
-  case extent_types_t::ROOT:
-  case extent_types_t::LADDR_INTERNAL:
-  case extent_types_t::LADDR_LEAF:
-  case extent_types_t::BACKREF_INTERNAL:
-  case extent_types_t::BACKREF_LEAF:
-    return false;
-  default:
+  if ((type >= extent_types_t::OMAP_INNER &&
+       type <= extent_types_t::OBJECT_DATA_BLOCK) ||
+      type == extent_types_t::TEST_BLOCK) {
+    assert(is_logical_metadata_type(type) ||
+           is_data_type(type));
     return true;
+  } else {
+    assert(!is_logical_metadata_type(type) &&
+           !is_data_type(type));
+    return false;
   }
 }
 
-constexpr bool is_retired_placeholder(extent_types_t type)
-{
+constexpr bool is_retired_placeholder_type(extent_types_t type) {
   return type == extent_types_t::RETIRED_PLACEHOLDER;
 }
 
-constexpr bool is_lba_node(extent_types_t type)
-{
+constexpr bool is_root_type(extent_types_t type) {
+  return type == extent_types_t::ROOT;
+}
+
+constexpr bool is_lba_node(extent_types_t type) {
   return type == extent_types_t::LADDR_INTERNAL ||
-    type == extent_types_t::LADDR_LEAF ||
-    type == extent_types_t::DINK_LADDR_LEAF;
+         type == extent_types_t::LADDR_LEAF ||
+         type == extent_types_t::DINK_LADDR_LEAF;
 }
 
-constexpr bool is_backref_node(extent_types_t type)
-{
+constexpr bool is_backref_node(extent_types_t type) {
   return type == extent_types_t::BACKREF_INTERNAL ||
-    type == extent_types_t::BACKREF_LEAF;
+         type == extent_types_t::BACKREF_LEAF;
 }
 
-constexpr bool is_lba_backref_node(extent_types_t type)
-{
+constexpr bool is_lba_backref_node(extent_types_t type) {
   return is_lba_node(type) || is_backref_node(type);
+}
+
+constexpr bool is_physical_type(extent_types_t type) {
+  if (type <= extent_types_t::DINK_LADDR_LEAF ||
+      (type >= extent_types_t::TEST_BLOCK_PHYSICAL &&
+       type <= extent_types_t::BACKREF_LEAF)) {
+    assert(is_root_type(type) ||
+           is_lba_backref_node(type) ||
+           type == extent_types_t::TEST_BLOCK_PHYSICAL);
+    return true;
+  } else {
+    assert(!is_root_type(type) &&
+           !is_lba_backref_node(type) &&
+           type != extent_types_t::TEST_BLOCK_PHYSICAL);
+    return false;
+  }
+}
+
+constexpr bool is_real_type(extent_types_t type) {
+  if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
+      (type >= extent_types_t::TEST_BLOCK &&
+       type <= extent_types_t::BACKREF_LEAF)) {
+    assert(is_logical_type(type) ||
+           is_physical_type(type));
+    return true;
+  } else {
+    assert(!is_logical_type(type) &&
+           !is_physical_type(type));
+    return false;
+  }
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
@@ -1304,8 +1345,7 @@ enum class data_category_t : uint8_t {
 std::ostream &operator<<(std::ostream &out, data_category_t c);
 
 constexpr data_category_t get_extent_category(extent_types_t type) {
-  if (type == extent_types_t::OBJECT_DATA_BLOCK ||
-      type == extent_types_t::TEST_BLOCK) {
+  if (is_data_type(type)) {
     return data_category_t::DATA;
   } else {
     return data_category_t::METADATA;

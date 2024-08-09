@@ -177,7 +177,7 @@ public:
       return false;
     }
     assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
-    ceph_assert_always(extent->get_type() == extent_types_t::ROOT ||
+    ceph_assert_always(is_root_type(extent->get_type()) ||
 	extent->get_paddr().is_absolute());
     return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
   }
@@ -571,7 +571,8 @@ private:
       extent_types_t type,
       placement_hint_t hint,
       rewrite_gen_t gen) {
-    if (type == extent_types_t::ROOT) {
+    assert(is_real_type(type));
+    if (is_root_type(type)) {
       gen = INLINE_GENERATION;
     } else if (get_main_backend_type() == backend_type_t::SEGMENTED &&
                is_lba_backref_node(type)) {

@@ -515,7 +515,7 @@ public:
 
   /// Returns true if extent is a plcaeholder
   bool is_placeholder() const {
-    return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
+    return is_retired_placeholder_type(get_type());
   }
 
   bool is_pending_io() const {

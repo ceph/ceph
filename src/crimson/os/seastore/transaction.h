@@ -101,7 +101,7 @@ public:
       iter != read_set.end()) {
       // placeholder in read-set should be in the retired-set
       // at the same time.
-      assert(iter->ref->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
+      assert(!is_retired_placeholder_type(iter->ref->get_type()));
       if (out)
 	*out = iter->ref;
       SUBTRACET(seastore_cache, "{} is present in read_set -- {}",
@@ -270,9 +270,9 @@ public:
   void replace_placeholder(CachedExtent& placeholder, CachedExtent& extent) {
     ceph_assert(!is_weak());
 
-    assert(placeholder.get_type() == extent_types_t::RETIRED_PLACEHOLDER);
-    assert(extent.get_type() != extent_types_t::RETIRED_PLACEHOLDER);
-    assert(extent.get_type() != extent_types_t::ROOT);
+    assert(is_retired_placeholder_type(placeholder.get_type()));
+    assert(!is_retired_placeholder_type(extent.get_type()));
+    assert(!is_root_type(extent.get_type()));
     assert(extent.get_paddr() == placeholder.get_paddr());
     {
       auto where = read_set.find(placeholder.get_paddr());

@@ -245,6 +245,10 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "OBJECT_DATA_BLOCK";
   case extent_types_t::RETIRED_PLACEHOLDER:
     return out << "RETIRED_PLACEHOLDER";
+  case extent_types_t::ALLOC_INFO:
+    return out << "ALLOC_INFO";
+  case extent_types_t::JOURNAL_TAIL:
+    return out << "JOURNAL_TAIL";
   case extent_types_t::TEST_BLOCK:
     return out << "TEST_BLOCK";
   case extent_types_t::TEST_BLOCK_PHYSICAL:
@@ -256,7 +260,7 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
   case extent_types_t::NONE:
     return out << "NONE";
   default:
-    return out << "UNKNOWN";
+    return out << "UNKNOWN(" << (unsigned)t << ")";
   }
 }
 
@@ -290,7 +294,7 @@ std::ostream &operator<<(std::ostream &out, data_category_t c)
 }
 
 bool can_inplace_rewrite(extent_types_t type) {
-  return get_extent_category(type) == data_category_t::DATA;
+  return is_data_type(type);
 }
 
 std::ostream &operator<<(std::ostream &out, sea_time_point_printer_t tp)

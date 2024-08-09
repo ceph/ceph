@@ -795,7 +795,7 @@ void Cache::commit_replace_extent(
   assert(next->version == prev->version + 1);
   extents.replace(*next, *prev);
 
-  if (prev->get_type() == extent_types_t::ROOT) {
+  if (is_root_type(prev->get_type())) {
     assert(prev->is_stable_clean()
       || prev->primary_ref_list_hook.is_linked());
     if (prev->is_dirty()) {
@@ -1081,7 +1081,7 @@ CachedExtentRef Cache::duplicate_for_write(
   auto [iter, inserted] = i->mutation_pendings.insert(*ret);
   ceph_assert(inserted);
   t.add_mutated_extent(ret);
-  if (ret->get_type() == extent_types_t::ROOT) {
+  if (is_root_type(ret->get_type())) {
     t.root = ret->cast<RootBlock>();
   } else {
     ret->last_committed_crc = i->last_committed_crc;
@@ -1175,7 +1175,7 @@ record_t Cache::prepare_record(
 
     assert(i->get_version() > 0);
     auto final_crc = i->calc_crc32c();
-    if (i->get_type() == extent_types_t::ROOT) {
+    if (is_root_type(i->get_type())) {
       SUBTRACET(seastore_t, "writing out root delta {}B -- {}",
                 t, delta_length, *i);
       assert(t.root == i);
@@ -1243,8 +1243,8 @@ record_t Cache::prepare_record(
     retire_stat.increment(extent->get_length());
     DEBUGT("retired and remove extent -- {}", t, *extent);
     commit_retire_extent(t, extent);
-    if (is_backref_mapped_extent_node(extent)
-	  || is_retired_placeholder(extent->get_type())) {
+    if (is_backref_mapped_extent_node(extent) ||
+        is_retired_placeholder_type(extent->get_type())) {
       rel_delta.alloc_blk_ranges.emplace_back(
 	extent->get_paddr(),
 	L_ADDR_NULL,
@@ -1277,7 +1277,7 @@ record_t Cache::prepare_record(
     i->prepare_write();
     i->prepare_commit();
     bl.append(i->get_bptr());
-    if (i->get_type() == extent_types_t::ROOT) {
+    if (is_root_type(i->get_type())) {
       ceph_assert(0 == "ROOT never gets written as a fresh block");
     }
 
@@ -1609,7 +1609,7 @@ void Cache::complete_commit(
     i->prior_instance = CachedExtentRef();
     i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
-    if (i->version == 1 || i->get_type() == extent_types_t::ROOT) {
+    if (i->version == 1 || is_root_type(i->get_type())) {
       i->dirty_from_or_retired_at = start_seq;
       DEBUGT("commit extent done, become dirty -- {}", t, *i);
     } else {
@@ -1638,8 +1638,8 @@ void Cache::complete_commit(
   for (auto &i: t.retired_set) {
     auto &extent = i.extent;
     extent->dirty_from_or_retired_at = start_seq;
-    if (is_backref_mapped_extent_node(extent)
-	  || is_retired_placeholder(extent->get_type())) {
+    if (is_backref_mapped_extent_node(extent) ||
+        is_retired_placeholder_type(extent->get_type())) {
       DEBUGT("backref_list free {} len {}",
 	     t,
 	     extent->get_paddr(),
@@ -1855,7 +1855,7 @@ Cache::replay_delta(
       std::make_pair(false, nullptr));
   }
 
-  if (delta.type == extent_types_t::ROOT) {
+  if (is_root_type(delta.type)) {
     TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
           journal_seq, record_base, delta, *root);
     remove_extent(root);
@@ -1877,7 +1877,7 @@ Cache::replay_delta(
       if (ret) {
         // no retired-placeholder should be exist yet because no transaction
         // has been created.
-        assert(ret->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
+        assert(!is_retired_placeholder_type(ret->get_type()));
         return ret->wait_io().then([ret] {
           return ret;
         });
@@ -2007,7 +2007,7 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	    if (result == Transaction::get_extent_ret::ABSENT) {
 	      DEBUGT("extent is absent on t -- {}", t, *ext);
 	      t.add_to_read_set(ext);
-	      if (ext->get_type() == extent_types_t::ROOT) {
+	      if (is_root_type(ext->get_type())) {
 		if (t.root) {
 		  assert(&*t.root == &*ext);
 		  ceph_assert(0 == "t.root would have to already be in the read set");

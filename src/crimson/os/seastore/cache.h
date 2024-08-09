@@ -312,7 +312,7 @@ public:
     if (!ret) {
       SUBDEBUGT(seastore_cache, "{} {} is absent", t, type, offset);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
-    } else if (ret->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+    } else if (is_retired_placeholder_type(ret->get_type())) {
       // retired_placeholder is not really cached yet
       SUBDEBUGT(seastore_cache, "{} {} is absent(placeholder)",
                 t, type, offset);
@@ -515,7 +515,7 @@ public:
     }
 
     // user should not see RETIRED_PLACEHOLDER extents
-    ceph_assert(p_extent->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
+    ceph_assert(!is_retired_placeholder_type(p_extent->get_type()));
     if (!p_extent->is_fully_loaded()) {
       assert(!p_extent->is_mutable());
       LOG_PREFIX(Cache::get_extent_viewable_by_trans);
@@ -597,7 +597,7 @@ private:
     }
 
     // extent PRESENT in cache
-    if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+    if (is_retired_placeholder_type(cached->get_type())) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
@@ -1736,7 +1736,7 @@ private:
         iter != extents.end()) {
       if (p_metric_key &&
           // retired_placeholder is not really cached yet
-          iter->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
+          !is_retired_placeholder_type(iter->get_type())) {
         ++p_counters->hit;
       }
       return CachedExtentRef(&*iter);
