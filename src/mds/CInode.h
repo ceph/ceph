@@ -1008,6 +1008,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     return !projected_parent.empty();
   }
 
+  CInode *get_rank_mask_inode(bool inherit=true);
   mds_rank_t get_export_pin(bool inherit=true) const;
   void check_pin_policy(mds_rank_t target);
   void set_export_pin(mds_rank_t rank);
@@ -1025,6 +1026,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   double get_ephemeral_rand() const;
   void maybe_ephemeral_rand(double threshold=-1.0);
   void setxattr_ephemeral_rand(double prob=0.0);
+  std::string get_bal_rank_mask_from_xattrs(bool projected_node=true);
   bool is_ephemeral_rand() const {
     return state_test(STATE_RANDEPHEMERALPIN);
   }
