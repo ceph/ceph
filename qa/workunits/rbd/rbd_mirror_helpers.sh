@@ -881,6 +881,29 @@ test_status_in_pool_dir()
     exit 1
 }
 
+test_peer_status_in_pool_dir()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local site_name=$4
+    local state_pattern="$5"
+    local description_pattern="$6"
+    local service_pattern="$7"
+
+    local xmlstatus=$(CEPH_ARGS='' rbd --cluster ${cluster} mirror image status \
+                 ${pool}/${image} --format xml)
+
+    local description state
+    description=$($XMLSTARLET sel -t -v \
+        "//image/peer_sites/peer_site[site_name='${site_name}']/description" <<< "$xmlstatus")
+    state=$($XMLSTARLET sel -t -v \
+        "//image/peer_sites/peer_site/state" <<< "$xmlstatus")
+
+    echo "${state}" | grep "${state_pattern}" ||
+    test "${description}"| grep "${description_pattern}"
+}
+
 test_mirror_pool_status_verbose()
 {
     local cluster=$1
@@ -901,6 +924,25 @@ test_mirror_pool_status_verbose()
 
     echo "${state}" | grep "${state_pattern}" ||
     test "${last_update}" '>' "${prev_last_update}"
+}
+
+wait_for_peer_status_in_pool_dir()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local site_name=$4
+    local state_pattern="$5"
+    local description_pattern="$6"
+    local service_pattern="$7"
+
+    for s in 1 1 1 2 2 4 4 8 8 8 16 16; do
+        sleep ${s}
+        test_peer_status_in_pool_dir ${cluster} ${pool} ${image} "${site_name}" "${state_pattern}" \
+                                "${description_pattern}" "${service_pattern}" &&
+            return 0
+    done
+    return 1
 }
 
 wait_for_status_in_pool_dir()
