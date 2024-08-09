@@ -8,6 +8,7 @@ import logging
 import re
 import threading
 import time
+import difflib
 from datetime import datetime, timedelta
 from string import ascii_lowercase, ascii_uppercase, digits, punctuation
 from typing import List, Optional, Sequence
@@ -193,6 +194,15 @@ class Role(object):
         return Role(r_dict['name'], r_dict['description'],
                     r_dict['scopes_permissions'])
 
+    @classmethod
+    def map_to_system_roles(cls, role):
+        matches = []
+        for rn in SYSTEM_ROLES_NAMES:
+            closest_match = difflib.get_close_matches(role.lower(), SYSTEM_ROLES_NAMES[rn], n=1, cutoff=0.8)
+            if closest_match:
+                matches.append(rn)
+        return matches[0] if matches else None
+
 
 # static pre-defined system roles
 # this roles cannot be deleted nor updated
@@ -282,6 +292,13 @@ SYSTEM_ROLES = {
     CEPHFS_MGR_ROLE.name: CEPHFS_MGR_ROLE,
     GANESHA_MGR_ROLE.name: GANESHA_MGR_ROLE,
 }
+
+# static name-like roles list for role mapping
+SYSTEM_ROLES_NAMES = {
+    ADMIN_ROLE: [ADMIN_ROLE.name, 'admin'],
+    READ_ONLY_ROLE: [READ_ONLY_ROLE.name, 'read', 'guest', 'monitor']
+}
+
 
 
 class User(object):

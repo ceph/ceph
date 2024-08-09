@@ -30,6 +30,7 @@ class JwtManager(object):
     JWT_TOKEN_TTL = 28800  # default 8 hours
     JWT_ALGORITHM = 'HS256'
     _secret = None
+    oauth2_token = False
 
     LOCAL_USER = threading.local()
 
@@ -73,23 +74,27 @@ class JwtManager(object):
         base64_message = split_message[1]
         base64_secret = split_message[2]
 
-        decoded_header = json.loads(base64.urlsafe_b64decode(base64_header))
-
-        if decoded_header['alg'] != cls.JWT_ALGORITHM:
-            raise InvalidAlgorithmError()
-
-        incoming_secret = base64.urlsafe_b64encode(hmac.new(
-            bytes(secret, 'UTF-8'),
-            msg=bytes(base64_header + "." + base64_message, 'UTF-8'),
-            digestmod=hashlib.sha256
-        ).digest()).decode('UTF-8').replace("=", "")
-
-        if base64_secret != incoming_secret:
-            raise InvalidTokenError()
-
         # We add ==== as padding to ignore the requirement to have correct padding in
         # the urlsafe_b64decode method.
+        decoded_header = json.loads(base64.urlsafe_b64decode(base64_header + "===="))
+
+        if decoded_header['alg'] != cls.JWT_ALGORITHM and (not cls.oauth2_token and decoded_header['alg'] == 'RS256'):
+            raise InvalidAlgorithmError()
+
+        incoming_secret = ''
+        if decoded_header['alg'] == cls.JWT_ALGORITHM:
+            incoming_secret = base64.urlsafe_b64encode(hmac.new(
+                bytes(secret, 'UTF-8'),
+                msg=bytes(base64_header + "." + base64_message, 'UTF-8'),
+                digestmod=hashlib.sha256
+            ).digest()).decode('UTF-8').replace("=", "")
+
+        if base64_secret != incoming_secret and not cls.oauth2_token:
+            raise InvalidTokenError()
+
         decoded_message = json.loads(base64.urlsafe_b64decode(base64_message + "===="))
+        if decoded_header['alg'] == 'RS256' and cls.oauth2_token:
+            decoded_message['username'] = decoded_message['sub']
         now = int(time.time())
         if decoded_message['exp'] < now:
             raise ExpiredSignatureError()
@@ -123,6 +128,8 @@ class JwtManager(object):
     @classmethod
     def get_token_from_header(cls):
         auth_cookie_name = 'token'
+        if cls.oauth2_token:
+            return cherrypy.request.headers.get('X-Access-Token')
         try:
             # use cookie
             return cherrypy.request.cookie[auth_cookie_name].value
@@ -153,9 +160,10 @@ class JwtManager(object):
     def get_user(cls, token):
         try:
             dtoken = cls.decode_token(token)
-            if not cls.is_blocklisted(dtoken['jti']):
+            if ('jti' in dtoken and not cls.is_blocklisted(dtoken['jti'])) or cls.oauth2_token:
                 user = AuthManager.get_user(dtoken['username'])
-                if user.last_update <= dtoken['iat']:
+
+                if ('iat' in dtoken and user.last_update <= dtoken['iat']) or cls.oauth2_token:
                     return user
                 cls.logger.debug(  # type: ignore
                     "user info changed after token was issued, iat=%s last_update=%s",
@@ -173,6 +181,7 @@ class JwtManager(object):
             cls.logger.debug(  # type: ignore
                 "Invalid token: user %s does not exist", dtoken['username']
             )
+
         return None
 
     @classmethod
@@ -192,7 +201,8 @@ class JwtManager(object):
         for jti in to_delete:
             del bl_dict[jti]
 
-        bl_dict[token['jti']] = token['exp']
+        if not cls.oauth2_token:
+            bl_dict[token['jti']] = token['exp']
         mgr.set_store(cls.JWT_TOKEN_BLOCKLIST_KEY, json.dumps(bl_dict))
 
     @classmethod
