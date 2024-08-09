@@ -1417,8 +1417,13 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
 void RocksDBStore::get_statistics(Formatter *f)
 {
   if (!cct->_conf->rocksdb_perf)  {
-    dout(20) << __func__ << " RocksDB perf is disabled, can't probe for stats"
-	     << dendl;
+    f->write_raw_data("error: RocksDB perf is disabled, can't probe for stats.\n");
+    return;
+  }
+  if (!cct->_conf->rocksdb_collect_compaction_stats &&
+      !cct->_conf->rocksdb_collect_extended_stats &&
+      !cct->_conf->rocksdb_collect_memory_stats)  {
+    f->write_raw_data("error: None of rocksdb_collect_* setting is enabled, hence no output.\n");
     return;
   }
   
