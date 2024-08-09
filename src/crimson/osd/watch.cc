@@ -81,7 +81,7 @@ Watch::~Watch()
 seastar::future<> Watch::connect(crimson::net::ConnectionXcoreRef conn, bool)
 {
   if (this->conn == conn) {
-    logger().debug("conn={} already connected", conn);
+    logger().debug("conn={} already connected", *conn);
     return seastar::now();
   }
   timeout_timer.cancel();

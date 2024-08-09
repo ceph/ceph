@@ -306,7 +306,7 @@ Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
       sizeof(*preamble) - sizeof(preamble->crc));
   if (crc != preamble->crc) {
     throw FrameError(fmt::format(
-        "bad preamble crc calculated={} expected={}", crc, preamble->crc));
+        "bad preamble crc calculated={} expected={}", crc, (uint32_t)preamble->crc));
   }
 
   // see calc_num_segments()

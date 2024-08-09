@@ -290,7 +290,7 @@ Socket::connect(const entity_addr_t &peer_addr)
     auto ret = std::make_unique<Socket>(
       std::move(socket), side_t::connector, 0, construct_tag{});
     logger().debug("Socket::connect(): connected to {}, socket {}",
-                   peer_addr, fmt::ptr(ret));
+                   peer_addr, fmt::ptr(ret.get()));
     return ret;
   });
 }
@@ -431,7 +431,7 @@ ShardedServerSocket::accept(accept_func_t &&_fn_accept)
               peer_addr.get_port(), Socket::construct_tag{});
           logger().debug("ShardedServerSocket({})::accept(): accepted peer {}, "
                          "socket {}, dispatch_only_on_primary_sid = {}",
-                         ss.listen_addr, peer_addr, fmt::ptr(_socket),
+                         ss.listen_addr, peer_addr, fmt::ptr(_socket.get()),
                          ss.dispatch_only_on_primary_sid);
           std::ignore = seastar::with_gate(
               ss.shutdown_gate,

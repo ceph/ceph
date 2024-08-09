@@ -164,9 +164,10 @@ struct shard_as_auth_t {
   // other in/out arguments) via this struct
 };
 
+namespace fmt {
 // the format specifier {D} is used to request debug output
 template <>
-struct fmt::formatter<shard_as_auth_t> {
+struct formatter<shard_as_auth_t> {
   template <typename ParseContext>
   constexpr auto parse(ParseContext& ctx)
   {
@@ -177,7 +178,7 @@ struct fmt::formatter<shard_as_auth_t> {
     return it;
   }
   template <typename FormatContext>
-  auto format(shard_as_auth_t const& as_auth, FormatContext& ctx)
+  auto format(shard_as_auth_t const& as_auth, FormatContext& ctx) const
   {
     if (debug_log) {
       // note: 'if' chain, as hard to consistently (on all compilers) avoid some
@@ -208,6 +209,7 @@ struct fmt::formatter<shard_as_auth_t> {
 
   bool debug_log{false};
 };
+} // namespace fmt
 
 struct auth_selection_t {
   shard_to_scrubmap_t::iterator auth;  ///< an iter into one of this_chunk->maps
@@ -229,7 +231,7 @@ struct fmt::formatter<auth_selection_t> {
   }
 
   template <typename FormatContext>
-  auto format(auth_selection_t const& aus, FormatContext& ctx)
+  auto format(auth_selection_t const& aus, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
                           " {{AU-S: {}->{:x} OI({:x}:{}) {} dm:{}}} ",
@@ -517,12 +519,14 @@ class ScrubBackend {
   uint64_t logical_to_ondisk_size(uint64_t logical_size) const;
 };
 
+namespace fmt {
+
 template <>
-struct fmt::formatter<data_omap_digests_t> {
+struct formatter<data_omap_digests_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const data_omap_digests_t& dg, FormatContext& ctx)
+  auto format(const data_omap_digests_t& dg, FormatContext& ctx) const
   {
     // can't use value_or() due to different output types
     if (std::get<0>(dg).has_value()) {
@@ -539,7 +543,7 @@ struct fmt::formatter<data_omap_digests_t> {
 };
 
 template <>
-struct fmt::formatter<std::pair<hobject_t, data_omap_digests_t>> {
+struct formatter<std::pair<hobject_t, data_omap_digests_t>> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -552,3 +556,4 @@ struct fmt::formatter<std::pair<hobject_t, data_omap_digests_t>> {
 			  std::get<1>(x));
   }
 };
+} // namespace fmt

@@ -2485,7 +2485,7 @@ namespace fmt {
 // (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92944).
 template <HasDoFormatTo T> struct formatter<T> : formatter<std::string_view> {
   template <typename FormatContext>
-  auto format(const T& staged_iterator, FormatContext& ctx) {
+  auto format(const T& staged_iterator, FormatContext& ctx) const {
     return staged_iterator.do_format_to(ctx.out(), true);
   }
 };

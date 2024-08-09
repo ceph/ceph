@@ -370,6 +370,6 @@ RecoveryBackend::handle_recovery_op(
   default:
     return seastar::make_exception_future<>(
 	std::invalid_argument(fmt::format("invalid request type: {}",
-					  m->get_header().type)));
+					  (uint16_t)m->get_header().type)));
   }
 }

@@ -19,7 +19,7 @@ struct fmt::formatter<seastar::lowres_system_clock::time_point> {
 
   template <typename FormatContext>
   auto format(const seastar::lowres_system_clock::time_point& t,
-              FormatContext& ctx) {
+              FormatContext& ctx) const {
     std::time_t tt = std::chrono::duration_cast<std::chrono::seconds>(
       t.time_since_epoch()).count();
     auto milliseconds = (t.time_since_epoch() %

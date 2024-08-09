@@ -208,10 +208,14 @@ int OSDriver::get_next_or_current(
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
   static_assert(sizeof(pool) == 8, "assumed by the formatting code");
+
+  // note: the snap_id is to be formatted as a 64-bit hex number,
+  // and not according to the text representation of snapid_t
+  ceph_assert(snap != CEPH_NOSNAP && snap != CEPH_SNAPDIR);
   return fmt::sprintf("%s%lld_%.16X_",
 		      MAPPING_PREFIX,
 		      pool,
-		      snap);
+		      static_cast<uint64_t>(snap));
 }
 
 string SnapMapper::to_raw_key(
@@ -729,10 +733,11 @@ int SnapMapper::get_snaps(
 
 string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
 {
+  ceph_assert(last != CEPH_NOSNAP && last != CEPH_SNAPDIR);
   return fmt::sprintf("%s_%lld_%016llx",
 		      PURGED_SNAP_PREFIX,
 		      pool,
-		      last);
+		      static_cast<uint64_t>(last));
 }
 
 void SnapMapper::make_purged_snap_key_value(
@@ -950,9 +955,10 @@ void SnapMapper::Scrubber::run()
 
 string SnapMapper::get_legacy_prefix(snapid_t snap)
 {
+  ceph_assert(snap != CEPH_NOSNAP && snap != CEPH_SNAPDIR);
   return fmt::sprintf("%s%.16X_",
 		      LEGACY_MAPPING_PREFIX,
-		      snap);
+		      static_cast<uint64_t>(snap));
 }
 
 string SnapMapper::to_legacy_raw_key(

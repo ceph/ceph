@@ -541,7 +541,7 @@ struct fmt::formatter<crimson::net::io_handler_state> {
   }
 
   template <typename FormatContext>
-  auto format(crimson::net::io_handler_state state, FormatContext& ctx) {
+  auto format(crimson::net::io_handler_state state, FormatContext& ctx) const {
     return fmt::format_to(
         ctx.out(),
         "io(in_seq={}, is_out_queued={}, has_out_sent={})",
@@ -555,7 +555,7 @@ template <>
 struct fmt::formatter<crimson::net::IOHandler::io_state_t>
   : fmt::formatter<std::string_view> {
   template <typename FormatContext>
-  auto format(crimson::net::IOHandler::io_state_t state, FormatContext& ctx) {
+  auto format(crimson::net::IOHandler::io_state_t state, FormatContext& ctx) const {
     using enum crimson::net::IOHandler::io_state_t;
     std::string_view name;
     switch (state) {
