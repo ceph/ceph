@@ -7916,7 +7916,9 @@ void MDCache::shutdown_start()
 bool MDCache::shutdown_pass()
 {
   dout(5) << "shutdown_pass" << dendl;
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_START);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_START);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_START)
+    _exit(134);
 
   if (mds->is_stopped()) {
     dout(5) << " already shut down" << dendl;
@@ -7931,7 +7933,9 @@ bool MDCache::shutdown_pass()
   // trim cache
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTTRIM);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTTRIM);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_POSTTRIM)
+    _exit(134);
 
   // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
@@ -7962,11 +7966,15 @@ bool MDCache::shutdown_pass()
 	dest = 0;
       dout(5) << "sending " << *dir << " back to mds." << dest << dendl;
       migrator->export_dir_nicely(dir, dest);
-      ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTONEEXPORT);
+      //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTONEEXPORT);
+      if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_POSTONEEXPORT)
+        _exit(134);
     }
   }
 
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTALLEXPORTS);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_POSTALLEXPORTS);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_POSTALLEXPORTS)
+    _exit(134);
 
   if (!strays_all_exported) {
     dout(5) << "waiting for strays to migrate" << dendl;
@@ -7986,7 +7994,9 @@ bool MDCache::shutdown_pass()
       mds->server->terminate_sessions();
     return false;
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SESSIONTERMINATE);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SESSIONTERMINATE);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_SESSIONTERMINATE)
+    _exit(134);
 
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
@@ -7999,7 +8009,9 @@ bool MDCache::shutdown_pass()
       auto sle = create_subtree_map();
       mds->mdlog->submit_entry(sle);
       mds->mdlog->flush();
-      ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SUBTREEMAP);
+      //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_SUBTREEMAP);
+      if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_SUBTREEMAP)
+        _exit(134);
     }
   }
   mds->mdlog->trim_all();
@@ -8007,7 +8019,9 @@ bool MDCache::shutdown_pass()
     dout(5) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_TRIMALL);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_TRIMALL);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_TRIMALL)
+    _exit(134);
 
   // drop our reference to our stray dir inode
   for (int i = 0; i < NUM_STRAY; ++i) {
@@ -8018,7 +8032,9 @@ bool MDCache::shutdown_pass()
       strays[i]->put_stickydirs();
     }
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_STRAYPUT);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_STRAYPUT);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_STRAYPUT)
+    _exit(134);
 
   CDir *mydir = myin ? myin->get_dirfrag(frag_t()) : NULL;
   if (mydir && !mydir->is_subtree_root())
@@ -8055,7 +8071,9 @@ bool MDCache::shutdown_pass()
     mds->mdlog->submit_entry(new ELid());
     mds->mdlog->flush();
     mds->mdlog->cap();
-    ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP);
+    //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP);
+    if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_LOGCAP)
+      _exit(134);
     return false;
   }
 
@@ -8086,19 +8104,25 @@ bool MDCache::shutdown_pass()
     myin->close_dirfrag(mydir->get_frag());
   }
   ceph_assert(subtrees.empty());
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_EMPTYSUBTREES);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_EMPTYSUBTREES);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_EMPTYSUBTREES)
+    _exit(134);
 
   if (myin) {
     remove_inode(myin);
     ceph_assert(!myin);
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_MYINREMOVAL);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_MYINREMOVAL);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_MYINREMOVAL)
+    _exit(134);
 
   if (global_snaprealm) {
     remove_inode(global_snaprealm->inode);
     global_snaprealm = nullptr;
   }
-  ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_GLOBALSNAPREALMREMOVAL);
+  //ceph_assert(kill_shutdown_at != KILL_SHUTDOWN_AT::SHUTDOWN_GLOBALSNAPREALMREMOVAL);
+  if (kill_shutdown_at == KILL_SHUTDOWN_AT::SHUTDOWN_GLOBALSNAPREALMREMOVAL)
+    _exit(134);
   
   // done!
   dout(5) << "shutdown done." << dendl;
