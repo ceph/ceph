@@ -49,9 +49,12 @@ enum io_pattern_t {
   IO_PATTERN_FULL_SEQ
 };
 
+const int PATTERN_BYTE_RANDOM = 256;
+
 struct IOType {};
 struct Size {};
 struct IOPattern {};
+struct PatternByte {};
 
 void validate(boost::any& v, const std::vector<std::string>& values,
               Size *target_type, int) {
@@ -103,6 +106,20 @@ void validate(boost::any& v, const std::vector<std::string>& values,
     v = boost::any(io_type);
 }
 
+void validate(boost::any& v, const std::vector<std::string>& values,
+              PatternByte *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  uint16_t pattern;
+  if (s == "random")
+    pattern = PATTERN_BYTE_RANDOM;
+  else if (s.size() == 1)
+    pattern = uint16_t(s.front());
+  else
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  v = boost::any(pattern);
+}
+
 } // anonymous namespace
 
 static void rbd_bencher_completion(void *c, void *pc);
@@ -132,8 +149,9 @@ struct rbd_bencher {
   io_type_t io_type;
   uint64_t io_size;
   bufferlist write_bl;
+  uint16_t pattern_byte;
 
-  explicit rbd_bencher(librbd::Image *i, io_type_t io_type, uint64_t io_size)
+  explicit rbd_bencher(librbd::Image *i, io_type_t io_type, uint64_t io_size, uint16_t pattern_byte)
     : image(i),
       in_flight(0),
       io_type(io_type),
@@ -141,7 +159,19 @@ struct rbd_bencher {
   {
     if (io_type == IO_TYPE_WRITE || io_type == IO_TYPE_RW) {
       bufferptr bp(io_size);
-      memset(bp.c_str(), rand() & 0xff, io_size);
+
+      if (pattern_byte == PATTERN_BYTE_RANDOM)
+      {
+        for (uint64_t i = 0; i < io_size; i++)
+        {
+          bp.c_str()[i] = rand() % PATTERN_BYTE_RANDOM;
+        }
+      }
+      else
+      {
+        memset(bp.c_str(), pattern_byte & 0xff, io_size);
+      }
+
       write_bl.push_back(bp);
     }
   }
@@ -212,7 +242,7 @@ bool should_read(uint64_t read_proportion)
 int do_bench(librbd::Image& image, io_type_t io_type,
 		   uint64_t io_size, uint64_t io_threads,
 		   uint64_t io_bytes, io_pattern_t io_pattern,
-                   uint64_t read_proportion)
+                   uint64_t read_proportion, uint16_t pattern_byte)
 {
   uint64_t size = 0;
   image.size(&size);
@@ -233,7 +263,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     return r;
   }
 
-  rbd_bencher b(&image, io_type, io_size);
+  rbd_bencher b(&image, io_type, io_size, pattern_byte);
 
   std::cout << "bench "
        << " type " << (io_type == IO_TYPE_READ ? "read" :
@@ -454,8 +484,10 @@ void get_arguments_for_bench(po::options_description *positional,
                              po::options_description *options) {
   add_bench_common_options(positional, options);
 
-  options->add_options()
-    ("io-type", po::value<IOType>()->required(), "IO type (read, write, or readwrite(rw))");
+    options->add_options()
+    ("io-type", po::value<IOType>()->required(), "IO type (read, write, or readwrite(rw))")
+    ("pattern-byte", po::value<PatternByte>(),
+      "Which byte value to write (accepts a single character, or 'random') [default: random]");
 }
 
 int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
@@ -511,6 +543,13 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
     bench_pattern = IO_PATTERN_SEQ;
   }
 
+  uint16_t pattern_byte;
+  if (vm.count("pattern-byte")) {
+    pattern_byte = vm["pattern-byte"].as<uint16_t>();
+  } else {
+    pattern_byte = PATTERN_BYTE_RANDOM;
+  }
+
   uint64_t bench_read_proportion;
   if (bench_io_type == IO_TYPE_READ) {
     bench_read_proportion = 100;
@@ -544,7 +583,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
   r = do_bench(image, bench_io_type, bench_io_size, bench_io_threads,
-		     bench_bytes, bench_pattern, bench_read_proportion);
+		     bench_bytes, bench_pattern, bench_read_proportion, pattern_byte);
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_signal);
