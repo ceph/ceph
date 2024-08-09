@@ -35,7 +35,7 @@ class ForwardScrubber(ThrasherGreenlet):
             self.do_scrub()
         except Exception as e:
             self.set_thrasher_exception(e)
-            self.logger.exception("exception:")
+            self.logger.error(f"exception: {e}")
             # allow successful completion so gevent doesn't see an exception...
 
     def do_scrub(self):
