@@ -86,7 +86,7 @@ class TestJournalRepair(CephFSTestCase):
 
         # Now check the MDS can read what we wrote: truncate the journal
         # and start the mds.
-        self.fs.journal_tool(['journal', 'reset'], 0)
+        self.fs.journal_tool(['journal', 'reset', '--yes-i-really-really-mean-it'], 0)
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
@@ -231,7 +231,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.journal_tool(["event", "recover_dentries", "summary"], 0, quiet=True)
         self.fs.journal_tool(["event", "recover_dentries", "summary"], 1, quiet=True)
         self.fs.table_tool(["0", "reset", "session"])
-        self.fs.journal_tool(["journal", "reset"], 0)
+        self.fs.journal_tool(["journal", "reset", "--yes-i-really-really-mean-it"], 0)
         self.fs.erase_mds_objects(1)
         self.run_ceph_cmd('fs', 'reset', self.fs.name,
                           '--yes-i-really-mean-it')
