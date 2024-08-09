@@ -546,7 +546,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       pending_map.available = m->get_available();
       updated = true;
     }
-    if (pending_map.available_modules != m->get_available_modules()) {
+    if (pending_map.available_modules != m->get_available_modules() &&
+        m->get_available_modules().size() > 0) {
       dout(4) << "available_modules " << m->get_available_modules()
 	      << " (was " << pending_map.available_modules << ")" << dendl;
       pending_map.available_modules = m->get_available_modules();

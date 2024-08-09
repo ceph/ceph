@@ -373,7 +373,19 @@ Message *decode_message(CephContext *cct,
       }
     }
   }
-
+  // hexdump all in that message
+  if (cct) {
+    ldout(cct, DEBUGLVL) << "decode_message " << header.version << dendl;
+    ldout(cct, DEBUGLVL) << "front:\n";
+    front.hexdump(*_dout);
+    *_dout << dendl;
+    ldout(cct, DEBUGLVL) << "middle:\n";
+    middle.hexdump(*_dout);
+    *_dout << dendl;
+    ldout(cct, DEBUGLVL) << "data:\n";
+    data.hexdump(*_dout);
+    *_dout << dendl;
+  }
   // make message
   ceph::ref_t<Message> m;
   int type = header.type;
