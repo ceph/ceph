@@ -1377,13 +1377,13 @@ void Journaler::_trim()
   }
 
   // trim
-  ceph_assert(trim_to <= write_pos);
-  ceph_assert(trim_to <= expire_pos);
-  ceph_assert(trim_to > trimming_pos);
   ldout(cct, 10) << "trim trimming to " << trim_to
 		 << ", trimmed/trimming/expire are "
 		 << trimmed_pos << "/" << trimming_pos << "/" << expire_pos
 		 << dendl;
+  ceph_assert(trim_to <= write_pos);
+  ceph_assert(trim_to <= expire_pos);
+  ceph_assert(trim_to >= trimming_pos);
 
   // delete range of objects
   uint64_t first = trimming_pos / period;

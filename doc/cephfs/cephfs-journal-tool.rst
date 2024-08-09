@@ -24,7 +24,7 @@ Syntax
 ::
 
     cephfs-journal-tool journal <inspect|import|export|reset>
-    cephfs-journal-tool header <get|set>
+    cephfs-journal-tool header <get|set|{autorepair> [--force]}
     cephfs-journal-tool event <get|splice|apply> [filter] <list|json|summary|binary>
 
 
@@ -95,8 +95,17 @@ Header mode
 * ``set`` modifies an attribute of the header.  Allowed attributes are
   ``trimmed_pos``, ``expire_pos`` and ``write_pos``.
 
-Example: header get/set
-~~~~~~~~~~~~~~~~~~~~~~~
+* ``autorepair`` provides a best effort to fix corrupted journal pointers of
+  the mdlog. Events are enumerated and the:
+  * trimmed_pos is set to the first event in the log segment
+  * expire_pos and read_pos are set to the first major segment event
+  * write_pos is set to the the first position immediately after the last event
+  A log is emitted to the console listing the proposed changes to the offsets
+  in the header. Only if a --force argument is found that the proposed header
+  fields are committed to the disk.
+
+Example: header get/set/autorepair
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ::
 
@@ -115,6 +124,8 @@ Example: header get/set
     # cephfs-journal-tool header set trimmed_pos 4194303
     Updating trimmed_pos 0x400000 -> 0x3fffff
     Successfully updated header.
+
+    # cephfs-journal-tool --rank a:0 header autorepair [--force]
 
 
 Event mode
