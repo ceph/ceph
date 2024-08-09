@@ -831,15 +831,27 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                                   "snapshot name '{0}' is invalid".format(snapname))
         snappath = self.snapshot_data_path(snapname)
         snap_info = {}
+        nsize = 0
         try:
             snap_attrs = {'created_at':'ceph.snap.btime',
                           'data_pool':'ceph.dir.layout.pool'}
             for key, val in snap_attrs.items():
                 snap_info[key] = self.fs.getxattr(snappath, val)
+
             pending_clones_info = self.get_pending_clones(snapname)
             info_dict = {'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
                     'data_pool': snap_info['data_pool'].decode('utf-8')}
-            info_dict.update(pending_clones_info);
+            if self.state != SubvolumeStates.STATE_RETAINED:
+                subvolpath = (self.metadata_mgr.get_global_option(
+                        MetadataManager.GLOBAL_META_KEY_PATH))
+                try:
+                    nsize = int(self.fs.getxattr(subvolpath,
+                                                 'ceph.quota.max_bytes'
+                                                 ).decode('utf-8'))
+                except cephfs.NoData:
+                    pass
+            info_dict.update({'bytes_quota': "infinite" if nsize == 0 else nsize})
+            info_dict.update(pending_clones_info)
             return info_dict
         except cephfs.Error as e:
             if e.errno == errno.ENOENT:
