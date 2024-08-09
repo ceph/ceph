@@ -213,6 +213,7 @@ enum {
   // allocation stats
   //****************************************
   l_bluestore_allocate_hist,
+  l_bluestore_allocator_lat,
   //****************************************
   l_bluestore_last
 };
