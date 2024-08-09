@@ -251,9 +251,8 @@ struct fmt::formatter<SnapSet> {
 
     } else {
       return fmt::format_to(ctx.out(),
-			    "{}={}:{}",
+			    "{}={}",
 			    snps.seq,
-			    snps.snaps,
 			    snps.clone_snaps);
     }
   }
