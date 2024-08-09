@@ -151,7 +151,8 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
     return false;
   } else {
     bool modules_changed = mgr_map_.modules != mgr_map.modules ||
-      mgr_map_.always_on_modules != mgr_map.always_on_modules;
+      mgr_map_.always_on_modules != mgr_map.always_on_modules ||
+      mgr_map_.force_disabled_modules != mgr_map.force_disabled_modules;
     mgr_map = mgr_map_;
 
     if (standby_modules != nullptr) {
@@ -240,10 +241,20 @@ void PyModuleRegistry::active_start(
     // Anything we're skipping because of !can_run will be flagged
     // to the user separately via get_health_checks
     if (!(i.second->is_enabled() && i.second->is_loaded())) {
+      dout(8) << __func__ << " Not starting module '" << i.first << "', it is "
+	      << "not enabled and loaded"  << dendl;
       continue;
     }
 
-    dout(4) << "Starting " << i.first << dendl;
+    // These are always-on modules but user force-disabled them.
+    if (mgr_map.force_disabled_modules.find(i.first) !=
+	mgr_map.force_disabled_modules.end()) {
+      dout(8) << __func__ << " Not starting module '" << i.first << "', it is "
+	      << "force-disabled" << dendl;
+      continue;
+    }
+
+    dout(4) << "Starting module '" << i.first << "'" << dendl;
     active_modules->start_one(i.second);
   }
 }

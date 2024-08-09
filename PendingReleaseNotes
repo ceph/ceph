@@ -12,6 +12,10 @@
   of the column showing the state of a group snapshot in the unformatted CLI
   output is changed from 'STATUS' to 'STATE'. The state of a group snapshot
   that was shown as 'ok' is now shown as 'complete', which is more descriptive.
+* CephFS: Volumes plugin can now be force-disabled even though it is an
+  "always on" MGR module. This can be necessary in cases where MGR(s) needs to
+  be prevented from being flooded by volumes plugin commands when a CephFS is
+  degraded.
 
 >=19.0.0
 
