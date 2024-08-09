@@ -157,7 +157,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           {
             matcher: { id: 'byName', options: 'Cluster' },
             properties: [
-              { id: 'links', value: [{ title: '', url: '/d/GQ3MHvnIz/ceph-cluster-new?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}' }] },
+              { id: 'links', value: [{ title: '', url: '/d/8XGIPTAIz/ceph-cluster?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}' }] },
             ],
           },
           {
