@@ -210,6 +210,7 @@ private:
 
   entity_addrvec_t _filter_addrs(const entity_addrvec_t& addrs);
 
+  entity_addrvec_t extend_with_wildcard_nonces(entity_addrvec_t&& addrs) const override;
  private:
   NetworkStack *stack;
   std::vector<Processor*> processors;

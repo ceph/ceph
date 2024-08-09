@@ -786,7 +786,9 @@ int main(int argc, const char **argv)
   int rank = monmap.get_rank(g_conf()->name.get_id());
   std::string public_msgr_type = g_conf()->ms_public_type.empty() ? g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
-				      entity_name_t::MON(rank), "mon", 0);
+				      entity_name_t::MON(rank),
+				      "mon",
+				      Messenger::get_random_nonce());
   if (!msgr)
     exit(1);
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
@@ -821,7 +823,7 @@ int main(int argc, const char **argv)
                               NULL);
 
   entity_addrvec_t bind_addrs = ipaddrs;
-  entity_addrvec_t public_addrs = ipaddrs;
+  entity_addrvec_t public_addrs = msgr->extend_with_wildcard_nonces(std::move(ipaddrs));
 
   // check if the public_bind_addr option is set
   if (!g_conf()->public_bind_addr.is_blank_ip()) {

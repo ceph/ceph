@@ -4,7 +4,6 @@
 #include <netdb.h>
 
 #include "include/types.h"
-#include "include/random.h"
 
 #include "Messenger.h"
 
@@ -25,7 +24,7 @@ uint64_t Messenger::get_random_nonce()
   // unreliable. To deal with this, we started guessing whether we
   // run in a container or not, and of course, got manual lever to
   // intervene if guessed wrong (CEPH_USE_RANDOM_NONCE).
-  return ceph::util::generate_random_number<uint64_t>();
+  return entity_addr_t::get_random_nonce();
 }
 
 Messenger *Messenger::create(CephContext *cct, const std::string &type,

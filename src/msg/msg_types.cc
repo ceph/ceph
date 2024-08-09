@@ -11,6 +11,7 @@
 #include <fmt/format.h>
 
 #include "common/Formatter.h"
+#include "include/random.h"
 
 bool entity_name_t::parse(std::string_view s)
 {
@@ -48,6 +49,12 @@ void entity_name_t::dump(ceph::Formatter *f) const
 {
   f->dump_string("type", type_str());
   f->dump_unsigned("num", num());
+}
+
+__u32 entity_addr_t::get_random_nonce()
+{
+  return ceph::util::generate_random_number<__u32>(
+    NONCE_WILDCARD + 1, std::numeric_limits<__u32>::max());
 }
 
 void entity_addr_t::dump(ceph::Formatter *f) const
