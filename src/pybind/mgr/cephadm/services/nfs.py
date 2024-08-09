@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class NFSService(CephService):
     TYPE = 'nfs'
+    DEFAULT_EXPORTER_PORT = 9587
 
     def ranked(self, spec: ServiceSpec) -> bool:
         return True

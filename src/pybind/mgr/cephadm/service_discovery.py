@@ -12,6 +12,7 @@ import orchestrator  # noqa
 from mgr_module import ServiceInfoT
 from mgr_util import build_url
 from typing import Dict, List, TYPE_CHECKING, cast, Collection, Callable, NamedTuple, Optional, IO
+from cephadm.services.nfs import NFSService
 from cephadm.services.monitoring import AlertmanagerService, NodeExporterService, PrometheusService
 import secrets
 from mgr_util import verify_tls_files
@@ -147,6 +148,7 @@ class Root(Server):
 <p><a href='prometheus/sd-config?service=haproxy'>HAProxy http sd-config</a></p>
 <p><a href='prometheus/sd-config?service=ceph-exporter'>Ceph exporter http sd-config</a></p>
 <p><a href='prometheus/sd-config?service=nvmeof'>NVMeoF http sd-config</a></p>
+<p><a href='prometheus/sd-config?service=nfs'>NFS http sd-config</a></p>
 <p><a href='prometheus/rules'>Prometheus rules</a></p>
 </body>
 </html>'''
@@ -167,6 +169,8 @@ class Root(Server):
             return self.ceph_exporter_sd_config()
         elif service == 'nvmeof':
             return self.nvmeof_sd_config()
+        elif service == 'nfs':
+            return self.nfs_sd_config()
         else:
             return []
 
@@ -242,6 +246,19 @@ class Root(Server):
             assert dd.hostname is not None
             addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
             port = NvmeofService.PROMETHEUS_PORT
+            srv_entries.append({
+                'targets': [build_url(host=addr, port=port).lstrip('/')],
+                'labels': {'instance': dd.hostname}
+            })
+        return srv_entries
+
+    def nfs_sd_config(self) -> List[Dict[str, Collection[str]]]:
+        """Return <http_sd_config> compatible prometheus config for nfs service."""
+        srv_entries = []
+        for dd in self.mgr.cache.get_daemons_by_type('nfs'):
+            assert dd.hostname is not None
+            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            port = NFSService.DEFAULT_EXPORTER_PORT
             srv_entries.append({
                 'targets': [build_url(host=addr, port=port).lstrip('/')],
                 'labels': {'instance': dd.hostname}
