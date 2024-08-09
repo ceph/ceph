@@ -10,6 +10,28 @@
 #include "rgw_frontend.h"
 #define REQUEST_TIMEOUT 65000
 
+#define BACKOFF_MAX_ROUND 60
+#define BACKOFF_MAX_WAIT 1000 // ms
+
+class RGWAsioBackoff {
+  int cur_wait;
+  int max_msecs;
+  int try_cnt;
+
+  void update_wait_time();
+public:
+  explicit RGWAsioBackoff(int _max_msecs = BACKOFF_MAX_WAIT) :
+                          cur_wait(1), max_msecs(_max_msecs), try_cnt(0) {}
+
+  void backoff_sleep();
+  void reset() {
+    cur_wait = 1;
+    try_cnt = 0;
+  }
+
+  bool is_backoff_done() const { return (try_cnt >= BACKOFF_MAX_ROUND); }
+};
+
 class RGWAsioFrontend : public RGWFrontend {
   class Impl;
   std::unique_ptr<Impl> impl;
