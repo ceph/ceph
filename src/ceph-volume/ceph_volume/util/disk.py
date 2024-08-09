@@ -839,6 +839,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         sysdir = os.path.join(_sys_block_path, devname)
         if block[2] == 'part':
             sysdir = os.path.join(_sys_block_path, block[3], devname)
+        metadata = {}
 
         # If the device is ceph rbd it gets excluded
         if is_ceph_rbd(diskname):
