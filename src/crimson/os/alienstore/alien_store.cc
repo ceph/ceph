@@ -75,7 +75,8 @@ AlienStore::AlienStore(const std::string& type,
                        const ConfigValues& values)
   : type(type),
     path{path},
-    values(values)
+    values(values),
+    op_gates(seastar::smp::count)
 {
 }
 
@@ -149,12 +150,12 @@ AlienStore::exists(
   CollectionRef ch,
   const ghobject_t& oid)
 {
-  return seastar::with_gate(op_gate, [=, this] {
-    return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, this] {
-      auto c = static_cast<AlienCollection*>(ch.get());
-      return store->exists(c->collection, oid);
+    return op_gates.submit_with_gate("exists", [=, this] {
+        return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, this] {
+            auto c = static_cast<AlienCollection*>(ch.get());
+            return store->exists(c->collection, oid);
+        });
     });
-  });
 }
 
 AlienStore::mount_ertr::future<> AlienStore::mount()
@@ -180,13 +181,13 @@ seastar::future<> AlienStore::umount()
     // not really started yet
     return seastar::now();
   }
-  return op_gate.close().then([this] {
+  return op_gates.close_all().then([this] {
     return tp->submit([this] {
       return store->umount();
+    }).then([] (int r) {
+      assert(r == 0);
+      return seastar::now();
     });
-  }).then([] (int r) {
-    assert(r == 0);
-    return seastar::now();
   });
 }
 
@@ -275,7 +276,6 @@ seastar::future<std::vector<coll_core_t>> AlienStore::list_collections()
     });
   });
 }
-
 seastar::future<> AlienStore::set_collection_opts(CollectionRef ch,
                                       const pool_opts_t& opts)
 {
@@ -477,7 +477,7 @@ seastar::future<> AlienStore::inject_data_error(const ghobject_t& o)
 {
   logger().debug("{}", __func__);
   assert(tp);
-  return seastar::with_gate(op_gate, [=, this] {
+  return op_gates.submit_with_gate("inject_data_error", [=, this] {
     return tp->submit([o, this] {
       return store->inject_data_error(o);
     });
@@ -488,8 +488,8 @@ seastar::future<> AlienStore::inject_mdata_error(const ghobject_t& o)
 {
   logger().debug("{}", __func__);
   assert(tp);
-  return seastar::with_gate(op_gate, [=, this] {
-    return tp->submit([=, this] {
+  return op_gates.submit_with_gate("inject_mdata_error", [=, this] {
+    return tp->submit([o, this] {
       return store->inject_mdata_error(o);
     });
   });
@@ -500,7 +500,7 @@ seastar::future<> AlienStore::write_meta(const std::string& key,
 {
   logger().debug("{}", __func__);
   assert(tp);
-  return seastar::with_gate(op_gate, [=, this] {
+  return op_gates.submit_with_gate("write_meta", [=, this] {
     return tp->submit([=, this] {
       return store->write_meta(key, value);
     }).then([] (int r) {
@@ -515,8 +515,8 @@ AlienStore::read_meta(const std::string& key)
 {
   logger().debug("{}", __func__);
   assert(tp);
-  return seastar::with_gate(op_gate, [this, key] {
-    return tp->submit([this, key] {
+  return op_gates.submit_with_gate("read_meta", [this, key] {
+    return tp->submit([key, this] {
       std::string value;
       int r = store->read_meta(key, &value);
       if (r > 0) {
