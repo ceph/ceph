@@ -3038,7 +3038,9 @@ void RGWStatBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = load_bucket_stats(this, y, *s->bucket, stats);
+  if (s->cct->_conf->rgw_bucket_stats_on_head_bucket) {
+    op_ret = load_bucket_stats(this, y, *s->bucket, stats);
+  }
 }
 
 int RGWListBucket::verify_permission(optional_yield y)

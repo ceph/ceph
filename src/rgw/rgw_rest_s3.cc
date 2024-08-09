@@ -2393,7 +2393,7 @@ static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
 
 void RGWStatBucket_ObjStore_S3::send_response()
 {
-  if (op_ret >= 0) {
+  if (op_ret >= 0 && s->cct->_conf->rgw_bucket_stats_on_head_bucket) {
     dump_bucket_metadata(s, bucket.get(), stats);
   }
 
