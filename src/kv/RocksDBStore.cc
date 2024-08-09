@@ -1243,7 +1243,9 @@ int RocksDBStore::do_open(ostream &out,
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
   plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");
-  plb.add_u64_counter(l_rocksdb_compact_range, "compact_range", "Compactions by range");
+  plb.add_u64_counter(l_rocksdb_compact_running, "compact_running", "Running compactions");
+  plb.add_u64_counter(l_rocksdb_compact_completed, "compact_completed", "Completed compactions");
+  plb.add_time(l_rocksdb_compact_lasted, "compact_lasted", "Last completed compaction duration");
   plb.add_u64_counter(l_rocksdb_compact_queue_merge, "compact_queue_merge", "Mergings of ranges in compaction queue");
   plb.add_u64(l_rocksdb_compact_queue_len, "compact_queue_len", "Length of compaction queue");
   plb.add_time_avg(l_rocksdb_write_wal_time, "rocksdb_write_wal_time", "Rocksdb write wal time");
@@ -1988,6 +1990,7 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 
 void RocksDBStore::compact()
 {
+  dout(2) << __func__ << " starting" << dendl;
   logger->inc(l_rocksdb_compact);
   rocksdb::CompactRangeOptions options;
   db->CompactRange(options, default_cf, nullptr, nullptr);
@@ -1999,6 +2002,7 @@ void RocksDBStore::compact()
 	nullptr, nullptr);
     }
   }
+  dout(2) << __func__ << " completed" << dendl;
 }
 
 void RocksDBStore::compact_thread_entry()
@@ -2011,12 +2015,17 @@ void RocksDBStore::compact_thread_entry()
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
       l.unlock();
-      logger->inc(l_rocksdb_compact_range);
+      logger->inc(l_rocksdb_compact_running);
+      auto start = ceph_clock_now();
       if (range.first.empty() && range.second.empty()) {
         compact();
       } else {
         compact_range(range.first, range.second);
       }
+      auto lat = ceph_clock_now() - start;
+      logger->dec(l_rocksdb_compact_running);
+      logger->inc(l_rocksdb_compact_completed);
+      logger->tset(l_rocksdb_compact_lasted, lat);
       l.lock();
       continue;
     }

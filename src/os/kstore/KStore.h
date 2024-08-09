@@ -573,9 +573,10 @@ public:
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 
-  void compact () override {
+  int compact () override {
     ceph_assert(db);
     db->compact();
+    return 0;
   }
   
 private:

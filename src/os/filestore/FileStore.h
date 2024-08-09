@@ -673,9 +673,10 @@ public:
   void inject_data_error(const ghobject_t &oid) override;
   void inject_mdata_error(const ghobject_t &oid) override;
 
-  void compact() override {
+  int compact() override {
     ceph_assert(object_map);
     object_map->compact();
+    return 0;
   }
 
   bool has_builtin_csum() const override {
