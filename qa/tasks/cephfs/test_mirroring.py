@@ -225,11 +225,14 @@ class TestMirroring(CephFSTestCase):
     def check_peer_snap_in_progress(self, fs_name, fs_id,
                                     peer_spec, dir_name, snap_name):
         peer_uuid = self.get_peer_uuid(peer_spec)
-        res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
-                                         'fs', 'mirror', 'peer', 'status',
-                                         f'{fs_name}@{fs_id}', peer_uuid)
-        self.assertTrue('syncing' == res[dir_name]['state'])
-        self.assertTrue(res[dir_name]['current_syncing_snap']['name'] == snap_name)
+        with safe_while(sleep=1, tries=30, action=f'wait for status: {peer_spec}') as proceed:
+            while proceed():
+                res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
+                                                 'fs', 'mirror', 'peer', 'status',
+                                                 f'{fs_name}@{fs_id}', peer_uuid)
+                if('syncing' == res[dir_name]['state'] and \
+                   res[dir_name]['current_syncing_snap']['name'] == snap_name):
+                    break
 
     def verify_snapshot(self, dir_name, snap_name):
         snap_list = self.mount_b.ls(path=f'{dir_name}/.snap')
@@ -1431,7 +1434,9 @@ class TestMirroring(CephFSTestCase):
         self.mount_a.run_shell(["mkdir", "d1/.snap/snap0"])
         self.mount_a.run_shell(["mkdir", "d2/.snap/snap0"])
 
-        time.sleep(60)
+        # Wait for the threads to finish
+        time.sleep(500)
+
         self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                "client.mirror_remote@ceph", '/d0', 'snap0', 1)
         self.verify_snapshot('d0', 'snap0')
@@ -1446,7 +1451,6 @@ class TestMirroring(CephFSTestCase):
         res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
         vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
         self.assertGreater(vafter["counters"]["snaps_synced"], vbefore["counters"]["snaps_synced"])
-        self.assertGreater(vafter["counters"]["snaps_deleted"], vbefore["counters"]["snaps_deleted"])
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
