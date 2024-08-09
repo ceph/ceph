@@ -30,6 +30,8 @@
 #include "ErasureCodeIsaTableCache.h"
 // -----------------------------------------------------------------------------
 
+#define EC_ISA_ADDRESS_ALIGNMENT 32u
+
 class ErasureCodeIsa : public ceph::ErasureCode {
 public:
 
