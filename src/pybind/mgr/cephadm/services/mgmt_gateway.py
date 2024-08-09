@@ -66,6 +66,11 @@ class MgmtGatewayService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
+    def get_oauth2_service_url(self) -> Optional[str]:
+        # TODO(redo): check how can we create several servers for HA
+        oauth2_servers = self.get_service_endpoints('oauth2-proxy')
+        return f'https://{oauth2_servers[0]}' if oauth2_servers else None
+
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
@@ -103,6 +108,7 @@ class MgmtGatewayService(CephadmService):
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('prometheus')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('alertmanager')]
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('grafana')]
+        deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('oauth2-proxy')]
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
             # we consider mgr a dep even if the dashboard is disabled
             # in order to be consistent with _calc_daemon_deps().
@@ -140,7 +146,8 @@ class MgmtGatewayService(CephadmService):
             'alertmanager_scheme': scheme,
             'prometheus_endpoints': prometheus_endpoints,
             'alertmanager_endpoints': alertmanager_endpoints,
-            'grafana_endpoints': grafana_endpoints
+            'grafana_endpoints': grafana_endpoints,
+            'oauth2_proxy_url': self.get_oauth2_service_url(),
         }
 
         cert, key = self.get_external_certificates(svc_spec, daemon_spec)

@@ -1273,7 +1273,7 @@ class CephExporterService(CephService):
         if spec.stats_period:
             exporter_config.update({'stats-period': f'{spec.stats_period}'})
 
-        security_enabled, mgmt_gw_enabled = self.mgr._get_security_config()
+        security_enabled, _, _ = self.mgr._get_security_config()
         if security_enabled:
             exporter_config.update({'https_enabled': True})
             crt, key = self.get_certificates(daemon_spec)

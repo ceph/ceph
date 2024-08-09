@@ -43,6 +43,7 @@ from ceph.deployment.service_spec import (
     SMBSpec,
     SNMPGatewaySpec,
     MgmtGatewaySpec,
+    OAuth2ProxySpec,
     ServiceSpec,
     TunedProfileSpec,
 )
@@ -600,6 +601,7 @@ class Orchestrator(object):
             'host': self.add_host,
             'smb': self.apply_smb,
             'mgmt-gateway': self.apply_mgmt_gateway,
+            'oauth2-proxy': self.apply_oauth2_proxy,
         }
 
         def merge(l: OrchResult[List[str]], r: OrchResult[str]) -> OrchResult[List[str]]:  # noqa: E741
@@ -849,6 +851,10 @@ class Orchestrator(object):
         """Update an existing cluster gateway service"""
         raise NotImplementedError()
 
+    def apply_oauth2_proxy(self, spec: OAuth2ProxySpec) -> OrchResult[str]:
+        """Update an existing oauth2-proxy"""
+        raise NotImplementedError()
+
     def apply_smb(self, spec: SMBSpec) -> OrchResult[str]:
         """Update a smb gateway service"""
         raise NotImplementedError()
@@ -933,6 +939,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'iscsi': 'iscsi',
         'nvmeof': 'nvmeof',
         'mgmt-gateway': 'mgmt-gateway',
+        'oauth2-proxy': 'oauth2-proxy',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
         'nfs': 'nfs',
@@ -969,6 +976,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'iscsi': ['iscsi'],
         'nvmeof': ['nvmeof'],
         'mgmt-gateway': ['mgmt-gateway'],
+        'oauth2-proxy': ['oauth2-proxy'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
         'nfs': ['nfs'],

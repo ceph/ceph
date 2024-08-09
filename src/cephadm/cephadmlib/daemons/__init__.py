@@ -10,6 +10,7 @@ from .snmp import SNMPGateway
 from .tracing import Tracing
 from .node_proxy import NodeProxy
 from .mgmt_gateway import MgmtGateway
+from .oauth2_proxy import OAuth2Proxy
 
 __all__ = [
     'Ceph',
@@ -27,4 +28,5 @@ __all__ = [
     'Tracing',
     'NodeProxy',
     'MgmtGateway',
+    'OAuth2Proxy',
 ]

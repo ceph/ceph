@@ -21,6 +21,7 @@ for details on individual services:
     tracing
     smb
     mgmt-gateway
+    oauth2-proxy
 
 Service Status
 ==============
