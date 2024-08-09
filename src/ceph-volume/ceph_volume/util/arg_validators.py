@@ -1,6 +1,7 @@
 import argparse
 import os
 import math
+import copy as _copy
 from ceph_volume import terminal, decorators, process
 from ceph_volume.util.device import Device
 from ceph_volume.util import disk
@@ -10,13 +11,27 @@ from ceph_volume.util.encryption import set_dmcrypt_no_workqueue
 def valid_osd_id(val):
     return str(int(val))
 
-class DmcryptAction(argparse._StoreTrueAction):
+class DmcryptAction(argparse._AppendAction):
     def __init__(self, *args, **kwargs):
         super(DmcryptAction, self).__init__(*args, **kwargs)
 
-    def __call__(self, *args, **kwargs):
+    @staticmethod
+    def _ensure_value(namespace, name, value):
+        if getattr(namespace, name, None) is None:
+            setattr(namespace, name, value)
+        return getattr(namespace, name)
+
+    def __call__(self, parser, namespace, values, option_string=None):
         set_dmcrypt_no_workqueue()
-        super(DmcryptAction, self).__call__(*args, **kwargs)
+
+        if not values:
+            values = ['block', 'db', 'wal']
+
+        # TODO: use argparse._ExtendAction when upgraded to python >= 3.8
+        items = _copy.copy(DmcryptAction._ensure_value(namespace, self.dest, []))
+        items.append(values)
+        setattr(namespace, self.dest, items)
+
 
 class ValidDevice(object):
 

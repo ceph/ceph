@@ -36,6 +36,8 @@ class BaseObjectStore:
         self.block_device_path = ''
         if hasattr(self.args, 'dmcrypt'):
             if self.args.dmcrypt:
+                self.encrypted_device_types: List[str] = self.args.dmcrypt[0]
+                self.tags['ceph.encrypted'] = 1
                 self.encrypted = 1
                 self.cephx_lockbox_secret = prepare_utils.create_key()
                 self.secrets['cephx_lockbox_secret'] = \

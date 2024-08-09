@@ -177,19 +177,22 @@ class LvmBlueStore(BlueStore):
         # process can use the mapper paths
         key = self.secrets['dmcrypt_key']
 
-        self.block_device_path = \
-            self.luks_format_and_open(key,
-                                      self.block_device_path,
-                                      'block',
-                                      self.tags)
-        self.wal_device_path = self.luks_format_and_open(key,
-                                                         self.wal_device_path,
-                                                         'wal',
-                                                         self.tags)
-        self.db_device_path = self.luks_format_and_open(key,
-                                                        self.db_device_path,
-                                                        'db',
-                                                        self.tags)
+        if 'block' in self.encrypted_device_types:
+            self.block_device_path = \
+                self.luks_format_and_open(key,
+                                          self.block_device_path,
+                                          'block',
+                                          self.tags)
+        if 'wal' in self.encrypted_device_types:
+            self.wal_device_path = self.luks_format_and_open(key,
+                                                             self.wal_device_path,
+                                                             'wal',
+                                                             self.tags)
+        if 'db' in self.encrypted_device_types:
+            self.db_device_path = self.luks_format_and_open(key,
+                                                            self.db_device_path,
+                                                            'db',
+                                                            self.tags)
 
     def luks_format_and_open(self,
                              key: Optional[str],
@@ -314,6 +317,7 @@ class LvmBlueStore(BlueStore):
                 device_lv = lv
                 break
         if device_lv:
+            is_encrypted = device_lv.tags.get('ceph.encrypted', '0') == '1'
             if is_encrypted:
                 encryption_utils.luks_open(dmcrypt_secret,
                                            device_lv.__dict__['lv_path'],
