@@ -1,7 +1,6 @@
-import os
 import pytest
 from ceph_volume.util import disk
-from mock.mock import patch, MagicMock
+from mock.mock import patch, Mock, MagicMock, mock_open
 
 
 class TestFunctions:
@@ -38,6 +37,11 @@ class TestFunctions:
     def test_is_partition(self):
         assert disk.is_partition('sda1')
 
+
+    @patch('os.path.exists', Mock(return_value=True))
+    def test_get_lvm_mapper_path_from_dm(self):
+        with patch('builtins.open', mock_open(read_data='test--foo--vg-test--foo--lv')):
+            assert disk.get_lvm_mapper_path_from_dm('/dev/dm-123') == '/dev/mapper/test--foo--vg-test--foo--lv'
 
 class TestLsblkParser(object):
 
@@ -549,24 +553,6 @@ class TestSizeSpecificFormatting(object):
         result = "%s" % size.tb
         assert "%s" % size.tb == "%s" % size.terabytes
         assert result == "1027.00 TB"
-
-
-class TestAllowLoopDevsWarning(object):
-    def setup_method(self):
-        disk.AllowLoopDevices.allow = False
-        disk.AllowLoopDevices.warned = False
-        if os.environ.get('CEPH_VOLUME_ALLOW_LOOP_DEVICES'):
-            os.environ.pop('CEPH_VOLUME_ALLOW_LOOP_DEVICES')
-
-    def test_loop_dev_warning(self, fake_call, caplog):
-        disk.AllowLoopDevices.warned = False
-        assert disk.allow_loop_devices() is False
-        assert not caplog.records
-        os.environ['CEPH_VOLUME_ALLOW_LOOP_DEVICES'] = "y"
-        assert disk.allow_loop_devices() is True
-        log = caplog.records[0]
-        assert log.levelname == "WARNING"
-        assert "will never be supported in production" in log.message
 
 
 class TestHasBlueStoreLabel(object):

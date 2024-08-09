@@ -166,7 +166,7 @@ class DriveGroupSpec(ServiceSpec):
     """
 
     _supported_features = [
-        "encrypted", "block_wal_size", "osds_per_device",
+        "encrypted", "tpm2", "block_wal_size", "osds_per_device",
         "db_slots", "wal_slots", "block_db_size", "placement", "service_id", "service_type",
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
@@ -185,6 +185,7 @@ class DriveGroupSpec(ServiceSpec):
                  osds_per_device=None,  # type: Optional[int]
                  objectstore='bluestore',  # type: str
                  encrypted=False,  # type: bool
+                 tpm2=False,  # type: bool
                  db_slots=None,  # type: Optional[int]
                  wal_slots=None,  # type: Optional[int]
                  osd_id_claims=None,  # type: Optional[Dict[str, List[str]]]
@@ -247,6 +248,9 @@ class DriveGroupSpec(ServiceSpec):
 
         #: ``true`` or ``false``
         self.encrypted = encrypted
+
+        #: ``true`` or ``false``
+        self.tpm2 = tpm2
 
         #: How many OSDs per DB device
         self.db_slots = db_slots

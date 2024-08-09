@@ -42,11 +42,13 @@ class Prepare(object):
         self.args = parser.parse_args(self.argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
-        if self.args.dmcrypt and not os.getenv('CEPH_VOLUME_DMCRYPT_SECRET'):
-            terminal.error('encryption was requested (--dmcrypt) but environment variable ' \
-                           'CEPH_VOLUME_DMCRYPT_SECRET is not set, you must set ' \
-                           'this variable to provide a dmcrypt secret.')
-            raise SystemExit(1)
+        if self.args.dmcrypt:
+            if not self.args.with_tpm and not os.getenv('CEPH_VOLUME_DMCRYPT_SECRET'):
+                terminal.error('encryption was requested (--dmcrypt) but environment variable ' \
+                               'CEPH_VOLUME_DMCRYPT_SECRET is not set, you must set ' \
+                               'this variable to provide a dmcrypt secret or use --with-tpm ' \
+                               'in order to enroll a tpm2 token.')
+                raise SystemExit(1)
 
         self.objectstore = objectstore.mapping['RAW'][self.args.objectstore](args=self.args)
         self.objectstore.safe_prepare(self.args)
