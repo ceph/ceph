@@ -64,6 +64,7 @@
 #include "rgw_lua.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_bucket_logging.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -759,7 +760,7 @@ static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s, r
   return 0;
 }
 
-static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s) {
+int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s) {
   return rgw_iam_add_buckettags(dpp, s, s->bucket.get());
 }
 
@@ -832,7 +833,7 @@ static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvide
   return make_tuple(has_existing_obj_tag, has_resource_tag);
 }
 
-static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag=true) {
+std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag) {
   return rgw_check_policy_condition(dpp, s->iam_policy, s->iam_identity_policies, s->session_policies, check_obj_exist_tag);
 }
 
@@ -983,6 +984,42 @@ void rgw_bucket_object_pre_exec(req_state *s)
     dump_continue(s);
 
   dump_bucket_from_state(s);
+}
+
+int do_bucket_logging(rgw::sal::Driver* driver,
+    req_state* s, 
+    RGWOp* op, 
+    rgw::bucketlogging::EventType type, 
+    const std::string& etag, 
+    optional_yield y,
+    bool async_completion) {
+  // check if bucket logging is needed
+  const auto& bucket_attrs = s->bucket->get_attrs();
+  if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
+    rgw::bucketlogging::configuration configuration;
+    try {
+      configuration.enabled = true;
+      decode(configuration, iter->second);  
+      ldpp_dout(op, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
+        "' configuration: " << configuration.to_json_str() << dendl;
+      if (configuration.event_type == type || 
+          configuration.event_type == rgw::bucketlogging::EventType::ReadWrite) {
+        if (auto ret = log_record(driver, s, op->name(), etag, configuration, op, y, async_completion); ret < 0) { 
+          ldpp_dout(op, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
+            "'. ret=" << ret << dendl;
+          if (configuration.records_batch_size == 0) {
+            // don't reply with error if logging is async
+            return ret;
+          }
+        }
+      }
+    } catch (buffer::error& err) {
+      ldpp_dout(op, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
+        << "'. error: " << err.what() << dendl;
+      return  -EINVAL;
+    }
+  }
+  return 0;
 }
 
 int RGWGetObj::verify_permission(optional_yield y)
@@ -2246,6 +2283,7 @@ void RGWGetObj::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_get_obj, 1);
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
+  std::string etag;
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -2274,6 +2312,13 @@ void RGWGetObj::execute(optional_yield y)
   multipart_parts_count = read_op->params.parts_count;
   if (op_ret < 0)
     goto done_err;
+
+  etag = attrs[RGW_ATTR_ETAG].to_str();
+  if (auto ret = do_bucket_logging(driver, s, this, rgw::bucketlogging::EventType::Read, etag, y, true); 
+      ret < 0) {
+    // don't reply with an error in case of failed GET logging
+    ldpp_dout(this, 5) << "WARNING: GET operation ignores bucket logging failure. error: " << ret << dendl;
+  }
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
@@ -3129,19 +3174,6 @@ void RGWListBucket::execute(optional_yield y)
   auto counters = rgw::op_counters::get(s);
   rgw::op_counters::inc(counters, l_rgw_op_list_obj, 1);
   rgw::op_counters::tinc(counters, l_rgw_op_list_obj_lat, s->time_elapsed());
-}
-
-int RGWGetBucketLogging::verify_permission(optional_yield y)
-{
-  auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
-  if (has_s3_resource_tag)
-    rgw_iam_add_buckettags(this, s);
-
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketLogging)) {
-    return -EACCES;
-  }
-
-  return 0;
 }
 
 int RGWGetBucketLocation::verify_permission(optional_yield y)
@@ -4588,6 +4620,11 @@ void RGWPutObj::execute(optional_yield y)
     obj_retention->encode(obj_retention_bl);
     emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
+  
+  op_ret = do_bucket_logging(driver, s, this, rgw::bucketlogging::EventType::Write, etag, y, false); 
+  if (op_ret  < 0) {
+    return;
+  }
 
   // don't track the individual parts of multipart uploads. they replicate in
   // full after CompleteMultipart
@@ -5383,6 +5420,14 @@ void RGWDeleteObj::execute(optional_yield y)
       }
     }
 
+    if (op_ret == 0) {
+      if (auto ret = do_bucket_logging(driver, s, this, rgw::bucketlogging::EventType::Write, etag, y, true); 
+        ret < 0) {
+          // don't reply with an error in case of failed delete logging
+          ldpp_dout(this, 5) << "WARNING: DELETE operation ignores bucket logging failure: " << ret << dendl;
+      }
+    }
+
     if (op_ret == -ECANCELED) {
       op_ret = 0;
     }
@@ -5723,6 +5768,12 @@ void RGWCopyObj::execute(optional_yield y)
    * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
   op_ret = s->object->swift_versioning_copy(s->owner, s->user->get_id(),
                                             this, s->yield);
+  if (op_ret < 0) {
+    return;
+  }
+
+  etag = s->src_object->get_attrs()[RGW_ATTR_ETAG].to_str();
+  op_ret = do_bucket_logging(driver, s, this, rgw::bucketlogging::EventType::Write, etag, y, false); 
   if (op_ret < 0) {
     return;
   }
@@ -6699,6 +6750,12 @@ void RGWCompleteMultipart::execute(optional_yield y)
 	    s->object.get(), nullptr, s,
 	    rgw::notify::ObjectCreatedCompleteMultipartUpload, y);
   op_ret = res->publish_reserve(this);
+  if (op_ret < 0) {
+    return;
+  }
+
+  // no etag
+  op_ret = do_bucket_logging(driver, s, this, rgw::bucketlogging::EventType::Write, "", y, false); 
   if (op_ret < 0) {
     return;
   }

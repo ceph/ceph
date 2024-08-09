@@ -76,13 +76,13 @@ int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool,
                        rgw_cache_entry_info *cache_info = nullptr,
 		       boost::optional<obj_version> refresh_version = boost::none,
                        bool raw_attrs=false);
-int rgw_delete_system_obj(const DoutPrefixProvider *dpp, 
+int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
                           RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const std::string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y);
 int rgw_stat_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                         const rgw_pool& pool, const std::string& key,
                         RGWObjVersionTracker *objv_tracker,
-                        real_time *pmtime, optional_yield y,
+                        real_time *pmtime, uint64_t *psize, optional_yield y,
                         std::map<std::string, bufferlist> *pattrs = nullptr);
 
 const char *rgw_find_mime_by_ext(std::string& ext);
