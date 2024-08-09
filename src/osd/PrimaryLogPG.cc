@@ -294,9 +294,19 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
   list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	    pair<bufferlist*, Context*> > > in;
   in.swap(pending_async_reads);
+  // TODO: drop the converter
+  list<pair<ECCommon::ec_align_t,
+	    pair<bufferlist*, Context*> > > in_native;
+  for (auto [align_tuple, ctx_pair] : in) {
+    in_native.emplace_back(
+      ECCommon::ec_align_t{
+        align_tuple.get<0>(), align_tuple.get<1>(), align_tuple.get<2>()
+      },
+      std::move(ctx_pair));
+  }
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
-    in,
+    in_native,
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
 }
 void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)

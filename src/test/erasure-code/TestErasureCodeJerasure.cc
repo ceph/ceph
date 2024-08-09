@@ -127,6 +127,33 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
       EXPECT_EQ(0, memcmp(decoded[1].c_str(), in.c_str() + length,
 			  in.length() - length));
     }
+
+    // partial decode with the exact-sized decode_concat()
+    {
+      map<int, bufferlist> partial_decode = encoded;
+      // we have everything but want only the first chunk
+      set<int> partial_want_to_read = { 0 };
+      EXPECT_EQ(1u, partial_want_to_read.size());
+      bufferlist out;
+      EXPECT_EQ(0, jerasure.decode_concat(partial_want_to_read,
+					  partial_decode,
+					  &out));
+      EXPECT_EQ(out.length(), partial_decode[0].length());
+    }
+
+    // partial degraded decode with the exact-sized decode_concat()
+    {
+      map<int, bufferlist> partial_decode = encoded;
+      // we have everything but what we really want
+      partial_decode.erase(0);
+      set<int> partial_want_to_read = { 0 };
+      EXPECT_EQ(1u, partial_want_to_read.size());
+      bufferlist out;
+      EXPECT_EQ(0, jerasure.decode_concat(partial_want_to_read,
+					  partial_decode,
+					  &out));
+      EXPECT_EQ(out.length(), encoded[0].length());
+    }
   }
 }
 

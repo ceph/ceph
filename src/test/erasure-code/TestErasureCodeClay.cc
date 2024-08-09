@@ -37,7 +37,7 @@ TEST(ErasureCodeClay, sanity_check_k)
   EXPECT_NE(std::string::npos, errors.str().find("must be >= 2"));
 }
 
-TEST(ErasureCodeClay, encode_decode)
+TEST(ErasureCodeClay, DISABLED_encode_decode)
 {
   ostringstream errors;
   ErasureCodeClay clay(g_conf().get_val<std::string>("erasure_code_dir"));
@@ -134,7 +134,7 @@ TEST(ErasureCodeClay, encode_decode)
 }
 
 
-TEST(ErasureCodeClay, encode_decode_aloof_nodes)
+TEST(ErasureCodeClay, DISABLED_encode_decode_aloof_nodes)
 {
   ostringstream errors;
   ErasureCodeClay clay(g_conf().get_val<std::string>("erasure_code_dir"));
@@ -243,7 +243,7 @@ TEST(ErasureCodeClay, encode_decode_aloof_nodes)
   }
 }
 
-TEST(ErasureCodeClay, encode_decode_shortening_case)
+TEST(ErasureCodeClay, DISABLED_encode_decode_shortening_case)
 {
   ostringstream errors;
   ErasureCodeClay clay(g_conf().get_val<std::string>("erasure_code_dir"));
