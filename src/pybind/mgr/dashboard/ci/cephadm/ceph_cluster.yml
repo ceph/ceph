@@ -1,11 +1,8 @@
 parameters:
- nodes: 4
- node_ip_offset: 100
  pool: ceph-dashboard
  network: ceph-dashboard
  gateway: 192.168.100.1
  netmask: 255.255.255.0
- prefix: ceph
  numcpus: 1
  memory: 2048
  image: fedora36
@@ -15,6 +12,13 @@ parameters:
  - 15
  - 5
  - 5
+
+{% set clusters = clusters | default(1) %}
+{% set nodes = nodes | default(4) %}
+
+{% for cluster in range(1, clusters+1) %}
+{% set node_ip_offset = 100 + (cluster-1) * 10 %}
+{% set prefix = "ceph" if cluster == 1 else "ceph" ~ cluster %}
 
 {% for number in range(0, nodes) %}
 {{ prefix }}-node-0{{ number }}:
@@ -40,6 +44,7 @@ parameters:
  - sed -i "s/SELINUX=enforcing/SELINUX=permissive/" /etc/selinux/config
  - setenforce 0
  {% if number == 0 %}
- - bash /root/bootstrap-cluster.sh
+ - export CLUSTER={{cluster-1}} && bash /root/bootstrap-cluster.sh
  {% endif %}
+{% endfor %}
 {% endfor %}

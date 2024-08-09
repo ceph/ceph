@@ -462,6 +462,10 @@ Note:
   Add ``--expanded`` if you need a cluster ready to deploy services (one with enough monitor
   daemons spread across different hosts and enough OSDs).
 
+Note:
+    Multiple clusters can be started by adding ``--clusters=<number>``. Also to specify node count for
+    each cluster ``--nodes=<number>``.
+
 Test your changes by running:
 
   $ ./src/pybind/mgr/dashboard/ci/cephadm/run-cephadm-e2e-tests.sh

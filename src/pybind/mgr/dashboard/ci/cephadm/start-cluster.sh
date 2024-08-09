@@ -34,14 +34,19 @@ sed -i '/ceph-node-/d' $HOME/.ssh/known_hosts || true
 : ${CEPH_DEV_FOLDER:=${PWD}}
 EXTRA_PARAMS=''
 DEV_MODE=''
+CLUSTERS=1
+NODES=4
 # Check script args/options.
 for arg in "$@"; do
   shift
   case "$arg" in
     "--dev-mode") DEV_MODE='true'; EXTRA_PARAMS+=" -P dev_mode=${DEV_MODE}" ;;
     "--expanded") EXTRA_PARAMS+=" -P expanded_cluster=true" ;;
+    "--clusters="*) CLUSTERS=${arg#*=} ;;
+    "--nodes="*) NODES=${arg#*=};;
   esac
 done
+EXTRA_PARAMS+=" -P clusters=${CLUSTERS} -P nodes=${NODES}"
 
 kcli delete plan -y ceph || true
 
