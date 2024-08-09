@@ -64,15 +64,14 @@ int validate_mirroring_enabled(librados::IoCtx io_ctx,
   librbd::mirror_group_info_t info;
   int r = rbd.mirror_group_get_info(io_ctx, group_name.c_str(), &info,
                                 sizeof(info));
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     std::cerr << "rbd: failed to get mirror info for group " << group_name
               << ": " << cpp_strerror(r) << std::endl;
     return r;
   }
 
-  if (info.state != RBD_MIRROR_GROUP_ENABLED) {
-    std::cerr << "rbd: mirroring not enabled for group: "
-              << group_name << std::endl;
+  if (r == -ENOENT || info.state != RBD_MIRROR_GROUP_ENABLED) {
+    std::cerr << "rbd: mirroring not enabled on the group" << std::endl;
     return -EINVAL;
   }
 
