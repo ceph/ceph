@@ -1015,8 +1015,13 @@ class CephFsSnapshotClone(RESTController):
 class CephFSSnapshotSchedule(RESTController):
 
     def list(self, fs: str, path: str = '/', recursive: bool = True):
-        error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
-                                          path, recursive, fs, None, None, 'plain')
+        try:
+            error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                              path, recursive, fs, 'plain')
+        except Exception as e:
+            raise DashboardException(
+                f'{e}: snap_schedule'
+            )
         if len(out) == 0:
             return []
 
