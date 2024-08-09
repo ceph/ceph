@@ -917,3 +917,53 @@ class TestNewFSCreation(CephFSTestCase):
                 test_fs.destroy()
             if test_fs1 is not None:
                 test_fs1.destroy()
+
+class TestForwardAuth(CephFSTestCase):
+    MDSS_REQUIRED = 2
+    CLIENTS_REQUIRED = 1
+
+    def test_client_request_forward_to_auth_mds(self):
+        """
+        The WRITE client requests will always be forwarded to the auth MDSs.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Requires FUSE client to force sending request to specified rank")
+
+        self.run_ceph_cmd('fs', 'set', self.fs.name, 'balance_automate', 'false')
+
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+
+        self.mount_a.remount(mntopts=['--client_debug_force_send_request_to_rank=0'])
+
+        test_path = "test_forwardauth_dir"
+        file_path = f"{test_path}/forward_auth_file"
+
+        self.mount_a.run_shell(["mkdir", test_path])
+        self.mount_a.setfattr(test_path, "ceph.dir.pin", "1") # no surprise migrations
+        self.mount_a.run_shell(["touch", f"{file_path}"])
+
+         # wait for the export to settle
+        self._wait_subtrees([(f"/{test_path}", 1)])
+
+        pf = self.fs.rank_tell(["perf", "dump"])
+        log.debug(f"{pf}")
+        fwd0 = pf['mds']['forward']
+
+        pyscript = dedent("""
+                import os
+
+                dfd = os.open(f"{path}", os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+                os.write(dfd, b'a' * 1024)
+                os.fsync(dfd)
+                os.close(dfd)
+            """.format(path=file_path))
+
+        for i in range(20):
+            self.mount_a.run_shell(['python3', '-c', pyscript])
+
+        pf = self.fs.rank_tell(["perf", "dump"])
+        log.debug(f"{pf}")
+        fwd1 = pf['mds']['forward']
+
+        self.assertGreaterEqual(fwd1, fwd0 + 20)
