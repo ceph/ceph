@@ -46,8 +46,6 @@ tasks:
         - .*test_container_synchronization.*
         - .*test_object_services.PublicObjectTest.test_access_public_container_object_without_using_creds
         - .*test_object_services.ObjectTest.test_create_object_with_transfer_encoding
-        - .*test_container_services.ContainerTest.test_create_container_with_remove_metadata_key
-        - .*test_container_services.ContainerTest.test_create_container_with_remove_metadata_value
         - .*test_object_expiry.ObjectExpiryTest.test_get_object_after_expiry_time
         - .*test_object_expiry.ObjectExpiryTest.test_get_object_at_expiry_time
         - .*test_account_services.AccountTest.test_list_no_account_metadata
