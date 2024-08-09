@@ -44,6 +44,8 @@
 #include <vector>
 #include <limits>
 
+#include "librbd/ImageCtx.h"
+#include "librbd/internal.h"
 #include "test/librados/test.h"
 #include "test/librados/test_cxx.h"
 #include "test/librbd/test_support.h"
@@ -13789,6 +13791,40 @@ TEST_F(TestLibRBD, FormatAndCloneFormatOptions)
   ASSERT_EQ(-EINVAL, do_migrate_import(opts_with_3));
   ASSERT_EQ(0, do_migrate_import(opts_with_2));
   ASSERT_NO_FATAL_FAILURE(verify_format_2(import_name));
+}
+
+TEST_F(TestLibRBD, MetadataMultipleSet)
+{
+  int order = 0;
+  const uint64_t size = 2 << 20;
+
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+  rbd_image_t image0, image1;
+
+  const std::string in0 = get_temp_image_name();
+  const std::string in1 = get_temp_image_name();
+  ASSERT_EQ(0, create_image(ioctx, in0.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, in0.c_str(), &image0, NULL));
+
+  ASSERT_EQ(0, create_image(ioctx, in1.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, in1.c_str(), &image1, NULL));
+
+  const std::string key("rbd_qos_iops_limit");
+  rbd_metadata_set(image0, key.c_str(), "1024");
+  rbd_metadata_set(image1, key.c_str(), "2048");
+  librbd::ImageCtx *im0 = (librbd::ImageCtx*)image0;
+  librbd::ImageCtx *im1 = (librbd::ImageCtx*)image1;
+  std::map<std::string, bufferlist> md0; 
+  std::map<std::string, bufferlist> md1; 
+  std::string last;
+  librbd::metadata_list(im0, last, 1024, &md0);
+  librbd::metadata_list(im1, last, 1024, &md1);
+  ASSERT_EQ(md0[key].to_str(), "1024");
+  ASSERT_EQ(md1[key].to_str(), "2048");
+  rbd_close(image0);
+  rbd_close(image1);
+  rados_ioctx_destroy(ioctx);
 }
 
 // poorman's ceph_assert()
