@@ -106,6 +106,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -122,6 +123,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -138,6 +140,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -154,6 +157,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -326,6 +330,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -342,6 +347,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -358,6 +364,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -374,6 +381,7 @@ TEST(PerfCountersCache, TestEviction) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -559,6 +567,7 @@ TEST(PerfCountersCache, TestLabeledCounters) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -575,6 +584,7 @@ TEST(PerfCountersCache, TestLabeledCounters) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -682,6 +692,7 @@ TEST(PerfCountersCache, TestLabeledCounters) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -698,6 +709,7 @@ TEST(PerfCountersCache, TestLabeledCounters) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -724,6 +736,7 @@ TEST(PerfCountersCache, TestLabeledCounters) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -740,6 +753,7 @@ TEST(PerfCountersCache, TestLabeledCounters) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -756,6 +770,7 @@ TEST(PerfCountersCache, TestLabeledCounters) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -801,6 +816,7 @@ TEST(PerfCountersCache, TestLabeledTimes) {
                 "test_time_avg": {
                     "avgcount": 2,
                     "sum": 600.000000000,
+                    "max_inc": 400.000000000,
                     "avgtime": 300.000000000
                 }
             }
@@ -817,6 +833,7 @@ TEST(PerfCountersCache, TestLabeledTimes) {
                 "test_time_avg": {
                     "avgcount": 2,
                     "sum": 300.000000000,
+                    "max_inc": 200.000000000,
                     "avgtime": 150.000000000
                 }
             }
@@ -950,6 +967,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -979,6 +997,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -996,6 +1015,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -1019,6 +1039,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -1036,6 +1057,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -1069,6 +1091,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -1086,6 +1109,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
@@ -1102,6 +1126,7 @@ TEST(PerfCountersCache, TestLabelStrings) {
                 "test_time_avg": {
                     "avgcount": 0,
                     "sum": 0.000000000,
+                    "max_inc": 0.000000000,
                     "avgtime": 0.000000000
                 }
             }
