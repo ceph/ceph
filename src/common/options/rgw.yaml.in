@@ -3151,6 +3151,25 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_sse_s3_vault_key_allow_rotation
+  type: bool
+  level: advanced
+  desc: If set, the imported key can be rotated within Vault by using the rotate endpoint
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_crypt_sse_s3_vault_key_rotation_period
+  with_legacy: true
+- name: rgw_crypt_sse_s3_vault_key_rotation_period
+  type: secs
+  level: advanced
+  desc: The period at which this key should be rotated automatically
+  long_desc: Setting this to "0" (the default) will disable automatic key rotation.
+    This value cannot be shorter than one hour.
+  default: 0
+  services:
+  - rgw
 - name: rgw_list_bucket_min_readahead
   type: int
   level: advanced

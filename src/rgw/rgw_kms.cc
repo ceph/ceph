@@ -140,7 +140,7 @@ static bool string_ends_maybe_slash(std::string_view hay,
 
 template<typename E, typename A = ZeroPoolAllocator>
 static inline void
-add_name_val_to_obj(std::string &n, std::string &v, rapidjson::GenericValue<E,A> &d,
+add_name_val_to_obj(const std::string &n, const std::string &v, rapidjson::GenericValue<E,A> &d,
   A &allocator)
 {
   rapidjson::GenericValue<E,A> name, val;
@@ -151,7 +151,7 @@ add_name_val_to_obj(std::string &n, std::string &v, rapidjson::GenericValue<E,A>
 
 template<typename E, typename A = ZeroPoolAllocator>
 static inline void
-add_name_val_to_obj(std::string &n, bool v, rapidjson::GenericValue<E,A> &d,
+add_name_val_to_obj(const std::string &n, const bool v, rapidjson::GenericValue<E,A> &d,
   A &allocator)
 {
   rapidjson::GenericValue<E,A> name, val;
@@ -162,7 +162,7 @@ add_name_val_to_obj(std::string &n, bool v, rapidjson::GenericValue<E,A> &d,
 
 template<typename E, typename A = ZeroPoolAllocator>
 static inline void
-add_name_val_to_obj(const char *n, std::string &v, rapidjson::GenericValue<E,A> &d,
+add_name_val_to_obj(const char *n, const std::string &v, rapidjson::GenericValue<E,A> &d,
   A &allocator)
 {
   std::string ns{n, strlen(n) };
@@ -171,7 +171,7 @@ add_name_val_to_obj(const char *n, std::string &v, rapidjson::GenericValue<E,A> 
 
 template<typename E, typename A = ZeroPoolAllocator>
 static inline void
-add_name_val_to_obj(const char *n, bool v, rapidjson::GenericValue<E,A> &d,
+add_name_val_to_obj(const char *n, const bool v, rapidjson::GenericValue<E,A> &d,
   A &allocator)
 {
   std::string ns{n, strlen(n) };
@@ -282,10 +282,6 @@ protected:
     }
 
     secret_req.append_header("X-Vault-Token", vault_token);
-    if (!vault_token.empty()){
-      secret_req.append_header("X-Vault-Token", vault_token);
-      vault_token.replace(0, vault_token.length(), vault_token.length(), '\000');
-    }
 
     string vault_namespace = kctx.k_namespace();
     if (!vault_namespace.empty()){
@@ -633,9 +629,12 @@ public:
     auto &allocator { d.GetAllocator() };
     bufferlist dummy_bl;
     std::string chacha20_poly1305 { "chacha20-poly1305" };
+    auto auto_rotate_period = cct->_conf.get_val<std::chrono::seconds>("rgw_crypt_sse_s3_vault_key_rotation_period");
 
     add_name_val_to_obj("type", chacha20_poly1305, d, allocator);
     add_name_val_to_obj("derived", true, d, allocator);
+    add_name_val_to_obj("allow_rotation", cct->_conf->rgw_crypt_sse_s3_vault_key_allow_rotation, d, allocator);
+    add_name_val_to_obj("auto_rotate_period", std::to_string(auto_rotate_period.count()), d, allocator);
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
     if (!d.Accept(writer)) {
