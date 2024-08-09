@@ -1,13 +1,14 @@
 import errno
 import json
 import logging
-import time
 import uuid
 from io import StringIO
 from os.path import join as os_path_join
+from time import sleep
 
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError
+from teuthology.contextutil import safe_while
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, classhook
 from tasks.cephfs.filesystem import FileLayout, FSMissing
@@ -85,6 +86,110 @@ class TestFsStatus(TestAdminCommands):
         mdsmap = json.loads(self.get_ceph_cmd_stdout("fs", "status", "--format=json"))["mdsmap"]
         self.assertEqual(mdsmap[0]["state"], "active")
 
+
+class TestAaaFSDown(TestAdminCommands):
+
+    MDSS_REQUIRED = 4
+
+    def get_num_of_standby_MDSs(self):
+        output = json.loads(self.get_ceph_cmd_stdout(
+            'mds stat --format json-pretty'))
+        num_of_standby_MDSs = len(output['fsmap']['standbys'])
+        return num_of_standby_MDSs
+
+    def get_num_of_MDSs(self):
+        output = json.loads(self.get_ceph_cmd_stdout(
+            'fs status --format json-pretty'))
+        num_of_MDSs = len(output['mdsmap'])
+        return num_of_MDSs
+
+    def wait_till_all_MDSs_are_down(self):
+        sleep(5)
+        num_of_MDSs = self.get_num_of_MDSs()
+        with safe_while(tries=120, sleep=5) as condition:
+            while condition():
+                cur_num_of_standby_MDSs = self.get_num_of_standby_MDSs()
+                if cur_num_of_standby_MDSs == num_of_MDSs:
+                    break
+
+    def test_fs_down_on_quincy(self):
+        num_of_standby_MDSs = self.get_num_of_standby_MDSs()
+        num_of_MDSs = self.get_num_of_MDSs()
+        log.info(f'self.MDSS_REQUIRED = {self.MDSS_REQUIRED}')
+        log.info(f'num_of_MDSs = {num_of_MDSs}')
+        log.info(f'num_of_standby_MDSs = {num_of_standby_MDSs}')
+        assert len(self.fs.get_active_names()) == 1
+
+        self.mount_a.write_file('somefile', 'somedata')
+
+        self.run_ceph_cmd(f'fs set {self.fs.name} down true')
+        self.wait_till_all_MDSs_are_down()
+
+        self.run_ceph_cmd(f'fs set {self.fs.name} down false')
+        self.fs.wait_for_daemons()
+        # XXX: acc to bug report, MDS should not be active again and
+        # therefore this should fail. if this line runs successfully, it
+        # means test passes, which bug wasn't reproduced
+        assert len(self.fs.get_active_names()) == 1
+
+    def test_fs_down_on_quincy_2(self):
+        '''
+        In case FS name mentioed in reproducing recipe somehow matters
+        '''
+        num_of_standby_MDSs = self.get_num_of_standby_MDSs()
+        num_of_MDSs = self.get_num_of_MDSs()
+        log.info(f'self.MDSS_REQUIRED = {self.MDSS_REQUIRED}')
+        log.info(f'num_of_MDSs = {num_of_MDSs}')
+        log.info(f'num_of_standby_MDSs = {num_of_standby_MDSs}')
+        assert len(self.fs.get_active_names()) == 1
+
+        self.run_ceph_cmd(f'fs volume rm {self.fs.name} '
+                           '--yes-i-really-mean-it')
+        fsname = 'cephfs-down-flag'
+        self.fs = self.mds_cluster.newfs(create=True, name=fsname)
+        sleep(5)
+
+        client_id = 'testuser'
+        keyring = self.fs.authorize(client_id, ('/', 'rw'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/', cephfs_name=fsname)
+
+        self.mount_a.write_file('somefile', 'somedata')
+
+        self.run_ceph_cmd(f'fs set {self.fs.name} down true')
+        self.wait_till_all_MDSs_are_down()
+
+        self.run_ceph_cmd(f'fs set {self.fs.name} down false')
+        self.fs.wait_for_daemons()
+        # XXX: acc to bug report, MDS should not be active again and
+        # therefore this should fail. if this line runs successfully, it
+        # means test passes, which bug wasn't reproduced
+        assert len(self.fs.get_active_names()) == 1
+
+    def test_fs_down_on_quincy_3(self):
+        num_of_standby_MDSs = self.get_num_of_standby_MDSs()
+        num_of_MDSs = self.get_num_of_MDSs()
+        log.info(f'self.MDSS_REQUIRED = {self.MDSS_REQUIRED}')
+        log.info(f'num_of_MDSs = {num_of_MDSs}')
+        log.info(f'num_of_standby_MDSs = {num_of_standby_MDSs}')
+        assert len(self.fs.get_active_names()) == 1
+
+        self.mount_a.write_file('somefile', 'somedata')
+
+        for i in range(100):
+            self.run_ceph_cmd(f'fs set {self.fs.name} down true')
+            self.wait_till_all_MDSs_are_down()
+
+            self.run_ceph_cmd(f'fs set {self.fs.name} down false')
+            # XXX: acc to bug report, MDS should not be active again and
+            # therefore this should fail. if this line runs successfully, it
+            # means test passes, which bug wasn't reproduced
+            self.fs.wait_for_daemons()
+            assert len(self.fs.get_active_names()) == 1
+
+            sleep(2)
 
 class TestAddDataPool(TestAdminCommands):
     """
@@ -508,7 +613,7 @@ class TestDump(CephFSTestCase):
             self.fs.set_joinable(b)
             b = not b
 
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         try:
             self.fs.status(epoch=epoch)
@@ -532,7 +637,7 @@ class TestDump(CephFSTestCase):
 
         # force a new fsmap
         self.fs.set_joinable(False)
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         status = self.fs.status()
         log.debug(f"new epoch is {status['epoch']}")
