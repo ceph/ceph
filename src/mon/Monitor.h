@@ -44,6 +44,7 @@
 
 #include "common/config_obs.h"
 #include "common/LogClient.h"
+#include "common/MemoryModel.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
 #include "auth/cephx/CephxKeyServer.h"
@@ -99,6 +100,8 @@ enum {
   l_mon_election_call,
   l_mon_election_win,
   l_mon_election_lose,
+  l_mon_heap_size_bytes,
+  l_mon_rss_size_kb,
   l_mon_last,
 };
 
@@ -169,6 +172,9 @@ public:
 
 private:
   void new_tick();
+
+  // Memory usage baseline snapshot for monitoring
+  MemoryModel::snap baseline;
 
   // -- local storage --
 public:

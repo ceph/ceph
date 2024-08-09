@@ -138,6 +138,9 @@ enum {
 
   l_osd_watch_timeouts,
 
+  l_osd_heap_size_bytes,
+  l_osd_rss_size_kb,
+
   l_osd_last,
 };
 

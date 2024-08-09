@@ -205,6 +205,10 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   routed_request_tid(0),
   op_tracker(cct, g_conf().get_val<bool>("mon_enable_op_tracker"), 1)
 {
+  // Capture initial memory usage as a baseline for later comparison, see tick()
+  MemoryModel mm(g_ceph_context);
+  mm.sample(&baseline);
+
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
 
@@ -749,6 +753,18 @@ int Monitor::preinit()
         "ewon", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost",
         "elst", PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(
+      l_mon_heap_size_bytes,
+      "heap_size_bytes",
+      "Mon process Heap size (bytes)",
+      "heap",
+      PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(
+      l_mon_rss_size_kb,
+      "rss_size_kb",
+      "Mon process RSS size (kb)",
+      "rss",
+      PerfCountersBuilder::PRIO_INTERESTING);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }
@@ -5983,6 +5999,19 @@ void Monitor::tick()
   }
 
   mgr_client.update_daemon_health(get_health_metrics());
+
+  // Memory Usage Logging: log current usage and a baseline
+  MemoryModel mm(g_ceph_context);
+  mm.sample();
+  dout(2) << "MON Memory usage: "
+	  << " total " << mm.last.get_total()
+	  << ", rss " << mm.last.get_rss()
+	  << ", heap " << mm.last.get_heap()
+	  << ", baseline " << baseline.get_heap()
+	  << dendl;
+  logger->set(l_mon_heap_size_bytes, mm.last.get_heap());
+  logger->set(l_mon_rss_size_kb, mm.last.get_rss());
+
   new_tick();
 }
 
