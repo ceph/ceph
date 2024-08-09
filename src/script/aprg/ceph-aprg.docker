@@ -1,0 +1,62 @@
+# Ceph container images
+# https://quay.io/repository/ceph/ceph
+FROM quay.io/centos/centos:stream9
+RUN yum update -y
+RUN yum install epel-release -y
+RUN dnf config-manager --set-enabled crb
+# Extra packages needed to run cbt
+RUN yum install python3-lxml -y
+RUN yum install python3-yaml -y
+RUN git clone https://git.kernel.dk/fio.git
+RUN git clone https://github.com/ceph/cbt
+RUN git clone https://github.com/andikleen/pmu-tools.git
+RUN git clone https://github.com/brendangregg/FlameGraph.git
+RUN git clone https://github.com/rstudio/tinytex.git
+RUM cd /tinytex/tools/ && make all
+RUN yum install pdsh -y
+RUN yum install pdsh-rcmd-ssh -y
+RUN yum install targetcli -y
+RUN yum install wget -y
+RUN yum install e2fsprogs -y
+RUN yum install blktrace -y
+RUN yum install lsof -y
+RUN yum install sysstat -y
+RUN yum install ipmitool -y
+RUN yum install dstat -y
+RUN yum install iftop -y
+RUN yum install iperf3 -y
+RUN yum install chrony -y
+RUN yum install irqbalance -y
+RUN yum install smartmontools -y
+RUN yum install logrotate -y
+RUN git clone https://github.com/sharkcz/collectl
+RUN cd /collectl && ./INSTALL
+RUN rm -rf /collectl
+RUN echo '[ -f "/ceph/build/vstart_environment.sh" ] && source /ceph/build/vstart_environment.sh' >>/etc/profile.d/ceph.sh
+RUN echo "Defaults    env_keep += \"LD_LIBRARY_PATH\"" >>/etc/sudoers
+RUN yum install gnuplot -y
+RUN yum install vim -y
+RUN yum install perl-JSON -y
+RUN yum install perl-JSON-XS -y
+
+# Add config files
+ADD bashrc /root/.bashrc
+ADD gitconfig  /root/.gitconfig
+ADD vimrc  /root/.vimrc
+ADD toprc /root/.config/procps/toprc
+ADD cephlog /etc/logrotate.d/ceph
+#Now part of the toolkit in src/script/aprg
+#COPY bin/rbd_fio_workloads.zip /root/bin/
+#COPY --chmod=755 bin/fio-parse-jsons.py /root/bin/
+#COPY --chmod=755 bin/run_fio.sh /root/bin/run_fio.sh
+#COPY --chmod=755 bin/cpu-map.sh /root/bin/cpu-map.sh
+#COPY --chmod=755 bin/parse-top.pl /root/bin/parse-top.pl
+#COPY --chmod=755 bin/run_batch_02.sh /root/bin/run_batch_02.sh
+#COPY --chmod=755 bin/run_batch_single.sh /root/bin/run_batch_single.sh
+#COPY --chmod=755 bin/run_batch_double.sh /root/bin/run_batch_double.sh
+#COPY --chmod=755 bin/run_batch_range_alien.sh /root/bin/run_batch_range_alien.sh
+#COPY --chmod=755 bin/cephlogoff.sh /root/bin/cephlogoff.sh
+#COPY --chmod=755 bin/cephmkrbd.sh /root/bin/cephmkrbd.sh
+#COPY --chmod=755 bin/cephteardown.sh /root/bin/cephteardown.sh
+#COPY --chmod=755 bin/fio_generate_plots /root/bin/fio_generate_plots
+###RUN unzip -od /fio/examples /root/bin/rbd_fio_workloads.zip
