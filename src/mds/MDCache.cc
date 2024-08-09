@@ -8287,7 +8287,9 @@ void MDCache::dispatch(const cref_t<Message> &m)
   case MSG_MDS_SNAPUPDATE:
     handle_snap_update(ref_cast<MMDSSnapUpdate>(m));
     break;
-    
+  case MSG_MDS_SNAPUPDATEREPLY:
+    handle_snap_update_reply(ref_cast<MMDSSnapUpdateReply>(m));
+    break;
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
     ceph_abort_msg("cache unknown message");
@@ -10111,7 +10113,8 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
     send_snaps(updates);
 }
 
-void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
+void MDCache::send_snap_update(MDRequestRef& mdr, CInode *in, version_t stid,
+                               int snap_op, MDSContext *onfinish)
 {
   dout(10) << __func__ << " " << *in << " stid " << stid << dendl;
   ceph_assert(in->is_auth());
@@ -10133,10 +10136,16 @@ void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
       m->snap_blob = snap_blob;
       mds->send_message_mds(m, p);
     }
-  }
 
-  if (stid > 0)
-    notify_global_snaprealm_update(snap_op);
+    if (onfinish) {
+      in->snap_update_ref_set = mds_set;
+      mds->snap_update_inos.insert(in->ino());
+      in->get(CInode::PIN_SNAPUPDATE);
+      in->add_waiter(CInode::WAIT_SNAPUPDATE, onfinish);
+    }
+  } else if (onfinish) {
+    onfinish->complete(0);
+  }
 }
 
 void MDCache::handle_snap_update(const cref_t<MMDSSnapUpdate> &m)
@@ -10144,8 +10153,10 @@ void MDCache::handle_snap_update(const cref_t<MMDSSnapUpdate> &m)
   mds_rank_t from = mds_rank_t(m->get_source().num());
   dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
 
+  auto reply = make_message<MMDSSnapUpdateReply>(m->get_ino(), m->get_tid());
   if (mds->get_state() < MDSMap::STATE_RESOLVE &&
       mds->get_want_state() != CEPH_MDS_STATE_RESOLVE) {
+    mds->send_message(reply, m->get_connection());
     return;
   }
 
@@ -10174,6 +10185,29 @@ void MDCache::handle_snap_update(const cref_t<MMDSSnapUpdate> &m)
 	}
       }
       do_realm_invalidate_and_update_notify(in, m->get_snap_op(), notify_clients);
+    }
+  }
+  mds->send_message(reply, m->get_connection());
+}
+
+void MDCache::handle_snap_update_reply(const cref_t<MMDSSnapUpdateReply> &m)
+{
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
+
+  if (mds->get_state() < MDSMap::STATE_RESOLVE &&
+      mds->get_want_state() != CEPH_MDS_STATE_RESOLVE) {
+    return;
+  }
+
+  CInode *in = get_inode(m->get_ino());
+  if (in) {
+    if (in->snap_update_ref_set.erase(from) && in->snap_update_ref_set.empty()) {
+      mds->snap_update_inos.erase(m->get_ino());
+      MDSContext::vec finished;
+      in->take_waiting(CInode::WAIT_SNAPUPDATE, finished);
+      mds->queue_waiters(finished);
+      in->put(CInode::PIN_SNAPUPDATE);
     }
   }
 }
@@ -14179,6 +14213,29 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
     while ((1U << n) < (unsigned)want)
       ++n;
     export_ephemeral_dist_frag_bits = n;
+  }
+
+  /* Remove the waiter reference if the corresponding MDS is down */
+  set<mds_rank_t> down_set, old_set, new_set;
+  oldmap.get_mds_set_lower_bound(old_set, MDSMap::STATE_RESOLVE);
+  mdsmap.get_mds_set_lower_bound(new_set, MDSMap::STATE_RESOLVE);
+  std::set_difference(old_set.begin(), old_set.end(),
+                      new_set.begin(), new_set.end(),
+                      std::inserter(down_set, down_set.begin()));
+  for (auto m : down_set) {
+    for (auto ino : mds->snap_update_inos) {
+      CInode *in = get_inode(ino);
+      if (!in)
+        continue;
+
+      if (in->snap_update_ref_set.erase(m) && in->snap_update_ref_set.empty()) {
+        mds->snap_update_inos.erase(ino);
+        MDSContext::vec finished;
+        in->take_waiting(CInode::WAIT_SNAPUPDATE, finished);
+        mds->queue_waiters(finished);
+        in->put(CInode::PIN_SNAPUPDATE);
+      }
+    }
   }
 }
 

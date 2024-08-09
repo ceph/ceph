@@ -147,6 +147,7 @@
 #include "messages/MMDSOpenIno.h"
 #include "messages/MMDSOpenInoReply.h"
 #include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSSnapUpdateReply.h"
 #include "messages/MMDSScrub.h"
 #include "messages/MMDSScrubStats.h"
 
@@ -771,6 +772,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_SNAPUPDATE:
     m = make_message<MMDSSnapUpdate>();
+    break;
+
+  case MSG_MDS_SNAPUPDATEREPLY:
+    m = make_message<MMDSSnapUpdateReply>();
     break;
 
   case MSG_MDS_FRAGMENTNOTIFY:
