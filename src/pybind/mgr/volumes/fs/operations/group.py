@@ -116,6 +116,13 @@ class Group(GroupTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+        try:
+            earmark = self.fs.getxattr(self.path, 'user.ceph.subvolumegroup.earmark').decode('utf-8')
+        except cephfs.NoData:
+            earmark = None
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
         return {'uid': int(st["uid"]),
                 'gid': int(st["gid"]),
                 'atime': str(st["atime"]),
@@ -126,7 +133,8 @@ class Group(GroupTemplate):
                 'created_at': str(st["btime"]),
                 'bytes_quota': "infinite" if nsize == 0 else nsize,
                 'bytes_used': int(usedbytes),
-                'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}
+                'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
+                'earmark': earmark}
 
     def resize(self, newsize, noshrink):
         try:
@@ -161,6 +169,7 @@ class Group(GroupTemplate):
                 raise (VolumeException(-e.args[0],
                                        "Cannot set new size for the subvolume group. '{0}'".format(e.args[1])))
         return newsize, group_stat.st_size
+
 
 def set_group_attrs(fs, path, attrs):
     # set subvolume group attrs
@@ -213,7 +222,16 @@ def set_group_attrs(fs, path, attrs):
     if mode is not None:
         fs.lchmod(path, mode)
 
-def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid):
+    # set earmark
+    earmark = attrs.get("earmark")
+    if earmark is not None:
+        try:
+            fs.setxattr(path, 'user.ceph.subvolumegroup.earmark', earmark.encode('utf-8'), 0)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+
+def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, earmark):
     """
     create a subvolume group.
 
@@ -225,6 +243,7 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid):
     :param mode: the user permissions
     :param uid: the user identifier
     :param gid: the group identifier
+    :para earmark: metadata string to identify if subvolumegroup is associated with nfs/smb
     :return: None
     """
     group = Group(fs, vol_spec, groupname)
@@ -239,7 +258,8 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid):
             'uid': uid,
             'gid': gid,
             'data_pool': pool,
-            'quota': size
+            'quota': size,
+            'earmark': earmark,
         }
         set_group_attrs(fs, path, attrs)
     except (cephfs.Error, VolumeException) as e:
@@ -306,3 +326,40 @@ def open_group_unique(fs, vol_spec, groupname, c_group, c_groupname):
     else:
         with open_group(fs, vol_spec, groupname) as group:
             yield group
+
+
+def set_earmark_group(fs, volspec, groupname, earmark):
+    """
+    Set earmark to a subvolume group
+
+    :param fs: ceph filesystem handle
+    :param volspec: volume specification
+    :param groupname: subvolume group name
+    :param earmark: metadata string to identify if subvolumegroup is associated with nfs/smb
+    :return: None
+    """
+    group = Group(fs, volspec, groupname)
+    path = group.path
+    try:
+        fs.setxattr(path, 'user.ceph.subvolumegroup.earmark', earmark.encode('utf-8'), 0)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+
+
+def remove_earmark_group(fs, volspec, groupname):
+    """
+    Remove earmark from a subvolume group
+
+    :param fs: ceph filesystem handle
+    :param volspec: volume specification
+    :param groupname: subvolume group name
+    :return: None
+    """
+    group = Group(fs, volspec, groupname)
+    path = group.path
+    try:
+        fs.removexattr(path, 'user.ceph.subvolumegroup.earmark')
+    except cephfs.NoData:
+        raise VolumeException(-errno.ENOENT, "subvolume group '{0}' does not have earmark".format(groupname))
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])

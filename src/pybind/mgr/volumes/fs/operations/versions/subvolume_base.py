@@ -6,6 +6,7 @@ import logging
 import hashlib
 from typing import Dict, Union
 from pathlib import Path
+import uuid
 
 import cephfs
 
@@ -192,6 +193,13 @@ class SubvolumeBase(object):
         except cephfs.NoData:
             attrs["quota"] = None
 
+        try:
+            attrs["earmark"] = self.fs.getxattr(pathname,
+                                                'user.ceph.subvolume.earmark'
+                                                ).decode('utf-8')
+        except cephfs.NoData:
+            attrs["earmark"] = None
+
         return attrs
 
     def set_attrs(self, path, attrs):
@@ -276,6 +284,16 @@ class SubvolumeBase(object):
         mode = attrs.get("mode", None)
         if mode is not None:
             self.fs.lchmod(path, mode)
+
+        # set earmark
+        earmark = attrs.get("earmark")
+        if earmark is not None:
+            try:
+                self.fs.setxattr(path, 'user.ceph.subvolume.earmark', earmark.encode('utf-8'), 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL, "invalid earmark specified: '{0}'".format(earmark))
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
 
     def _resize(self, path, newsize, noshrink):
         try:
@@ -418,6 +436,13 @@ class SubvolumeBase(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+        try:
+            earmark = self.fs.getxattr(subvolpath,
+                                       'user.ceph.subvolume.earmark'
+                                       ).decode('utf-8')
+        except cephfs.NoData:
+            earmark = None
+
         return {'path': subvolpath,
                 'type': etype.value,
                 'uid': int(st["uid"]),
@@ -434,7 +459,8 @@ class SubvolumeBase(object):
                 if nsize == 0
                 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
                 'pool_namespace': pool_namespace,
-                'features': self.features, 'state': self.state.value}
+                'features': self.features, 'state': self.state.value,
+                'earmark': earmark}
 
     def set_user_metadata(self, keyname, value):
         try:
@@ -470,6 +496,24 @@ class SubvolumeBase(object):
             log.error(f"Failed to remove user metadata key={keyname} on subvolume={self.subvol_name} "
                       f"group={self.group_name} reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
             raise VolumeException(-me.args[0], me.args[1])
+
+    def set_earmark(self, earmark):
+        subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
+        try:
+            self.fs.setxattr(subvol_path, 'user.ceph.subvolume.earmark', earmark.encode('utf-8'), 0)
+        except cephfs.Error as e:
+            if not e.errno == errno.ENOENT:
+                log.error('error removing earmark')
+                raise Exception(-e.errno)
+
+    def remove_earmark(self):
+        subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
+        try:
+            self.fs.removexattr(subvol_path, 'user.ceph.subvolume.earmark')
+        except cephfs.Error as e:
+            if not e.errno == errno.ENOENT:
+                log.error('error removing earmark')
+                raise Exception(-e.errno)
 
     def get_snap_section_name(self, snapname):
         section = "SNAP_METADATA" + "_" + snapname;

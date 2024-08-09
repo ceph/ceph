@@ -11,10 +11,10 @@ import cephfs
 
 from mgr_util import CephfsClient
 
-from .fs_util import listdir, has_subdir
+from .fs_util import listdir, has_subdir, validate_earmark
 
 from .operations.group import open_group, create_group, remove_group, \
-    open_group_unique, set_group_attrs
+    open_group_unique, set_group_attrs, set_earmark_group, remove_earmark_group
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
@@ -223,11 +223,18 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
+        earmark    = kwargs['earmark']
 
         oct_mode = octal_str_to_decimal_int(mode)
+        if earmark == "":  # empty earmark indicates no earmarking
+            earmark = None
+        else:
+            if not validate_earmark(earmark):
+                raise VolumeException(-errno.EINVAL, "Invalid earmark '{0}'".format(earmark))
+
         try:
             create_subvol(
-                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid)
+                self.mgr, fs_handle, self.volspec, group, subvolname, size, isolate_nspace, pool, oct_mode, uid, gid, earmark)
         except VolumeException as ve:
             # kick the purge threads for async removal -- note that this
             # assumes that the subvolume is moved to trashcan for cleanup on error.
@@ -600,6 +607,41 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def set_earmark(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+        force     = kwargs['force']
+        earmark   = kwargs['earmark']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.USER_METADATA_REMOVE) as subvolume:
+                        subvolume.set_earmark(earmark)
+        except VolumeException as ve:
+            if not (ve.errno == -errno.ENOENT and force):
+                ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def remove_earmark(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+        force     = kwargs['force']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.USER_METADATA_REMOVE) as subvolume:
+                        subvolume.remove_earmark()
+        except VolumeException as ve:
+            if not (ve.errno == -errno.ENOENT and force):
+                ret = self.volume_exception_to_retval(ve)
+        return ret
+
     ### subvolume snapshot
 
     def create_subvolume_snapshot(self, **kwargs):
@@ -882,6 +924,13 @@ class VolumeClient(CephfsClient["Module"]):
         uid       = kwargs['uid']
         gid       = kwargs['gid']
         mode      = kwargs['mode']
+        earmark   = kwargs['earmark']
+
+        if earmark == "":  # empty earmark indicates no earmarking
+            earmark = None
+        else:
+            if not validate_earmark(earmark):
+                raise VolumeException(-errno.EINVAL, "Invalid earmark '{0}'".format(earmark))
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -893,13 +942,14 @@ class VolumeClient(CephfsClient["Module"]):
                             'gid': gid,
                             'mode': octal_str_to_decimal_int(mode),
                             'data_pool': pool,
-                            'quota': size
+                            'quota': size,
+                            'earmark': earmark
                         }
                         set_group_attrs(fs_handle, group.path, attrs)
                 except VolumeException as ve:
                     if ve.errno == -errno.ENOENT:
                         oct_mode = octal_str_to_decimal_int(mode)
-                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid)
+                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, earmark)
                     else:
                         raise
         except VolumeException as ve:
@@ -1022,6 +1072,36 @@ class VolumeClient(CephfsClient["Module"]):
             else:
                 ret = self.volume_exception_to_retval(ve)
         return ret
+
+    def set_earmark_subvolume_group(self, **kwargs):
+        ret      = 0, "", ""
+        volname    = kwargs['vol_name']
+        groupname = kwargs['group_name']
+        force     = kwargs['force']
+        earmark   = kwargs['earmark']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                set_earmark_group(fs_handle, self.volspec, groupname, earmark)
+        except VolumeException as ve:
+            if not (ve.errno == -errno.ENOENT and force):
+                ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def remove_earmark_subvolume_group(self, **kwargs):
+        ret      = 0, "", ""
+        volname    = kwargs['vol_name']
+        groupname = kwargs['group_name']
+        force     = kwargs['force']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                remove_earmark_group(fs_handle, self.volspec, groupname)
+        except VolumeException as ve:
+            if not (ve.errno == -errno.ENOENT and force):
+                ret = self.volume_exception_to_retval(ve)
+        return ret
+
 
     ### group snapshot
 

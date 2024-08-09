@@ -89,7 +89,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=pool_layout,type=CephString,req=false '
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
-                   'name=mode,type=CephString,req=false ',
+                   'name=mode,type=CephString,req=false '
+                   'name=earmark,type=CephString,req=false',
             'desc': "Create a CephFS subvolume group in a volume, and optionally, "
                     "with a specific data pool layout, and a specific numeric mode",
             'perm': 'rw'
@@ -125,6 +126,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'fs subvolumegroup earmark set '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=earmark,type=CephString,req=false '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Set earmark for a subvolumegroup",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup earmark rm '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Remove earmark from a subvolumegroup",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolume ls '
                    'name=vol_name,type=CephString '
                    'name=group_name,type=CephString,req=false ',
@@ -141,7 +159,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=uid,type=CephInt,req=false '
                    'name=gid,type=CephInt,req=false '
                    'name=mode,type=CephString,req=false '
-                   'name=namespace_isolated,type=CephBool,req=false ',
+                   'name=namespace_isolated,type=CephBool,req=false',
+                   'name=earmark,type=CephString,req=false'
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
                     "with a specific size (in bytes), a specific data pool layout, "
                     "a specific mode, in a specific subvolume group and in separate "
@@ -270,6 +289,25 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=force,type=CephBool,req=false ',
             'desc': "Remove custom metadata (key-value) associated with the key of a CephFS subvolume in a volume, "
                     "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume earmark set '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=earmark,type=CephString,req=false '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Set earmark for a subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume earmark rm '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Remove earmark from a subvolume",
             'perm': 'rw'
         },
         {
@@ -631,6 +669,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                               group_name=cmd['group_name'],
                                               new_size=cmd['new_size'],
                                               no_shrink=cmd.get('no_shrink', False))
+
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
@@ -638,6 +677,19 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_exist(self, inbuf, cmd):
         return self.vc.subvolume_group_exists(vol_name=cmd['vol_name'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_earark_set(self, inbuf, cmd):
+        return self.vc.set_earmark_subvolume_group(vol_name=cmd['vol_name'],
+                                                      group_name=cmd['group_name'],
+                                                      earmark=cmd.get('earmark', None),
+                                                      force=cmd.get('force', False))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolumegroup_earark_rm(self, inbuf, cmd):
+        return self.vc.remove_earmark_subvolume_group(vol_name=cmd['vol_name'],
+                                                      group_name=cmd['group_name'],
+                                                      force=cmd.get('force', False))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
@@ -652,7 +704,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         uid=cmd.get('uid', None),
                                         gid=cmd.get('gid', None),
                                         mode=cmd.get('mode', '755'),
-                                        namespace_isolated=cmd.get('namespace_isolated', False))
+                                        namespace_isolated=cmd.get('namespace_isolated', False),
+                                        earmark=cmd.get('earmark', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
@@ -762,7 +815,22 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       key_name=cmd['key_name'],
                                       group_name=cmd.get('group_name', None),
                                       force=cmd.get('force', False))
-    
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_earmark_set(self, inbuf, cmd):
+        return self.vc.set_earmark(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None),
+                                      earmark=cmd.get('earmark', None),
+                                      force=cmd.get('force', False))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_earmark_rm(self, inbuf, cmd):
+        return self.vc.remove_earmark(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None),
+                                      force=cmd.get('force', False))
+
     @mgr_cmd_wrap
     def _cmd_fs_quiesce(self, inbuf, cmd):
         return self.vc.quiesce(cmd)

@@ -214,3 +214,22 @@ def create_base_dir(fs, path, mode):
             fs.mkdirs(path, mode)
         else:
             raise VolumeException(-e.args[0], e.args[1])
+
+
+def validate_earmark(self, earmark):
+    """
+    Validates that the earmark string is either empty or composed of parts separated by scopes,
+    with the top-level scope being either 'nfs' or 'smb'.
+
+    :param earmark: The earmark string to validate.
+    :return: True if valid, False otherwise.
+    """
+    if earmark in ['nfs', 'smb']:
+        return True
+
+    parts = earmark.split('.')
+
+    if parts[0] not in ['nfs', 'smb']:
+        return False
+
+    return all(parts)
