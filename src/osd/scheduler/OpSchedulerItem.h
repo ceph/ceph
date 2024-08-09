@@ -220,6 +220,11 @@ public:
   const spg_t& get_ordering_token() const final {
     return get_pgid();
   }
+
+  PGOpQueueable &operator=(const PGOpQueueable &) = delete;
+  PGOpQueueable &operator=(PGOpQueueable &&) = delete;
+  PGOpQueueable(const PGOpQueueable&)  = delete;
+  PGOpQueueable(PGOpQueueable&&) = delete;
 };
 
 class PGOpItem : public PGOpQueueable {
@@ -492,17 +497,18 @@ class PGRecovery : public PGOpQueueable {
   epoch_t epoch_queued;
   uint64_t reserved_pushes;
   int priority;
+  OSDService *osd;
 public:
   PGRecovery(
     spg_t pg,
     epoch_t epoch_queued,
     uint64_t reserved_pushes,
-    int priority)
+    int priority, OSDService *service)
     : PGOpQueueable(pg),
       time_queued(ceph_clock_now()),
       epoch_queued(epoch_queued),
       reserved_pushes(reserved_pushes),
-      priority(priority) {}
+      priority(priority), osd(service) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecovery(pgid=" << get_pgid()
 	       << " epoch_queued=" << epoch_queued
@@ -522,6 +528,7 @@ public:
   op_scheduler_class get_scheduler_class() const final {
     return priority_to_scheduler_class(priority);
   }
+  ~PGRecovery();
 };
 
 class PGRecoveryContext : public PGOpQueueable {
