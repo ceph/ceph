@@ -375,6 +375,7 @@ int main(int argc, const char **argv)
 	    << " for osd." << whoami
 	    << " fsid " << g_conf().get_val<uuid_d>("fsid")
 	    << dendl;
+    forker.exit(0);
   }
   if (mkfs || mkkey) {
     forker.exit(0);
