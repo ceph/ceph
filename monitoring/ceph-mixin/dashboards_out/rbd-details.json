@@ -89,14 +89,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rbd_write_ops{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval])",
+               "expr": "rate(ceph_rbd_write_ops{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Write",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rbd_read_ops{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval])",
+               "expr": "rate(ceph_rbd_read_ops{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Read",
@@ -191,14 +191,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rbd_write_bytes{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval])",
+               "expr": "rate(ceph_rbd_write_bytes{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Write",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rbd_read_bytes{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval])",
+               "expr": "rate(ceph_rbd_read_bytes{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval])",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Read",
@@ -293,14 +293,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rbd_write_latency_sum{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval]) /\n  rate(ceph_rbd_write_latency_count{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval])\n",
+               "expr": "rate(ceph_rbd_write_latency_sum{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval]) /\n  rate(ceph_rbd_write_latency_count{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval])\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Write",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rbd_read_latency_sum{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval]) /\n  rate(ceph_rbd_read_latency_count{job=~\"$job\", pool=\"$pool\", image=\"$image\"}[$__rate_interval])\n",
+               "expr": "rate(ceph_rbd_read_latency_sum{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval]) /\n  rate(ceph_rbd_read_latency_count{pool=\"$pool\", image=\"$image\", cluster=~\"$cluster\", }[$__rate_interval])\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{pool}} Read",
@@ -368,36 +368,16 @@
             "type": "datasource"
          },
          {
-            "allValue": ".+",
-            "current": { },
-            "datasource": "$datasource",
-            "hide": 2,
-            "includeAll": true,
-            "label": "cluster",
-            "multi": true,
-            "name": "cluster",
-            "options": [ ],
-            "query": "label_values(ceph_osd_metadata, cluster)",
-            "refresh": 1,
-            "regex": "(.*)",
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [ ],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-         },
-         {
-            "allValue": ".+",
+            "allValue": null,
             "current": { },
             "datasource": "$datasource",
             "hide": 0,
-            "includeAll": true,
-            "label": "job",
-            "multi": true,
-            "name": "job",
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
             "options": [ ],
-            "query": "label_values(ceph_osd_metadata{}, job)",
+            "query": "label_values(ceph_health_status, cluster)",
             "refresh": 1,
             "regex": "(.*)",
             "sort": 1,
@@ -417,7 +397,7 @@
             "multi": false,
             "name": "pool",
             "options": [ ],
-            "query": "label_values(pool)",
+            "query": "label_values(ceph_rbd_read_ops{cluster=~\"$cluster\", }, pool)",
             "refresh": 1,
             "regex": "",
             "sort": 0,
@@ -437,7 +417,7 @@
             "multi": false,
             "name": "image",
             "options": [ ],
-            "query": "label_values(image)",
+            "query": "label_values(ceph_rbd_read_ops{cluster=~\"$cluster\", , pool=\"$pool\"}, image)",
             "refresh": 1,
             "regex": "",
             "sort": 0,
