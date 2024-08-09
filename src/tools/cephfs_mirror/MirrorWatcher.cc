@@ -11,7 +11,6 @@
 #include "aio_utils.h"
 #include "MirrorWatcher.h"
 #include "FSMirror.h"
-#include "Types.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
@@ -22,10 +21,11 @@ namespace cephfs {
 namespace mirror {
 
 MirrorWatcher::MirrorWatcher(librados::IoCtx &ioctx, FSMirror *fs_mirror,
-                             ContextWQ *work_queue)
+                             ErrorListener &elistener, ContextWQ *work_queue)
   : Watcher(ioctx, CEPHFS_MIRROR_OBJECT, work_queue),
     m_ioctx(ioctx),
     m_fs_mirror(fs_mirror),
+    m_elistener(elistener),
     m_work_queue(work_queue),
     m_lock(ceph::make_mutex("cephfs::mirror::mirror_watcher")),
     m_instance_id(stringify(m_ioctx.get_instance_id())) {
@@ -93,15 +93,15 @@ void MirrorWatcher::handle_rewatch_complete(int r) {
     dout(0) << ": client blocklisted" <<dendl;
     std::scoped_lock locker(m_lock);
     m_blocklisted = true;
-    m_blocklisted_ts = ceph_clock_now();
+    m_elistener.set_blocklisted_ts();
   } else if (r == -ENOENT) {
     derr << ": mirroring object deleted" << dendl;
     m_failed = true;
-    m_failed_ts = ceph_clock_now();
+    m_elistener.set_failed_ts();
   } else if (r < 0) {
     derr << ": rewatch error: " << cpp_strerror(r) << dendl;
     m_failed = true;
-    m_failed_ts = ceph_clock_now();
+    m_elistener.set_failed_ts();
   }
 }
 

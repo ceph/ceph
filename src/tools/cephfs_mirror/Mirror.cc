@@ -20,6 +20,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephfs::mirror::Mirror " << __func__
 
+using namespace std::chrono;
+
 namespace cephfs {
 namespace mirror {
 
@@ -237,7 +239,7 @@ int Mirror::init_mon_client() {
     return r;
   }
 
-  r = m_monc->authenticate(std::chrono::duration<double>(m_cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
+  r = m_monc->authenticate(duration<double>(m_cct->_conf.get_val<seconds>("client_mount_timeout")).count());
   if (r < 0) {
     derr << ": failed to authenticate to monitor: " << cpp_strerror(r) << dendl;
     return r;
@@ -493,19 +495,18 @@ void Mirror::peer_removed(const Filesystem &filesystem, const Peer &peer) {
 void Mirror::update_fs_mirrors() {
   dout(20) << dendl;
 
-  auto now = ceph_clock_now();
-  double blocklist_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
-    ("cephfs_mirror_restart_mirror_on_blocklist_interval").count();
-  double failed_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
-    ("cephfs_mirror_restart_mirror_on_failure_interval").count();
+  seconds blocklist_interval = g_ceph_context->_conf.get_val<seconds>
+    ("cephfs_mirror_restart_mirror_on_blocklist_interval");
+  seconds failed_interval = g_ceph_context->_conf.get_val<seconds>
+    ("cephfs_mirror_restart_mirror_on_failure_interval");
 
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
       auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
-	(failed_interval > 0 && (mirror_action.fs_mirror->get_failed_ts() - now) > failed_interval);
+        (failed_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_failed_ts()).count() > failed_interval.count());
       auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
-	(blocklist_interval > 0 && (mirror_action.fs_mirror->get_blocklisted_ts() - now) > blocklist_interval);
+        (blocklist_interval.count() > 0 && duration_cast<seconds>(clock::now() - mirror_action.fs_mirror->get_blocklisted_ts()).count() > blocklist_interval.count());
 
       if (!mirror_action.action_in_progress && !_is_restarting(filesystem)) {
 	if (failed_restart || blocklisted_restart) {
@@ -538,7 +539,7 @@ void Mirror::schedule_mirror_update_task() {
                                      m_timer_task = nullptr;
                                      update_fs_mirrors();
                                    });
-  double after = g_ceph_context->_conf.get_val<std::chrono::seconds>
+  double after = g_ceph_context->_conf.get_val<seconds>
     ("cephfs_mirror_action_update_interval").count();
   dout(20) << ": scheduling fs mirror update (" << m_timer_task << ") after "
            << after << " seconds" << dendl;
