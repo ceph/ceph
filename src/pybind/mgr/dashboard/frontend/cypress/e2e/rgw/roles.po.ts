@@ -34,7 +34,7 @@ export class RolesPageHelper extends PageHelper {
     this.getTableCell(this.columnIndex.roleName, name)
       .click()
       .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.maxSessionDuration})`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.maxSessionDuration})`)
       .should(($elements) => {
         const roleName = $elements.map((_, el) => el.textContent).get();
         expect(roleName).to.include(`${maxSessionDuration} hours`);

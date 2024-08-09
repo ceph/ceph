@@ -68,7 +68,7 @@
     </nav>
     <!-- Page Content -->
     <div id="content"
-         [ngClass]="{'active': !showMenuSidebar}">
+         [ngClass]="{'active': !showMenuSidebar, 'content-theme': true}">
       <ng-content></ng-content>
     </div>
   </div>
@@ -77,7 +77,6 @@
   <!-- ************************ -->
   <ng-template #cd_menu>
     <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
-    <div cdsTheme="theme">
       <cds-sidenav [expanded]="showMenuSidebar"
                    class="mt-5">
         <!-- Dashboard -->
@@ -327,7 +326,6 @@
                             class="tc_submenuitem tc_submenuitem_admin_configuration"><span i18n>Configuration</span></cds-sidenav-item>
         </cds-sidenav-menu>
       </cds-sidenav>
-    </div>
     </ng-container>
   </ng-template>
   </div>

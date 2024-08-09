@@ -68,8 +68,8 @@
 </div>
 
 <ng-template #origin
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <span class="quota-origin"
         (click)="selectOrigin(value)">{{value}}</span>
 </ng-template>

@@ -17,3 +17,7 @@ button.dropdown-item:hover {
 .action-label {
   font-weight: bold;
 }
+
+::ng-deep .cds--toolbar-content .cds--overflow-menu {
+  inline-size: auto !important;
+}

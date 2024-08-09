@@ -11,6 +11,6 @@
   }
 }
 
-::ng-deep cd-configuration datatable-body-cell.wrap {
+::ng-deep cd-configuration td[cdstabledata].wrap {
   word-break: break-all;
 }

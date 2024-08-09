@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -19,7 +19,6 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
-import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -337,7 +336,12 @@ describe('OsdListComponent', () => {
           'Destroy',
           'Delete'
         ],
-        primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Create' }
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
       },
       'create,update': {
         actions: [
@@ -351,20 +355,30 @@ describe('OsdListComponent', () => {
           'Mark In',
           'Mark Down'
         ],
-        primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Create' }
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
       },
       'create,delete': {
         actions: ['Create', 'Mark Lost', 'Purge', 'Destroy', 'Delete'],
         primary: {
           multiple: 'Create',
-          executing: 'Mark Lost',
-          single: 'Mark Lost',
+          executing: 'Create',
+          single: 'Create',
           no: 'Create'
         }
       },
       create: {
         actions: ['Create'],
-        primary: { multiple: 'Create', executing: 'Create', single: 'Create', no: 'Create' }
+        primary: {
+          multiple: 'Create',
+          executing: 'Create',
+          single: 'Create',
+          no: 'Create'
+        }
       },
       'update,delete': {
         actions: [
@@ -381,7 +395,12 @@ describe('OsdListComponent', () => {
           'Destroy',
           'Delete'
         ],
-        primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
       update: {
         actions: [
@@ -394,20 +413,30 @@ describe('OsdListComponent', () => {
           'Mark In',
           'Mark Down'
         ],
-        primary: { multiple: 'Scrub', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
       delete: {
         actions: ['Mark Lost', 'Purge', 'Destroy', 'Delete'],
         primary: {
-          multiple: 'Mark Lost',
-          executing: 'Mark Lost',
-          single: 'Mark Lost',
-          no: 'Mark Lost'
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
         }
       },
       'no-permissions': {
         actions: [],
-        primary: { multiple: '', executing: '', single: '', no: '' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       }
     });
   });
@@ -417,25 +446,15 @@ describe('OsdListComponent', () => {
       fixture.detectChanges();
     });
 
-    beforeEach(fakeAsync(() => {
-      // The menu needs a click to render the dropdown!
-      const dropDownToggle = fixture.debugElement.query(By.css('.dropdown-toggle'));
-      dropDownToggle.triggerEventHandler('click', null);
-      tick();
-      fixture.detectChanges();
-    }));
-
     it('has all menu entries disabled except create', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
-      const toClassName = TestBed.inject(TableActionsComponent).toClassName;
-      const getActionClasses = (action: CdTableAction) =>
-        tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action)}`)).classes;
+      const tableActionComponent: TableActionsComponent = tableActionElement.componentInstance;
 
       component.tableActions.forEach((action) => {
         if (action.name === 'Create') {
           return;
         }
-        expect(getActionClasses(action).disabled).toBe(true);
+        expect(tableActionComponent.disableSelectionAction(action)).toBeTruthy();
       });
     });
   });

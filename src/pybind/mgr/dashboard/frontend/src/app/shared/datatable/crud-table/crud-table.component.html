@@ -21,7 +21,7 @@
       [selectionType]="meta.table.selectionType"
       (updateSelection)="updateSelection($event)"
       [toolHeader]="meta.table.toolHeader">
-    <div class="table-actions btn-toolbar">
+    <div class="table-actions">
       <cd-table-actions [permission]="permission"
                         [selection]="selection"
                         class="btn-group"
@@ -29,8 +29,8 @@
                         [tableActions]="meta.actions">
       </cd-table-actions>
     </div>
-    <ng-container *ngIf="expandedRow && meta.detail_columns.length > 0"
-                  cdTableDetail>
+    <ng-container [ngIf]="expandedRow && meta.detail_columns.length > 0"
+                  *cdTableDetail>
       <table class="table table-striped table-bordered">
         <tbody>
           <tr *ngFor="let column of meta.detail_columns">
@@ -46,7 +46,7 @@
 </ng-container>
 
 <ng-template #badgeDictTpl
-             let-value="value">
+             let-value="data.value">
   <span *ngFor="let instance of value | keyvalue; last as isLast">
     <span class="badge badge-background-primary" >{{ instance.key }}: {{ instance.value }}</span>
     <ng-container *ngIf="!isLast">&nbsp;</ng-container>
@@ -54,12 +54,12 @@
 </ng-template>
 
 <ng-template #dateTpl
-             let-value="value">
+             let-value="data.value">
   <span>{{ value | cdDate }}</span>
 </ng-template>
 
 <ng-template #durationTpl
-             let-value="value">
+             let-value="data.value">
   <span>{{ value | duration }}</span>
 </ng-template>
 

@@ -41,4 +41,14 @@ export class CdTableAction {
   // In some rare cases you want to hide a action that can be used by the user for example
   // if one action can lock the item and another action unlocks it
   visible?: (_: CdTableSelection) => boolean;
+
+  buttonKind?:
+    | 'primary'
+    | 'secondary'
+    | 'tertiary'
+    | 'ghost'
+    | 'danger'
+    | 'danger--primary'
+    | 'danger--tertiary'
+    | 'danger--ghost' = 'primary';
 }

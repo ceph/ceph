@@ -1,12 +1,10 @@
-import { TableColumnProp } from '@swimlane/ngx-datatable';
-
 export interface CdTableColumnFiltersChange {
   /**
    * Applied filters.
    */
   filters: {
     name: string;
-    prop: TableColumnProp;
+    prop: string | number;
     value: { raw: string; formatted: string };
   }[];
 

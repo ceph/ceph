@@ -5,13 +5,15 @@
           [autoReload]="false"
           [autoSave]="false"
           [footer]="false"
+          size="xs"
+          [layer]="0"
           [limit]="0">
 </cd-table>
 
 <ng-template #cellScopeCheckboxTpl
-             let-column="column"
-             let-row="row"
-             let-value="value">
+             let-column="data.column"
+             let-row="data.row"
+             let-value="data.value">
   <div class="custom-control custom-checkbox">
     <input class="custom-control-input"
            id="scope_{{ row.scope }}"
@@ -25,9 +27,9 @@
 </ng-template>
 
 <ng-template #cellPermissionCheckboxTpl
-             let-column="column"
-             let-row="row"
-             let-value="value">
+             let-column="data.column"
+             let-row="data.row"
+             let-value="data.value">
   <div class="custom-control custom-checkbox">
     <input class="custom-control-input"
            type="checkbox"
@@ -41,7 +43,7 @@
 </ng-template>
 
 <ng-template #headerPermissionCheckboxTpl
-             let-column="column">
+             let-column="data">
   <div class="custom-control custom-checkbox">
     <input class="custom-control-input"
            id="header_{{ column.prop }}"

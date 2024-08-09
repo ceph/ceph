@@ -7,7 +7,7 @@
                 i18n>Neither hostname nor OSD ID given</cd-alert-panel>
 
 <ng-template #deviceLocation
-             let-value="value">
+             let-value="data.value">
   <ng-container *ngFor="let location of value">
     <cd-label *ngIf="location.host === hostname"
               [value]="location.dev"></cd-label>
@@ -15,7 +15,7 @@
 </ng-template>
 
 <ng-template #daemonName
-             let-value="value">
+             let-value="data.value">
   <ng-container [ngTemplateOutlet]="osdId !== null ? osdIdDaemon : readableDaemons"
                 [ngTemplateOutletContext]="{daemons: value}">
   </ng-container>
@@ -39,7 +39,7 @@
 
 
 <ng-template #lifeExpectancy
-             let-value="value">
+             let-value="data.value">
   <span *ngIf="!value.life_expectancy_enabled"
         i18n>{{ "" | notAvailable }}</span>
   <span *ngIf="value.min && !value.max">&gt; {{value.min | i18nPlural: translationMapping}}</span>
@@ -48,6 +48,6 @@
 </ng-template>
 
 <ng-template #lifeExpectancyTimestamp
-             let-value="value">
+             let-value="data.value">
   {{value}}
 </ng-template>

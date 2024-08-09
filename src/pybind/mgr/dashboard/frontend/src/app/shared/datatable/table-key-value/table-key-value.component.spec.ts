@@ -3,7 +3,6 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
@@ -24,7 +23,6 @@ describe('TableKeyValueComponent', () => {
     declarations: [TableComponent, TableKeyValueComponent, TablePaginationComponent],
     imports: [
       FormsModule,
-      NgxDatatableModule,
       ComponentsModule,
       RouterTestingModule,
       NgbDropdownModule,

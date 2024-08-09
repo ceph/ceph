@@ -34,13 +34,14 @@ describe('Cluster Ceph Users', () => {
 
     it('should edit a user', () => {
       const newCaps = 'allow *';
-      users.edit(entityName, 'allow *');
+      users.edit(entityName, 'allow *', true);
       users.existTableCell(entityName, true);
       users.checkCaps(entityName, [`${entity}: ${newCaps}`]);
+      users.clickActionButtonFromMultiselect(entityName, 'edit');
     });
 
     it('should delete a user', () => {
-      users.delete(entityName, null, null, true);
+      users.delete(entityName, null, null, true, true);
     });
   });
 });

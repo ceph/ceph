@@ -32,13 +32,7 @@ export class ConfigurationPageHelper extends PageHelper {
     cy.get('#address').should('have.class', 'ng-valid');
     cy.get('#kms_provider').should('be.disabled');
     cy.contains('button', 'Submit').click();
-    this.getTableCell(this.columnIndex.address, new_address)
-      .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.address})`)
-      .should(($elements) => {
-        const address = $elements.text();
-        expect(address).to.eq(new_address);
-      });
+    this.getFirstTableCell(new_address);
   }
 
   private selectKmsProvider(provider: string) {
