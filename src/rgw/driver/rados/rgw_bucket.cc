@@ -2781,6 +2781,7 @@ public:
 class RGWMetadataHandlerPut_BucketInstance : public RGWMetadataHandlerPut_SObj
 {
   CephContext *cct;
+  optional_yield y;
   RGWBucketInstanceMetadataHandler *bihandler;
   RGWBucketInstanceMetadataObject *obj;
 public:
@@ -2790,7 +2791,7 @@ public:
                                        RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 				       optional_yield y,
                                        RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, _obj, objv_tracker, y, type, from_remote_zone),
-                                       cct(_cct), bihandler(_handler) {
+                                       cct(_cct), y(y), bihandler(_handler) {
     obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
 
     auto& bci = obj->get_bci();
@@ -2947,7 +2948,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
     auto lc_it = bci.attrs.find(RGW_ATTR_LC);
     if (lc_it != bci.attrs.end()) {
       ldpp_dout(dpp, 20) << "set lc config for " << bci.info.bucket.name << dendl;
-      ret = lc->set_bucket_config(bucket.get(), bci.attrs, nullptr);
+      ret = lc->set_bucket_config(dpp, y, bucket.get(), bci.attrs, nullptr);
       if (ret < 0) {
 	      ldpp_dout(dpp, 0) << __func__ << " failed to set lc config for "
 			<< bci.info.bucket.name
@@ -2957,7 +2958,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
     } else {
       ldpp_dout(dpp, 20) << "remove lc config for " << bci.info.bucket.name << dendl;
-      ret = lc->remove_bucket_config(bucket.get(), bci.attrs, false /* cannot merge attrs */);
+      ret = lc->remove_bucket_config(dpp, y, bucket.get(), bci.attrs, false /* cannot merge attrs */);
       if (ret < 0) {
 	      ldpp_dout(dpp, 0) << __func__ << " failed to remove lc config for "
 			<< bci.info.bucket.name

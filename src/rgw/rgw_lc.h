@@ -653,10 +653,12 @@ public:
   bool going_down();
   void start_processor();
   void stop_processor();
-  int set_bucket_config(rgw::sal::Bucket* bucket,
+  int set_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
+                        rgw::sal::Bucket* bucket,
                         const rgw::sal::Attrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
-  int remove_bucket_config(rgw::sal::Bucket* bucket,
+  int remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
+                           rgw::sal::Bucket* bucket,
                            const rgw::sal::Attrs& bucket_attrs,
 			   bool merge_attrs = true);
 
