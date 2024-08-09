@@ -31,6 +31,13 @@
 namespace bs = boost::system;
 namespace ca = ceph::async;
 
+struct FileHandleInfo{
+    Inode *file;
+    const char *filename;
+    Fh *fh;
+    struct ceph_statx stx;
+};
+
 class ClientScaffold : public Client {  
 public:
     ClientScaffold(Messenger *m, MonClient *mc, Objecter *objecter_) : Client(m, mc, objecter_) {}
@@ -85,6 +92,128 @@ public:
       ceph_assert(session->con->send_message2(std::move(m)) == 0);
       wait_on_list(waiting_for_reclaim);
       return session->reclaim_state == MetaSession::RECLAIM_FAIL ? true : false;
+    }
+
+    void write_n_bytes_async(struct Fh *fh, size_t to_write, size_t block_size,
+                            int iov_cnt, off_t *offset) {
+      /// @brief Write N bytes of data asynchronously.
+      /// @param fh - File handle
+      /// @param to_write - bytes to write
+      /// @param block_size - Total size of each iovec structs array
+      /// @param iov_cnt - Number of elements in iovec structs array
+      /// @param offset - location to start writing from
+
+      const size_t DATA_PER_BLOCK = size_t(block_size / iov_cnt);
+      // to persist memory address of out_buf after every loop iteration
+      std::vector<std::unique_ptr<char[]>> buffers;
+      buffers.reserve(iov_cnt);
+      struct iovec iov_buf_out[iov_cnt];
+
+      for (int i = 0; i < iov_cnt; ++i) {
+        auto out_buf = std::make_unique<char[]>(DATA_PER_BLOCK);
+        memset(out_buf.get(), 'a' + i, DATA_PER_BLOCK);
+        iov_buf_out[i].iov_base = out_buf.get();
+        iov_buf_out[i].iov_len = DATA_PER_BLOCK;
+        buffers.push_back(std::move(out_buf));
+      }
+
+      std::unique_ptr<C_SaferCond> writefinish = nullptr;
+      int64_t rc = 0, bytes_written = 0;
+
+      while (to_write > 0) {
+        writefinish.reset(new C_SaferCond("nonblocking-writefinish-n-mb"));
+        if (to_write >= block_size) {
+          rc = ll_preadv_pwritev(fh, iov_buf_out, iov_cnt, *offset,
+                                true, writefinish.get(), nullptr);
+          ASSERT_EQ(rc, 0);
+          bytes_written = writefinish->wait();
+          ASSERT_EQ(bytes_written, block_size);
+          *offset += bytes_written;
+          to_write -= bytes_written;
+        } else {
+          // Allocate a smaller buffer for the remaining bytes
+          auto small_buf = std::make_unique<char[]>(to_write);
+          memset(small_buf.get(), 'z', to_write);
+          struct iovec iov_small_buf_out[1] = {
+              {small_buf.get(), to_write}
+          };
+          rc = ll_preadv_pwritev(fh, iov_small_buf_out, 1, *offset,
+                                true, writefinish.get(), nullptr);
+          ASSERT_EQ(rc, 0);
+          bytes_written = writefinish->wait();
+          ASSERT_EQ(bytes_written, to_write);
+          *offset += bytes_written;
+          to_write -= bytes_written;
+          ASSERT_EQ(to_write, 0);
+          break;
+        }
+      }
+    }
+
+    bool is_data_pool_full(int64_t data_pool) {
+      /* check if data pool is reported as full with a specified timeout 
+      and period to sleep */
+      return objecter->with_osdmap([&](const OSDMap &o) {
+        for (const auto& kv : o.get_pools()) {
+          if (kv.first == data_pool && kv.second.has_flag(pg_pool_t::FLAG_FULL)) {
+            return true;
+          }
+        }
+        return false;
+      });
+    }
+
+    bool wait_until_true(std::function<bool()> condition, int32_t timeout = 600,
+                        int32_t period = 5) {
+      // wait for the condition to be true until timeout
+
+      while(true) {
+        if (condition()) {
+          return true;
+        }
+        timeout -= period;
+        if (!timeout) {
+          return false;
+        }
+        sleep(period);
+      }
+    }
+
+    bool wait_for_osdmap_epoch_update(const epoch_t initial_osd_epoch,
+                                      int32_t timeout = 10,
+                                      int32_t period = 5) {
+      // wait for timeout and check for osdmap epoch increment
+
+      bs::error_code ec;
+      objecter->wait_for_latest_osdmap(ca::use_blocked[ec]);
+      ldout(cct, 20) << __func__ << ": latest osdmap: " << ec << dendl;
+
+      while(timeout) {
+        if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) > initial_osd_epoch) {
+          return true;
+        } else {
+          sleep(period);
+          timeout -= period;
+        }
+      }
+      return false;
+    }
+
+    FileHandleInfo get_file(Inode *root, const char* filename, UserPerm myperm) {
+      // open a file and return inode, filename, file handle and fs stats
+
+      Inode *file;
+      Fh *fh;
+      struct ceph_statx stx;
+
+      assert (ll_createx(root, filename, 0666, O_RDWR | O_CREAT | O_TRUNC,
+              &file, &fh, &stx, 0, 0, myperm) == 0);
+      FileHandleInfo result;
+      result.file = file;
+      result.filename = filename;
+      result.fh = fh;
+      result.stx = stx;
+      return result;
     }
 };
 

@@ -18,6 +18,7 @@
 #include <string>
 
 #include <fmt/format.h>
+#include <sys/statvfs.h>
 
 #include "test/client/TestClient.h"
 
@@ -610,4 +611,494 @@ TEST_F(TestClient, LlreadvLlwritevInvalidFileHandle) {
   bytes_read = readfinish->wait();
   ASSERT_EQ(bytes_read, -CEPHFS_EBADF);
   ASSERT_EQ(bl.length(), 0);
+}
+
+TEST_F(TestClient, LlreadvLlwritevOverlimit) {
+  /* From man page: 
+  POSIX.1  allows  an  implementation to place a limit on the number of
+  items that can be passed in iov.  An implementation can advertise its limit
+  by defining IOV_MAX in <limits.h> or at run time via the return value from
+  sysconf(_SC_IOV_MAX).  On modern Linux systems, the limit is 1024. Back in
+  Linux 2.0 days, this limit was 16 so test if iovcnt exceeds 1024 segments
+  then no data transfer occurs.
+  
+  However going through the libcephfs or the client code, there is no such
+  limit imposed in cephfs, therefore async I/O over the limit should succeed.
+  */
+
+  int mypid = getpid();
+  char filename[256];
+
+  sprintf(filename, "test_llreadvllwritevoverlimitfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_RDWR | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  // setup buffer array
+  const int IOV_SEG_OVERLIMIT = 1500;
+  ssize_t bytes_to_write = 0;
+  struct iovec iov_out_overlimit[IOV_SEG_OVERLIMIT];
+  struct iovec iov_in_overlimit[IOV_SEG_OVERLIMIT];
+  for(int i = 0; i < IOV_SEG_OVERLIMIT; ++i) {
+    char out_str[] = "foo";
+
+    // fill iovec structures for write op
+    iov_out_overlimit[i].iov_base = out_str;
+    iov_out_overlimit[i].iov_len = sizeof(out_str);
+    bytes_to_write += iov_out_overlimit[i].iov_len;
+
+    // set up iovec structures for read op
+    char in_str[sizeof(out_str)];
+    iov_in_overlimit[i].iov_base = in_str;
+    iov_in_overlimit[i].iov_len = sizeof(in_str);
+  }
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-overlimit"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-overlimit"));
+
+  int64_t rc;
+  bufferlist bl;
+
+  rc = client->ll_preadv_pwritev(fh, iov_out_overlimit, IOV_SEG_OVERLIMIT,
+                                 0, true, writefinish.get(), nullptr);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_written = writefinish->wait();
+  ASSERT_EQ(bytes_written, bytes_to_write);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in_overlimit, IOV_SEG_OVERLIMIT,
+                                 0, false, readfinish.get(), &bl);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_read = readfinish->wait();
+  ASSERT_EQ(bytes_read, bytes_to_write);
+  copy_bufferlist_to_iovec(iov_in_overlimit, IOV_SEG_OVERLIMIT, &bl,
+                           bytes_read);
+
+  for(int i = 0; i < IOV_SEG_OVERLIMIT; ++i) {
+    ASSERT_EQ(strncmp((const char*)iov_in_overlimit[i].iov_base,
+              (const char*)iov_out_overlimit[i].iov_base,
+              iov_out_overlimit[i].iov_len), 0);
+  }
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+}
+
+TEST_F(TestClient, LlreadvLlwritevNonContiguous) {
+  /* Test writing at non-contiguous memory locations, and make sure read at
+  the exact locations where the buffers are written and the bytes read should
+  be equal to the bytes written.  */
+
+  int mypid = getpid();
+  char filename[256];
+
+  sprintf(filename, "test_llreadvllwritevnoncontiguousfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_RDWR | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  const int NUM_BUF = 5;
+  char out_buf_0[] = "hello ";
+  char out_buf_1[] = "world\n";
+  char out_buf_2[] = "Ceph - ";
+  char out_buf_3[] = "a scalable distributed ";
+  char out_buf_4[] = "storage system\n";
+
+  struct iovec iov_out_non_contiguous[NUM_BUF] = {
+    {out_buf_0, sizeof(out_buf_0)},
+    {out_buf_1, sizeof(out_buf_1)},
+    {out_buf_2, sizeof(out_buf_2)},
+    {out_buf_3, sizeof(out_buf_3)},
+    {out_buf_4, sizeof(out_buf_4)}
+  };
+
+  char in_buf_0[sizeof(out_buf_0)];
+  char in_buf_1[sizeof(out_buf_1)];
+  char in_buf_2[sizeof(out_buf_2)];
+  char in_buf_3[sizeof(out_buf_3)];
+  char in_buf_4[sizeof(out_buf_4)];
+
+  struct iovec iov_in_non_contiguous[NUM_BUF] = {
+    {in_buf_0, sizeof(in_buf_0)},
+    {in_buf_1, sizeof(in_buf_1)},
+    {in_buf_2, sizeof(in_buf_2)},
+    {in_buf_3, sizeof(in_buf_3)},
+    {in_buf_4, sizeof(in_buf_4)}
+  };
+
+  ssize_t bytes_to_write = 0, total_bytes_written = 0, total_bytes_read = 0;
+  for(int i = 0; i < NUM_BUF; ++i) {
+    bytes_to_write += iov_out_non_contiguous[i].iov_len;
+  }
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  int64_t rc;
+  bufferlist bl, tmpbl;
+
+  struct iovec *current_iov = iov_out_non_contiguous;
+
+  for(int i = 0; i < NUM_BUF; ++i) {
+    writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-non-contiguous"));
+    rc = client->ll_preadv_pwritev(fh, current_iov++, 1, i * NUM_BUF * 10,
+                                   true, writefinish.get(), nullptr);
+    ASSERT_EQ(rc, 0);
+    total_bytes_written += writefinish->wait();
+  }
+  ASSERT_EQ(total_bytes_written, bytes_to_write);
+
+  current_iov = iov_in_non_contiguous;
+
+  for(int i = 0; i < NUM_BUF; ++i) {
+    readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-non-contiguous"));
+    ssize_t bytes_read = 0;
+    rc = client->ll_preadv_pwritev(fh, current_iov++, 1, i * NUM_BUF * 10,
+                                   false, readfinish.get(), &tmpbl);
+    bl.append(tmpbl);
+    ASSERT_EQ(rc, 0);
+    bytes_read = readfinish->wait();
+    ASSERT_EQ(bytes_read, iov_out_non_contiguous[i].iov_len);
+    total_bytes_read += bytes_read; 
+  }
+  ASSERT_EQ(total_bytes_read, bytes_to_write);
+
+  copy_bufferlist_to_iovec(iov_in_non_contiguous, NUM_BUF, &bl, total_bytes_read);
+  for(int i = 0; i < NUM_BUF; ++i) {
+    ASSERT_EQ(0, strncmp((const char*)iov_in_non_contiguous[i].iov_base,
+                         (const char*)iov_out_non_contiguous[i].iov_base,
+                         iov_out_non_contiguous[i].iov_len));
+  }
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));        
+}
+
+TEST_F(TestClient, LlreadvLlwritevWriteOnlyFile) {
+  /* Test async I/O with a file that has only "w" perms.*/
+  int mypid = getpid();
+  char filename[256];
+
+  sprintf(filename, "test_llreadvllwritevwriteonlyfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_WRONLY | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  char out_buf_0[] = "hello ";
+  char out_buf_1[] = "world\n";
+  struct iovec iov_out[2] = {
+	  {out_buf_0, sizeof(out_buf_0)},
+	  {out_buf_1, sizeof(out_buf_1)},
+  };
+
+  char in_buf_0[sizeof(out_buf_0)];
+  char in_buf_1[sizeof(out_buf_1)];
+  struct iovec iov_in[2] = {
+	  {in_buf_0, sizeof(in_buf_0)},
+	  {in_buf_1, sizeof(in_buf_1)},
+  };
+
+  ssize_t bytes_to_write = iov_out[0].iov_len + iov_out[1].iov_len;
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  int64_t rc;
+  bufferlist bl;
+
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-write-only"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-write-only"));
+
+  rc = client->ll_preadv_pwritev(fh, iov_out, 2, 0, true, writefinish.get(),
+                                 nullptr);
+  ASSERT_EQ(rc, 0);
+  ssize_t total_bytes_written = writefinish->wait();
+  ASSERT_EQ(total_bytes_written, bytes_to_write);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
+                                 &bl);
+  ASSERT_EQ(rc, 0);
+  ssize_t total_bytes_read = readfinish->wait();
+  ASSERT_EQ(total_bytes_read, -CEPHFS_EBADF);
+  ASSERT_EQ(bl.length(), 0);
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+}
+
+TEST_F(TestClient, LlreadvLlwritevFsync) {
+  /*Test two scenarios:
+  a) async I/O with fsync enabled and sync metadata+data
+  b) asynx I/O with fsync enabled and sync data only */
+
+  int mypid = getpid();
+  char filename[256];
+
+  sprintf(filename, "test_llreadvllwritevfsyncfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_RDWR | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  char out_buf_0[] = "hello ";
+  char out_buf_1[] = "world b is much longer\n";
+
+  char in_buf_0[sizeof(out_buf_0)];
+  char in_buf_1[sizeof(out_buf_1)];
+
+  struct iovec iov_out_fsync_sync_all[2] = {
+	  {out_buf_0, sizeof(out_buf_0)},
+	  {out_buf_1, sizeof(out_buf_1)},
+  };
+
+  struct iovec iov_in_fsync_sync_all[2] = {
+	  {in_buf_0, sizeof(in_buf_0)},
+	  {in_buf_1, sizeof(in_buf_1)},
+  };
+
+  struct iovec iov_out_dataonly_fysnc[2] = {
+    {out_buf_0, sizeof(out_buf_0)},
+    {out_buf_1, sizeof(out_buf_1)}
+  };
+
+  struct iovec iov_in_dataonly_fysnc[2] = {
+    {in_buf_0, sizeof(in_buf_0)},
+    {in_buf_1, sizeof(in_buf_1)}
+  };
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  // fsync - true, syncdataonly - false
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-fsync-sync-all"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-fsync-sync-all"));
+
+  int64_t rc;
+  bufferlist bl;
+  ssize_t bytes_to_write = 0, bytes_written = 0, bytes_read = 0;
+
+  bytes_to_write = iov_out_fsync_sync_all[0].iov_len
+                   + iov_out_fsync_sync_all[1].iov_len;
+
+  rc = client->ll_preadv_pwritev(fh, iov_out_fsync_sync_all, 2, 1000, true,
+                                 writefinish.get(), nullptr, true, false);
+  ASSERT_EQ(rc, 0);
+  bytes_written = writefinish->wait();
+  ASSERT_EQ(bytes_written, bytes_to_write);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in_fsync_sync_all, 2, 1000, false,
+                                 readfinish.get(), &bl);
+  ASSERT_EQ(rc, 0);
+  bytes_read = readfinish->wait();
+  ASSERT_EQ(bytes_read, bytes_to_write);
+
+  copy_bufferlist_to_iovec(iov_in_fsync_sync_all, 2, &bl, bytes_read);
+  for(int i = 0 ; i < 2; ++i) {
+    ASSERT_EQ(strncmp((const char*)iov_in_fsync_sync_all[i].iov_base,
+                      (const char*)iov_out_fsync_sync_all[i].iov_base,
+                      iov_out_fsync_sync_all[i].iov_len), 0);
+  }
+
+  // fsync - true, syncdataonly - true
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-fsync-syncdataonly"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-fsync-syndataonly"));
+
+  bytes_to_write = iov_out_dataonly_fysnc[0].iov_len
+                   + iov_out_dataonly_fysnc[1].iov_len;
+
+  rc = client->ll_preadv_pwritev(fh, iov_out_dataonly_fysnc, 2, 100,
+                                 true, writefinish.get(), nullptr,
+                                 true, true);
+  ASSERT_EQ(rc, 0);
+  bytes_written = writefinish->wait();
+  ASSERT_EQ(bytes_written, bytes_to_write);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in_dataonly_fysnc, 2, 100,
+                                 false, readfinish.get(), &bl);
+  ASSERT_EQ(rc, 0);
+  bytes_read = readfinish->wait();
+  ASSERT_EQ(bytes_read, bytes_to_write);
+
+  copy_bufferlist_to_iovec(iov_in_dataonly_fysnc, 2, &bl, rc);
+  for(int i = 0; i < 2; ++i) {
+    ASSERT_EQ(0, strncmp((const char*)iov_in_dataonly_fysnc[i].iov_base,
+                         (const char*)iov_out_dataonly_fysnc[i].iov_base,
+                         iov_out_dataonly_fysnc[i].iov_len));
+  }
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+}
+
+TEST_F(TestClient, LlreadvLlwritevBufferOverflow) {
+  /* Provide empty read buffers to see how the function behaves
+  when there is no space to store the data*/
+
+  int mypid = getpid();
+  char filename[256];
+
+  sprintf(filename, "test_llreadvllwritevbufferoverflowfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_RDWR | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  char out_buf_0[] = "hello ";
+  char out_buf_1[] = "world\n";
+  struct iovec iov_out[2] = {
+	  {out_buf_0, sizeof(out_buf_0)},
+	  {out_buf_1, sizeof(out_buf_1)},
+  };
+
+  char in_buf_0[0];
+  char in_buf_1[0];
+  struct iovec iov_in[2] = {
+	  {in_buf_0, sizeof(in_buf_0)},
+	  {in_buf_1, sizeof(in_buf_1)},
+  };
+
+  ssize_t bytes_to_write = iov_out[0].iov_len + iov_out[1].iov_len;
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-buffer-overflow"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-buffer-overflow"));
+
+  int64_t rc;
+  bufferlist bl;
+
+  rc = client->ll_preadv_pwritev(fh, iov_out, 2, 0, true, writefinish.get(),
+                                 nullptr);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_written = writefinish->wait();
+  ASSERT_EQ(bytes_written, bytes_to_write);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
+                                 &bl);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_read = readfinish->wait();
+  ASSERT_EQ(bytes_read, 0);
+  ASSERT_EQ(bl.length(), 0);
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+}
+
+TEST_F(TestClient, LlreadvLlwritevQuotaFull) {
+  /*Test that if the max_bytes quota is exceeded, async I/O code path handles
+  the case gracefully*/
+
+  Inode *root, *diri;
+  struct ceph_statx stx;
+  root = client->get_root();
+  ASSERT_NE(root, nullptr);
+
+  int pid = getpid();
+
+  char dirname[256];
+  sprintf(dirname, "testdirquotaufull%u", pid);
+  ASSERT_EQ(0, client->ll_mkdirx(root, dirname, 0777, &diri, &stx, 0, 0,
+                                 myperm));
+
+  // set quota.max_bytes
+  char xattrk[128];
+  sprintf(xattrk, "ceph.quota.max_bytes");
+  char setxattrv[128], getxattrv[128];
+  int32_t len = sprintf(setxattrv, "8388608"); // 8MiB
+  int64_t rc = client->ll_setxattr(diri, xattrk, setxattrv, len,
+                                   CEPH_XATTR_CREATE, myperm);
+  ASSERT_EQ(rc, 0);
+  rc = client->ll_getxattr(diri, xattrk, (void *)getxattrv, len, myperm);
+  ASSERT_EQ(rc, 7);
+  ASSERT_STREQ(setxattrv, getxattrv);
+
+  // create a file inside the dir
+  char filename[256];
+  sprintf(filename, "testllreadvllwritevquotafull%u", pid);
+  auto file_a = client->get_file(diri, filename, myperm);
+
+  // try async I/O of 64MiB
+  const size_t BLOCK_SIZE = 32 * 1024 * 1024;
+  auto out_buf_0 = std::make_unique<char[]>(BLOCK_SIZE);
+  memset(out_buf_0.get(), 0xDD, BLOCK_SIZE);
+  auto out_buf_1 = std::make_unique<char[]>(BLOCK_SIZE);
+  memset(out_buf_1.get(), 0xFF, BLOCK_SIZE);
+
+  struct iovec iov_out[2] = {
+      {out_buf_0.get(), BLOCK_SIZE},
+      {out_buf_1.get(), BLOCK_SIZE}
+  };
+
+  auto in_buf_0 = std::make_unique<char[]>(sizeof(out_buf_0));
+  auto in_buf_1 = std::make_unique<char[]>(sizeof(out_buf_0));
+  struct iovec iov_in[2] = {
+    {in_buf_0.get(), sizeof(in_buf_0)},
+    {in_buf_1.get(), sizeof(in_buf_1)},
+  };
+
+  // write should fail with EDQUOT
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-quota-full"));
+  rc = client->ll_preadv_pwritev(file_a.fh, iov_out, 2, 0,
+                                  true, writefinish.get(), nullptr);
+  ASSERT_EQ(rc, 0);
+  int64_t bytes_written = writefinish->wait();
+  ASSERT_EQ(bytes_written, -CEPHFS_EDQUOT);
+
+  // since there was no write, nothing sould be read
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-quota-full"));
+  bufferlist bl;
+  rc = client->ll_preadv_pwritev(file_a.fh, iov_in, 2, 0, false, readfinish.get(), &bl);
+  ASSERT_EQ(rc, 0);
+  int64_t bytes_read = readfinish->wait();
+  ASSERT_EQ(bytes_read, 0);
+  ASSERT_EQ(bl.length(), 0);
+
+  client->ll_release(file_a.fh);
+  ASSERT_EQ(client->ll_unlink(diri, file_a.filename, myperm), 0);
+
+  client->ll_rmdir(diri, dirname, myperm);
+  ASSERT_TRUE(client->ll_put(diri));
 }
