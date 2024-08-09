@@ -23,8 +23,8 @@ std::ostream &operator<<(std::ostream &os, const MirrorEntityType &type) {
 }
 
 std::ostream &operator<<(std::ostream &os, const MirrorEntity &entity) {
-  return os << "type=" << entity.type << ", global_id=" << entity.global_id
-            << ", count=" << entity.count;
+  return os << "[type=" << entity.type << ", global_id=" << entity.global_id
+            << ", count=" << entity.count << "]";
 }
 
 std::ostream& operator<<(std::ostream& os,
