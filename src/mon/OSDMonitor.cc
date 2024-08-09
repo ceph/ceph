@@ -40,6 +40,7 @@
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDMarkMeDead.h"
+#include "messages/MOSDIgnoreSubtree.h"
 #include "messages/MOSDFull.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
@@ -116,6 +117,7 @@ using ceph::make_message;
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
 static const string OSD_SNAP_PREFIX("osd_snap");
+static const string OSD_IGNORE_SUBTREE_PREFIX("osd_ignore_subtree");
 
 /*
 
@@ -706,6 +708,7 @@ void OSDMonitor::get_store_prefixes(std::set<string>& s) const
   s.insert(OSD_PG_CREATING_PREFIX);
   s.insert(OSD_METADATA_PREFIX);
   s.insert(OSD_SNAP_PREFIX);
+  s.insert(OSD_IGNORE_SUBTREE_PREFIX);
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
@@ -1129,6 +1132,13 @@ void OSDMonitor::on_active()
 void OSDMonitor::on_restart()
 {
   last_osd_report.clear();
+
+  ignore_subtree_osds.clear();
+  auto iter = mon.store->get_iterator(OSD_IGNORE_SUBTREE_PREFIX);
+  while (iter->valid()) {
+    ignore_subtree_osds.insert(std::stoi(iter->key()));
+    iter->next();
+  }
 }
 
 void OSDMonitor::on_shutdown()
@@ -1162,6 +1172,8 @@ void OSDMonitor::create_pending()
   pending_inc.fsid = mon.monmap->fsid;
   pending_metadata.clear();
   pending_metadata_rm.clear();
+  pending_ignore_subtree.clear();
+  pending_cancel_ignore_subtree.clear();
 
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 
@@ -2042,6 +2054,19 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
+  // ignore_subtree
+  bufferlist v;
+  encode("1", v);
+  for (set<int>::iterator p = pending_ignore_subtree.begin();
+      p != pending_ignore_subtree.end();
+      ++p)
+    t->put(OSD_IGNORE_SUBTREE_PREFIX, stringify(*p), v);
+
+  for (set<int>::iterator p = pending_cancel_ignore_subtree.begin();
+       p != pending_cancel_ignore_subtree.end();
+       ++p)
+    t->erase(OSD_IGNORE_SUBTREE_PREFIX, stringify(*p));
+
   // purged_snaps
   if (tmp.require_osd_release >= ceph_release_t::octopus &&
       !pending_inc.new_purged_snaps.empty()) {
@@ -2693,6 +2718,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_mark_me_down(op);
   case MSG_OSD_MARK_ME_DEAD:
     return preprocess_mark_me_dead(op);
+  case MSG_OSD_IGNORE_SUBTREE:
+    return preprocess_ignore_subtree(op);
   case MSG_OSD_FULL:
     return preprocess_full(op);
   case MSG_OSD_FAILURE:
@@ -2737,6 +2764,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_mark_me_down(op);
   case MSG_OSD_MARK_ME_DEAD:
     return prepare_mark_me_dead(op);
+  case MSG_OSD_IGNORE_SUBTREE:
+    return prepare_ignore_subtree(op);
   case MSG_OSD_FULL:
     return prepare_full(op);
   case MSG_OSD_FAILURE:
@@ -2837,6 +2866,41 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
   reply->cluster_osdmap_trim_lower_bound = first;
   reply->newest_map = last;
   mon.send_reply(op, reply);
+  return true;
+}
+
+bool OSDMonitor::preprocess_ignore_subtree(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  MOSDIgnoreSubtree* m = static_cast<MOSDIgnoreSubtree*>(op->get_req());
+  const auto src = m->get_orig_source();
+  dout(10) << __func__ << " " << *m << " from " << src << dendl;
+  int from = src.num();
+  // check caps
+  auto session = op->get_session();
+  if (!session) {
+    dout(10) << __func__ << " no monitor session!" << dendl;
+    goto ignore;
+  }
+
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    goto ignore;
+  }
+
+  if (!src.is_osd() ||
+      !osdmap.is_up(from) ||
+      !osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs())) {
+    dout(1) << " ignoring ignore_subtree from non-active osd." << from << dendl;
+    goto ignore;
+  }
+
+  // always forward to leader
+  return false;
+
+ignore:
+  mon.no_reply(op);
   return true;
 }
 
@@ -3243,6 +3307,9 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   set<string> reporters_by_subtree;
   auto reporter_subtree_level = g_conf().get_val<string>("mon_osd_reporter_subtree_level");
   ceph_assert(fi.reporters.size());
+  if (ignore_subtree_when_mark_down(target_osd)) {
+    reporter_subtree_level = "osd";
+  }
   for (auto p = fi.reporters.begin(); p != fi.reporters.end();) {
     // get the parent bucket whose type matches with "reporter_subtree_level".
     // fall back to OSD if the level doesn't exist.
@@ -3445,6 +3512,89 @@ void OSDMonitor::set_default_laggy_params(int target_osd)
   xi.laggy_probability = 0.0;
   xi.laggy_interval = 0;
   dout(20) << __func__ << " reset laggy, now xi " << xi << dendl;
+}
+
+bool OSDMonitor::ignore_subtree_when_mark_down(int target_osd)
+{
+  if (auto iter = ignore_subtree_osds.find(target_osd); iter != ignore_subtree_osds.end()) {
+    return true;
+  }
+  return false;
+}
+
+class C_AckIgnoreSubtree : public C_MonOp {
+  OSDMonitor *osdmon;
+public:
+  C_AckIgnoreSubtree(
+    OSDMonitor *osdmon,
+    MonOpRequestRef op)
+    : C_MonOp(op), osdmon(osdmon) {}
+
+  void _finish(int r) override {
+    if (r == 0) {
+      MOSDIgnoreSubtree *m = static_cast<MOSDIgnoreSubtree*>(op->get_req());
+      int from = m->get_orig_source().num();
+      osdmon->mon.send_reply(
+        op,
+        new MOSDIgnoreSubtree(MOSDIgnoreSubtree::REPLY, m->stamp));
+
+      switch (m->op) {
+        case MOSDIgnoreSubtree::IGNORE:
+        osdmon->ignore_subtree_osds.insert(from);
+        break;
+
+      case MOSDIgnoreSubtree::CANCEL_IGNORE:
+        osdmon->ignore_subtree_osds.erase(from);
+        break;
+      }
+    } else if (r == -EAGAIN) {
+        osdmon->dispatch(op);
+    } else {
+        ceph_abort_msgf("C_AckIgnoreSubtree: unknown result %d", r);
+    }
+  }
+  ~C_AckIgnoreSubtree() override {
+  }
+};
+
+bool OSDMonitor::prepare_ignore_subtree(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  MOSDIgnoreSubtree* m = static_cast<MOSDIgnoreSubtree*>(op->get_req());
+  const auto src = m->get_orig_source();
+  dout(10) << __func__ << " " << *m << " from " << src << dendl;
+  int from = src.num();
+
+  bool ignored = ignore_subtree_when_mark_down(from);
+
+  switch (m->op) {
+    case MOSDIgnoreSubtree::IGNORE:
+      if (ignored) {
+        goto reply;
+      }
+      dout(10) << __func__ << " ignore subtree for osd." << from << dendl;
+      pending_ignore_subtree.insert(from);
+      break;
+
+    case MOSDIgnoreSubtree::CANCEL_IGNORE:
+      if (!ignored) {
+        goto reply;
+      }
+      dout(10) << __func__ << " cancel ignore subtree for osd." << from << dendl;
+      pending_cancel_ignore_subtree.insert(from);
+      break;
+
+    default:
+      return false;
+  }
+  wait_for_finished_proposal(op, new C_AckIgnoreSubtree(this, op));
+  return true;
+
+reply:
+  dout(10) << __func__ << " doesn't need to update anything" << dendl;
+  Context *c(new C_AckIgnoreSubtree(this, op));
+  c->complete(0);
+  return false;
 }
 
 
@@ -12089,6 +12239,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             ss << "osd." << osd << " is still up; must be down before removal. ";
 	  } else {
             ceph_assert(err == 0);
+            //clear ignore subtree when rm osd
+            if (ignore_subtree_when_mark_down(osd)) {
+              dout(10) << __func__ << " clear ignore subtree for osd." << osd << dendl;
+              ignore_subtree_osds.erase(osd);
+              pending_cancel_ignore_subtree.insert(osd);
+            }
 	    if (any) {
 	      ss << ", osd." << osd;
             } else {
@@ -12952,6 +13108,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "destroyed osd." << id;
     } else {
       ss << "purged osd." << id;
+    }
+
+    //clear ignore subtree when destroy/purge osd
+    if (ignore_subtree_when_mark_down(id)) {
+      dout(10) << __func__ << " clear ignore subtree for osd." << id << dendl;
+      ignore_subtree_osds.erase(id);
+      pending_cancel_ignore_subtree.insert(id);
     }
 
     getline(ss, rs);

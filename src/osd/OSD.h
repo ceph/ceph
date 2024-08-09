@@ -51,6 +51,7 @@
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "messages/MOSDOp.h"
+#include "messages/MOSDIgnoreSubtree.h"
 #include "common/EventTrace.h"
 #include "osd/osd_perf_counters.h"
 #include "common/Finisher.h"
@@ -1111,6 +1112,9 @@ protected:
 
   bool store_is_rotational = true;
   bool journal_is_rotational = true;
+  bool mon_ignore_subtree_for_me = false;
+  bool subtree_satisfied = true;
+  utime_t last_ignore_subtree_send_stamp;
 
   ZTracer::Endpoint trace_endpoint;
   PerfCounters* create_logger();
@@ -1462,11 +1466,15 @@ private:
   void heartbeat_check();
   void heartbeat_entry();
   void need_heartbeat_peer_update();
+  std::string _get_loc_by_subtree(int id, std::string subtree);
 
   void heartbeat_kick() {
     std::lock_guard l(heartbeat_lock);
     heartbeat_cond.notify_all();
   }
+
+  void handle_ignore_subtree(MOSDIgnoreSubtree *m);
+  void check_ignore_subtree();
 
   struct T_Heartbeat : public Thread {
     OSD *osd;
@@ -1947,6 +1955,7 @@ private:
     case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
     case MSG_OSD_PG_LEASE:
     case MSG_OSD_PG_LEASE_ACK:
+    case MSG_OSD_IGNORE_SUBTREE:
       return true;
     default:
       return false;

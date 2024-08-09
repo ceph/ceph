@@ -101,6 +101,7 @@
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "messages/MOSDPGReadyToMerge.h"
+#include "messages/MOSDIgnoreSubtree.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -521,6 +522,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_MARK_ME_DEAD:
     m = make_message<MOSDMarkMeDead>();
+    break;
+  case MSG_OSD_IGNORE_SUBTREE:
+    m = make_message<MOSDIgnoreSubtree>();
     break;
   case MSG_OSD_FULL:
     m = make_message<MOSDFull>();

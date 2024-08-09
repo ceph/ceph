@@ -3727,6 +3727,17 @@ int OSD::init()
     last_require_osd_release = ceph_release_from_name(val);
   }
 
+  {
+    string val;
+    int r = store->read_meta("mon_ignore_subtree_for_me", &val);
+    if (r < 0 || val != "true") {
+      mon_ignore_subtree_for_me = false;
+    } else {
+      mon_ignore_subtree_for_me = true;
+    }
+    subtree_satisfied = !mon_ignore_subtree_for_me;
+  }
+
   // mount.
   dout(2) << "init " << dev_path
 	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
@@ -5630,6 +5641,23 @@ void OSD::need_heartbeat_peer_update()
   heartbeat_set_peers_need_update();
 }
 
+string OSD::_get_loc_by_subtree(int id, string subtree)
+{
+  string subtree_name;
+  int subtree_type = get_osdmap()->crush->get_type_id(subtree);
+  if (subtree_type == 0) {
+    return "osd." + std::to_string(id);
+  } else if (subtree_type < 0) {
+    return "";
+  }
+
+  auto reporter_loc = get_osdmap()->crush->get_full_location(id);
+  if (auto iter = reporter_loc.find(subtree); iter != reporter_loc.end()) {
+    subtree_name = iter->second;
+  }
+  return subtree_name;
+}
+
 void OSD::maybe_update_heartbeat_peers()
 {
   ceph_assert(ceph_mutex_is_locked(osd_lock));
@@ -5662,34 +5690,46 @@ void OSD::maybe_update_heartbeat_peers()
 
 
   // build heartbeat from set
+  auto min_down = cct->_conf.get_val<uint64_t>("mon_osd_min_down_reporters");
+  auto subtree = cct->_conf.get_val<string>("mon_osd_reporter_subtree_level");
+  set<int> want;
   if (is_active()) {
+    auto my_subtree = _get_loc_by_subtree(whoami, subtree);
+    bool may_need_to_ignore_subtree = get_osdmap()->crush->get_type_id(subtree) > 0;
+    set<string> peers_subtree;
     vector<PGRef> pgs;
     _get_pgs(&pgs);
     for (auto& pg : pgs) {
       pg->with_heartbeat_peers([&](int peer) {
 	  if (get_osdmap()->is_up(peer)) {
 	    _add_heartbeat_peer(peer);
+            if (may_need_to_ignore_subtree && peers_subtree.size() < min_down && peer != whoami) {
+              auto peer_subtree = _get_loc_by_subtree(peer, subtree);
+              if (!peer_subtree.empty() && peer_subtree != my_subtree) {
+                auto subtree_cnt = peers_subtree.size();
+                peers_subtree.insert(peer_subtree);
+                if (subtree_cnt < peers_subtree.size()) {
+                  want.insert(peer);
+                }
+              }
+            }
 	  }
 	});
+    }
+
+    if (may_need_to_ignore_subtree && pgs.size()) {
+      subtree_satisfied = (peers_subtree.size() >= min_down);
     }
   }
 
   // include next and previous up osds to ensure we have a fully-connected set
-  set<int> want, extras;
+  set<int> extras;
   const int next = get_osdmap()->get_next_up_osd_after(whoami);
   if (next >= 0)
     want.insert(next);
   int prev = get_osdmap()->get_previous_up_osd_before(whoami);
   if (prev >= 0 && prev != next)
     want.insert(prev);
-
-  // make sure we have at least **min_down** osds coming from different
-  // subtree level (e.g., hosts) for fast failure detection.
-  auto min_down = cct->_conf.get_val<uint64_t>("mon_osd_min_down_reporters");
-  auto subtree = cct->_conf.get_val<string>("mon_osd_reporter_subtree_level");
-  auto limit = std::max(min_down, (uint64_t)cct->_conf->osd_heartbeat_min_peers);
-  get_osdmap()->get_random_up_osds_by_subtree(
-    whoami, subtree, limit, want, &want);
 
   for (set<int>::iterator p = want.begin(); p != want.end(); ++p) {
     dout(10) << " adding neighbor peer osd." << *p << dendl;
@@ -6124,6 +6164,7 @@ void OSD::heartbeat_entry()
     return;
   while (!heartbeat_stop) {
     heartbeat();
+    check_ignore_subtree();
 
     double wait;
     if (cct->_conf.get_val<bool>("debug_disable_randomized_ping")) {
@@ -6322,6 +6363,31 @@ bool OSD::heartbeat_reset(Connection *con)
   return true;
 }
 
+void OSD::check_ignore_subtree()
+{
+  if (mon_ignore_subtree_for_me == subtree_satisfied) {
+    utime_t now = ceph_clock_now();
+    if (now - last_ignore_subtree_send_stamp > cct->_conf->osd_heartbeat_grace) {
+      uint8_t op = mon_ignore_subtree_for_me ? \
+        MOSDIgnoreSubtree::CANCEL_IGNORE : MOSDIgnoreSubtree::IGNORE;
+      auto m = new MOSDIgnoreSubtree(op, now);
+      monc->send_mon_message(m);
+      last_ignore_subtree_send_stamp = now;
+    }
+  }
+}
+
+void OSD::handle_ignore_subtree(MOSDIgnoreSubtree *m)
+{
+  std::lock_guard l(heartbeat_lock);
+  if (m->op == MOSDIgnoreSubtree::REPLY && m->stamp == last_ignore_subtree_send_stamp) {
+    int r = store->write_meta("mon_ignore_subtree_for_me", mon_ignore_subtree_for_me ? "false" : "true");
+    if (r == 0) {
+      mon_ignore_subtree_for_me = !mon_ignore_subtree_for_me;
+    }
+  }
+  m->put();
+}
 
 
 // =========================================
@@ -7571,6 +7637,10 @@ void OSD::ms_fast_dispatch(Message *m)
   case MSG_OSD_SCRUB2:
     handle_fast_scrub(static_cast<MOSDScrub2*>(m));
     return;
+  case MSG_OSD_IGNORE_SUBTREE:
+    handle_ignore_subtree(static_cast<MOSDIgnoreSubtree*>(m));
+    return;
+
   case MSG_OSD_PG_CREATE2:
     return handle_fast_pg_create(static_cast<MOSDPGCreate2*>(m));
   case MSG_OSD_PG_NOTIFY:
