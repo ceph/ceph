@@ -246,7 +246,12 @@ MessageURef LogClient::get_mon_log_message(log_flushing_t flush_flag)
 
 bool LogClient::are_pending() const
 {
-  return last_log > last_log_sent;
+  if (last_log > last_log_sent &&
+      !log_queue.empty() &&
+      log_queue.back().seq > last_log_sent) {
+    return true;
+  }
+  return false;
 }
 
 MessageURef LogClient::_get_mon_log_message()
@@ -263,7 +268,13 @@ MessageURef LogClient::_get_mon_log_message()
     return {};
   }
 
+  // all entries in queue have been sent
+  if (log_queue.back().seq <= last_log_sent)
+    return {};
+
   // limit entries per message
+  // since `last_log` always increase despite clog_to_monitors option, `num_unsent`
+  // maybe greater than actual num of entries that waiting to be sent.
   const int64_t num_unsent = last_log - last_log_sent;
   int64_t num_to_send;
   if (local_conf()->mon_client_max_log_entries_per_message > 0) {
@@ -273,22 +284,29 @@ MessageURef LogClient::_get_mon_log_message()
     num_to_send = num_unsent;
   }
 
-  logger().debug("log_queue is {} last_log {} sent {} num {} unsent {}"
-		" sending {}", log_queue.size(), last_log,
-		last_log_sent, log_queue.size(), num_unsent, num_to_send);
-  ceph_assert((unsigned)num_unsent <= log_queue.size());
+  logger().debug("log_queue is {} last_log {} last sent {} max unsent {}"
+		" max sending {}", log_queue.size(), last_log,
+		last_log_sent, num_unsent, num_to_send);
+  // find the first entry to send
   auto log_iter = log_queue.begin();
   std::deque<LogEntry> out_log_queue; /* will send the logs contained here */
   while (log_iter->seq <= last_log_sent) {
     ++log_iter;
     ceph_assert(log_iter != log_queue.end());
   }
-  while (num_to_send--) {
-    ceph_assert(log_iter != log_queue.end());
-    out_log_queue.push_back(*log_iter);
-    last_log_sent = log_iter->seq;
-    logger().debug(" will send {}", *log_iter);
-    ++log_iter;
+  // find at most #num_to_send entries from log_queue
+  while (out_log_queue.size() < num_to_send && log_iter != log_queue.end()) {
+    if (log_iter->seq != last_log_sent + 1) {
+      // log entry is missing, this may occur when clog_to_monitors config was
+      // changed from enabled to disabled and now enabled again, just take it
+      // as has been sent.
+      last_log_sent++;
+    } else {
+      out_log_queue.push_back(*log_iter);
+      last_log_sent = log_iter->seq;
+      logger().debug(" will send {}", *log_iter);
+      ++log_iter;
+    }
   }
   
   return crimson::make_message<MLog>(m_fsid,
