@@ -56,6 +56,7 @@ ClusterRef = Union[resources.Cluster, resources.RemovedCluster]
 ShareRef = Union[resources.Share, resources.RemovedShare]
 
 _DOMAIN = 'domain'
+_CLUSTERED = 'clustered'
 log = logging.getLogger(__name__)
 
 
@@ -1122,12 +1123,15 @@ def _generate_config(
         for share in shares
     }
 
+    instance_features = []
+    if cluster.is_clustered():
+        instance_features.append('ctdb')
     cfg: Dict[str, Any] = {
         'samba-container-config': 'v0',
         'configs': {
             cluster.cluster_id: {
                 'instance_name': cluster.cluster_id,
-                'instance_features': [],
+                'instance_features': instance_features,
                 'globals': ['default', cluster.cluster_id],
                 'shares': list(share_configs.keys()),
             },
@@ -1168,6 +1172,8 @@ def _generate_smb_service_spec(
     features = []
     if cluster.auth_mode == AuthMode.ACTIVE_DIRECTORY:
         features.append(_DOMAIN)
+    if cluster.is_clustered():
+        features.append(_CLUSTERED)
     # only one config uri can be used, the input list should be
     # ordered from lowest to highest priority and the highest priority
     # item that exists in the store will be used.
