@@ -3432,6 +3432,21 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
     return 0;
   }
 
+  cls::rbd::MirrorSnapshotState state;
+  int r = get_last_mirror_snapshot_state(group_ioctx, group_id, &state);
+  if (r == -ENOENT) {
+    state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED;
+    r = 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY) {
+    lderr(cct) << "group is not primary" << dendl;
+    return -EBUSY;
+  }
+
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
   cls::rbd::GroupSnapshot group_snap{
       group_snap_id,
@@ -3442,10 +3457,10 @@ int Mirror<I>::group_image_add(IoCtx &group_ioctx,
 
   std::vector<uint64_t> quiesce_requests;
   std::vector<I *> image_ctxs;
-  int r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
-                               &group_snap, quiesce_requests,
-                               cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
-                               flags);
+  r = prepare_group_images(group_ioctx, group_id, &image_ctxs,
+                           &group_snap, quiesce_requests,
+                           cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY,
+                           flags);
   if (r != 0) {
     return r;
   }
@@ -3897,8 +3912,8 @@ int Mirror<I>::group_get_info(librados::IoCtx& io_ctx,
   int r = cls_client::dir_get_id(&io_ctx, RBD_GROUP_DIRECTORY, group_name,
                                  &group_id);
   if (r < 0) {
-    lderr(cct) << "error getting id of group " << group_name << ": "
-               << cpp_strerror(r) << dendl;
+    ldout(cct, 20) << "error getting id of group " << group_name << ": "
+                   << cpp_strerror(r) << dendl;
     return r;
   }
 
