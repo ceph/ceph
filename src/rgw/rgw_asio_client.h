@@ -25,6 +25,7 @@ class ClientIO : public io::RestfulClient,
   using endpoint_type = boost::asio::ip::tcp::endpoint;
   endpoint_type local_endpoint;
   endpoint_type remote_endpoint;
+  std::string_view extra_response_headers;
 
   RGWEnv env;
 
@@ -34,7 +35,8 @@ class ClientIO : public io::RestfulClient,
  public:
   ClientIO(parser_type& parser, bool is_ssl,
            const endpoint_type& local_endpoint,
-           const endpoint_type& remote_endpoint);
+           const endpoint_type& remote_endpoint,
+           std::string_view extra_response_headers);
   ~ClientIO() override;
 
   int init_env(CephContext *cct) override;

@@ -404,6 +404,20 @@ set(rgw_a_srcs
   driver/rados/rgw_rest_log.cc
   driver/rados/rgw_rest_realm.cc)
 
+if (WITH_RADOSGW_QUICHE)
+  # build the h3 library and its dependencies
+  include(BuildH3Frontend)
+  build_h3_frontend()
+
+  # install librgw_h3_quiche.so with other plugins
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/h3/librgw_h3_quiche.so
+    DESTINATION ${CEPH_INSTALL_PKGLIBDIR}/h3)
+
+  list(APPEND rgw_a_srcs
+      rgw_quiche_client_io.cc
+      rgw_quiche_frontend.cc)
+endif()
+
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
 set_source_files_properties(rgw_iam_policy.cc PROPERTIES
@@ -427,6 +441,12 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   find_package(RDKafka 0.9.2 REQUIRED)
+endif()
+
+if (WITH_RADOSGW_QUICHE)
+  add_dependencies(rgw_a h3_ext)
+  target_include_directories(rgw_a PRIVATE "h3/include")
+  target_compile_definitions(rgw_a PUBLIC HAVE_QUICHE)
 endif()
 
 target_link_libraries(rgw_a
