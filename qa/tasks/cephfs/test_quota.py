@@ -135,7 +135,8 @@ class TestQuota(CephFSTestCase):
 
         self.mount_a.run_shell(["mkdir", "subdir"])
 
-        invalid_values = ["10A", "1y00Ki", "af00", "G", "", " ", "-1t", "-1"]
+        invalid_values = ["10A", "1y00Ki", "af00", "G", "", " ", "-1t", "-1",
+                          "1GT", "2MM", "5Di", "8Bi", "i", "7iB"]
         for invalid_value in invalid_values:
             with self.assertRaises(CommandFailedError):
                 self.mount_a.setfattr("./subdir", "ceph.quota.max_bytes",

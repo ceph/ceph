@@ -259,6 +259,21 @@ TEST(StrictIECCast, Error) {
   }
   {
     std::string err;
+    (void)strict_iec_cast<int64_t>("1GT", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
+    (void)strict_iec_cast<int64_t>("1TG", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
+    (void)strict_iec_cast<int64_t>("1KD", &err);
+    ASSERT_NE(err, "");
+  }
+  {
+    std::string err;
     (void)strict_iec_cast<int64_t>("2E", &err);
     ASSERT_EQ(err, "");
   }
