@@ -5,16 +5,15 @@ install(TARGETS ceph_perf_objectstore
   DESTINATION bin)
 
 add_library(store_test_fixture OBJECT store_test_fixture.cc)
-target_include_directories(store_test_fixture PRIVATE
-  $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>
+target_link_libraries(store_test_fixture PUBLIC
+  GTest::gtest
   legacy-option-headers)
 
-add_executable(ceph_test_objectstore
-  store_test.cc
-  $<TARGET_OBJECTS:store_test_fixture>)
+add_executable(ceph_test_objectstore store_test.cc)
 target_link_libraries(ceph_test_objectstore
   os
   ceph-common
+  store_test_fixture
   ${UNITTEST_LIBS}
   global
   ${EXTRALIBS}
@@ -89,7 +88,7 @@ if(WITH_BLUESTORE)
 
   add_executable(unittest_alloc_aging EXCLUDE_FROM_ALL
     Allocator_aging_fragmentation.cc)
-  target_link_libraries(unittest_alloc_aging os global GTest::Main)
+  target_link_libraries(unittest_alloc_aging os global GTest::gtest_main)
 
   # unittest_bluefs
   add_executable(unittest_bluefs

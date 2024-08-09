@@ -251,7 +251,7 @@ add_ceph_unittest(unittest_erasure_code_plugin_clay)
 add_dependencies(unittest_erasure_code_plugin_clay
   ec_clay)
 target_link_libraries(unittest_erasure_code_plugin_clay
-  GTest::Main
+  GTest::gtest_main
   global
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
