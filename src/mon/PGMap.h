@@ -83,6 +83,9 @@ public:
 
   mempool::pgmap::map<int64_t,interval_set<snapid_t>> purged_snaps;
 
+  //ruleno -> <max_raw_used osd_id, max_raw_used ratio>
+  mempool::pgmap::map<int64_t, std::pair<int, double>> max_raw_used_by_rule;
+
   bool use_per_pool_stats() const {
     return osd_sum.num_osds == osd_sum.num_per_pool_osds;
   }
@@ -188,6 +191,8 @@ public:
 				   const pool_stat_t &pool_stat,
 				   uint64_t avail,
 				   float raw_used_rate,
+                                   int64_t max_used_osd,
+                                   float max_used_rate,
 				   bool verbose,
 				   bool per_pool,
 				   bool per_pool_omap,
@@ -449,9 +454,11 @@ public:
   void encode_digest(const OSDMap& osdmap,
 		     ceph::buffer::list& bl, uint64_t features);
 
-  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
-  void get_rules_avail(const OSDMap& osdmap,
-		       std::map<int,int64_t> *avail_map) const;
+  /// calculates some stats for the specificed crush rule.
+  ///  returns <available, max_raw_used osd, max_raw_used rate> tuple
+  std::tuple<int64_t, int64_t, double>
+    get_rule_stats(const OSDMap& osdmap, int ruleno) const;
+  void update_by_rules_stats(const OSDMap& osdmap);
   void dump(ceph::Formatter *f, bool with_net = false) const;
   void dump_basic(ceph::Formatter *f) const;
   void dump_pg_stats(ceph::Formatter *f, bool brief) const;
@@ -463,7 +470,13 @@ public:
   void dump_filtered_pg_stats(ceph::Formatter *f, std::set<pg_t>& pgs) const;
   void dump_pool_stats_full(const OSDMap &osd_map, std::stringstream *ss,
 			    ceph::Formatter *f, bool verbose) const override {
-    get_rules_avail(osd_map, &avail_space_by_rule);
+
+    // Using const_cast is a bit ugly but we need to refresh
+    // some cumulative stats (e.g. space_avail_by_rule) in the digest before
+    // going ahead with the dumping.
+    // An alternative would be eliminating const declarations back
+    // through the call stack which looks a bit weird for dump* methods.
+    const_cast<PGMap*>(this)->update_by_rules_stats(osd_map);
     PGMapDigest::dump_pool_stats_full(osd_map, ss, f, verbose);
   }
 
