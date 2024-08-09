@@ -1,7 +1,10 @@
 """
 Helper methods to test that MON and MDS caps are enforced properly.
 """
+import os
 import logging
+
+from textwrap import dedent
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
@@ -96,7 +99,22 @@ class CapsHelper(CephFSTestCase):
 
                 # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
                 # to mount
-                proc = mount.open_background(path)
+                # proc = mount.open_background(path)
+                _path = os.path.join(mount.hostfs_mntpt, path)
+
+                pyscript = dedent("""
+                    import time
+
+                    with open("{path}", 'w') as f:
+                        f.write("{content}")
+                        f.flush()
+                        while True:
+                            time.sleep(1)
+                    """).format(path=_path, content="content")
+
+                rproc = mount._run_python(pyscript)
+
+                mount.wait_for_visible(basename, size=len("content")+len(filedata))
 
                 cmdargs.append(path)
                 mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
