@@ -117,6 +117,8 @@ public:
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
+  void recreate_pool();
+  void set_allow_ec_overwrites(std::string pool, bool allow=true);
   static librados::Rados s_cluster;
   static std::string pool_name;
 
