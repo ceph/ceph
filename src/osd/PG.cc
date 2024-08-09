@@ -2403,6 +2403,15 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
     ++num;
   }
   bool running = true;
+
+  std::lock_guard l(osd->pg_delete);
+  auto& osd_deleting_pgs = osd->get_osd_deleting_pgs();
+  if (osd_deleting_pgs.find(pg_id.pgid) == osd_deleting_pgs.end()) {
+    pg_stat_t delete_stats;
+    delete_stats.state = PG_STATE_DELETING;
+    osd_deleting_pgs[pg_id.pgid] = delete_stats;
+  }
+
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, get_osdmap_epoch(), num);
@@ -2433,6 +2442,12 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
       init_pg_ondisk(t, info.pgid, &pool.info);
       recovery_state.reset_last_persisted();
     } else {
+     if (osd_deleting_pgs.find(pg_id.pgid) != osd_deleting_pgs.end()) {
+       osd_deleting_pgs[pg_id.pgid].state = PG_STATE_DELETED;
+       auto& osd_deleted_pgs = osd->get_osd_deleted_pgs();
+       osd_deleted_pgs[pg_id.pgid] = osd_deleting_pgs[pg_id.pgid];
+       osd_deleting_pgs.erase(pg_id.pgid);
+     }
       recovery_state.set_delete_complete();
 
       // cancel reserver here, since the PG is about to get deleted and the
