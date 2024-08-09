@@ -1507,9 +1507,6 @@ private:
     uint64_t hit = 0;
   };
 
-  template <typename CounterT>
-  using counter_by_extent_t = std::array<CounterT, EXTENT_TYPES_MAX>;
-
   struct invalid_trans_efforts_t {
     io_stat_t read;
     io_stat_t mutate;
@@ -1592,15 +1589,6 @@ private:
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
   } stats;
-
-  template <typename CounterT>
-  CounterT& get_by_ext(
-      counter_by_extent_t<CounterT>& counters_by_ext,
-      extent_types_t ext) {
-    auto index = static_cast<uint8_t>(ext);
-    assert(index < EXTENT_TYPES_MAX);
-    return counters_by_ext[index];
-  }
 
   void account_conflict(Transaction::src_t src1, Transaction::src_t src2) {
     assert(src1 < Transaction::src_t::MAX);

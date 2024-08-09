@@ -2330,6 +2330,18 @@ void minus_srcs(counter_by_src_t<CounterT>& base,
   }
 }
 
+template <typename CounterT>
+using counter_by_extent_t = std::array<CounterT, EXTENT_TYPES_MAX>;
+
+template <typename CounterT>
+CounterT& get_by_ext(
+    counter_by_extent_t<CounterT>& counters_by_ext,
+    extent_types_t ext) {
+  auto index = static_cast<uint8_t>(ext);
+  assert(index < EXTENT_TYPES_MAX);
+  return counters_by_ext[index];
+}
+
 struct grouped_io_stats {
   uint64_t num_io = 0;
   uint64_t num_io_grouped = 0;
