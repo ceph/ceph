@@ -58,6 +58,9 @@ struct BackfillState {
   struct RequestDone : sc::event<RequestDone> {
   };
 
+  struct CancelBackfill : sc::event<CancelBackfill> {
+  };
+
 private:
   // internal events
   struct RequestPrimaryScanning : sc::event<RequestPrimaryScanning> {
@@ -132,10 +135,16 @@ public:
     explicit Crashed();
   };
 
+  struct Cancelled : sc::simple_state<Cancelled, BackfillMachine>,
+		     StateHelper<Cancelled> {
+    explicit Cancelled();
+  };
+
   struct Initial : sc::state<Initial, BackfillMachine>,
                    StateHelper<Initial> {
     using reactions = boost::mpl::list<
       sc::custom_reaction<Triggered>,
+      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Initial(my_context);
     // initialize after triggering backfill by on_activate_complete().
@@ -146,6 +155,7 @@ public:
   struct Enqueuing : sc::state<Enqueuing, BackfillMachine>,
                      StateHelper<Enqueuing> {
     using reactions = boost::mpl::list<
+      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<RequestPrimaryScanning, PrimaryScanning>,
       sc::transition<RequestReplicasScanning, ReplicasScanning>,
       sc::transition<RequestWaiting, Waiting>,
@@ -206,6 +216,7 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<PrimaryScanned>,
       sc::transition<RequestDone, Done>,
+      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<sc::event_base, Crashed>>;
     explicit PrimaryScanning(my_context);
     sc::result react(ObjectPushed);
@@ -219,6 +230,7 @@ public:
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<ReplicaScanned>,
       sc::transition<RequestDone, Done>,
+      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<sc::event_base, Crashed>>;
     explicit ReplicasScanning(my_context);
     // collect scanning result; if all results are collected, transition
@@ -243,6 +255,7 @@ public:
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
       sc::transition<RequestDone, Done>,
+      sc::transition<CancelBackfill, Cancelled>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Waiting(my_context);
     sc::result react(ObjectPushed);
