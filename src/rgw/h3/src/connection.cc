@@ -260,11 +260,11 @@ error_code ConnectionImpl::poll_events(ip::udp::endpoint peer,
           // wait for the next event
         } else if (ec) {
           return ec;
-        } else if (r->data.empty()) {
+        } else if (r->read_data.empty()) {
           // wake the reader
-          auto& reader = *r;
+          auto& handler = r->read_handler;
           readers.erase(r);
-          streamio_wake(reader, ec);
+          streamio_wake(handler, ec);
         }
       }
     }
@@ -307,15 +307,15 @@ error_code ConnectionImpl::handle_packet(std::span<uint8_t> data,
     auto w = writers.begin();
     while (w != writers.end()) {
       // try to write some more
-      auto ec = streamio_write(*w, w->fin);
+      auto ec = streamio_write(*w, w->write_fin);
       if (ec == h3_errc::done) {
         ++w; // wait for more packets
       } else if (ec) {
         return ec;
-      } else if (w->data.empty()) {
-        auto& writer = *w;
+      } else if (w->write_data.empty()) {
+        auto& handler = w->write_handler;
         w = writers.erase(w);
-        streamio_wake(writer, ec);
+        streamio_wake(handler, ec);
       } else {
         ++w; // wait for more packets
       }
@@ -327,21 +327,20 @@ error_code ConnectionImpl::handle_packet(std::span<uint8_t> data,
   return error_code{};
 }
 
-auto ConnectionImpl::streamio_wait(StreamIO& stream, streamio_set& blocked)
+auto ConnectionImpl::streamio_wait(std::optional<StreamIO::Handler>& handler)
     -> asio::awaitable<error_code, executor_type>
 {
-  blocked.push_back(stream);
   writer_wake();
 
-  if (stream.handler) {
+  if (handler) {
     throw std::runtime_error("ConnectionImpl::streamio_wait() only "
-                             "supports a single writer");
+                             "supports a single reader and writer");
   }
 
   auto token = use_awaitable;
   return asio::async_initiate<use_awaitable_t, StreamIO::Signature>(
-      [&stream] (StreamIO::Handler h) {
-        stream.handler.emplace(std::move(h));
+      [&handler] (StreamIO::Handler h) {
+        handler.emplace(std::move(h));
       }, token);
 }
 
@@ -350,56 +349,61 @@ void ConnectionImpl::streamio_reset(error_code ec)
   // cancel any readers/writers
   auto r = readers.begin();
   while (r != readers.end()) {
-    auto& reader = *r;
+    auto& handler = r->read_handler;
     r = readers.erase(r);
-    streamio_wake(reader, ec);
+    streamio_wake(handler, ec);
   }
   auto w = writers.begin();
   while (w != writers.end()) {
-    auto& writer = *w;
+    auto& handler = w->write_handler;
     w = writers.erase(w);
-    streamio_wake(writer, ec);
+    streamio_wake(handler, ec);
   }
 }
 
 error_code ConnectionImpl::streamio_read(StreamIO& stream)
 {
-  error_code ec;
+  auto& data = stream.read_data;
   const ssize_t bytes = ::quiche_h3_recv_body(
         h3conn.get(), conn.get(), stream.id,
-        stream.data.data(), stream.data.size());
+        data.data(), data.size());
+
+  error_code ec;
   if (bytes < 0) {
     ec.assign(static_cast<int>(bytes), h3_category());
   } else {
-    stream.data = stream.data.subspan(bytes);
+    data = data.subspan(bytes);
   }
   return ec;
 }
 
 error_code ConnectionImpl::streamio_write(StreamIO& stream, bool fin)
 {
-  error_code ec;
+  auto& data = stream.write_data;
   const ssize_t bytes = ::quiche_h3_send_body(
       h3conn.get(), conn.get(), stream.id,
-      stream.data.data(), stream.data.size(), fin);
+      data.data(), data.size(), fin);
+
+  error_code ec;
   if (bytes < 0) {
     ec.assign(static_cast<int>(bytes), h3_category());
   } else {
-    stream.data = stream.data.subspan(bytes);
+    data = data.subspan(bytes);
   }
   return ec;
 }
 
-void ConnectionImpl::streamio_wake(StreamIO& stream, error_code ec)
+void ConnectionImpl::streamio_wake(std::optional<StreamIO::Handler>& handler,
+                                   error_code ec)
 {
-  if (!stream.handler) {
+  if (!handler) {
     throw std::runtime_error("ConnectionImpl::streamio_wake() "
                              "called without a waiter");
   }
 
   // bind arguments to the handler for dispatch
-  auto c = asio::append(std::move(*stream.handler), nullptr, ec);
-  stream.handler.reset();
+  auto c = asio::append(std::move(*handler), nullptr, ec);
+  handler.reset();
 
   asio::post(std::move(c));
 }
@@ -407,13 +411,14 @@ void ConnectionImpl::streamio_wake(StreamIO& stream, error_code ec)
 auto ConnectionImpl::read_body(StreamIO& stream, std::span<uint8_t> data)
     -> asio::awaitable<size_t, executor_type>
 {
-  stream.data = data;
+  stream.read_data = data;
 
-  while (!stream.data.empty()) {
+  while (!stream.read_data.empty()) {
     auto ec = streamio_read(stream);
     if (ec == h3_errc::done) {
       // no bytes buffered, wait for more packets
-      ec = co_await streamio_wait(stream, readers);
+      readers.push_back(stream);
+      ec = co_await streamio_wait(stream.read_handler);
       if (ec) {
         throw boost::system::system_error(ec);
       }
@@ -424,7 +429,7 @@ auto ConnectionImpl::read_body(StreamIO& stream, std::span<uint8_t> data)
   }
 
   observer.on_stream_recv_body(cid, stream.id, data.size());
-  co_return data.size() - stream.data.size();
+  co_return data.size() - stream.read_data.size();
 }
 
 auto ConnectionImpl::write_response(StreamIO& stream,
@@ -458,7 +463,8 @@ auto ConnectionImpl::write_response(StreamIO& stream,
 
       if (ec == h3_errc::done) {
         // unable to buffer more bytes, wait for flow control window and retry
-        ec = co_await streamio_wait(stream, writers);
+        writers.push_back(stream);
+        ec = co_await streamio_wait(stream.write_handler);
         if (ec) {
           throw boost::system::system_error(ec);
         }
@@ -474,21 +480,22 @@ auto ConnectionImpl::write_response(StreamIO& stream,
   // unreachable
 }
 
-auto ConnectionImpl::write_body(StreamIO& stream, std::span<uint8_t> data,
+auto ConnectionImpl::write_body(StreamIO& stream, std::span<const uint8_t> data,
                                 bool fin)
     -> asio::awaitable<size_t, executor_type>
 {
-  stream.data = data;
-  stream.fin = fin;
+  stream.write_data = data;
+  stream.write_fin = fin;
 
   // if fin is set, call quiche_h3_send_body() even if there's no data
   bool fin_flag = fin;
 
-  while (!stream.data.empty() || fin_flag) {
+  while (!stream.write_data.empty() || fin_flag) {
     auto ec = streamio_write(stream, fin);
     if (ec == h3_errc::done) {
       // unable to buffer more bytes, wait for flow control window
-      ec = co_await streamio_wait(stream, writers);
+      writers.push_back(stream);
+      ec = co_await streamio_wait(stream.write_handler);
       if (ec) {
         throw boost::system::system_error(ec);
       }
@@ -502,7 +509,7 @@ auto ConnectionImpl::write_body(StreamIO& stream, std::span<uint8_t> data,
 
   observer.on_stream_send_body(cid, stream.id, data.size());
   writer_wake();
-  co_return data.size() - stream.data.size();
+  co_return data.size() - stream.write_data.size();
 }
 
 error_code ConnectionImpl::on_closed()

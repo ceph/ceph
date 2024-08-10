@@ -118,7 +118,7 @@ class Connection : public boost::intrusive_ref_counter<Connection> {
 
   /// Write response body to the given stream. Return the number of bytes
   /// written. Errors are thrown as boost::system::system_error exceptions.
-  virtual auto write_body(StreamIO& stream, std::span<uint8_t> data, bool fin)
+  virtual auto write_body(StreamIO& stream, std::span<const uint8_t> data, bool fin)
       -> asio::awaitable<size_t, executor_type> = 0;
 
   /// Receive body bytes from the given stream. Return the number of bytes
@@ -128,16 +128,22 @@ class Connection : public boost::intrusive_ref_counter<Connection> {
 };
 
 /// A stream handle used to coordinate i/o between ClientIO and Connection.
-struct StreamIO : boost::intrusive::set_base_hook<> {
+struct StreamIO {
   uint64_t id;
-  std::span<uint8_t> data;
-  bool fin = false;
 
   using Signature = void(std::exception_ptr, error_code);
   using Handler = typename asio::async_result<
       asio::use_awaitable_t<Connection::executor_type>,
       Signature>::handler_type;
-  std::optional<Handler> handler;
+
+  std::span<uint8_t> read_data;
+  std::optional<Handler> read_handler;
+  boost::intrusive::set_member_hook<> read_hook;
+
+  std::span<const uint8_t> write_data;
+  bool write_fin = false;
+  std::optional<Handler> write_handler;
+  boost::intrusive::set_member_hook<> write_hook;
 
   StreamIO(uint64_t id) : id(id) {}
 };

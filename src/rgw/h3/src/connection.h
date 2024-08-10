@@ -58,9 +58,17 @@ struct streamid_less {
   bool operator()(K lhs, K rhs) const { return lhs < rhs; }
 };
 
-using streamio_set = boost::intrusive::set<StreamIO,
-      boost::intrusive::key_of_value<streamid_key>,
-      boost::intrusive::compare<streamid_less>>;
+namespace bi = boost::intrusive;
+
+using streamio_reader_set = bi::set<StreamIO,
+      bi::member_hook<StreamIO, bi::set_member_hook<>, &StreamIO::read_hook>,
+      bi::key_of_value<streamid_key>,
+      bi::compare<streamid_less>>;
+
+using streamio_writer_set = bi::set<StreamIO,
+      bi::member_hook<StreamIO, bi::set_member_hook<>, &StreamIO::write_hook>,
+      bi::key_of_value<streamid_key>,
+      bi::compare<streamid_less>>;
 
 
 /// A server-side h3 connection accepted by a Listener. When incoming packets
@@ -133,7 +141,7 @@ class ConnectionImpl : public Connection,
       -> asio::awaitable<void, executor_type> override;
 
   /// write response body to the given stream
-  auto write_body(StreamIO& stream, std::span<uint8_t> data, bool fin)
+  auto write_body(StreamIO& stream, std::span<const uint8_t> data, bool fin)
       -> asio::awaitable<size_t, executor_type> override;
 
   void cancel();
@@ -174,8 +182,8 @@ class ConnectionImpl : public Connection,
   connection_id cid;
 
   // streams waiting on reads/writes
-  streamio_set readers;
-  streamio_set writers;
+  streamio_reader_set readers;
+  streamio_writer_set writers;
 
   // long-lived coroutine that completes when the connection closes
   asio::awaitable<error_code, executor_type> accept();
@@ -207,10 +215,10 @@ class ConnectionImpl : public Connection,
 
   error_code streamio_write(StreamIO& stream, bool fin);
 
-  void streamio_wake(StreamIO& stream, error_code ec);
+  void streamio_wake(std::optional<StreamIO::Handler>& handler, error_code ec);
 
   // add a stream to the given set and wait for its io to be ready
-  auto streamio_wait(StreamIO& stream, streamio_set& blocked)
+  auto streamio_wait(std::optional<StreamIO::Handler>& handler)
       -> asio::awaitable<error_code, executor_type>;
 
   // cancel blocked streams with the given error
