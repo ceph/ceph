@@ -39,6 +39,7 @@ tasks:
           ceph smb cluster create modusr1 user
           --define-user-pass=user1%t3stP4ss1
           --define-user-pass=user2%t3stP4ss2
+          --placement=count:1
       - cmd: ceph smb share create modusr1 share1 cephfs / --subvolume=smb/sv1
       - cmd: ceph smb share create modusr1 share2 cephfs / --subvolume=smb/sv2
 # Wait for the smb service to start
