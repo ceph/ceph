@@ -83,6 +83,14 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   count = 0;
   private tableContext: CdTableFetchDataContext = null;
   errorMessage: string;
+  
+ messages = { 
+       moveToTrash:$localize`Move an image to the trash. Images, even ones actively in-use by clones, can be moved to the trash and deleted at a later time.`,
+       delete:$localize`Delete an rbd image (including all data blocks). If the image has snapshots, this fails and nothing is deleted.`,
+       copy:$localize`Copy the content of a source image into the newly created destination image`,
+       flatten:$localize`If the image is a clone, copy all shared blocks from the parent snapshot and make the child independent of the parent, severing the link between parent snap and child. `
+  };
+  //  moveToTrash:string = $localize`Move an image to the trash. Images, even ones actively in-use by clones, can be moved to the trash and deleted at a later time.`
 
   builders = {
     'rbd/create': (metadata: object) =>
@@ -159,7 +167,19 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       icon: Icons.destroy,
       click: () => this.deleteRbdModal(),
       name: this.actionLabels.DELETE,
-      disable: (selection: CdTableSelection) => this.getDeleteDisableDesc(selection)
+      title: this.messages.delete,
+      disable: (selection: CdTableSelection) => this.getDeleteDisableDesc(selection),
+    };
+    const moveAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.trash,
+      title: this.messages.moveToTrash,
+      click: () => this.trashRbdModal(),
+      name: this.actionLabels.TRASH,
+      disable: (selection: CdTableSelection) => 
+        this.getRemovingStatusDesc(selection) ||
+        this.getInvalidNameDisable(selection) ||
+        selection.first().image_format === RBDImageFormat.V1 ,
     };
     const resyncAction: CdTableAction = {
       permission: 'update',
@@ -177,7 +197,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         !!selection.first().cdExecuting,
       icon: Icons.copy,
       routerLink: () => `/block/rbd/copy/${getImageUri()}`,
-      name: this.actionLabels.COPY
+      name: this.actionLabels.COPY,
+      title: this.messages.copy
     };
     const flattenAction: CdTableAction = {
       permission: 'update',
@@ -188,18 +209,10 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         !selection.first().parent,
       icon: Icons.flatten,
       click: () => this.flattenRbdModal(),
-      name: this.actionLabels.FLATTEN
+      name: this.actionLabels.FLATTEN,
+      title:this.messages.flatten
     };
-    const moveAction: CdTableAction = {
-      permission: 'delete',
-      icon: Icons.trash,
-      click: () => this.trashRbdModal(),
-      name: this.actionLabels.TRASH,
-      disable: (selection: CdTableSelection) =>
-        this.getRemovingStatusDesc(selection) ||
-        this.getInvalidNameDisable(selection) ||
-        selection.first().image_format === RBDImageFormat.V1
-    };
+  
     const removeSchedulingAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
@@ -238,11 +251,11 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       copyAction,
       flattenAction,
       resyncAction,
-      deleteAction,
-      moveAction,
       removeSchedulingAction,
       promoteAction,
-      demoteAction
+      demoteAction,
+      moveAction,
+      deleteAction,
     ];
   }
 
@@ -626,7 +639,9 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
     if (first && this.hasClonedSnapshots(first)) {
       return $localize`This RBD has cloned snapshots. Please delete related RBDs before deleting this RBD.`;
     }
-
+    if (first && !this.imageIsPrimary(first)) {
+      return true;
+    }
     return this.getInvalidNameDisable(selection) || this.hasClonedSnapshots(selection.first());
   }
 

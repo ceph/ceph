@@ -7,7 +7,12 @@
           novalidate>
 
       <div i18n="form title"
-           class="form-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }} 
+           <cd-help-text>
+           <span *ngIf="action === 'Copy'">Copy the content of a source image into the newly created destination image</span> 
+          </cd-help-text>
+          </div>
+      <div class="card-body">
 
       <!-- Parent -->
       <div class="form-item"
