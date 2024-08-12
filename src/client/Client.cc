@@ -4265,7 +4265,7 @@ void Client::signal_cond_list(list<ceph::condition_variable*>& ls)
   }
 }
 
-void Client::wait_on_context_list(list<Context*>& ls)
+void Client::wait_on_context_list(std::vector<Context*>& ls)
 {
   ceph::condition_variable cond;
   bool done = false;
@@ -4276,30 +4276,14 @@ void Client::wait_on_context_list(list<Context*>& ls)
   l.release();
 }
 
-void Client::signal_context_list(list<Context*>& ls)
-{
-  while (!ls.empty()) {
-    ls.front()->complete(0);
-    ls.pop_front();
-  }
-}
-
 void Client::signal_caps_inode(Inode *in)
 {
   // Process the waitfor_caps list
-  while (!in->waitfor_caps.empty()) {
-    in->waitfor_caps.front()->complete(0);
-    in->waitfor_caps.pop_front();
-  }
+  signal_context_list(in->waitfor_caps);
 
   // New items may have been added to the pending list, move them onto the
   // waitfor_caps list
-  while (!in->waitfor_caps_pending.empty()) {
-    Context *ctx = in->waitfor_caps_pending.front();
-
-    in->waitfor_caps_pending.pop_front();
-    in->waitfor_caps.push_back(ctx);
-  }
+  std::swap(in->waitfor_caps, in->waitfor_caps_pending);
 }
 
 void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
@@ -11904,7 +11888,7 @@ void Client::C_nonblocking_fsync_state::advance()
       ldout(clnt->cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
 
       req->get();
-      clnt->add_nonblocking_onfinish_to_context_list(req->waitfor_safe, advancer);
+      req->waitfor_safe.push_back(advancer);
       // ------------  here is a state machine break point
       return;
     }
@@ -11930,7 +11914,7 @@ void Client::C_nonblocking_fsync_state::advance()
         ldout(clnt->cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
                              << " uncommitted, waiting" << dendl;
         advancer = new C_nonblocking_fsync_state_advancer(clnt, this);
-        clnt->add_nonblocking_onfinish_to_context_list(in->waitfor_commit, advancer);
+        in->waitfor_commit.push_back(advancer);
         // ------------  here is a state machine break point but we have to
         //               return to this case because this might loop.
         progress = 1;
@@ -11988,9 +11972,9 @@ void Client::C_nonblocking_fsync_state::advance()
                              << " for C_nonblocking_fsync_state " << this
                              << dendl;
         if (progress == 3)
-          clnt->add_nonblocking_onfinish_to_context_list(in->waitfor_caps, advancer);
+          in->waitfor_caps.push_back(advancer);
         else
-          clnt->add_nonblocking_onfinish_to_context_list(in->waitfor_caps_pending, advancer);
+          in->waitfor_caps_pending.push_back(advancer);
         // ------------  here is a state machine break point
         //               the advancer completion will resume with case 3
         progress = 4;
@@ -16796,7 +16780,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	case MetaSession::STATE_OPENING:
 	  {
 	    ldout(cct, 1) << "reset from mds we were opening; retrying" << dendl;
-	    list<Context*> waiters;
+	    std::vector<Context*> waiters;
 	    waiters.swap(s->waiting_for_open);
 	    _closed_mds_session(s.get());
 	    auto news = _get_or_open_mds_session(mds);
