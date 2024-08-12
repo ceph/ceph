@@ -47,7 +47,7 @@ Membership
 Current Members
 ^^^^^^^^^^^^^^^
 
-* Dan van der Ster <daniel.vanderster@cern.ch>
+* Dan van der Ster <dan.vanderster@clyso.com>
 * Josh Durgin <jdurgin@redhat.com>
 * Neha Ojha <nojha@redhat.com>
 
@@ -89,9 +89,9 @@ Current Members
  * Igor Fedotov <igor.fedotov@croit.io>
  * Jeff Layton <jlayton@redhat.com>
  * Josh Durgin <jdurgin@redhat.com>
- * João Eduardo Luis <joao@suse.de>
+ * João Eduardo Luis <joao@clyso.com>
  * Ken Dreyer <kdreyer@redhat.com>
- * Mark Nelson <mnelson@redhat.com>
+ * Mark Nelson <mark.nelson@clyso.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <myoungwon.oh@samsung.com>
