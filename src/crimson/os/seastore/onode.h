@@ -8,6 +8,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
+#include "common/hobject.h"
 #include "include/byteorder.h"
 #include "seastore_types.h"
 
@@ -56,10 +57,12 @@ protected:
   virtual laddr_t get_hint() const = 0;
   const uint32_t default_metadata_offset = 0;
   const uint32_t default_metadata_range = 0;
+  const hobject_t hobj;
 public:
-  Onode(uint32_t ddr, uint32_t dmr)
+  Onode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj)
     : default_metadata_offset(ddr),
-      default_metadata_range(dmr)
+      default_metadata_range(dmr),
+      hobj(hobj)
   {}
 
   virtual bool is_alive() const = 0;
@@ -85,6 +88,7 @@ public:
   laddr_t get_data_hint() const {
     return get_hint();
   }
+  friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
 
 
