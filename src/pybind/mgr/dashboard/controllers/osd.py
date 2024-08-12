@@ -136,10 +136,16 @@ class Osd(RESTController):
                 osds[node['id']]['tree'] = node
 
         # Extending by osd parent node information
+        def host_extend_osds(host, node):
+            if 'children' in node:
+                for child_id in node['children']:
+                    for child in [n for n in nodes if n['id'] == child_id]:
+                        if child['type'] == 'osd' and child_id in osds:
+                            osds[child_id]['host'] = host
+                        else:
+                            host_extend_osds(host, child)
         for host in [n for n in nodes if n['type'] == 'host']:
-            for osd_id in host['children']:
-                if osd_id >= 0 and osd_id in osds:
-                    osds[osd_id]['host'] = host
+            host_extend_osds(host, host)
 
         removing_osd_ids = self.get_removing_osds()
 
