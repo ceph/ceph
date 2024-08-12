@@ -26,7 +26,7 @@ protected:
 public:
   std::string_view get_type_name() const override { return "mds_quiesce_db_listing"; }
   void print(std::ostream& o) const override {
-
+    o << get_type_name();
   }
 
   void encode_payload(uint64_t features) override { 
