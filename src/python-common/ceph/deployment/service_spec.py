@@ -1221,7 +1221,7 @@ class RGWSpec(ServiceSpec):
                  rgw_realm_token: Optional[str] = None,
                  update_endpoints: Optional[bool] = False,
                  zone_endpoints: Optional[str] = None,  # comma separated endpoints list
-                 zonegroup_hostnames: Optional[str] = None,
+                 zonegroup_hostnames: Optional[List[str]] = None,
                  rgw_user_counters_cache: Optional[bool] = False,
                  rgw_user_counters_cache_size: Optional[int] = None,
                  rgw_bucket_counters_cache: Optional[bool] = False,
