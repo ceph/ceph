@@ -1,5 +1,5 @@
 
-from typing import Any, Tuple, IO, List, Union
+from typing import Any, Tuple, IO, List, Union, Optional
 import ipaddress
 
 from datetime import datetime, timedelta
@@ -21,7 +21,11 @@ class SSLCerts:
         self.key_file: IO[bytes]
         self.cert_file: IO[bytes]
 
-    def generate_root_cert(self, addr: str) -> Tuple[str, str]:
+    def generate_root_cert(
+        self,
+        addr: Optional[str] = None,
+        custom_san_list: Optional[List[str]] = None
+    ) -> Tuple[str, str]:
         self.root_key = rsa.generate_private_key(
             public_exponent=65537, key_size=4096, backend=default_backend())
         root_public_key = self.root_key.public_key()
@@ -36,12 +40,19 @@ class SSLCerts:
         root_builder = root_builder.not_valid_after(datetime.now() + timedelta(days=(365 * 10 + 3)))
         root_builder = root_builder.serial_number(x509.random_serial_number())
         root_builder = root_builder.public_key(root_public_key)
+
+        san_list: List[x509.GeneralName] = []
+        if addr:
+            san_list.extend([x509.IPAddress(ipaddress.ip_address(addr))])
+        if custom_san_list:
+            san_list.extend([x509.DNSName(n) for n in custom_san_list])
         root_builder = root_builder.add_extension(
             x509.SubjectAlternativeName(
-                [x509.IPAddress(ipaddress.ip_address(addr))]
+                san_list
             ),
             critical=False
         )
+
         root_builder = root_builder.add_extension(
             x509.BasicConstraints(ca=True, path_length=None), critical=True,
         )

@@ -37,7 +37,7 @@ class FakeMgr:
         self.http_server = MagicMock()
         self.http_server.agent = MagicMock()
         self.http_server.agent.ssl_certs = SSLCerts()
-        self.http_server.agent.ssl_certs.generate_root_cert(self.get_mgr_ip())
+        self.http_server.agent.ssl_certs.generate_root_cert(addr=self.get_mgr_ip())
         self.cert_mgr = FakeCertMgr()
 
     def get_mgr_ip(self) -> str:

@@ -21,7 +21,7 @@ class CertMgr:
             except SSLConfigException:
                 raise Exception("Cannot load cephadm root CA certificates.")
         else:
-            self.ssl_certs.generate_root_cert(ip)
+            self.ssl_certs.generate_root_cert(addr=ip)
             mgr.cert_key_store.save_cert(self.CEPHADM_ROOT_CA_CERT, self.ssl_certs.get_root_cert())
             mgr.cert_key_store.save_key(self.CEPHADM_ROOT_CA_KEY, self.ssl_certs.get_root_key())
 
