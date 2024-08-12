@@ -16,6 +16,7 @@
 
 #include <boost/asio/ip/udp.hpp>
 #include <boost/container/static_vector.hpp>
+#include <boost/intrusive/list.hpp>
 
 namespace rgw::h3 {
 
@@ -24,7 +25,7 @@ static constexpr size_t max_datagram_size = 4096;
 using message_buffer = boost::container::static_vector<
     uint8_t, max_datagram_size>;
 
-struct message {
+struct message : boost::intrusive::list_base_hook<> {
   message_buffer buffer{message_buffer::max_size(),
                         boost::container::default_init};
   boost::asio::ip::udp::endpoint peer; // remote address

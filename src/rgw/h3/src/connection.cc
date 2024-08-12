@@ -302,29 +302,43 @@ error_code ConnectionImpl::handle_packet(std::span<uint8_t> data,
     if (ec) {
       return ec;
     }
+  }
 
-    // try to wake writers
-    auto w = writers.begin();
-    while (w != writers.end()) {
-      // try to write some more
-      auto ec = streamio_write(*w, w->write_fin);
-      if (ec == h3_errc::done) {
-        ++w; // wait for more packets
-      } else if (ec) {
-        return ec;
-      } else if (w->write_data.empty()) {
-        auto& handler = w->write_handler;
-        w = writers.erase(w);
-        streamio_wake(handler, ec);
-      } else {
-        ++w; // wait for more packets
-      }
+  return error_code{};
+}
+
+error_code ConnectionImpl::handle_packets(boost::intrusive::list<message> messages,
+                                          const ip::udp::endpoint& self)
+{
+  error_code ec;
+  for (auto& m : messages) {
+    ec = handle_packet(m.buffer, m.peer, self);
+    if (ec) {
+      return ec;
+    }
+  }
+
+  // try to wake writers
+  auto w = writers.begin();
+  while (w != writers.end()) {
+    // try to write some more
+    auto ec = streamio_write(*w, w->write_fin);
+    if (ec == h3_errc::done) {
+      ++w; // wait for more packets
+    } else if (ec) {
+      return ec;
+    } else if (w->write_data.empty()) {
+      auto& handler = w->write_handler;
+      w = writers.erase(w);
+      streamio_wake(handler, ec);
+    } else {
+      ++w; // wait for more packets
     }
   }
 
   writer_wake();
 
-  return error_code{};
+  return {};
 }
 
 auto ConnectionImpl::streamio_wait(std::optional<StreamIO::Handler>& handler)

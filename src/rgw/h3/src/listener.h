@@ -72,9 +72,15 @@ class ListenerImpl : public Listener {
 
   auto listen()
       -> asio::awaitable<void, executor_type>;
-  auto on_packet(std::default_random_engine& rng,
-                 message* packet, ip::udp::endpoint self)
-      -> asio::awaitable<error_code, executor_type>;
+
+  // parse an incoming packet. attempt to negotiate new connections for
+  // unrecognized destination connection ids. return a reference to
+  // ConnectionImpl for recognized connections
+  auto parse_packet(std::default_random_engine& rng,
+                    const ip::udp::endpoint& self,
+                    const ip::udp::endpoint& peer,
+                    std::span<const uint8_t> data)
+      -> std::pair<boost::intrusive_ptr<ConnectionImpl>, error_code>;
 };
 
 } // namespace rgw::h3

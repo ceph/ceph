@@ -31,6 +31,8 @@
 
 #include <h3/h3.h>
 
+#include "message.h"
+
 namespace rgw::h3 {
 
 struct conn_deleter {
@@ -94,16 +96,16 @@ class ConnectionImpl : public Connection,
   auto async_accept(CompletionToken&& token)
   {
     using Signature = void(error_code);
-    auto self = boost::intrusive_ptr{this};
+    auto ref = boost::intrusive_ptr{this};
     return asio::async_initiate<CompletionToken, Signature>(
-        [this, self=std::move(self)] (auto&& handler) mutable {
+        [this, ref=std::move(ref)] (auto&& handler) mutable {
           // spawn accept() on the connection's executor and enable its
           // cancellation via 'cancel_accept'
           auto ex = get_executor();
           asio::co_spawn(ex, accept(),
               bind_cancellation_slot(cancel_accept.slot(),
                   bind_executor(ex,
-                      [self=std::move(self), h=std::move(handler)]
+                      [ref=std::move(ref), h=std::move(handler)]
                       (std::exception_ptr eptr, error_code ec) mutable {
                         if (eptr) {
                           std::rethrow_exception(std::move(eptr));
@@ -114,19 +116,21 @@ class ConnectionImpl : public Connection,
         }, token);
   }
 
-  /// process an input packet on the connection's executor
+  /// process input packets on the connection's executor
   template <typename CompletionToken>
-  auto async_handle_packet(std::span<uint8_t> data, ip::udp::endpoint peer,
-                           ip::udp::endpoint self, CompletionToken&& token)
+  auto async_handle_packets(boost::intrusive::list<message> messages,
+                            ip::udp::endpoint self,
+                            CompletionToken&& token)
   {
     using Signature = void(error_code);
+    auto ref = boost::intrusive_ptr{this};
     return asio::async_initiate<CompletionToken, Signature>(
-        [this, data, peer=std::move(peer),
+        [this, ref=std::move(ref), messages=std::move(messages),
          self=std::move(self)] (auto&& handler) mutable {
           asio::dispatch(get_executor(),
-              [this, data, peer=std::move(peer), self=std::move(self),
-               h=std::move(handler)] () mutable {
-                auto ec = handle_packet(data, std::move(peer), std::move(self));
+              [this, ref=std::move(ref), messages=std::move(messages),
+               self=std::move(self), h=std::move(handler)] () mutable {
+                auto ec = handle_packets(std::move(messages), self);
                 asio::dispatch(asio::append(std::move(h), ec));
               });
         }, token);
@@ -208,8 +212,12 @@ class ConnectionImpl : public Connection,
   error_code poll_events(ip::udp::endpoint peer, ip::udp::endpoint self);
 
   // handle an incoming packet from the Listener
-  error_code handle_packet(std::span<uint8_t> data, ip::udp::endpoint peer,
+  error_code handle_packet(std::span<uint8_t> data,
+                           ip::udp::endpoint peer,
                            ip::udp::endpoint self);
+
+  error_code handle_packets(boost::intrusive::list<message> messages,
+                            const ip::udp::endpoint& self);
 
   error_code streamio_read(StreamIO& stream);
 
