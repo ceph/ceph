@@ -115,9 +115,8 @@ For developer who is interested in UADK, you can refer to the below steps for bu
       make
       make install
 
-   .. note:: Without –prefix, UADK will be installed to /usr/local/lib by
-             default. If get error:"cannot find -lnuma", please install 
-             the `libnuma-dev`.
+   .. note:: Without –prefix, UADK will be installed to /usr/local/lib by default.
+   If get error:"cannot find -lnuma", please install the `libnuma-dev`
 
 #. Configure
 
