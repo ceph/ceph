@@ -20,7 +20,7 @@ Layout fields
 -------------
 
 pool
-    This is a string and returns either an ID or a name. Strings may contain
+    This is a string and contains either an ID or a name. Strings may contain
     only characters in the set ``[a-zA-Z0-9\_-.]``. This determines the RADOS
     pool that stores a file's data objects.
 
@@ -41,9 +41,9 @@ pool_namespace
 stripe_unit
     This is an integer. The size (in bytes) of a block of data used in the
     distribution of a file. All stripe units for a file have equal size. The
-    last stripe unit is typically incomplete–that is, it represents the data at
-    the end of the file as well as unused “space” beyond the end of the file to
-    the end of the fixed stripe unit size.
+    last stripe unit is typically only partly full of data: it holds file data
+    through EOF as well as padding that fills the balance of the fixed stripe
+    unit size. 
 
 stripe_count
     Integer. The number of consecutive stripe units that constitute a RAID 0
