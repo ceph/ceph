@@ -197,50 +197,54 @@ seastar::future<> OSD::mkfs(
   std::string osdspec_affinity)
 {
   LOG_PREFIX(OSD::mkfs);
-  return store.start().then([&store, FNAME, osd_uuid] {
-    return store.mkfs(osd_uuid).handle_error(
-      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
-        ERROR("error creating empty object store in {}: ({}) {}",
-	      local_conf().get_val<std::string>("osd_data"),
-	      ec.value(), ec.message());
-      }));
-  }).then([&store, FNAME] {
-    return store.mount().handle_error(
-      crimson::stateful_ec::assert_failure([FNAME](const auto& ec) {
-        ERROR("error mounting object store in {}: ({}) {}",
-	      local_conf().get_val<std::string>("osd_data"),
-	      ec.value(), ec.message());
-      }));
-  }).then([&store] {
-    return open_or_create_meta_coll(store);
-  }).then([&store, whoami, cluster_fsid](auto meta_coll) {
+
+  co_await store.start();
+
+  co_await store.mkfs(osd_uuid).handle_error(
+    crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
+      ERROR("error creating empty object store in {}: ({}) {}",
+	    local_conf().get_val<std::string>("osd_data"),
+	    ec.value(), ec.message());
+    }));
+
+  co_await store.mount().handle_error(
+    crimson::stateful_ec::assert_failure([FNAME](const auto& ec) {
+      ERROR("error mounting object store in {}: ({}) {}",
+	    local_conf().get_val<std::string>("osd_data"),
+	    ec.value(), ec.message());
+    }));
+
+  {
+    auto meta_coll = co_await open_or_create_meta_coll(store);
+
     OSDSuperblock superblock;
     superblock.cluster_fsid = cluster_fsid;
     superblock.osd_fsid = store.get_fsid();
     superblock.whoami = whoami;
     superblock.compat_features = get_osd_initial_compat_set();
-    return _write_superblock(
+    co_await _write_superblock(
       store, std::move(meta_coll), std::move(superblock));
-  }).then([&store, cluster_fsid] {
-    return store.write_meta("ceph_fsid", cluster_fsid.to_string());
-  }).then([&store] {
-    return store.write_meta("magic", CEPH_OSD_ONDISK_MAGIC);
-  }).then([&store, whoami] {
-    return store.write_meta("whoami", std::to_string(whoami));
-  }).then([&store] {
-    return _write_key_meta(store);
-  }).then([&store, osdspec_affinity=std::move(osdspec_affinity)] {
-    return store.write_meta("osdspec_affinity", osdspec_affinity);
-  }).then([&store] {
-    return store.write_meta("ready", "ready");
-  }).then([&store, whoami, cluster_fsid] {
-    fmt::print("created object store {} for osd.{} fsid {}\n",
-               local_conf().get_val<std::string>("osd_data"),
-               whoami, cluster_fsid);
-    return store.umount();
-  }).then([&store] {
-    return store.stop();
-  });
+  }
+
+  co_await store.write_meta("ceph_fsid", cluster_fsid.to_string());
+
+  co_await store.write_meta("magic", CEPH_OSD_ONDISK_MAGIC);
+
+  co_await store.write_meta("whoami", std::to_string(whoami));
+
+  co_await _write_key_meta(store);
+
+  co_await store.write_meta("osdspec_affinity", osdspec_affinity);
+
+  co_await store.write_meta("ready", "ready");
+
+  INFO("created object store {} for osd.{} fsid {}\n",
+       local_conf().get_val<std::string>("osd_data"),
+       whoami, cluster_fsid);
+  co_await store.umount();
+
+  co_await store.stop();
+  co_return;
 }
 
 seastar::future<> OSD::_write_superblock(
