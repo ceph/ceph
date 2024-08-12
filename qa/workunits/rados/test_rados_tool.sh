@@ -329,10 +329,10 @@ test_xattr() {
     expect_false $RADOS_TOOL -p $POOL setxattr $OBJ 2>/dev/null
     expect_false $RADOS_TOOL -p $POOL setxattr $OBJ foo fooval extraarg 2>/dev/null
     $RADOS_TOOL -p $POOL setxattr $OBJ foo fooval
-    $RADOS_TOOL -p $POOL getxattr $OBJ foo > $V2
+    $RADOS_TOOL -p $POOL getxattr $OBJ foo > $V2 | tr -d '\n' > $V2
     cmp $V1 $V2
     cat $V1 | $RADOS_TOOL -p $POOL setxattr $OBJ bar
-    $RADOS_TOOL -p $POOL getxattr $OBJ bar > $V2
+    $RADOS_TOOL -p $POOL getxattr $OBJ bar > $V2 | tr -d '\n' > $V2
     cmp $V1 $V2
     $RADOS_TOOL -p $POOL listxattr $OBJ > $V1
     grep -q foo $V1
