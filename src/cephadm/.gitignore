@@ -1,0 +1,6 @@
+# tox related
+.coverage*
+htmlcov
+.tox
+coverage.xml
+.mypy_cache
