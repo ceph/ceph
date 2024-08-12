@@ -91,6 +91,23 @@ class SMBService(CephService):
         # data path access.
         return AuthEntity(f'client.{self.TYPE}.config.{daemon_id}')
 
+    def ignore_possible_stray(
+        self, service_type: str, daemon_id: str, name: str
+    ) -> bool:
+        """Called to decide if a possible stray service should be ignored
+        because it "virtually" belongs to a service.
+        This is mainly needed when properly managed services spawn layered ceph
+        services with different names (for example).
+        """
+        if service_type == 'ctdb':
+            # in the future it would be good if the ctdb service registered
+            # with a name/key we could associate with a cephadm deployed smb
+            # service (or not). But for now we just suppress the stray service
+            # warning for all ctdb lock helpers using the cluster
+            logger.debug('ignoring possibly stray ctdb service: %s', name)
+            return True
+        return False
+
     def _allow_config_key_command(self, name: str) -> str:
         # permit the samba container config access to the mon config key store
         # with keys like smb/config/<cluster_id>/*.
