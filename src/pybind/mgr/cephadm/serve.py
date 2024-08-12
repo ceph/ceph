@@ -495,23 +495,7 @@ class CephadmServe:
                 for s in daemons:
                     daemon_id = s.get('id')
                     assert daemon_id
-                    name = '%s.%s' % (s.get('type'), daemon_id)
-                    if s.get('type') in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
-                        metadata = self.mgr.get_metadata(
-                            cast(str, s.get('type')), daemon_id, {})
-                        assert metadata is not None
-                        try:
-                            if s.get('type') == 'rgw-nfs':
-                                # https://tracker.ceph.com/issues/49573
-                                name = metadata['id'][:-4]
-                            else:
-                                name = '%s.%s' % (s.get('type'), metadata['id'])
-                        except (KeyError, TypeError):
-                            self.log.debug(
-                                "Failed to find daemon id for %s service %s" % (
-                                    s.get('type'), s.get('id')
-                                )
-                            )
+                    name = self._service_reference_name(s.get('type'), daemon_id)
                     if s.get('type') == 'tcmu-runner':
                         # because we don't track tcmu-runner daemons in the host cache
                         # and don't have a way to check if the daemon is part of iscsi service
@@ -538,6 +522,27 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.set_health_warning(
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+
+    def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
+        if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
+            name = f'{service_type}.{daemon_id}'
+            return name
+
+        metadata = self.mgr.get_metadata(service_type, daemon_id, {})
+        assert metadata is not None
+        try:
+            if service_type == 'rgw-nfs':
+                # https://tracker.ceph.com/issues/49573
+                name = metadata['id'][:-4]
+            else:
+                name = '%s.%s' % (service_type, metadata['id'])
+        except (KeyError, TypeError):
+            self.log.debug(
+                "Failed to find daemon id for %s service %s" % (
+                    service_type, daemon_id
+                )
+            )
+        return name
 
     def _check_for_moved_osds(self) -> None:
         self.log.debug('_check_for_moved_osds')
