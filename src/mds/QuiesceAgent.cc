@@ -173,7 +173,7 @@ void* QuiesceAgent::agent_thread_main() {
     // send the ack and clear the old roots outside of the lock
     bool new_version = current.db_version != old.db_version;
     if (new_version || !ack.roots.empty()) {
-      dout(20) << "asyncrhonous ack for " << (new_version ? "a new" : "the current") << " version: " << ack << dendl;
+      dout(20) << "asynchronous ack for " << (new_version ? "a new" : "the current") << " version: " << ack << dendl;
       int rc = quiesce_control.agent_ack(std::move(ack));
       if (rc != 0) {
         dout(3) << "got error: " << rc << " trying to send " << ack << dendl;
