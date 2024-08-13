@@ -40,7 +40,7 @@ The QATlib can be downloaded from `qatlib`_, which is used for the in-tree QAT
 driver.
 
    .. note::
-      The out-of-tree QAT driver is gradually turning to intree driver+QATlib.
+      The out-of-tree QAT driver is gradually being migrated to an intree driver+QATlib.
 
 2. The implementation of QAT-based encryption is directly based on the QAT API,
    which is included the driver package. However, QAT support for compression
@@ -56,7 +56,7 @@ Implementation
 
 `OpenSSL support for RGW encryption`_ has been merged into Ceph, and Intel also
 provides one `QAT Engine`_ for OpenSSL. Theoretically, QAT-based encryption in
-Ceph can be directly supported through OpenSSl+QAT Engine.
+Ceph can be directly supported through the OpenSSl+QAT Engine.
 
 However, the QAT Engine for OpenSSL currently supports only chained operations,
 which means that Ceph will not be able to utilize QAT hardware features for
@@ -70,10 +70,9 @@ in user space, which is designed to take full advantage of the performance that
 QuickAssist Technology provides. Unlike QAT-based encryption, QAT-based
 compression is supported through a tool class for QAT acceleration rather than
 a compressor plugin. This common tool class can transparently accelerate the
-existing compression types, but only zlib compressor is supported at the
-time of writing. This means that the user can use this tool class to speed up
-zlib compressor if the QAT hardware is available and if QAT is capable of
-handling it.
+existing compression types, but only the zlib compressor is supported at the
+time of writing. This means that this tool class can be used to speed up
+the zlib compressor if QAT hardware is available.
 
 Configuration
 =============
@@ -119,7 +118,7 @@ Configuration
 
    * To properly use the QATlib library, the Intel VT-d and SR-IOV parameters
      must be enabled in the platform BIOS.
-   * Some qatlib features require a recent kernel driver or firmware version.
+   * Some QATlib features require a recent kernel driver or firmware version.
      See `QATlib Kernel Driver Releases`_.
    * The supported platform contains a 4xxx Intel Communications device or
      newer.
@@ -147,8 +146,8 @@ Configuration
       cd build
       ininja
 
-   .. note:: The section name of the QAT configuration files must be ``CEPH``,
-      because the section name is set as ``CEPH`` in the Ceph crypto source code.
+   .. note:: The section name in QAT configuration files must be ``CEPH``,
+      because the section name is set to ``CEPH`` in the Ceph crypto source code.
   
    Edit the Ceph configuration file (usually ``ceph.conf``) to make use of the
    QAT-based crypto plugin::
@@ -159,19 +158,19 @@ Configuration
 
    **For out-of-tree QAT**
 
-   For the out-of-tree QAT driver package, before starting ensure that both QAT
-   driver and `QATzip`_  have been installed. Besides ``ICP_ROOT``, remember to
+   For the out-of-tree QAT driver package, before building ensure that both the QAT
+   driver and `QATzip`_  have been installed. In addition to ``ICP_ROOT``,
    set the environment variable ``QZ_ROOT`` to the root directory of your QATzip
    source tree.
 
-   The following CMake options have to be configured to trigger QAT-based
+   The following CMake options must be configured to trigger QAT-based
    compression when building Ceph:
   
    .. prompt:: bash $
 
       ./do_cmake.sh -DWITH_QATDRV=ON -DWITH_QATZIP=ON -DWITH_SYSTEM_QATZIP=ON -DWITH_QATLIB=OFF
 
-   Set an environment variable to clarify the section name of User Process
+   Set an environment variable to clarify the section name of the User Process
    Instance Section in the QAT configuration files. For example: 
   
    .. prompt:: bash $
@@ -180,13 +179,13 @@ Configuration
 
    **For in-tree QAT**
 
-   For in-tree QAT, make sure that your system meets the `QATlib System
+   For in-tree QAT, ensure that your system meets the `QATlib System
    Requirements`_.  QATlib can be installed from pre-built packages or from
    source code.  See `QATlib Installation`_ . After QATlib is installed, you
    can run ``cpa_sample_code`` to check if the QAT environment is OK.
 
-   If you are using QATlib source code, Ceph cmake build has the compilation
-   options of qatlib and qatzip enabled by default. Our normal compilation
+   If you are using QATlib source code, the Ceph `cmake` build enables the
+   qatlib and qatzip options by default. Our normal compilation
    already includes QAT-compressor-related code.
 
    .. prompt:: bash $
@@ -194,7 +193,7 @@ Configuration
       ./do_cmake.sh
 
    If you are using pre-built packages installed on the system, the following
-   CMake options have to be configured when building Ceph:
+   CMake options must be configured when building Ceph:
 
    .. prompt:: bash $
 
@@ -203,7 +202,7 @@ Configuration
 
    **For both out-of-tree QAT and in-tree QAT**
 
-   Edit the Ceph configuration file (usually ``ceph.conf``) to enable QAT
+   Edit Ceph's central config DB or configuration file (usually ``ceph.conf``) to enable QAT
    support for *zlib* compression::
 
       qat compressor enabled=true
