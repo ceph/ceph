@@ -27,9 +27,9 @@ using std::string;
 #undef dout_prefix
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
 
-void NVMeofGwMap::to_gmap(
-  std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const
-{
+
+void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey,
+    NvmeGwMonClientStates>& Gmap, bool gw_version_last) const {
   Gmap.clear();
   for (const auto& created_map_pair: created_gws) {
     const auto& group_key = created_map_pair.first;
@@ -38,19 +38,17 @@ void NVMeofGwMap::to_gmap(
       const auto& gw_id = gw_created_pair.first;
       const auto& gw_created  = gw_created_pair.second;
 
-      auto gw_state = NvmeGwClientState(
-	gw_created.ana_grp_id, epoch, gw_created.availability);
+      auto gw_state = NvmeGwClientState(gw_created.ana_grp_id, epoch, gw_created.availability);
       for (const auto& sub: gw_created.subsystems) {
-	gw_state.subsystems.insert({
-	    sub.nqn,
-	    NqnState(sub.nqn, gw_created.sm_state, gw_created)
-	  });
+        gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn,
+            gw_created.sm_state, gw_created, gw_version_last)});
       }
       Gmap[group_key][gw_id] = gw_state;
       dout (20) << gw_id << " Gw-Client: " << gw_state << dendl;
     }
   }
 }
+
 
 void NVMeofGwMap::add_grp_id(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key, const NvmeAnaGrpId grpid)
