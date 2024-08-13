@@ -5,6 +5,7 @@ overrides:
       - mon down
       - MON_DOWN
       - out of quorum
+      - PG_AVAILABILITY
 tasks:
 - install:
     branch: pacific
