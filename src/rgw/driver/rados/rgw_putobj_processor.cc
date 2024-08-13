@@ -59,30 +59,44 @@ void read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& cate
         }
       }
       }
-
-      {
-      // keep the object as CloudTiered only for Cloud-transitioned or 
-      // temporary restored objects.
-      auto config_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
-      if (config_iter != attrs.end()) {
-        rgw::sal::RGWRestoreType rt = rgw::sal::RGWRestoreType::None;
-        auto iter = config_iter->second.cbegin();
-
-        try {
-          using ceph::decode;
-          decode(rt, iter);
-
-          if (rt == rgw::sal::RGWRestoreType::Permanent) {
-            category = RGWObjCategory::Main;
-          } else {
-            category = RGWObjCategory::CloudTiered;
-          }
-        } catch (buffer::error& err) {
-        }
-      }
-      }
     }
     attrs.erase(attr_iter);
+  }
+
+  // retain the object category as CloudTiered for Cloud-transitioned or 
+  // temporary restored or RestoreInProgress objects.
+  auto r_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
+  if (r_iter != attrs.end()) {
+    rgw::sal::RGWRestoreStatus st = rgw::sal::RGWRestoreStatus::None;
+    auto iter = r_iter->second.cbegin();
+
+    try {
+      using ceph::decode;
+      decode(st, iter);
+
+      if (st != rgw::sal::RGWRestoreStatus::CloudRestored) {
+        category = RGWObjCategory::CloudTiered;
+      } else {
+        auto config_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+        if (config_iter != attrs.end()) {
+          rgw::sal::RGWRestoreType rt = rgw::sal::RGWRestoreType::None;
+          iter = config_iter->second.cbegin();
+
+          try {
+             using ceph::decode;
+             decode(rt, iter);
+
+             if (rt == rgw::sal::RGWRestoreType::Permanent) {
+               category = RGWObjCategory::Main;
+             } else {
+               category = RGWObjCategory::CloudTiered;
+             }
+           } catch (buffer::error& err) {
+           }
+         }
+       }
+     } catch (buffer::error& err) {
+    }
   }
 }
 

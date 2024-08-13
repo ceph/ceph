@@ -2760,9 +2760,11 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
   read_op->params.lastmod = &read_mtime;
 
+  ldpp_dout(dpp, 0) << "Expiring temporary restored Obj:" << get_key() << dendl;
+
   ret = read_op->prepare(y, dpp);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "XXXXX: read_op failed ret=" << ret << dendl;
+    ldpp_dout(dpp, 0) << "read_op failed ret=" << ret << dendl;
     return ret;
   }
 
