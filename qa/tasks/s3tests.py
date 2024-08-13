@@ -89,6 +89,8 @@ def _config_user(s3tests_conf, section, user, email):
     s3tests_conf[section].setdefault('totp_seed',
         base64.b32encode(os.urandom(40)).decode())
     s3tests_conf[section].setdefault('totp_seconds', '5')
+    if section == 's3 tenant':
+        s3tests_conf[section].setdefault('tenant', 'testx')
 
 
 @contextlib.contextmanager
