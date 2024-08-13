@@ -10216,12 +10216,14 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenZombieRepairTest) {
     }
 
     cerr << "fscking/fixing" << std::endl;
+    for (size_t i = 0; i < col_count; i++) {
+      ch[i].reset(nullptr);
+    }
     bstore->umount();
     ASSERT_EQ(bstore->fsck(false), col_count * obj_count);
     ASSERT_LE(bstore->quick_fix(), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
   }
-
   cerr << "Completing" << std::endl;
   bstore->mount();
 }
@@ -10279,6 +10281,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  ch.reset(nullptr);
   bstore->umount();
   bstore->mount();
   {
@@ -10367,6 +10370,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreBrokenNoSharedBlobRepairTest) {
   bstore->inject_stray_shared_blob_key(12345678);
 
   {
+    ch.reset(nullptr);
     cerr << "fscking/fixing" << std::endl;
     // we need to check for null-manager before umount()
     bool has_null_manager = bstore->has_null_manager();
@@ -10439,6 +10443,7 @@ TEST_P(StoreTest, BluestoreRepairGlobalStats) {
     ASSERT_EQ(r, 0);
   }
 
+  ch.reset(nullptr);
   bstore->umount();
 
   // enable per-pool stats collection hence causing fsck to fail
@@ -10501,6 +10506,7 @@ TEST_P(StoreTest, BluestoreRepairGlobalStatsFixOnMount) {
     ASSERT_EQ(r, 0);
   }
 
+  ch.reset(nullptr);
   bstore->umount();
 
   // enable per-pool stats collection hence causing fsck to fail
@@ -10748,6 +10754,7 @@ TEST_P(StoreTestDeferredSetup, DISABLED_BluestoreHugeReads)
   }
 
   // force cache clear
+  ch.reset(nullptr);
   {
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
@@ -11240,6 +11247,7 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
       }
     }
   }
+  ch.reset(nullptr);
   umount();
   // Need to do 2 passes of repair:
   // - the first one moves offending objects away
@@ -11670,6 +11678,7 @@ TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   r = store->read(ch, hoid, 0xb000, 0xb000, bl);
   ASSERT_EQ(r, 0xb000);
 
+  ch.reset(nullptr);
   store->umount();
   store->mount();
 
@@ -11734,6 +11743,7 @@ TEST_P(StoreTestOmapUpgrade, WithOmapHeader) {
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res.begin()->first, "key1");
   }
+  ch.reset(nullptr);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0);
   SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
@@ -11838,6 +11848,7 @@ TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res.begin()->first, "key1");
   }
+  ch.reset(nullptr);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0);
   SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
@@ -11896,6 +11907,7 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   //checking just written data
   check_omap_data(object_count, poolid, cid);
 
+  ch.reset(nullptr);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0);
   SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
