@@ -49,7 +49,11 @@ std::string const pretty_version_to_str(void)
   oss << "ceph version " << CEPH_GIT_NICE_VER
       << " (" << STRINGIFY(CEPH_GIT_VER) << ") "
       << ceph_release_name(CEPH_RELEASE)
-      << " (" << CEPH_RELEASE_TYPE << ")";
+      << " (" << CEPH_RELEASE_TYPE << ")"
+#ifdef WITH_SEASTAR
+      << " (crimson)"
+#endif
+      ;
   return oss.str();
 }
 
