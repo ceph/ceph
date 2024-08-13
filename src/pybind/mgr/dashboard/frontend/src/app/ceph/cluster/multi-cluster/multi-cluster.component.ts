@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
@@ -8,7 +8,6 @@ import { MultiClusterFormComponent } from './multi-cluster-form/multi-cluster-fo
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { Router } from '@angular/router';
 
 import {
@@ -26,6 +25,8 @@ import { SettingsService } from '~/app/shared/api/settings.service';
 export class MultiClusterComponent implements OnInit, OnDestroy {
   COUNT_OF_UTILIZATION_CHARTS = 5;
 
+  @ViewChild('clusterUsageTpl', { static: true })
+  clusterUsageTpl: TemplateRef<any>;
   @ViewChild('nameTpl', { static: true })
   nameTpl: any;
 
@@ -95,8 +96,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     private settingsService: SettingsService,
     private modalService: ModalService,
     private router: Router,
-    private prometheusService: PrometheusService,
-    private dimlessBinaryPipe: DimlessBinaryPipe
+    private prometheusService: PrometheusService
   ) {
     this.multiClusterQueries = {
       cluster: {
@@ -151,21 +151,9 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       { prop: 'alert', name: $localize`Alerts`, flexGrow: 1 },
       { prop: 'version', name: $localize`Version`, flexGrow: 2 },
       {
-        prop: 'total_capacity',
-        name: $localize`Total Capacity`,
-        pipe: this.dimlessBinaryPipe,
-        flexGrow: 1
-      },
-      {
-        prop: 'used_capacity',
-        name: $localize`Used Capacity`,
-        pipe: this.dimlessBinaryPipe,
-        flexGrow: 1
-      },
-      {
-        prop: 'available_capacity',
-        name: $localize`Available Capacity`,
-        pipe: this.dimlessBinaryPipe,
+        prop: 'usage',
+        name: $localize`Usage`,
+        cellTemplate: this.clusterUsageTpl,
         flexGrow: 1
       },
       { prop: 'pools', name: $localize`Pools`, flexGrow: 1 },
