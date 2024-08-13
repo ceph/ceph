@@ -5148,13 +5148,15 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   bufferlist t, t_tier;
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
-  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
+  using namespace rgw::putobj;
   jspan_context no_trace{false, false};
-  rgw::putobj::AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
+  rgw::putobj::AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info, nullptr,
                                   owner, obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
  
- void (*progress_cb)(off_t, void *) = NULL;
- void *progress_data = NULL;
+  void (*progress_cb)(off_t, void *) = NULL;
+  void *progress_data = NULL;
+  bool cb_processed = false;
   RGWFetchObjFilter *filter;
   RGWFetchObjFilter_Default source_filter;
   if (!filter) {
@@ -5179,6 +5181,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                       if (ret < 0) {
                         return ret;
                       }
+                      cb_processed = true;
                       return 0;
                     });
 
@@ -5192,7 +5195,13 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                                 attrs, &cb);
 
   if (ret < 0) { 
+    ldpp_dout(dpp, 20) << "Fetching from cloud failed, object:" << dest_obj << dendl;
     return ret; 
+  }
+
+  if (!cb_processed) { 
+    ldpp_dout(dpp, 20) << "Callback not processed, object:" << dest_obj << dendl;
+    return -EIO; 
   }
 
   ret = cb.flush();
@@ -6808,9 +6817,28 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       }
       uint64_t epoch = ioctx.get_last_version();
       int64_t poolid = ioctx.get_id();
+
+      // Retain Object category as CloudTiered while restore is in
+      // progress or failed
+      RGWObjCategory category = RGWObjCategory::Main;
+      auto r_iter = attrs.find(RGW_ATTR_RESTORE_STATUS);
+      if (r_iter != attrs.end()) {
+        rgw::sal::RGWRestoreStatus st = rgw::sal::RGWRestoreStatus::None;
+        auto iter = r_iter->second.cbegin();
+
+        try {
+          using ceph::decode;
+          decode(st, iter);
+
+          if (st != rgw::sal::RGWRestoreStatus::CloudRestored) {
+            category = RGWObjCategory::CloudTiered;
+          }
+        } catch (buffer::error& err) {
+        }
+      }
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, owner,
-                            RGWObjCategory::Main, nullptr, y, nullptr, false, log_op);
+                            category, nullptr, y, nullptr, false, log_op);
     } else {
       int ret = index_op.cancel(dpp, nullptr, y, log_op);
       if (ret < 0) {
