@@ -127,6 +127,7 @@ enum {
 
   // write op stats
   //****************************************
+  l_bluestore_write_lat,
   l_bluestore_write_big,
   l_bluestore_write_big_bytes,
   l_bluestore_write_big_blobs,
@@ -725,6 +726,7 @@ public:
       o.blob_bl = blob_bl;
 #endif
     }
+    void add_tail(uint32_t new_blob_size, uint32_t min_release_size);
     void dup(const Blob& from, bool copy_used_in_blob);
     void copy_from(CephContext* cct, const Blob& from,
 		   uint32_t min_release_size, uint32_t start, uint32_t len);
@@ -747,6 +749,11 @@ public:
     /// put logical references, and get back any released extents
     bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
+    uint32_t put_ref_accumulate(
+      Collection *coll,
+      uint32_t offset,
+      uint32_t length,
+      PExtentVector *released_disk);
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
 
@@ -1149,6 +1156,10 @@ public:
     extent_map_t::iterator seek_lextent(uint64_t offset);
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
 
+    /// split extent
+    extent_map_t::iterator split_at(extent_map_t::iterator p, uint32_t offset);
+    /// if inside extent split it, if not return extent on right
+    extent_map_t::iterator maybe_split_at(uint32_t offset);
     /// add a new Extent
     void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
       extent_map.insert(*new Extent(lo, o, l, b));
@@ -1827,6 +1838,14 @@ public:
       values[STATFS_COMPRESSED_ALLOCATED] = st.data_compressed_allocated;
       return *this;
     }
+    bool operator==(const volatile_statfs& rhs) const {
+      return
+      values[STATFS_ALLOCATED] == rhs.values[STATFS_ALLOCATED] &&
+      values[STATFS_STORED] == rhs.values[STATFS_STORED] &&
+      values[STATFS_COMPRESSED_ORIGINAL] == rhs.values[STATFS_COMPRESSED_ORIGINAL] &&
+      values[STATFS_COMPRESSED] == rhs.values[STATFS_COMPRESSED] &&
+      values[STATFS_COMPRESSED_ALLOCATED] == rhs.values[STATFS_COMPRESSED_ALLOCATED];
+    }
     bool is_empty() {
       return values[STATFS_ALLOCATED] == 0 &&
 	values[STATFS_STORED] == 0 &&
@@ -2335,6 +2354,9 @@ public:
     bool apply_defer();
   };
 
+  class Writer;
+  friend class Writer;
+
   // --------------------------------------------------------
   // members
 private:
@@ -2432,6 +2454,7 @@ private:
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
   bool elastic_shared_blobs = false; ///< use smart ExtentMap::dup to reduce shared blob count
+  bool use_write_v2 = false; ///< use new write path
 
   enum {
     // Please preserve the order since it's DB persistent
@@ -3523,6 +3546,29 @@ public:
     CephContext* cct, const std::string &path,
     const bluestore_bdev_label_t& label, uint64_t disk_position = 0);
 
+  void debug_punch_hole_2(
+    CollectionRef& c,
+    OnodeRef& o,
+    uint32_t offset,
+    uint32_t length,
+    PExtentVector& released,
+    std::vector<BlobRef>& pruned_blobs,
+    std::set<SharedBlobRef>& shared_changed,
+    volatile_statfs& statfs_delta) {
+      _punch_hole_2(c.get(), o, offset, length, released,
+        pruned_blobs, shared_changed, statfs_delta);
+    }
+  Allocator*& debug_get_alloc() {
+    return alloc;
+  }
+  void debug_set_block_size(uint64_t _block_size) {
+    block_size = _block_size;
+    block_mask = ~(block_size - 1);
+    block_size_order = std::countr_zero(block_size);
+  }
+  void debug_set_prefer_deferred_size(uint64_t s) {
+    prefer_deferred_size = s;
+  }
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
@@ -3615,12 +3661,13 @@ private:
 
   // --------------------------------------------------------
   // write ops
-
+  public:
   struct WriteContext {
     bool buffered = false;          ///< buffered write
     bool compress = false;          ///< compressed write
-    uint64_t target_blob_size = 0;  ///< target (max) blob size
+    uint8_t csum_type = 0;          ///< checksum type for new blobs
     unsigned csum_order = 0;        ///< target checksum chunk order
+    uint64_t target_blob_size = 0;  ///< target (max) blob size
 
     old_extent_map_t old_extents;   ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
@@ -3669,6 +3716,7 @@ private:
       buffered = other.buffered;
       compress = other.compress;
       target_blob_size = other.target_blob_size;
+      csum_type = other.csum_type;
       csum_order = other.csum_order;
     }
     void write(
@@ -3698,6 +3746,16 @@ private:
       uint64_t loffs_end,
       uint64_t min_alloc_size);
   };
+  private:
+  BlueStore::extent_map_t::iterator _punch_hole_2(
+    Collection* c,
+    OnodeRef& o,
+    uint32_t offset,
+    uint32_t length,
+    PExtentVector& released,
+    std::vector<BlobRef>& pruned_blobs,
+    std::set<SharedBlobRef>& shared_changed,
+    volatile_statfs& statfs_delta);
   void _do_write_small(
     TransContext *txc,
     CollectionRef &c,
@@ -3765,6 +3823,13 @@ private:
                       uint64_t length,
                       ceph::buffer::list& bl,
                       WriteContext *wctx);
+  int _do_write_v2(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef& o,
+    uint64_t offset, uint64_t length,
+    ceph::buffer::list& bl,
+    uint32_t fadvise_flags);
 
   int _touch(TransContext *txc,
 	     CollectionRef& c,

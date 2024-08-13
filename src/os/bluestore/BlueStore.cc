@@ -54,6 +54,7 @@
 #include "common/pretty_binary.h"
 #include "common/WorkQueue.h"
 #include "kv/KeyValueHistogram.h"
+#include "Writer.h"
 
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE
@@ -4299,6 +4300,42 @@ BlueStore::extent_map_t::const_iterator BlueStore::ExtentMap::seek_lextent(
   return fp;
 }
 
+// Split extent at desired offset.
+// Returns iterator to the right part.
+BlueStore::extent_map_t::iterator BlueStore::ExtentMap::split_at(
+  BlueStore::extent_map_t::iterator p, uint32_t offset)
+{
+  ceph_assert(p != extent_map.end());
+  ceph_assert(p->logical_offset < offset);
+  ceph_assert(offset < p->logical_end());
+  add(offset, p->blob_offset + (offset - p->logical_offset),
+      p->logical_end() - offset, p->blob);
+  p->length = offset - p->logical_offset;
+  ++p;
+  return p;
+}
+
+// If inside extent split it, and return right part.
+// If not inside extent return extent on right.
+BlueStore::extent_map_t::iterator BlueStore::ExtentMap::maybe_split_at(uint32_t offset)
+{
+  auto p = seek_lextent(offset);
+  if (p != extent_map.end()) {
+    if (p->logical_offset < offset && offset < p->logical_end()) {
+      // need to split
+      add(offset, p->blob_offset + (offset - p->logical_offset),
+          p->logical_end() - offset, p->blob);
+      p->length = offset - p->logical_offset;
+      ++p;
+      // check that we moved to proper extent
+      ceph_assert(p->logical_offset == offset);
+    } else {
+      // the extent is either outside offset or exactly at
+    }
+  }
+  return p;
+}
+
 bool BlueStore::ExtentMap::has_any_lextents(uint64_t offset, uint64_t length)
 {
   auto fp = seek_lextent(offset);
@@ -6219,6 +6256,9 @@ void BlueStore::_init_logger()
 
   // write op stats
   //****************************************
+  b.add_time_avg(l_bluestore_write_lat, "write_lat",
+	    "write_op average execution time",
+	    "aw", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluestore_write_big, "write_big",
 		    "Large aligned writes into fresh blobs");
   b.add_u64_counter(l_bluestore_write_big_bytes, "write_big_bytes",
@@ -9109,7 +9149,12 @@ int BlueStore::_mount()
       return r;
     }
   }
-
+  use_write_v2 = cct->_conf.get_val<bool>("bluestore_write_v2");
+  if (cct->_conf.get_val<bool>("bluestore_write_v2_random")) {
+    srand(time(NULL));
+    use_write_v2 = rand() % 2;
+    cct->_conf.set_val("bluestore_write_v2", std::to_string(use_write_v2));
+  }
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
@@ -16640,18 +16685,7 @@ int BlueStore::_do_alloc_write(
   }
 
   // checksum
-  int64_t csum = csum_type.load();
-  csum = select_option(
-    "csum_type",
-    csum,
-    [&]() {
-      int64_t val;
-      if (coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-        return std::optional<int64_t>(val);
-      }
-      return std::optional<int64_t>();
-    }
-  );
+  int64_t csum = wctx->csum_type;
 
   // compress (as needed) and calc needed space
   uint64_t need = 0;
@@ -17055,6 +17089,21 @@ void BlueStore::_choose_write_options(
   // apply basic csum block size
   wctx->csum_order = block_size_order;
 
+  // checksum
+  int64_t csum = csum_type.load();
+  csum = select_option(
+    "csum_type",
+    csum,
+    [&]() {
+      int64_t val;
+      if (c->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
+        return std::optional<int64_t>(val);
+      }
+      return std::optional<int64_t>();
+    }
+  );
+  wctx->csum_type = csum;
+
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;
   auto cm = select_option(
@@ -17291,6 +17340,51 @@ int BlueStore::_do_write(
   return r;
 }
 
+int BlueStore::_do_write_v2(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& o,
+  uint64_t offset,
+  uint64_t length,
+  bufferlist& bl,
+  uint32_t fadvise_flags)
+{
+  int r = 0;
+
+  dout(20) << __func__
+	   << " " << o->oid
+	   << " 0x" << std::hex << offset << "~" << length
+	   << " - have 0x" << o->onode.size
+	   << " (" << std::dec << o->onode.size << ")"
+	   << " bytes" << std::hex
+	   << " fadvise_flags 0x" << fadvise_flags
+	   << " alloc_hint 0x" << o->onode.alloc_hint_flags
+           << " expected_object_size " << o->onode.expected_object_size
+           << " expected_write_size " << o->onode.expected_write_size
+           << std::dec
+	   << dendl;
+  _dump_onode<30>(cct, *o);
+  if (length == 0) {
+    return 0;
+  }
+  WriteContext wctx;
+  _choose_write_options(c, o, fadvise_flags, &wctx);
+  if (wctx.compress) {
+    // if we have compression, skip to write_v1
+    return _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+  }
+  if (bl.length() != length) {
+    bl.splice(length, bl.length() - length);
+  }
+  o->extent_map.fault_range(db, offset, length);
+  BlueStore::Writer wr(this, txc, &wctx, o);
+  wr.do_write(offset, bl);
+  o->extent_map.compress_extent_map(offset, length);
+  o->extent_map.dirty_range(offset, length);
+  o->extent_map.maybe_reshard(offset, offset + length);
+  return r;
+}
+
 int BlueStore::_write(TransContext *txc,
 		      CollectionRef& c,
 		      OnodeRef& o,
@@ -17301,14 +17395,21 @@ int BlueStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
+  auto start = mono_clock::now();
   int r = 0;
   if (offset + length >= OBJECT_MAX_SIZE) {
     r = -E2BIG;
   } else {
     _assign_nid(txc, o);
-    r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    if (use_write_v2) {
+      r = _do_write_v2(txc, c, o, offset, length, bl, fadvise_flags);
+    } else {
+      r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    }
     txc->write_onode(o);
   }
+  auto finish = mono_clock::now();
+  logger->tinc(l_bluestore_write_lat, finish - start);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
