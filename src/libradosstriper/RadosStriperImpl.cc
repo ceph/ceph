@@ -280,7 +280,12 @@ WriteCompletionData::WriteCompletionData
 
 WriteCompletionData::~WriteCompletionData() {
   m_unlockCompletion->release();
-  if (m_safe) delete m_safe;
+  if (m_safe) {
+    if (m_safe->c->io) {
+      m_safe->c->io->put();
+    }
+    delete m_safe;
+  }
 }
 
 void WriteCompletionData::complete_unlock(int r) {
