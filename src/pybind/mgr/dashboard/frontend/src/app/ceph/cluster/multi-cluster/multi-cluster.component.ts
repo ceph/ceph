@@ -16,6 +16,8 @@ import {
   MultiClusterPromqlsForPoolUtilization as PoolUltilizationQueries
 } from '~/app/shared/enum/dashboard-promqls.enum';
 import { SettingsService } from '~/app/shared/api/settings.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-multi-cluster',
@@ -92,14 +94,16 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   multiClusterQueries: any = {};
   managedByConfig$: Observable<any>;
   clusterDetailsArray: any[];
-  prometheusConnectionError: any[] = [];
+  prometheusConnectionErrors: any[] = [];
+  reconnectionError: string;
 
   constructor(
     private multiClusterService: MultiClusterService,
     private settingsService: SettingsService,
     private modalService: ModalService,
     private router: Router,
-    private prometheusService: PrometheusService
+    private prometheusService: PrometheusService,
+    private notificationService: NotificationService
   ) {
     this.multiClusterQueries = {
       cluster: {
@@ -326,7 +330,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     }
 
     const clusters: ClusterInfo[] = [];
-    this.queriesResults.TOTAL_CAPACITY?.forEach((totalCapacityMetric: any, index:number) => {
+    this.queriesResults.TOTAL_CAPACITY?.forEach((totalCapacityMetric: any, index: number) => {
       const clusterName = totalCapacityMetric.metric.cluster;
       const totalCapacity = parseInt(totalCapacityMetric.value[1]);
       const getMgrMetadata = this.findCluster(this.queriesResults?.MGR_METADATA, clusterName);
@@ -400,56 +404,80 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
     );
   }
 
-  checkFederateMetricsStatus(federateMetrics: any) {
-    this.prometheusConnectionError = [];
-    federateMetrics.forEach((entry1: { metric: { instance: any }; value: any }) => {
-      const instanceIpPort = entry1.metric.instance;
+  checkFederateMetricsStatus(federatedMetrics: any) {
+    if (!federatedMetrics || federatedMetrics.length === 0) {
+      return;
+    }
+
+    this.prometheusConnectionErrors = [];
+
+    federatedMetrics.forEach((metricEntry: { metric: { instance: string }; value: any }) => {
+      const instanceIpPort = metricEntry.metric.instance;
       const instanceIp = instanceIpPort.split(':')[0];
       const instancePort = instanceIpPort.split(':')[1];
-      const prometheus_federation_status = entry1.value[1];
+      const federationStatus = metricEntry.value[1];
 
-      this.clusterDetailsArray.forEach((entry2) => {
-        if (entry2['name'] !== this.localClusterName) {
-          const prometheusUrl = entry2['prometheus_url']
-            .replace('http://', '')
-            .replace('https://', '');
+      this.clusterDetailsArray?.forEach((clusterDetails) => {
+        if (clusterDetails.name !== this.localClusterName) {
+          const prometheusUrl = clusterDetails.prometheus_url.replace(
+            /^(http:\/\/|https:\/\/)/,
+            ''
+          );
           const prometheusIp = prometheusUrl.split(':')[0];
-          const prometheusPort = prometheusUrl.split(':')[1];
+          const prometheusPort = prometheusUrl.split(':')[1] ? prometheusUrl.split(':')[1] : '443';
+
+          const existingError = this.prometheusConnectionErrors.find(
+            (errorEntry) => errorEntry.url === clusterDetails.url
+          );
 
           if (
+            !existingError &&
             instanceIp === prometheusIp &&
             instancePort === prometheusPort &&
-            prometheus_federation_status === '0'
+            federationStatus === '0'
           ) {
-            this.prometheusConnectionError.push({
-              cluster_name: entry2.name,
-              cluster_alias: entry2.cluster_alias,
-              url: entry2.url,
-              user: entry2.user,
-              ssl_verify: entry2.ssl_verify,
-              ssl_certificate: entry2.ssl_certificate
+            this.prometheusConnectionErrors.push({
+              cluster_name: clusterDetails.name,
+              cluster_alias: clusterDetails.cluster_alias,
+              url: clusterDetails.url
             });
+
+            this.multiClusterService
+              .reConnectCluster(
+                clusterDetails.url,
+                clusterDetails.user,
+                null,
+                clusterDetails.ssl_verify,
+                clusterDetails.ssl_certificate,
+                clusterDetails.ttl,
+                clusterDetails.token
+              )
+              .subscribe({
+                error: (errorResponse: any) => {
+                  const reconnectionError = errorResponse.error.detail;
+                  const errorIndex = this.prometheusConnectionErrors.findIndex(
+                    (errorEntry) => errorEntry.url === clusterDetails.url
+                  );
+                  if (errorIndex !== -1) {
+                    this.prometheusConnectionErrors[
+                      errorIndex
+                    ].reconnectionError = reconnectionError;
+                  }
+                },
+                next: (response: any) => {
+                  if (response === true) {
+                    const message = $localize`Cluster re-connected successfully`;
+                    this.notificationService.show(NotificationType.success, message);
+
+                    this.prometheusConnectionErrors = this.prometheusConnectionErrors.filter(
+                      (errorEntry) => errorEntry.url !== clusterDetails.url
+                    );
+                  }
+                }
+              });
           }
         }
       });
-    });
-  }
-
-  openReconnectClusterForm(cluster: any) {
-    const initialState = {
-      action: 'reconnect',
-      cluster: cluster
-    };
-    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
-      size: 'lg'
-    });
-    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
-      this.loading = true;
-      setTimeout(() => {
-        const currentRoute = this.router.url.split('?')[0];
-        this.multiClusterService.refreshMultiCluster(currentRoute);
-        this.getPrometheusData(this.prometheusService.lastHourDateObject);
-      }, this.PROMETHEUS_DELAY);
     });
   }
 

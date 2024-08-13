@@ -4,6 +4,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { MultiClusterComponent } from './multi-cluster.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { ToastrModule } from 'ngx-toastr';
 
 describe('MultiClusterComponent', () => {
   let component: MultiClusterComponent;
@@ -11,7 +12,7 @@ describe('MultiClusterComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule, SharedModule],
+      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
       declarations: [MultiClusterComponent],
       providers: [NgbActiveModal, DimlessBinaryPipe]
     }).compileComponents();

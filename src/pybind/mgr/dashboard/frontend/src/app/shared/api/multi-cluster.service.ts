@@ -172,16 +172,23 @@ export class MultiClusterService {
     password: string,
     ssl = false,
     cert = '',
-    ttl: number
+    ttl: number,
+    cluster_token?: string
   ) {
-    return this.http.put('api/multi-cluster/reconnect_cluster', {
+    const requestBody: any = {
       url,
       username,
       password,
       ssl_verify: ssl,
       ssl_certificate: cert,
       ttl: ttl
-    });
+    };
+
+    if (cluster_token) {
+      requestBody.cluster_token = cluster_token;
+    }
+
+    return this.http.put('api/multi-cluster/reconnect_cluster', requestBody);
   }
 
   private getClusterObserver() {

@@ -1233,12 +1233,6 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         result = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(result))
 
-    @_cli_write_command('orch prometheus get-prometheus-cert')
-    def _get_prometheus_cert(self) -> HandleCommandResult:
-        completion = self.get_prometheus_cert()
-        result = raise_if_exception(completion)
-        return HandleCommandResult(stdout=json.dumps(result))
-
     @_cli_write_command('orch prometheus remove-target')
     def _remove_prometheus_target(self, url: str) -> HandleCommandResult:
         completion = self.remove_prometheus_target(url)
@@ -1260,6 +1254,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.get_prometheus_access_info()
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
+
+    @_cli_write_command('orch get-security-config')
+    def _get_security_config(self) -> HandleCommandResult:
+        completion = self.get_security_config()
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
 
     @_cli_write_command('orch alertmanager get-credentials')
     def _get_alertmanager_access_info(self) -> HandleCommandResult:

@@ -4,6 +4,7 @@ ceph dashboard mgr plugin (based on CherryPy)
 """
 import collections
 import errno
+import json
 import logging
 import os
 import socket
@@ -12,8 +13,10 @@ import sys
 import tempfile
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
+
+from .controllers.multi_cluster import MultiCluster
 
 if TYPE_CHECKING:
     if sys.version_info >= (3, 8):
@@ -393,6 +396,11 @@ class Module(MgrModule, CherryPyConfig):
         else:
             self.set_store(item_key, inbuf)
         return 0, f'SSL {item_label} updated', ''
+
+    def get_cluster_credentials_files(self, targets: List[str]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        multi_cluster_instance = MultiCluster()
+        cluster_credentials_files, clusters_credentials = multi_cluster_instance.get_cluster_credentials_files(targets)
+        return cluster_credentials_files, clusters_credentials
 
     @CLIWriteCommand("dashboard set-ssl-certificate")
     def set_ssl_certificate(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
