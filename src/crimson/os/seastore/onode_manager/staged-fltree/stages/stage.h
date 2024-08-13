@@ -1443,7 +1443,7 @@ struct staged {
         if constexpr (NODE_TYPE == node_type_t::LEAF) {
           os << *value_ptr;
         } else {
-          os << value_ptr->value;
+          os << laddr_t(value_ptr->value);
         }
         os << " " << size << "B"
            << "  @" << offset << "B";
