@@ -1330,6 +1330,27 @@ public:
       );
     }
   }
+
+  template <InvokeReturnsInterruptibleFuture AsyncAction>
+  [[gnu::always_inline]]
+  static auto repeat_eagain(AsyncAction&& action) {
+    return seastar::do_with(
+      std::forward<AsyncAction>(action),
+      [] (auto &f) {
+      return repeat([&f] {
+	return std::invoke(f
+	).si_then([] {
+	  return seastar::stop_iteration::yes;
+	}).handle_error_interruptible(
+	  [](const crimson::ct_error::eagain &e) {
+	    return seastar::stop_iteration::no;
+	  },
+	  crimson::ct_error::pass_further_all{}
+	);
+      });
+    });
+  }
+
   template <typename AsyncAction>
   requires (!InvokeReturnsInterruptibleFuture<AsyncAction>)
   [[gnu::always_inline]]

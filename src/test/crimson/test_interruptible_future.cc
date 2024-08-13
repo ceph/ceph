@@ -282,6 +282,29 @@ TEST_F(seastar_test_suite_t, DISABLED_nested_interruptors)
   });
 }
 
+TEST_F(seastar_test_suite_t, interruptible_repeat_eagain)
+{
+  using interruptor =
+    interruptible::interruptor<TestInterruptCondition>;
+  run_async([] {
+    interruptor::with_interruption([] {
+      return seastar::do_with(
+	0,
+	[](auto &i) {
+	return interruptor::repeat_eagain([&i]() -> base_iertr::future<> {
+	  if (++i < 5) {
+	    return crimson::ct_error::eagain::make();
+	  }
+	  return base_iertr::now();
+	}).si_then([&i] {
+	  std::cout << i << std::endl;
+	  ceph_assert(i == 5);
+	});
+      });
+    }, [](std::exception_ptr) {}, false).unsafe_get();
+  });
+}
+
 #if 0
 // This seems to cause a hang in the gcc-9 linker on bionic
 TEST_F(seastar_test_suite_t, handle_error)
