@@ -125,7 +125,7 @@ namespace rgw::dedup {
     if (!hash_tab[idx].val.is_occupied()) {
       hash_tab[idx].key = *p_key;
       hash_tab[idx].val = val;
-      ldpp_dout(dpp, 0) << __func__ << "::add new entry" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::add new entry" << dendl;
       ceph_assert(hash_tab[idx].val.count == 1);
     }
     else {
@@ -133,19 +133,19 @@ namespace rgw::dedup {
       hash_tab[idx].val.count ++;
       if (!hash_tab[idx].val.has_shared_manifest() && shared_manifest) {
 	// replace value!
-	ldpp_dout(dpp, 0) << __func__ << "::Replace with shared_manifest" << dendl;
+	ldpp_dout(dpp, 20) << __func__ << "::Replace with shared_manifest" << dendl;
 	val.count = hash_tab[idx].val.count;
 	val.clear_singleton();
 	hash_tab[idx].val = val;
       }
       else if (hash_tab[idx].val.is_singleton()) {
-	ldpp_dout(dpp, 0) << __func__ << "::clear singleton" << dendl;
+	ldpp_dout(dpp, 20) << __func__ << "::clear singleton" << dendl;
 	// This is the second record with the same key -> clear singleton state
 	hash_tab[idx].val.clear_singleton();
       }
       ceph_assert(hash_tab[idx].val.count > 1);
     }
-    ldpp_dout(dpp, 0) << __func__ << "::DUP COUNT=" << hash_tab[idx].val.count << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::DUP COUNT=" << hash_tab[idx].val.count << dendl;
     return 0;
   }
   

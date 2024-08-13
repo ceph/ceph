@@ -154,17 +154,17 @@ namespace rgw::dedup {
   int disk_block_header_t::verify(disk_block_id_t expected_block_id, const DoutPrefixProvider* dpp)
   {
     if (unlikely(offset != BLOCK_MAGIC && offset != LAST_BLOCK_MAGIC)) {
-      ldpp_dout(dpp, 0) << __func__ << "::ERR::bad magic number (0x" << std::hex << offset << std::dec << ")" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERR::bad magic number (0x" << std::hex << offset << std::dec << ")" << dendl;
       return -2;
     }
 
     if (unlikely(rec_count > MAX_REC_IN_BLOCK) ) {
-      ldpp_dout(dpp, 0) << __func__ << "::ERR::rec_count=" << rec_count << " > MAX_REC_IN_BLOCK" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERR::rec_count=" << rec_count << " > MAX_REC_IN_BLOCK" << dendl;
       return -2;
     }
 
     if (unlikely(this->block_id != expected_block_id)) {
-      ldpp_dout(dpp, 0) << __func__ << "::ERR::block_id=" << block_id
+      ldpp_dout(dpp, 1) << __func__ << "::ERR::block_id=" << block_id
 			<< "!= expected_block_id=" << expected_block_id << dendl;
       return -3;
     }
@@ -369,9 +369,9 @@ namespace rgw::dedup {
     unsigned idx = 0;
     for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p, ++idx) {
       rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
-      ldpp_dout(dpp, 0) << idx << "] " << raw_obj.oid << dendl;
+      ldpp_dout(dpp, 20) << idx << "] " << raw_obj.oid << dendl;
     }
-    ldpp_dout(dpp, 0) << "==============================================" << dendl;
+    ldpp_dout(dpp, 20) << "==============================================" << dendl;
     return 0;
   }
 
@@ -451,7 +451,7 @@ namespace rgw::dedup {
     rgw_raw_obj raw_obj(pool, oid);	// TBD: what about loc ???
     int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << __func__ << "::failed to open rados context for " << oid << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::failed to open rados context for " << oid << dendl;
       return -1;
     }
 
@@ -464,7 +464,7 @@ namespace rgw::dedup {
     bufferlist bl;
     ret = ioctx.read(oid, bl, read_len, byte_offset);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERR: failed to read log obj " << oid << ", error is " << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 1) << "ERR: failed to read log obj " << oid << ", error is " << cpp_strerror(ret) << dendl;
       return ret;
     }
 
@@ -488,13 +488,13 @@ namespace rgw::dedup {
 	return 0;
       }
       else {
-	ldpp_dout(dpp, 0) << __func__ << "::Bad record in block=" << block_id
+	ldpp_dout(dpp, 1) << __func__ << "::Bad record in block=" << block_id
 			  << ", rec_id=" << rec_id << dendl;
 	return -1;
       }
     }
     else {
-      ldpp_dout(dpp, 0) << __func__ << "::unexpected short read n=" << n << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::unexpected short read n=" << n << dendl;
       return -1;
     }
 
@@ -514,14 +514,14 @@ namespace rgw::dedup {
     auto sysobj = store->svc()->sysobj;
     auto& pool  = store->svc()->zone->get_zone_params().log_pool;
 
-    ldpp_dout(dpp, 0)  << __func__ << "::worker_id=" << (uint32_t)worker_id
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
 		       << ", md5_shard=" << (uint32_t)md5_shard
 		       << ", seq_number=" << seq_number
 		       << ":: oid=" << oid << dendl;
     real_time mtime;
     int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, &mtime, null_yield, dpp);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERR: failed to read log obj " << oid << ", error is " << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 1) << "ERR: failed to read log obj " << oid << ", error is " << cpp_strerror(ret) << dendl;
     }
     return ret;
   }
@@ -539,12 +539,12 @@ namespace rgw::dedup {
     auto sysobj = store->svc()->sysobj;
     auto& pool  = store->svc()->zone->get_zone_params().log_pool;
 
-    ldpp_dout(dpp, 0) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
     //bool exclusive = true;
     bool exclusive = false; // allow overwrite of old objects
     int ret = rgw_put_system_obj(dpp, sysobj, pool, oid, bl, exclusive, nullptr, real_time(), null_yield);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to write log obj " << oid << " with: " << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to write log obj " << oid << " with: " << cpp_strerror(ret) << dendl;
     }
 
     return ret;
@@ -574,11 +574,11 @@ namespace rgw::dedup {
     // it is used as a signal to worker in the next step
 
     if (p_curr_block == &d_arr[0] && p_curr_block->is_empty()) {
-      ldpp_dout(dpp, 0) << __func__ << "::Empty buffers, generate terminating block" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "::Empty buffers, generate terminating block" << dendl;
     }
     p_curr_block->close_block(dpp, false);
 
-    ldpp_dout(dpp, 0) << __func__ << "::worker_id=" << (uint32_t)d_worker_id
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)d_worker_id
 		      << ", md5_shard=" << (uint32_t)d_md5_shard << dendl;
     int ret = flush(store);
     return ret;
@@ -592,7 +592,7 @@ namespace rgw::dedup {
 				     const parsed_etag_t    *p_parsed_etag,
 				     uint64_t                obj_size)
   {
-    ldpp_dout(dpp, 0) << __func__  << "::worker_id=" << (uint32_t)d_worker_id
+    ldpp_dout(dpp, 20) << __func__  << "::worker_id=" << (uint32_t)d_worker_id
 		      << ", md5_shard=" << (uint32_t)d_md5_shard
 		      << "::" << p_bucket->get_name() << "/" << p_obj->get_name() << dendl;
     disk_record_t rec;
@@ -619,7 +619,7 @@ namespace rgw::dedup {
       return 0;
     }
     else {
-      ldpp_dout(dpp, 0)  << __func__ << "::calling flush()" << dendl;
+      ldpp_dout(dpp, 20)  << __func__ << "::calling flush()" << dendl;
       ret = flush(store);
       p_curr_block->add_record(&rec, dpp);
 

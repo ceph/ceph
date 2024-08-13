@@ -51,6 +51,7 @@
 #include <optional>
 
 #include "cls/lock/cls_lock_client.h"
+#include "../../cls/cmpxattr/server.h"
 #include "include/compat.h"
 #include "include/util.h"
 #include "common/hobject.h"
@@ -2779,9 +2780,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       decode(sha1, p);
       cout << sha1.to_str() << std::endl;
     }
+    if (attr_name == "cluster_lock") {
+      named_time_lock_t ntl;
+      auto p = bl.cbegin();
+      decode(ntl, p);
+      utime_t duration = ceph_clock_now() - ntl.lock_time;
+      cout << ntl.owner << "::duration = " << duration
+	   << "::max_lock_duration = " << ntl.max_lock_duration << std::endl;
+    }
     else {
       string s(bl.c_str(), bl.length());
-      cout << s << std::endl;
     }
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
     if (!pool_name || nargs.size() < (obj_name ? 2 : 3)) {

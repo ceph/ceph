@@ -35,6 +35,9 @@ namespace rgw::dedup {
   using slab_id_t      = uint16_t;
   using block_offset_t = uint8_t;
   using record_id_t    = uint8_t;
+
+  static constexpr work_shard_t NULL_WORK_SHARD = 0xFF;
+  static constexpr md5_shard_t  NULL_MD5_SHARD  = 0xFF;
   struct __attribute__ ((packed)) disk_block_id_t
   {
   public:

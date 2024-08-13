@@ -279,10 +279,10 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
   vector<OSDOp> nops(1);
   OSDOp& op = nops[0];
   int r;
-#if 1
+#if 0
   // REMOVE-ME!!
   // temp output to help dedbug dedup code
-  if (strcmp(name, "user.rgw.etag") == 0) {
+  if (strcmp(name, "user.rgw.etag") == 0 || strcmp(name, "cluster_lock") == 0) {
     std::cerr << std::endl << __func__ << "::oid=" << (*pctx)->obs->oi.soid.oid << std::endl;
   }
 #endif

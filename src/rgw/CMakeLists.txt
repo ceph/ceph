@@ -153,6 +153,7 @@ set(librgw_common_srcs
   rgw_dedup_table.cc
   rgw_dedup_store.cc
   rgw_dedup_utils.cc
+  rgw_dedup_cluster.cc
   rgw_data_access.cc
   driver/d4n/d4n_directory.cc
   driver/d4n/d4n_policy.cc
