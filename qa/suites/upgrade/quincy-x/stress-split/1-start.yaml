@@ -11,6 +11,7 @@ overrides:
       - Reduced data availability
       - Degraded data redundancy
       - OSDMAP_FLAGS
+      - PG_AVAILABILITY
 tasks:
 - install:
     branch: quincy
