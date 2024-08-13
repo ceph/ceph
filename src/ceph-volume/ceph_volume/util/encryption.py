@@ -2,12 +2,14 @@ import base64
 import os
 import logging
 import re
+import json
 from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
-from .disk import lsblk, device_family, get_part_entry_type
+from .disk import lsblk, device_family, get_part_entry_type, _dd_read
 from packaging import version
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -82,7 +84,7 @@ def get_key_size_from_conf():
 
     return key_size
 
-def create_dmcrypt_key():
+def create_dmcrypt_key() -> str:
     """
     Create the secret dm-crypt key (KEK) used to encrypt/decrypt the Volume Key.
     """
@@ -91,7 +93,7 @@ def create_dmcrypt_key():
     return key
 
 
-def luks_format(key, device):
+def luks_format(key: str, device: str) -> None:
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup
 
@@ -140,7 +142,47 @@ def plain_open(key, device, mapping):
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
-def luks_open(key, device, mapping):
+def luks_close(mapping: str) -> None:
+    """Close a LUKS2 mapper device.
+
+    Args:
+        mapping (str): the name of the mapper to be closed.
+    """
+    command: List[str] = ['cryptsetup',
+                          'luksClose',
+                          mapping]
+
+    process.call(command,
+                 terminal_verbose=True,
+                 show_command=True)
+
+
+def rename_mapper(current: str, new: str) -> None:
+    """Rename a mapper
+
+    Args:
+        old (str): current name
+        new (str): new name
+    """
+
+    command: List[str] = [
+        'dmsetup',
+        'rename',
+        current,
+        new
+    ]
+
+    _, err, rc = process.call(command,
+                              terminal_verbose=True,
+                              show_command=True)
+    if rc:
+        raise RuntimeError(f"Can't rename mapper '{current}' to '{new}': {err}")
+
+
+def luks_open(key: str,
+              device: str,
+              mapping: str,
+              with_tpm: int = 0) -> None:
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup
 
@@ -150,23 +192,38 @@ def luks_open(key, device, mapping):
     :param device: absolute path to device
     :param mapping: mapping name used to correlate device. Usually a UUID
     """
-    command = [
-        'cryptsetup',
-        '--key-size',
-        get_key_size_from_conf(),
-        '--key-file',
-        '-',
-        '--allow-discards',  # allow discards (aka TRIM) requests for device
-        'luksOpen',
-        device,
-        mapping,
-    ]
+    command: List[str] = []
+    if with_tpm:
+        command = ['/usr/lib/systemd/systemd-cryptsetup',
+                   'attach',
+                   mapping,
+                   device,
+                   '-',
+                   'tpm2-device=auto,discard']
+        if bypass_workqueue(device):
+            command[-1] += ',no-read-workqueue,no-write-workqueue'
+    else:
+        command = [
+            'cryptsetup',
+            '--key-size',
+            get_key_size_from_conf(),
+            '--key-file',
+            '-',
+            '--allow-discards',  # allow discards (aka TRIM) requests for device
+            'luksOpen',
+            device,
+            mapping,
+        ]
 
-    if bypass_workqueue(device):
-        command.extend(['--perf-no_read_workqueue',
-                        '--perf-no_write_workqueue'])
+        if bypass_workqueue(device):
+            command.extend(['--perf-no_read_workqueue',
+                            '--perf-no_write_workqueue'])
 
-    process.call(command, stdin=key, terminal_verbose=True, show_command=True)
+    process.call(command,
+                 run_on_host=with_tpm,
+                 stdin=key,
+                 terminal_verbose=True,
+                 show_command=True)
 
 
 def dmcrypt_close(mapping, skip_path_check=False):
@@ -355,3 +412,160 @@ def prepare_dmcrypt(key, device, mapping):
         mapping
     )
     return '/dev/mapper/%s' % mapping
+
+
+class CephLuks2:
+    def __init__(self, device: str) -> None:
+        self.device: str = device
+        self.osd_fsid: str = ''
+        if self.is_ceph_encrypted:
+            self.osd_fsid = self.get_osd_fsid()
+
+    @property
+    def has_luks2_signature(self) -> bool:
+        try:
+            return _dd_read(self.device, 4) == 'LUKS'
+        except Exception as e:
+            raise RuntimeError(e)
+
+    @property
+    def is_ceph_encrypted(self) -> bool:
+        """Check whether a device is used for a Ceph encrypted OSD
+
+        Args:
+            device (str): The path of the device being checked.
+
+        Returns:
+            bool: `True` if the device is used by an encrypted Ceph OSD, else `False`.
+        """
+        result: bool = False
+        try:
+            result = self.has_luks2_signature and 'ceph_fsid=' in self.get_subsystem()
+        except RuntimeError:
+            pass
+        return result
+
+    def config_luks2(self, config: Dict[str, str]) -> None:
+        """Set the subsystem of a LUKS2 device
+
+        Args:
+            config (str): The config to apply to the LUKS2 device.
+
+        Raises:
+            RuntimeError: If it can't set LUKS2 configuration.
+        """
+        if not (0 < len(config) <= 2):
+            raise RuntimeError(f'Invalid config for LUKS2 device {self.device}')
+
+        valid_keys = ['label', 'subsystem']
+        if not all(key in valid_keys for key in config.keys()):
+            raise RuntimeError(f'LUKS2 config for device {self.device} can only be "label" and/or "subsystem".')
+
+        command: List[str] = ['cryptsetup', 'config',
+                              self.device]
+        for k, v in config.items():
+                command.extend([f'--{k}', v])
+        _, err, rc = process.call(command, verbose_on_failure=False)
+        if rc:
+            raise RuntimeError(f"Can't set luks2 config to {self.device}:\n{err}")
+
+    def get_label(self) -> str:
+        """Get the label of a LUKS2 device
+
+        Args:
+            device (str): The device to get the LUKS label from.
+
+        Returns:
+            str: The LUKS2 label of the device.
+        """
+        result: str = ''
+        try:
+            result = _dd_read(self.device, 48, 24)
+        except Exception:
+            raise RuntimeError(f"Can't get luks2 label from {self.device}")
+        return result
+
+    def get_osd_fsid(self) -> str:
+        """Get the osd fsid.
+
+        Returns:
+            str: The OSD fsid
+        """
+
+        result: str = ''
+        try:
+            subsystem = self.get_subsystem()
+            result = subsystem.split('=')[1]
+        except IndexError:
+            logger.debug(f"LUKS2 device {self.device} doesn't have ceph osd fsid detail. Please check LUKS2 label for this device.")
+        return result
+
+    def get_subsystem(self) -> str:
+        """Get the subsystem of a LUKS2 device
+
+        Args:
+            device (str): The device to get the LUKS subsystem from.
+
+        Returns:
+            str: The LUKS2 subsystem of the device.
+        """
+        result: str = ''
+        try:
+            result = _dd_read(self.device, 48, 208)
+        except Exception as e:
+            raise RuntimeError(f"Can't get luks2 label from {self.device}:\n{e}")
+        return result
+
+    def get_json_area(self) -> Dict[str, Any]:
+        """Retrieve the LUKS2 JSON configuration area from a given device.
+
+        This function reads the LUKS2 JSON configuration area from the specified 'device'.
+        It first checks if the device contains a LUKS2 signature. If not, an empty dictionary
+        is returned. If a LUKS2 signature is found, it reads the JSON configuration area
+        starting from byte offset 4096 (4 KB) and extracts the configuration data.
+
+        Args:
+            device (str): The path to the device.
+
+        Raises:
+            RuntimeError: If the LUKS2 JSON area on the device is invalid or cannot be decoded.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the extracted LUKS2 JSON configuration data.
+        """
+        result: Dict[str, Any] = {}
+        try:
+            data: str = _dd_read(self.device, 12288, 4096)
+            result = json.loads(data)
+        except json.JSONDecodeError:
+            msg: str = f"LUKS2 json area for device {self.device} seems invalid."
+            raise RuntimeError(msg)
+        except Exception:
+            raise
+
+        return result
+
+    @property
+    def is_tpm2_enrolled(self) -> bool:
+        """Check if a given device is enrolled with TPM2.
+
+        This function checks if the specified 'device' is enrolled with TPM2.
+        It first determines if the device is a LUKS encrypted volume by checking
+        its filesystem type using lsblk. If the filesystem type is 'crypto_LUKS',
+        it extracts the LUKS2 JSON configuration area from the device using the
+        'get_luks2_json_area' function. If the JSON area contains a 'systemd-tpm2'
+        token, it indicates that the device is enrolled with TPM2.
+
+        Args:
+            device (str): The path to the device.
+
+        Returns:
+            bool: True if the device is enrolled with TPM2, False otherwise.
+        """
+        if lsblk(self.device).get('FSTYPE', '') == 'crypto_LUKS':
+            json_area: Dict[str, Any] = self.get_json_area()
+            if 'tokens' in json_area.keys():
+                for token in json_area['tokens'].keys():
+                    if json_area['tokens'][token].get('type', '') == 'systemd-tpm2':
+                        return True
+        return False

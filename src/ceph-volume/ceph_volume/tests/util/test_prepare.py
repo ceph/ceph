@@ -130,28 +130,35 @@ class TestOsdMkfsBluestore(object):
         o.osd_mkfs()
         assert '--keyfile' in fake_call.calls[2]['args'][0]
 
-    def test_keyring_is_not_added(self, fake_call, monkeypatch):
+    def test_keyring_is_not_added(self, fake_call, monkeypatch, factory):
+        args = factory(dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
         o = objectstore.bluestore.BlueStore([])
+        o.args = args
         o.osd_id = '1'
         o.osd_fsid = 'asdf'
         o.osd_mkfs()
         assert '--keyfile' not in fake_call.calls[0]['args'][0]
 
-    def test_wal_is_added(self, fake_call, monkeypatch, objectstore_bluestore):
+    def test_wal_is_added(self, fake_call, monkeypatch, objectstore_bluestore, factory):
+        args = factory(dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
         bs = objectstore_bluestore(objecstore='bluestore',
                         osd_id='1',
                         osd_fid='asdf',
                         wal_device_path='/dev/smm1',
-                        cephx_secret='foo',)
+                        cephx_secret='foo',
+                        dmcrypt=False)
+        bs.args = args
         bs.osd_mkfs()
         assert '--bluestore-block-wal-path' in fake_call.calls[2]['args'][0]
         assert '/dev/smm1' in fake_call.calls[2]['args'][0]
 
-    def test_db_is_added(self, fake_call, monkeypatch):
+    def test_db_is_added(self, fake_call, monkeypatch, factory):
+        args = factory(dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
         bs = objectstore.bluestore.BlueStore([])
+        bs.args = args
         bs.db_device_path = '/dev/smm2'
         bs.osd_mkfs()
         assert '--bluestore-block-db-path' in fake_call.calls[2]['args'][0]

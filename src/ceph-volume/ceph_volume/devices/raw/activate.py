@@ -40,11 +40,18 @@ class Activate(object):
             help='The device for the OSD to start'
         )
         parser.add_argument(
+            '--devices',
+            help='The device for the OSD to start',
+            nargs='*',
+            default=[]
+        )
+        parser.add_argument(
             '--osd-id',
             help='OSD ID to activate'
         )
         parser.add_argument(
             '--osd-uuid',
+            dest='osd_fsid',
             help='OSD UUID to active'
         )
         parser.add_argument(
@@ -82,15 +89,11 @@ class Activate(object):
             return
         self.args = parser.parse_args(self.argv)
 
-        devs = []
         if self.args.device:
-            devs = [self.args.device]
-        if self.args.block_wal:
-            devs.append(self.args.block_wal)
-        if self.args.block_db:
-            devs.append(self.args.block_db)
+            if self.args.devices is None:
+                self.args.devices = [self.args.device]
+            else:
+                self.args.devices.append(self.args.device)
+
         self.objectstore = objectstore.mapping['RAW'][self.args.objectstore](args=self.args)
-        self.objectstore.activate(devs=devs,
-                                  start_osd_id=self.args.osd_id,
-                                  start_osd_uuid=self.args.osd_uuid,
-                                  tmpfs=not self.args.no_tmpfs)
+        self.objectstore.activate()

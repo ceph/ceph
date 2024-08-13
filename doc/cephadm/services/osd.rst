@@ -666,6 +666,21 @@ This example would deploy all OSDs with encryption enabled.
         all: true
       encrypted: true
 
+Ceph Squid onwards support tpm2 token enrollment to LUKS2 devices.
+You can add the `tpm2` to your OSD spec:
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: example_osd_spec_with_tpm2
+    placement:
+      host_pattern: '*'
+    spec:
+      data_devices:
+        all: true
+      encrypted: true
+      tpm2: true
+
 See a full list in the DriveGroupSpecs
 
 .. py:currentmodule:: ceph.deployment.drive_group

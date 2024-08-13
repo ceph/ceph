@@ -268,6 +268,12 @@ class Batch(object):
             help='Enable device encryption via dm-crypt',
         )
         parser.add_argument(
+            '--with-tpm',
+            dest='with_tpm',
+            help='Whether encrypted OSDs should be enrolled with TPM.',
+            action='store_true'
+        )
+        parser.add_argument(
             '--crush-device-class',
             dest='crush_device_class',
             help='Crush device class to assign this OSD to',
@@ -423,6 +429,7 @@ class Batch(object):
         global_args = [
             'bluestore',
             'dmcrypt',
+            'with_tpm',
             'crush_device_class',
             'no_systemd',
         ]

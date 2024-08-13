@@ -61,6 +61,12 @@ For enabling :ref:`encryption <ceph-volume-lvm-encryption>`, the ``--dmcrypt`` f
 
     ceph-volume lvm prepare --bluestore --dmcrypt --data vg/lv
 
+Starting with Ceph Squid, you can opt for TPM2 token enrollment for the created LUKS2 devices with the ``--with-tpm`` flag:
+
+.. prompt:: bash #
+
+    ceph-volume lvm prepare --bluestore --dmcrypt --with-tpm --data vg/lv
+
 If a ``block.db`` device or a ``block.wal`` device is needed, it can be
 specified with ``--block.db`` or ``--block.wal``. These can be physical
 devices, partitions, or logical volumes. ``block.db`` and ``block.wal`` are

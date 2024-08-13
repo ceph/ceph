@@ -83,6 +83,11 @@ common_args = {
         'action': arg_validators.DmcryptAction,
         'help': 'Enable device encryption via dm-crypt',
     },
+    '--with-tpm': {
+        'dest': 'with_tpm',
+        'help': 'Whether encrypted OSDs should be enrolled with TPM.',
+        'action': 'store_true'
+    },
     '--no-systemd': {
         'dest': 'no_systemd',
         'action': 'store_true',

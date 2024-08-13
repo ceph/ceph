@@ -1,7 +1,9 @@
 from . import lvmbluestore
 from . import rawbluestore
+from typing import Any, Dict
 
-mapping = {
+
+mapping: Dict[str, Any] = {
     'LVM': {
         'bluestore': lvmbluestore.LvmBlueStore
     },

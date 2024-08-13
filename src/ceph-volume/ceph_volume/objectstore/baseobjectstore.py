@@ -2,9 +2,11 @@ import logging
 import os
 import errno
 import time
+import tempfile
 from ceph_volume import conf, terminal, process
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system, disk
+from ceph_volume.util import encryption as encryption_utils
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -22,21 +24,23 @@ class BaseObjectStore:
         # for the OSD, this needs to be fixed. This could either be a file (!)
         # or a string (!!) or some flags that we would need to compound
         # into a dict so that we can convert to JSON (!!!)
-        self.secrets = {'cephx_secret': prepare_utils.create_key()}
-        self.cephx_secret = self.secrets.get('cephx_secret',
-                                             prepare_utils.create_key())
-        self.encrypted = 0
+        self.secrets: Dict[str, str] = {'cephx_secret': prepare_utils.create_key()}
+        self.cephx_secret: str = self.secrets.get('cephx_secret',
+                                                  prepare_utils.create_key())
+        self.encrypted: int = 0
         self.tags: Dict[str, Any] = {}
         self.osd_id: str = ''
-        self.osd_fsid = ''
-        self.block_lv: Optional["Volume"] = None
-        self.cephx_lockbox_secret = ''
+        self.osd_fsid: str = ''
+        self.cephx_lockbox_secret: str = ''
         self.objectstore: str = ''
         self.osd_mkfs_cmd: List[str] = []
-        self.block_device_path = ''
-        if hasattr(self.args, 'dmcrypt'):
-            if self.args.dmcrypt:
-                self.encrypted = 1
+        self.block_device_path: str = ''
+        self.dmcrypt_key: str = encryption_utils.create_dmcrypt_key()
+        self.with_tpm: int = int(getattr(self.args, 'with_tpm', False))
+        self.method: str = ''
+        if getattr(self.args, 'dmcrypt', False):
+            self.encrypted = 1
+            if not self.with_tpm:
                 self.cephx_lockbox_secret = prepare_utils.create_key()
                 self.secrets['cephx_lockbox_secret'] = \
                     self.cephx_lockbox_secret
@@ -152,3 +156,23 @@ class BaseObjectStore:
 
     def activate(self) -> None:
         raise NotImplementedError()
+
+    def enroll_tpm2(self, device: str) -> None:
+        """
+        Enrolls a device with TPM2 (Trusted Platform Module 2.0) using systemd-cryptenroll.
+        This method creates a temporary file to store the dmcrypt key and uses it to enroll the device.
+
+        Args:
+            device (str): The device path to be enrolled with TPM2.
+        """
+
+        if self.with_tpm:
+            tmp_dir: str = '/rootfs/tmp' if os.environ.get('I_AM_IN_A_CONTAINER', False) else '/tmp'
+            with tempfile.NamedTemporaryFile(mode='w', delete=True, dir=tmp_dir) as temp_file:
+                temp_file.write(self.dmcrypt_key)
+                temp_file.flush()
+                temp_file_name: str = temp_file.name.replace('/rootfs', '', 1)
+                cmd: List[str] = ['systemd-cryptenroll', '--tpm2-device=auto',
+                                  device, '--unlock-key-file', temp_file_name,
+                                  '--tpm2-pcrs', '9+12', '--wipe-slot', 'tpm2']
+                process.call(cmd, run_on_host=True, show_command=True)
