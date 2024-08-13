@@ -78,6 +78,7 @@ class TestPrepare(object):
         with pytest.raises(RuntimeError) as error:
             self.p.args = Mock()
             self.p.args.data = '/dev/sdfoo'
+            self.p.args.with_tpm = '0'
             self.p.get_lv = Mock()
             self.p.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=self.p.args)
             self.p.objectstore.safe_prepare()

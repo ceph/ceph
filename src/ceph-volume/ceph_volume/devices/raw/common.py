@@ -1,7 +1,7 @@
 import argparse
 from ceph_volume.util import arg_validators
 
-def create_parser(prog, description):
+def create_parser(prog: str, description: str) -> argparse.ArgumentParser:
     """
     Both prepare and create share the same parser, those are defined here to
     avoid duplication
@@ -58,6 +58,12 @@ def create_parser(prog, description):
         action=arg_validators.DmcryptAction,
         help='Enable device encryption via dm-crypt',
     )
+    parser.add_argument(
+        '--with-tpm',
+        dest='with_tpm',
+        help='Whether encrypted OSDs should be enrolled with TPM.',
+        action='store_true'
+    ),
     parser.add_argument(
         '--osd-id',
         help='Reuse an existing OSD id',
