@@ -5332,12 +5332,12 @@ int RGWRados::Object::complete_atomic_modification(const DoutPrefixProvider *dpp
   if (store->gc == nullptr) {
     ldpp_dout(dpp, 0) << "deleting objects inline since gc isn't initialized" << dendl;
     //Delete objects inline just in case gc hasn't been initialised, prevents crashes
-    store->delete_objs_inline(dpp, chain, tag);
+    store->delete_objs_inline(dpp, chain, tag, y);
   } else {
     auto [ret, leftover_chain] = store->gc->send_split_chain(chain, tag, y); // do it synchronously
     if (ret < 0 && leftover_chain) {
       //Delete objects inline if send chain to gc fails
-      store->delete_objs_inline(dpp, *leftover_chain, tag);
+      store->delete_objs_inline(dpp, *leftover_chain, tag, y);
     }
   }
   return 0;
@@ -5366,7 +5366,8 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWRados::send_chain_to_gc(cls
   return gc->send_split_chain(chain, tag, y);
 }
 
-void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain, const string& tag)
+void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_chain& chain,
+                                  const string& tag, optional_yield y)
 {
   string last_pool;
   std::unique_ptr<IoCtx> ctx(new IoCtx);
@@ -5390,7 +5391,7 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
     ":" << obj.key.name << dendl;
     ObjectWriteOperation op;
     cls_refcount_put(op, tag, true);
-    ret = ctx->operate(oid, &op);
+    ret = rgw_rados_operate(dpp, *ctx, oid, &op, y);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "delete_objs_inline: refcount put returned error " << ret << dendl;
     }
@@ -7221,7 +7222,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
 
   state.cur_ioctx->locator_set_key(read_obj.loc);
 
-  r = state.cur_ioctx->operate(read_obj.oid, &op, NULL);
+  r = rgw_rados_operate(dpp, *state.cur_ioctx, read_obj.oid, &op, nullptr, y);
   ldpp_dout(dpp, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
