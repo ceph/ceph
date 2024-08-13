@@ -3300,9 +3300,8 @@ options:
   level: advanced
   desc: Max shards that dynamic resharding can create
   long_desc: This is the maximum number of bucket index shards that dynamic sharding
-    is able to create on its own. This does not limit user requested resharding. Ideally
-    this value is a prime number.
-  default: 1999
+    is able to create on its own. This does not limit user requested resharding.
+  default: 4999
   services:
   - rgw
   see_also:
