@@ -199,12 +199,12 @@ scrape_configs:
   - job_name: 'federate_{{ loop.index }}'
     scrape_interval: 15s
     honor_labels: true
-    metrics_path: '/federate'
+    metrics_path: {{ federate_path }}
     relabel_configs:
     - source_labels: [__address__]
       target_label: cluster
       replacement: {{ cluster_fsid }}
-{% if secure_monitoring_stack %}
+{% if security_enabled %}
     scheme: https
     tls_config:
       ca_file: {{ details['cert_file_name'] }}

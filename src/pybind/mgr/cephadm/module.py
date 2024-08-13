@@ -3187,18 +3187,6 @@ Then run the following:
         return 'prometheus credentials updated correctly'
 
     @handle_orch_error
-    def set_prometheus_cert(self, cert: str) -> str:
-        self.set_store(PrometheusService.PROMETHEUS_CERT_CFG_KEY, cert)
-        return 'prometheus cert stored correctly'
-
-    @handle_orch_error
-    def get_prometheus_cert(self) -> str:
-        prometheus_cert = self.get_store(PrometheusService.PROMETHEUS_CERT_CFG_KEY)
-        if prometheus_cert is None:
-            prometheus_cert = ''
-        return prometheus_cert
-
-    @handle_orch_error
     def set_custom_prometheus_alerts(self, alerts_file: str) -> str:
         self.set_store('services/prometheus/alerting/custom_alerts.yml', alerts_file)
         # need to reconfig prometheus daemon(s) to pick up new alerts file
@@ -3209,27 +3197,24 @@ Then run the following:
     @handle_orch_error
     def set_prometheus_target(self, url: str) -> str:
         try:
-            if url.startswith("http://") or url.startswith("https://"):
-                return f"Invalid URL '{url}'. It should be in the format host_ip:port"
-
-            parsed_url_with_scheme = urlparse(f'http://{url}')
-            host = parsed_url_with_scheme.hostname
-            port = parsed_url_with_scheme.port
-
-            if not host or port is None:
-                raise ValueError("Hostname or port is missing.")
-
+            parsed_url = urlparse(url)
+            host = parsed_url.hostname
+            port = parsed_url.port
+            if not host:
+                return 'Invalid URL. Hostname is missing.'
             ipaddress.ip_address(host)
-
-        except (ValueError, OSError) as e:
-            return f"Invalid URL. {e}"
+            url = f"{host}:{port}" if port else host
+        except ValueError as e:
+            return f'Invalid url. {str(e)}'
         prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+        # Add the target URL if it does not already exist
         if url not in prometheus_spec.targets:
             prometheus_spec.targets.append(url)
         else:
             return f"Target '{url}' already exists.\n"
-        if not prometheus_spec:
-            return "Service prometheus not found\n"
+        # Redeploy daemons after applying the configuration
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
         spec = ServiceSpec.from_json(prometheus_spec.to_json())
         self.apply([spec], no_overwrite=False)
@@ -3268,6 +3253,12 @@ Then run the following:
         return {'user': user,
                 'password': password,
                 'certificate': self.cert_mgr.get_root_ca()}
+
+    @handle_orch_error
+    def get_security_config(self) -> Dict[str, bool]:
+        security_enabled, mgmt_gw_enabled, _ = self._get_security_config()
+        return {'security_enabled': security_enabled,
+                'mgmt_gw_enabled': mgmt_gw_enabled}
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:

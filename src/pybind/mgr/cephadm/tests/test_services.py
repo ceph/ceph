@@ -833,18 +833,6 @@ class TestMonitoring:
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=smb
 
-                  - job_name: 'federate'
-                    scrape_interval: 15s
-                    honor_labels: true
-                    metrics_path: '/federate'
-                    params:
-                      'match[]':
-                        - '{job="ceph"}'
-                        - '{job="node"}'
-                        - '{job="haproxy"}'
-                        - '{job="ceph-exporter"}'
-                    static_configs:
-                    - targets: []
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(

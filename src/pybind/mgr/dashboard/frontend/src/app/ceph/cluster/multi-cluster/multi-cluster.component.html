@@ -70,20 +70,20 @@
                       spacingClass="mb-3"
                       [showTitle]="false"
                       size="slim"
-                      *ngIf="prometheusConnectionError.length > 0"
+                      *ngIf="prometheusConnectionErrors.length > 0"
                       (dismissed)="onDismissed()"
                       [dismissible]="true"
                       i18n>
-        <div>
-          <p>Couldn't fetch metrics from the following clusters. Please reconnect the respective clusters to re-establish the prometheus connection - <br></p>
-          <span *ngFor="let cluster of prometheusConnectionError">
-            {{ cluster['cluster_alias']}} - {{ cluster['cluster_name'] }}
-            <button class="btn btn-primary btn-sm"
-                    type="button"
-                    (click)="openReconnectClusterForm(cluster)">Reconnect
-            </button>
-          </span>
+      <div>
+        <p><strong>Could not retrieve metrics from the following clusters:</strong></p>
+        <div *ngFor="let cluster of prometheusConnectionErrors">
+          <p>
+            <strong>Cluster Name:</strong> {{ cluster['cluster_alias'] }}<br>
+            <strong>Cluster ID:</strong> {{ cluster['cluster_name'] }}<br>
+            <strong>Issue:</strong> {{ cluster.reconnectionError ? cluster.reconnectionError : 'Security configuration error' }}<br>
+          </p>
         </div>
+      </div>
       </cd-alert-panel>
       <cd-alert-panel type="info"
                       spacingClass="mb-3"
