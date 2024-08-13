@@ -166,23 +166,11 @@
 </ng-template>
 
 <ng-template #simplifiedSummary>
-  <span *ngIf="!dropdownTotalError else showErrorNum">
+  <span>
     {{ data }}
     <i class="text-success"
        [ngClass]="[icons.success]"></i>
   </span>
-  <ng-template #showErrorNum>
-    <span *ngIf="data - dropdownTotalError  > 0">
-      {{ data - dropdownTotalError  }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
-    </span>
-    <span>
-      {{ dropdownTotalError  }}
-      <i class="text-danger"
-         [ngClass]="[icons.danger]"></i>
-    </span>
-  </ng-template>
 </ng-template>
 
 <ng-template #noLinkTitle>
