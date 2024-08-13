@@ -218,82 +218,6 @@ static int cmp_set_vals(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   return cls_cxx_map_set_vals(hctx, &values);
 }
 
-static int cmp_vals_set_vals(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  cmp_vals_set_vals_op op;
-  try {
-    auto p = in->cbegin();
-    decode(op, p);
-  } catch (const buffer::error&) {
-    CLS_LOG(0, "ERROR: %s: failed to decode input", __func__);
-    return -EINVAL;
-  }
-
-  // read the values for each key to compare
-  std::map<std::string, bufferlist> cmp_values;
-  //int r = cls_cxx_map_get_vals_by_keys(hctx, cmp_keys, &cmp_values);
-  for (const auto& kv : op.cmp_pairs) {
-    const std::string &key = kv.first;
-    //std::cerr << __func__ << "::calling cls_cxx_getxattr key=" << key << std::endl;
-    ceph::bufferlist bl;
-    //int ret = cls_cxx_map_get_val(hctx, key, &bl);
-    int ret = cls_cxx_getxattr(hctx, key.c_str(), &bl);
-    if (ret < 0) {
-      CLS_LOG(4, "ERROR: %s: cls_cxx_getxattr() for key=%s ret=%d",
-	      __func__, key.c_str(), ret);
-      std::cerr << __func__ << "::failed getxattr() for key=" << key << ", ret=" << ret << std::endl;
-      return -1;
-    } else {
-      cmp_values[key] = bl;
-    }
-  }
-  //std::cerr << __func__ << "::cmp_values.size() = " << cmp_values.size() << std::endl;
-  auto v = cmp_values.begin();
-  for (const auto& [key, input] : op.cmp_pairs) {
-    auto k = cmp_values.end();
-    bufferlist value;
-    if (v != cmp_values.end() && v->first == key) {
-      value = std::move(v->second);
-      k = v++;
-      CLS_LOG(20, "%s::comparing key=%s mode=%d op=%d",
-	      __func__, key.c_str(), (int)op.mode, (int)op.comparison);
-    } else {
-      CLS_LOG(20, "%s:: missing key=%s, abort operation", __func__, key.c_str());
-      std::cerr << __func__ << "::missing  key=" << key << std::endl;
-      return -EINVAL;
-    }
-
-    int ret = compare_value(op.mode, op.comparison, input, value);
-    if (ret <= 0) {
-      // unsuccessful comparison
-      CLS_LOG(10, "%s:: failed compare key=%s ret=%d", __func__, key.c_str(), ret);
-      std::cerr << __func__ << "::failed compare key=" << key
-		<< ", input=" << input << ", value=" << value << std::endl;
-      return -1;
-    }
-
-    // successful comparison
-    CLS_LOG(20, "%s:: successful comparison key=%s", __func__, key.c_str());
-  }
-
-  // if arrived here all keys in the cmp_pairs passed check
-  // overwrite all key/values in the set_pairs
-  for (const auto& [key, value] : op.set_pairs) {
-    int ret = cls_cxx_setxattr(hctx, key.c_str(), &value);
-    if (ret == 0) {
-      CLS_LOG(20, "%s:: successful set xattr key=%s", __func__, key.c_str());
-      std::cerr << __func__ << "::successful set xattr key=" << key << std::endl;
-    }
-    else {
-      CLS_LOG(4, "ERROR: %s failed to set xattr key=%s ret=%d", __func__, key.c_str(), ret);
-      std::cerr << __func__ << "::failed to set xattr key=" << key << ", ret=" << ret  << std::endl;
-      return ret;
-    }
-  }
-
-  return 0;
-}
-
 static int cmp_rm_keys(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   cmp_rm_keys_op op;
@@ -365,7 +289,6 @@ CLS_INIT(cmpomap)
   cls_handle_t h_class;
   cls_method_handle_t h_cmp_vals;
   cls_method_handle_t h_cmp_set_vals;
-  cls_method_handle_t h_cmp_vals_set_vals;
   cls_method_handle_t h_cmp_rm_keys;
 
   cls_register("cmpomap", &h_class);
@@ -374,8 +297,6 @@ CLS_INIT(cmpomap)
                           cmp_vals, &h_cmp_vals);
   cls_register_cxx_method(h_class, "cmp_set_vals", CLS_METHOD_RD | CLS_METHOD_WR,
                           cmp_set_vals, &h_cmp_set_vals);
-  cls_register_cxx_method(h_class, "cmp_vals_set_vals", CLS_METHOD_RD | CLS_METHOD_WR,
-			  cmp_vals_set_vals, &h_cmp_vals_set_vals);
   cls_register_cxx_method(h_class, "cmp_rm_keys", CLS_METHOD_RD | CLS_METHOD_WR,
                           cmp_rm_keys, &h_cmp_rm_keys);
 }
