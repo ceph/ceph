@@ -83,8 +83,11 @@ public:
   void check_sub(Subscription *sub);
 
 private:
+  bool encode_last_gw_version(MonSession *session, std::string gw_id = "");
   void synchronize_last_beacon();
-
+  static  int is_last_version(uint64_t features) {
+    return HAVE_FEATURE(features, SERVER_SQUID);
+  }
 };
 
 #endif /* MON_NVMEGWMONITOR_H_ */

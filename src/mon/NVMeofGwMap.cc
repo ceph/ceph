@@ -28,7 +28,7 @@ using std::string;
 #define dout_prefix *_dout << "nvmeofgw " << __PRETTY_FUNCTION__ << " "
 
 void NVMeofGwMap::to_gmap(
-  std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const
+  std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap, bool gw_version_last) const
 {
   Gmap.clear();
   for (const auto& created_map_pair: created_gws) {
@@ -43,7 +43,7 @@ void NVMeofGwMap::to_gmap(
       for (const auto& sub: gw_created.subsystems) {
 	gw_state.subsystems.insert({
 	    sub.nqn,
-	    NqnState(sub.nqn, gw_created.sm_state, gw_created)
+	    NqnState(sub.nqn, gw_created.sm_state, gw_created, gw_version_last)
 	  });
       }
       Gmap[group_key][gw_id] = gw_state;
