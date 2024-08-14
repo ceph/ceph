@@ -333,13 +333,11 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 
 static boost::optional<Policy>
 get_iam_policy_from_attr(CephContext* cct,
-                         const map<string, bufferlist>& attrs)
+                         const map<string, bufferlist>& attrs,
+                         const string& tenant)
 {
   if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
-    // resource policy is not restricted to the current tenant
-    const std::string* policy_tenant = nullptr;
-
-    return Policy(cct, policy_tenant, i->second.to_str(), false);
+    return Policy(cct, &tenant, i->second.to_str(), false);
   } else {
     return none;
   }
@@ -424,7 +422,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     mpobj->set_in_extra_data(true);
     object = mpobj.get();
   }
-  policy = get_iam_policy_from_attr(s->cct, bucket_attrs);
+  policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
 
   int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
 				     acl, storage_class, object, s->yield);
@@ -602,7 +600,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   }
 
   try {
-    s->iam_policy = get_iam_policy_from_attr(s->cct, s->bucket_attrs);
+    s->iam_policy = get_iam_policy_from_attr(s->cct, s->bucket_attrs, s->bucket_tenant);
   } catch (const std::exception& e) {
     ldpp_dout(dpp, 0) << "Error reading IAM Policy: " << e.what() << dendl;
 
@@ -1971,7 +1969,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
     }
-    _bucket_policy = get_iam_policy_from_attr(s->cct, bucket_attrs);
+    _bucket_policy = get_iam_policy_from_attr(s->cct, bucket_attrs, auth_tenant);
     bucket_policy = &_bucket_policy;
     pbucket = ubucket.get();
   } else {
@@ -2106,7 +2104,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
           return r;
 	}
 	auto _bucket_policy = get_iam_policy_from_attr(
-	  s->cct, tmp_bucket->get_attrs());
+	  s->cct, tmp_bucket->get_attrs(), auth_tenant);
         bucket_policy = _bucket_policy.get_ptr();
 	buckets[bucket_name].swap(tmp_bucket);
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
@@ -5553,7 +5551,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
   if (op_ret < 0) {
     return op_ret;
   }
-  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs());
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket_tenant);
 
   //Add destination bucket tags for authorization
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, dest_iam_policy, s->iam_identity_policies, s->session_policies);
@@ -7196,7 +7194,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  auto policy = get_iam_policy_from_attr(s->cct, battrs);
+  auto policy = get_iam_policy_from_attr(s->cct, battrs, binfo.bucket.tenant);
 
   bucket_owner = bacl.get_owner();
 
@@ -7536,7 +7534,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  auto policy = get_iam_policy_from_attr(s->cct, battrs);
+  auto policy = get_iam_policy_from_attr(s->cct, battrs, binfo.bucket.tenant);
 
   return verify_bucket_permission(this, s, ARN(obj), s->user_acl, bacl, policy,
                                   s->iam_identity_policies, s->session_policies,
@@ -8180,7 +8178,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
 
   try {
     const Policy p(
-      s->cct, nullptr, data.to_str(),
+      s->cct, &s->bucket_tenant, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
     if (s->bucket_access_conf &&
