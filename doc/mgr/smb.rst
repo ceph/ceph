@@ -55,7 +55,7 @@ Create Cluster
 
 .. code:: bash
 
-    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>]
+    $ ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>]
 
 Create a new logical cluster, identified by the cluster id value. The cluster
 create command must specify the authentication mode the cluster will use. This
@@ -88,6 +88,14 @@ custom_dns
     not configured to resolve DNS entries within AD domain(s).
 placement
     A Ceph orchestration :ref:`placement specifier <orchestrator-cli-placement-spec>`
+clustering
+    Optional. Control if a cluster abstraction actually uses Samba's clustering
+    mechanism.  The value may be one of ``default``, ``always``, or ``never``.
+    A ``default`` value indicates that clustering should be enabled if the
+    placement count value is any value other than 1. A value of ``always``
+    enables clustering regardless of the placement count. A value of ``never``
+    disables clustering regardless of the placement count. If unspecified,
+    ``default`` is assumed.
 
 Remove Cluster
 ++++++++++++++
@@ -360,6 +368,14 @@ custom_dns
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
+clustering
+    Optional. Control if a cluster abstraction actually uses Samba's clustering
+    mechanism.  The value may be one of ``default``, ``always``, or ``never``.
+    A ``default`` value indicates that clustering should be enabled if the
+    placement count value is any value other than 1. A value of ``always``
+    enables clustering regardless of the placement count. A value of ``never``
+    disables clustering regardless of the placement count. If unspecified,
+    ``default`` is assumed.
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
