@@ -977,7 +977,7 @@ int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 15) << "radoslist added to visited list DLO=\"" <<
       oid << "\"" << dendl;
 
-    char* prefix_path_c = attr_it->second.c_str();
+    const char* prefix_path_c = attr_it->second.c_str();
     const std::string& prefix_path = prefix_path_c;
 
     const size_t sep_pos = prefix_path.find('/');

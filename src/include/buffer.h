@@ -1170,7 +1170,8 @@ struct error_code;
      * get a char
      */
     const char& operator[](unsigned n) const;
-    char *c_str();
+    char* data(); // may return null if bl contains non-writeable buffers
+    const char *c_str();
     std::string to_str() const;
 
     void substr_of(const list& other, unsigned off, unsigned len);

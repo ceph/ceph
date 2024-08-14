@@ -568,7 +568,8 @@ public:
     output.clear();
     buffer::ptr buf(aligned_size + AES_256_IVSIZE);
     unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
-    unsigned char* input_raw = reinterpret_cast<unsigned char*>(input.c_str());
+    const unsigned char* input_raw =
+      reinterpret_cast<const unsigned char*>(input.c_str());
 
     /* decrypt main bulk of data */
     result = cbc_transform(buf_raw,
