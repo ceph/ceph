@@ -295,8 +295,9 @@ double buffer_iterator()
   for (int i = 0; i < count; i++) {
     auto it = b.cbegin();
     while (!it.end()) {
-      sum += (static_cast<const char*>(it.get_current_ptr().c_str()))[it.get_remaining()-1];
-      ++it;
+      const char* c;
+      it.get_ptr_and_advance(1, &c);
+      sum += *c;
     }
   }
   uint64_t stop = Cycles::rdtsc();
