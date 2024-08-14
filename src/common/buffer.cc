@@ -676,14 +676,6 @@ static ceph::spinlock debug_lock;
   }
 
   template<bool is_const>
-  buffer::ptr buffer::list::iterator_impl<is_const>::get_current_ptr() const
-  {
-    if (p == ls->end())
-      throw end_of_buffer();
-    return ptr(*p, p_off, p->length() - p_off);
-  }
-
-  template<bool is_const>
   bool buffer::list::iterator_impl<is_const>::is_pointing_same_raw(
     const ptr& other) const
   {
