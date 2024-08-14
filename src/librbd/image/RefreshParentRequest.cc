@@ -28,7 +28,7 @@ RefreshParentRequest<I>::RefreshParentRequest(
     const MigrationInfo &migration_info, Context *on_finish)
   : m_child_image_ctx(child_image_ctx), m_parent_md(parent_md),
     m_migration_info(migration_info), m_on_finish(on_finish),
-    m_parent_snap_id(CEPH_NOSNAP), m_error_result(0) {
+    m_error_result(0) {
 }
 
 template <typename I>
