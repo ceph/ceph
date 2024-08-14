@@ -135,10 +135,10 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  struct remap_entry {
+  struct remap_entry_t {
     extent_len_t offset;
     extent_len_t len;
-    remap_entry(extent_len_t _offset, extent_len_t _len) {
+    remap_entry_t(extent_len_t _offset, extent_len_t _len) {
       offset = _offset;
       len = _len;
     }
@@ -159,7 +159,7 @@ public:
   virtual remap_ret remap_mappings(
     Transaction &t,
     LBAMappingRef orig_mapping,
-    std::vector<remap_entry> remaps,
+    std::vector<remap_entry_t> remaps,
     std::vector<LogicalCachedExtentRef> extents  // Required if and only
 						 // if pin isn't indirect
     ) = 0;

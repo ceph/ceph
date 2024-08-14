@@ -230,7 +230,7 @@ struct object_data_handler_test_t:
     return ret;
   }
 
-  using remap_entry = TransactionManager::remap_entry;
+  using remap_entry_t = TransactionManager::remap_entry_t;
   LBAMappingRef remap_pin(
     Transaction &t,
     LBAMappingRef &&opin,
@@ -239,7 +239,7 @@ struct object_data_handler_test_t:
     auto pin = with_trans_intr(t, [&](auto& trans) {
       return tm->remap_pin<ObjectDataBlock>(
         trans, std::move(opin), std::array{
-          remap_entry(new_offset, new_len)}
+          remap_entry_t(new_offset, new_len)}
       ).si_then([](auto ret) {
         return std::move(ret[0]);
       });

@@ -388,19 +388,19 @@ public:
    * Remap original extent to new extents.
    * Return the pins of new extent.
    */
-  using remap_entry = LBAManager::remap_entry;
+  using remap_entry_t = LBAManager::remap_entry_t;
   using remap_pin_iertr = base_iertr;
   using remap_pin_ret = remap_pin_iertr::future<std::vector<LBAMappingRef>>;
   template <typename T, std::size_t N>
   remap_pin_ret remap_pin(
     Transaction &t,
     LBAMappingRef &&pin,
-    std::array<remap_entry, N> remaps) {
+    std::array<remap_entry_t, N> remaps) {
     static_assert(std::is_base_of_v<LogicalCachedExtent, T>);
 
 #ifndef NDEBUG
     std::sort(remaps.begin(), remaps.end(),
-      [](remap_entry x, remap_entry y) {
+      [](remap_entry_t x, remap_entry_t y) {
         return x.offset < y.offset;
     });
     auto original_len = pin->get_length();
@@ -513,7 +513,7 @@ public:
 	return lba_manager->remap_mappings(
 	  t,
 	  std::move(pin),
-	  std::vector<remap_entry>(remaps.begin(), remaps.end()),
+	  std::vector<remap_entry_t>(remaps.begin(), remaps.end()),
 	  std::move(extents)
 	).si_then([FNAME, &t](auto ret) {
 	  SUBDEBUGT(seastore_tm, "remapped {} pins",

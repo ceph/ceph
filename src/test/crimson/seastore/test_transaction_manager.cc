@@ -1103,7 +1103,7 @@ struct transaction_manager_test_t :
     });
   }
 
-  using remap_entry = TransactionManager::remap_entry;
+  using remap_entry_t = TransactionManager::remap_entry_t;
   LBAMappingRef remap_pin(
     test_transaction_t &t,
     LBAMappingRef &&opin,
@@ -1120,7 +1120,7 @@ struct transaction_manager_test_t :
     auto pin = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->remap_pin<TestBlock>(
         trans, std::move(opin), std::array{
-          remap_entry(new_offset, new_len)}
+          remap_entry_t(new_offset, new_len)}
       ).si_then([](auto ret) {
         return std::move(ret[0]);
       });
@@ -1172,10 +1172,10 @@ struct transaction_manager_test_t :
         t,
         std::move(opin),
         std::array{
-          remap_entry(
+          remap_entry_t(
             0,
             new_offset),
-          remap_entry(
+          remap_entry_t(
             new_offset + new_len,
             o_len - new_offset - new_len)
         }
@@ -1211,7 +1211,7 @@ struct transaction_manager_test_t :
         t,
         std::move(opin),
         std::array{
-          remap_entry(
+          remap_entry_t(
             new_offset + new_len,
             o_len - new_offset - new_len)
         }
@@ -1242,7 +1242,7 @@ struct transaction_manager_test_t :
         t,
         std::move(opin),
         std::array{
-          remap_entry(
+          remap_entry_t(
             0,
             new_offset)
         }

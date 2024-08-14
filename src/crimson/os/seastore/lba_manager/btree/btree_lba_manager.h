@@ -445,7 +445,7 @@ public:
   remap_ret remap_mappings(
     Transaction &t,
     LBAMappingRef orig_mapping,
-    std::vector<remap_entry> remaps,
+    std::vector<remap_entry_t> remaps,
     std::vector<LogicalCachedExtentRef> extents) final {
     LOG_PREFIX(BtreeLBAManager::remap_mappings);
     assert((orig_mapping->is_indirect())
