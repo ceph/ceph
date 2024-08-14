@@ -11,13 +11,14 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { ConfigurationDetailsComponent } from './configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration.component';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 describe('ConfigurationComponent', () => {
   let component: ConfigurationComponent;
   let fixture: ComponentFixture<ConfigurationComponent>;
 
   configureTestBed({
-    declarations: [ConfigurationComponent, ConfigurationDetailsComponent],
+    declarations: [ConfigurationComponent, ConfigurationDetailsComponent, TableComponent],
     imports: [
       BrowserAnimationsModule,
       SharedModule,
@@ -39,8 +40,12 @@ describe('ConfigurationComponent', () => {
   });
 
   it('should check header text', () => {
-    expect(fixture.debugElement.query(By.css('.datatable-header')).nativeElement.textContent).toBe(
-      ['Name', 'Description', 'Current value', 'Default', 'Editable'].join('')
-    );
+    const cdTableEl = fixture.debugElement.query(By.directive(TableComponent));
+    const cdTableComponent: TableComponent = cdTableEl.componentInstance;
+    cdTableComponent.ngAfterViewInit();
+    fixture.detectChanges();
+    const actual = fixture.debugElement.query(By.css('thead')).nativeElement.textContent.trim();
+    const expected = 'Name  Description  Current value  Default  Editable';
+    expect(actual).toBe(expected);
   });
 });

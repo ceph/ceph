@@ -11,7 +11,7 @@
                 [hasDetails]="true"
                 (setExpandedRow)="setExpandedRow($event)"
                 (fetchData)="getDaemonList($event)">
-        <cd-rgw-daemon-details cdTableDetail
+        <cd-rgw-daemon-details *cdTableDetail
                                [selection]="expandedRow">
         </cd-rgw-daemon-details>
       </cd-table>

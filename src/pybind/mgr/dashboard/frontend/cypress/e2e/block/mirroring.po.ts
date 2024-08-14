@@ -19,10 +19,7 @@ export class MirroringPageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.index.url)
   editMirror(name: string, option: string) {
     // Clicks the pool in the table
-    this.getFirstTableCell(name).click();
-
-    // Clicks the Edit Mode button
-    cy.contains('button', 'Edit Mode').click();
+    this.clickRowActionButton(name, 'edit-mode');
 
     // Clicks the drop down in the edit pop-up, then clicks the Update button
     cy.get('cds-modal').should('be.visible');
@@ -37,7 +34,7 @@ export class MirroringPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   generateToken(poolName: string) {
-    cy.get('[aria-label="Create Bootstrap Token"]').first().click();
+    cy.get('[aria-label="Create Bootstrap Token"]').click();
     cy.get('cd-bootstrap-create-modal').within(() => {
       cy.get(`input[name=${poolName}]`).click({ force: true });
       cy.get('button[type=submit]').click();
@@ -51,7 +48,7 @@ export class MirroringPageHelper extends PageHelper {
     cy.get('cd-mirroring-pools').within(() => {
       this.getTableCell(this.poolsColumnIndex.name, poolName)
         .parent()
-        .find(`datatable-body-cell:nth-child(${this.poolsColumnIndex.health}) .badge`)
+        .find(`[cdstabledata]:nth-child(${this.poolsColumnIndex.health}) .badge`)
         .should(($ele) => {
           const newLabels = $ele.toArray().map((v) => v.innerText);
           expect(newLabels).to.include(status);

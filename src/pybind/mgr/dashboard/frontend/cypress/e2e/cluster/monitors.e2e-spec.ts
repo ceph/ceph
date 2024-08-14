@@ -42,20 +42,19 @@ describe('Monitors page', () => {
       monitors.getLegends().its(2).should('have.text', 'Not In Quorum');
 
       // verify correct columns on In Quorum table
-      monitors.getDataTableHeaders(0).contains('Name');
+      monitors.getDataTableHeaders().contains('Name');
 
-      monitors.getDataTableHeaders(0).contains('Rank');
+      monitors.getDataTableHeaders().contains('Rank');
 
-      monitors.getDataTableHeaders(0).contains('Public Address');
+      monitors.getDataTableHeaders().contains('Public Address');
 
-      monitors.getDataTableHeaders(0).contains('Open Sessions');
-
+      monitors.getDataTableHeaders().contains('Open Sessions');
       // verify correct columns on Not In Quorum table
-      monitors.getDataTableHeaders(1).contains('Name');
+      monitors.getDataTableHeaders().contains('Name');
 
-      monitors.getDataTableHeaders(1).contains('Rank');
+      monitors.getDataTableHeaders().contains('Rank');
 
-      monitors.getDataTableHeaders(1).contains('Public Address');
+      monitors.getDataTableHeaders().contains('Public Address');
     });
   });
 });

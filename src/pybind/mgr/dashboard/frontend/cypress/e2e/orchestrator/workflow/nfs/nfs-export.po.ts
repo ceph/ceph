@@ -35,8 +35,8 @@ export class NFSPageHelper extends PageHelper {
     cy.get('cd-submit-button').click();
   }
 
-  editExport(pseudo: string, editPseudo: string, url: string) {
-    this.navigateEdit(pseudo, true, true, url);
+  editExport(pseudo: string, editPseudo: string) {
+    this.navigateEdit(pseudo, true, true);
 
     cy.get('input[name=pseudo]').clear().type(editPseudo);
 

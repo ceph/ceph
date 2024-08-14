@@ -17,6 +17,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
 import { RgwDaemonDetailsComponent } from '../rgw-daemon-details/rgw-daemon-details.component';
 import { RgwDaemonListComponent } from './rgw-daemon-list.component';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 describe('RgwDaemonListComponent', () => {
   let component: RgwDaemonListComponent;
@@ -45,7 +46,7 @@ describe('RgwDaemonListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [RgwDaemonListComponent, RgwDaemonDetailsComponent],
+    declarations: [RgwDaemonListComponent, RgwDaemonDetailsComponent, TableComponent],
     imports: [
       BrowserAnimationsModule,
       HttpClientTestingModule,
@@ -78,8 +79,12 @@ describe('RgwDaemonListComponent', () => {
     tick();
     expect(listDaemonsSpy).toHaveBeenCalledTimes(1);
     expect(component.daemons).toEqual([daemon]);
+    const cdTableEl = fixture.debugElement.query(By.directive(TableComponent));
+    const cdTableComponent: TableComponent = cdTableEl.componentInstance;
+    cdTableComponent.ngAfterViewInit();
+    fixture.detectChanges();
     expect(fixture.debugElement.query(By.css('cd-table')).nativeElement.textContent).toContain(
-      'total of 1'
+      '1-1 of 1 item'
     );
 
     fixture.destroy();

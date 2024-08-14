@@ -56,29 +56,75 @@ describe('MgrModuleListComponent', () => {
     expect(tableActions).toEqual({
       'create,update,delete': {
         actions: ['Edit', 'Enable', 'Disable'],
-        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
       'create,update': {
         actions: ['Edit', 'Enable', 'Disable'],
-        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
       'create,delete': {
         actions: [],
-        primary: { multiple: '', executing: '', single: '', no: '' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
-      create: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      create: {
+        actions: [],
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
+      },
       'update,delete': {
         actions: ['Edit', 'Enable', 'Disable'],
-        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
       update: {
         actions: ['Edit', 'Enable', 'Disable'],
-        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       },
-      delete: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      delete: {
+        actions: [],
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
+      },
       'no-permissions': {
         actions: [],
-        primary: { multiple: '', executing: '', single: '', no: '' }
+        primary: {
+          multiple: '',
+          executing: '',
+          single: '',
+          no: ''
+        }
       }
     });
   });
@@ -129,7 +175,7 @@ describe('MgrModuleListComponent', () => {
       expect(component.table.refreshBtn).toHaveBeenCalled();
     }));
 
-    it.only('should not disable module without selecting one', () => {
+    it('should not disable module without selecting one', () => {
       expect(component.getTableActionDisabledDesc()).toBeTruthy();
     });
 

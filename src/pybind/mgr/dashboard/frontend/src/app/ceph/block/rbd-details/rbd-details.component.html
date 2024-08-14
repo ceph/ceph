@@ -169,8 +169,8 @@
 </ng-container>
 
 <ng-template #poolConfigurationSourceTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <ng-container *ngIf="+value; else global">
     <strong i18n
             i18n-ngbTooltip

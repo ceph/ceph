@@ -8,269 +8,6 @@
   line-height: 1;
 }
 
-.dataTables_wrapper {
-  margin-bottom: 25px;
-  // after bootstrap 8.0 the details table started to
-  // have an issue where the columns keep expanding to
-  // infinity.
-  // https://github.com/ceph/ceph/pull/40618#pullrequestreview-629010639
-  // making the max-width to 99.9% solves the issue as a temporary fix
-  // until we get a conclusive fix, this needs to be kept.
-  max-width: 99.9%;
-
-  .separator {
-    border-left: 1px solid vv.$datatable-divider-color;
-    display: inline-block;
-    height: 30px;
-    margin-left: 5px;
-    padding-left: 5px;
-    vertical-align: middle;
-  }
-
-  .widget-toolbar {
-    border-left: 1px solid vv.$datatable-divider-color;
-    float: right;
-    padding: 0 8px;
-
-    .form-check {
-      padding-left: 0;
-    }
-  }
-
-  .dataTables_length > input {
-    line-height: 25px;
-    text-align: right;
-  }
-}
-
-.dataTables_header {
-  background-color: vv.$gray-100;
-  border: 1px solid vv.$gray-400;
-  border-bottom: 0;
-  padding: 5px;
-  position: relative;
-
-  .cd-datatable-actions {
-    float: left;
-  }
-
-  .form-group {
-    padding-left: 8px;
-  }
-
-  .input-group {
-    border-left: 1px solid vv.$datatable-divider-color;
-    float: right;
-    max-width: 250px;
-    padding-left: 8px;
-    padding-right: 8px;
-    width: 40%;
-
-    .form-control {
-      height: 30px;
-    }
-  }
-
-  .input-group.dataTables_paginate {
-    min-width: 85px;
-    padding-right: 8px;
-    width: 8%;
-  }
-
-  .filter-chips {
-    float: right;
-    padding: 0 8px;
-
-    .badge-remove {
-      color: vv.$white;
-    }
-  }
-}
-
-::ng-deep cd-table .cd-datatable {
-  border: 1px solid vv.$gray-400;
-  margin-bottom: 0;
-  max-width: none !important;
-
-  .progress-linear {
-    display: block;
-    height: 5px;
-    margin: 0;
-    padding: 0;
-    position: relative;
-    width: 100%;
-
-    .container {
-      background-color: vv.$primary;
-
-      .bar {
-        background-color: vv.$primary;
-        height: 100%;
-        left: 0;
-        overflow: hidden;
-        position: absolute;
-        width: 100%;
-      }
-
-      .bar::before {
-        animation: progress-loading 3s linear infinite;
-        background-color: vv.$primary;
-        content: '';
-        display: block;
-        height: 100%;
-        left: -200px;
-        position: absolute;
-        width: 200px;
-      }
-    }
-  }
-
-  .datatable-header {
-    background-clip: padding-box;
-    background-color: vv.$gray-100;
-    background-image: linear-gradient(to bottom, vv.$gray-100 0, vv.$gray-200 100%);
-    background-repeat: repeat-x;
-    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#fffafafa', endColorstr='#ffededed', GradientType=0);
-
-    .sort-asc,
-    .sort-desc {
-      color: vv.$primary;
-    }
-
-    .datatable-header-cell {
-      @include mixins.table-cell;
-
-      font-weight: bold;
-      text-align: left;
-
-      .datatable-header-cell-label {
-        &::after {
-          font-family: ForkAwesome;
-          font-weight: 400;
-          height: 9px;
-          left: 10px;
-          line-height: 12px;
-          position: relative;
-          vertical-align: baseline;
-          width: 12px;
-        }
-      }
-
-      &.sortable {
-        .datatable-header-cell-label::after {
-          content: ' \f0dc';
-        }
-
-        &.sort-active {
-          &.sort-asc .datatable-header-cell-label::after {
-            content: ' \f160';
-          }
-
-          &.sort-desc .datatable-header-cell-label::after {
-            content: ' \f161';
-          }
-        }
-      }
-
-      &:first-child {
-        border-left: 0;
-      }
-    }
-  }
-
-  .datatable-body {
-    margin-bottom: -6px;
-
-    .empty-row {
-      background-color: lighten(vv.$primary, 45%);
-      font-style: italic;
-      font-weight: bold;
-      padding-bottom: 5px;
-      padding-top: 5px;
-      text-align: center;
-    }
-
-    .datatable-body-row {
-      &.clickable:hover .datatable-row-group {
-        background-color: lighten(vv.$primary, 45%);
-        transition-duration: 0.3s;
-        transition-property: background;
-        transition-timing-function: linear;
-      }
-
-      &.datatable-row-even {
-        background-color: vv.$white;
-      }
-
-      &.datatable-row-odd {
-        background-color: vv.$white;
-      }
-
-      &.active,
-      &.active:hover {
-        background-color: lighten(vv.$primary, 35%);
-      }
-
-      .datatable-body-cell {
-        @include mixins.table-cell;
-
-        &:first-child {
-          border-left: 0;
-        }
-
-        .datatable-body-cell-label {
-          display: block;
-          height: 100%;
-        }
-      }
-    }
-
-    .datatable-row-detail {
-      border-bottom: 2px solid vv.$gray-400;
-      overflow-y: visible !important;
-      padding: 20px;
-    }
-
-    .expand-collapse-icon {
-      display: block;
-      height: 100%;
-      text-align: center;
-
-      &:hover {
-        text-decoration: none;
-      }
-    }
-
-    .expand-collapse-icon-right::before {
-      @include row-details-icon;
-      content: '\f105';
-    }
-
-    .expand-collapse-icon-down::before {
-      @include row-details-icon;
-      content: '\f107';
-    }
-  }
-
-  .datatable-footer {
-    .selected-count,
-    .page-count {
-      font-style: italic;
-      min-height: 2rem;
-      padding-left: 0.3rem;
-      padding-top: 0.3rem;
-    }
-  }
-
-  .cd-datatable-checkbox {
-    text-align: center;
-
-    &:checked {
-      accent-color: vv.$primary;
-    }
-  }
-}
-
 @keyframes progress-loading {
   from {
     left: -200px;
@@ -296,4 +33,46 @@
   to {
     left: 100%;
   }
+}
+
+.reload {
+  animation-duration: 2500ms;
+  animation-iteration-count: infinite;
+  animation-name: spin;
+  animation-timing-function: linear;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.no-data {
+  font-size: 1.1rem;
+  height: 5rem;
+}
+
+::ng-deep .table-actions {
+  display: flex;
+  flex-flow: row-reverse;
+  gap: 0.1em;
+}
+
+.filter-tags {
+  background-color: var(--cds-layer-accent);
+  border-bottom: 1px solid var(--cds-layer-active);
+  color: var(--cds-text-primary);
+}
+
+::ng-deep div.cds--batch-actions.cds--batch-actions--active {
+  background-color: vv.$primary;
+}
+
+::ng-deep div.cds--batch-summary {
+  background-color: vv.$primary;
 }

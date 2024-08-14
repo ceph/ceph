@@ -46,10 +46,13 @@ export class HostsPageHelper extends PageHelper {
     }
   }
 
-  checkExist(hostname: string, exist: boolean) {
+  checkExist(hostname: string, exist: boolean, shouldReload = false) {
+    if (shouldReload) {
+      cy.reload(true, { log: true, timeout: 5 * 1000 });
+    }
     this.getTableCell(this.columnIndex.hostname, hostname, true)
       .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.hostname}) span`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.hostname}) span`)
       .should(($elements) => {
         const hosts = $elements.toArray().map((v) => v.innerText);
         if (exist) {
@@ -61,13 +64,12 @@ export class HostsPageHelper extends PageHelper {
   }
 
   remove(hostname: string) {
-    super.delete(hostname, this.columnIndex.hostname, 'hosts', true);
+    super.delete(hostname, this.columnIndex.hostname, 'hosts', true, false, true);
   }
 
   // Add or remove labels on a host, then verify labels in the table
   editLabels(hostname: string, labels: string[], add: boolean) {
-    this.getTableCell(this.columnIndex.hostname, hostname, true).click();
-    this.clickActionButton('edit');
+    this.clickRowActionButton(hostname, 'edit');
 
     // add or remove label badges
     if (add) {
@@ -90,10 +92,10 @@ export class HostsPageHelper extends PageHelper {
   checkLabelExists(hostname: string, labels: string[], add: boolean) {
     // Verify labels are added or removed from Labels column
     // First find row with hostname, then find labels in the row
-    this.getTableCell(this.columnIndex.hostname, hostname, true)
-      .click()
+    this.getTableCell(this.columnIndex.hostname, hostname, true).as('row').click();
+    cy.get('@row')
       .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.labels}) .badge`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.labels}) .badge`)
       .should(($ele) => {
         const newLabels = $ele.toArray().map((v) => v.innerText);
         for (const label of labels) {
@@ -110,8 +112,7 @@ export class HostsPageHelper extends PageHelper {
   maintenance(hostname: string, exit = false, force = false) {
     this.clearTableSearchInput();
     if (force) {
-      this.getTableCell(this.columnIndex.hostname, hostname, true).click();
-      this.clickActionButton('enter-maintenance');
+      this.clickRowActionButton(hostname, 'enter-maintenance');
 
       cy.get('cds-modal').within(() => {
         cy.contains('button', 'Continue').click();
@@ -119,7 +120,7 @@ export class HostsPageHelper extends PageHelper {
 
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .parent()
-        .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .badge`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           expect(status).to.include('maintenance');
@@ -129,28 +130,27 @@ export class HostsPageHelper extends PageHelper {
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .click()
         .parent()
-        .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status})`)
         .then(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           if (status[0].includes('maintenance')) {
-            this.clickActionButton('exit-maintenance');
+            this.clickRowActionButton(hostname, 'exit-maintenance');
           }
         });
 
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .parent()
-        .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status})`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           expect(status).to.not.include('maintenance');
         });
     } else {
-      this.getTableCell(this.columnIndex.hostname, hostname, true).click();
-      this.clickActionButton('enter-maintenance');
+      this.clickRowActionButton(hostname, 'enter-maintenance');
 
       this.getTableCell(this.columnIndex.hostname, hostname, true)
         .parent()
-        .find(`datatable-body-cell:nth-child(${this.columnIndex.status}) .badge`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.status}) .badge`)
         .should(($ele) => {
           const status = $ele.toArray().map((v) => v.innerText);
           expect(status).to.include('maintenance');
@@ -160,8 +160,7 @@ export class HostsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   drain(hostname: string) {
-    this.getTableCell(this.columnIndex.hostname, hostname, true).click();
-    this.clickActionButton('start-drain');
+    this.clickRowActionButton(hostname, 'start-drain');
     cy.wait(1000);
     this.checkLabelExists(hostname, ['_no_schedule'], true);
 
@@ -175,7 +174,7 @@ export class HostsPageHelper extends PageHelper {
   checkServiceInstancesExist(hostname: string, instances: string[]) {
     this.getTableCell(this.columnIndex.hostname, hostname, true)
       .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.services}) .badge`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.services}) .badge`)
       .should(($ele) => {
         const serviceInstances = $ele.toArray().map((v) => v.innerText);
         for (const instance of instances) {

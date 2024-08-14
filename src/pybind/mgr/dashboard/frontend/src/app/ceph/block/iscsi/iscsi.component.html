@@ -16,8 +16,8 @@
 </div>
 
 <ng-template #iscsiSparklineTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <span *ngIf="row.backstore === 'user:rbd'">
     <cd-sparkline [data]="value"
                   [isBinary]="row.cdIsBinary"></cd-sparkline>
@@ -29,8 +29,8 @@
 </ng-template>
 
 <ng-template #iscsiPerSecondTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <span *ngIf="row.backstore === 'user:rbd'">
     {{ value }} /s
   </span>
@@ -41,8 +41,8 @@
 </ng-template>
 
 <ng-template #iscsiRelativeDateTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <span *ngIf="row.backstore === 'user:rbd'">
     {{ value | relativeDate | notAvailable }}
   </span>

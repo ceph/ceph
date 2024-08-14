@@ -5,7 +5,7 @@
 </cd-table>
 
 <ng-template #configurationSourceTpl
-             let-value="value">
+             let-value="data.value">
 
   <div [ngSwitch]="value">
     <span *ngSwitchCase="'global'"
@@ -18,8 +18,8 @@
 </ng-template>
 
 <ng-template #configurationValueTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <div [ngSwitch]="row.type">
     <span *ngSwitchCase="typeField.bps">{{ value | dimlessBinaryPerSecond }}</span>
     <span *ngSwitchCase="typeField.milliseconds">{{ value | milliseconds }}</span>

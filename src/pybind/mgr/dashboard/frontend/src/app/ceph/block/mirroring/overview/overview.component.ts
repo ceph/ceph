@@ -47,18 +47,20 @@ export class OverviewComponent implements OnInit, OnDestroy {
 
     const createBootstrapAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.upload,
+      icon: 'document--add',
       click: () => this.createBootstrapModal(),
       name: $localize`Create Bootstrap Token`,
       canBePrimary: () => true,
-      disable: () => false
+      disable: () => false,
+      buttonKind: 'primary'
     };
     const importBootstrapAction: CdTableAction = {
       permission: 'update',
-      icon: Icons.download,
+      icon: 'document--import',
       click: () => this.importBootstrapModal(),
       name: $localize`Import Bootstrap Token`,
-      disable: () => false
+      disable: () => false,
+      buttonKind: 'tertiary'
     };
     this.tableActions = [createBootstrapAction, importBootstrapAction];
   }

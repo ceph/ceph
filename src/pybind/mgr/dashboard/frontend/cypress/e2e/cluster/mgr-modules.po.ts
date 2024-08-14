@@ -23,9 +23,10 @@ export class ManagerModulesPageHelper extends PageHelper {
     cy.contains('button', 'Update').click();
     // Checks if edits appear
     this.getExpandCollapseElement(name).should('be.visible').click();
-
     for (const input of inputs) {
-      cy.get('.datatable-body').last().contains(input.newValue);
+      cy.get('[data-testid="datatable-row-detail"] [cdstablerow] [cdstabledata] span').contains(
+        input.newValue
+      );
     }
 
     // Clear mgr module of all edits made to it
@@ -47,10 +48,10 @@ export class ManagerModulesPageHelper extends PageHelper {
     this.getExpandCollapseElement(name).should('be.visible').click();
     for (const input of inputs) {
       if (input.oldValue) {
-        cy.get('.datatable-body')
-          .eq(1)
-          .should('contain', input.id)
-          .and('not.contain', input.newValue);
+        cy.contains('[data-testid="datatable-row-detail"] [cdstablerow] [cdstabledata]', input.id)
+          .parent('[cdstablerow]')
+          .find('[cdstabledata]')
+          .should('not.contain', input.newValue);
       }
     }
   }

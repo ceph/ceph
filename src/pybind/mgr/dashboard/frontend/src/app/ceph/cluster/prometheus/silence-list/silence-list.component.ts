@@ -1,7 +1,6 @@
 import { Component, Inject } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import { Observable, Subscriber } from 'rxjs';
 
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
@@ -24,6 +23,8 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
+import { CdSortDirection } from '~/app/shared/enum/cd-sort-direction';
+import { CdSortPropDir } from '~/app/shared/models/cd-sort-prop-dir';
 
 const BASE_URL = 'monitoring/silences';
 
@@ -48,7 +49,7 @@ export class SilenceListComponent extends PrometheusListHelper {
     'badge badge-warning': 'pending',
     'badge badge-default': 'expired'
   };
-  sorts: SortPropDir[] = [{ prop: 'endsAt', dir: SortDirection.desc }];
+  sorts: CdSortPropDir[] = [{ prop: 'endsAt', dir: CdSortDirection.desc }];
   rules: PrometheusRule[];
   visited: boolean;
 

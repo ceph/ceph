@@ -10,27 +10,28 @@
           [autoReload]="-1"
           (fetchData)="taskListService.fetch()"
           (updateSelection)="updateSelection($event)">
-  <div class="table-actions btn-toolbar">
+  <div class="table-actions">
     <cd-table-actions class="btn-group"
                       [permission]="permission"
                       [selection]="selection"
                       [tableActions]="tableActions">
     </cd-table-actions>
-    <button class="btn btn-light"
+    <button cdsButton="tertiary"
             type="button"
             (click)="purgeModal()"
             [disabled]="disablePurgeBtn"
             *ngIf="permission.delete">
-      <i [ngClass]="[icons.destroy]"
-         aria-hidden="true"></i>
       <ng-container i18n>Purge Trash</ng-container>
+      <svg class="cds--btn__icon"
+           cdsIcon="close"
+           size="16"></svg>
     </button>
   </div>
 </cd-table>
 
 <ng-template #expiresTpl
-             let-row="row"
-             let-value="value">
+             let-row="data.row"
+             let-value="data.value">
   <ng-container *ngIf="row.cdIsExpired"
                 i18n>Expired at</ng-container>
 

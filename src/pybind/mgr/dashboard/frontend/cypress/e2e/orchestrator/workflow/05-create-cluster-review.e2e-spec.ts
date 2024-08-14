@@ -40,23 +40,23 @@ describe('Create Cluster Review page', () => {
       createCluster.getDataTables().should('have.length', 1);
 
       // verify correct columns on Host Details table
-      createCluster.getDataTableHeaders(0).contains('Hostname');
+      createCluster.getDataTableHeaders().contains('Hostname');
 
-      createCluster.getDataTableHeaders(0).contains('Labels');
+      createCluster.getDataTableHeaders().contains('Labels');
 
-      createCluster.getDataTableHeaders(0).contains('CPUs');
+      createCluster.getDataTableHeaders().contains('CPUs');
 
-      createCluster.getDataTableHeaders(0).contains('Cores');
+      createCluster.getDataTableHeaders().contains('Cores');
 
-      createCluster.getDataTableHeaders(0).contains('Total Memory');
+      createCluster.getDataTableHeaders().contains('Total Memory');
 
-      createCluster.getDataTableHeaders(0).contains('Raw Capacity');
+      createCluster.getDataTableHeaders().contains('Raw Capacity');
 
-      createCluster.getDataTableHeaders(0).contains('HDDs');
+      createCluster.getDataTableHeaders().contains('HDDs');
 
-      createCluster.getDataTableHeaders(0).contains('Flash');
+      createCluster.getDataTableHeaders().contains('Flash');
 
-      createCluster.getDataTableHeaders(0).contains('NICs');
+      createCluster.getDataTableHeaders().contains('NICs');
     });
 
     it('should check default host name is present', () => {

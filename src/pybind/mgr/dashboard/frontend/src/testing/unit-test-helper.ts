@@ -661,24 +661,18 @@ export class TableActionHelper {
       [action: string]: { disabled: boolean; disableDesc: string };
     }
   ) => {
-    // click dropdown to update all actions buttons
-    const dropDownToggle = fixture.debugElement.query(By.css('.dropdown-toggle'));
-    dropDownToggle.triggerEventHandler('click', null);
-    fixture.detectChanges();
-    await fixture.whenStable();
-
+    const component = fixture.componentInstance;
+    const selection = component.selection;
     const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
-    const toClassName = TestBed.inject(TableActionsComponent).toClassName;
-    const getActionElement = (action: CdTableAction) =>
-      tableActionElement.query(By.css(`[ngbDropdownItem].${toClassName(action)}`));
+    const tableActionComponent: TableActionsComponent = tableActionElement.componentInstance;
+    tableActionComponent.selection = selection;
 
     const actions = {};
     tableActions.forEach((action) => {
-      const actionElement = getActionElement(action);
       if (expectResult[action.name]) {
         actions[action.name] = {
-          disabled: actionElement.classes.disabled ? true : false,
-          disableDesc: actionElement.properties.title
+          disabled: tableActionComponent.disableSelectionAction(action),
+          disableDesc: tableActionComponent.useDisableDesc(action) || ''
         };
       }
     });

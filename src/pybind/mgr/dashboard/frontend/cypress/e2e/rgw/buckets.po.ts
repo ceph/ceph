@@ -52,7 +52,7 @@ export class BucketsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index.url)
   edit(name: string, new_owner: string, isLocking = false) {
-    this.navigateEdit(name);
+    this.navigateEdit(name, false, false, null, true);
 
     // Placement target is not allowed to be edited and should be hidden
     cy.get('input[name=placement-target]').should('not.exist');
@@ -66,7 +66,7 @@ export class BucketsPageHelper extends PageHelper {
 
       this.getTableCell(this.columnIndex.name, name)
         .parent()
-        .find(`datatable-body-cell:nth-child(${this.columnIndex.owner})`)
+        .find(`[cdstabledata]:nth-child(${this.columnIndex.owner})`)
         .should(($elements) => {
           const bucketName = $elements.text();
           expect(bucketName).to.eq(new_owner);
@@ -92,7 +92,7 @@ export class BucketsPageHelper extends PageHelper {
     // Check if the owner is updated
     this.getTableCell(this.columnIndex.name, name)
       .parent()
-      .find(`datatable-body-cell:nth-child(${this.columnIndex.owner})`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.owner})`)
       .should(($elements) => {
         const bucketName = $elements.text();
         expect(bucketName).to.eq(new_owner);
@@ -108,7 +108,7 @@ export class BucketsPageHelper extends PageHelper {
     cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);
 
     // Disable versioning:
-    this.navigateEdit(name);
+    this.navigateEdit(name, false, true, null, true);
 
     cy.get('label[for=versioning]').click();
     cy.get('input[id=versioning]').should('not.be.checked');
@@ -167,7 +167,7 @@ export class BucketsPageHelper extends PageHelper {
   }
 
   testInvalidEdit(name: string) {
-    this.navigateEdit(name);
+    this.navigateEdit(name, false, true, null, true);
 
     cy.get('input[id=versioning]').should('exist').and('not.be.checked');
 
