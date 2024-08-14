@@ -29,9 +29,9 @@
                         [tableActions]="meta.actions">
       </cd-table-actions>
     </div>
-    <ng-container [ngIf]="expandedRow && meta.detail_columns.length > 0"
-                  *cdTableDetail>
-      <table class="table table-striped table-bordered">
+    <ng-container *ngIf="expandedRow && meta.detail_columns.length > 0">
+      <table *cdTableDetail
+             class="table table-striped table-bordered">
         <tbody>
           <tr *ngFor="let column of meta.detail_columns">
             <td i18n
