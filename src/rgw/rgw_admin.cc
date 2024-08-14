@@ -6854,6 +6854,16 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      const auto& info = role->get_info();
+      if (!info.perm_policy_map.empty() ||
+          !info.managed_policies.arns.empty()) {
+        cerr << "ERROR: The role cannot be deleted until all role policies are removed" << std::endl;
+        return -ERR_DELETE_CONFLICT;
+      }
       ret = role->delete_obj(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
