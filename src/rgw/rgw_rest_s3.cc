@@ -2266,7 +2266,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params(optional_yield y)
     return -EIO;
   }
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   if (!parser.parse(buf, data.length(), 1)) {
     ldpp_dout(this, 10) << "NOTICE: failed to parse data: " << buf << dendl;
     r = -EINVAL;
@@ -2337,7 +2337,7 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
     return -EIO;
   }
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   if (!parser.parse(buf, data.length(), 1)) {
     ldpp_dout(this, 5) << "failed to parse xml: " << buf << dendl;
     return -EINVAL;
@@ -2571,7 +2571,7 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
       return -EIO;
     }
 
-    char* buf = data.c_str();
+    const char* buf = data.c_str();
     bool success = parser.parse(buf, data.length(), 1);
     ldpp_dout(this, 20) << "create bucket input data=" << buf << dendl;
 
@@ -4178,7 +4178,7 @@ int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  char* buf = data.c_str();
+  const char* buf = data.c_str();
   if (!buf || !parser.parse(buf, data.length(), 1)) {
     return -ERR_MALFORMED_XML;
   }
@@ -4370,7 +4370,7 @@ int RGWSetRequestPayment_ObjStore_S3::get_params(optional_yield y)
     return -EIO;
   }
 
-  char* buf = in_data.c_str();
+  const char* buf = in_data.c_str();
   if (!parser.parse(buf, in_data.length(), 1)) {
     ldpp_dout(this, 10) << "failed to parse data: " << buf << dendl;
     return -EINVAL;

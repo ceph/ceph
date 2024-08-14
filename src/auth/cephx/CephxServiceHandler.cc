@@ -267,7 +267,7 @@ int CephxServiceHandler::handle_request(
         ret = -EACCES;
 	break;
       } else {
-        char *caps_str = caps->caps.c_str();
+        const char *caps_str = caps->caps.c_str();
         if (!caps_str || !caps_str[0]) {
           ldout(cct,0) << "mon caps null for " << entity_name << dendl;
           ret = -EACCES;

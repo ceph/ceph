@@ -24,7 +24,7 @@ extern "C" {
 
 typedef void *cls_filter_handle_t;
 typedef int (*cls_method_call_t)(cls_method_context_t ctx,
-				 char *indata, int datalen,
+				 const char *indata, int datalen,
 				 char **outdata, int *outdatalen);
 typedef struct {
 	const char *name;

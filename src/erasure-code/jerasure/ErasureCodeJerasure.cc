@@ -107,7 +107,7 @@ int ErasureCodeJerasure::encode_chunks(const set<int> &want_to_encode,
 {
   char *chunks[k + m];
   for (int i = 0; i < k + m; i++)
-    chunks[i] = (*encoded)[i].c_str();
+    chunks[i] = (*encoded)[i].data();
   jerasure_encode(&chunks[0], &chunks[k], (*encoded)[0].length());
   return 0;
 }
@@ -127,9 +127,9 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
       erasures_count++;
     }
     if (i < k)
-      data[i] = (*decoded)[i].c_str();
+      data[i] = (*decoded)[i].data();
     else
-      coding[i - k] = (*decoded)[i].c_str();
+      coding[i - k] = (*decoded)[i].data();
   }
   erasures[erasures_count] = -1;
 

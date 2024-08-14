@@ -645,7 +645,7 @@ TEST_F(LibRadosMiscPP, WriteSamePP) {
   char buf[128];
   bufferlist fl;
   char full[128 * 4];
-  char *cmp;
+  const char *cmp;
 
   /* zero the full range before using writesame */
   memset(full, 0, sizeof(full));

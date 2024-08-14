@@ -111,7 +111,7 @@ std::ostream& operator<<(std::ostream& out, const osd_xinfo_t& xi);
 struct PGTempMap {
 #if 1
   ceph::buffer::list data;
-  typedef btree::btree_map<pg_t,ceph_le32*> map_t;
+  typedef btree::btree_map<pg_t,const ceph_le32*> map_t;
   map_t map;
 
   void encode(ceph::buffer::list& bl) const {
@@ -150,9 +150,10 @@ struct PGTempMap {
       data.rebuild();
     }
     //map.reserve(n);
-    char *start = data.c_str();
+    const char *start = data.c_str();
     for (auto i : offsets) {
-      map.insert(map.end(), std::make_pair(i.first, (ceph_le32*)(start + i.second)));
+      map.insert(map.end(),
+                 std::make_pair(i.first, (const ceph_le32*)(start + i.second)));
     }
   }
   void rebuild() {
@@ -176,7 +177,7 @@ struct PGTempMap {
 	current.first = it->first;
 	ceph_assert(it->second);
 	current.second.resize(*it->second);
-	ceph_le32 *p = it->second + 1;
+	const ceph_le32 *p = it->second + 1;
 	for (uint32_t n = 0; n < *it->second; ++n, ++p) {
 	  current.second[n] = *p;
 	}
@@ -246,11 +247,11 @@ struct PGTempMap {
       data.append(z.c_str(), z.length());
     }
     encode(v, data);
-    map[pgid] = (ceph_le32*)(data.back().end_c_str()) - (1 + v.size());
+    map[pgid] = (const ceph_le32*)(data.back().end_c_str()) - (1 + v.size());
   }
   mempool::osdmap::vector<int32_t> get(pg_t pgid) {
     mempool::osdmap::vector<int32_t> v;
-    ceph_le32 *p = map[pgid];
+    const ceph_le32 *p = map[pgid];
     size_t n = *p++;
     v.resize(n);
     for (size_t i = 0; i < n; ++i, ++p) {

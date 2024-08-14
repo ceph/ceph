@@ -108,7 +108,7 @@ public:
     //
     // compute the coding chunk with first chunk ^ second chunk
     //
-    char *p = out.c_str();
+    char *p = out.data();
     for (unsigned i = 0; i < chunk_length; i++)
       p[i + CODING_CHUNK * chunk_length] =
         p[i + FIRST_DATA_CHUNK * chunk_length] ^

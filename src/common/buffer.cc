@@ -1470,11 +1470,31 @@ static ceph::spinlock debug_lock;
     ceph_abort();
   }
 
+  char *buffer::list::data()
+  {
+    if (const auto len = length(); len == 0) {
+      return nullptr;                         // no non-empty buffers
+    } else if (_carriage->length() != len) {
+      // if there is no writeable buffer, _carriage points to the 0-sized
+      // always_empty_bptr. If so, rebuild will copy the data to fresh,
+      // writeable buffer
+      rebuild();
+    } else {
+      // there are two+ *main* scenarios that hit this branch:
+      //   1. bufferlist with single, non-empty & writeable buffer;
+      //   2. bufferlist with single, non-empty & writeable buffer followed by
+      //      empty buffer. splice() tries to not waste our appendable
+      //      space; to carry it an empty bptr is added at the end.
+      //   2+. in contrast to c_str(), the writeable may be also after
+      //      an empty one.
+    }
+    return _carriage->c_str();
+  }
+
   /*
    * return a contiguous ptr to whole bufferlist contents.
    */
-  char *buffer::list::c_str()
-  {
+  const char *buffer::list::c_str() {
     if (const auto len = length(); len == 0) {
       return nullptr;                         // no non-empty buffers
     } else if (len != _buffers.front().length()) {
