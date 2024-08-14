@@ -1838,40 +1838,47 @@ namespace rgw::sal {
     return std::make_unique<DBLifecycle>(this);
   }
 
-  int DBLifecycle::get_entry(const std::string& oid, const std::string& marker,
-			      std::unique_ptr<LCEntry>* entry)
+  int DBLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, const std::string& marker,
+                             std::unique_ptr<LCEntry>* entry)
   {
     return store->getDB()->get_entry(oid, marker, entry);
   }
 
-  int DBLifecycle::get_next_entry(const std::string& oid, const std::string& marker,
+  int DBLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                                  const std::string& oid, const std::string& marker,
 				  std::unique_ptr<LCEntry>* entry)
   {
     return store->getDB()->get_next_entry(oid, marker, entry);
   }
 
-  int DBLifecycle::set_entry(const std::string& oid, LCEntry& entry)
+  int DBLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, LCEntry& entry)
   {
     return store->getDB()->set_entry(oid, entry);
   }
 
-  int DBLifecycle::list_entries(const std::string& oid, const std::string& marker,
+  int DBLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                                const std::string& oid, const std::string& marker,
   				 uint32_t max_entries, vector<std::unique_ptr<LCEntry>>& entries)
   {
     return store->getDB()->list_entries(oid, marker, max_entries, entries);
   }
 
-  int DBLifecycle::rm_entry(const std::string& oid, LCEntry& entry)
+  int DBLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                            const std::string& oid, LCEntry& entry)
   {
     return store->getDB()->rm_entry(oid, entry);
   }
 
-  int DBLifecycle::get_head(const std::string& oid, std::unique_ptr<LCHead>* head)
+  int DBLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                            const std::string& oid, std::unique_ptr<LCHead>* head)
   {
     return store->getDB()->get_head(oid, head);
   }
 
-  int DBLifecycle::put_head(const std::string& oid, LCHead& head)
+  int DBLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                            const std::string& oid, LCHead& head)
   {
     return store->getDB()->put_head(oid, head);
   }

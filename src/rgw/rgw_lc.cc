@@ -1865,7 +1865,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       /* XXXX are we SURE the only way result could == ENOENT is when
        * there is no such bucket?  It is currently the value returned
        * from bucket_lc_process(...) */
-      ret = sal_lc->rm_entry(obj_names[index],  entry);
+      ret = sal_lc->rm_entry(this, null_yield, obj_names[index], entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to remove entry "
             << obj_names[index] << dendl;
@@ -1877,7 +1877,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       entry.set_status(lc_complete);
     }
 
-    ret = sal_lc->set_entry(obj_names[index],  entry);
+    ret = sal_lc->set_entry(this, null_yield, obj_names[index], entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to set entry on "
           << obj_names[index] << dendl;
@@ -1897,7 +1897,8 @@ int RGWLC::list_lc_progress(string& marker, uint32_t max_entries,
   progress_map.clear();
   for(; index < max_objs; index++, marker="") {
     vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>> entries;
-    int ret = sal_lc->list_entries(obj_names[index], marker, max_entries, entries);
+    int ret = sal_lc->list_entries(this, null_yield, obj_names[index],
+                                   marker, max_entries, entries);
     if (ret < 0) {
       if (ret == -ENOENT) {
         ldpp_dout(this, 10) << __func__ << "() ignoring unfound lc object="
@@ -2052,7 +2053,8 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   std::unique_lock<rgw::sal::LCSerializer> lock(
     *(serializer.get()), std::adopt_lock);
 
-  ret = sal_lc->get_entry(obj_names[index], bucket_entry_marker, &entry);
+  ret = sal_lc->get_entry(this, null_yield, obj_names[index],
+                          bucket_entry_marker, &entry);
   if (ret >= 0) {
     if (entry->get_status() == lc_processing) {
       if (expired_session(entry->get_start_time())) {
@@ -2081,7 +2083,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     << dendl;
 
   entry->set_status(lc_processing);
-  ret = sal_lc->set_entry(obj_names[index], *entry);
+  ret = sal_lc->set_entry(this, null_yield, obj_names[index], *entry);
   if (ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::process_bucket() failed to set obj entry "
 		       << obj_names[index] << entry->get_bucket() << entry->get_status()
@@ -2149,7 +2151,8 @@ inline int RGWLC::advance_head(const std::string& lc_shard,
   int ret{0};
   std::unique_ptr<rgw::sal::Lifecycle::LCEntry> next_entry;
 
-  ret = sal_lc->get_next_entry(lc_shard, entry.get_bucket(), &next_entry);
+  ret = sal_lc->get_next_entry(this, null_yield, lc_shard,
+                               entry.get_bucket(), &next_entry);
   if (ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::process() failed to get obj entry "
 		       << lc_shard << dendl;
@@ -2160,7 +2163,7 @@ inline int RGWLC::advance_head(const std::string& lc_shard,
   head.set_marker(next_entry->get_bucket());
   head.set_start_date(start_date);
 
-  ret = sal_lc->put_head(lc_shard, head);
+  ret = sal_lc->put_head(this, null_yield, lc_shard, head);
   if (ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
 		       << lc_shard
@@ -2183,7 +2186,7 @@ inline int RGWLC::check_if_shard_done(const std::string& lc_shard,
        << lc_shard << " worker=" << worker_ix
        << dendl;
       head.set_shard_rollover_date(ceph_clock_now());
-      ret = sal_lc->put_head(lc_shard, head);
+      ret = sal_lc->put_head(this, null_yield, lc_shard, head);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
                            << lc_shard
@@ -2261,7 +2264,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     utime_t now = ceph_clock_now();
 
     /* preamble: find an inital bucket/marker */
-    ret = sal_lc->get_head(lc_shard, &head);
+    ret = sal_lc->get_head(this, null_yield, lc_shard, &head);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj head "
           << lc_shard << ", ret=" << ret << dendl;
@@ -2280,7 +2283,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			 << dendl;
 
       vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>> entries;
-      int ret = sal_lc->list_entries(lc_shard, head->get_marker(), 1, entries);
+      int ret = sal_lc->list_entries(this, null_yield, lc_shard,
+                                     head->get_marker(), 1, entries);
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->list_entries(lc_shard, head.marker, 1, "
 			   << "entries) returned error ret==" << ret << dendl;
@@ -2299,7 +2303,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			 << dendl;
 
       /* fetches the entry pointed to by head.bucket */
-      ret = sal_lc->get_entry(lc_shard, head->get_marker(), &entry);
+      ret = sal_lc->get_entry(this, null_yield, lc_shard,
+                              head->get_marker(), &entry);
       if (ret == -ENOENT) {
         /* skip to next entry */
 	      std::unique_ptr<rgw::sal::Lifecycle::LCEntry> tmp_entry = sal_lc->get_entry();
@@ -2366,7 +2371,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     entry->set_status(lc_processing);
     entry->set_start_time(now);
 
-    ret = sal_lc->set_entry(lc_shard, *entry);
+    ret = sal_lc->set_entry(this, null_yield, lc_shard, *entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to set obj entry "
 	      << lc_shard << entry->get_bucket() << entry->get_status() << dendl;
@@ -2402,7 +2407,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       /* XXXX are we SURE the only way result could == ENOENT is when
        * there is no such bucket?  It is currently the value returned
        * from bucket_lc_process(...) */
-      ret = sal_lc->rm_entry(lc_shard,  *entry);
+      ret = sal_lc->rm_entry(this, null_yield, lc_shard, *entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::process() failed to remove entry "
 			   << lc_shard << " (nonfatal)"
@@ -2415,7 +2420,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       } else {
         entry->set_status(lc_complete);
       }
-      ret = sal_lc->set_entry(lc_shard, *entry);
+      ret = sal_lc->set_entry(this, null_yield, lc_shard, *entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on lc_shard="
                            << lc_shard << " entry=" << entry
@@ -2604,9 +2609,10 @@ static int guard_lc_modify(const DoutPrefixProvider *dpp,
   return ret;
 }
 
-int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
-                         const rgw::sal::Attrs& bucket_attrs,
-                         RGWLifecycleConfiguration *config)
+int RGWLC::set_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
+                             rgw::sal::Bucket* bucket,
+                             const rgw::sal::Attrs& bucket_attrs,
+                             RGWLifecycleConfiguration *config)
 {
   int ret{0};
   rgw::sal::Attrs attrs = bucket_attrs;
@@ -2617,8 +2623,7 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
     config->encode(lc_bl);
     attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-    ret =
-      bucket->merge_and_store_attrs(this, attrs, null_yield);
+    ret = bucket->merge_and_store_attrs(dpp, attrs, y);
     if (ret < 0) {
       return ret;
     }
@@ -2627,16 +2632,17 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
   rgw_bucket& b = bucket->get_key();
 
 
-  ret = guard_lc_modify(this, driver, sal_lc.get(), b, cookie,
+  ret = guard_lc_modify(dpp, driver, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    rgw::sal::Lifecycle::LCEntry& entry) {
-    return sal_lc->set_entry(oid, entry);
+    return sal_lc->set_entry(dpp, y, oid, entry);
   });
 
   return ret;
 }
 
-int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
+int RGWLC::remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
+                                rgw::sal::Bucket* bucket,
                                 const rgw::sal::Attrs& bucket_attrs,
 				bool merge_attrs)
 {
@@ -2646,19 +2652,19 @@ int RGWLC::remove_bucket_config(rgw::sal::Bucket* bucket,
 
   if (merge_attrs) {
     attrs.erase(RGW_ATTR_LC);
-    ret = bucket->merge_and_store_attrs(this, attrs, null_yield);
+    ret = bucket->merge_and_store_attrs(dpp, attrs, y);
 
     if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
+      ldpp_dout(dpp, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
 			 << b.name << " returned err=" << ret << dendl;
       return ret;
     }
   }
 
-  ret = guard_lc_modify(this, driver, sal_lc.get(), b, cookie,
+  ret = guard_lc_modify(dpp, driver, sal_lc.get(), b, cookie,
 			[&](rgw::sal::Lifecycle* sal_lc, const string& oid,
 			    rgw::sal::Lifecycle::LCEntry& entry) {
-    return sal_lc->rm_entry(oid, entry);
+    return sal_lc->rm_entry(dpp, y, oid, entry);
   });
 
   return ret;
@@ -2692,7 +2698,7 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
   // 2. entry doesn't exist, which usually happens when reshard has happened prior to update and next LC process has already dropped the update
   // 3. entry exists matching the current bucket id which was after a reshard (needs to be updated to the marker)
   // We are not dropping the old marker here as that would be caught by the next LC process update
-  int ret = sal_lc->get_entry(lc_oid, bucket_lc_key, &entry);
+  int ret = sal_lc->get_entry(dpp, null_yield, lc_oid, bucket_lc_key, &entry);
   if (ret == 0) {
     ldpp_dout(dpp, 5) << "Entry already exists, nothing to do" << dendl;
     return ret; // entry is already existing correctly set to marker
@@ -2708,10 +2714,10 @@ int fix_lc_shard_entry(const DoutPrefixProvider *dpp,
 
     ret = guard_lc_modify(dpp,
       driver, sal_lc, bucket->get_key(), cookie,
-      [&lc_oid](rgw::sal::Lifecycle* slc,
+      [dpp, &lc_oid](rgw::sal::Lifecycle* slc,
 			      const string& oid,
 			      rgw::sal::Lifecycle::LCEntry& entry) {
-	return slc->set_entry(lc_oid, entry);
+	return slc->set_entry(dpp, null_yield, lc_oid, entry);
       });
 
   }

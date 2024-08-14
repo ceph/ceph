@@ -370,7 +370,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   if (get_attrs().count(RGW_ATTR_LC)) {
     constexpr bool merge_attrs = false; // don't update xattrs, we're deleting
     (void) store->getRados()->get_lc()->remove_bucket_config(
-      this, get_attrs(), merge_attrs);
+      dpp, y, this, get_attrs(), merge_attrs);
   }
 
   // remove bucket-topic mapping
@@ -3612,43 +3612,56 @@ int LCRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, opti
   return lock.lock_exclusive(ioctx, oid);
 }
 
-int RadosLifecycle::get_entry(const std::string& oid, const std::string& marker,
+int RadosLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, const std::string& marker,
 			      std::unique_ptr<LCEntry>* entry)
 {
-  cls_rgw_lc_entry cls_entry;
-  int ret = cls_rgw_lc_get_entry(*store->getRados()->get_lc_pool_ctx(), oid, marker, cls_entry);
-  if (ret)
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_lc_get_entry(op, marker, bl);
+
+  auto& ioctx = *store->getRados()->get_lc_pool_ctx();
+  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  if (ret < 0) {
     return ret;
+  }
 
-  LCEntry* e;
-  e = new StoreLCEntry(cls_entry.bucket, cls_entry.start_time, cls_entry.status);
-  if (!e)
-    return -ENOMEM;
+  cls_rgw_lc_entry cls_entry;
+  ret = cls_rgw_lc_get_entry_decode(bl, cls_entry);
+  if (ret < 0) {
+    return ret;
+  }
 
-  entry->reset(e);
+  *entry = std::make_unique<StoreLCEntry>(cls_entry.bucket, cls_entry.start_time, cls_entry.status);
   return 0;
 }
 
-int RadosLifecycle::get_next_entry(const std::string& oid, const std::string& marker,
+int RadosLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                                   const std::string& oid, const std::string& marker,
 				   std::unique_ptr<LCEntry>* entry)
 {
-  cls_rgw_lc_entry cls_entry;
-  int ret = cls_rgw_lc_get_next_entry(*store->getRados()->get_lc_pool_ctx(), oid, marker,
-				      cls_entry);
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_lc_get_next_entry(op, marker, bl);
 
-  if (ret)
+  auto& ioctx = *store->getRados()->get_lc_pool_ctx();
+  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  if (ret < 0) {
     return ret;
+  }
 
-  LCEntry* e;
-  e = new StoreLCEntry(cls_entry.bucket, cls_entry.start_time, cls_entry.status);
-  if (!e)
-    return -ENOMEM;
+  cls_rgw_lc_entry cls_entry;
+  ret = cls_rgw_lc_get_next_entry_decode(bl, cls_entry);
+  if (ret < 0) {
+    return ret;
+  }
 
-  entry->reset(e);
+  *entry = std::make_unique<StoreLCEntry>(cls_entry.bucket, cls_entry.start_time, cls_entry.status);
   return 0;
 }
 
-int RadosLifecycle::set_entry(const std::string& oid, LCEntry& entry)
+int RadosLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                              const std::string& oid, LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
 
@@ -3656,19 +3669,34 @@ int RadosLifecycle::set_entry(const std::string& oid, LCEntry& entry)
   cls_entry.start_time = entry.get_start_time();
   cls_entry.status = entry.get_status();
 
-  return cls_rgw_lc_set_entry(*store->getRados()->get_lc_pool_ctx(), oid, cls_entry);
+  librados::ObjectWriteOperation op;
+  cls_rgw_lc_set_entry(op, cls_entry);
+
+  auto& ioctx = *store->getRados()->get_lc_pool_ctx();
+  return rgw_rados_operate(dpp, ioctx, oid, &op, y);
 }
 
-int RadosLifecycle::list_entries(const std::string& oid, const std::string& marker,
-				 uint32_t max_entries, std::vector<std::unique_ptr<LCEntry>>& entries)
+int RadosLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                                 const std::string& oid, const std::string& marker,
+                                 uint32_t max_entries, std::vector<std::unique_ptr<LCEntry>>& entries)
 {
   entries.clear();
 
-  vector<cls_rgw_lc_entry> cls_entries;
-  int ret = cls_rgw_lc_list(*store->getRados()->get_lc_pool_ctx(), oid, marker, max_entries, cls_entries);
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_lc_list(op, marker, max_entries, bl);
 
-  if (ret < 0)
+  auto& ioctx = *store->getRados()->get_lc_pool_ctx();
+  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  if (ret < 0) {
     return ret;
+  }
+
+  vector<cls_rgw_lc_entry> cls_entries;
+  ret = cls_rgw_lc_list_decode(bl, cls_entries);
+  if (ret < 0) {
+    return ret;
+  }
 
   for (auto& entry : cls_entries) {
     entries.push_back(std::make_unique<StoreLCEntry>(entry.bucket, oid,
@@ -3678,34 +3706,46 @@ int RadosLifecycle::list_entries(const std::string& oid, const std::string& mark
   return ret;
 }
 
-int RadosLifecycle::rm_entry(const std::string& oid, LCEntry& entry)
+int RadosLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
-
   cls_entry.bucket = entry.get_bucket();
   cls_entry.start_time = entry.get_start_time();
   cls_entry.status = entry.get_status();
 
-  return cls_rgw_lc_rm_entry(*store->getRados()->get_lc_pool_ctx(), oid, cls_entry);
+  librados::ObjectWriteOperation op;
+  cls_rgw_lc_rm_entry(op, cls_entry);
+
+  auto& ioctx = *store->getRados()->get_lc_pool_ctx();
+  return rgw_rados_operate(dpp, ioctx, oid, &op, y);
 }
 
-int RadosLifecycle::get_head(const std::string& oid, std::unique_ptr<LCHead>* head)
+int RadosLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, std::unique_ptr<LCHead>* head)
 {
-  cls_rgw_lc_obj_head cls_head;
-  int ret = cls_rgw_lc_get_head(*store->getRados()->get_lc_pool_ctx(), oid, cls_head);
-  if (ret)
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  cls_rgw_lc_get_head(op, bl);
+
+  auto& ioctx = *store->getRados()->get_lc_pool_ctx();
+  int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
+  if (ret < 0) {
     return ret;
+  }
 
-  LCHead* h;
-  h = new StoreLCHead(cls_head.start_date, cls_head.shard_rollover_date, cls_head.marker);
-  if (!h)
-    return -ENOMEM;
+  cls_rgw_lc_obj_head cls_head;
+  ret = cls_rgw_lc_get_head_decode(bl, cls_head);
+  if (ret < 0) {
+    return ret;
+  }
 
-  head->reset(h);
+  *head = std::make_unique<StoreLCHead>(cls_head.start_date, cls_head.shard_rollover_date, cls_head.marker);
   return 0;
 }
 
-int RadosLifecycle::put_head(const std::string& oid, LCHead& head)
+int RadosLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& oid, LCHead& head)
 {
   cls_rgw_lc_obj_head cls_head;
 
@@ -3713,7 +3753,11 @@ int RadosLifecycle::put_head(const std::string& oid, LCHead& head)
   cls_head.start_date = head.get_start_date();
   cls_head.shard_rollover_date = head.get_shard_rollover_date();
 
-  return cls_rgw_lc_put_head(*store->getRados()->get_lc_pool_ctx(), oid, cls_head);
+  librados::ObjectWriteOperation op;
+  cls_rgw_lc_put_head(op, cls_head);
+
+  auto& ioctx = *store->getRados()->get_lc_pool_ctx();
+  return rgw_rados_operate(dpp, ioctx, oid, &op, y);
 }
 
 std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& lock_name,

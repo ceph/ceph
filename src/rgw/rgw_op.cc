@@ -6095,7 +6095,8 @@ void RGWPutLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->set_bucket_config(s->bucket.get(), s->bucket_attrs, &new_config);
+  op_ret = driver->get_rgwlc()->set_bucket_config(this, y, s->bucket.get(),
+                                                  s->bucket_attrs, &new_config);
   if (op_ret < 0) {
     return;
   }
@@ -6111,7 +6112,8 @@ void RGWDeleteLC::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_rgwlc()->remove_bucket_config(s->bucket.get(), s->bucket_attrs);
+  op_ret = driver->get_rgwlc()->remove_bucket_config(this, y, s->bucket.get(),
+                                                     s->bucket_attrs);
   if (op_ret < 0) {
     return;
   }
