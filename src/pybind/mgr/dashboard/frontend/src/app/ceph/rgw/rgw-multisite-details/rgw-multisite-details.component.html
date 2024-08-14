@@ -114,7 +114,7 @@
          *ngIf="metadata">
       <legend>{{ metadataTitle }}</legend>
       <div>
-        <cd-table-key-value cdTableDetail
+        <cd-table-key-value *cdTableDetail
                             [data]="metadata">
         </cd-table-key-value>
       </div>
