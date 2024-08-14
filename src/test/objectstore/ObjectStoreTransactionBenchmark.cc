@@ -87,7 +87,7 @@ class Transaction {
     uint64_t start_time = Cycles::rdtsc();
     ObjectStore::Transaction::iterator i = t.begin();
     while (i.have_op()) {
-    ObjectStore::Transaction::Op *op = i.decode_op();
+    const ObjectStore::Transaction::Op *op = i.decode_op();
 
       switch (op->op) {
       case ObjectStore::Transaction::OP_WRITE:
