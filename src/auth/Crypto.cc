@@ -324,7 +324,7 @@ public:
     // form contiguous buffer for block cipher. The ctor copies shallowly.
     ceph::bufferlist incopy(in);
     incopy.append(std::move(pad_buf));
-    const auto in_buf = reinterpret_cast<unsigned char*>(incopy.c_str());
+    const auto in_buf = reinterpret_cast<const unsigned char*>(incopy.c_str());
 
     // reinitialize IV each time. It might be unnecessary depending on
     // actual implementation but at the interface layer we are obliged
@@ -354,7 +354,7 @@ public:
 
     // needed because of .c_str() on const. It's a shallow copy.
     ceph::bufferlist incopy(in);
-    const auto in_buf = reinterpret_cast<unsigned char*>(incopy.c_str());
+    const auto in_buf = reinterpret_cast<const unsigned char*>(incopy.c_str());
 
     // make a local, modifiable copy of IV.
     static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);

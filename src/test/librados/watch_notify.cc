@@ -40,7 +40,7 @@ protected:
                                     uint64_t notify_id,
                                     uint64_t cookie,
                                     uint64_t notifier_gid,
-                                    void *data,
+                                    const void *data,
                                     size_t data_len);
   static void watch_notify2_test_errcb(void *arg, uint64_t cookie, int err);
   static void watch_notify2_test_errcb_reconnect(void *arg, uint64_t cookie, int err);
@@ -52,7 +52,7 @@ void LibRadosWatchNotify::watch_notify2_test_cb(void *arg,
 				  uint64_t notify_id,
 				  uint64_t cookie,
 				  uint64_t notifier_gid,
-				  void *data,
+				  const void *data,
 				  size_t data_len)
 {
   std::cout << __func__ << " from " << notifier_gid << " notify_id " << notify_id
@@ -62,7 +62,7 @@ void LibRadosWatchNotify::watch_notify2_test_cb(void *arg,
   ceph_assert(thiz);
   thiz->notify_cookies.insert(cookie);
   thiz->notify_bl.clear();
-  thiz->notify_bl.append((char*)data, data_len);
+  thiz->notify_bl.append((const char*)data, data_len);
   if (notify_sleep)
     sleep(notify_sleep);
   thiz->notify_err = 0;
