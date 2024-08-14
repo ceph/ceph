@@ -163,7 +163,7 @@ namespace librbd {
     std::string header_oid;
     std::string id; // only used for new-format images
     ParentImageInfo parent_md;
-    ImageCtx *parent;
+    ImageCtx *parent = nullptr;
     ImageCtx *child = nullptr;
     MigrationInfo migration_info;
     cls::rbd::GroupSpec group_spec;
