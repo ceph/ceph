@@ -199,8 +199,10 @@ private:
   void cancel_timer(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId anagrpid);
+
+  /// checks that any particular ana group is active no more than 1 gw
   void validate_gw_map(
-    const NvmeGroupKey& group_key);
+    const NvmeGroupKey& group_key) const;
 
 public:
   int blocklist_gw(

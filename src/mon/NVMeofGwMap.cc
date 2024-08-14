@@ -754,27 +754,39 @@ int NVMeofGwMap::blocklist_gw(
   return 0;
 }
 
-void  NVMeofGwMap::validate_gw_map(const NvmeGroupKey& group_key)
+void NVMeofGwMap::validate_gw_map(const NvmeGroupKey& group_key) const
 {
-  for (auto& gw_created: created_gws[group_key]) {
-    auto gw_id = gw_created.first;
-    for (auto& state_itr: created_gws[group_key][gw_id].sm_state) {
-      NvmeAnaGrpId ana_group = state_itr.first;
-      int count = 0;
-      for (auto& gw_created_pair: created_gws[group_key]) {
-	auto& st = gw_created_pair.second;
-	if (st.sm_state[ana_group] == gw_states_per_group_t::GW_ACTIVE_STATE) {
-	  count ++;
-	  if (count == 2) {
-	    dout(1) << "Critical Error : number active states per ana-group "
-		    << ana_group << "more than 1 in pool-group " << group_key
-		    << dendl;
-	    dout(4) << created_gws[group_key] << dendl;
-	  }
-	}
+  auto group_iter = created_gws.find(group_key);
+  if (group_iter == created_gws.end()) {
+    return;
+  }
+  const auto &group_gws = group_iter->second;
+
+  auto first_gw_iter = group_gws.begin();
+  if (first_gw_iter == group_gws.end()) {
+    return;
+  }
+  auto gw_id = first_gw_iter->first;
+  const auto &gw_state = first_gw_iter->second;
+
+  // Check that each ana-group in the sm_state map of the first gateway is
+  // active in no more than a single gateway within the group
+  for (const auto& [ana_group_id, _]: gw_state.sm_state) {
+    unsigned num_active = 0;
+    for (const auto& [_, gw_state] : group_gws) {
+      auto sm_iter = gw_state.sm_state.find(ana_group_id);
+      if (sm_iter != gw_state.sm_state.end() &&
+	  sm_iter->second == gw_states_per_group_t::GW_ACTIVE_STATE) {
+	++num_active;
       }
     }
-    break;
+    if (num_active > 1) {
+      dout(1) << "Critical Error : found " << num_active << " (> 1) active"
+	      << " states for ana-group " << ana_group_id
+	      << " in pool-group " << group_key
+	      << dendl;
+      dout(4) << group_gws << dendl;
+    }
   }
 }
 
