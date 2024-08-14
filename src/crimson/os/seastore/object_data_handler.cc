@@ -129,24 +129,24 @@ struct extent_to_remap_t {
     return type == type_t::OVERWRITE;
   }
 
-  using remap_entry = TransactionManager::remap_entry;
-  remap_entry create_remap_entry() {
+  using remap_entry_t = TransactionManager::remap_entry_t;
+  remap_entry_t create_remap_entry() {
     assert(is_remap1());
-    return remap_entry(
+    return remap_entry_t(
       new_offset,
       new_len);
   }
 
-  remap_entry create_left_remap_entry() {
+  remap_entry_t create_left_remap_entry() {
     assert(is_remap2());
-    return remap_entry(
+    return remap_entry_t(
       0,
       new_offset);
   }
 
-  remap_entry create_right_remap_entry() {
+  remap_entry_t create_right_remap_entry() {
     assert(is_remap2());
-    return remap_entry(
+    return remap_entry_t(
       new_offset + new_len,
       pin->get_length() - new_offset - new_len);
   }
