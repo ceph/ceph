@@ -1,0 +1,166 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+  <ng-container class="modal-content"
+                *cdFormLoading="loading">
+    <form name="form"
+          #formDir="ngForm"
+          [formGroup]="form">
+      <div class="modal-body">
+
+        <!-- FsName -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="userId"
+                 i18n>Fs name
+          </label>
+          <div class="cd-col-form-input">
+            <input id="fsName"
+                   name="fsName"
+                   type="text"
+                   class="form-control"
+                   formControlName="fsName">
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('fsName', formDir, 'required')"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- UserId -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="userId"
+                 i18n>User ID
+            <cd-helper>
+              You can manage users from
+              <a routerLink="/ceph-users"
+                 (click)="closeModal()">Ceph Users</a>
+              page
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <span class="input-group-text"
+                    for="userId"
+                    i18n>client.
+              </span>
+              <input id="userId"
+                     name="userId"
+                     type="text"
+                     class="form-control"
+                     formControlName="userId">
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('userId', formDir, 'required')"
+                    i18n>This field is required!</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Directory -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="directory"
+                 i18n>Directory
+            <cd-helper>Path to restrict access to</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input id="typeahead-http"
+                   i18n
+                   type="text"
+                   class="form-control"
+                   disabled="directoryStore.isLoading"
+                   formControlName="directory"
+                   [ngbTypeahead]="search"
+                   [placeholder]="directoryStore.isLoading ? 'Loading directories' : 'Directory search'"
+                   i18n-placeholder>
+            <div *ngIf="directoryStore.isLoading">
+              <i [ngClass]="[icons.spinner, icons.spin, 'mt-2', 'me-2']"></i>
+            </div>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('directory', formDir, 'required')"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
+
+        <!-- Permissions -->
+        <div class="form-group row">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="permissions">Permissons</label>
+          <div class="cd-col-form-input">
+
+            <!-- Read -->
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="read"
+                     formControlName="read"
+                     type="checkbox">
+              <label class="custom-control-label"
+                     for="read"
+                     i18n>Read
+              </label>
+              <cd-helper i18n>Read permission is the minimum givable access</cd-helper>
+            </div>
+
+            <!-- Write -->
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="write"
+                     formControlName="write"
+                     type="checkbox"
+                     (change)="toggleFormControl()">
+              <label class="custom-control-label"
+                     for="write"
+                     i18n>Write
+              </label>
+            </div>
+
+            <!-- Quota -->
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="quota"
+                     formControlName="quota"
+                     type="checkbox">
+              <label class="custom-control-label"
+                     for="quota"
+                     i18n>Quota
+              </label>
+              <cd-helper i18n>Permission to set layouts or quotas, write access needed</cd-helper>
+            </div>
+
+            <!-- Snapshot -->
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="snapshot"
+                     formControlName="snapshot"
+                     type="checkbox">
+              <label class="custom-control-label"
+                     for="snapshot"
+                     i18n>Snapshot
+              </label>
+              <cd-helper i18n>Permission to create or delete snapshots, write access needed</cd-helper>
+            </div>
+
+            <!-- Root Squash -->
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="rootSquash"
+                     formControlName="rootSquash"
+                     type="checkbox">
+              <label class="custom-control-label"
+                     for="rootSquash"
+                     i18n>Root Squash
+              </label>
+              <cd-helper>Safety measure to prevent scenarios such as accidental sudo rm -rf /path</cd-helper>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [form]="form"
+                              [submitText]="(action | titlecase)"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
