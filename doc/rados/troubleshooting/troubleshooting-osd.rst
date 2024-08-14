@@ -680,6 +680,7 @@ Although some of these events may appear redundant, they cross important
 boundaries in the internal code (such as passing data across locks into new
 threads).
 
+.. _rados_tshooting_flapping_osd:
 
 Flapping OSDs
 =============
