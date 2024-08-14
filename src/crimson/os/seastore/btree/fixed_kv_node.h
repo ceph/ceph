@@ -148,7 +148,7 @@ struct FixedKVNode : ChildableCachedExtent {
     ceph_assert(iter != copy_dests_by_trans.end());
     auto &copy_dests = static_cast<copy_dests_t&>(*iter);
     auto it = copy_dests.dests_by_key.lower_bound(key);
-    if ((*it)->range.begin > key) {
+    if (it == copy_dests.dests_by_key.end() || (*it)->range.begin > key) {
       ceph_assert(it != copy_dests.dests_by_key.begin());
       --it;
     }
