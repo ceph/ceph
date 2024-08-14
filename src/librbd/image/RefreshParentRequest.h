@@ -67,7 +67,7 @@ private:
   MigrationInfo m_migration_info;
   Context *m_on_finish;
 
-  ImageCtxT *m_parent_image_ctx;
+  ImageCtxT *m_parent_image_ctx = nullptr;
   uint64_t m_parent_snap_id;
 
   int m_error_result;

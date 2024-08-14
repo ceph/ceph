@@ -112,7 +112,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       old_format(false),
       order(0), size(0), features(0),
       format_string(NULL),
-      id(image_id), parent(NULL),
+      id(image_id),
       stripe_unit(0), stripe_count(0), flags(0),
       readahead(),
       total_bytes_read(0),
@@ -157,6 +157,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   ImageCtx::~ImageCtx() {
     ldout(cct, 10) << this << " " << __func__ << dendl;
 
+    ceph_assert(parent == nullptr);
     ceph_assert(config_watcher == nullptr);
     ceph_assert(image_watcher == NULL);
     ceph_assert(exclusive_lock == NULL);
