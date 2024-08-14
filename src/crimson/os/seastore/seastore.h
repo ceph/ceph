@@ -204,9 +204,11 @@ public:
 
     void init_managers();
 
-    device_stats_t get_device_stats(bool report_detail) const;
+    double reset_report_interval() const;
 
-    shard_stats_t get_io_stats(bool report_detail) const;
+    device_stats_t get_device_stats(bool report_detail, double seconds) const;
+
+    shard_stats_t get_io_stats(bool report_detail, double seconds) const;
 
   private:
     struct internal_context_t {

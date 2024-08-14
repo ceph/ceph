@@ -303,7 +303,8 @@ public:
 
   device_stats_t get_device_stats(
     const writer_stats_t &journal_stats,
-    bool report_detail) const;
+    bool report_detail,
+    double seconds) const;
 
   using mount_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
@@ -1097,9 +1098,6 @@ private:
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
   extent_len_t max_data_allocation_size = 0;
-
-  mutable seastar::lowres_clock::time_point last_tp =
-    seastar::lowres_clock::time_point::min();
 
   friend class ::transaction_manager_test_t;
 };

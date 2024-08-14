@@ -592,14 +592,16 @@ seastar::future<> SeaStore::report_stats()
   shard_io_stats.resize(seastar::smp::count);
   return shard_stores.invoke_on_all([this](const Shard &local_store) {
     bool report_detail = false;
+    double seconds = 0;
     if (seastar::this_shard_id() == 0) {
       // avoid too verbose logs, only report detail in a particular shard
       report_detail = true;
+      seconds = local_store.reset_report_interval();
     }
     shard_device_stats[seastar::this_shard_id()] =
-      local_store.get_device_stats(report_detail);
+      local_store.get_device_stats(report_detail, seconds);
     shard_io_stats[seastar::this_shard_id()] =
-      local_store.get_io_stats(report_detail);
+      local_store.get_io_stats(report_detail, seconds);
   }).then([this] {
     LOG_PREFIX(SeaStore);
     auto now = seastar::lowres_clock::now();
@@ -2530,27 +2532,33 @@ void SeaStore::Shard::init_managers()
       *transaction_manager);
 }
 
-device_stats_t SeaStore::Shard::get_device_stats(bool report_detail) const
+double SeaStore::Shard::reset_report_interval() const
 {
-  return transaction_manager->get_device_stats(report_detail);
-}
-
-shard_stats_t SeaStore::Shard::get_io_stats(bool report_detail) const
-{
+  double seconds;
   auto now = seastar::lowres_clock::now();
   if (last_tp == seastar::lowres_clock::time_point::min()) {
-    last_tp = now;
-    last_shard_stats = shard_stats;
-    return {};
+    seconds = 0;
+  } else {
+    std::chrono::duration<double> duration_d = now - last_tp;
+    seconds = duration_d.count();
   }
-  std::chrono::duration<double> duration_d = now - last_tp;
-  double seconds = duration_d.count();
   last_tp = now;
+  return seconds;
+}
 
+device_stats_t SeaStore::Shard::get_device_stats(
+    bool report_detail, double seconds) const
+{
+  return transaction_manager->get_device_stats(report_detail, seconds);
+}
+
+shard_stats_t SeaStore::Shard::get_io_stats(
+    bool report_detail, double seconds) const
+{
   shard_stats_t ret = shard_stats;
   ret.minus(last_shard_stats);
-  last_shard_stats = shard_stats;
-  if (report_detail) {
+
+  if (report_detail && seconds != 0) {
     LOG_PREFIX(SeaStore::get_io_stats);
     auto calc_conflicts = [](uint64_t ios, uint64_t repeats) {
       return (double)(repeats-ios)/ios;
@@ -2586,6 +2594,8 @@ shard_stats_t SeaStore::Shard::get_io_stats(bool report_detail) const
          ret.pending_bg_num,
          ret.pending_flush_num);
   }
+
+  last_shard_stats = shard_stats;
   return ret;
 }
 

@@ -80,9 +80,10 @@ public:
   using close_ertr = base_ertr;
   close_ertr::future<> close();
 
-  device_stats_t get_device_stats(bool report_detail) const {
+  device_stats_t get_device_stats(
+      bool report_detail, double seconds) const {
     writer_stats_t journal_stats = journal->get_writer_stats();
-    return epm->get_device_stats(journal_stats, report_detail);
+    return epm->get_device_stats(journal_stats, report_detail, seconds);
   }
 
   /// Resets transaction
