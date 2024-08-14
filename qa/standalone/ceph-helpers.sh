@@ -1856,6 +1856,7 @@ function repair() {
     local last_scrub=$(get_last_scrub_stamp $pgid)
     ceph pg repair $pgid
     wait_for_scrub $pgid "$last_scrub"
+    sleep 2
 }
 
 function test_repair() {
