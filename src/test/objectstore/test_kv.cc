@@ -119,11 +119,11 @@ TEST_P(KVTest, OpenWriteRead) {
     bufferlist v1, v2;
     ASSERT_EQ(0, db->get("prefix", "key", &v1));
     ASSERT_EQ(v1.length(), 5u);
-    (v1.c_str())[v1.length()] = 0x0;
+    (v1.data())[v1.length()] = 0x0;
     ASSERT_EQ(std::string(v1.c_str()), std::string("value"));
     ASSERT_EQ(0, db->get("prefix", "key2", &v2));
     ASSERT_EQ(v2.length(), 6u);
-    (v2.c_str())[v2.length()] = 0x0;
+    (v2.data())[v2.length()] = 0x0;
     ASSERT_EQ(std::string(v2.c_str()), std::string("value2"));
   }
   fini();

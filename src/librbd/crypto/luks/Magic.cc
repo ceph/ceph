@@ -106,7 +106,7 @@ int Magic::replace_magic(CephContext* cct, ceph::bufferlist& bl) {
       }
 
       // check secondary header magic
-      auto secondary_header_magic = bl.c_str() + hdr_size;
+      auto secondary_header_magic = bl.data() + hdr_size;
       transform_secondary_header_magic(secondary_header_magic);
       auto is_secondary_header_magic_valid =
               !memcmp(secondary_header_magic, old_magic->c_str(), MAGIC_LENGTH);
@@ -129,7 +129,7 @@ int Magic::replace_magic(CephContext* cct, ceph::bufferlist& bl) {
   }
 
   // switch primary header magic
-  memcpy(bl.c_str(), new_magic->c_str(), MAGIC_LENGTH);
+  memcpy(bl.data(), new_magic->c_str(), MAGIC_LENGTH);
 
   return 0;
 }
