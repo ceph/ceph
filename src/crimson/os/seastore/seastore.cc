@@ -590,6 +590,7 @@ seastar::future<> SeaStore::report_stats()
   ceph_assert(seastar::this_shard_id() == primary_core);
   shard_device_stats.resize(seastar::smp::count);
   shard_io_stats.resize(seastar::smp::count);
+  shard_cache_stats.resize(seastar::smp::count);
   return shard_stores.invoke_on_all([this](const Shard &local_store) {
     bool report_detail = false;
     double seconds = 0;
@@ -602,6 +603,8 @@ seastar::future<> SeaStore::report_stats()
       local_store.get_device_stats(report_detail, seconds);
     shard_io_stats[seastar::this_shard_id()] =
       local_store.get_io_stats(report_detail, seconds);
+    shard_cache_stats[seastar::this_shard_id()] =
+      local_store.get_cache_stats(report_detail, seconds);
   }).then([this] {
     LOG_PREFIX(SeaStore);
     auto now = seastar::lowres_clock::now();
@@ -697,6 +700,24 @@ seastar::future<> SeaStore::report_stats()
                  << ") ";
     }
     INFO("details: {}", oss_pending.str());
+
+    cache_stats_t cache_total = {};
+    for (const auto& s : shard_cache_stats) {
+      cache_total.add(s);
+    }
+    cache_size_stats_t lru_sizes_ps = cache_total.lru_sizes;
+    lru_sizes_ps.size /= seastar::smp::count;
+    lru_sizes_ps.num_extents /= seastar::smp::count;
+    cache_io_stats_t lru_io_ps = cache_total.lru_io;
+    lru_io_ps.in_size /= seastar::smp::count;
+    lru_io_ps.in_num_extents /= seastar::smp::count;
+    lru_io_ps.out_size /= seastar::smp::count;
+    lru_io_ps.out_num_extents /= seastar::smp::count;
+    INFO("cache lru: total{} {}; per-shard: total{} {}",
+         cache_total.lru_sizes,
+         cache_io_stats_printer_t{seconds, cache_total.lru_io},
+         lru_sizes_ps,
+         cache_io_stats_printer_t{seconds, lru_io_ps});
     return seastar::now();
   });
 }
@@ -2597,6 +2618,13 @@ shard_stats_t SeaStore::Shard::get_io_stats(
 
   last_shard_stats = shard_stats;
   return ret;
+}
+
+cache_stats_t SeaStore::Shard::get_cache_stats(
+    bool report_detail, double seconds) const
+{
+  return transaction_manager->get_cache_stats(
+      report_detail, seconds);
 }
 
 std::unique_ptr<SeaStore> make_seastore(

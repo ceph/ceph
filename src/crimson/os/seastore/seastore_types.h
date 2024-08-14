@@ -2342,6 +2342,15 @@ CounterT& get_by_ext(
   return counters_by_ext[index];
 }
 
+template <typename CounterT>
+const CounterT& get_by_ext(
+    const counter_by_extent_t<CounterT>& counters_by_ext,
+    extent_types_t ext) {
+  auto index = static_cast<uint8_t>(ext);
+  assert(index < EXTENT_TYPES_MAX);
+  return counters_by_ext[index];
+}
+
 struct grouped_io_stats {
   uint64_t num_io = 0;
   uint64_t num_io_grouped = 0;
@@ -2548,6 +2557,103 @@ struct shard_stats_t {
   }
 };
 
+struct cache_io_stats_t {
+  uint64_t in_size = 0;
+  uint64_t in_num_extents = 0;
+  uint64_t out_size = 0;
+  uint64_t out_num_extents = 0;
+
+  bool is_empty() const {
+    return in_num_extents == 0 && out_num_extents == 0;
+  }
+
+  double get_in_mbs(double seconds) const {
+    return (in_size>>12)/(seconds*256);
+  }
+
+  double get_in_avg_kb() const {
+    return (in_size>>10)/static_cast<double>(in_num_extents);
+  }
+
+  double get_out_mbs(double seconds) const {
+    return (out_size>>12)/(seconds*256);
+  }
+
+  double get_out_avg_kb() const {
+    return (out_size>>10)/static_cast<double>(out_num_extents);
+  }
+
+  void account_in(extent_len_t size) {
+    in_size += size;
+    ++in_num_extents;
+  }
+
+  void account_out(extent_len_t size) {
+    out_size += size;
+    ++out_num_extents;
+  }
+
+  void minus(const cache_io_stats_t& o) {
+    in_size -= o.in_size;
+    in_num_extents -= o.in_num_extents;
+    out_size -= o.out_size;
+    out_num_extents -= o.out_num_extents;
+  }
+
+  void add(const cache_io_stats_t& o) {
+    in_size += o.in_size;
+    in_num_extents += o.in_num_extents;
+    out_size += o.out_size;
+    out_num_extents += o.out_num_extents;
+  }
+};
+struct cache_io_stats_printer_t {
+  double seconds;
+  const cache_io_stats_t &stats;
+};
+std::ostream& operator<<(std::ostream&, const cache_io_stats_printer_t&);
+
+struct cache_size_stats_t {
+  uint64_t size = 0;
+  uint64_t num_extents = 0;
+
+  double get_mb() const {
+    return (size>>12)/static_cast<double>(256);
+  }
+
+  double get_avg_kb() const {
+    return (size>>10)/static_cast<double>(num_extents);
+  }
+
+  void account_in(extent_len_t sz) {
+    size += sz;
+    ++num_extents;
+  }
+
+  void account_out(extent_len_t sz) {
+    assert(size >= sz);
+    assert(num_extents > 0);
+    size -= sz;
+    --num_extents;
+  }
+
+  void add(const cache_size_stats_t& o) {
+    size += o.size;
+    num_extents += o.num_extents;
+  }
+};
+std::ostream& operator<<(std::ostream&, const cache_size_stats_t&);
+
+struct cache_stats_t {
+  cache_size_stats_t lru_sizes;
+  cache_io_stats_t lru_io;
+
+  void add(const cache_stats_t& o) {
+    lru_sizes.add(o.lru_sizes);
+    lru_io.add(o.lru_io);
+  }
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
@@ -2565,6 +2671,8 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 
 #if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::cache_io_stats_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::cache_size_stats_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::data_category_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::delta_info_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_id_printer_t> : fmt::ostream_formatter {};

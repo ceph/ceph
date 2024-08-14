@@ -86,6 +86,10 @@ public:
     return epm->get_device_stats(journal_stats, report_detail, seconds);
   }
 
+  cache_stats_t get_cache_stats(bool report_detail, double seconds) const {
+    return cache->get_stats(report_detail, seconds);
+  }
+
   /// Resets transaction
   void reset_transaction_preserve_handle(Transaction &t) {
     return cache->reset_transaction_preserve_handle(t);

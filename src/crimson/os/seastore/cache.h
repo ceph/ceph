@@ -198,6 +198,8 @@ public:
   Cache(ExtentPlacementManager &epm);
   ~Cache();
 
+  cache_stats_t get_stats(bool report_detail, double seconds) const;
+
   /// Creates empty transaction by source
   TransactionRef create_transaction(
       Transaction::src_t src,
@@ -1363,7 +1365,7 @@ private:
       return;
     }
     if (ext.is_stable_clean() && !ext.is_placeholder()) {
-      lru.move_to_top(ext);
+      lru.move_to_top(ext, p_src);
     }
   }
 
@@ -1419,6 +1421,7 @@ private:
 
   friend class crimson::os::seastore::backref::BtreeBackrefManager;
   friend class crimson::os::seastore::BackrefManager;
+
   /**
    * lru
    *
@@ -1431,16 +1434,38 @@ private:
     // current size (bytes)
     size_t current_size = 0;
 
+    counter_by_extent_t<cache_size_stats_t> sizes_by_ext;
+    cache_io_stats_t overall_io;
+    cache_io_stats_t trans_io;
+    counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
+      trans_io_by_src_ext;
+
+    mutable cache_io_stats_t last_overall_io;
+    mutable cache_io_stats_t last_trans_io;
+    mutable counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
+      last_trans_io_by_src_ext;
+
     CachedExtent::primary_ref_list lru;
 
-    void do_remove_from_lru(CachedExtent &extent) {
+    void do_remove_from_lru(
+        CachedExtent &extent,
+        const Transaction::src_t* p_src) {
       assert(extent.is_stable_clean() && !extent.is_placeholder());
       assert(extent.primary_ref_list_hook.is_linked());
       assert(lru.size() > 0);
-      assert(current_size >= extent.get_length());
+      auto extent_length = extent.get_length();
+      assert(current_size >= extent_length);
 
       lru.erase(lru.s_iterator_to(extent));
-      current_size -= extent.get_length();
+      current_size -= extent_length;
+      get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_length);
+      overall_io.account_out(extent_length);
+      if (p_src) {
+        trans_io.account_out(extent_length);
+        get_by_ext(
+          get_by_src(trans_io_by_src_ext, *p_src),
+          extent.get_type()).account_out(extent_length);
+      }
       intrusive_ptr_release(&extent);
     }
 
@@ -1459,32 +1484,48 @@ private:
       return lru.size();
     }
 
+    void get_stats(
+        cache_stats_t &stats,
+        bool report_detail,
+        double seconds) const;
+
     void remove_from_lru(CachedExtent &extent) {
       assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
-        do_remove_from_lru(extent);
+        do_remove_from_lru(extent, nullptr);
       }
     }
 
-    void move_to_top(CachedExtent &extent) {
+    void move_to_top(
+        CachedExtent &extent,
+        const Transaction::src_t* p_src) {
       assert(extent.is_stable_clean() && !extent.is_placeholder());
 
+      auto extent_length = extent.get_length();
       if (extent.primary_ref_list_hook.is_linked()) {
         // present, move to top (back)
         assert(lru.size() > 0);
-        assert(current_size >= extent.get_length());
+        assert(current_size >= extent_length);
         lru.erase(lru.s_iterator_to(extent));
         lru.push_back(extent);
       } else {
         // absent, add to top (back)
-        current_size += extent.get_length();
+        current_size += extent_length;
+        get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_length);
+        overall_io.account_in(extent_length);
+        if (p_src) {
+          trans_io.account_in(extent_length);
+          get_by_ext(
+            get_by_src(trans_io_by_src_ext, *p_src),
+            extent.get_type()).account_in(extent_length);
+        }
         intrusive_ptr_add_ref(&extent);
         lru.push_back(extent);
 
         // trim to capacity
         while (current_size > capacity) {
-          do_remove_from_lru(lru.front());
+          do_remove_from_lru(lru.front(), p_src);
         }
       }
     }
@@ -1493,7 +1534,7 @@ private:
       LOG_PREFIX(Cache::LRU::clear);
       for (auto iter = lru.begin(); iter != lru.end();) {
 	SUBDEBUG(seastore_cache, "clearing {}", *iter);
-	do_remove_from_lru(*(iter++));
+	do_remove_from_lru(*(iter++), nullptr);
       }
     }
 

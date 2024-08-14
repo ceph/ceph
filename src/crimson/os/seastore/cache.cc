@@ -2159,4 +2159,110 @@ Cache::do_get_caching_extent_by_type(
   });
 }
 
+cache_stats_t Cache::get_stats(
+  bool report_detail, double seconds) const
+{
+  cache_stats_t ret;
+  lru.get_stats(ret, report_detail, seconds);
+  return ret;
+}
+
+void Cache::LRU::get_stats(
+  cache_stats_t &stats,
+  bool report_detail,
+  double seconds) const
+{
+  LOG_PREFIX(Cache::LRU::get_stats);
+
+  stats.lru_sizes = cache_size_stats_t{current_size, lru.size()};
+  stats.lru_io = overall_io;
+  stats.lru_io.minus(last_overall_io);
+
+  if (report_detail && seconds != 0) {
+    cache_io_stats_t _trans_io = trans_io;
+    _trans_io.minus(last_trans_io);
+
+    cache_io_stats_t other_io = stats.lru_io;
+    other_io.minus(_trans_io);
+
+    counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
+      _trans_io_by_src_ext = trans_io_by_src_ext;
+    counter_by_src_t<cache_io_stats_t> trans_io_by_src;
+    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
+      auto src = static_cast<transaction_type_t>(_src);
+      auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
+      const auto& last_io_by_ext = get_by_src(last_trans_io_by_src_ext, src);
+      auto& trans_io_per_src = get_by_src(trans_io_by_src, src);
+      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+        auto ext = static_cast<extent_types_t>(_ext);
+        auto& extent_io = get_by_ext(io_by_ext, ext);
+        const auto& last_extent_io = get_by_ext(last_io_by_ext, ext);
+        extent_io.minus(last_extent_io);
+        trans_io_per_src.add(extent_io);
+      }
+    }
+
+    std::ostringstream oss;
+    oss << "\nlru total" << stats.lru_sizes;
+    cache_size_stats_t data_sizes;
+    cache_size_stats_t mdat_sizes;
+    cache_size_stats_t phys_sizes;
+    for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+      auto ext = static_cast<extent_types_t>(_ext);
+      const auto extent_sizes = get_by_ext(sizes_by_ext, ext);
+      if (is_data_type(ext)) {
+        data_sizes.add(extent_sizes);
+      } else if (is_logical_metadata_type(ext)) {
+        mdat_sizes.add(extent_sizes);
+      } else if (is_physical_type(ext)) {
+        phys_sizes.add(extent_sizes);
+      }
+    }
+    oss << "\n  data" << data_sizes
+        << "\n  mdat" << mdat_sizes
+        << "\n  phys" << phys_sizes;
+
+    oss << "\nlru io: trans-"
+        << cache_io_stats_printer_t{seconds, _trans_io}
+        << "; other-"
+        << cache_io_stats_printer_t{seconds, other_io};
+    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
+      auto src = static_cast<transaction_type_t>(_src);
+      const auto& trans_io_per_src = get_by_src(trans_io_by_src, src);
+      if (trans_io_per_src.is_empty()) {
+        continue;
+      }
+      cache_io_stats_t data_io;
+      cache_io_stats_t mdat_io;
+      cache_io_stats_t phys_io;
+      const auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
+      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+        auto ext = static_cast<extent_types_t>(_ext);
+        const auto extent_io = get_by_ext(io_by_ext, ext);
+        if (is_data_type(ext)) {
+          data_io.add(extent_io);
+        } else if (is_logical_metadata_type(ext)) {
+          mdat_io.add(extent_io);
+        } else if (is_physical_type(ext)) {
+          phys_io.add(extent_io);
+        }
+      }
+      oss << "\n  " << src << ": "
+          << cache_io_stats_printer_t{seconds, trans_io_per_src}
+          << "\n    data: "
+          << cache_io_stats_printer_t{seconds, data_io}
+          << "\n    mdat: "
+          << cache_io_stats_printer_t{seconds, mdat_io}
+          << "\n    phys: "
+          << cache_io_stats_printer_t{seconds, phys_io};
+    }
+
+    INFO("{}", oss.str());
+  }
+
+  last_overall_io = overall_io;
+  last_trans_io = trans_io;
+  last_trans_io_by_src_ext = trans_io_by_src_ext;
+}
+
 }

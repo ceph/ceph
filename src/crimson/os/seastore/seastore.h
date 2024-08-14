@@ -210,6 +210,8 @@ public:
 
     shard_stats_t get_io_stats(bool report_detail, double seconds) const;
 
+    cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
+
   private:
     struct internal_context_t {
       CollectionRef ch;
@@ -585,6 +587,7 @@ private:
     seastar::lowres_clock::time_point::min();
   mutable std::vector<device_stats_t> shard_device_stats;
   mutable std::vector<shard_stats_t> shard_io_stats;
+  mutable std::vector<cache_stats_t> shard_cache_stats;
 };
 
 std::unique_ptr<SeaStore> make_seastore(
