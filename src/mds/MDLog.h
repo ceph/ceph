@@ -146,7 +146,10 @@ public:
     return unflushed == 0;
   }
 
-  void trim_expired_segments();
+  void trim_expired_segments(MDSContext* ctx=nullptr) {
+    std::unique_lock locker(submit_mutex);
+    _trim_expired_segments(locker, ctx);
+  }
   int trim_all() {
     return trim_to(0);
   }
@@ -288,7 +291,7 @@ private:
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
   void _expired(LogSegment *ls);
-  void _trim_expired_segments();
+  void _trim_expired_segments(auto& locker, MDSContext* ctx=nullptr);
   void write_head(MDSContext *onfinish);
 
   void trim();
