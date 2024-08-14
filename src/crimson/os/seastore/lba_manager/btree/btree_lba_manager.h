@@ -264,13 +264,20 @@ public:
   struct alloc_mapping_info_t {
     laddr_t key = L_ADDR_NULL; // once assigned, the allocation to
 			       // key must be exact and successful
-    extent_len_t len = 0;
-    pladdr_t val;
-    uint32_t checksum = 0;
+    lba_map_val_t value;
     LogicalCachedExtent* extent = nullptr;
 
     static alloc_mapping_info_t create_zero(extent_len_t len) {
-      return {L_ADDR_NULL, len, P_ADDR_ZERO, 0, nullptr};
+      return {
+	L_ADDR_NULL,
+	lba_map_val_t{
+	  len,
+	  P_ADDR_ZERO,
+	  EXTENT_DEFAULT_REF_COUNT,
+	  0
+	},
+	nullptr
+      };
     }
     static alloc_mapping_info_t create_indirect(
       laddr_t laddr,
@@ -278,19 +285,23 @@ public:
       laddr_t intermediate_key) {
       return {
 	laddr,
-	len,
-	intermediate_key,
-	0,	// crc will only be used and checked with LBA direct mappings
+	{
+	  len,
+	  intermediate_key,
+	  EXTENT_DEFAULT_REF_COUNT,
+	  0	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
+	},
 	nullptr};
     }
     static alloc_mapping_info_t create_direct(
       laddr_t laddr,
       extent_len_t len,
       paddr_t paddr,
+      extent_ref_count_t refcount,
       uint32_t checksum,
       LogicalCachedExtent *extent) {
-      return {laddr, len, paddr, checksum, extent};
+      return {laddr, {len, paddr, refcount, checksum}, extent};
     }
   };
 
@@ -307,8 +318,7 @@ public:
       return _alloc_extents(
 	t,
 	hint,
-	alloc_infos,
-	EXTENT_DEFAULT_REF_COUNT
+	alloc_infos
       ).si_then([](auto mappings) {
 	assert(mappings.size() == 1);
 	auto mapping = std::move(mappings.front());
@@ -366,16 +376,16 @@ public:
 	L_ADDR_NULL,
 	ext.get_length(),
 	ext.get_paddr(),
+	refcount,
 	ext.get_last_committed_crc(),
 	&ext)};
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint, refcount](auto &alloc_infos) {
+      [this, &t, hint](auto &alloc_infos) {
       return _alloc_extents(
 	t,
 	hint,
-	alloc_infos,
-	refcount
+	alloc_infos
       ).si_then([](auto mappings) {
 	assert(mappings.size() == 1);
 	auto mapping = std::move(mappings.front());
@@ -397,13 +407,14 @@ public:
 	  extent->has_laddr() ? extent->get_laddr() : L_ADDR_NULL,
 	  extent->get_length(),
 	  extent->get_paddr(),
+	  refcount,
 	  extent->get_last_committed_crc(),
 	  extent.get()));
     }
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint, refcount](auto &alloc_infos) {
-      return _alloc_extents(t, hint, alloc_infos, refcount);
+      [this, &t, hint](auto &alloc_infos) {
+      return _alloc_extents(t, hint, alloc_infos);
     });
   }
 
@@ -638,8 +649,7 @@ private:
   alloc_extents_ret _alloc_extents(
     Transaction &t,
     laddr_t hint,
-    std::vector<alloc_mapping_info_t> &alloc_infos,
-    extent_ref_count_t refcount);
+    std::vector<alloc_mapping_info_t> &alloc_infos);
 
   ref_ret _incref_extent(
     Transaction &t,
@@ -659,7 +669,7 @@ private:
   {
 #ifndef NDEBUG
     for (auto &alloc_info : alloc_infos) {
-      assert(alloc_info.val.get_laddr() != L_ADDR_NULL);
+      assert(alloc_info.value.pladdr.get_laddr() != L_ADDR_NULL);
     }
 #endif
     return seastar::do_with(
@@ -668,8 +678,7 @@ private:
       return _alloc_extents(
 	t,
 	laddr,
-	alloc_infos,
-	EXTENT_DEFAULT_REF_COUNT
+	alloc_infos
       ).si_then([&alloc_infos](auto mappings) {
 	assert(alloc_infos.size() == mappings.size());
 	std::vector<BtreeLBAMappingRef> rets;
@@ -680,8 +689,8 @@ private:
 	  auto &alloc_info = *ait;
 	  assert(mapping->get_key() == alloc_info.key);
 	  assert(mapping->get_raw_val().get_laddr() ==
-	    alloc_info.val.get_laddr());
-	  assert(mapping->get_length() == alloc_info.len);
+	    alloc_info.value.pladdr.get_laddr());
+	  assert(mapping->get_length() == alloc_info.value.len);
 	  rets.emplace_back(mapping);
 	}
 	return rets;
