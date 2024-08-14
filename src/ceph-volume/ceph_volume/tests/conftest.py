@@ -1,11 +1,13 @@
 import os
 import pytest
-from mock.mock import patch, PropertyMock, create_autospec
+from mock.mock import patch, PropertyMock, create_autospec, Mock
 from ceph_volume.api import lvm
 from ceph_volume.util import disk
 from ceph_volume.util import device
 from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume import conf, configuration, objectstore
+from ceph_volume.objectstore.rawbluestore import RawBlueStore
+from typing import Any, Dict, List, Optional, Callable
 
 
 class Capture(object):
@@ -494,6 +496,14 @@ raw_direct_report_data = {
         "osd_id": 9,
         "osd_uuid": "a0e07c5b-bee1-4ea2-ae07-cb89deda9b27",
         "type": "bluestore"
+    },
+    "db32a338-b640-4cbc-af17-f63808b1c36e": {
+        "ceph_fsid": "c301d0aa-288d-11ef-b535-c84bd6975560",
+        "device": "/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdb-block-dmcrypt",
+        "device_db": "/dev/mapper/ceph-db32a338-b640-4cbc-af17-f63808b1c36e-sdc-db-dmcrypt",
+        "osd_id": 0,
+        "osd_uuid": "db32a338-b640-4cbc-af17-f63808b1c36e",
+        "type": "bluestore"
     }
 }
 
@@ -504,3 +514,20 @@ def mock_lvm_direct_report(monkeypatch):
 @pytest.fixture
 def mock_raw_direct_report(monkeypatch):
     monkeypatch.setattr('ceph_volume.objectstore.rawbluestore.direct_report', lambda x: raw_direct_report_data)
+
+@pytest.fixture
+def fake_lsblk_all(monkeypatch: Any) -> Callable:
+    def apply(data: Optional[List[Dict[str, Any]]] = None) -> None:
+        if data is None:
+            devices = []
+        else:
+            devices = data
+        monkeypatch.setattr("ceph_volume.util.device.disk.lsblk_all", lambda *a, **kw: devices)
+    return apply
+
+@pytest.fixture
+def rawbluestore(factory: type[Factory]) -> RawBlueStore:
+    args = factory(devices=['/dev/foo'])
+    with patch('ceph_volume.objectstore.rawbluestore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ=='])):
+        r = RawBlueStore(args)  # type: ignore
+        return r
