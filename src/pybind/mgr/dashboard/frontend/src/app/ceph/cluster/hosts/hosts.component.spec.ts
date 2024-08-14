@@ -117,7 +117,7 @@ describe('HostsComponent', () => {
     fixture.detectChanges();
 
     const spans = fixture.debugElement.nativeElement.querySelectorAll(
-      'cds-table > table > tbody > tr > td > span'
+      'table > tbody > tr > td > span'
     );
     expect(spans[0].textContent.trim()).toBe(hostname);
   });

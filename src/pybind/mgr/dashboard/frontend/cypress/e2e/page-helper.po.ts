@@ -147,14 +147,14 @@ export abstract class PageHelper {
    */
   private waitDataTableToLoad() {
     cy.get('cd-table').should('exist');
-    cy.get('cds-table table tbody').should('exist');
+    cy.get('table[cdstable] tbody').should('exist');
     cy.contains('Loading').should('not.exist');
   }
 
   getDataTables() {
     this.waitDataTableToLoad();
 
-    return cy.get('cd-table cds-table');
+    return cy.get('cd-table [cdsTable]');
   }
 
   private getTableCountSpan(_spanType: 'selected' | 'found' | 'total' | 'item' | 'items') {
