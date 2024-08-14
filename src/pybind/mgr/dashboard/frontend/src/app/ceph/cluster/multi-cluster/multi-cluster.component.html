@@ -266,3 +266,10 @@
     </ng-container>
   </div>
 </ng-container>
+
+<ng-template #clusterUsageTpl
+             let-row="row">
+  <cd-usage-bar [total]="row.total_capacity"
+                [used]="row.used_capacity">
+  </cd-usage-bar>
+</ng-template>
