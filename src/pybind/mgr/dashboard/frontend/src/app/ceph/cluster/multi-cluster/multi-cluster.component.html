@@ -268,7 +268,7 @@
 </ng-container>
 
 <ng-template #clusterUsageTpl
-             let-row="row">
+             let-row="data.row">
   <cd-usage-bar [total]="row.total_capacity"
                 [used]="row.used_capacity">
   </cd-usage-bar>
