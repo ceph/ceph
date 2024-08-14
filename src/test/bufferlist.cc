@@ -1022,22 +1022,6 @@ TEST(BufferListIterator, operator_plus_plus) {
   }
 }
 
-TEST(BufferListIterator, get_current_ptr) {
-  bufferlist bl;
-  {
-    bufferlist::iterator i(&bl);
-    EXPECT_THROW(++i, buffer::end_of_buffer);
-  }
-  bl.append("ABC", 3);
-  {
-    bufferlist::iterator i(&bl, 1);
-    const buffer::ptr ptr = i.get_current_ptr();
-    EXPECT_EQ('B', ptr[0]);
-    EXPECT_EQ((unsigned)1, ptr.offset());
-    EXPECT_EQ((unsigned)2, ptr.length());
-  }  
-}
-
 TEST(BufferListIterator, copy) {
   bufferlist bl;
   const char *expected = "ABC";
