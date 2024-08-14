@@ -261,6 +261,10 @@
                 Another name for :term:`Dashboard`.
 
 	Dashboard Plugin
+        Flapping OSD
+                An OSD that is repeatedly marked ``up`` and then ``down`` in
+                rapid succession. See :ref:`rados_tshooting_flapping_osd`.
+
         FQDN
                 **F**\ully **Q**\ualified **D**\omain **N**\ame. A domain name
                 that is applied to a node in a network and that specifies the
@@ -360,6 +364,9 @@
                 :term:`Ceph OSD Daemon` despite an industry push in the
                 mid-2010s to insist that "OSD" should refer to "Object Storage
                 Device", so it is important to know which meaning is intended. 
+
+        OSD, flapping
+                See :term:`Flapping OSD`.
 
 	OSD FSID 
                 The OSD fsid is a unique identifier that is used to identify an
