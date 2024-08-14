@@ -237,12 +237,11 @@ all cached caps (the actual recall value is ``num_caps -
 mds_min_caps_per_client(100)``).
 
 Under certain circumstances, many "recall caps" requests can be sent so quickly
-that the "mon warning limit" exceeded, and the "clients failing to respond to
-cache pressure" message can be triggered. If the client does not release the
-caps fast enough, the MDS repeats the "recall caps" request one second later.
-This means that the MDS will send "recall caps" again and again. The "total"
-counter of "recall caps" for the session will grow and grow, and will
-eventually exceed the "mon warning limit".
+that the health warning is generated: "clients failing to respond to cache
+pressure". If the client does not release the caps fast enough, the MDS repeats
+the "recall caps" request one second later.  This means that the MDS will send
+"recall caps" again and again. The "total" counter of "recall caps" for the
+session will grow and grow, and will eventually exceed the "mon warning limit".
 
 A throttling mechanism, controlled by the ``mds_recall_max_decay_threshold``
 parameter (126K by default), is available for reducing the rate of "recall
@@ -258,7 +257,7 @@ Example Scenario
 Here is an example. A client is having 20k caps cached. At some moment the
 server decides the client is inactive (because the session's ``cache_liveness``
 value is low). It starts to ask the client to release caps down to
-``mds_min_caps_per_client`` value (100 by default). For this every seconds it
+``mds_min_caps_per_client`` value (100 by default). Every second, it
 sends recall_caps asking to release ``caps_num - mds_min_caps_per_client`` caps
 (but not more than ``mds_recall_max_caps``, which is 30k by default). A client
 is starting to release, but is releasing with a rate of (for example) only 100
