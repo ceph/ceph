@@ -15802,7 +15802,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   vector<OnodeRef> ovec(i.objects.size());
 
   for (int pos = 0; i.have_op(); ++pos) {
-    Transaction::Op *op = i.decode_op();
+    const Transaction::Op *op = i.decode_op();
     int r = 0;
 
     // no coll or obj

@@ -59,7 +59,7 @@ void Transaction::dump(ceph::Formatter *f)
   int op_num = 0;
   bool stop_looping = false;
   while (i.have_op() && !stop_looping) {
-    Transaction::Op *op = i.decode_op();
+    const Transaction::Op *op = i.decode_op();
     f->open_object_section("op");
     f->dump_int("op_num", op_num);
 

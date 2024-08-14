@@ -701,7 +701,7 @@ void MemStore::_do_transaction(Transaction& t)
   int pos = 0;
 
   while (i.have_op()) {
-    Transaction::Op *op = i.decode_op();
+    const Transaction::Op *op = i.decode_op();
     int r = 0;
 
     switch (op->op) {
