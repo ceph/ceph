@@ -363,6 +363,29 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         }
       ];
     }
+
+    const tableHeadersSubscription = this._tableHeaders
+      .pipe(
+        map((values: CdTableColumn[]) =>
+          values.map(
+            (col: CdTableColumn) =>
+              new TableHeaderItem({
+                data: col?.headerTemplate ? { ...col } : col.name,
+                title: col.name,
+                template: col?.headerTemplate,
+                // if cellClass is a function it cannot be called here as it requires table data to execute
+                // instead if cellClass is a function it will be called and applied while parsing the data
+                className: _.isString(col?.cellClass) ? col?.cellClass : col?.className,
+                visible: !col.isHidden,
+                sortable: _.isNil(col.sortable) ? true : col.sortable
+              })
+          )
+        )
+      )
+      .subscribe({
+        next: (values: TableHeaderItem[]) => (this.model.header = values)
+      });
+
     const datasetSubscription = this._dataset
       .pipe(
         filter((values: any[]) => {
@@ -419,28 +442,6 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         }
       });
 
-    const tableHeadersSubscription = this._tableHeaders
-      .pipe(
-        map((values: CdTableColumn[]) =>
-          values.map(
-            (col: CdTableColumn) =>
-              new TableHeaderItem({
-                data: col?.headerTemplate ? { ...col } : col.name,
-                title: col.name,
-                template: col?.headerTemplate,
-                // if cellClass is a function it cannot be called here as it requires table data to execute
-                // instead if cellClass is a function it will be called and applied while parsing the data
-                className: _.isString(col?.cellClass) ? col?.cellClass : col?.className,
-                visible: !col.isHidden,
-                sortable: _.isNil(col.sortable) ? true : col.sortable
-              })
-          )
-        )
-      )
-      .subscribe({
-        next: (values: TableHeaderItem[]) => (this.model.header = values)
-      });
-
     const rowsExpandedSubscription = this.model.rowsExpandedChange.subscribe({
       next: (index: number) => {
         if (this.model.rowsExpanded.every((x) => !x)) {
@@ -454,9 +455,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       }
     });
 
+    this._subscriptions.add(tableHeadersSubscription);
     this._subscriptions.add(datasetSubscription);
     this._subscriptions.add(rowsExpandedSubscription);
-    this._subscriptions.add(tableHeadersSubscription);
   }
 
   ngOnInit() {

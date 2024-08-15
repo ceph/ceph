@@ -28,10 +28,10 @@ $content-theme: map-merge(
     focus-inverse: lighten(vv.$primary, 25%),
     text-inverse: vv.$dark,
     support-info: vv.$info,
-    layer-01: vv.$secondary,
-    layer-hover-01: vv.$gray-600,
+    layer-01: vv.$light,
+    layer-hover-01: colors.$gray-20,
     text-primary: vv.$dark,
-    text-secondary: vv.$body-bg-alt,
+    text-secondary: vv.$dark,
     text-disabled: vv.$gray-500,
     icon-secondary: vv.$body-bg-alt
   )
