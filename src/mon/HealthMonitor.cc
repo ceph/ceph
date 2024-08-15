@@ -733,8 +733,11 @@ bool HealthMonitor::check_leader_health()
   if (g_conf().get_val<bool>("mon_warn_on_older_version")) {
     check_for_older_version(&next);
   }
+  std::set<std::string> mons_down;
   // MON_DOWN
-  check_for_mon_down(&next);
+  check_for_mon_down(&next, mons_down);
+  // MON_NETSPLIT
+  check_netsplit(&next, mons_down);
   // MON_CLOCK_SKEW
   check_for_clock_skew(&next);
   // MON_MSGR2_NOT_ENABLED
@@ -802,7 +805,7 @@ void HealthMonitor::check_for_older_version(health_check_map_t *checks)
   }
 }
 
-void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
+void HealthMonitor::check_for_mon_down(health_check_map_t *checks, std::set<std::string> &mon_downs)
 {
   int max = mon.monmap->size();
   int actual = mon.get_quorum().size();
@@ -822,7 +825,9 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
     for (int i=0; i<max; i++) {
       if (q.count(i) == 0) {
 	ostringstream ss;
-	ss << "mon." << mon.monmap->get_name(i) << " (rank " << i
+  std::string mon_name = mon.monmap->get_name(i);
+  mon_downs.insert(mon_name);
+	ss << "mon." << mon_name << " (rank " << i
 	   << ") addr " << mon.monmap->get_addrs(i)
 	   << " is down (out of quorum)";
 	d.detail.push_back(ss.str());
@@ -915,6 +920,250 @@ void HealthMonitor::check_mon_crush_loc_stretch_mode(health_check_map_t *checks)
     ss << details.size() << " monitor(s) have nonexistent CRUSH location";
     auto &d = checks->add("NONEXISTENT_MON_CRUSH_LOC_STRETCH_MODE", HEALTH_WARN, ss.str(),
                 details.size());
+    d.detail.swap(details);
+  }
+}
+
+void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::string> &mons_down)
+{
+  /**
+  * Check for netsplits between monitors and report them in a topology-aware manner
+  *
+  * This function detects network partitions between monitors and reports them as:
+  * - Location-level netsplits: When ALL monitors in one location cannot communicate
+  *   with ALL monitors in another location, this is reported as a location-level 
+  *   netsplit (e.g., "Netsplit detected between dc1 and dc2")
+  * - Individual-level netsplits: When only specific monitors are disconnected
+  *   and not following location boundaries, these are reported individually
+  *   (e.g., "Netsplit detected between mon.a and mon.d")
+  *
+  * The function identifies the highest relevant topology level (zone, datacenter, etc.)
+  * when reporting location-level netsplits, to give operators the most useful information
+  * for troubleshooting network issues.
+  *
+  * Time Complexity: O(m^2)
+  * Space Complexity: O(m^2)
+  * where m is the number of monitors in the monmap.
+  */
+  dout(20) << __func__ << dendl;
+  if (mon.monmap->size() < 3 || mon.monmap->strategy != MonMap::CONNECTIVITY) {
+    return;
+  }
+  std::set<unsigned> mons_down_ranks;
+  for (const auto& mon_name : mons_down) {
+    mons_down_ranks.insert(mon.monmap->get_rank(mon_name));
+  }
+  // Get netsplit pairs early to avoid unnecessary work if no netsplits exist.
+  // O(m^2)
+  std::set<std::pair<unsigned, unsigned>> nsp_pairs = mon.elector.get_netsplit_peer_tracker(mons_down_ranks);
+  if (nsp_pairs.empty()) {
+    return;
+  }
+  // Pre-populate mon_loc_map & location_to_mons for each monitor, discarding monitors that are down,
+  // and sort the crush location highest to lowest by type id in the cluster topology.
+  // Sort takes O(1) since the number of locations in the cluster topology is fixed.
+  // OSDMap::_build_crush_types defines the hierarchy
+  // (root > region > datacenter > room > ...) which allows us to sort in
+  // descending order and report netsplits at the highest (most significant)
+  // level of the topology where monitors differ.
+  // Time Complexity: O(m)
+  // Space Complexity: O(m)
+  std::map<std::string, std::set<std::string>> location_to_mons;
+  std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> mon_loc_map;
+  for (auto &mon_info : mon.monmap->mon_info) {
+      // Create a vector of pairs
+      std::vector<std::pair<std::string, std::string>> sorted_crush_loc_vec;
+      for (const auto& item : mon_info.second.crush_loc) {
+        sorted_crush_loc_vec.push_back(item);
+      }
+      // Sort the vector by type id
+      std::sort(sorted_crush_loc_vec.begin(), sorted_crush_loc_vec.end(),
+          [this](const std::pair<std::string, std::string> &a,
+                const std::pair<std::string, std::string> &b) {
+            auto a_type_id = mon.osdmon()->osdmap.crush->get_validated_type_id(a.first);
+            auto b_type_id = mon.osdmon()->osdmap.crush->get_validated_type_id(b.first);
+            // Handle missing type IDs gracefully
+            // If 'a' is invalid, it should come AFTER valid entries
+            if (!a_type_id.has_value()) {
+              dout(0) << "ERROR: Monitor CRUSH location type '" << a.first 
+                      << "' not found in CRUSH map" << dendl;
+              return false;
+            }
+            // If 'b' is invalid, it should come AFTER valid entries
+            if (!b_type_id.has_value()) {
+              dout(0) << "ERROR: Monitor CRUSH location type '" << b.first 
+                      << "' not found in CRUSH map" << dendl;
+              return true;
+            }
+            // Both have valid type IDs, sort by ID (higher IDs first)
+            return *a_type_id > *b_type_id;
+          });
+      // Store in mon_loc_map
+      const std::string& mon_name = mon_info.second.name;
+      mon_loc_map[mon_name] = sorted_crush_loc_vec;
+      // Group monitors by location of their highest CRUSH bucket-type
+      // Discard monitors that are down or have no location
+      if (!sorted_crush_loc_vec.empty()) {
+        if (!mons_down.count(mon_name)) {
+          auto& highest_loc = sorted_crush_loc_vec.front();
+          location_to_mons[highest_loc.second].insert(mon_name);
+        } else {
+          dout(30) << "mon: " << mon_name << " is down" << dendl;
+        }
+      } else {
+        dout(30) << "mon: " << mon_name << " has no location" << dendl;
+      }
+  }
+
+  // retrieve the netsplit pairs and check for the highest common CRUSH 
+  // bucket-type between the two monitors in the pair.
+  auto mon_loc_map_end = mon_loc_map.end();
+  std::map<std::pair<std::string, std::string>, int> location_disconnects;
+  std::set<std::pair<std::string, std::string>> mon_disconnects;
+  for (auto &rank_pair : nsp_pairs) {
+    std::string first_mon = mon.monmap->get_name(rank_pair.first);
+    std::string second_mon = mon.monmap->get_name(rank_pair.second);
+    if (first_mon.empty()) {
+      dout(10) << "Failed to get mon name for rank " << rank_pair.first
+               << ", it might no longer exist in the monmap" << dendl;
+      continue;
+    }
+    if (second_mon.empty()) {
+      dout(10) << "Failed to get mon name for rank " << rank_pair.second
+               << ", it might no longer exist in the monmap" << dendl;
+      continue;
+    }
+    // Skip if either monitor is down ... although this should not happen
+    // if the connection scores that nsp_pairs is built from is correct.
+    if (mons_down.count(first_mon)) {
+      dout(10) << "mon: " << first_mon
+        << " is down; something is wrong with connection scores" << dendl;
+      continue;
+    }
+    if (mons_down.count(second_mon)) {
+      dout(10) << "mon: " << second_mon
+        << " is down; something is wrong with connection scores" << dendl;
+      continue;
+    }
+    // Skip if either monitor is not found in mon_loc_map
+    auto first_mon_loc_it = mon_loc_map.find(first_mon);
+    auto second_mon_loc_it = mon_loc_map.find(second_mon);
+    if (first_mon_loc_it == mon_loc_map_end) {
+      dout(10) << "Failed to locate mon: " << first_mon
+               << " might no longer exist in the monmap" << dendl;
+      continue;
+    }
+    if (second_mon_loc_it == mon_loc_map_end) {
+      dout(10) << "Failed to locate mon: " << second_mon
+               << " might no longer exist in the monmap" << dendl;
+      continue;
+    }
+    // If either monitor has no location, add to the individual-level netsplit report
+    if (first_mon_loc_it->second.empty() || second_mon_loc_it->second.empty()) {
+      if (first_mon > second_mon) std::swap(first_mon, second_mon);
+      mon_disconnects.insert({first_mon, second_mon});
+      continue;
+    }
+    // Get the highest CRUSH bucket-type location for each monitor
+    std::string first_mon_highest_loc = first_mon_loc_it->second.front().second;
+    std::string second_mon_highest_loc = second_mon_loc_it->second.front().second;
+    // If the monitors are in the same location, add to the individual-level netsplit report
+    if (first_mon_highest_loc == second_mon_highest_loc) {
+      if (first_mon > second_mon) std::swap(first_mon, second_mon);
+      mon_disconnects.insert({first_mon, second_mon});
+      continue;
+    }
+    // Else add to the location-level netsplit report
+    if (first_mon_highest_loc > second_mon_highest_loc) std::swap(first_mon_highest_loc, second_mon_highest_loc);
+    if (first_mon > second_mon) std::swap(first_mon, second_mon);
+    // Count the disconnects between the two monitors and locations
+    location_disconnects[{first_mon_highest_loc, second_mon_highest_loc}]++;
+    mon_disconnects.insert({first_mon, second_mon});
+  }
+  
+  // For debugging purposes:
+  if (mon.cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
+    dout(30) << "mon_disconnects: {";
+    bool first = true;
+    for (const auto& mon_pair : mon_disconnects) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << mon_pair.first << ", "
+        << mon_pair.second << ") ";
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "location_disconnects: {";
+    bool first = true;
+    for (const auto& loc_pair : location_disconnects) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << loc_pair.first.first << ", "
+        << loc_pair.first.second << "): "
+        << loc_pair.second;
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "mon_loc_map: " << dendl;
+    for (const auto& mon_pair : mon_loc_map) {
+      dout(30) << mon_pair.first << ": {";
+      bool first = true;
+      for (const auto& loc_pair : mon_pair.second) {
+        if (!first) *_dout << ", ";
+        first = false;
+        *_dout << loc_pair.first << ": " << loc_pair.second;
+      }
+      *_dout << "}" << dendl;
+    }
+
+    dout(30) << "location_to_mons: " << dendl;
+    for (const auto& loc_pair : location_to_mons) {
+      dout(30) << loc_pair.first << ": {";
+      bool first = true;
+      for (const auto& monitor : loc_pair.second) {
+        if (!first) *_dout << ", ";
+        first = false;
+        *_dout << monitor;
+      }
+      *_dout << "}" << dendl;
+    }
+  }
+
+  // Check for location-level netsplits and remove individual-level netsplits
+  list<string> details;
+  for (auto& kv : location_disconnects) {
+    auto& loc_pair = kv.first;
+    int disconnect_count = kv.second;
+    
+    // The expected number of disconnects between two locations
+    // is the product of the number of monitors in each location
+    int expected_disconnects = location_to_mons[loc_pair.first].size() * 
+                                location_to_mons[loc_pair.second].size();
+    // Report location-level netsplits
+    if (disconnect_count == expected_disconnects) {
+      ostringstream ds;
+      ds << "Netsplit detected between " << loc_pair.first << " and " << loc_pair.second;
+      details.push_back(ds.str());
+      
+      // Remove individual monitor disconnects between these locations
+      for (const auto& mon1 : location_to_mons[loc_pair.first]) {
+        for (const auto& mon2 : location_to_mons[loc_pair.second]) {
+          // Normalize the order to erase the correct pair (can't use std::swap)
+          mon_disconnects.erase({std::min(mon1, mon2), std::max(mon1, mon2)});
+        }
+      }
+    }
+  }
+  // Report individual-level netsplits
+  for (auto& mon_pair : mon_disconnects) {
+    ostringstream ds;
+    ds << "Netsplit detected between mon." << mon_pair.first << " and mon." << mon_pair.second;
+    details.push_back(ds.str());
+  }
+  
+  // Report health check if any details
+  if (!details.empty()) {
+    ostringstream ss;
+    ss << details.size() << " network partition" << (details.size() > 1 ? "s" : "") << " detected";
+    auto& d = checks->add("MON_NETSPLIT", HEALTH_WARN, ss.str(), details.size());
     d.detail.swap(details);
   }
 }
