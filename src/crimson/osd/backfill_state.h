@@ -55,6 +55,9 @@ struct BackfillState {
   struct Triggered : sc::event<Triggered> {
   };
 
+  struct RequestDone : sc::event<RequestDone> {
+  };
+
 private:
   // internal events
   struct RequestPrimaryScanning : sc::event<RequestPrimaryScanning> {
@@ -64,9 +67,6 @@ private:
   };
 
   struct RequestWaiting : sc::event<RequestWaiting> {
-  };
-
-  struct RequestDone : sc::event<RequestDone> {
   };
 
   class ProgressTracker;
@@ -149,7 +149,6 @@ public:
       sc::transition<RequestPrimaryScanning, PrimaryScanning>,
       sc::transition<RequestReplicasScanning, ReplicasScanning>,
       sc::transition<RequestWaiting, Waiting>,
-      sc::transition<RequestDone, Done>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Enqueuing(my_context);
 
@@ -206,6 +205,7 @@ public:
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<PrimaryScanned>,
+      sc::transition<RequestDone, Done>,
       sc::transition<sc::event_base, Crashed>>;
     explicit PrimaryScanning(my_context);
     sc::result react(ObjectPushed);
@@ -218,6 +218,7 @@ public:
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
       sc::custom_reaction<ReplicaScanned>,
+      sc::transition<RequestDone, Done>,
       sc::transition<sc::event_base, Crashed>>;
     explicit ReplicasScanning(my_context);
     // collect scanning result; if all results are collected, transition
@@ -241,6 +242,7 @@ public:
                    StateHelper<Waiting> {
     using reactions = boost::mpl::list<
       sc::custom_reaction<ObjectPushed>,
+      sc::transition<RequestDone, Done>,
       sc::transition<sc::event_base, Crashed>>;
     explicit Waiting(my_context);
     sc::result react(ObjectPushed);
@@ -266,12 +268,21 @@ public:
   hobject_t get_last_backfill_started() const {
     return last_backfill_started;
   }
+
+  void backfill_target_done() {
+    ceph_assert(replicas_in_backfill > 0);
+    replicas_in_backfill--;
+    if (!replicas_in_backfill) {
+      backfill_machine.process_event(RequestDone{});
+    }
+  }
 private:
   hobject_t last_backfill_started;
   BackfillInterval backfill_info;
   std::map<pg_shard_t, BackfillInterval> peer_backfill_info;
   BackfillMachine backfill_machine;
   std::unique_ptr<ProgressTracker> progress_tracker;
+  size_t replicas_in_backfill = 0;
 };
 
 // BackfillListener -- an interface used by the backfill FSM to request
