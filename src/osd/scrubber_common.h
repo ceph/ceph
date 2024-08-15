@@ -84,12 +84,21 @@ using act_token_t = uint32_t;
 /// (note: struct size should be kept small, as it is copied around)
 struct OSDRestrictions {
   /// high local OSD concurrency. Thus - only high priority scrubs are allowed
-  bool high_priority_only{false};
-  bool allow_requested_repair_only{false};
-  bool only_deadlined{false};
+  bool max_concurrency_reached{false};
+
+  /// rolled a dice, and decided not to scrub in this tick
+  bool random_backoff_active{false};
+
+  /// the OSD is performing recovery & osd_repair_during_recovery is 'true'
+  bool allow_requested_repair_only:1{false};
+
+  /// the load is high, or the time is not right. For periodic scrubs,
+  /// only the overdue ones are allowed.
+  bool only_deadlined:1{false};
   bool load_is_low:1{true};
   bool time_permit:1{true};
-  bool max_concurrency_reached:1{false};
+  /// the OSD is performing a recovery, osd_scrub_during_recovery is 'false',
+  /// and so is osd_repair_during_recovery
   bool recovery_in_progress:1{false};
 };
 static_assert(sizeof(Scrub::OSDRestrictions) <= sizeof(uint32_t));
@@ -185,13 +194,13 @@ struct formatter<Scrub::OSDRestrictions> {
   auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx) const
   {
     return fmt::format_to(
-      ctx.out(),
-      "priority-only:{},overdue-only:{},load:{},time:{},repair-only:{}",
-        conds.high_priority_only,
-        conds.only_deadlined,
-        conds.load_is_low ? "ok" : "high",
-        conds.time_permit ? "ok" : "no",
-        conds.allow_requested_repair_only);
+	ctx.out(), "<{}.{}.{}.{}.{}.{}>",
+	conds.max_concurrency_reached ? "max-scrubs" : "",
+	conds.random_backoff_active ? "backoff" : "",
+	conds.load_is_low ? "" : "high-load",
+	conds.time_permit ? "" : "time-restrict",
+	conds.recovery_in_progress ? "recovery" : "",
+	conds.allow_requested_repair_only ? "repair-only" : "");
   }
 };
 

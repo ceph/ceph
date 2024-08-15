@@ -344,6 +344,7 @@ class ScrubJob {
  *  | noscrub    |    yes     |      no?     |     no   |      no     |
  *  | max-scrubs |    yes     |      yes?    |     no   |      no     |
  *  | backoff    |    yes     |      no      |     no   |      no     |
+ *  | recovery   |    yes     |      no      |     no   |      no     |
  *  +------------+------------+--------------+----------+-------------+
  */
 
@@ -362,7 +363,10 @@ class ScrubJob {
 
   static bool observes_max_concurrency(urgency_t urgency);
 
-  static bool observes_random_backoff(urgency_t urgency);};
+  static bool observes_random_backoff(urgency_t urgency);
+
+  static bool observes_recovery(urgency_t urgency);
+};
 }  // namespace Scrub
 
 namespace std {
