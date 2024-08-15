@@ -270,6 +270,67 @@ void ConnectionTracker::notify_rank_removed(int rank_removed, int new_rank)
   increase_version();
 }
 
+std::set<std::pair<unsigned, unsigned>> ConnectionTracker::get_netsplit()
+{
+  /**
+  * Detect network splits (netsplits) between monitors.
+  *
+  * This function identifies disconnected monitor pairs by analyzing connection
+  * reports from all peers. It only reports netsplits when the current monitor
+  * has full connectivity to all other monitors (allowing it to make accurate
+  * assessments). For each disconnected pair, a normalized pair (smallest rank first)
+  * is added to the result set.
+  * 
+  * The algorithm works as follows:
+  * 1. First checks if this monitor can reach all other monitors
+  * 2. If fully connected, examines all peer connection reports
+  * 3. For each reported disconnection, adds a normalized pair to the result set
+  * 4. Normalizes pairs to avoid duplicates (e.g., (3,1) becomes (1,3))
+  *
+  * @return Set of disconnected monitor pairs.
+  *
+  * Time Complexity: O(m²)
+  * Space Complexity: O(m²)
+  * where m is the number of monitors.
+  */
+  ldout(cct, 20) << __func__ << dendl;
+  std::set<std::pair<unsigned, unsigned>> disconnect_set;
+  // Check if we are connected to everyone. O(m)
+  for (const auto& my_current_i : my_reports.current) {
+    if (!my_current_i.second) {
+      ldout(cct, 20) << "rank " << rank << " disconnected from " << my_current_i.first
+        << " - skipping netsplit detection (requires full connectivity)" << dendl;
+      return disconnect_set;
+    }
+  }
+  // peer_reports:
+  // 1: {current={0:true,2:true},history={0:0.93,2:0.99},epoch=1,epoch_version=1},
+  // 2: {current={0:true,1:true},history={0:0.93,1:0.85},epoch=1,epoch_version=1}
+  // Go through all our peer reports and populate disconnect_set. O(m^2)
+  for (const auto& peer_report_i : peer_reports) {
+    const ConnectionReport& report = peer_report_i.second;
+    if (peer_report_i.first < 0) {
+      ldout(cct, 20) << "ignoring rank < 0 ..."<< dendl;
+      continue;
+    }
+    for (const auto& current_i : report.current) {
+      if (!current_i.second) {
+        ldout(cct, 30) << peer_report_i.first
+          << " not connected to " << current_i.first << dendl;
+        std::pair<unsigned, unsigned> pair = std::make_pair(
+          peer_report_i.first, current_i.first);
+        // sort the pair avoid duplicates.
+        if (pair.first > pair.second) {
+          std::swap(pair.first, pair.second);
+        }
+        // insert() won't add duplicates
+        disconnect_set.insert(pair);
+      }
+    }
+  }
+  return disconnect_set;
+}
+
 bool ConnectionTracker::is_clean(int mon_rank, int monmap_size)
 {
   ldout(cct, 30) << __func__ << dendl;
