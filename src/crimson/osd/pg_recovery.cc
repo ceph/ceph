@@ -605,6 +605,7 @@ bool PGRecovery::budget_available() const
 
 void PGRecovery::backfilled()
 {
+  backfill_state.reset();
   using LocalPeeringEvent = crimson::osd::LocalPeeringEvent;
   std::ignore = pg->get_shard_services().start_operation<LocalPeeringEvent>(
     static_cast<crimson::osd::PG*>(pg),
@@ -615,11 +616,30 @@ void PGRecovery::backfilled()
     PeeringState::Backfilled{});
 }
 
+void PGRecovery::backfill_cancelled()
+{
+  // We are not creating a new BackfillRecovery request here, as we
+  // need to cancel the backfill synchronously (before this method returns).
+  using BackfillState = crimson::osd::BackfillState;
+  backfill_state->process_event(
+    BackfillState::CancelBackfill{}.intrusive_from_this());
+  backfill_state.reset();
+}
+
 void PGRecovery::dispatch_backfill_event(
   boost::intrusive_ptr<const boost::statechart::event_base> evt)
 {
   logger().debug("{}", __func__);
-  backfill_state->process_event(evt);
+  if (backfill_state) {
+    backfill_state->process_event(evt);
+  } else {
+    // TODO: Do we need to worry about cases in which the pg has
+    // 	     been through both backfill cancellations and backfill
+    // 	     restarts between the sendings and replies of
+    // 	     ReplicaScan/ObjectPush requests? Seems classic OSDs
+    // 	     doesn't handle these cases.
+    logger().debug("{}, backfill cancelled, dropping evt");
+  }
 }
 
 void PGRecovery::on_backfill_reserved()
