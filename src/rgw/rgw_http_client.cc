@@ -1147,7 +1147,6 @@ void *RGWHTTPManager::reqs_thread_entry()
           http_status = err.http_ret;
         }
         int id = req_data->id;
-	finish_request(req_data, status, http_status);
         switch (result) {
           case CURLE_OK:
             break;
@@ -1160,6 +1159,7 @@ void *RGWHTTPManager::reqs_thread_entry()
             dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << " req_data->error_buf=" << req_data->error_buf << dendl;
 	    break;
         }
+	finish_request(req_data, status, http_status);
       }
     }
   }
