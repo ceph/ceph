@@ -498,6 +498,14 @@ BackfillState::Crashed::Crashed()
   ceph_abort_msg("{}: this should not happen");
 }
 
+// -- Cancelled
+BackfillState::Cancelled::Cancelled()
+{
+  backfill_state().backfill_info.clear();
+  backfill_state().peer_backfill_info.clear();
+  backfill_state().progress_tracker.reset();
+}
+
 // ProgressTracker is an intermediary between the BackfillListener and
 // BackfillMachine + its states. All requests to push or drop an object
 // are directed through it. The same happens with notifications about
