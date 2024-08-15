@@ -375,6 +375,9 @@ class Elector : public ElectionOwner, RankProvider {
   * https://tracker.ceph.com/issues/58049
   */
   bool peer_tracker_is_clean();
+
+  std::set<std::pair<unsigned, unsigned>> get_netsplit_peer_tracker(std::set<unsigned> &mons_down);
+
   /**
    * Forget everything about our peers. :(
    */
