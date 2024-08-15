@@ -616,10 +616,10 @@ static int cls_2pc_queue_remove_entries(cls_method_context_t hctx, bufferlist *i
     list_op.end_marker = rem_2pc_op.end_marker;
     ret = cls_2pc_queue_count_entries(hctx, list_op, head, rem_2pc_op.entries_to_remove);
     if (ret < 0) {
-      CLS_LOG(1, "ERROR: cls_2pc_queue_count_entries: returned: %d", ret);
+      CLS_LOG(1, "ERROR: cls_2pc_queue_remove_entries: returned: %d", ret);
       return ret;
     }
-    CLS_LOG(10, "INFO: cls_2pc_queue_count_entries: counted: %u", rem_2pc_op.entries_to_remove);
+    CLS_LOG(10, "INFO: cls_2pc_queue_remove_entries: counted: %u", rem_2pc_op.entries_to_remove);
   }
 
   cls_queue_remove_op rem_op;
