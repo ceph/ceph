@@ -171,10 +171,10 @@ bool OsdScrub::is_sched_target_eligible(
       ScrubJob::observes_random_backoff(e.urgency)) {
     return false;
   }
-  if (!r.time_permit && ScrubJob::observes_allowed_hours(e.urgency)) {
+  if (r.restricted_time && ScrubJob::observes_allowed_hours(e.urgency)) {
     return false;
   }
-  if (!r.load_is_low && ScrubJob::observes_load_limit(e.urgency)) {
+  if (r.cpu_overloaded && ScrubJob::observes_load_limit(e.urgency)) {
     return false;
   }
   if (r.recovery_in_progress && ScrubJob::observes_recovery(e.urgency)) {
@@ -218,10 +218,11 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
   } else {
 
     // regular, i.e. non-high-priority scrubs are allowed
-    env_conditions.time_permit = scrub_time_permit(scrub_clock_now);
-    env_conditions.load_is_low = m_load_tracker.scrub_load_below_threshold();
+    env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
+    env_conditions.cpu_overloaded =
+	!m_load_tracker.scrub_load_below_threshold();
     env_conditions.only_deadlined =
-	!env_conditions.time_permit || !env_conditions.load_is_low;
+	env_conditions.restricted_time || env_conditions.cpu_overloaded;
   }
 
   return env_conditions;

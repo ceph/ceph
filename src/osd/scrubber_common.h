@@ -95,8 +95,9 @@ struct OSDRestrictions {
   /// the load is high, or the time is not right. For periodic scrubs,
   /// only the overdue ones are allowed.
   bool only_deadlined:1{false};
-  bool load_is_low:1{true};
-  bool time_permit:1{true};
+  bool cpu_overloaded:1{false};
+  bool restricted_time:1{false};
+
   /// the OSD is performing a recovery, osd_scrub_during_recovery is 'false',
   /// and so is osd_repair_during_recovery
   bool recovery_in_progress:1{false};
@@ -197,8 +198,8 @@ struct formatter<Scrub::OSDRestrictions> {
 	ctx.out(), "<{}.{}.{}.{}.{}.{}>",
 	conds.max_concurrency_reached ? "max-scrubs" : "",
 	conds.random_backoff_active ? "backoff" : "",
-	conds.load_is_low ? "" : "high-load",
-	conds.time_permit ? "" : "time-restrict",
+	conds.cpu_overloaded ? "high-load" : "",
+	conds.restricted_time ? "time-restrict" : "",
 	conds.recovery_in_progress ? "recovery" : "",
 	conds.allow_requested_repair_only ? "repair-only" : "");
   }
