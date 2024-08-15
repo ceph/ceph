@@ -242,7 +242,7 @@ function TEST_recovery_scrub_2() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
-    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 "
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0.1 "
     ceph_osd_args+="--osd_scrub_backoff_ratio=0 "
     ceph_osd_args+="--osd_stats_update_period_not_scrubbing=3 "
     ceph_osd_args+="--osd_stats_update_period_scrubbing=2"

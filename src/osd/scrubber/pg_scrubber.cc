@@ -710,12 +710,21 @@ bool PgScrubber::is_after_repair_required() const
 }
 
 
+/**
+ * mark for a deep-scrub after the current scrub ended with errors.
+ * Note that no need to requeue the target, as it will be requeued
+ * when the scrub ends.
+ */
 void PgScrubber::request_rescrubbing(requested_scrub_t& request_flags)
 {
   dout(10) << __func__ << " flags: " << request_flags << dendl;
 
   request_flags.need_auto = true;
-  update_scrub_job(delay_ready_t::no_delay);
+  auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
+  trgt.up_urgency_to(urgency_t::must_repair);
+  trgt.sched_info.schedule.scheduled_at = {0, 0};
+  trgt.sched_info.schedule.not_before = ceph_clock_now();
+  // no need to requeue, as scrub_finish() will do that.
 }
 
 
@@ -1709,7 +1718,7 @@ void PgScrubber::set_op_parameters(
   m_epoch_start = m_pg->get_osdmap_epoch();
 
   m_flags.check_repair = m_active_target->urgency() == urgency_t::after_repair;
-  m_flags.auto_repair = request.auto_repair || request.need_auto;
+  m_flags.auto_repair = false;
   m_flags.required = request.req_scrub || request.must_scrub;
 
   m_flags.priority = (request.must_scrub || request.need_auto)
@@ -1733,6 +1742,9 @@ void PgScrubber::set_op_parameters(
   m_is_deep = m_active_target->sched_info.level == scrub_level_t::deep;
   if (m_is_deep) {
     state_set(PG_STATE_DEEP_SCRUB);
+    if (pg_cond.can_autorepair || request.auto_repair) {
+      m_flags.auto_repair = true;
+    }
   } else {
     ceph_assert(!request.must_deep_scrub);
     ceph_assert(!request.need_auto);
@@ -2105,9 +2117,6 @@ void PgScrubber::scrub_finish()
     ceph_assert(tr == 0);
   }
 
-  // determine the next scrub time
-  update_scrub_job(delay_ready_t::delay_ready);
-
   if (has_error) {
     m_pg->queue_peering_event(PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(get_osdmap_epoch(),
@@ -2123,6 +2132,8 @@ void PgScrubber::scrub_finish()
   if (do_auto_scrub) {
     request_rescrubbing(m_planned_scrub);
   }
+  // determine the next scrub time
+  update_scrub_job(delay_ready_t::delay_ready);
 
   if (m_pg->is_active() && m_pg->is_primary()) {
     m_pg->recovery_state.share_pg_info();

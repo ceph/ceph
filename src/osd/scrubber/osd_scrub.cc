@@ -115,13 +115,15 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
   const auto env_restrictions =
       restrictions_on_scrubbing(is_recovery_active, scrub_time);
 
-  dout(10) << fmt::format("scrub scheduling (@tick) starts. "
-                          "time now:{:s}, recovery is active?:{} restrictions:{}",
-                          scrub_time, is_recovery_active, env_restrictions)
+  dout(10) << fmt::format(
+		  "scrub scheduling (@tick) starts. "
+		  "time now:{:s}, recovery is active?:{} restrictions:{}",
+		  scrub_time, is_recovery_active, env_restrictions)
 	   << dendl;
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>() &&
-      !env_restrictions.high_priority_only) {
+      !env_restrictions.max_concurrency_reached &&
+      !env_restrictions.random_backoff_active) {
     debug_log_all_jobs();
   }
 
@@ -165,7 +167,8 @@ bool OsdScrub::is_sched_target_eligible(
       ScrubJob::observes_max_concurrency(e.urgency)) {
     return false;
   }
-  if (!r.load_is_low && ScrubJob::observes_random_backoff(e.urgency)) {
+  if (r.random_backoff_active &&
+      ScrubJob::observes_random_backoff(e.urgency)) {
     return false;
   }
   if (!r.time_permit && ScrubJob::observes_allowed_hours(e.urgency)) {
@@ -174,7 +177,9 @@ bool OsdScrub::is_sched_target_eligible(
   if (!r.load_is_low && ScrubJob::observes_load_limit(e.urgency)) {
     return false;
   }
-  // recovery?
+  if (r.recovery_in_progress && ScrubJob::observes_recovery(e.urgency)) {
+    return false;
+  }
   return true;
 }
 
@@ -190,13 +195,12 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
   if (!m_resource_bookkeeper.can_inc_scrubs()) {
     // our local OSD is already running too many scrubs
     dout(15) << "OSD cannot inc scrubs" << dendl;
-    env_conditions.high_priority_only = true;
+    env_conditions.max_concurrency_reached = true;
 
   } else if (scrub_random_backoff()) {
     // dice-roll says we should not scrub now
-      dout(15) << "Lost in dice. Only high priority scrubs allowed."
-	       << dendl;
-      env_conditions.high_priority_only = true;
+    dout(15) << "Lost in dice. Only high priority scrubs allowed." << dendl;
+    env_conditions.random_backoff_active = true;
 
   } else if (is_recovery_active && !conf->osd_scrub_during_recovery) {
     if (conf->osd_repair_during_recovery) {
@@ -207,9 +211,9 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
       env_conditions.allow_requested_repair_only = true;
 
     } else {
-      dout(15) << "recovery in progress. Only high priority scrubs allowed."
+      dout(15) << "recovery in progress. Operator-initiated scrubs only."
 	       << dendl;
-      env_conditions.high_priority_only = true;
+      env_conditions.recovery_in_progress = true;
     }
   } else {
 
