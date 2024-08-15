@@ -5887,7 +5887,7 @@ void Monitor::new_tick()
 void Monitor::tick()
 {
   // ok go.
-  dout(11) << "tick" << dendl;
+  dout(10) << "tick begin" << dendl;
   const utime_t now = ceph_clock_now();
   
   // Check if we need to emit any delayed health check updated messages
@@ -5983,6 +5983,9 @@ void Monitor::tick()
   }
 
   mgr_client.update_daemon_health(get_health_metrics());
+
+  const utime_t lat = ceph_clock_now() - now;
+  dout(10) << " tick completed, latency: " << lat << dendl;
   new_tick();
 }
 
