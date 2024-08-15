@@ -2807,62 +2807,6 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
 }
 
 
-#if 0
-bool PgScrubber::is_time_for_deep(
-    Scrub::ScrubPGPreconds pg_cond,
-    const requested_scrub_t& planned) const
-{
-  const auto last_deep = m_pg->info.history.last_deep_scrub_stamp;  // shorthand
-  dout(10) << fmt::format(
-		  "{}: pg_cond:({}) need-auto?{} last_deep_scrub_stamp:{}",
-		  __func__, pg_cond, planned.need_auto, last_deep)
-	   << dendl;
-
-  if (!pg_cond.allow_deep)
-    return false;
-
-  if (planned.need_auto) {
-    dout(10) << __func__ << ": need repair after scrub errors" << dendl;
-    return true;
-  }
-
-  const auto sched_conf = populate_config_params();
-  const auto next_deep = last_deep + sched_conf.deep_interval;
-  const auto timenow = ceph_clock_now();
-  if (timenow >= next_deep) {
-    dout(20) << fmt::format(
-		    "{}: now ({}) >= time for deep ({})", __func__, timenow,
-		    next_deep)
-	     << dendl;
-    return true;
-  }
-
-  if (pg_cond.has_deep_errors) {
-    // note: the text below is matched by 'standalone' tests
-    get_clog()->info() << fmt::format(
-	"osd.{} pg {} Deep scrub errors, upgrading scrub to deep-scrub",
-	get_whoami(), m_pg_id);
-    return true;
-  }
-
-  // we only flip coins if 'allow_shallow_scrub' is asserted. Otherwise - as
-  // this function is called often, we will probably be deep-scrubbing most of
-  // the time.
-  if (pg_cond.allow_shallow) {
-    const bool deep_coin_flip =
-	random_bool_with_probability(sched_conf.deep_randomize_ratio);
-    if (deep_coin_flip) {
-      dout(10) << fmt::format(
-		      "{}: scrub upgraded to deep (coin flip)", __func__)
-	       << dendl;
-      return true;
-    }
-  }
-
-  return false;
-}
-#endif
-
 // ///////////////////// preemption_data_t //////////////////////////////////
 
 PgScrubber::preemption_data_t::preemption_data_t(PG* pg) : m_pg{pg}
