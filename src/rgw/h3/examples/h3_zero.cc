@@ -205,7 +205,7 @@ auto create_h3_config(const rgw::h3::Options&)
 auto create_h3_listener(rgw::h3::Observer& observer,
                         rgw::h3::Config& config,
                         rgw::h3::Listener::executor_type ex,
-                        rgw::h3::udp_socket socket,
+                        ip::udp::socket socket,
                         rgw::h3::StreamHandler& on_new_stream)
     -> std::unique_ptr<rgw::h3::Listener>;
 } // extern "C"
@@ -293,9 +293,9 @@ int main(int argc, char** argv)
   // bind a udp socket
   auto ctx = asio::thread_pool{thread_count};
   const auto endpoint = ip::udp::endpoint{ip::address_v4::any(), port};
-  rgw::h3::udp_socket socket{ctx, endpoint};
+  ip::udp::socket socket{ctx, endpoint};
   socket.non_blocking(true);
-  socket.set_option(rgw::h3::udp_socket::reuse_address{true});
+  socket.set_option(ip::udp::socket::reuse_address{true});
   std::cout << "Bound udp socket to " << socket.local_endpoint() << '\n';
 
   // create the listener

@@ -541,7 +541,7 @@ int Frontend::init()
 
     // bind a nonblocking udp socket for both v4/v6
     const auto endpoint = ip::udp::endpoint{ip::udp::v6(), port};
-    auto socket = udp_socket{context};
+    auto socket = ip::udp::socket{context};
     socket.open(endpoint.protocol(), ec);
     if (ec) {
       ldpp_dout(this, -1) << "failed to open socket with " << ec.message() << dendl;
@@ -549,7 +549,7 @@ int Frontend::init()
     }
     socket.non_blocking(true, ec);
     socket.set_option(ip::v6_only{false}, ec);
-    socket.set_option(udp_socket::reuse_address{true}, ec);
+    socket.set_option(ip::udp::socket::reuse_address{true}, ec);
     socket.bind(endpoint, ec);
     if (ec) {
       ldpp_dout(this, -1) << "failed to bind address " << endpoint

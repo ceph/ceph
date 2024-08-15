@@ -165,6 +165,6 @@ using create_config_fn = std::unique_ptr<Config> (*)(const Options&);
 /// Function pointer type for the create_h3_listener() entrypoint.
 using create_listener_fn = std::unique_ptr<Listener> (*)(
     Observer& observer, Config& config, Listener::executor_type ex,
-    udp_socket socket, StreamHandler& on_new_stream);
+    ip::udp::socket socket, StreamHandler& on_new_stream);
 
 } // namespace rgw::h3

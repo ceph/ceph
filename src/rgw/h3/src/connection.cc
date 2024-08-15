@@ -22,7 +22,7 @@
 namespace rgw::h3 {
 
 ConnectionImpl::ConnectionImpl(Observer& observer, quiche_h3_config* h3config,
-                               udp_socket& socket, StreamHandler& on_new_stream,
+                               ip::udp::socket& socket, StreamHandler& on_new_stream,
                                conn_ptr _conn, connection_id cid)
     : observer(observer), h3config(h3config),
       ex(asio::make_strand(socket.get_executor())),

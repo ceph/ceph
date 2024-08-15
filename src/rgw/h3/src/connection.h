@@ -81,7 +81,7 @@ class ConnectionImpl : public Connection,
                        public boost::intrusive::set_base_hook<> {
  public:
   ConnectionImpl(Observer& observer, quiche_h3_config* h3config,
-                 udp_socket& socket, StreamHandler& on_new_stream,
+                 ip::udp::socket& socket, StreamHandler& on_new_stream,
                  conn_ptr conn, connection_id cid);
   ~ConnectionImpl();
 
@@ -155,7 +155,7 @@ class ConnectionImpl : public Connection,
   quiche_h3_config* h3config;
   executor_type ex;
   // socket shared with Listener, but Connection only uses it to write packets
-  udp_socket& socket;
+  ip::udp::socket& socket;
   StreamHandler& on_new_stream;
 
   // cancellation signal attached to async_accept()

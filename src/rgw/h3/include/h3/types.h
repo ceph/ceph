@@ -38,7 +38,4 @@ using address_validation_token = boost::container::static_vector<uint8_t, 128>;
 /// Use the polymorphic executor.
 using default_executor = asio::any_io_executor;
 
-/// UDP socket on the default executor.
-using udp_socket = asio::basic_datagram_socket<ip::udp, default_executor>;
-
 } // namespace rgw::h3

@@ -35,7 +35,7 @@ class ListenerImpl : public Listener {
  public:
   /// Construct a listener on the given socket.
   explicit ListenerImpl(Observer& observer, ConfigImpl& config,
-                        executor_type ex, udp_socket socket,
+                        executor_type ex, ip::udp::socket socket,
                         StreamHandler& on_new_stream);
 
   executor_type get_executor() const override { return ex; }
@@ -61,7 +61,7 @@ class ListenerImpl : public Listener {
   quiche_config* config;
   quiche_h3_config* h3config;
   executor_type ex;
-  udp_socket socket;
+  ip::udp::socket socket;
   StreamHandler& on_new_stream;
 
   asio::cancellation_signal cancel_listen;
@@ -91,7 +91,7 @@ extern "C" {
 auto create_h3_listener(rgw::h3::Observer& observer,
                         rgw::h3::Config& config,
                         rgw::h3::Listener::executor_type ex,
-                        rgw::h3::udp_socket socket,
+                        boost::asio::ip::udp::socket socket,
                         rgw::h3::StreamHandler& on_new_stream)
     -> std::unique_ptr<rgw::h3::Listener>;
 

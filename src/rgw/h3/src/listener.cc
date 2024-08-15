@@ -28,7 +28,7 @@
 namespace rgw::h3 {
 
 ListenerImpl::ListenerImpl(Observer& observer, ConfigImpl& cfg,
-                           executor_type ex, udp_socket socket,
+                           executor_type ex, ip::udp::socket socket,
                            StreamHandler& on_new_stream)
     : observer(observer), ssl_context(cfg.get_ssl_context()),
       config(cfg.get_config()), h3config(cfg.get_h3_config()),
@@ -83,7 +83,7 @@ auto ListenerImpl::listen() -> asio::awaitable<void, executor_type>
       if (ec == std::errc::operation_would_block ||
           ec == std::errc::resource_unavailable_try_again) {
         // wait until the socket is readable
-        co_await socket.async_wait(udp_socket::wait_read,
+        co_await socket.async_wait(ip::udp::socket::wait_read,
             asio::redirect_error(use_awaitable, ec));
         continue;
       }
@@ -322,7 +322,7 @@ extern "C" {
 auto create_h3_listener(rgw::h3::Observer& observer,
                         rgw::h3::Config& config,
                         rgw::h3::Listener::executor_type ex,
-                        rgw::h3::udp_socket socket,
+                        boost::asio::ip::udp::socket socket,
                         rgw::h3::StreamHandler& on_new_stream)
     -> std::unique_ptr<rgw::h3::Listener>
 {
