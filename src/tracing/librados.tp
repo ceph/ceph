@@ -3993,8 +3993,8 @@ TRACEPOINT_EVENT(librados, rados_omap_get_next_enter,
 TRACEPOINT_EVENT(librados, rados_omap_get_next_exit,
     TP_ARGS(
         int, retval,
-        char**, key,
-        char**, val,
+        const char**, key,
+        const char**, val,
         size_t*, len),
     TP_FIELDS(
         ctf_integer(int, retval, retval)
