@@ -4,11 +4,11 @@
 
 .. index:: Ceph Block Device; live-migration
 
-RBD images can be live-migrated between different pools within the same cluster;
-between different image formats and layouts; or from external data sources.
-When started, the source will be deep-copied to the destination image, pulling
-all snapshot history while preserving the sparse allocation of data where
-possible.
+RBD images can be live-migrated between different pools, image formats and/or
+layouts within the same Ceph cluster; from an image in another Ceph cluster; or
+from external data sources. When started, the source will be deep-copied to
+the destination image, pulling all snapshot history while preserving the sparse
+allocation of data where possible.
 
 By default, when live-migrating RBD images within the same Ceph cluster, the
 source image will be marked read-only and all clients will instead redirect
@@ -18,8 +18,9 @@ image during the migration to remove the dependency on the source image's
 parent.
 
 The live-migration process can also be used in an import-only mode where the
-source image remains unmodified and the target image can be linked to an
-external data source such as a backing file, HTTP(s) file, or S3 object.
+source image remains unmodified and the target image can be linked to an image
+in another Ceph cluster or to an external data source such as a backing file,
+HTTP(s) file, or S3 object.
 
 The live-migration copy process can safely run in the background while the new
 target image is in use. There is currently a requirement to temporarily stop
@@ -156,6 +157,10 @@ as follows::
 
         {
             "type": "native",
+            ["cluster_name": "<cluster-name>",] (specify if image in another cluster,
+                                                 requires ``<cluster-name>.conf`` file)
+            ["client_name": "<client-name>",] (for connecting to another cluster,
+                                               default is ``client.admin``)
             "pool_name": "<pool-name>",
             ["pool_id": <pool-id>,] (optional alternative to "pool_name")
             ["pool_namespace": "<pool-namespace",] (optional)

@@ -158,6 +158,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     ldout(cct, 10) << this << " " << __func__ << dendl;
 
     ceph_assert(parent == nullptr);
+    ceph_assert(parent_rados == nullptr);
     ceph_assert(config_watcher == nullptr);
     ceph_assert(image_watcher == NULL);
     ceph_assert(exclusive_lock == NULL);

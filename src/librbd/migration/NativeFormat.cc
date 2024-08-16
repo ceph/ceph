@@ -2,8 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/migration/NativeFormat.h"
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/scope_guard.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "json_spirit/json_spirit.h"
@@ -20,6 +23,8 @@ namespace migration {
 namespace {
 
 const std::string TYPE_KEY{"type"};
+const std::string CLUSTER_NAME_KEY{"cluster_name"};
+const std::string CLIENT_NAME_KEY{"client_name"};
 const std::string POOL_ID_KEY{"pool_id"};
 const std::string POOL_NAME_KEY{"pool_name"};
 const std::string POOL_NAMESPACE_KEY{"pool_namespace"};
@@ -58,8 +63,11 @@ template <typename I>
 int NativeFormat<I>::create_image_ctx(
     librados::IoCtx& dst_io_ctx,
     const json_spirit::mObject& source_spec_object,
-    bool import_only, uint64_t src_snap_id, I** src_image_ctx) {
+    bool import_only, uint64_t src_snap_id, I** src_image_ctx,
+    librados::Rados** src_rados) {
   auto cct = reinterpret_cast<CephContext*>(dst_io_ctx.cct());
+  std::string cluster_name;
+  std::string client_name;
   std::string pool_name;
   int64_t pool_id = -1;
   std::string pool_namespace;
@@ -68,6 +76,30 @@ int NativeFormat<I>::create_image_ctx(
   std::string snap_name;
   uint64_t snap_id = CEPH_NOSNAP;
   int r;
+
+  if (auto it = source_spec_object.find(CLUSTER_NAME_KEY);
+      it != source_spec_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      cluster_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid cluster name" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if (auto it = source_spec_object.find(CLIENT_NAME_KEY);
+      it != source_spec_object.end()) {
+    if (cluster_name.empty()) {
+      lderr(cct) << "cannot specify client name without cluster name" << dendl;
+      return -EINVAL;
+    }
+    if (it->second.type() == json_spirit::str_type) {
+      client_name = it->second.get_str();
+    } else {
+      lderr(cct) << "invalid client name" << dendl;
+      return -EINVAL;
+    }
+  }
 
   if (auto it = source_spec_object.find(POOL_NAME_KEY);
       it != source_spec_object.end()) {
@@ -180,7 +212,53 @@ int NativeFormat<I>::create_image_ctx(
     snap_id = src_snap_id;
   }
 
-  // TODO add support for external clusters
+  std::unique_ptr<librados::Rados> rados_ptr;
+  if (!cluster_name.empty()) {
+    // manually bootstrap a CephContext, skipping reading environment
+    // variables for now -- since we don't have access to command line
+    // arguments here, the least confusing option is to limit initial
+    // remote cluster config to a file in the default location
+    // TODO: support specifying mon_host and key via source spec
+    // TODO: support merging in effective local cluster config to get
+    // overrides for log levels, etc
+    CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+    if (!client_name.empty() && !iparams.name.from_str(client_name)) {
+      lderr(cct) << "failed to set remote client name" << dendl;
+      return -EINVAL;
+    }
+
+    auto remote_cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
+    auto put_remote_cct = make_scope_guard([remote_cct] { remote_cct->put(); });
+
+    remote_cct->_conf->cluster = cluster_name;
+
+    // pass CEPH_CONF_FILE_DEFAULT instead of nullptr to prevent
+    // CEPH_CONF environment variable from being picked up
+    r = remote_cct->_conf.parse_config_files(CEPH_CONF_FILE_DEFAULT, nullptr,
+                                             0);
+    if (r < 0) {
+      remote_cct->_conf.complain_about_parse_error(cct);
+      lderr(cct) << "failed to read ceph conf for remote cluster: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    remote_cct->_conf.apply_changes(nullptr);
+
+    rados_ptr.reset(new librados::Rados());
+    r = rados_ptr->init_with_context(remote_cct);
+    ceph_assert(r == 0);
+
+    r = rados_ptr->connect();
+    if (r < 0) {
+      lderr(cct) << "failed to connect to remote cluster: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+  } else {
+    rados_ptr.reset(new librados::Rados(dst_io_ctx));
+  }
+
   librados::IoCtx src_io_ctx;
   if (!pool_name.empty()) {
     r = rados_ptr->ioctx_create(pool_name.c_str(), src_io_ctx);
@@ -202,6 +280,13 @@ int NativeFormat<I>::create_image_ctx(
     *src_image_ctx = I::create(image_name, image_id, snap_id, src_io_ctx,
                                true);
   }
+
+  if (!cluster_name.empty()) {
+    *src_rados = rados_ptr.release();
+  } else {
+    *src_rados = nullptr;
+  }
+
   return 0;
 }
 
