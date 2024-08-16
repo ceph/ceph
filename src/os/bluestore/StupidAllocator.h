@@ -23,7 +23,7 @@ class StupidAllocator : public Allocator {
     mempool::bluestore_alloc::pool_allocator<std::pair<const K, V>>;
   template <typename K, typename V> using btree_map_t =
     btree::btree_map<K, V, std::less<K>, allocator_t<K, V>>;
-  using interval_set_t = interval_set<uint64_t, btree_map_t>;
+  using interval_set_t = interval_set<uint64_t, uint64_t, btree_map_t>;
   std::vector<interval_set_t> free;  ///< leading-edge copy
 
   uint64_t last_alloc = 0;

@@ -143,6 +143,7 @@ void dump(ceph::Formatter* f, const osd_alerts_t& alerts);
 
 typedef interval_set<
   snapid_t,
+  snapid_t,
   mempool::osdmap::flat_map> snap_interval_set_t;
 
 
