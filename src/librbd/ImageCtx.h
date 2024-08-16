@@ -144,7 +144,7 @@ namespace librbd {
                        // lock_tag
                        // lockers
                        // object_map
-                       // parent_md and parent
+                       // parent_md, parent and parent_rados
                        // encryption_format
 
     ceph::shared_mutex timestamp_lock; // protects (create/access/modify)_timestamp
@@ -164,6 +164,8 @@ namespace librbd {
     std::string id; // only used for new-format images
     ParentImageInfo parent_md;
     ImageCtx *parent = nullptr;
+    librados::Rados *parent_rados = nullptr; // set iff image is being imported
+                                             // from another cluster
     ImageCtx *child = nullptr;
     MigrationInfo migration_info;
     cls::rbd::GroupSpec group_spec;

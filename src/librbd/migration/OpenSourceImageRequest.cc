@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/TaskFinisher.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ImageDispatcher.h"
 #include "librbd/migration/FormatInterface.h"
@@ -24,11 +25,13 @@ namespace migration {
 template <typename I>
 OpenSourceImageRequest<I>::OpenSourceImageRequest(
     librados::IoCtx& dst_io_ctx, I* dst_image_ctx, uint64_t src_snap_id,
-    const MigrationInfo &migration_info, I** src_image_ctx, Context* on_finish)
+    const MigrationInfo &migration_info, I** src_image_ctx,
+    librados::Rados** src_rados, Context* on_finish)
   : m_cct(reinterpret_cast<CephContext*>(dst_io_ctx.cct())),
     m_dst_io_ctx(dst_io_ctx), m_dst_image_ctx(dst_image_ctx),
     m_src_snap_id(src_snap_id), m_migration_info(migration_info),
-    m_src_image_ctx(src_image_ctx), m_on_finish(on_finish) {
+    m_src_image_ctx(src_image_ctx), m_src_rados(src_rados),
+    m_on_finish(on_finish) {
   ldout(m_cct, 10) << dendl;
 }
 
@@ -74,7 +77,7 @@ void OpenSourceImageRequest<I>::open_native(
 
   int r = NativeFormat<I>::create_image_ctx(m_dst_io_ctx, source_spec_object,
                                             import_only, m_src_snap_id,
-                                            m_src_image_ctx);
+                                            m_src_image_ctx, m_src_rados);
   if (r < 0) {
     lderr(m_cct) << "failed to create native image context: "
                  << cpp_strerror(r) << dendl;
@@ -113,7 +116,17 @@ void OpenSourceImageRequest<I>::handle_open_native(int r) {
   if (r < 0) {
     lderr(m_cct) << "failed to open native image: " << cpp_strerror(r)
                  << dendl;
-    finish(r);
+
+    // m_src_rados must be deleted outside the scope of its task
+    // finisher thread to avoid the finisher attempting to destroy
+    // itself and locking up
+    // since the local image (m_dst_image_ctx) may not be available,
+    // redirect to the local rados' task finisher
+    auto ctx = new LambdaContext([this](int r) {
+      delete *m_src_rados;
+      finish(r);
+    });
+    TaskFinisherSingleton::get_singleton(m_cct).queue(ctx, r);
     return;
   }
 
@@ -127,6 +140,8 @@ void OpenSourceImageRequest<I>::open_format(
 
   // note that all source image ctx properties are placeholders
   *m_src_image_ctx = I::create("", "", CEPH_NOSNAP, m_dst_io_ctx, true);
+  *m_src_rados = nullptr;
+
   auto src_image_ctx = *m_src_image_ctx;
   src_image_ctx->child = m_dst_image_ctx;
 
@@ -293,6 +308,7 @@ void OpenSourceImageRequest<I>::finish(int r) {
 
   if (r < 0) {
     *m_src_image_ctx = nullptr;
+    *m_src_rados = nullptr;
   } else {
     register_image_dispatch();
   }
