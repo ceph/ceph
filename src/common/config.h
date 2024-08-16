@@ -39,6 +39,8 @@ enum {
 
 extern const char *ceph_conf_level_name(int level);
 
+extern const char *CEPH_CONF_FILE_DEFAULT;
+
 /** This class represents the current Ceph configuration.
  *
  * For Ceph daemons, this is the daemon configuration.  Log levels, caching
