@@ -258,13 +258,13 @@ function cherry_pick_phase {
     fi
 
     set -x
-    git fetch "$upstream_remote"
+    git fetch "$upstream_remote" "refs/heads/${milestone}"
 
     if git show-ref --verify --quiet "refs/heads/$local_branch" ; then
         if [ "$FORCE" ] ; then
             if [ "$non_interactive" ] ; then
                 git checkout "$local_branch"
-                git reset --hard "${upstream_remote}/${milestone}"
+                git reset --hard FETCH_HEAD
             else
                 echo
                 echo "A local branch $local_branch already exists and the --force option was given."
@@ -276,7 +276,7 @@ function cherry_pick_phase {
                 [ "$yes_or_no_answer" ] && yes_or_no_answer="${yes_or_no_answer:0:1}"
                 if [ "$yes_or_no_answer" = "y" ] ; then
                     git checkout "$local_branch"
-                    git reset --hard "${upstream_remote}/${milestone}"
+                    git reset --hard FETCH_HEAD
                 else
                     info "OK, bailing out!"
                     false
@@ -289,10 +289,10 @@ function cherry_pick_phase {
             false
         fi
     else
-        git checkout "${upstream_remote}/${milestone}" -b "$local_branch"
+        git checkout -b "$local_branch" FETCH_HEAD
     fi
 
-    git fetch "$upstream_remote" "pull/$original_pr/head:pr-$original_pr"
+    git fetch "$upstream_remote" "$merge_commit_sha"
 
     set +x
     maybe_restore_set_x
