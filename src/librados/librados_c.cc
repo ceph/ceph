@@ -4530,10 +4530,11 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_omap_get_vals_by_keys2)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_omap_get_vals_by_keys2);
 
+// TODO: this brakes backward compatibility, add compat!
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_omap_get_next2)(
   rados_omap_iter_t iter,
-  char **key,
-  char **val,
+  const char **key,
+  const char **val,
   size_t *key_len,
   size_t *val_len)
 {
@@ -4552,7 +4553,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_omap_get_next2)(
     return 0;
   }
   if (key)
-    *key = (char*)it->i->first.c_str();
+    *key = it->i->first.c_str();
   if (val)
     *val = it->i->second.c_str();
   if (key_len)
@@ -4565,10 +4566,11 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_omap_get_next2)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_omap_get_next2);
 
+// TODO: this brakes backward compatibility, add compat!
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_omap_get_next)(
   rados_omap_iter_t iter,
-  char **key,
-  char **val,
+  const char **key,
+  const char **val,
   size_t *len)
 {
   return LIBRADOS_C_API_DEFAULT_F(rados_omap_get_next2)(iter, key, val, nullptr, len);
