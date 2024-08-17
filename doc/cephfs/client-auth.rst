@@ -274,7 +274,7 @@ Client ``someuser`` is authorized for only one file system:
         caps mon = "allow r"
         caps osd = "allow rw tag cephfs data=cephfs"
 
-Mounting ``cephfs1`` on the already-created mountpoint  ``/mnt/cephfs1``  with
+Mounting ``cephfs1`` on the already-created mount point  ``/mnt/cephfs1``  with
 ``someuser`` works:
 
 .. prompt:: bash #
