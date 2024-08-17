@@ -149,8 +149,7 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 }
 
 
-/**
- *
+/*
  * Note: only checking those conditions that are frequent, and should not cause
  * a queue reshuffle.
  */

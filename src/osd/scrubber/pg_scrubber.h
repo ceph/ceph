@@ -611,12 +611,22 @@ class PgScrubber : public ScrubPgIF,
   void dump_active_scrubber(ceph::Formatter* f) const;
 
   /**
+   * Used as a parameter of requeue_penalized() to indicate whether the
+   * both targets of this PG should be delayed (and not just the named one).
+   */
+  enum class delay_both_targets_t { no, yes };
+
+  /**
    * move the 'not before' to a later time (with a delay amount that is
    * based on the delay cause). Also saves the cause.
    * Pushes the updated scheduling entry into the OSD's queue.
+   * @param s_or_d - the specific target (shallow or deep) to delay;
+   * @param delay_both - should both targets be delayed? note - the
+   *  'other' target will not be delayed if it has higher priority.
    */
   void requeue_penalized(
       scrub_level_t s_or_d,
+      delay_both_targets_t delay_both,
       Scrub::delay_cause_t cause,
       utime_t scrub_clock_now);
 
