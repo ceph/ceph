@@ -20,9 +20,11 @@ in `Mount CephFS: Prerequisites`_ page.
 
 Synopsis
 ========
-In general, the command to mount CephFS via FUSE looks like this::
+In general, the command to mount CephFS via FUSE looks like this:
 
-    ceph-fuse {mountpoint} {options}
+.. prompt:: bash #
+
+   ceph-fuse {mount point} {options}
 
 Mounting CephFS
 ===============
