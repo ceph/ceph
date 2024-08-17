@@ -165,7 +165,7 @@ as follows::
             ["pool_id": <pool-id>,] (optional alternative to "pool_name")
             ["pool_namespace": "<pool-namespace",] (optional)
             "image_name": "<image-name>",
-            ["image_id": "<image-id>",] (optional if image in trash)
+            ["image_id": "<image-id>",] (specify if image in trash)
             "snap_name": "<snap-name>",
             ["snap_id": "<snap-id>",] (optional alternative to "snap_name")
         }
