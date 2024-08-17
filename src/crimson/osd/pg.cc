@@ -27,6 +27,7 @@
 #include "os/Transaction.h"
 
 #include "crimson/common/exception.h"
+#include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyanstore/cyan_store.h"
@@ -47,6 +48,8 @@ using std::ostream;
 using std::set;
 using std::string;
 using std::vector;
+
+SET_SUBSYS(osd);
 
 namespace {
   seastar::logger& logger() {
@@ -1786,5 +1789,11 @@ void PG::remove_maybe_snapmapped_object(
       ceph_abort();
     }
   }
+}
+
+void PG::PGLogEntryHandler::remove(const hobject_t &soid) {
+  LOG_PREFIX(PG::PGLogEntryHandler::remove);
+  DEBUGDPP("remove {} on pglog rollback", *pg, soid);
+  pg->remove_maybe_snapmapped_object(*t, soid);
 }
 }

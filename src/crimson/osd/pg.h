@@ -442,7 +442,7 @@ public:
     PGLogEntryHandler(PG *pg, ceph::os::Transaction *t) : pg(pg), t(t) {}
 
     // LogEntryHandler
-    void remove(const hobject_t &soid) override {}
+    void remove(const hobject_t &soid) override;
     void try_stash(const hobject_t &hoid, version_t v) override {
       // TODO
     }
