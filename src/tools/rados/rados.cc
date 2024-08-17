@@ -2469,7 +2469,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 #endif // WITH_LIBRADOSSTRIPER
           if (pgid) {
             uint32_t ps;
-            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps) {
+            string hash_src = i->get_locator().empty() ? i->get_oid() : i->get_locator();
+            if (io_ctx.get_object_pg_hash_position2(hash_src, &ps) || pgid->ps() != ps) {
               break;
 	    }
           }
