@@ -27,7 +27,7 @@ This is the general form of the command for mounting CephFS via FUSE:
 
 .. prompt:: bash #
 
-   ceph-fuse {mountpoint} {options}
+   ceph-fuse {mount point} {options}
 
 Mounting CephFS
 ===============
