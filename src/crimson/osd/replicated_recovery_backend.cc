@@ -232,8 +232,10 @@ ReplicatedRecoveryBackend::local_recover_delete(
     (auto lomt) -> interruptible_future<> {
     if (lomt->os.exists) {
       return seastar::do_with(ceph::os::Transaction(),
-	[this, lomt = std::move(lomt)](auto& txn) {
-	return backend->remove(lomt->os, txn).then_interruptible(
+	[this, lomt = std::move(lomt)](auto& txn) mutable {
+        return interruptor::async([this, lomt=std::move(lomt), &txn] {
+          pg.remove_maybe_snapmapped_object(txn, lomt->os.oi.soid);
+        }).then_interruptible(
 	  [this, &txn]() mutable {
 	  logger().debug("ReplicatedRecoveryBackend::local_recover_delete: do_transaction...");
 	  return shard_services.get_store().do_transaction(coll,

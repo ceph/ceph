@@ -1771,4 +1771,20 @@ PG::already_complete(const osd_reqid_t& reqid)
   }
 }
 
+void PG::remove_maybe_snapmapped_object(
+  ceph::os::Transaction &t,
+  const hobject_t &soid)
+{
+  t.remove(
+    coll_ref->get_cid(),
+    ghobject_t{soid, ghobject_t::NO_GEN, pg_whoami.shard});
+  if (soid.snap < CEPH_MAXSNAP) {
+    OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+    int r = snap_mapper.remove_oid(soid, &_t);
+    if (!(r == 0 || r == -ENOENT)) {
+      logger().debug("{}: remove_oid returned {}", __func__, cpp_strerror(r));
+      ceph_abort();
+    }
+  }
+}
 }

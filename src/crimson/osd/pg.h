@@ -432,15 +432,17 @@ public:
   }
   void unreserve_recovery_space() final {}
 
+  void remove_maybe_snapmapped_object(
+    ceph::os::Transaction &t,
+    const hobject_t &soid);
+
   struct PGLogEntryHandler : public PGLog::LogEntryHandler {
     PG *pg;
     ceph::os::Transaction *t;
     PGLogEntryHandler(PG *pg, ceph::os::Transaction *t) : pg(pg), t(t) {}
 
     // LogEntryHandler
-    void remove(const hobject_t &hoid) override {
-      // TODO
-    }
+    void remove(const hobject_t &soid) override {}
     void try_stash(const hobject_t &hoid, version_t v) override {
       // TODO
     }
