@@ -1924,10 +1924,12 @@ void PgScrubber::clear_scrub_blocked()
 void PgScrubber::flag_reservations_failure()
 {
   dout(10) << __func__ << dendl;
-  // delay the next invocation of the scrubber on this target
+  // delay the next invocation of the scrubber on this target. Note that
+  // we use 'delay_both_targets_t::yes', as requeue_penalized() knows not to
+  // penalize the sister target if its priority is higher.
   requeue_penalized(
-      m_active_target->level(), delay_cause_t::replicas,
-      ceph_clock_now());
+      m_active_target->level(), delay_both_targets_t::yes,
+      delay_cause_t::replicas, ceph_clock_now());
 }
 
 /*
@@ -2236,6 +2238,7 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 
 void PgScrubber::requeue_penalized(
     scrub_level_t s_or_d,
+    delay_both_targets_t delay_both,
     Scrub::delay_cause_t cause,
     utime_t scrub_clock_now)
 {
@@ -2248,10 +2251,33 @@ void PgScrubber::requeue_penalized(
     return;
   }
   /// \todo fix the 5s' to use a cause-specific delay parameter
-  auto& trgt = m_scrub_job->delay_on_failure(s_or_d, 5s, cause, scrub_clock_now);
+  auto& trgt =
+      m_scrub_job->delay_on_failure(s_or_d, 5s, cause, scrub_clock_now);
   ceph_assert(!trgt.queued);
   m_osds->get_scrub_services().enqueue_target(trgt);
   trgt.queued = true;
+
+  if (delay_both == delay_both_targets_t::yes) {
+    const auto sister_level = (s_or_d == scrub_level_t::deep)
+				  ? scrub_level_t::shallow
+				  : scrub_level_t::deep;
+    auto& trgt2 = m_scrub_job->get_target(sister_level);
+    // do not delay if the other target has higher urgency
+    if (trgt2.urgency() > trgt.urgency()) {
+      dout(10) << fmt::format(
+		      "{}: not delaying the other target (urgency: {})",
+		      __func__, trgt2.urgency())
+	       << dendl;
+      return;
+    }
+    if (trgt2.queued) {
+      m_osds->get_scrub_services().dequeue_target(m_pg_id, sister_level);
+      trgt2.queued = false;
+    }
+    m_scrub_job->delay_on_failure(sister_level, 5s, cause, scrub_clock_now);
+    m_osds->get_scrub_services().enqueue_target(trgt2);
+    trgt2.queued = true;
+  }
 }
 
 
@@ -2289,13 +2315,15 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     return schedule_result_t::target_specific_failure;
   }
 
-  // for all other failures - we must reinstate our entry in the Scrub Queue
+  // for all other failures - we must reinstate our entry in the Scrub Queue.
+  // For some of the failures, we will also delay the 'other' target.
   if (!m_pg->is_clean()) {
     dout(10) << fmt::format(
 		    "{}: cannot scrub (not clean). Registered?{:c}", __func__,
 		    m_scrub_job->is_registered() ? 'Y' : 'n')
 	     << dendl;
-    requeue_penalized(s_or_d, delay_cause_t::pg_state, clock_now);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state, clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -2304,7 +2332,8 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     // (on the transition from NotTrimming to Trimming/WaitReservation),
     // i.e. some time before setting 'snaptrim'.
     dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
-    requeue_penalized(s_or_d, delay_cause_t::pg_state, clock_now);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state, clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -2315,13 +2344,15 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
       if (!pg_cond.allow_shallow) {
 	// can't scrub at all
 	dout(10) << __func__ << ": shallow not allowed" << dendl;
-	requeue_penalized(s_or_d, delay_cause_t::flags, clock_now);
+	requeue_penalized(
+	    s_or_d, delay_both_targets_t::no, delay_cause_t::flags, clock_now);
 	return schedule_result_t::target_specific_failure;
       }
     } else if (!pg_cond.allow_deep) {
       // can't scrub at all
       dout(10) << __func__ << ": deep not allowed" << dendl;
-      requeue_penalized(s_or_d, delay_cause_t::flags, clock_now);
+      requeue_penalized(
+	  s_or_d, delay_both_targets_t::no, delay_cause_t::flags, clock_now);
       return schedule_result_t::target_specific_failure;
     }
   }
@@ -2329,19 +2360,20 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
   // restricting shallow scrubs of PGs that have deep errors:
   if (pg_cond.has_deep_errors && trgt.is_shallow()) {
     if (trgt.urgency() < urgency_t::operator_requested) {
-    // if there are deep errors, we should have scheduled a deep scrub first.
-    // If we are here trying to perform a shallow scrub, it means that for some
-    // reason that deep scrub failed to be initiated. We will not try a shallow
-    // scrub until this is solved.
+      // if there are deep errors, we should have scheduled a deep scrub first.
+      // If we are here trying to perform a shallow scrub, it means that for some
+      // reason that deep scrub failed to be initiated. We will not try a shallow
+      // scrub until this is solved.
       dout(10) << __func__ << ": Regular scrub skipped due to deep-scrub errors"
 	       << dendl;
-      requeue_penalized(s_or_d, delay_cause_t::pg_state, clock_now);
+      requeue_penalized(
+	  s_or_d, delay_both_targets_t::no, delay_cause_t::pg_state, clock_now);
       return schedule_result_t::target_specific_failure;
     } else {
       // we will honor the request anyway, but will report the issue
       m_osds->clog->error() << fmt::format(
-                "osd.{} pg {} Regular scrub request, deep-scrub details will be lost",
-                m_osds->whoami, m_pg_id);
+	  "osd.{} pg {} Regular scrub request, deep-scrub details will be lost",
+	  m_osds->whoami, m_pg_id);
     }
   }
 
@@ -2353,7 +2385,9 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
 	     << ": skipping this PG as repairing was not explicitly "
 		"requested for it"
 	     << dendl;
-    requeue_penalized(s_or_d, delay_cause_t::scrub_params, clock_now);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::scrub_params,
+	clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -2361,7 +2395,9 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
   // be retried by the OSD later on.
   if (!reserve_local(trgt)) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
-    requeue_penalized(s_or_d, delay_cause_t::local_resources, clock_now);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::local_resources,
+	clock_now);
     return schedule_result_t::osd_wide_failure;
   }
 
