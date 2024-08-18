@@ -106,13 +106,13 @@ public:
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId ANA_groupid, epoch_t &epoch, bool failover);
 
-  void encode(ceph::buffer::list &bl) const {
+  void encode(ceph::buffer::list &bl, uint64_t features) const {
     using ceph::encode;
     ENCODE_START(1, 1, bl);
     encode(epoch, bl);// global map epoch
 
-    encode(created_gws, bl); //Encode created GWs
-    encode(fsm_timers, bl);
+    encode(created_gws, bl, features); //Encode created GWs
+    encode(fsm_timers, bl, features);
     ENCODE_FINISH(bl);
   }
 

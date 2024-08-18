@@ -56,7 +56,7 @@ public:
     using ceph::encode;
     encode(VERSION, payload);
     encode(gwmap_epoch, payload);
-    encode(map, payload);
+    encode(map, payload, features);
   }
 private:
   using RefCountedObject::put;
