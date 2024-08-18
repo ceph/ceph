@@ -179,7 +179,7 @@ Naming Clusters (deprecated)
 
 Each Ceph cluster has an internal name. This internal name is used as part of
 configuration, and as part of "log file" names as well as part of directory
-names and as part of mountpoint names. This name defaults to "ceph". Previous
+names and as part of mount point names. This name defaults to "ceph". Previous
 releases of Ceph allowed one to specify a custom name instead, for example
 "ceph2". This option was intended to facilitate the running of multiple logical
 clusters on the same physical hardware, but in practice it was rarely
