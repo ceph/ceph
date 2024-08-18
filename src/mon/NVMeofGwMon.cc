@@ -158,7 +158,10 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << dendl;
   ceph_assert(get_last_committed() + 1 == pending_map.epoch);
   bufferlist bl;
-  pending_map.encode(bl);
+  uint64_t features = mon.get_quorum_con_features();
+  pending_map.encode(bl, features);
+  dout(10) << " has NVMEOFHA: "
+	   << HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA) << dendl;
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
 }
