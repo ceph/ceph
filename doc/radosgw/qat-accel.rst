@@ -40,7 +40,7 @@ The QATlib can be downloaded from `qatlib`_, which is used for the in-tree QAT
 driver.
 
    .. note::
-      The out-of-tree QAT driver is gradually being migrated to an intree driver+QATlib.
+      The out-of-tree QAT driver is gradually being migrated to an in-tree driver+QATlib.
 
 2. The implementation of QAT-based encryption is directly based on the QAT API,
    which is included the driver package. However, QAT support for compression
