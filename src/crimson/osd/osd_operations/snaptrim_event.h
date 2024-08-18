@@ -134,7 +134,7 @@ private:
   remove_or_update_iertr::future<ceph::os::Transaction>
   remove_or_update(ObjectContextRef obc, ObjectContextRef head_obc);
 
-  void add_log_entry(
+  pg_log_entry_t& add_log_entry(
     int _op,
     const hobject_t& _soid,
     const eversion_t& pv,
@@ -152,6 +152,7 @@ private:
       mt,
       return_code);
     osd_op_p.at_version.version++;
+    return log_entries.back();
   }
 
   Ref<PG> pg;

@@ -263,7 +263,7 @@ SnapTrimObjSubEvent::adjust_snaps(
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
     OI_ATTR,
     bl);
-  add_log_entry(
+  auto &loge = add_log_entry(
     pg_log_entry_t::MODIFY,
     coid,
     obc->obs.oi.prior_version,
@@ -271,8 +271,10 @@ SnapTrimObjSubEvent::adjust_snaps(
     osd_reqid_t(),
     obc->obs.oi.mtime,
     0);
-  return OpsExecuter::snap_map_modify(
-    coid, new_snaps, pg->snap_mapper, pg->osdriver, txn);
+  bufferlist snapsbl;
+  encode(new_snaps, snapsbl);
+  loge.snaps.swap(snapsbl);
+  return interruptor::now();
 }
 
 void SnapTrimObjSubEvent::update_head(
