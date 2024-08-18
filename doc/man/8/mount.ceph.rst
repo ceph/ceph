@@ -56,7 +56,7 @@ A sub-directory of the file system can be mounted by specifying the (absolute)
 path to the sub-directory right after "=" in the device part of the mount command.
 
 Mount helper application conventions dictate that the first two options are
-device to be mounted and the mountpoint for that device. Options must be
+device to be mounted and the mount point for that device. Options must be
 passed only after these fixed arguments.
 
 
