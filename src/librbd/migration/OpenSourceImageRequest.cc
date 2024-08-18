@@ -8,6 +8,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ImageDispatcher.h"
+#include "librbd/migration/FormatInterface.h"
 #include "librbd/migration/ImageDispatch.h"
 #include "librbd/migration/NativeFormat.h"
 #include "librbd/migration/SourceSpecBuilder.h"
@@ -22,36 +23,18 @@ namespace migration {
 
 template <typename I>
 OpenSourceImageRequest<I>::OpenSourceImageRequest(
-    librados::IoCtx& io_ctx, I* dst_image_ctx, uint64_t src_snap_id,
+    librados::IoCtx& dst_io_ctx, I* dst_image_ctx, uint64_t src_snap_id,
     const MigrationInfo &migration_info, I** src_image_ctx, Context* on_finish)
-  : m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())), m_io_ctx(io_ctx),
-    m_dst_image_ctx(dst_image_ctx), m_src_snap_id(src_snap_id),
-    m_migration_info(migration_info), m_src_image_ctx(src_image_ctx),
-    m_on_finish(on_finish) {
+  : m_cct(reinterpret_cast<CephContext*>(dst_io_ctx.cct())),
+    m_dst_io_ctx(dst_io_ctx), m_dst_image_ctx(dst_image_ctx),
+    m_src_snap_id(src_snap_id), m_migration_info(migration_info),
+    m_src_image_ctx(src_image_ctx), m_on_finish(on_finish) {
   ldout(m_cct, 10) << dendl;
 }
 
 template <typename I>
 void OpenSourceImageRequest<I>::send() {
-  open_source();
-}
-
-template <typename I>
-void OpenSourceImageRequest<I>::open_source() {
   ldout(m_cct, 10) << dendl;
-
-  // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", CEPH_NOSNAP, m_io_ctx, true);
-  auto src_image_ctx = *m_src_image_ctx;
-  src_image_ctx->child = m_dst_image_ctx;
-
-  // use default layout values (can be overridden by source layers later)
-  src_image_ctx->order = 22;
-  src_image_ctx->layout = file_layout_t();
-  src_image_ctx->layout.stripe_count = 1;
-  src_image_ctx->layout.stripe_unit = 1ULL << src_image_ctx->order;
-  src_image_ctx->layout.object_size = 1Ull << src_image_ctx->order;
-  src_image_ctx->layout.pool_id = -1;
 
   bool import_only = true;
   auto source_spec = m_migration_info.source_spec;
@@ -67,42 +50,117 @@ void OpenSourceImageRequest<I>::open_source() {
                    << "source_snap_id=" << m_src_snap_id << ", "
                    << "import_only=" << import_only << dendl;
 
-  SourceSpecBuilder<I> source_spec_builder{src_image_ctx};
   json_spirit::mObject source_spec_object;
-  int r = source_spec_builder.parse_source_spec(source_spec,
-                                                &source_spec_object);
+  int r = SourceSpecBuilder<I>::parse_source_spec(source_spec,
+                                                  &source_spec_object);
   if (r < 0) {
-    lderr(m_cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
-                 << dendl;
-    (*m_src_image_ctx)->state->close();
+    lderr(m_cct) << "failed to parse migration source-spec: "
+                 << cpp_strerror(r) << dendl;
     finish(r);
     return;
   }
 
-  r = source_spec_builder.build_format(source_spec_object, import_only,
-                                       &m_format);
+  if (NativeFormat<I>::is_source_spec(source_spec_object)) {
+    open_native(source_spec_object, import_only);
+  } else {
+    open_format(source_spec_object);
+  }
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::open_native(
+    const json_spirit::mObject& source_spec_object, bool import_only) {
+  ldout(m_cct, 10) << dendl;
+
+  int r = NativeFormat<I>::create_image_ctx(m_dst_io_ctx, source_spec_object,
+                                            import_only, m_src_snap_id,
+                                            m_src_image_ctx);
+  if (r < 0) {
+    lderr(m_cct) << "failed to create native image context: "
+                 << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  auto src_image_ctx = *m_src_image_ctx;
+  src_image_ctx->child = m_dst_image_ctx;
+
+  if (m_dst_image_ctx != nullptr) {
+    // set rados flags for reading the source image
+    if (m_dst_image_ctx->config.template get_val<bool>("rbd_balance_parent_reads")) {
+      src_image_ctx->set_read_flag(librados::OPERATION_BALANCE_READS);
+    } else if (m_dst_image_ctx->config.template get_val<bool>("rbd_localize_parent_reads")) {
+      src_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
+    }
+  }
+
+  uint64_t flags = 0;
+  if (src_image_ctx->id.empty() && !import_only) {
+    flags |= OPEN_FLAG_OLD_FORMAT;
+  }
+
+  // open the source image
+  auto ctx = util::create_context_callback<
+    OpenSourceImageRequest<I>,
+    &OpenSourceImageRequest<I>::handle_open_native>(this);
+  src_image_ctx->state->open(flags, ctx);
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::handle_open_native(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to open native image: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+
+  finish(0);
+}
+
+template <typename I>
+void OpenSourceImageRequest<I>::open_format(
+    const json_spirit::mObject& source_spec_object) {
+  ldout(m_cct, 10) << dendl;
+
+  // note that all source image ctx properties are placeholders
+  *m_src_image_ctx = I::create("", "", CEPH_NOSNAP, m_dst_io_ctx, true);
+  auto src_image_ctx = *m_src_image_ctx;
+  src_image_ctx->child = m_dst_image_ctx;
+
+  // use default layout values (can be overridden by migration formats later)
+  src_image_ctx->order = 22;
+  src_image_ctx->stripe_unit = 1ULL << src_image_ctx->order;
+  src_image_ctx->stripe_count = 1;
+  src_image_ctx->layout = file_layout_t(src_image_ctx->stripe_unit,
+                                        src_image_ctx->stripe_count,
+                                        src_image_ctx->stripe_unit);
+
+  SourceSpecBuilder<I> source_spec_builder{src_image_ctx};
+  int r = source_spec_builder.build_format(source_spec_object, &m_format);
   if (r < 0) {
     lderr(m_cct) << "failed to build migration format handler: "
                  << cpp_strerror(r) << dendl;
-    (*m_src_image_ctx)->state->close();
-    finish(r);
+    close_image(r);
     return;
   }
 
   auto ctx = util::create_context_callback<
     OpenSourceImageRequest<I>,
-    &OpenSourceImageRequest<I>::handle_open_source>(this);
+    &OpenSourceImageRequest<I>::handle_open_format>(this);
   m_format->open(ctx);
 }
 
 template <typename I>
-void OpenSourceImageRequest<I>::handle_open_source(int r) {
+void OpenSourceImageRequest<I>::handle_open_format(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to open migration source: " << cpp_strerror(r)
+    lderr(m_cct) << "failed to open migration format: " << cpp_strerror(r)
                  << dendl;
-    finish(r);
+    close_image(r);
     return;
   }
 
