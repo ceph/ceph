@@ -17,6 +17,7 @@
 #undef dout_prefix
 #define MODULE_PREFFIX "nvmeofgw "
 #define dout_prefix *_dout << MODULE_PREFFIX << __PRETTY_FUNCTION__ << " "
+#define MAX_SUPPORTED_ANA_GROUPS 16
 
 inline std::ostream& operator<<(
   std::ostream& os, const gw_exported_states_per_group_t value) {
@@ -254,12 +255,32 @@ inline void decode(ana_state_t& st, ceph::buffer::list::const_iterator &bl) {
   DECODE_FINISH(bl);
 }
 
-inline void encode(const GwSubsystems& subsystems,  ceph::bufferlist &bl) {
-  ENCODE_START(1, 1, bl);
+inline void encode(
+  const GwSubsystems& subsystems,  ceph::bufferlist &bl, uint64_t features) {
+  uint8_t version = 1;
+  uint8_t compat = 1;
+  if (HAVE_FEATURE(features, NVMEOFHA)) {
+    version = 2;
+    compat = 2;
+  }
+  ENCODE_START(version, compat, bl);
   encode((uint32_t)subsystems.size(), bl);
   for (const auto& sub: subsystems) {
     encode(sub.second.nqn, bl);
-    encode(sub.second.ana_state, bl);
+    if (version == 1) {
+      dout(20) << "encode ana_state vector version1 = " << version << dendl;
+      /* Version 1 requires exactly 16 entries */
+      ana_state_t filled(sub.second.ana_state);
+      filled.resize(
+	MAX_SUPPORTED_ANA_GROUPS,
+	std::make_pair(
+	  gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE,
+	  0));
+      encode(filled, bl);
+    } else {
+      dout(20) << "encode ana_state vector version2 = " << version << dendl;
+      encode(sub.second.ana_state, bl);
+    }
   }
   ENCODE_FINISH(bl);
 }
@@ -267,7 +288,7 @@ inline void encode(const GwSubsystems& subsystems,  ceph::bufferlist &bl) {
 inline  void decode(
   GwSubsystems& subsystems, ceph::bufferlist::const_iterator& bl) {
   uint32_t num_subsystems;
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(num_subsystems, bl);
   subsystems.clear();
   for (uint32_t i=0; i<num_subsystems; i++) {
@@ -280,11 +301,11 @@ inline  void decode(
   DECODE_FINISH(bl);
 }
 
-inline void encode(const NvmeGwClientState& state,  ceph::bufferlist &bl) {
+inline void encode(const NvmeGwClientState& state,  ceph::bufferlist &bl, uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode(state.group_id, bl);
   encode(state.gw_map_epoch, bl);
-  encode (state.subsystems, bl);
+  encode (state.subsystems, bl, features);
   encode((uint32_t)state.availability, bl);
   ENCODE_FINISH(bl);
 }
@@ -301,50 +322,96 @@ inline  void decode(
   DECODE_FINISH(bl);
 }
 
-inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl) {
-  ENCODE_START(1, 1, bl);
-  encode((uint32_t)state.data.size(), bl);
-  for (auto &tm_itr:state.data) {
-    encode((uint32_t)tm_itr.first, bl);// encode key
-    uint32_t tick = tm_itr.second.timer_started;
-    uint8_t  val  = tm_itr.second.timer_value;
-    encode(tick, bl);
-    encode(val,  bl);
-    auto endtime  = tm_itr.second.end_time;
-    // Convert the time point to milliseconds since the epoch
-    uint64_t millisecondsSinceEpoch =
+inline  void encode(const NvmeGwTimerState& state,  ceph::bufferlist &bl,
+  uint64_t features) {
+  uint8_t version = 1;
+  uint8_t compat = 1;
+  if (HAVE_FEATURE(features, NVMEOFHA)) {
+    version = 2;
+    compat = 2;
+  }
+  ENCODE_START(version, compat, bl);
+
+  if (version >= 2) {
+    encode((uint32_t)state.data.size(), bl);
+    for (auto &tm_itr:state.data) {
+      encode((uint32_t)tm_itr.first, bl);// encode key
+      uint32_t tick = tm_itr.second.timer_started;
+      uint8_t  val  = tm_itr.second.timer_value;
+      encode(tick, bl);
+      encode(val,  bl);
+      auto endtime  = tm_itr.second.end_time;
+      // Convert the time point to milliseconds since the epoch
+      uint64_t  millisecondsSinceEpoch =
       std::chrono::duration_cast<std::chrono::milliseconds>(
-	endtime.time_since_epoch()).count();
-    encode(millisecondsSinceEpoch , bl);
+      endtime.time_since_epoch()).count();
+      encode(millisecondsSinceEpoch , bl);
+    }
+  } else {
+    encode((uint32_t)MAX_SUPPORTED_ANA_GROUPS, bl);
+    Tmdata empty;
+    for (uint32_t i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
+      auto tmiter = state.data.find(i);
+      const Tmdata *to_encode = &empty;
+      if (tmiter != state.data.end()) {
+	to_encode = &(tmiter->second);
+      }
+      encode(to_encode->timer_started, bl);
+      encode(to_encode->timer_value,  bl);
+      auto endtime  = to_encode->end_time;
+      // Convert the time point to milliseconds since the epoch
+      uint64_t  millisecondsSinceEpoch =
+         std::chrono::duration_cast<std::chrono::milliseconds>(
+      endtime.time_since_epoch()).count();
+      encode(millisecondsSinceEpoch , bl);
+    }
   }
   ENCODE_FINISH(bl);
 }
 
 inline  void decode(
   NvmeGwTimerState& state,  ceph::bufferlist::const_iterator& bl) {
+  DECODE_START(2, bl);
+  dout(20) << "decode NvmeGwTimers version = " << struct_v << dendl;
   uint32_t size;
-  DECODE_START(1, bl);
   decode(size, bl);
   for (uint32_t i = 0; i <size; i ++) {
     uint32_t tm_key;
     uint32_t tick;
     uint8_t val;
-    decode(tm_key, bl);
-    decode(tick, bl);
-    decode(val,  bl);
-    Tmdata tm;
-    tm.timer_started = tick;
-    tm.timer_value = val;
-    uint64_t milliseconds;
-    decode(milliseconds, bl);
-    auto duration = std::chrono::milliseconds(milliseconds);
-    tm.end_time = std::chrono::time_point<std::chrono::system_clock>(duration);
-    state.data[tm_key] = tm;
+    if (struct_v >= 2) {
+      decode(tm_key, bl);
+      decode(tick, bl);
+      decode(val,  bl);
+      Tmdata tm;
+      tm.timer_started = tick;
+      tm.timer_value = val;
+      uint64_t milliseconds;
+      decode(milliseconds, bl);
+      auto duration = std::chrono::milliseconds(milliseconds);
+      tm.end_time = std::chrono::time_point<std::chrono::system_clock>(duration);
+      state.data[tm_key] = tm;
+    } else {
+      decode(tick, bl);
+      decode(val,  bl);
+      Tmdata tm;
+      tm.timer_started = tick;
+      tm.timer_value = val;
+      uint64_t milliseconds;
+      decode(milliseconds, bl);
+      if (tm.timer_started) {
+        // relevant only entries with started timers in the state
+        auto duration = std::chrono::milliseconds(milliseconds);
+        tm.end_time = std::chrono::time_point<std::chrono::system_clock>(duration);
+        state.data[i] = tm;
+      }
+    }
   }
   DECODE_FINISH(bl);
 }
 
-inline void encode(const NvmeAnaNonceMap& nonce_map,  ceph::bufferlist &bl) {
+inline void encode(const NvmeAnaNonceMap& nonce_map,  ceph::bufferlist &bl,
+  uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode((uint32_t)nonce_map.size(), bl);
   for (auto& ana_group_nonces : nonce_map) {
@@ -359,6 +426,7 @@ inline void encode(const NvmeAnaNonceMap& nonce_map,  ceph::bufferlist &bl) {
 
 inline void decode(
   NvmeAnaNonceMap& nonce_map, ceph::buffer::list::const_iterator &bl) {
+  dout(20) << "decode nonce map  " << dendl;
   uint32_t map_size;
   NvmeAnaGrpId ana_grp_id;
   uint32_t vector_size;
@@ -376,29 +444,57 @@ inline void decode(
   DECODE_FINISH(bl);
 }
 
-inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl) {
-  ENCODE_START(1, 1, bl);
+inline void encode(const NvmeGwMonStates& gws,  ceph::bufferlist &bl,
+  uint64_t features) {
+  uint8_t version = 1;
+  uint8_t compat = 1;
+  if (HAVE_FEATURE(features, NVMEOFHA)) {
+    version = 2;
+    compat = 2;
+  }
+  ENCODE_START(version, compat, bl);
   encode ((uint32_t)gws.size(), bl); // number of gws in the group
   for (auto& gw : gws) {
     encode(gw.first, bl);// GW_id
     encode(gw.second.ana_grp_id, bl); // GW owns this group-id
-    encode((uint32_t)gw.second.sm_state.size(), bl);
-    for (auto &state_it:gw.second.sm_state) {
-      encode((uint32_t)state_it.first, bl); //key of map
-      encode((uint32_t)state_it.second, bl);//value of map
-    }
-    encode((uint32_t)gw.second.availability, bl);
-    encode((uint16_t)gw.second.performed_full_startup, bl);
-    encode((uint16_t)gw.second.last_gw_map_epoch_valid, bl);
-    encode(gw.second.subsystems, bl);
+    if (version >= 2) {
+      encode((uint32_t)gw.second.sm_state.size(), bl);
+      for (auto &state_it:gw.second.sm_state) {
+        encode((uint32_t)state_it.first, bl); //key of map
+        encode((uint32_t)state_it.second, bl);//value of map
+      }
+      encode((uint32_t)gw.second.availability, bl);
+      encode((uint16_t)gw.second.performed_full_startup, bl);
+      encode((uint16_t)gw.second.last_gw_map_epoch_valid, bl);
+      encode(gw.second.subsystems, bl);
 
-    encode((uint32_t)gw.second.blocklist_data.size(), bl);
-    for (auto &blklst_itr: gw.second.blocklist_data) {
-      encode((uint32_t)blklst_itr.first, bl);
-      encode((uint32_t)blklst_itr.second.osd_epoch, bl);
-      encode((uint32_t)blklst_itr.second.is_failover, bl);
+      encode((uint32_t)gw.second.blocklist_data.size(), bl);
+      for (auto &blklst_itr: gw.second.blocklist_data) {
+        encode((uint32_t)blklst_itr.first, bl);
+        encode((uint32_t)blklst_itr.second.osd_epoch, bl);
+        encode((uint32_t)blklst_itr.second.is_failover, bl);
+      }
+    } else {
+      gw_states_per_group_t states[MAX_SUPPORTED_ANA_GROUPS];
+      for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) states[i] = gw_states_per_group_t::GW_IDLE_STATE;
+      for (auto &state_it:gw.second.sm_state) states[state_it.first] = state_it.second;
+      for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) encode((uint32_t)states[i], bl);
+
+      encode((uint32_t)gw.second.availability, bl);
+      encode((uint16_t)gw.second.performed_full_startup, bl);
+      encode((uint16_t)gw.second.last_gw_map_epoch_valid, bl);
+      encode(gw.second.subsystems, bl); // TODO reuse but put features - encode version
+      Blocklist_data bl_data[MAX_SUPPORTED_ANA_GROUPS];
+      for (auto &blklst_itr: gw.second.blocklist_data) {
+        bl_data[blklst_itr.first].osd_epoch   = blklst_itr.second.osd_epoch;
+        bl_data[blklst_itr.first].is_failover = blklst_itr.second.is_failover;
+      }
+      for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
+        encode((uint32_t)bl_data[i].osd_epoch, bl);
+        encode((bool)bl_data[i].is_failover, bl);
+      }
     }
-    encode(gw.second.nonce_map, bl);
+    encode(gw.second.nonce_map, bl, features);
   }
   ENCODE_FINISH(bl);
 }
@@ -407,28 +503,42 @@ inline void decode(
   NvmeGwMonStates& gws, ceph::buffer::list::const_iterator &bl) {
   gws.clear();
   uint32_t num_created_gws;
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
+  dout(20) << "decode NvmeGwMonStates. struct_v: " << struct_v << dendl;
   decode(num_created_gws, bl);
-
+  dout(20) << "decode NvmeGwMonStates. num gws  " << num_created_gws << dendl;
+  std::set<uint32_t> created_anagrps;
   for (uint32_t i = 0; i<num_created_gws; i++) {
     std::string gw_name;
     decode(gw_name, bl);
     NvmeAnaGrpId ana_grp_id;
     decode(ana_grp_id, bl);
-
+    dout(20) << "decode NvmeGwMonStates. GW-id " << gw_name << " ana grpid "<< ana_grp_id <<  dendl;
     NvmeGwMonState gw_created(ana_grp_id);
     uint32_t sm_state;
     uint32_t sm_key;
-    NvmeGwId peer_name;
     uint32_t size;
-    decode(size, bl);
-    for (uint32_t i = 0; i <size; i ++) {
-      decode(sm_key, bl);
-      decode(sm_state, bl);
-      gw_created.sm_state[sm_key] = ((gw_states_per_group_t)sm_state);
+    if (struct_v >= 2) {
+      decode(size, bl);
+      for (uint32_t i = 0; i <size; i ++) {
+        decode(sm_key, bl);
+        decode(sm_state, bl);
+        gw_created.sm_state[sm_key] = ((gw_states_per_group_t)sm_state);
+      }
+    } else {
+      created_anagrps.insert(ana_grp_id);
+      for (uint32_t i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++) {
+        decode(sm_state, bl);
+        dout(20) << "decode NvmeGwMonStates state: "
+                 << i << " " << sm_state << dendl;
+        gw_created.sm_state[i] = ((gw_states_per_group_t)sm_state);
+        //here create all 16 states but need to erase not relevant states after loop on created GW
+      }
     }
+    // common code
     uint32_t avail;
     decode(avail, bl);
+    dout(20) << "decode NvmeGwMonStates avail : " << avail << dendl;
     gw_created.availability = (gw_availability_t)avail;
     uint16_t performed_startup;
     decode(performed_startup, bl);
@@ -439,27 +549,53 @@ inline void decode(
     BeaconSubsystems   subsystems;
     decode(subsystems, bl);
     gw_created.subsystems = subsystems;
-    decode(size, bl);
-    for (uint32_t i=0; i<size; i++) {
-      uint32_t blklist_key;
-      uint32_t osd_epoch;
-      uint32_t is_failover;
-      decode(blklist_key, bl);
-      decode(osd_epoch,   bl);
-      decode(is_failover, bl);
-      Blocklist_data blst((epoch_t)osd_epoch, (bool)is_failover);
 
-      gw_created.blocklist_data[blklist_key] = blst;
+    if (struct_v >= 2) {
+      decode(size, bl);
+      for (uint32_t i=0; i<size; i++) {
+        uint32_t blklist_key;
+        uint32_t osd_epoch;
+        uint32_t is_failover;
+        decode(blklist_key, bl);
+        decode(osd_epoch,   bl);
+        decode(is_failover, bl);
+        Blocklist_data blst((epoch_t)osd_epoch, (bool)is_failover);
+        gw_created.blocklist_data[blklist_key] = blst;
+      }
+    } else {
+      for (uint32_t i=0; i<MAX_SUPPORTED_ANA_GROUPS; i++) {
+        uint32_t osd_epoch;
+        bool is_failover;
+        decode(osd_epoch,   bl);
+        dout(20) << "decode osd epoch  " << osd_epoch << dendl;
+        decode(is_failover, bl);
+        dout(20) << "decode is-failover  " << is_failover << dendl;
+        Blocklist_data blst((epoch_t)osd_epoch, (bool)is_failover);
+        // the same action as with "states"
+        gw_created.blocklist_data[i] = blst;
+      }
     }
     decode(gw_created.nonce_map, bl);
     gws[gw_name] = gw_created;
+  }
+  if (struct_v == 1) {  //Fix allocations of states and blocklist_data
+    //since only after full loop on gws we know what states are relevant
+    for (auto &gw_it:gws) {
+      auto &state = gw_it.second;
+      for (uint32_t i=0; i<MAX_SUPPORTED_ANA_GROUPS; i++) {
+        if (created_anagrps.count(i) == 0) {
+          state.sm_state.erase(i);
+          state.blocklist_data.erase(i);
+        }
+      }
+    }
   }
   DECODE_FINISH(bl);
 }
 
 inline void encode(
   const std::map<NvmeGroupKey, NvmeGwMonStates>& created_gws,
-  ceph::bufferlist &bl) {
+  ceph::bufferlist &bl, uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode ((uint32_t)created_gws.size(), bl); // number of groups
   for (auto& group_gws: created_gws) {
@@ -468,7 +604,7 @@ inline void encode(
     encode(group_key.second, bl); // group
 
     auto& gws = group_gws.second;
-    encode (gws, bl); // encode group gws
+    encode(gws, bl, features); // encode group gws
   }
   ENCODE_FINISH(bl);
 }
@@ -477,7 +613,7 @@ inline void decode(
   std::map<NvmeGroupKey, NvmeGwMonStates>& created_gws,
   ceph::buffer::list::const_iterator &bl) {
   created_gws.clear();
-  uint32_t ngroups;
+  uint32_t ngroups = 0;
   DECODE_START(1, bl);
   decode(ngroups, bl);
   for (uint32_t i = 0; i<ngroups; i++) {
@@ -492,12 +628,12 @@ inline void decode(
 }
 
 inline void encode(
-  const NvmeGwMonClientStates& subsyst_gwmap, ceph::bufferlist &bl) {
+  const NvmeGwMonClientStates& subsyst_gwmap, ceph::bufferlist &bl, uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode((uint32_t)subsyst_gwmap.size(), bl);
   for (auto& subsyst: subsyst_gwmap) {
     encode(subsyst.first, bl);
-    encode(subsyst.second, bl);
+    encode(subsyst.second, bl, features);
   }
   ENCODE_FINISH(bl);
 }
@@ -522,14 +658,15 @@ inline void decode(
 // Start encode  NvmeGroupKey, GMAP
 inline void encode(
   const std::map<NvmeGroupKey, NvmeGwMonClientStates>& gmap,
-  ceph::bufferlist &bl) {
+  ceph::bufferlist &bl,
+  uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode ((uint32_t)gmap.size(), bl); // number of groups
   for (auto& group_state: gmap) {
     auto& group_key = group_state.first;
     encode(group_key.first, bl); // pool
     encode(group_key.second, bl); // group
-    encode(group_state.second, bl);
+    encode(group_state.second, bl, features);
   }
   ENCODE_FINISH(bl);
 }
@@ -555,7 +692,7 @@ inline void decode(
 
 inline void encode(
   const std::map<NvmeGroupKey, NvmeGwTimers>& gmetadata,
-  ceph::bufferlist &bl) {
+  ceph::bufferlist &bl,  uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode ((uint32_t)gmetadata.size(), bl); // number of groups
   for (auto& group_md: gmetadata) {
@@ -563,7 +700,7 @@ inline void encode(
     encode(group_key.first, bl); // pool
     encode(group_key.second, bl); // group
 
-    encode(group_md.second, bl);
+    encode(group_md.second, bl, features);
   }
   ENCODE_FINISH(bl);
 }
@@ -586,12 +723,13 @@ inline void decode(
   DECODE_FINISH(bl);
 }
 
-inline void encode(const NvmeGwTimers& group_md,  ceph::bufferlist &bl) {
+inline void encode(const NvmeGwTimers& group_md,  ceph::bufferlist &bl,
+  uint64_t features) {
   ENCODE_START(1, 1, bl);
   encode ((uint32_t)group_md.size(), bl); // number of groups
   for (auto& gw_md: group_md) {
     encode(gw_md.first, bl); // gw
-    encode(gw_md.second, bl); //  map of this gw
+    encode(gw_md.second, bl, features); //  map of this gw
   }
   ENCODE_FINISH(bl);
 }
@@ -654,6 +792,7 @@ inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl) {
 
 inline void decode(BeaconSubsystem& sub, ceph::buffer::list::const_iterator &bl) {
   DECODE_START(1, bl);
+  dout(20) << "decode BeaconSubsystems " << dendl;
   decode(sub.nqn, bl);
   uint32_t s;
   sub.listeners.clear();
