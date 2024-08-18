@@ -11,7 +11,7 @@ Synopsis
 
 | **mount.fuse.ceph** [-h] [-o OPTIONS [*OPTIONS* ...]]
                       device [*device* ...]
-                      mountpoint [*mountpoint* ...]
+                      mountpoint [*mount point* ...]
 
 Description
 ===========

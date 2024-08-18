@@ -24,7 +24,7 @@ This will mount the default ceph filesystem using the drive letter ``x``.
 If ``ceph.conf`` is placed at the default location, which is
 ``%ProgramData%\ceph\ceph.conf``, then this argument becomes optional.
 
-The ``-l`` argument also allows using an empty folder as a mountpoint
+The ``-l`` argument also allows using an empty folder as a mount point
 instead of a drive letter.
 
 The uid and gid used for mounting the filesystem default to 0 and may be
@@ -75,7 +75,7 @@ like so::
 
     ceph-dokan.exe unmap -l x
 
-Note that when unmapping Ceph filesystems, the exact same mountpoint argument
+Note that when unmapping Ceph filesystems, the exact same mount point argument
 must be used as when the mapping was created.
 
 Limitations
