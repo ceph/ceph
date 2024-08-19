@@ -458,14 +458,6 @@ namespace rgw::sal {
     return false;
   }
 
-  bool DBZone::has_zonegroup_api(const std::string& api) const
-  {
-    if (api == "default")
-      return true;
-
-    return false;
-  }
-
   const std::string& DBZone::get_current_period_id()
   {
     return current_period->get_id();

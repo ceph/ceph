@@ -15,6 +15,7 @@ import boto
 import boto.s3.connection
 from boto.s3.website import WebsiteConfiguration
 from boto.s3.cors import CORSConfiguration
+from botocore.exceptions import ClientError
 
 from nose.tools import eq_ as eq
 from nose.tools import assert_not_equal, assert_equal, assert_true, assert_false
@@ -3634,4 +3635,23 @@ def test_copy_object_different_bucket():
         CopySource = source_bucket.name + '/' + objname)
     
     zonegroup_bucket_checkpoint(zonegroup_conns, dest_bucket.name)
-    
+
+def test_bucket_create_location_constraint():
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        for zg in realm.current_period.zonegroups:
+            z = zonegroup_conns.rw_zones[0]
+            bucket_name = gen_bucket_name()
+            if zg.name == zonegroup.name:
+                # my zonegroup should pass
+                z.s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration={'LocationConstraint': zg.name})
+                # check bucket location
+                response = z.s3_client.get_bucket_location(Bucket=bucket_name)
+                assert_equal(response['LocationConstraint'], zg.name)
+            else:
+                # other zonegroup should fail with 400
+                e = assert_raises(ClientError,
+                                  z.s3_client.create_bucket,
+                                    Bucket=bucket_name,
+                                    CreateBucketConfiguration={'LocationConstraint': zg.name})
+                assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
