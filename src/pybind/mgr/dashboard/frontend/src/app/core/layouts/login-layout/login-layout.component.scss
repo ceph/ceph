@@ -1,0 +1,61 @@
+@use './src/styles/vendor/variables' as vv;
+
+::ng-deep cd-login-layout .login {
+  background-color: vv.$secondary;
+  background-image: url('../../../../assets/ceph_background.gif');
+  background-position: right bottom;
+  background-repeat: no-repeat;
+  color: vv.$body-color-bright;
+
+  header {
+    position: absolute;
+    width: 100vw;
+
+    .navbar {
+      .dropdown-menu {
+        margin-top: 0.2rem;
+
+        li a {
+          &:hover {
+            background-color: vv.$primary;
+          }
+        }
+      }
+    }
+  }
+
+  section {
+    display: inline-flex;
+    min-height: 100vh;
+    width: 100vw;
+  }
+
+  .list-inline {
+    margin-bottom: 0;
+    margin-left: 17%;
+  }
+
+  a {
+    color: vv.$fg-color-over-dark-bg;
+
+    &:hover {
+      color: vv.$fg-hover-color-over-dark-bg;
+    }
+  }
+
+  @media screen and (min-width: vv.$screen-sm-min) {
+    .login-form,
+    .branding-info {
+      padding-top: 30vh;
+    }
+  }
+  @media screen and (max-width: vv.$screen-sm-max) {
+    .login-form {
+      padding-top: 10vh;
+    }
+
+    .branding-info {
+      padding-top: 0;
+    }
+  }
+}
