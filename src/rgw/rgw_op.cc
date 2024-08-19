@@ -3564,54 +3564,62 @@ void RGWCreateBucket::execute(optional_yield y)
   const rgw::SiteConfig& site = *s->penv.site;
   const std::optional<RGWPeriod>& period = site.get_period();
   const RGWZoneGroup& my_zonegroup = site.get_zonegroup();
-
-  if (s->system_request) {
-    // allow system requests to override the target zonegroup. for forwarded
-    // requests, we'll create the bucket for the originating zonegroup
-    createparams.zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
-  }
-
+  const std::string rgwx_zonegroup = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
   const RGWZoneGroup* bucket_zonegroup = &my_zonegroup;
-  if (createparams.zonegroup_id.empty()) {
-    // default to the local zonegroup
-    createparams.zonegroup_id = my_zonegroup.id;
-  } else if (period) {
-    auto z = period->period_map.zonegroups.find(createparams.zonegroup_id);
-    if (z == period->period_map.zonegroups.end()) {
-      ldpp_dout(this, 0) << "could not find zonegroup "
-          << createparams.zonegroup_id << " in current period" << dendl;
-      op_ret = -ENOENT;
-      return;
-    }
-    bucket_zonegroup = &z->second;
-  } else if (createparams.zonegroup_id != my_zonegroup.id) {
-    ldpp_dout(this, 0) << "zonegroup does not match current zonegroup "
-        << createparams.zonegroup_id << dendl;
-    op_ret = -ENOENT;
-    return;
-  }
 
-  // validate the LocationConstraint
+  // Validate LocationConstraint if it's provided and enforcement is strict
   if (!location_constraint.empty() && !relaxed_region_enforcement) {
-    // on the master zonegroup, allow any valid api_name. otherwise it has to
-    // match the bucket's zonegroup
-    if (period && my_zonegroup.is_master) {
-      if (!period->period_map.zonegroups_by_api.count(location_constraint)) {
+    if (period) {
+      auto location_iter = period->period_map.zonegroups_by_api.find(location_constraint);
+      if (location_iter == period->period_map.zonegroups_by_api.end()) {
         ldpp_dout(this, 0) << "location constraint (" << location_constraint
             << ") can't be found." << dendl;
         op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
-        s->err.message = "The specified location-constraint is not valid";
+        s->err.message = fmt::format("The {} location constraint is not valid.",
+                                     location_constraint);
         return;
       }
-    } else if (bucket_zonegroup->api_name != location_constraint) {
+      bucket_zonegroup = &location_iter->second;
+    } else if (location_constraint != my_zonegroup.api_name) { // if we don't have a period, we can only use the current zonegroup - so check if the location matches by api name here
       ldpp_dout(this, 0) << "location constraint (" << location_constraint
-          << ") doesn't match zonegroup (" << bucket_zonegroup->api_name
-          << ')' << dendl;
-      op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
-      s->err.message = "The specified location-constraint is not valid";
+          << ") doesn't match zonegroup (" << my_zonegroup.api_name << ")" << dendl;
+      op_ret = -ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION;
+      s->err.message = fmt::format("The {} location constraint is incompatible "
+                                   "for the region specific endpoint this request was sent to.",
+                                   location_constraint);
       return;
     }
   }
+  // If it's a system request, use the provided zonegroup if available
+  else if (s->system_request && !rgwx_zonegroup.empty()) {
+    if (period) {
+      auto zonegroup_iter = period->period_map.zonegroups.find(rgwx_zonegroup);
+      if (zonegroup_iter == period->period_map.zonegroups.end()) {
+        ldpp_dout(this, 0) << "could not find zonegroup " << rgwx_zonegroup
+            << " in current period" << dendl;
+        op_ret = -ENOENT;
+        return;
+      }
+      bucket_zonegroup = &zonegroup_iter->second;
+    }
+  }
+
+  const bool enforce_location_match =
+    !period ||               // No period: no multisite, so no need to enforce location match.
+    !s->system_request ||    // All user requests are enforced to match zonegroup's location.
+    !my_zonegroup.is_master; // but if it's a system request (forwarded) only allow remote creation on master zonegroup.
+  if (enforce_location_match && !my_zonegroup.equals(bucket_zonegroup->get_id())) {
+    ldpp_dout(this, 0) << "location constraint (" << bucket_zonegroup->api_name
+        << ") doesn't match zonegroup (" << my_zonegroup.api_name << ")" << dendl;
+    op_ret = -ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION;
+    s->err.message = fmt::format("The {} location constraint is incompatible "
+                                 "for the region specific endpoint this request was sent to.",
+                                 bucket_zonegroup->api_name);
+    return;
+  }
+
+  // Set the final zonegroup ID
+  createparams.zonegroup_id = bucket_zonegroup->id;
 
   // select and validate the placement target
   op_ret = select_bucket_placement(this, *bucket_zonegroup, s->user->get_info(),
@@ -3620,7 +3628,7 @@ void RGWCreateBucket::execute(optional_yield y)
     return;
   }
 
-  if (bucket_zonegroup == &my_zonegroup) {
+  if (my_zonegroup.equals(bucket_zonegroup->get_id())) {
     // look up the zone placement pool
     createparams.zone_placement = rgw::find_zone_placement(
         this, site.get_zone_params(), createparams.placement_rule);

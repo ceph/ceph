@@ -68,20 +68,6 @@ int RGWPeriod::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   return ret;
 }
 
-int RGWPeriod::add_zonegroup(const DoutPrefixProvider *dpp, const RGWZoneGroup& zonegroup, optional_yield y)
-{
-  if (zonegroup.realm_id != realm_id) {
-    return 0;
-  }
-  int ret = period_map.update(zonegroup, cct);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: updating period map: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return store_info(dpp, false, y);
-}
-
 int RGWPeriod::update(const DoutPrefixProvider *dpp, optional_yield y)
 {
   auto zone_svc = sysobj_svc->get_zone_svc();
