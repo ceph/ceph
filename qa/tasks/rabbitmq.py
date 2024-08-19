@@ -70,22 +70,25 @@ def run_rabbitmq(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
         ctx.cluster.only(client).run(args=[
-             'sudo', 'systemctl', 'enable', 'rabbitmq-server.service'
+             'echo', 'loopback_users.guest = false', run.Raw('|'), 'sudo', 'tee', '-a', '/etc/rabbitmq/rabbitmq.conf'
             ],
         )
 
         ctx.cluster.only(client).run(args=[
-             'sudo', '/sbin/service', 'rabbitmq-server', 'start'
+             'sudo', 'systemctl', 'enable', 'rabbitmq-server'
             ],
         )
 
-        '''
+        ctx.cluster.only(client).run(args=[
+             'sudo', 'systemctl', 'start', 'rabbitmq-server'
+            ],
+        )
+
         # To check whether rabbitmq-server is running or not
         ctx.cluster.only(client).run(args=[
-             'sudo', '/sbin/service', 'rabbitmq-server', 'status'
+             'sudo', 'systemctl', 'status', 'rabbitmq-server'
             ],
         )
-        '''
 
     try:
         yield
@@ -96,7 +99,7 @@ def run_rabbitmq(ctx, config):
             (remote,) = ctx.cluster.only(client).remotes.keys()
 
             ctx.cluster.only(client).run(args=[
-                 'sudo', '/sbin/service', 'rabbitmq-server', 'stop'
+                 'sudo', 'systemctl', 'stop', 'rabbitmq-server'
                 ],
             )
 
