@@ -72,4 +72,18 @@ void LBALeafNode::maybe_fix_mapping_pos(BtreeLBAMapping &mapping)
   }
 }
 
+BtreeLBAMappingRef LBALeafNode::get_mapping(
+  op_context_t<laddr_t> c, laddr_t laddr)
+{
+  auto iter = lower_bound(laddr);
+  ceph_assert(iter != end() && iter->get_key() == laddr);
+  auto val = iter.get_val();
+  return std::make_unique<BtreeLBAMapping>(
+    c,
+    this,
+    iter.get_offset(),
+    val,
+    lba_node_meta_t{laddr, val.len, 0});
+}
+
 }
