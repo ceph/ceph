@@ -86,6 +86,8 @@ void D3nDataCache::init(CephContext *_cct) {
       // create the cache storage directory
       lsubdout(g_ceph_context, rgw, 5) << "D3nDataCache: init: creating the persistent storage directory on start" << dendl;
       efs::create_directories(cache_location);
+      efs::permissions(cache_location, 
+        efs::perms::owner_all | efs::perms::group_all | efs::perms::others_read);
     }
   } catch (const efs::filesystem_error& e) {
     lderr(g_ceph_context) << "D3nDataCache: init: ERROR initializing the cache storage directory '" << cache_location <<
