@@ -106,7 +106,6 @@ public:
   }
 
 private:
-  void wake();
   unsigned readers = 0;
   unsigned writers = 0;
   bool exclusively_used = false;
@@ -116,6 +115,7 @@ private:
     exclusive,
     none,
   };
+  void wake(type_t);
   struct waiter_t {
     waiter_t(seastar::promise<>&& pr, type_t type)
       : pr(std::move(pr)), type(type)
