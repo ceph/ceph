@@ -96,7 +96,6 @@ public:
   uint32_t get_zone_short_id() const;
 
   const std::string& get_current_period_id() const;
-  bool has_zonegroup_api(const std::string& api) const;
 
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
