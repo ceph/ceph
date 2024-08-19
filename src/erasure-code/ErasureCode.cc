@@ -39,7 +39,7 @@ using std::vector;
 using ceph::bufferlist;
 
 namespace ceph {
-const unsigned ErasureCode::SIMD_ALIGN = 32;
+const unsigned ErasureCode::SIMD_ALIGN = 64;
 
 int ErasureCode::init(
   ErasureCodeProfile &profile,
