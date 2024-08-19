@@ -3596,13 +3596,16 @@ void RGWCreateBucket::execute(optional_yield y)
     // on the master zonegroup, allow any valid api_name. otherwise it has to
     // match the bucket's zonegroup
     if (period && my_zonegroup.is_master) {
-      if (!period->period_map.zonegroups_by_api.count(location_constraint)) {
+      auto location_iter = period->period_map.zonegroups_by_api.find(location_constraint);
+      if (location_iter == period->period_map.zonegroups_by_api.end()) {
         ldpp_dout(this, 0) << "location constraint (" << location_constraint
             << ") can't be found." << dendl;
         op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
         s->err.message = "The specified location-constraint is not valid";
         return;
       }
+      createparams.zonegroup_id = location_iter->second.id;
+      bucket_zonegroup = &location_iter->second;
     } else if (bucket_zonegroup->api_name != location_constraint) {
       ldpp_dout(this, 0) << "location constraint (" << location_constraint
           << ") doesn't match zonegroup (" << bucket_zonegroup->api_name
@@ -3620,7 +3623,7 @@ void RGWCreateBucket::execute(optional_yield y)
     return;
   }
 
-  if (bucket_zonegroup == &my_zonegroup) {
+  if (my_zonegroup.equals(bucket_zonegroup->get_id())) {
     // look up the zone placement pool
     createparams.zone_placement = rgw::find_zone_placement(
         this, site.get_zone_params(), createparams.placement_rule);
