@@ -54,10 +54,19 @@ if(HAVE_NASM_X64_AVX2)
     ${isal_src_dir}/erasure_code/gf_4vect_mad_avx512.asm
     ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx512.asm
     ${isal_src_dir}/erasure_code/gf_vect_mad_avx512.asm
+    ${isal_src_dir}/raid/raid_base.c
+    ${isal_src_dir}/raid/raid_multibinary.asm
+    ${isal_src_dir}/raid/xor_check_sse.asm
+    ${isal_src_dir}/raid/xor_gen_sse.asm
+    ${isal_src_dir}/raid/xor_gen_avx.asm
+    ${isal_src_dir}/raid/xor_gen_avx512.asm
+    ${isal_src_dir}/raid/pq_check_sse.asm
+    ${isal_src_dir}/raid/pq_gen_sse.asm
+    ${isal_src_dir}/raid/pq_gen_avx.asm
+    ${isal_src_dir}/raid/pq_gen_avx2.asm
     ErasureCodeIsa.cc
     ErasureCodeIsaTableCache.cc
     ErasureCodePluginIsa.cc
-    xor_op.cc
   )
 elseif(HAVE_ARMV8_SIMD)
   set(isa_srcs
@@ -77,13 +86,20 @@ elseif(HAVE_ARMV8_SIMD)
     ${isal_src_dir}/erasure_code/aarch64/gf_vect_mad_neon.S
     ${isal_src_dir}/erasure_code/aarch64/gf_vect_mul_neon.S
     ${isal_src_dir}/erasure_code/aarch64/ec_multibinary_arm.S
+    ${isal_src_dir}/raid/raid_base.c
+    ${isal_src_dir}/raid/aarch64/raid_aarch64_dispatcher.c
+    ${isal_src_dir}/raid/aarch64/raid_multibinary_arm.S
+    ${isal_src_dir}/raid/aarch64/xor_check_neon.S
+    ${isal_src_dir}/raid/aarch64/xor_gen_neon.S
+    ${isal_src_dir}/raid/aarch64/pq_check_neon.S
+    ${isal_src_dir}/raid/aarch64/pq_gen_neon.S
     ErasureCodeIsa.cc
     ErasureCodeIsaTableCache.cc
     ErasureCodePluginIsa.cc
-    xor_op.cc
   )
   set_source_files_properties(
     ${isal_src_dir}/erasure_code/aarch64/ec_multibinary_arm.S
+    ${isal_src_dir}/raid/aarch64/raid_multibinary_arm.S
     PROPERTIES COMPILE_FLAGS "-D__ASSEMBLY__"
   )
 endif()
