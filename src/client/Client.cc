@@ -15842,6 +15842,10 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
     return -CEPHFS_ENOTCONN;
   }
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
+
+  std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
@@ -15852,10 +15856,6 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   tout(cct) << (uintptr_t)fh << std::endl;
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
-
-  /* We can't return bytes written larger than INT_MAX, clamp len to that */
-  len = std::min(len, (loff_t)INT_MAX);
-  std::scoped_lock lock(client_lock);
 
   int r = _read(fh, off, len, bl);
   ldout(cct, 3) << "ll_read " << fh << " " << off << "~" << len << " = " << r
@@ -15987,6 +15987,10 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
     return -CEPHFS_ENOTCONN;
   }
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
+
+  std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
@@ -15998,10 +16002,6 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   tout(cct) << (uintptr_t)fh << std::endl;
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
-
-  /* We can't return bytes written larger than INT_MAX, clamp len to that */
-  len = std::min(len, (loff_t)INT_MAX);
-  std::scoped_lock lock(client_lock);
 
   int r = _write(fh, off, len, data, NULL, 0);
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
@@ -16016,12 +16016,11 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
     return -CEPHFS_ENOTCONN;
   }
 
+  std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
   }
-
-  std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
 }
 
@@ -16032,12 +16031,11 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
     return -CEPHFS_ENOTCONN;
   }
 
+  std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
     return -CEPHFS_EBADF;
   }
-
-  std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
 }
 
@@ -16060,17 +16058,23 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
       return retval;
     }
 
+    retval = 0;
+    std::unique_lock cl(client_lock);
+
     if(fh == NULL || !_ll_fh_exists(fh)) {
       ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
       retval = -CEPHFS_EBADF;
+    }
+
+    if (retval != 0) {
       if (onfinish != nullptr) {
+        cl.unlock();
         onfinish->complete(retval);
+        cl.lock();
         retval = 0;
       }
       return retval;
     }
-
-    std::scoped_lock cl(client_lock);
 
     retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
                                     onfinish, bl, do_fsync, syncdataonly);
@@ -16092,9 +16096,9 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
     if (retval < 0) {
       if (onfinish != nullptr) {
         //async io failed
-        client_lock.unlock();
+        cl.unlock();
         onfinish->complete(retval);
-        client_lock.lock();
+        cl.lock();
         /* async call should always return zero to caller and allow the
         caller to wait on callback for the actual errno/retval. */
         retval = 0;
