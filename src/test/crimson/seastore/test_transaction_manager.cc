@@ -978,14 +978,14 @@ struct transaction_manager_test_t :
         extent_types_t::ONODE_BLOCK_STAGED,
         extent_types_t::COLL_BLOCK,
         extent_types_t::OBJECT_DATA_BLOCK,
-        extent_types_t::RETIRED_PLACEHOLDER,
-        extent_types_t::ALLOC_INFO,
-        extent_types_t::JOURNAL_TAIL,
         extent_types_t::TEST_BLOCK,
         extent_types_t::TEST_BLOCK_PHYSICAL,
         extent_types_t::BACKREF_INTERNAL,
         extent_types_t::BACKREF_LEAF
       };
+      // exclude DINK_LADDR_LEAF, RETIRED_PLACEHOLDER,
+      //         ALLOC_INFO, JOURNAL_TAIL
+      assert(all_extent_types.size() == EXTENT_TYPES_MAX - 4);
 
       std::vector<rewrite_gen_t> all_generations;
       for (auto i = INIT_GENERATION; i < REWRITE_GENERATIONS; i++) {
@@ -998,8 +998,9 @@ struct transaction_manager_test_t :
 
       // this loop should be consistent with EPM::adjust_generation
       for (auto t : all_extent_types) {
+        assert(is_real_type(t));
         expected_generations[t] = {};
-        if (!is_logical_type(t)) {
+        if (is_root_type(t) || is_lba_backref_node(t)) {
           for (auto gen : all_generations) {
             expected_generations[t][gen] = INLINE_GENERATION;
           }
@@ -1018,7 +1019,7 @@ struct transaction_manager_test_t :
 
       auto update_data_gen_mapping = [&](std::function<rewrite_gen_t(rewrite_gen_t)> func) {
         for (auto t : all_extent_types) {
-          if (!is_logical_type(t)) {
+          if (is_root_type(t) || is_lba_backref_node(t)) {
             continue;
           }
           for (auto i = INIT_GENERATION + 1; i < REWRITE_GENERATIONS; i++) {

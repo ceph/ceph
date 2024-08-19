@@ -658,7 +658,7 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
     return backref_manager->rewrite_extent(t, extent);
   }
 
-  if (extent->get_type() == extent_types_t::ROOT) {
+  if (is_root_type(extent->get_type())) {
     DEBUGT("rewriting root extent -- {}", t, *extent);
     cache->duplicate_for_write(t, extent);
     return rewrite_extent_iertr::now();

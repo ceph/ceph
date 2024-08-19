@@ -515,7 +515,7 @@ public:
 
   /// Returns true if extent is a plcaeholder
   bool is_placeholder() const {
-    return get_type() == extent_types_t::RETIRED_PLACEHOLDER;
+    return is_retired_placeholder_type(get_type());
   }
 
   bool is_pending_io() const {
@@ -685,7 +685,7 @@ private:
     CachedExtent,
     boost::intrusive::list_member_hook<>,
     &CachedExtent::primary_ref_list_hook>;
-  using list = boost::intrusive::list<
+  using primary_ref_list = boost::intrusive::list<
     CachedExtent,
     primary_ref_list_member_options>;
 

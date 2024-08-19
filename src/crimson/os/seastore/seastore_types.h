@@ -1197,40 +1197,81 @@ constexpr size_t BACKREF_NODE_SIZE = 4096;
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
 
+constexpr bool is_data_type(extent_types_t type) {
+  return type == extent_types_t::OBJECT_DATA_BLOCK ||
+         type == extent_types_t::TEST_BLOCK;
+}
+
+constexpr bool is_logical_metadata_type(extent_types_t type) {
+  return type >= extent_types_t::OMAP_INNER &&
+         type <= extent_types_t::COLL_BLOCK;
+}
+
 constexpr bool is_logical_type(extent_types_t type) {
-  switch (type) {
-  case extent_types_t::ROOT:
-  case extent_types_t::LADDR_INTERNAL:
-  case extent_types_t::LADDR_LEAF:
-  case extent_types_t::BACKREF_INTERNAL:
-  case extent_types_t::BACKREF_LEAF:
-    return false;
-  default:
+  if ((type >= extent_types_t::OMAP_INNER &&
+       type <= extent_types_t::OBJECT_DATA_BLOCK) ||
+      type == extent_types_t::TEST_BLOCK) {
+    assert(is_logical_metadata_type(type) ||
+           is_data_type(type));
     return true;
+  } else {
+    assert(!is_logical_metadata_type(type) &&
+           !is_data_type(type));
+    return false;
   }
 }
 
-constexpr bool is_retired_placeholder(extent_types_t type)
-{
+constexpr bool is_retired_placeholder_type(extent_types_t type) {
   return type == extent_types_t::RETIRED_PLACEHOLDER;
 }
 
-constexpr bool is_lba_node(extent_types_t type)
-{
+constexpr bool is_root_type(extent_types_t type) {
+  return type == extent_types_t::ROOT;
+}
+
+constexpr bool is_lba_node(extent_types_t type) {
   return type == extent_types_t::LADDR_INTERNAL ||
-    type == extent_types_t::LADDR_LEAF ||
-    type == extent_types_t::DINK_LADDR_LEAF;
+         type == extent_types_t::LADDR_LEAF ||
+         type == extent_types_t::DINK_LADDR_LEAF;
 }
 
-constexpr bool is_backref_node(extent_types_t type)
-{
+constexpr bool is_backref_node(extent_types_t type) {
   return type == extent_types_t::BACKREF_INTERNAL ||
-    type == extent_types_t::BACKREF_LEAF;
+         type == extent_types_t::BACKREF_LEAF;
 }
 
-constexpr bool is_lba_backref_node(extent_types_t type)
-{
+constexpr bool is_lba_backref_node(extent_types_t type) {
   return is_lba_node(type) || is_backref_node(type);
+}
+
+constexpr bool is_physical_type(extent_types_t type) {
+  if (type <= extent_types_t::DINK_LADDR_LEAF ||
+      (type >= extent_types_t::TEST_BLOCK_PHYSICAL &&
+       type <= extent_types_t::BACKREF_LEAF)) {
+    assert(is_root_type(type) ||
+           is_lba_backref_node(type) ||
+           type == extent_types_t::TEST_BLOCK_PHYSICAL);
+    return true;
+  } else {
+    assert(!is_root_type(type) &&
+           !is_lba_backref_node(type) &&
+           type != extent_types_t::TEST_BLOCK_PHYSICAL);
+    return false;
+  }
+}
+
+constexpr bool is_real_type(extent_types_t type) {
+  if (type <= extent_types_t::OBJECT_DATA_BLOCK ||
+      (type >= extent_types_t::TEST_BLOCK &&
+       type <= extent_types_t::BACKREF_LEAF)) {
+    assert(is_logical_type(type) ||
+           is_physical_type(type));
+    return true;
+  } else {
+    assert(!is_logical_type(type) &&
+           !is_physical_type(type));
+    return false;
+  }
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
@@ -1304,8 +1345,7 @@ enum class data_category_t : uint8_t {
 std::ostream &operator<<(std::ostream &out, data_category_t c);
 
 constexpr data_category_t get_extent_category(extent_types_t type) {
-  if (type == extent_types_t::OBJECT_DATA_BLOCK ||
-      type == extent_types_t::TEST_BLOCK) {
+  if (is_data_type(type)) {
     return data_category_t::DATA;
   } else {
     return data_category_t::METADATA;
@@ -2290,6 +2330,27 @@ void minus_srcs(counter_by_src_t<CounterT>& base,
   }
 }
 
+template <typename CounterT>
+using counter_by_extent_t = std::array<CounterT, EXTENT_TYPES_MAX>;
+
+template <typename CounterT>
+CounterT& get_by_ext(
+    counter_by_extent_t<CounterT>& counters_by_ext,
+    extent_types_t ext) {
+  auto index = static_cast<uint8_t>(ext);
+  assert(index < EXTENT_TYPES_MAX);
+  return counters_by_ext[index];
+}
+
+template <typename CounterT>
+const CounterT& get_by_ext(
+    const counter_by_extent_t<CounterT>& counters_by_ext,
+    extent_types_t ext) {
+  auto index = static_cast<uint8_t>(ext);
+  assert(index < EXTENT_TYPES_MAX);
+  return counters_by_ext[index];
+}
+
 struct grouped_io_stats {
   uint64_t num_io = 0;
   uint64_t num_io_grouped = 0;
@@ -2496,6 +2557,103 @@ struct shard_stats_t {
   }
 };
 
+struct cache_io_stats_t {
+  uint64_t in_size = 0;
+  uint64_t in_num_extents = 0;
+  uint64_t out_size = 0;
+  uint64_t out_num_extents = 0;
+
+  bool is_empty() const {
+    return in_num_extents == 0 && out_num_extents == 0;
+  }
+
+  double get_in_mbs(double seconds) const {
+    return (in_size>>12)/(seconds*256);
+  }
+
+  double get_in_avg_kb() const {
+    return (in_size>>10)/static_cast<double>(in_num_extents);
+  }
+
+  double get_out_mbs(double seconds) const {
+    return (out_size>>12)/(seconds*256);
+  }
+
+  double get_out_avg_kb() const {
+    return (out_size>>10)/static_cast<double>(out_num_extents);
+  }
+
+  void account_in(extent_len_t size) {
+    in_size += size;
+    ++in_num_extents;
+  }
+
+  void account_out(extent_len_t size) {
+    out_size += size;
+    ++out_num_extents;
+  }
+
+  void minus(const cache_io_stats_t& o) {
+    in_size -= o.in_size;
+    in_num_extents -= o.in_num_extents;
+    out_size -= o.out_size;
+    out_num_extents -= o.out_num_extents;
+  }
+
+  void add(const cache_io_stats_t& o) {
+    in_size += o.in_size;
+    in_num_extents += o.in_num_extents;
+    out_size += o.out_size;
+    out_num_extents += o.out_num_extents;
+  }
+};
+struct cache_io_stats_printer_t {
+  double seconds;
+  const cache_io_stats_t &stats;
+};
+std::ostream& operator<<(std::ostream&, const cache_io_stats_printer_t&);
+
+struct cache_size_stats_t {
+  uint64_t size = 0;
+  uint64_t num_extents = 0;
+
+  double get_mb() const {
+    return (size>>12)/static_cast<double>(256);
+  }
+
+  double get_avg_kb() const {
+    return (size>>10)/static_cast<double>(num_extents);
+  }
+
+  void account_in(extent_len_t sz) {
+    size += sz;
+    ++num_extents;
+  }
+
+  void account_out(extent_len_t sz) {
+    assert(size >= sz);
+    assert(num_extents > 0);
+    size -= sz;
+    --num_extents;
+  }
+
+  void add(const cache_size_stats_t& o) {
+    size += o.size;
+    num_extents += o.num_extents;
+  }
+};
+std::ostream& operator<<(std::ostream&, const cache_size_stats_t&);
+
+struct cache_stats_t {
+  cache_size_stats_t lru_sizes;
+  cache_io_stats_t lru_io;
+
+  void add(const cache_stats_t& o) {
+    lru_sizes.add(o.lru_sizes);
+    lru_io.add(o.lru_io);
+  }
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
@@ -2513,6 +2671,8 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 
 #if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::cache_io_stats_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::cache_size_stats_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::data_category_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::delta_info_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_id_printer_t> : fmt::ostream_formatter {};

@@ -204,9 +204,13 @@ public:
 
     void init_managers();
 
-    device_stats_t get_device_stats(bool report_detail) const;
+    double reset_report_interval() const;
 
-    shard_stats_t get_io_stats(bool report_detail) const;
+    device_stats_t get_device_stats(bool report_detail, double seconds) const;
+
+    shard_stats_t get_io_stats(bool report_detail, double seconds) const;
+
+    cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
 
   private:
     struct internal_context_t {
@@ -583,6 +587,7 @@ private:
     seastar::lowres_clock::time_point::min();
   mutable std::vector<device_stats_t> shard_device_stats;
   mutable std::vector<shard_stats_t> shard_io_stats;
+  mutable std::vector<cache_stats_t> shard_cache_stats;
 };
 
 std::unique_ptr<SeaStore> make_seastore(

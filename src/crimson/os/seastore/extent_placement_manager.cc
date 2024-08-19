@@ -277,7 +277,8 @@ void ExtentPlacementManager::set_primary_device(Device *device)
 device_stats_t
 ExtentPlacementManager::get_device_stats(
   const writer_stats_t &journal_stats,
-  bool report_detail) const
+  bool report_detail,
+  double seconds) const
 {
   LOG_PREFIX(ExtentPlacementManager::get_device_stats);
 
@@ -345,16 +346,7 @@ ExtentPlacementManager::get_device_stats(
     cold_stats.add(cold_writer_stats.back());
   }
 
-  auto now = seastar::lowres_clock::now();
-  if (last_tp == seastar::lowres_clock::time_point::min()) {
-    last_tp = now;
-    return {};
-  }
-  std::chrono::duration<double> duration_d = now - last_tp;
-  double seconds = duration_d.count();
-  last_tp = now;
-
-  if (report_detail) {
+  if (report_detail && seconds != 0) {
     std::ostringstream oss;
     auto report_writer_stats = [seconds, &oss](
         const char* name,
