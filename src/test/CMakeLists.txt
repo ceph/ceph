@@ -282,6 +282,7 @@ target_link_libraries(ceph_test_librgw_file
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -295,6 +296,7 @@ target_link_libraries(ceph_test_librgw_file_cd
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_cd DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -308,6 +310,7 @@ target_link_libraries(ceph_test_librgw_file_gp
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_gp DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -322,6 +325,7 @@ target_link_libraries(ceph_test_librgw_file_nfsns
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
   target_link_libraries(ceph_test_librgw_file_nfsns spawn)
 install(TARGETS ceph_test_librgw_file_nfsns DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -336,6 +340,7 @@ target_link_libraries(ceph_test_librgw_file_aw
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_aw DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -350,6 +355,7 @@ target_link_libraries(ceph_test_librgw_file_marker
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
   target_link_libraries(ceph_test_librgw_file_marker spawn)
 install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -365,6 +371,7 @@ target_link_libraries(ceph_test_librgw_file_xattr
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 target_link_libraries(ceph_test_librgw_file_xattr spawn)
 
