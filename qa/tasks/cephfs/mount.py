@@ -165,6 +165,17 @@ class CephFSMount(object):
                      get_file(self.client_remote, self.client_keyring_path,
                               sudo=True).decode())
 
+    def is_blocked(self):                                                                                                                                                                                                                                     
+        self.fs = Filesystem(self.ctx, name=self.cephfs_name)
+
+        try: 
+            output = self.fs.get_ceph_cmd_stdout('osd blocklist ls')
+        except CommandFailedError:
+            # Fallback for older Ceph cluster
+            output = self.fs.get_ceph_cmd_stdout('osd blacklist ls')
+
+        return self.addr in output
+
     def is_mounted(self):
         return self.mounted
 
