@@ -750,6 +750,9 @@ void Cache::add_to_dirty(CachedExtentRef ref)
   assert(ref->is_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
+
+  // Note: next might not be at extent_state_t::DIRTY,
+  // also see CachedExtent::is_stable_writting()
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
   stats.dirty_bytes += ref->get_length();
@@ -759,9 +762,49 @@ void Cache::remove_from_dirty(CachedExtentRef ref)
 {
   assert(ref->is_dirty());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
+
   stats.dirty_bytes -= ref->get_length();
   dirty.erase(dirty.s_iterator_to(*ref));
   intrusive_ptr_release(&*ref);
+}
+
+void Cache::replace_dirty(
+    CachedExtentRef next,
+    CachedExtentRef prev)
+{
+  assert(prev->is_dirty());
+  ceph_assert(prev->primary_ref_list_hook.is_linked());
+
+  // Note: next might not be at extent_state_t::DIRTY,
+  // also see CachedExtent::is_stable_writting()
+  assert(next->is_dirty());
+  assert(!next->primary_ref_list_hook.is_linked());
+  ceph_assert(next->get_modify_time() != NULL_TIME);
+
+  assert(prev->get_dirty_from() == next->get_dirty_from());
+  assert(prev->get_length() == next->get_length());
+  assert(!is_root_type(next->get_type()));
+  assert(prev->get_type() == next->get_type());
+
+  auto prev_it = dirty.iterator_to(*prev);
+  dirty.insert(prev_it, *next);
+  dirty.erase(prev_it);
+  intrusive_ptr_release(&*prev);
+  intrusive_ptr_add_ref(&*next);
+}
+
+void Cache::clear_dirty()
+{
+  for (auto i = dirty.begin(); i != dirty.end(); ) {
+    auto ptr = &*i;
+    assert(ptr->is_dirty());
+    ceph_assert(ptr->primary_ref_list_hook.is_linked());
+
+    stats.dirty_bytes -= ptr->get_length();
+    dirty.erase(i++);
+    intrusive_ptr_release(ptr);
+  }
+  assert(stats.dirty_bytes == 0);
 }
 
 void Cache::remove_extent(CachedExtentRef ref)
@@ -790,7 +833,6 @@ void Cache::commit_replace_extent(
     CachedExtentRef next,
     CachedExtentRef prev)
 {
-  assert(next->is_dirty());
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->version == prev->version + 1);
   extents.replace(*next, *prev);
@@ -799,19 +841,12 @@ void Cache::commit_replace_extent(
     assert(prev->is_stable_clean()
       || prev->primary_ref_list_hook.is_linked());
     if (prev->is_dirty()) {
-      stats.dirty_bytes -= prev->get_length();
-      dirty.erase(dirty.s_iterator_to(*prev));
-      intrusive_ptr_release(&*prev);
+      // add the new dirty root to front
+      remove_from_dirty(prev);
     }
     add_to_dirty(next);
   } else if (prev->is_dirty()) {
-    assert(prev->get_dirty_from() == next->get_dirty_from());
-    assert(prev->primary_ref_list_hook.is_linked());
-    auto prev_it = dirty.iterator_to(*prev);
-    dirty.insert(prev_it, *next);
-    dirty.erase(prev_it);
-    intrusive_ptr_release(&*prev);
-    intrusive_ptr_add_ref(&*next);
+    replace_dirty(next, prev);
   } else {
     lru.remove_from_lru(*prev);
     add_to_dirty(next);
@@ -1752,15 +1787,9 @@ Cache::close_ertr::future<> Cache::close()
        extents.size(),
        extents.get_bytes());
   root.reset();
-  for (auto i = dirty.begin(); i != dirty.end(); ) {
-    auto ptr = &*i;
-    stats.dirty_bytes -= ptr->get_length();
-    dirty.erase(i++);
-    intrusive_ptr_release(ptr);
-  }
+  clear_dirty();
   backref_extents.clear();
   backref_entryrefs_by_seq.clear();
-  assert(stats.dirty_bytes == 0);
   lru.clear();
   return close_ertr::now();
 }

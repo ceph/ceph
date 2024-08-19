@@ -1687,8 +1687,13 @@ private:
   /// Add dirty extent to dirty list
   void add_to_dirty(CachedExtentRef ref);
 
+  /// Replace the prev dirty extent by next
+  void replace_dirty(CachedExtentRef next, CachedExtentRef prev);
+
   /// Remove from dirty list
   void remove_from_dirty(CachedExtentRef ref);
+
+  void clear_dirty();
 
   /// Remove extent from extents handling dirty and refcounting
   void remove_extent(CachedExtentRef ref);
