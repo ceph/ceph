@@ -21,7 +21,6 @@
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 #include "erasure-code/isa/ErasureCodeIsa.h"
-#include "erasure-code/isa/xor_op.h"
 #include "global/global_context.h"
 #include "common/config.h"
 #include "gtest/gtest.h"
