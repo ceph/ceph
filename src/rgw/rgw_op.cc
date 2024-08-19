@@ -148,7 +148,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
 
   // use the master zone's endpoints
   auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
-                          creds, zg->second.id, zg->second.api_name};
+                          creds, site.get_zonegroup().id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
   int ret = conn.forward(dpp, effective_owner, req, nullptr,
