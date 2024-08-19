@@ -4257,11 +4257,6 @@ bool RadosZone::get_redirect_endpoint(std::string* endpoint)
   return true;
 }
 
-bool RadosZone::has_zonegroup_api(const std::string& api) const
-{
-  return store->svc()->zone->has_zonegroup_api(api);
-}
-
 const std::string& RadosZone::get_current_period_id()
 {
   return store->svc()->zone->get_current_period_id();

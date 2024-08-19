@@ -858,8 +858,6 @@ bool DaosZone::is_writeable() { return true; }
 
 bool DaosZone::get_redirect_endpoint(std::string* endpoint) { return false; }
 
-bool DaosZone::has_zonegroup_api(const std::string& api) const { return false; }
-
 const std::string& DaosZone::get_current_period_id() {
   return current_period->get_id();
 }

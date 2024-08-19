@@ -108,9 +108,6 @@ public:
   virtual bool get_redirect_endpoint(std::string* endpoint) override {
       return next->get_redirect_endpoint(endpoint);
   }
-  virtual bool has_zonegroup_api(const std::string& api) const override {
-      return next->has_zonegroup_api(api);
-  }
   virtual const std::string& get_current_period_id() override {
       return next->get_current_period_id();
   }
