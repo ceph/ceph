@@ -293,8 +293,7 @@ private:
   recover_missing_snaps(
     Ref<PG> pg,
     instance_handle_t &ihref,
-    ObjectContextRef head,
-    std::set<snapid_t> &snaps);
+  std::map<snapid_t, hobject_t> snaps);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_op(
       instance_handle_t &ihref,

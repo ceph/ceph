@@ -291,27 +291,21 @@ ClientRequest::interruptible_future<>
 ClientRequest::recover_missing_snaps(
   Ref<PG> pg,
   instance_handle_t &ihref,
-  ObjectContextRef head,
-  std::set<snapid_t> &snaps)
+  std::map<snapid_t, hobject_t> snaps)
 {
   LOG_PREFIX(ClientRequest::recover_missing_snaps);
-  for (auto &snap : snaps) {
-    auto coid = head->obs.oi.soid;
-    coid.snap = snap;
-    auto oid = resolve_oid(head->get_head_ss(), coid);
+  for (auto &[snap, oid] : snaps) {
     /* Rollback targets may legitimately not exist if, for instance,
      * the object is an rbd block which happened to be sparse and
      * therefore non-existent at the time of the specified snapshot.
      * In such a case, rollback will simply delete the object.  Here,
      * we skip the oid as there is no corresponding clone to recover.
      * See https://tracker.ceph.com/issues/63821 */
-    if (oid) {
-      auto unfound = co_await do_recover_missing(pg, *oid, m->get_reqid());
-      if (unfound) {
-        DEBUGDPP("{} unfound, hang it for now", *pg, oid);
-        co_await interruptor::make_interruptible(
-          pg->get_recovery_backend()->add_unfound(oid));
-      }
+    auto unfound = co_await do_recover_missing(pg, oid, m->get_reqid());
+    if (unfound) {
+      DEBUGDPP("{} unfound, hang it for now", *pg, oid);
+      co_await interruptor::make_interruptible(
+        pg->get_recovery_backend()->add_unfound(std::move(oid)));
     }
   }
 }
@@ -337,13 +331,29 @@ ClientRequest::process_op(
 
     std::set<snapid_t> snaps = snaps_need_to_recover();
     if (!snaps.empty()) {
-      auto with_obc = pg->obc_loader.with_obc<RWState::RWREAD>(
-        m->get_hobj().get_head(),
-        [&snaps, &ihref, pg, this](auto head, auto) {
-        return recover_missing_snaps(pg, ihref, head, snaps);
-      }).handle_error_interruptible(
-        crimson::ct_error::assert_all("unexpected error")
-      );
+      auto with_obc = seastar::do_with(
+        std::map<snapid_t, hobject_t>(),
+        [this, pg, &ihref, &snaps](auto &snap_oid_map) {
+        return pg->obc_loader.with_obc<RWState::RWREAD>(
+          m->get_hobj().get_head(),
+          [&snaps, &snap_oid_map](auto head, auto) {
+          for (auto &snap : snaps) {
+            auto coid = head->obs.oi.soid;
+            coid.snap = snap;
+            auto oid = resolve_oid(head->get_head_ss(), coid);
+            if (oid) {
+              auto [it, inserted] = snap_oid_map.try_emplace(
+                snap, std::move(*oid));
+              ceph_assert(inserted);
+            }
+          }
+          return interruptor::now();
+        }).si_then([this, pg, &ihref, &snap_oid_map] {
+          return recover_missing_snaps(pg, ihref, std::move(snap_oid_map));
+        }).handle_error_interruptible(
+          crimson::ct_error::assert_all("unexpected error")
+        );
+      });
       // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401
       co_await std::move(with_obc);
     }
