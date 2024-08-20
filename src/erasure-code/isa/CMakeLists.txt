@@ -2,8 +2,8 @@
 set(isal_src_dir ${CMAKE_SOURCE_DIR}/src/isa-l)
 include_directories(${isal_src_dir}/include)
 
-if(HAVE_NASM_X64_AVX2)
-  set(CMAKE_ASM_FLAGS "-i ${isal_src_dir}/include/ ${CMAKE_ASM_FLAGS}")
+if(HAVE_NASM_X64_AVX512)
+  set(CMAKE_ASM_FLAGS "-i ${isal_src_dir}/include/ ${CMAKE_ASM_FLAGS} -DHAVE_AS_KNOWS_AVX512 -DAS_FEATURE_LEVEL=10")
   set(isa_srcs
     ${isal_src_dir}/erasure_code/ec_base.c
     ${isal_src_dir}/erasure_code/gf_2vect_dot_prod_sse.asm
@@ -52,6 +52,10 @@ if(HAVE_NASM_X64_AVX2)
     ${isal_src_dir}/erasure_code/gf_3vect_mad_avx512.asm
     ${isal_src_dir}/erasure_code/gf_4vect_dot_prod_avx512.asm
     ${isal_src_dir}/erasure_code/gf_4vect_mad_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_dot_prod_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_mad_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_dot_prod_avx512.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_mad_avx512.asm
     ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx512.asm
     ${isal_src_dir}/erasure_code/gf_vect_mad_avx512.asm
     ${isal_src_dir}/raid/raid_base.c
@@ -60,6 +64,64 @@ if(HAVE_NASM_X64_AVX2)
     ${isal_src_dir}/raid/xor_gen_sse.asm
     ${isal_src_dir}/raid/xor_gen_avx.asm
     ${isal_src_dir}/raid/xor_gen_avx512.asm
+    ${isal_src_dir}/raid/pq_check_sse.asm
+    ${isal_src_dir}/raid/pq_gen_sse.asm
+    ${isal_src_dir}/raid/pq_gen_avx.asm
+    ${isal_src_dir}/raid/pq_gen_avx2.asm
+    ${isal_src_dir}/raid/pq_gen_avx512.asm
+    ErasureCodeIsa.cc
+    ErasureCodeIsaTableCache.cc
+    ErasureCodePluginIsa.cc
+  )
+elseif(HAVE_NASM_X64_AVX2)
+  set(CMAKE_ASM_FLAGS "-i ${isal_src_dir}/include/ ${CMAKE_ASM_FLAGS}")
+  set(isa_srcs
+    ${isal_src_dir}/erasure_code/ec_base.c
+    ${isal_src_dir}/erasure_code/gf_2vect_dot_prod_sse.asm
+    ${isal_src_dir}/erasure_code/gf_3vect_dot_prod_sse.asm
+    ${isal_src_dir}/erasure_code/gf_4vect_dot_prod_sse.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_dot_prod_sse.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_dot_prod_sse.asm
+    ${isal_src_dir}/erasure_code/gf_vect_dot_prod_sse.asm
+    ${isal_src_dir}/erasure_code/gf_2vect_mad_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_3vect_mad_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_4vect_mad_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_mad_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_mad_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_vect_mad_avx2.asm
+    ${isal_src_dir}/erasure_code/ec_highlevel_func.c
+    ${isal_src_dir}/erasure_code/gf_2vect_mad_avx.asm
+    ${isal_src_dir}/erasure_code/gf_3vect_mad_avx.asm
+    ${isal_src_dir}/erasure_code/gf_4vect_mad_avx.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_mad_avx.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_mad_avx.asm
+    ${isal_src_dir}/erasure_code/gf_vect_mad_avx.asm
+    ${isal_src_dir}/erasure_code/ec_multibinary.asm
+    ${isal_src_dir}/erasure_code/gf_2vect_mad_sse.asm
+    ${isal_src_dir}/erasure_code/gf_3vect_mad_sse.asm
+    ${isal_src_dir}/erasure_code/gf_4vect_mad_sse.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_mad_sse.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_mad_sse.asm
+    ${isal_src_dir}/erasure_code/gf_vect_mad_sse.asm
+    ${isal_src_dir}/erasure_code/gf_2vect_dot_prod_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_3vect_dot_prod_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_4vect_dot_prod_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_dot_prod_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_dot_prod_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx2.asm
+    ${isal_src_dir}/erasure_code/gf_vect_mul_avx.asm
+    ${isal_src_dir}/erasure_code/gf_2vect_dot_prod_avx.asm
+    ${isal_src_dir}/erasure_code/gf_3vect_dot_prod_avx.asm
+    ${isal_src_dir}/erasure_code/gf_4vect_dot_prod_avx.asm
+    ${isal_src_dir}/erasure_code/gf_5vect_dot_prod_avx.asm
+    ${isal_src_dir}/erasure_code/gf_6vect_dot_prod_avx.asm
+    ${isal_src_dir}/erasure_code/gf_vect_dot_prod_avx.asm
+    ${isal_src_dir}/erasure_code/gf_vect_mul_sse.asm
+    ${isal_src_dir}/raid/raid_base.c
+    ${isal_src_dir}/raid/raid_multibinary.asm
+    ${isal_src_dir}/raid/xor_check_sse.asm
+    ${isal_src_dir}/raid/xor_gen_sse.asm
+    ${isal_src_dir}/raid/xor_gen_avx.asm
     ${isal_src_dir}/raid/pq_check_sse.asm
     ${isal_src_dir}/raid/pq_gen_sse.asm
     ${isal_src_dir}/raid/pq_gen_avx.asm
@@ -107,6 +169,9 @@ endif()
 add_library(ec_isa SHARED
   ${isa_srcs}
   $<TARGET_OBJECTS:erasure_code_objs>)
+if(HAVE_NASM_X64_AVX512)
+  target_compile_definitions(ec_isa PRIVATE HAVE_AS_KNOWS_AVX512)
+endif()
 target_link_libraries(ec_isa ${EXTRALIBS})
 set_target_properties(ec_isa PROPERTIES
   INSTALL_RPATH "")
