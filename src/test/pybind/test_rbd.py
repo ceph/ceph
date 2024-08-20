@@ -2918,6 +2918,18 @@ class TestGroups(object):
         self.group.remove_snap(snap_name)
         assert_raises(ObjectNotFound, self.group.get_snap_info, snap_name)
 
+    def test_group_snap_get_info_no_member_images(self):
+        self.group.create_snap(snap_name)
+
+        snap_info_dict = self.group.get_snap_info(snap_name)
+        assert sorted(snap_info_dict.keys()) == self.gp_snap_keys
+        assert snap_info_dict['name'] == snap_name
+        assert snap_info_dict['state'] == RBD_GROUP_SNAP_STATE_COMPLETE
+        assert snap_info_dict['image_snap_name'] == ""
+        assert snap_info_dict['image_snaps'] == []
+
+        self.group.remove_snap(snap_name)
+
     def test_group_snap(self):
         global snap_name
         eq([], list(self.group.list_snaps()))
