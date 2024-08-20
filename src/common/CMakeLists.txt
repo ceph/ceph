@@ -237,7 +237,11 @@ elseif(HAVE_S390X)
   )
 endif(HAVE_INTEL)
 
-add_library(crc32 OBJECT ${crc32_srcs})
+if(HAVE_POWER8)
+  add_library(crc32 STATIC ${crc32_srcs})
+else()
+  add_library(crc32 OBJECT ${crc32_srcs})
+endif()
 
 if(HAVE_ARMV8_CRC)
   set_target_properties(crc32 PROPERTIES
