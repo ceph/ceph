@@ -12408,7 +12408,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              prefix == "osd pg-upmap-items" ||
              prefix == "osd rm-pg-upmap-items" ||
 	     prefix == "osd pg-upmap-primary" ||
-	     prefix == "osd rm-pg-upmap-primary") {
+	     prefix == "osd rm-pg-upmap-primary" ||
+	     prefix == "osd rm-pg-upmap-primary-all") {
     enum {
       OP_PG_UPMAP,
       OP_RM_PG_UPMAP,
@@ -12416,6 +12417,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       OP_RM_PG_UPMAP_ITEMS,
       OP_PG_UPMAP_PRIMARY,
       OP_RM_PG_UPMAP_PRIMARY,
+      OP_RM_PG_UPMAP_PRIMARY_ALL,
     } upmap_option;
 
     if (prefix == "osd pg-upmap") {
@@ -12430,6 +12432,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       upmap_option = OP_PG_UPMAP_PRIMARY;
     } else if (prefix == "osd rm-pg-upmap-primary") {
       upmap_option = OP_RM_PG_UPMAP_PRIMARY;
+    } else if (prefix == "osd rm-pg-upmap-primary-all") {
+      upmap_option = OP_RM_PG_UPMAP_PRIMARY_ALL;
     } else {
       ceph_abort_msg("invalid upmap option");
     }
@@ -12449,6 +12453,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     case OP_PG_UPMAP_PRIMARY:	// fall through
     case OP_RM_PG_UPMAP_PRIMARY:
+    case OP_RM_PG_UPMAP_PRIMARY_ALL:
       min_release = ceph_release_t::reef;
       min_feature = CEPH_FEATUREMASK_SERVER_REEF;
       feature_name = "pg-upmap-primary";
@@ -12474,17 +12479,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto wait;
     if (err < 0)
       goto reply_no_propose;
+    string pgidstr;
     pg_t pgid;
-    err = parse_pgid(cmdmap, ss, pgid);
-    if (err < 0)
-      goto reply_no_propose;
-    if (pending_inc.old_pools.count(pgid.pool())) {
-      ss << "pool of " << pgid << " is pending removal";
-      err = -ENOENT;
-      getline(ss, rs);
-      wait_for_commit(op,
-        new Monitor::C_Command(mon, op, err, rs, get_last_committed() + 1));
-      return true;
+    bool has_pgid = false;
+    if (cmd_getval(cmdmap, "pgid", pgidstr)) {
+      has_pgid = true;
+      err = parse_pgid(cmdmap, ss, pgid);
+      if (err < 0)
+	goto reply_no_propose;
+      if (pending_inc.old_pools.count(pgid.pool())) {
+	ss << "pool of " << pgid << " is pending removal";
+	err = -ENOENT;
+	getline(ss, rs);
+	wait_for_commit(op,
+	  new Monitor::C_Command(mon, op, err, rs, get_last_committed() + 1));
+	return true;
+      }
     }
 
     // check pending upmap changes
@@ -12501,12 +12511,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     case OP_PG_UPMAP_PRIMARY:   // fall through
     case OP_RM_PG_UPMAP_PRIMARY:
+    case OP_RM_PG_UPMAP_PRIMARY_ALL:
       {
-	const pg_pool_t *pt = osdmap.get_pg_pool(pgid.pool());
-        if (! pt->is_replicated()) {
-	  ss << "pg-upmap-primary is only supported for replicated pools";
-	  err = -EINVAL;
-	  goto reply_no_propose;
+        if (has_pgid) {
+	  const pg_pool_t *pt = osdmap.get_pg_pool(pgid.pool());
+	  if (! pt->is_replicated()) {
+	    ss << "pg-upmap-primary is only supported for replicated pools";
+	    err = -EINVAL;
+	    goto reply_no_propose;
+	  }
 	}
       }
       // fall through
@@ -12721,6 +12734,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       {
         pending_inc.old_pg_upmap_primary.insert(pgid);
         ss << "clear " << pgid << " pg_upmap_primary mapping";
+      }
+      break;
+
+    case OP_RM_PG_UPMAP_PRIMARY_ALL:
+      {
+	auto& pools = osdmap.get_pools();
+        for (const auto& [pid, pool] : pools) {
+	  ss << pid << std::endl;
+	  if (pool.is_replicated()) {
+	    ss << "clearing all pg_upmap_primaries..." << std::endl;
+	    osdmap.rm_all_upmap_prims(cct, &pending_inc, pid);
+	  }
+	}
       }
       break;
 

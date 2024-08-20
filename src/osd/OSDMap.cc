@@ -5231,6 +5231,7 @@ void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_i
       }
     }
   }
+  clean_pg_upmaps(cct, pending_inc);
 }
 
 int OSDMap::calc_desired_primary_distribution(
