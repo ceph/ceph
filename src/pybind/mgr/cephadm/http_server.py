@@ -31,7 +31,7 @@ class CephadmHttpServer(threading.Thread):
         self.service_discovery = ServiceDiscovery(mgr)
         self.cherrypy_shutdown_event = threading.Event()
         self._service_discovery_port = self.mgr.service_discovery_port
-        security_enabled, mgmt_gw_enabled = self.mgr._get_security_config()
+        security_enabled, _, _ = self.mgr._get_security_config()
         self.security_enabled = security_enabled
         super().__init__(target=self.run)
 
@@ -50,7 +50,7 @@ class CephadmHttpServer(threading.Thread):
 
     def config_update(self) -> None:
         self.service_discovery_port = self.mgr.service_discovery_port
-        security_enabled, mgmt_gw_enabled = self.mgr._get_security_config()
+        security_enabled, _, _ = self.mgr._get_security_config()
         if self.security_enabled != security_enabled:
             self.security_enabled = security_enabled
             self.restart()
