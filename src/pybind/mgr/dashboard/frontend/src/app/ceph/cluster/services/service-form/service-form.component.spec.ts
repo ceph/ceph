@@ -392,6 +392,7 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
         formHelper.setValue('service_type', 'nvmeof');
         formHelper.setValue('service_id', 'svc');
         formHelper.setValue('pool', 'xyz');
+        formHelper.setValue('group', 'abc');
       });
 
       it('should submit nvmeof', () => {
@@ -401,7 +402,8 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           service_id: 'svc',
           placement: {},
           unmanaged: false,
-          pool: 'xyz'
+          pool: 'xyz',
+          group: 'abc'
         });
       });
 
@@ -411,6 +413,10 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
       it('should throw error when there is no pool', () => {
         formHelper.expectErrorChange('pool', '', 'required');
+      });
+
+      it('should throw error when there is no group', () => {
+        formHelper.expectErrorChange('group', '', 'required');
       });
     });
 
