@@ -2072,10 +2072,12 @@ void OSDMap::clean_temps(CephContext *cct,
 
 void OSDMap::get_upmap_pgs(vector<pg_t> *upmap_pgs) const
 {
-  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size());
+  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size() + pg_upmap_primaries.size());
   for (auto& p : pg_upmap)
     upmap_pgs->push_back(p.first);
   for (auto& p : pg_upmap_items)
+    upmap_pgs->push_back(p.first);
+  for (auto& p : pg_upmap_primaries)
     upmap_pgs->push_back(p.first);
 }
 
@@ -2232,6 +2234,21 @@ void OSDMap::clean_pg_upmaps(
                      << dendl;
       pending_inc->old_pg_upmap.insert(pg);
     }
+    auto k = pending_inc->new_pg_upmap_primary.find(pg);
+    if (k != pending_inc->new_pg_upmap_primary.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+	             << "pg_upmap_primaries entry "
+		     << k->first << "->" << k->second
+		     << dendl;
+      pending_inc->new_pg_upmap_primary.erase(k);
+    }
+    auto l = pg_upmap_primaries.find(pg);
+    if (l != pg_upmap_primaries.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap_primaries entry "
+	             << l->first << "->" << l->second
+		     << dendl;
+      pending_inc->old_pg_upmap_primary.insert(pg);
+    }
     auto p = pending_inc->new_pg_upmap_items.find(pg);
     if (p != pending_inc->new_pg_upmap_items.end()) {
       ldout(cct, 10) << __func__ << " cancel invalid pending "
@@ -2265,9 +2282,6 @@ bool OSDMap::clean_pg_upmaps(
   get_upmap_pgs(&to_check);
   auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
   clean_pg_upmaps(cct, pending_inc, to_cancel, to_remap);
-  //TODO: Create these 3 functions for pg_upmap_primaries and so they can be checked 
-  //      and cleaned in the same way as pg_upmap. This is not critical since invalid
-  //      pg_upmap_primaries are never applied, (the final check is in _apply_upmap).
   return any_change;
 }
 
