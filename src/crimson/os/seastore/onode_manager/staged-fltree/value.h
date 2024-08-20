@@ -141,7 +141,7 @@ class ValueDeltaRecorder {
   /// Called by DeltaRecorderT to apply user-defined value delta.
   virtual void apply_value_delta(ceph::bufferlist::const_iterator&,
                                  NodeExtentMutable&,
-                                 laddr_t) = 0;
+                                 laddr_offset_t) = 0;
 
  protected:
   ValueDeltaRecorder(ceph::bufferlist& encoded) : encoded{encoded} {}
