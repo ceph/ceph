@@ -742,10 +742,12 @@ void Cache::mark_dirty(CachedExtentRef ref)
 
   lru.remove_from_lru(*ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
-  add_to_dirty(ref);
+  add_to_dirty(ref, nullptr);
 }
 
-void Cache::add_to_dirty(CachedExtentRef ref)
+void Cache::add_to_dirty(
+    CachedExtentRef ref,
+    const Transaction::src_t* p_src)
 {
   assert(ref->is_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
@@ -756,23 +758,53 @@ void Cache::add_to_dirty(CachedExtentRef ref)
   // also see CachedExtent::is_stable_writting()
   intrusive_ptr_add_ref(&*ref);
   dirty.push_back(*ref);
-  stats.dirty_bytes += ref->get_length();
+
+  auto extent_length = ref->get_length();
+  stats.dirty_bytes += extent_length;
+  get_by_ext(
+    stats.dirty_sizes_by_ext,
+    ref->get_type()
+  ).account_in(extent_length);
+  if (p_src != nullptr) {
+    assert(!is_root_type(ref->get_type()));
+    get_by_ext(
+      get_by_src(stats.dirty_io_by_src_ext, *p_src),
+      ref->get_type()
+    ).in_sizes.account_in(extent_length);
+  }
 }
 
-void Cache::remove_from_dirty(CachedExtentRef ref)
+void Cache::remove_from_dirty(
+    CachedExtentRef ref,
+    const Transaction::src_t* p_src)
 {
   assert(ref->is_dirty());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
   assert(ref->is_fully_loaded());
 
-  stats.dirty_bytes -= ref->get_length();
+  auto extent_length = ref->get_length();
+  stats.dirty_bytes -= extent_length;
+  get_by_ext(
+    stats.dirty_sizes_by_ext,
+    ref->get_type()
+  ).account_out(extent_length);
+  if (p_src != nullptr) {
+    assert(!is_root_type(ref->get_type()));
+    auto& dirty_stats = get_by_ext(
+      get_by_src(stats.dirty_io_by_src_ext, *p_src),
+      ref->get_type());
+    dirty_stats.out_sizes.account_in(extent_length);
+    dirty_stats.out_versions += ref->get_version();
+  }
+
   dirty.erase(dirty.s_iterator_to(*ref));
   intrusive_ptr_release(&*ref);
 }
 
 void Cache::replace_dirty(
     CachedExtentRef next,
-    CachedExtentRef prev)
+    CachedExtentRef prev,
+    const Transaction::src_t& src)
 {
   assert(prev->is_dirty());
   ceph_assert(prev->primary_ref_list_hook.is_linked());
@@ -790,6 +822,10 @@ void Cache::replace_dirty(
   assert(!is_root_type(next->get_type()));
   assert(prev->get_type() == next->get_type());
 
+  get_by_ext(
+    get_by_src(stats.dirty_io_by_src_ext, src),
+    next->get_type()).num_replace += 1;
+
   auto prev_it = dirty.iterator_to(*prev);
   dirty.insert(prev_it, *next);
   dirty.erase(prev_it);
@@ -805,18 +841,26 @@ void Cache::clear_dirty()
     ceph_assert(ptr->primary_ref_list_hook.is_linked());
     assert(ptr->is_fully_loaded());
 
-    stats.dirty_bytes -= ptr->get_length();
+    auto extent_length = ptr->get_length();
+    stats.dirty_bytes -= extent_length;
+    get_by_ext(
+      stats.dirty_sizes_by_ext,
+      ptr->get_type()
+    ).account_out(extent_length);
+
     dirty.erase(i++);
     intrusive_ptr_release(ptr);
   }
   assert(stats.dirty_bytes == 0);
 }
 
-void Cache::remove_extent(CachedExtentRef ref)
+void Cache::remove_extent(
+    CachedExtentRef ref,
+    const Transaction::src_t* p_src)
 {
   assert(ref->is_valid());
   if (ref->is_dirty()) {
-    remove_from_dirty(ref);
+    remove_from_dirty(ref, p_src);
   } else if (!ref->is_placeholder()) {
     lru.remove_from_lru(*ref);
   }
@@ -827,7 +871,8 @@ void Cache::commit_retire_extent(
     Transaction& t,
     CachedExtentRef ref)
 {
-  remove_extent(ref);
+  const auto t_src = t.get_src();
+  remove_extent(ref, &t_src);
 
   ref->dirty_from_or_retired_at = JOURNAL_SEQ_NULL;
   invalidate_extent(t, *ref);
@@ -842,19 +887,20 @@ void Cache::commit_replace_extent(
   assert(next->version == prev->version + 1);
   extents.replace(*next, *prev);
 
+  const auto t_src = t.get_src();
   if (is_root_type(prev->get_type())) {
     assert(prev->is_stable_clean()
       || prev->primary_ref_list_hook.is_linked());
     if (prev->is_dirty()) {
       // add the new dirty root to front
-      remove_from_dirty(prev);
+      remove_from_dirty(prev, nullptr/* exclude root */);
     }
-    add_to_dirty(next);
+    add_to_dirty(next, nullptr/* exclude root */);
   } else if (prev->is_dirty()) {
-    replace_dirty(next, prev);
+    replace_dirty(next, prev, t_src);
   } else {
     lru.remove_from_lru(*prev);
-    add_to_dirty(next);
+    add_to_dirty(next, &t_src);
   }
 
   next->on_replace_prior();
@@ -1374,7 +1420,7 @@ record_t Cache::prepare_record(
     }
     assert(i->state == CachedExtent::extent_state_t::DIRTY);
     assert(i->version > 0);
-    remove_from_dirty(i);
+    remove_from_dirty(i, &trans_src);
     // set the version to zero because the extent state is now clean
     // in order to handle this transparently
     i->version = 0;
@@ -1725,10 +1771,10 @@ void Cache::complete_commit(
 	  i->get_type(),
 	  start_seq));
       add_extent(i);
+      const auto t_src = t.get_src();
       if (i->is_dirty()) {
-        add_to_dirty(i);
+        add_to_dirty(i, &t_src);
       } else {
-        const auto t_src = t.get_src();
         touch_extent(*i, &t_src);
       }
     }
@@ -1750,7 +1796,7 @@ void Cache::init()
   if (root) {
     // initial creation will do mkfs followed by mount each of which calls init
     DEBUG("remove extent -- prv_root={}", *root);
-    remove_extent(root);
+    remove_extent(root, nullptr);
     root = nullptr;
   }
   root = new RootBlock();
@@ -1892,7 +1938,7 @@ Cache::replay_delta(
   if (is_root_type(delta.type)) {
     TRACE("replay root delta at {} {}, remove extent ... -- {}, prv_root={}",
           journal_seq, record_base, delta, *root);
-    remove_extent(root);
+    remove_extent(root, nullptr);
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from_or_retired_at = journal_seq;
     root->state = CachedExtent::extent_state_t::DIRTY;
@@ -1900,7 +1946,7 @@ Cache::replay_delta(
           journal_seq, record_base, delta, *root);
     root->set_modify_time(modify_time);
     add_extent(root);
-    add_to_dirty(root);
+    add_to_dirty(root, nullptr);
     return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
       std::make_pair(true, root));
   } else {

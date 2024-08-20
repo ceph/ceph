@@ -2654,6 +2654,13 @@ struct cache_stats_t {
   }
 };
 
+struct dirty_io_stats_t {
+  cache_size_stats_t in_sizes;
+  uint64_t num_replace = 0;
+  cache_size_stats_t out_sizes;
+  uint64_t out_versions = 0;
+};
+
 }
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
