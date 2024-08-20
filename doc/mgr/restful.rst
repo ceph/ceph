@@ -77,6 +77,19 @@ If the port is not configured, *restful* will bind to port ``8003``.
 If the address it not configured, the *restful* will bind to ``::``,
 which corresponds to all available IPv4 and IPv6 addresses.
 
+Configuring max_request
+---------------------------
+
+The maximum request size can be configured via a central configuration
+option::
+
+  ceph config set mgr mgr/restful/$name/max_requests $NUM
+
+where ``$name`` is the ID of the ceph-mgr daemon (usually the hostname).
+
+.. mgr_module:: restful
+.. confval:: max_requests
+
 .. _creating-an-api-user:
 
 Creating an API User
