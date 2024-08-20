@@ -750,6 +750,7 @@ void Cache::add_to_dirty(CachedExtentRef ref)
   assert(ref->is_dirty());
   assert(!ref->primary_ref_list_hook.is_linked());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
+  assert(ref->is_fully_loaded());
 
   // Note: next might not be at extent_state_t::DIRTY,
   // also see CachedExtent::is_stable_writting()
@@ -762,6 +763,7 @@ void Cache::remove_from_dirty(CachedExtentRef ref)
 {
   assert(ref->is_dirty());
   ceph_assert(ref->primary_ref_list_hook.is_linked());
+  assert(ref->is_fully_loaded());
 
   stats.dirty_bytes -= ref->get_length();
   dirty.erase(dirty.s_iterator_to(*ref));
@@ -774,12 +776,14 @@ void Cache::replace_dirty(
 {
   assert(prev->is_dirty());
   ceph_assert(prev->primary_ref_list_hook.is_linked());
+  assert(prev->is_fully_loaded());
 
   // Note: next might not be at extent_state_t::DIRTY,
   // also see CachedExtent::is_stable_writting()
   assert(next->is_dirty());
   assert(!next->primary_ref_list_hook.is_linked());
   ceph_assert(next->get_modify_time() != NULL_TIME);
+  assert(next->is_fully_loaded());
 
   assert(prev->get_dirty_from() == next->get_dirty_from());
   assert(prev->get_length() == next->get_length());
@@ -799,6 +803,7 @@ void Cache::clear_dirty()
     auto ptr = &*i;
     assert(ptr->is_dirty());
     ceph_assert(ptr->primary_ref_list_hook.is_linked());
+    assert(ptr->is_fully_loaded());
 
     stats.dirty_bytes -= ptr->get_length();
     dirty.erase(i++);
