@@ -394,6 +394,10 @@ private:
     std::set<snapid_t> *snaps ///< [out] snaps
     ) const; ///< @return error, -ENOENT if oid is not recorded
 
+  void update_snap_map(
+    const pg_log_entry_t& i,
+    MapCacher::Transaction<std::string, ceph::buffer::list> *t);
+
   /// Get snaps for oid - alternative interface
   tl::expected<std::set<snapid_t>, SnapMapReaderI::result_t> get_snaps(
     const hobject_t &hoid) const final;
