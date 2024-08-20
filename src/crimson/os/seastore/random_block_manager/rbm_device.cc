@@ -30,7 +30,6 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     [this, FNAME, config=std::move(config), shard_num, journal_size](auto st) {
     super.block_size = st.block_size;
     super.size = st.size;
-    super.feature |= RBM_BITMAP_BLOCK_CRC;
     super.config = std::move(config);
     super.journal_size = journal_size;
     ceph_assert_always(super.journal_size > 0);
@@ -59,19 +58,22 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
       crimson::ct_error::assert_all{
       "Invalid error open in RBMDevice::do_primary_mkfs"}
     ).safe_then([this] {
-      return write_rbm_header(
+      return initialize_nvme_features(
       ).safe_then([this] {
-	return close();
-      }).handle_error(
-	mkfs_ertr::pass_further{},
-	crimson::ct_error::assert_all{
-	"Invalid error write_rbm_header in RBMDevice::do_primary_mkfs"
+	return write_rbm_superblock(
+	).safe_then([this] {
+	  return close();
+	}).handle_error(
+	  mkfs_ertr::pass_further{},
+	  crimson::ct_error::assert_all{
+	  "Invalid error write_rbm_superblock in RBMDevice::do_primary_mkfs"
+	});
       });
     });
   });
 }
 
-write_ertr::future<> RBMDevice::write_rbm_header()
+write_ertr::future<> RBMDevice::write_rbm_superblock()
 {
   bufferlist meta_b_header;
   super.crc = 0;
@@ -79,7 +81,7 @@ write_ertr::future<> RBMDevice::write_rbm_header()
   // If NVMeDevice supports data protection, CRC for checksum is not required
   // NVMeDevice is expected to generate and store checksum internally.
   // CPU overhead for CRC might be saved.
-  if (is_data_protection_enabled()) {
+  if (is_end_to_end_data_protection()) {
     super.crc = -1;
   } else {
     super.crc = meta_b_header.crc32c(-1);
@@ -94,10 +96,10 @@ write_ertr::future<> RBMDevice::write_rbm_header()
   return write(RBM_START_ADDRESS, std::move(bp));
 }
 
-read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
+read_ertr::future<rbm_superblock_t> RBMDevice::read_rbm_superblock(
   rbm_abs_addr addr)
 {
-  LOG_PREFIX(RBMDevice::read_rbm_header);
+  LOG_PREFIX(RBMDevice::read_rbm_superblock);
   assert(super.block_size > 0);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(super.block_size)),
@@ -106,16 +108,16 @@ read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
       addr,
       bptr
     ).safe_then([length=bptr.length(), this, bptr, FNAME]()
-      -> read_ertr::future<rbm_metadata_header_t> {
+      -> read_ertr::future<rbm_superblock_t> {
       bufferlist bl;
       bl.append(bptr);
       auto p = bl.cbegin();
-      rbm_metadata_header_t super_block;
+      rbm_superblock_t super_block;
       try {
 	decode(super_block, p);
       }
       catch (ceph::buffer::error& e) {
-	DEBUG("read_rbm_header: unable to decode rbm super block {}",
+	DEBUG("read_rbm_superblock: unable to decode rbm super block {}",
 	      e.what());
 	return crimson::ct_error::enoent::make();
       }
@@ -123,11 +125,11 @@ read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
       bufferlist meta_b_header;
       super_block.crc = 0;
       encode(super_block, meta_b_header);
-      assert(ceph::encoded_sizeof<rbm_metadata_header_t>(super_block) <
+      assert(ceph::encoded_sizeof<rbm_superblock_t>(super_block) <
 	  super_block.block_size);
 
       // Do CRC verification only if data protection is not supported.
-      if (is_data_protection_enabled() == false) {
+      if (super_block.is_end_to_end_data_protection() == false) {
 	if (meta_b_header.crc32c(-1) != crc) {
 	  DEBUG("bad crc on super block, expected {} != actual {} ",
 		meta_b_header.crc32c(-1), crc);
@@ -139,7 +141,7 @@ read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
       super_block.crc = crc;
       super = super_block;
       DEBUG("got {} ", super);
-      return read_ertr::future<rbm_metadata_header_t>(
+      return read_ertr::future<rbm_superblock_t>(
 	read_ertr::ready_future_marker{},
 	super_block
       );
@@ -160,7 +162,7 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
     ).safe_then([this](auto st) {
       assert(st.block_size > 0);
       super.block_size = st.block_size;
-      return read_rbm_header(RBM_START_ADDRESS
+      return read_rbm_superblock(RBM_START_ADDRESS
       ).safe_then([this](auto s) {
 	LOG_PREFIX(RBMDevice::do_shard_mount);
 	shard_info = s.shard_infos[seastar::this_shard_id()];

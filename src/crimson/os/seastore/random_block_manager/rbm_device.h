@@ -66,11 +66,6 @@ using discard_ertr = crimson::errorator<
   crimson::ct_error::input_output_error>;
 
 constexpr uint32_t RBM_SUPERBLOCK_SIZE = 4096;
-enum {
-  // TODO: This allows the device to manage crc on a block by itself
-  RBM_NVME_END_TO_END_PROTECTION = 1,
-  RBM_BITMAP_BLOCK_CRC = 2,
-};
 
 class RBMDevice : public Device {
 public:
@@ -83,7 +78,7 @@ public:
     return read(rbm_addr, out);
   }
 protected:
-  rbm_metadata_header_t super;
+  rbm_superblock_t super;
   rbm_shard_info_t shard_info;
 public:
   RBMDevice() {}
@@ -149,7 +144,13 @@ public:
     ceph::bufferlist bl,
     uint16_t stream = 0) = 0;
 
-  bool is_data_protection_enabled() const { return false; }
+  bool is_end_to_end_data_protection() const final {
+    return super.is_end_to_end_data_protection();
+  }
+
+  virtual nvme_command_ertr::future<> initialize_nvme_features() { 
+    return nvme_command_ertr::now(); 
+  }
 
   mkfs_ret do_mkfs(device_config_t);
 
@@ -160,9 +161,9 @@ public:
 
   mount_ret do_shard_mount();
 
-  write_ertr::future<> write_rbm_header();
+  write_ertr::future<> write_rbm_superblock();
 
-  read_ertr::future<rbm_metadata_header_t> read_rbm_header(rbm_abs_addr addr);
+  read_ertr::future<rbm_superblock_t> read_rbm_superblock(rbm_abs_addr addr);
 
   using stat_device_ret =
     read_ertr::future<seastar::stat_data>;

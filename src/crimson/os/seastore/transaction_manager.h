@@ -1000,6 +1000,13 @@ private:
     });
   }
 
+  bool get_checksum_needed(paddr_t paddr) {
+    if (paddr.is_record_relative()) {
+      return journal->is_checksum_needed();
+    }
+    return epm->get_checksum_needed(paddr);
+  }
+
 public:
   // Testing interfaces
   auto get_epm() {
