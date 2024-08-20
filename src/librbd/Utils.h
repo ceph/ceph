@@ -9,7 +9,6 @@
 #include "include/ceph_assert.h"
 #include "include/Context.h"
 #include "common/snap_types.h"
-#include "common/zipkin_trace.h"
 #include "common/RefCountedObj.h"
 
 #include <atomic>

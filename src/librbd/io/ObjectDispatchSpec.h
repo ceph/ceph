@@ -8,7 +8,6 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
-#include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
 #include <boost/variant/variant.hpp>

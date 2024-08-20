@@ -17,7 +17,6 @@
 #include "test/librbd/mock/io/MockImageDispatcher.h"
 #include "test/librbd/mock/io/MockObjectDispatcher.h"
 #include "common/WorkQueue.h"
-#include "common/zipkin_trace.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
 #include <string>

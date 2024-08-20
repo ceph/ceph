@@ -12,8 +12,6 @@
 
 #include "global/global_context.h"
 
-#include "common/zipkin_trace.h"
-
 #include "Message.h"
 
 #include "messages/MPGStats.h"
@@ -1016,16 +1014,38 @@ Message *decode_message(CephContext *cct,
   return m.detach();
 }
 
+struct fake_blkin_trace_info {
+    int64_t trace_id;
+    int64_t span_id;
+    int64_t parent_span_id;
+};
+
+static inline void encode(const fake_blkin_trace_info& b, ceph::buffer::list& bl)
+{
+  using ceph::encode;
+  encode(b.trace_id, bl);
+  encode(b.span_id, bl);
+  encode(b.parent_span_id, bl);
+}
+
+static inline void decode(fake_blkin_trace_info& b, ceph::buffer::list::const_iterator& p)
+{
+  using ceph::decode;
+  decode(b.trace_id, p);
+  decode(b.span_id, p);
+  decode(b.parent_span_id, p);
+}
+
 void Message::encode_trace(ceph::bufferlist &bl, uint64_t features)
 {
   using ceph::encode;
-  static const blkin_trace_info empty = { 0, 0, 0 };
+  static const fake_blkin_trace_info empty = { 0, 0, 0 };
   encode(empty, bl);
 }
 
 void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 {
-  blkin_trace_info info = {};
+  fake_blkin_trace_info info = {};
   decode(info, p);
 }
 

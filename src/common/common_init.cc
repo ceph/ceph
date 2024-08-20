@@ -22,7 +22,6 @@
 #include "common/hostname.h"
 #include "common/strtol.h"
 #include "common/valgrind.h"
-#include "common/zipkin_trace.h"
 
 #define dout_subsys ceph_subsys_
 
@@ -95,7 +94,6 @@ void common_init_finish(CephContext *cct)
   }
   cct->_finished = true;
   cct->init_crypto();
-  ZTracer::ztrace_init();
 
   if (!cct->_log->is_started()) {
     cct->_log->start();

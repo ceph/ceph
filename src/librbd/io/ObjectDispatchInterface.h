@@ -7,7 +7,6 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
-#include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
 

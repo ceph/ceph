@@ -4,7 +4,6 @@
 #include "auth/AuthRegistry.h"
 
 #include "common/errno.h"
-#include "common/zipkin_trace.h"
 #include "librados/librados_asio.h"
 
 #include "include/stringify.h"
