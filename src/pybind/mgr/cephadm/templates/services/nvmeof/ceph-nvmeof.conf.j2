@@ -48,8 +48,7 @@ root_ca_cert = /root.ca.cert
 
 [spdk]
 tgt_path = {{ spec.tgt_path }}
-rpc_socket_dir = {{ spec.rpc_socket_dir }}
-rpc_socket_name = {{ spec.rpc_socket_name }}
+rpc_socket = {{ spec.rpc_socket }}
 timeout = {{ spec.spdk_timeout }}
 bdevs_per_cluster = {{ spec.bdevs_per_cluster }}
 log_level={{ spec.spdk_log_level }}
