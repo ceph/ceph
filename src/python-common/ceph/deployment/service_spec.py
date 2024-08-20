@@ -1340,8 +1340,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  spdk_timeout: Optional[float] = 60.0,
                  spdk_log_level: Optional[str] = '',
                  spdk_protocol_log_level: Optional[str] = 'WARNING',
-                 rpc_socket_dir: Optional[str] = '/var/tmp/',
-                 rpc_socket_name: Optional[str] = 'spdk.sock',
+                 rpc_socket: Optional[str] = '/var/tmp/spdk.sock',
                  conn_retries: Optional[int] = 10,
                  transports: Optional[str] = 'tcp',
                  transport_tcp_options: Optional[Dict[str, int]] =
@@ -1430,10 +1429,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.spdk_log_level = spdk_log_level
         #: ``spdk_protocol_log_level`` the SPDK-GW protocol log level
         self.spdk_protocol_log_level = spdk_protocol_log_level or 'WARNING'
-        #: ``rpc_socket_dir`` the SPDK socket file directory
-        self.rpc_socket_dir = rpc_socket_dir or '/var/tmp/'
-        #: ``rpc_socket_name`` the SPDK socket file name
-        self.rpc_socket_name = rpc_socket_name or 'spdk.sock'
+        #: ``rpc_socket`` the SPDK RPC socket file path
+        self.rpc_socket = rpc_socket or '/var/tmp/spdk.sock'
         #: ``conn_retries`` ceph connection retries number
         self.conn_retries = conn_retries
         #: ``transports`` tcp
