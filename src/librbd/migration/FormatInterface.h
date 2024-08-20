@@ -6,7 +6,6 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
-#include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"
 #include <map>

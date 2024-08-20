@@ -6,7 +6,6 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "common/zipkin_trace.h"
 #include "librbd/Types.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"

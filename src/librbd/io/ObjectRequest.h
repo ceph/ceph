@@ -8,7 +8,6 @@
 #include "include/buffer.h"
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
-#include "common/zipkin_trace.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Types.h"
 #include "librbd/io/Types.h"

@@ -7,7 +7,6 @@
 #include "include/int_types.h"
 #include "librbd/object_map/Request.h"
 #include "common/bit_vector.hpp"
-#include "common/zipkin_trace.h"
 #include "librbd/Utils.h"
 #include <boost/optional.hpp>
 
