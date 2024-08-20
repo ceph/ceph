@@ -402,36 +402,29 @@ SnapTrimObjSubEvent::start()
   // lock both clone's and head's obcs
   co_await pg->obc_loader.with_obc<RWState::RWWRITE>(
     coid,
-    [this](auto head_obc, auto clone_obc) {
+    [this](auto head_obc, auto clone_obc) -> ObjectContextLoader::load_obc_iertr::future<> {
       logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
-      return enter_stage<interruptor>(
-        client_pp().process
-      ).then_interruptible(
-        [this,clone_obc=std::move(clone_obc), head_obc=std::move(head_obc)]() mutable {
-	  logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
-	  return remove_or_update(
-	    clone_obc, head_obc
-	  ).safe_then_interruptible(
-	    [clone_obc, this](auto&& txn) mutable {
-	    return pg->submit_transaction(
+
+      co_await enter_stage<interruptor>(client_pp().process);
+
+      logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
+
+      auto txn = co_await remove_or_update(clone_obc, head_obc);
+
+      auto [submitted, all_completed] = co_await pg->submit_transaction(
 	      std::move(clone_obc),
 	      std::move(txn),
 	      std::move(osd_op_p),
 	      std::move(log_entries)
-	    ).then_interruptible([this](auto p) {
-	      auto &submitted = std::get<0>(p);
-	      auto &all_completed = std::get<1>(p);
-	      return submitted.then_interruptible(
-		[this, all_completed=std::move(all_completed)]() mutable {
-		  return enter_stage<interruptor>(
-		    client_pp().wait_repop
-		  ).then_interruptible([all_completed=std::move(all_completed)]() mutable{
-		    return std::move(all_completed);
-		  });
-		});
-	    });
-	  });
-	});
+      );
+
+      co_await std::move(submitted);
+
+      co_await enter_stage<interruptor>(client_pp().wait_repop);
+
+      co_await std::move(all_completed);
+
+      co_return;
     },
     false
   ).handle_error_interruptible(
