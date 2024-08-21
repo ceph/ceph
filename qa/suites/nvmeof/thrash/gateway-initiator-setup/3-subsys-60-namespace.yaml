@@ -17,8 +17,8 @@ tasks:
     no_coverage_and_limits: true
     clients:
       client.3:
-        - rbd/nvmeof_setup_subsystem.sh
-        - rbd/nvmeof_basic_tests.sh
+        - nvmeof/setup_subsystem.sh
+        - nvmeof/basic_tests.sh
     env:
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage

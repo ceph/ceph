@@ -17,7 +17,7 @@ tasks:
     no_coverage_and_limits: true
     clients:
       client.2:
-        - rbd/nvmeof_setup_subsystem.sh
+        - nvmeof/setup_subsystem.sh
     env:
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage
@@ -27,11 +27,11 @@ tasks:
     timeout: 30m
     clients:
       client.2:
-        - rbd/nvmeof_basic_tests.sh
-        - rbd/nvmeof_fio_test.sh --rbd_iostat
+        - nvmeof/basic_tests.sh
+        - nvmeof/fio_test.sh --rbd_iostat
       client.3:
-        - rbd/nvmeof_basic_tests.sh
-        - rbd/nvmeof_namespace_test.sh
+        - nvmeof/basic_tests.sh
+        - nvmeof/namespace_test.sh
     env:
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'
