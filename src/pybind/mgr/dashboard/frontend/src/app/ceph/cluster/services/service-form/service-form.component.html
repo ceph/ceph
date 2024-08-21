@@ -16,6 +16,13 @@
              Click here</a> to create a new Realm/Zone Group/Zone
         </cd-alert-panel>
 
+        <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'oauth2-proxy'"
+                        type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          Authentication must be enabled in an active `mgtm-gateway` service to enable Single Sign-On(SSO) with `oauth2-proxy`
+        </cd-alert-panel>
+
         <!-- Service type -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -907,8 +914,146 @@
             </div>
           </fieldset>
         </ng-container>
-        <!-- RGW, Ingress & iSCSI -->
-        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress'].includes(serviceForm.controls.service_type.value)">
+
+        <!-- oauth2-proxy -->
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'oauth2-proxy'">
+          <!-- provider_display_name -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="provider_display_name">
+              <span i18n>Provider display name</span>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="provider_display_name"
+                     class="form-control"
+                     type="text"
+                     formControlName="provider_display_name"
+                     placeholder="My OIDC Provider"
+                     i18n-placeholder>
+              <cd-help-text i18n>The display name for the identity provider (IdP) in the UI.</cd-help-text>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('provider_display_name', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- client_id -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="client_id">
+              <span i18n>Client ID</span>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="client_id"
+                     class="form-control"
+                     type="text"
+                     formControlName="client_id"
+                     placeholder="oauth2-client">
+              <cd-help-text i18n>The client ID for authenticating with the IdP.</cd-help-text>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('client_id', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- client_secret -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="client_secret">
+              <span i18n>Client secret</span>
+            </label>
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input id="client_secret"
+                       class="form-control"
+                       type="password"
+                       formControlName="client_secret">
+                <span class="input-group-append">
+                  <button type="button"
+                          class="btn btn-light"
+                          cdPasswordButton="client_secret">
+                  </button>
+                  <cd-copy-2-clipboard-button source="client_secret">
+                  </cd-copy-2-clipboard-button>
+                </span>
+              </div>
+              <cd-help-text i18n>The client secret for authenticating with the IdP.</cd-help-text>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('client_secret', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- oidc_issuer_url -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="oidc_issuer_url">
+              <span i18n>OIDC Issuer URL</span>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="oidc_issuer_url"
+                     class="form-control"
+                     type="text"
+                     formControlName="oidc_issuer_url"
+                     placeholder="https://<IdPs-domain>/realms/<realm-name>">
+              <cd-help-text i18n>The URL of the OpenID Connect (OIDC) issuer.</cd-help-text>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('oidc_issuer_url', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('oidc_issuer_url', frm, 'validUrl')"
+                    i18n>Invalid url.</span>
+            </div>
+          </div>
+          <!-- https_address -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="https_address">
+              <span i18n>Https address</span>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="https_address"
+                     class="form-control"
+                     type="text"
+                     formControlName="https_address"
+                     placeholder="0.0.0.0:4180">
+              <cd-help-text i18n>The address for HTTPS connections as [IP|Hostname]:port.</cd-help-text>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('https_address', frm, 'invalidAddress')"
+                    i18n>Format must be [IP|Hostname]:port and the port between 0 and 65535</span>
+            </div>
+          </div>
+          <!-- redirect_url -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="redirect_url">
+              <span i18n>Redirect URL</span>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="redirect_url"
+                     class="form-control"
+                     type="text"
+                     formControlName="redirect_url"
+                     placeholder="https://<IP|Hostname>:4180/oauth2/callback">
+              <cd-help-text i18n>The URL the oauth2-proxy service will redirect to after a successful login.</cd-help-text>
+            </div>
+          </div>
+          <!-- Allowlist_domains -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="allowlist_domains">
+              <span i18n>Allowlist domains</span>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="allowlist_domains"
+                     class="form-control"
+                     type="text"
+                     formControlName="allowlist_domains"
+                     placeholder="domain1.com,192.168.100.1:8080">
+              <cd-help-text i18n>Comma separated list of domains to be allowed to redirect to, used for login or logout.</cd-help-text>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- RGW, Ingress, iSCSI & Oauth2-proxy -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress', 'oauth2-proxy'].includes(serviceForm.controls.service_type.value)">
           <!-- ssl -->
           <div class="form-group row">
             <div class="cd-col-form-offset">

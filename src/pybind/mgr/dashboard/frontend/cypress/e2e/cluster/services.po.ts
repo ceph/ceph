@@ -100,6 +100,14 @@ export class ServicesPageHelper extends PageHelper {
           }
           break;
 
+        case 'oauth2-proxy':
+          cy.get('#https_address').type('localhost:8443');
+          cy.get('#provider_display_name').type('provider');
+          cy.get('#client_id').type('foo');
+          cy.get('#client_secret').type('bar');
+          cy.get('#oidc_issuer_url').type('http://127.0.0.0:8080/realms/ceph');
+          break;
+
         default:
           cy.get('#service_id').type('test');
           unmanaged

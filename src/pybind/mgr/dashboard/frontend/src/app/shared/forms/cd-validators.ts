@@ -666,4 +666,21 @@ export class CdValidators {
       }
     };
   }
+
+  static oauthAddressTest(): ValidatorFn {
+    const OAUTH2_HTTPS_ADDRESS_PATTERN = /^((\d{1,3}\.){3}\d{1,3}|([a-zA-Z0-9-_]+\.)*[a-zA-Z0-9-_]+)/;
+    return (control: AbstractControl): Record<string, boolean> | null => {
+      if (!control.value) {
+        return null;
+      }
+
+      if (!control.value.includes(':')) {
+        return { invalidAddress: true };
+      }
+      const [address, port] = control.value.split(':');
+      const addressTest = OAUTH2_HTTPS_ADDRESS_PATTERN.test(address);
+      const portTest = Number(port) >= 0 && Number(port) <= 65535;
+      return { invalidAddress: !(addressTest && portTest) };
+    };
+  }
 }
