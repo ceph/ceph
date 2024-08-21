@@ -22,6 +22,10 @@ cleanup_tempdir() {
     rm -rf ${TEMPDIR}
 }
 
+expect_false() {
+    if "$@"; then return 1; else return 0; fi
+}
+
 create_base_image() {
     local image=$1
 
@@ -124,8 +128,56 @@ EOF
 
     rbd migration abort ${dest_image}
 
+    # no snap name or snap id
+    expect_false rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\"}" \
+        ${dest_image}
+
+    # invalid source spec JSON
+    expect_false rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": non-existing}" \
+        ${dest_image}
+
+    # non-existing snap name
+    expect_false rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": \"non-existing\"}" \
+        ${dest_image}
+
+    # invalid snap name
+    expect_false rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": 123456}" \
+        ${dest_image}
+
+    # non-existing snap id passed as int
+    expect_false rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": 123456}" \
+        ${dest_image}
+
+    # non-existing snap id passed as string
+    expect_false rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": \"123456\"}" \
+        ${dest_image}
+
+    # invalid snap id
+    expect_false rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": \"foobar\"}" \
+        ${dest_image}
+
+    # snap id passed as int
+    local snap_id=$(rbd snap ls ${base_image} --format xml | xmlstarlet sel -t -v "//snapshots/snapshot[name='2']/id")
     rbd migration prepare --import-only \
-        --source-spec "{\"type\": \"native\", \"pool_id\": "${pool_id}", \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": ${snap_id}}" \
+        ${dest_image}
+    rbd migration abort ${dest_image}
+
+    # snap id passed as string
+    rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_id\": \"${snap_id}\"}" \
+        ${dest_image}
+    rbd migration abort ${dest_image}
+
+    rbd migration prepare --import-only \
+        --source-spec "{\"type\": \"native\", \"pool_id\": ${pool_id}, \"image_name\": \"${base_image}\", \"snap_name\": \"2\"}" \
         ${dest_image}
     rbd migration abort ${dest_image}
 
