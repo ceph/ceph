@@ -1,0 +1,75 @@
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <form name="roleForm"
+        #formDir="ngForm"
+        [formGroup]="roleForm"
+        novalidate>
+    <div class="card">
+      <div i18n="form title"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+      <div class="card-body">
+
+        <!-- Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': mode !== roleFormMode.editing}"
+                 for="name"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Name..."
+                   id="name"
+                   name="name"
+                   formControlName="name"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="roleForm.showError('name', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="roleForm.showError('name', formDir, 'notUnique')"
+                  i18n>The chosen name is already in use.</span>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group row">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="description">Description</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Description..."
+                   id="description"
+                   name="description"
+                   formControlName="description">
+          </div>
+        </div>
+
+        <!-- Permissions -->
+        <div class="form-group row">
+          <label i18n
+                 class="cd-col-form-label">Permissions</label>
+          <div class="cd-col-form-input">
+            <cd-checked-table-form [data]="scopes_permissions"
+                                   [columns]="columns"
+                                   [form]="roleForm"
+                                   inputField="scopes_permissions"
+                                   [scopes]="scopes"
+                                   [initialValue]="initialValue"></cd-checked-table-form>
+          </div>
+        </div>
+
+      </div>
+      <div class="card-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="roleForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
+      </div>
+    </div>
+  </form>
+</div>
