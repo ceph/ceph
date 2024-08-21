@@ -82,4 +82,3 @@
 	path = src/nvmeof/gateway
 	url = https://github.com/ceph/ceph-nvmeof.git
 	fetchRecurseSubmodules = false
-	shallow = true
