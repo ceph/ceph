@@ -20,7 +20,10 @@
 #include <fstream>
 
 #include "AsyncMessenger.h"
+#include <utime.h>
 
+#include "common/Clock.h"
+#include "common/Formatter.h"
 #include "common/config.h"
 #include "common/Timer.h"
 #include "common/errno.h"
@@ -355,6 +358,72 @@ int AsyncMessenger::shutdown()
   lock.unlock();
   stack->drain();
   return 0;
+}
+
+void AsyncMessenger::dump(Formatter* f) {
+  std::lock_guard l{lock};
+  f->dump_unsigned("nonce", nonce);
+  f->open_object_section("my_name");
+  my_name.dump(f);
+  f->close_section();  // my_name
+  f->open_object_section("my_addrs");
+  my_addrs->dump(f);
+  f->close_section();  // my_addrs
+
+  f->open_array_section("listen_sockets");
+  for (const auto& proc : processors) {
+    for (const auto& sock : proc->listen_sockets) {
+      f->open_object_section("socket");
+      f->dump_int("socket_fd", sock.fd());
+
+      f->dump_int("worker_id", proc->worker ? proc->worker->id : -1);
+      f->close_section();  // socket
+    }
+  }
+  f->close_section();  // listen_sockets
+
+  f->open_object_section("dispatch_queue");
+  f->dump_int("length", get_dispatch_queue_len());
+  utime_t dispatch_queue_max_age;
+  dispatch_queue_max_age.set_from_double(
+      get_dispatch_queue_max_age(ceph_clock_now()));
+  f->dump_string("max_age_ago", utimespan_str(dispatch_queue_max_age));
+  f->close_section();  // dispatch_queue
+
+  f->dump_int("connections_count", conns.size());
+
+  f->open_array_section("connections");
+  for (const auto& [e, c] : conns) {
+    f->open_object_section("connection");
+    e.dump(f);
+    c->dump(f);
+    f->close_section();  // connection
+  }
+  f->close_section();  // connections
+
+  f->open_array_section("anon_conns");
+  for (const auto& c : anon_conns) {
+    c->dump(f);
+  }
+  f->close_section();  // anon_conns
+
+  f->open_array_section("accepting_conns");
+  for (const auto& c : accepting_conns) {
+    c->dump(f);
+  }
+  f->close_section();
+
+  f->open_array_section("deleted_conns");
+  for (const auto& c : deleted_conns) {
+    c->dump(f);
+  }
+  f->close_section();  // deleted_conns
+
+  if (local_connection) {
+    f->open_array_section("local_connection");
+    local_connection->dump(f);
+    f->close_section();  // local_connection
+  }
 }
 
 int AsyncMessenger::bind(const entity_addr_t &bind_addr,
