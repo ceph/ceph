@@ -18,9 +18,9 @@ tasks:
     timeout: 30m
     clients:
       client.2:
-        - rbd/nvmeof_setup_subsystem.sh
-        - rbd/nvmeof_basic_tests.sh
-        - rbd/nvmeof_fio_test.sh --rbd_iostat
+        - nvmeof/setup_subsystem.sh
+        - nvmeof/basic_tests.sh
+        - nvmeof/fio_test.sh --rbd_iostat
     env:
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage
@@ -32,8 +32,8 @@ tasks:
     timeout: 30m
     clients:
       client.2:
-        - rbd/nvmeof_scalability_test.sh nvmeof.a
-        - rbd/nvmeof_scalability_test.sh nvmeof.b 
+        - nvmeof/scalability_test.sh nvmeof.a
+        - nvmeof/scalability_test.sh nvmeof.b 
     env:
       SCALING_DELAYS: '50'
 
