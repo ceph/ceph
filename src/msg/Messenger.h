@@ -28,6 +28,7 @@
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
+#include "common/Formatter.h"
 #include "common/Throttle.h"
 #include "include/Context.h"
 #include "include/types.h"
@@ -520,6 +521,8 @@ public:
   /**
    * @} // Startup/Shutdown
    */
+
+  virtual void dump(Formatter* f) = 0;
 
   /**
    * @defgroup Messaging
