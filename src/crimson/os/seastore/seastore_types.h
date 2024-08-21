@@ -2617,6 +2617,10 @@ struct cache_size_stats_t {
   uint64_t size = 0;
   uint64_t num_extents = 0;
 
+  bool is_empty() const {
+    return num_extents == 0;
+  }
+
   double get_mb() const {
     return (size>>12)/static_cast<double>(256);
   }
@@ -2641,24 +2645,67 @@ struct cache_size_stats_t {
     size += o.size;
     num_extents += o.num_extents;
   }
-};
-std::ostream& operator<<(std::ostream&, const cache_size_stats_t&);
 
-struct cache_stats_t {
-  cache_size_stats_t lru_sizes;
-  cache_io_stats_t lru_io;
-
-  void add(const cache_stats_t& o) {
-    lru_sizes.add(o.lru_sizes);
-    lru_io.add(o.lru_io);
+  void minus(const cache_size_stats_t& o) {
+    size -= o.size;
+    num_extents -= o.num_extents;
   }
 };
+std::ostream& operator<<(std::ostream&, const cache_size_stats_t&);
+struct cache_size_stats_printer_t {
+  double seconds;
+  const cache_size_stats_t& stats;
+};
+std::ostream& operator<<(std::ostream&, const cache_size_stats_printer_t&);
 
 struct dirty_io_stats_t {
   cache_size_stats_t in_sizes;
   uint64_t num_replace = 0;
   cache_size_stats_t out_sizes;
   uint64_t out_versions = 0;
+
+  double get_avg_out_version() const {
+    return out_versions/static_cast<double>(out_sizes.num_extents);
+  }
+
+  bool is_empty() const {
+    return in_sizes.is_empty() &&
+           num_replace == 0 &&
+           out_sizes.is_empty();
+  }
+
+  void add(const dirty_io_stats_t& o) {
+    in_sizes.add(o.in_sizes);
+    num_replace += o.num_replace;
+    out_sizes.add(o.out_sizes);
+    out_versions += o.out_versions;
+  }
+
+  void minus(const dirty_io_stats_t& o) {
+    in_sizes.minus(o.in_sizes);
+    num_replace -= o.num_replace;
+    out_sizes.minus(o.out_sizes);
+    out_versions -= o.out_versions;
+  }
+};
+struct dirty_io_stats_printer_t {
+  double seconds;
+  const dirty_io_stats_t& stats;
+};
+std::ostream& operator<<(std::ostream&, const dirty_io_stats_printer_t&);
+
+struct cache_stats_t {
+  cache_size_stats_t lru_sizes;
+  cache_io_stats_t lru_io;
+  cache_size_stats_t dirty_sizes;
+  dirty_io_stats_t dirty_io;
+
+  void add(const cache_stats_t& o) {
+    lru_sizes.add(o.lru_sizes);
+    lru_io.add(o.lru_io);
+    dirty_sizes.add(o.dirty_sizes);
+    dirty_io.add(o.dirty_io);
+  }
 };
 
 }
@@ -2680,9 +2727,11 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::cache_io_stats_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::cache_size_stats_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::cache_size_stats_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::data_category_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::delta_info_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_id_printer_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::dirty_io_stats_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};

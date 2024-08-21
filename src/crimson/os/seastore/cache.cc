@@ -146,6 +146,8 @@ void Cache::register_metrics()
   DEBUG("");
 
   stats = {};
+  last_dirty_io = {};
+  last_dirty_io_by_src_ext = {};
 
   namespace sm = seastar::metrics;
   using src_t = Transaction::src_t;
@@ -767,6 +769,7 @@ void Cache::add_to_dirty(
   ).account_in(extent_length);
   if (p_src != nullptr) {
     assert(!is_root_type(ref->get_type()));
+    stats.dirty_io.in_sizes.account_in(extent_length);
     get_by_ext(
       get_by_src(stats.dirty_io_by_src_ext, *p_src),
       ref->get_type()
@@ -790,6 +793,8 @@ void Cache::remove_from_dirty(
   ).account_out(extent_length);
   if (p_src != nullptr) {
     assert(!is_root_type(ref->get_type()));
+    stats.dirty_io.out_sizes.account_in(extent_length);
+    stats.dirty_io.out_versions += ref->get_version();
     auto& dirty_stats = get_by_ext(
       get_by_src(stats.dirty_io_by_src_ext, *p_src),
       ref->get_type());
@@ -822,6 +827,7 @@ void Cache::replace_dirty(
   assert(!is_root_type(next->get_type()));
   assert(prev->get_type() == next->get_type());
 
+  stats.dirty_io.num_replace += 1;
   get_by_ext(
     get_by_src(stats.dirty_io_by_src_ext, src),
     next->get_type()).num_replace += 1;
@@ -2242,8 +2248,98 @@ Cache::do_get_caching_extent_by_type(
 cache_stats_t Cache::get_stats(
   bool report_detail, double seconds) const
 {
+  LOG_PREFIX(Cache::get_stats);
+
   cache_stats_t ret;
   lru.get_stats(ret, report_detail, seconds);
+
+  /*
+   * get dirty stats
+   */
+
+  ret.dirty_sizes = cache_size_stats_t{stats.dirty_bytes, dirty.size()};
+  ret.dirty_io = stats.dirty_io;
+  ret.dirty_io.minus(last_dirty_io);
+
+  if (report_detail && seconds != 0) {
+    counter_by_src_t<counter_by_extent_t<dirty_io_stats_t> >
+      _trans_io_by_src_ext = stats.dirty_io_by_src_ext;
+    counter_by_src_t<dirty_io_stats_t> trans_io_by_src;
+    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
+      auto src = static_cast<transaction_type_t>(_src);
+      auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
+      const auto& last_io_by_ext = get_by_src(last_dirty_io_by_src_ext, src);
+      auto& trans_io_per_src = get_by_src(trans_io_by_src, src);
+      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+        auto ext = static_cast<extent_types_t>(_ext);
+        auto& extent_io = get_by_ext(io_by_ext, ext);
+        const auto& last_extent_io = get_by_ext(last_io_by_ext, ext);
+        extent_io.minus(last_extent_io);
+        trans_io_per_src.add(extent_io);
+      }
+    }
+
+    std::ostringstream oss;
+    oss << "\ndirty total" << ret.dirty_sizes;
+    cache_size_stats_t data_sizes;
+    cache_size_stats_t mdat_sizes;
+    cache_size_stats_t phys_sizes;
+    for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+      auto ext = static_cast<extent_types_t>(_ext);
+      const auto& extent_sizes = get_by_ext(stats.dirty_sizes_by_ext, ext);
+
+      if (is_data_type(ext)) {
+        data_sizes.add(extent_sizes);
+      } else if (is_logical_metadata_type(ext)) {
+        mdat_sizes.add(extent_sizes);
+      } else if (is_physical_type(ext)) {
+        phys_sizes.add(extent_sizes);
+      }
+    }
+    oss << "\n  data" << data_sizes
+        << "\n  mdat" << mdat_sizes
+        << "\n  phys" << phys_sizes;
+
+    oss << "\ndirty io: "
+        << dirty_io_stats_printer_t{seconds, ret.dirty_io};
+    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
+      auto src = static_cast<transaction_type_t>(_src);
+      const auto& trans_io_per_src = get_by_src(trans_io_by_src, src);
+      if (trans_io_per_src.is_empty()) {
+        continue;
+      }
+      dirty_io_stats_t data_io;
+      dirty_io_stats_t mdat_io;
+      dirty_io_stats_t phys_io;
+      const auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
+      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+        auto ext = static_cast<extent_types_t>(_ext);
+        const auto extent_io = get_by_ext(io_by_ext, ext);
+        if (is_data_type(ext)) {
+          data_io.add(extent_io);
+        } else if (is_logical_metadata_type(ext)) {
+          mdat_io.add(extent_io);
+        } else if (is_physical_type(ext)) {
+          phys_io.add(extent_io);
+        }
+      }
+      oss << "\n  " << src << ": "
+          << dirty_io_stats_printer_t{seconds, trans_io_per_src}
+          << "\n    data: "
+          << dirty_io_stats_printer_t{seconds, data_io}
+          << "\n    mdat: "
+          << dirty_io_stats_printer_t{seconds, mdat_io}
+          << "\n    phys: "
+          << dirty_io_stats_printer_t{seconds, phys_io};
+    }
+
+    INFO("{}", oss.str());
+
+    last_dirty_io_by_src_ext = stats.dirty_io_by_src_ext;
+  }
+
+  last_dirty_io = stats.dirty_io;
+
   return ret;
 }
 

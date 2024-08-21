@@ -1605,6 +1605,7 @@ private:
 
     uint64_t dirty_bytes = 0;
     counter_by_extent_t<cache_size_stats_t> dirty_sizes_by_ext;
+    dirty_io_stats_t dirty_io;
     counter_by_src_t<counter_by_extent_t<dirty_io_stats_t> >
       dirty_io_by_src_ext;
 
@@ -1634,6 +1635,10 @@ private:
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
   } stats;
+
+  mutable dirty_io_stats_t last_dirty_io;
+  mutable counter_by_src_t<counter_by_extent_t<dirty_io_stats_t> >
+    last_dirty_io_by_src_ext;
 
   void account_conflict(Transaction::src_t src1, Transaction::src_t src2) {
     assert(src1 < Transaction::src_t::MAX);

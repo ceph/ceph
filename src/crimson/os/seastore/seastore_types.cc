@@ -1012,4 +1012,31 @@ std::ostream& operator<<(std::ostream& out, const cache_size_stats_t& p)
   return out;
 }
 
+std::ostream& operator<<(std::ostream& out, const cache_size_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  out << "("
+      << fmt::format(dfmt, p.stats.get_mb()/p.seconds)
+      << "MiB/s,"
+      << fmt::format(dfmt, p.stats.get_avg_kb())
+      << "KiB,"
+      << fmt::format(dfmt, p.stats.num_extents/p.seconds)
+      << "ps)";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const dirty_io_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  out << "in"
+      << cache_size_stats_printer_t{p.seconds, p.stats.in_sizes}
+      << " replaces="
+      << fmt::format(dfmt, p.stats.num_replace/p.seconds)
+      << "ps out"
+      << cache_size_stats_printer_t{p.seconds, p.stats.out_sizes}
+      << " outv="
+      << fmt::format(dfmt, p.stats.get_avg_out_version());
+  return out;
+}
+
 } // namespace crimson::os::seastore
