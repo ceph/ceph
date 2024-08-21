@@ -182,7 +182,13 @@ enum class RGWObjCategory : uint8_t {
   MultiMeta = 3,  // b-i entries for multipart upload metadata objs
 
   CloudTiered = 4, // b-i entries which are tiered to external cloud
+
+  Standard = 5,
+
+  Glacier = 6,
 };
+
+RGWObjCategory get_category_from_storage_class(const std::string& storage_class);
 
 std::string_view to_string(RGWObjCategory c);
 
@@ -661,6 +667,7 @@ struct rgw_bucket_category_stats {
   uint64_t total_size;
   uint64_t total_size_rounded;
   uint64_t num_entries;
+  std::string storage_class;
   uint64_t actual_size{0}; //< account for compression, encryption
 
   rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
@@ -670,6 +677,7 @@ struct rgw_bucket_category_stats {
     encode(total_size, bl);
     encode(total_size_rounded, bl);
     encode(num_entries, bl);
+    encode(storage_class, bl);
     encode(actual_size, bl);
     ENCODE_FINISH(bl);
   }
@@ -678,6 +686,7 @@ struct rgw_bucket_category_stats {
     decode(total_size, bl);
     decode(total_size_rounded, bl);
     decode(num_entries, bl);
+    decode(storage_class, bl);
     if (struct_v >= 3) {
       decode(actual_size, bl);
     } else {
@@ -868,16 +877,18 @@ struct rgw_usage_data {
   uint64_t bytes_received;
   uint64_t ops;
   uint64_t successful_ops;
+  std::string storage_class;
 
   rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
   rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
-
+  rgw_usage_data(uint64_t sent, uint64_t received, const std::string& storage) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0), storage_class(storage) {}
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(bytes_sent, bl);
     encode(bytes_received, bl);
     encode(ops, bl);
     encode(successful_ops, bl);
+    encode(storage_class, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -887,6 +898,7 @@ struct rgw_usage_data {
     decode(bytes_received, bl);
     decode(ops, bl);
     decode(successful_ops, bl);
+    decode(storage_class, bl);
     DECODE_FINISH(bl);
   }
 
@@ -895,6 +907,7 @@ struct rgw_usage_data {
     bytes_received += usage.bytes_received;
     ops += usage.ops;
     successful_ops += usage.successful_ops;
+    storage_class = usage.storage_class;
   }
 };
 WRITE_CLASS_ENCODER(rgw_usage_data)
@@ -921,6 +934,7 @@ struct rgw_usage_log_entry {
     encode(total_usage.bytes_received, bl);
     encode(total_usage.ops, bl);
     encode(total_usage.successful_ops, bl);
+    encode(total_usage.storage_class, bl);
     encode(usage_map, bl);
     encode(payer.to_str(), bl);
     ENCODE_FINISH(bl);
@@ -938,6 +952,7 @@ struct rgw_usage_log_entry {
     decode(total_usage.bytes_received, bl);
     decode(total_usage.ops, bl);
     decode(total_usage.successful_ops, bl);
+    decode(total_usage.storage_class, bl);
     if (struct_v < 2) {
       usage_map[""] = total_usage;
     } else {
@@ -978,7 +993,13 @@ struct rgw_usage_log_entry {
   }
 
   void add(const std::string& category, const rgw_usage_data& data) {
-    usage_map[category].aggregate(data);
+    std::string combined_category = category;
+    
+     if (!data.storage_class.empty() && category.find("_" + data.storage_class) == std::string::npos) {
+        combined_category += "_" + data.storage_class;
+    }
+
+    usage_map[combined_category].aggregate(data);
     total_usage.aggregate(data);
   }
 

@@ -157,14 +157,20 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       // creation date may have changed (ie delete/recreate bucket)
       entry.creation_time = update_entry.creation_time;
     }
-
+    entry.stats = update_entry.stats;
+    uint64_t total_size_new = 0;
+    for (const auto& stat : entry.stats) {
+      total_size_new += stat.second.total_size;
+    }
+    CLS_LOG(20, "test() total_size: %lu", 
+    total_size_new); 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
     } else if (ret >= 0 && entry.user_stats_sync) {
       dec_header_stats(&header.stats, entry);
     }
-
+    header.info = entry.stats;
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
             key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
 
@@ -182,7 +188,12 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
     add_header_stats(&header.stats, entry);
   }
-
+    uint64_t total_size_new1 = 0;
+    for (const auto& stat : header.info) {
+      total_size_new1 += stat.second.total_size;
+    }
+    CLS_LOG(20, "test() total_size: %lu", 
+    total_size_new1); 
   bufferlist bl;
 
   CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);

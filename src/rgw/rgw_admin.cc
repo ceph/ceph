@@ -631,6 +631,7 @@ enum class OPT {
   KEY_CREATE,
   KEY_RM,
   BUCKETS_LIST,
+  BUCKETS_STORAGE,
   BUCKET_LIMIT_CHECK,
   BUCKET_LINK,
   BUCKET_UNLINK,
@@ -847,6 +848,7 @@ static SimpleCmd::Commands all_cmds = {
   { "key create", OPT::KEY_CREATE },
   { "key rm", OPT::KEY_RM },
   { "buckets list", OPT::BUCKETS_LIST },
+  { "buckets storage", OPT::BUCKETS_STORAGE },
   { "bucket list", OPT::BUCKETS_LIST },
   { "bucket limit check", OPT::BUCKET_LIMIT_CHECK },
   { "bucket link", OPT::BUCKET_LINK },
@@ -4193,6 +4195,7 @@ int main(int argc, const char **argv)
                          OPT::USER_INFO,
 			 OPT::USER_STATS,
 			 OPT::BUCKETS_LIST,
+       OPT::BUCKETS_STORAGE,
 			 OPT::BUCKET_LIMIT_CHECK,
 			 OPT::BUCKET_STATS,
 			 OPT::BUCKET_SYNC_CHECKPOINT,
@@ -6733,7 +6736,8 @@ int main(int argc, const char **argv)
       params.enforce_ns = false;
       params.list_versions = true;
       params.allow_unordered = bool(allow_unordered);
-
+      cout << results.objs.size() << std::endl;
+      
       do {
         const int remaining = max_entries - count;
 	ret = bucket->list(dpp(), params, std::min(remaining, paginate_size), results,
@@ -6744,7 +6748,19 @@ int main(int argc, const char **argv)
         }
 
         count += results.objs.size();
-
+        cout << count << std::endl;
+        // cerr << "ERROR: hello: " << cpp_strerror(results.objs) << std::endl;
+        cerr << "ERROR: MIK: " << cpp_strerror(2) << std::endl;
+        std::map<std::string, size_t> storage_class_totals;
+        for (auto it = results.objs.begin(); it != results.objs.end(); ++it) {
+           rgw_bucket_dir_entry obj = *it;
+           std::string storage_class = obj.meta.storage_class.empty() ? "default_class" : obj.meta.storage_class;
+           storage_class_totals[storage_class] += obj.meta.size;
+          //  cout << obj.meta.etag << std::endl;
+        }
+        for (const auto& entry : storage_class_totals) {
+            std::cout << "Storage Class: " << entry.first << ", Total Size: " << entry.second << std::endl;
+        }
         for (const auto& entry : results.objs) {
           encode_json("entry", entry, formatter.get());
         }
@@ -6755,6 +6771,81 @@ int main(int argc, const char **argv)
       formatter->flush(cout);
     } /* have bucket_name */
   } /* OPT::BUCKETS_LIST */
+
+  if (opt_cmd == OPT::BUCKETS_STORAGE) {
+    if (bucket_name.empty()) {
+      if (!rgw::sal::User::empty(user)) {
+        if (!user_op.has_existing_user()) {
+          cerr << "ERROR: could not find user: " << user << std::endl;
+          return -ENOENT;
+        }
+      }
+      RGWBucketAdminOp::info(store, bucket_op, stream_flusher, null_yield, dpp());
+    } else {
+      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+      if (ret < 0) {
+        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      formatter->open_array_section("entries");
+
+      int count = 0;
+
+      static constexpr int MAX_PAGINATE_SIZE = 10000;
+      static constexpr int DEFAULT_MAX_ENTRIES = 1000;
+
+      if (max_entries < 0) {
+	max_entries = DEFAULT_MAX_ENTRIES;
+      }
+      const int paginate_size = std::min(max_entries, MAX_PAGINATE_SIZE);
+
+      string prefix;
+      string delim;
+      string ns;
+
+      rgw::sal::Bucket::ListParams params;
+      rgw::sal::Bucket::ListResults results;
+
+      params.prefix = prefix;
+      params.delim = delim;
+      params.marker = rgw_obj_key(marker);
+      params.ns = ns;
+      params.enforce_ns = false;
+      params.list_versions = true;
+      params.allow_unordered = bool(allow_unordered);
+      cout << results.objs.size() << std::endl;
+      
+      do {
+        const int remaining = max_entries - count;
+	      ret = bucket->list(dpp(), params, std::min(remaining, paginate_size), results,
+			   null_yield);
+        if (ret < 0) {
+          cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        count += results.objs.size();
+        cout << count << std::endl;
+        // cerr << "ERROR: hello: " << cpp_strerror(results.objs) << std::endl;
+        // cerr << "ERROR: MIK: " << cpp_strerror(2) << std::endl;
+        std::map<std::string, size_t> storage_class_totals;
+        for (auto it = results.objs.begin(); it != results.objs.end(); ++it) {
+            rgw_bucket_dir_entry obj = *it;
+            std::string storage_class = obj.meta.storage_class.empty() ? "default_class" : obj.meta.storage_class;
+            storage_class_totals[storage_class] += obj.meta.size;
+            //  cout << obj.meta.etag << std::endl;
+        }
+        for (const auto& entry : storage_class_totals) {
+            formatter->open_object_section("storage_class");
+            formatter->dump_string("class_name", entry.first);
+            formatter->dump_unsigned("total_size", entry.second);
+            formatter->close_section();
+        }
+        formatter->flush(cout);
+
+      } while (results.is_truncated && count < max_entries);
+    } /* have bucket_name */
+  } 
 
   if (opt_cmd == OPT::BUCKET_RADOS_LIST) {
     RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(store),
@@ -8163,6 +8254,7 @@ next:
     }
 
     if (sync_stats) {
+      cout << "hahaha" << std::endl;
       if (!bucket_name.empty()) {
         int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
         if (ret < 0) {
@@ -8184,7 +8276,7 @@ next:
         }
       }
     }
-
+      cout << "123123" << std::endl;
     constexpr bool omit_utilized_stats = false;
     RGWStorageStats stats(omit_utilized_stats);
     ceph::real_time last_stats_sync;
@@ -8204,6 +8296,19 @@ next:
 
     {
       Formatter::ObjectSection os(*formatter, "result");
+      formatter->open_object_section("stats.storage-classes");
+      for (const auto& item : stats.stats) {
+        const RGWObjCategory& category = item.first;
+        const rgw_bucket_category_stats& stats = item.second;
+        
+        formatter->open_object_section(to_string(category));
+        encode_json("total_size", stats.total_size, formatter.get());
+        encode_json("total_size_rounded", stats.total_size_rounded, formatter.get());
+        encode_json("num_entries", stats.num_entries, formatter.get());
+        encode_json("actual_size", stats.actual_size, formatter.get());
+        formatter->close_section();
+      }
+      formatter->close_section();
       encode_json("stats", stats, formatter.get());
       utime_t last_sync_ut(last_stats_sync);
       encode_json("last_stats_sync", last_sync_ut, formatter.get());

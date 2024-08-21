@@ -229,8 +229,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
-  rgw_usage_data data(bytes_sent, bytes_received);
-
+  rgw_usage_data data(bytes_sent, bytes_received, s->info.storage_class);
   data.ops = 1;
   if (!s->is_err())
     data.successful_ops = 1;
@@ -240,10 +239,15 @@ static void log_usage(struct req_state *s, const string& op_name)
 	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
 	<< bytes_received << ", success=" << data.successful_ops << dendl;
 
+  ldpp_dout(s, 30) << "hihihi" << s->info.storage_class << dendl;
+  ldpp_dout(s, 30) << "hihihi2" << data.storage_class << dendl;
+  ldpp_dout(s, 30) << "hohoho" << op_name << dendl;
+  ldpp_dout(s, 30) << "hihihi2" << data.bytes_received << "byte_sent" << data.bytes_sent <<  dendl;
+
   entry.add(op_name, data);
 
   utime_t ts = ceph_clock_now();
-
+  ldpp_dout(s, 30) << "hihihi3" << entry.total_usage.storage_class <<  dendl;
   usage_logger->insert(ts, entry);
 }
 
@@ -525,6 +529,7 @@ int OpsLogRados::log(struct req_state* s, struct rgw_log_entry& entry)
 
   struct tm bdt;
   time_t t = req_state::Clock::to_time_t(entry.time);
+  ldpp_dout(s, 0) << "time for me" << s->info.storage_class << dendl;
   if (s->cct->_conf->rgw_log_object_name_utc)
     gmtime_r(&t, &bdt);
   else
@@ -656,6 +661,11 @@ int rgw_log_op(RGWREST* const rest, struct req_state *s, const RGWOp* op, OpsLog
   entry.time = s->time;
   entry.total_time = s->time_elapsed();
   entry.bytes_sent = bytes_sent;
+  // cout << entry.total_time << std::endl;
+  // cout << entry.time << std::endl;
+  // dout(1) << "====== req done req=UwU1" << dendl;
+  // dout(1) << "testtest" << s->time << dendl;
+  // dout(1) << "testtest" << s->time_elapsed() << dendl;
   entry.bytes_received = bytes_received;
   if (s->err.http_ret) {
     char buf[16];

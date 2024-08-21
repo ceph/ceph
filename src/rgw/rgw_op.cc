@@ -572,10 +572,10 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     s->dest_placement.storage_class = s->info.storage_class;
     s->dest_placement.inherit_from(s->bucket->get_placement_rule());
 
-    if (!store->get_zone()->get_params().valid_placement(s->dest_placement)) {
-      ldpp_dout(dpp, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
-      return -EINVAL;
-    }
+    // if (!store->get_zone()->get_params().valid_placement(s->dest_placement)) {
+    //   ldpp_dout(dpp, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
+    //   return -EINVAL;
+    // }
 
     s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket->get_attrs());
   }
@@ -2159,7 +2159,14 @@ void RGWGetObj::execute(optional_yield y)
   attrs = s->object->get_attrs();
   if (op_ret < 0)
     goto done_err;
-
+  ldpp_dout(this, 0) << "test123123123" << dendl;
+   attr_iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
+  if (attr_iter != attrs.end()) {
+    std::string storage_class = attr_iter->second.to_str();
+    s->info.storage_class = storage_class;
+    ldpp_dout(this, 0) << "test1" << s->info.storage_class << dendl;
+    ldpp_dout(this, 0) << "test111" << storage_class << dendl;
+  }
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
@@ -4969,6 +4976,7 @@ void RGWDeleteObj::execute(optional_yield y)
       } else {
         obj_size = astate->size;
         etag = astate->attrset[RGW_ATTR_ETAG].to_str();
+        s->info.storage_class = astate->attrset[RGW_ATTR_STORAGE_CLASS].to_str();
       }
 
       // ignore return value from get_obj_attrs in all other cases

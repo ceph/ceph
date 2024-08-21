@@ -3359,11 +3359,17 @@ int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp,
   if (!pent) {
     pent = &ent;
   }
+  ldpp_dout(dpp, 20) << "Test123123" << pent->size << dendl;
   int r = svc.bi->read_stats(dpp, bucket_info, pent, null_yield);
   if (r < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
     return r;
   }
+  uint64_t total_size_new3 = 0;
+  for (const auto& stat : pent->stats) {
+    total_size_new3 += stat.second.total_size;
+  }
+  ldpp_dout(dpp, 20) << "Test123123" << pent->size << "Troll" <<  total_size_new3 << dendl;
 
   return ctl.user->flush_bucket_stats(dpp, user_id, *pent, y);
 }

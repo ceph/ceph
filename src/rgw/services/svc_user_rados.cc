@@ -630,6 +630,8 @@ int RGWSI_User_RADOS::cls_user_add_bucket(const DoutPrefixProvider *dpp, rgw_raw
 {
   list<cls_user_bucket_entry> l;
   l.push_back(entry);
+  ldpp_dout(dpp, 20) << "test123" << entry.size << dendl;
+  ldpp_dout(dpp, 20) << "test123" << entry.count << dendl;
 
   return cls_user_update_buckets(dpp, obj, l, true, y);
 }
@@ -663,14 +665,17 @@ int RGWSI_User_RADOS::add_bucket(const DoutPrefixProvider *dpp,
   cls_user_bucket_entry new_bucket;
 
   bucket.convert(&new_bucket.bucket);
+  ldpp_dout(dpp, 20) << "test123" << new_bucket.size << dendl;
   new_bucket.size = 0;
   if (real_clock::is_zero(creation_time))
     new_bucket.creation_time = real_clock::now();
   else
     new_bucket.creation_time = creation_time;
-
+  ldpp_dout(dpp, 20) << "test123" << new_bucket.size << dendl;
   rgw_raw_obj obj = get_buckets_obj(user);
+  ldpp_dout(dpp, 20) << "test123" << new_bucket.size << dendl;
   ret = cls_user_add_bucket(dpp, obj, new_bucket, y);
+  ldpp_dout(dpp, 20) << "test123" << new_bucket.size << dendl;
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error adding bucket to user: ret=" << ret << dendl;
     return ret;
@@ -703,7 +708,13 @@ int RGWSI_User_RADOS::cls_user_flush_bucket_stats(const DoutPrefixProvider *dpp,
 {
   cls_user_bucket_entry entry;
   ent.convert(&entry);
-
+  ldpp_dout(dpp, 20) << "tesst123" << entry.size << dendl;
+  ldpp_dout(dpp, 20) << "tesst123" << entry.size_rounded << dendl;
+  uint64_t total_size_new3 = 0;
+  for (const auto& stat : entry.stats) {
+    total_size_new3 += stat.second.total_size;
+  }
+  ldpp_dout(dpp, 20) << "Test123123Troll" <<  total_size_new3 << dendl;
   list<cls_user_bucket_entry> entries;
   entries.push_back(entry);
 
@@ -925,10 +936,20 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
 
   const cls_user_stats& hs = header.stats;
 
-  stats->size = hs.total_bytes;
+  // stats->size = hs.total_bytes;
   stats->size_rounded = hs.total_bytes_rounded;
   stats->num_objects = hs.total_entries;
-
+  stats->stats = header.info;
+  uint64_t total_size_new3 = 0;
+  for (const auto& stat : header.info) {
+    total_size_new3 += stat.second.total_size;
+  }
+  ldpp_dout(dpp, 20) << "Test123123NewTroll" <<  total_size_new3 << hs.total_bytes << hs.total_bytes_rounded <<  dendl;
+  uint64_t total_size_new2 = 0;
+  for (const auto& stat : stats->stats) {
+    total_size_new2 += stat.second.total_size;
+  }
+  ldpp_dout(dpp, 20) << "Test123123NewTroll" <<  total_size_new2 << dendl;
   if (last_stats_sync) {
     *last_stats_sync = header.last_stats_sync;
   }

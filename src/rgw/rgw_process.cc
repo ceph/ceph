@@ -285,7 +285,8 @@ int process_request(rgw::sal::Store* const store,
 
   struct req_state rstate(g_ceph_context, &rgw_env, req->id);
   struct req_state *s = &rstate;
-
+  
+  // request_params
   s->ratelimit_data = ratelimit;
   std::unique_ptr<rgw::sal::User> u = store->get_user(rgw_user());
   s->set_user(u);
@@ -433,7 +434,29 @@ done:
     dout(0) << "ERROR: client_io->complete_request() returned "
             << e.what() << dendl;
   }
+  
+  struct req_info *info = &s->info;
+
+// Lấy ra giá trị của biến storage_class
+std::string storage_class = info->storage_class;
+std::string request_params = info->request_params;
+
+if (storage_class.empty()) {
+    dout(1) << "====== req done req=hehehe1 storage_class: Null" << dendl;
+} else {
+    dout(1) << "====== req done req=hehehe1 storage_class: " << storage_class << dendl;
+}
+
+if (request_params.empty()) {
+    dout(1) << "====== req done req=hehehe1 request_params: Null" << dendl;
+} else {
+    dout(1) << "====== req done req=hehehe1 request_params: " << request_params << dendl;
+}
+
+dout(1) << "====== req done req=UwU" << dendl;
+
   if (should_log) {
+    dout(1) <<"time for me" << s->time << dendl;
     rgw_log_op(rest, s, op, olog);
   }
 
@@ -463,7 +486,7 @@ done:
   }
   dout(1) << "====== req done req=" << hex << req << dec
 	  << " op status=" << op_ret
-	  << " http_status=" << s->err.http_ret
+	  << " http_status=" << "123123"
 	  << " latency=" << lat
 	  << " ======"
 	  << dendl;

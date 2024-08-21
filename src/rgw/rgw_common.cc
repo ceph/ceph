@@ -2941,6 +2941,7 @@ void RGWStorageStats::dump(Formatter *f) const
     encode_json("size_kb_utilized", rgw_rounded_kb(size_utilized), f);
   }
   encode_json("num_objects", num_objects, f);
+  encode_json("storage_class", storage_class, f);
 }
 
 void rgw_obj_key::dump(Formatter *f) const

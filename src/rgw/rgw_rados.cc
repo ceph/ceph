@@ -1801,7 +1801,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
   int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead, max);
 
   result->clear();
-
+  cout << "123123123" << std::endl;
   // use a local marker; either the marker will have a previous entry
   // or it will be empty; either way it's OK to copy
   rgw_obj_key marker_obj(params.marker.name,
@@ -2032,6 +2032,11 @@ int RGWRados::Bucket::List::list_objects_ordered(
 	": adding entry " << entry.key << " to result" << dendl;
 
       result->emplace_back(std::move(entry));
+//       for (auto it = result->begin(); it != result->end(); ++it) {
+//     rgw_bucket_dir_entry obj = *it;
+//     std::cout << obj.meta.size << std::endl;
+//     std::cout << obj.meta.etag << std::endl;
+// }
       count++;
     } // eiter for loop
 
@@ -3671,7 +3676,9 @@ int RGWRados::rewrite_obj(rgw::sal::Object* obj, const DoutPrefixProvider *dpp, 
   read_op.params.obj_size = &obj_size;
   read_op.params.lastmod = &mtime;
 
+  //prepare1
   int ret = read_op.prepare(y, dpp);
+  ldpp_dout(dpp, 20) << "Read xattr rgw_rados1: " << "helo1" << dendl;
   if (ret < 0)
     return ret;
 
@@ -4386,7 +4393,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   read_op.params.lastmod = src_mtime;
   read_op.params.obj_size = &obj_size;
 
+//prepare check 2
   ret = read_op.prepare(y, dpp);
+  ldpp_dout(dpp, 20) << "Read xattr rgw_rados2: " << "helo2" << dendl;
   if (ret < 0) {
     return ret;
   }
@@ -4719,7 +4728,9 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   read_op.params.lastmod = &read_mtime;
   read_op.params.obj_size = &obj_size;
 
+  //prepare check 3
   int ret = read_op.prepare(y, dpp);
+  ldpp_dout(dpp, 20) << "Read xattr rgw_rados3: " << "helo3" << dendl;
   if (ret < 0) {
     return ret;
   }
@@ -5034,6 +5045,9 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
     RGWStorageStats& s = stats[category];
 
     s.category = category;
+    cout << s.category << std::endl;
+    cout << 123123 << std::endl;
+    s.storage_class = header_stats.storage_class;
     s.size += header_stats.total_size;
     s.size_rounded += header_stats.total_size_rounded;
     s.size_utilized += header_stats.actual_size;
@@ -5068,6 +5082,22 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 
   // aggregate results (from different shards if there are any)
   for (const auto& iter : bucket_objs_ret) {
+    ldpp_dout(dpp, 0) << "new one " << iter.second.existing_header.ver << dendl;
+    ldpp_dout(dpp, 0) << "new one1 " << iter.second.calculated_header.master_ver << dendl;
+     uint64_t existing_total_size = 0;
+  for (const auto& stat : iter.second.existing_header.stats) {
+    existing_total_size += stat.second.total_size;
+  }
+
+  // Tính tổng total_size từ calculated_header.stats
+  uint64_t calculated_total_size = 0;
+  for (const auto& stat : iter.second.calculated_header.stats) {
+    calculated_total_size += stat.second.total_size;
+  }
+
+  // In ra tổng total_size
+  ldpp_dout(dpp, 0) << "existing total size: " << existing_total_size << dendl;
+  ldpp_dout(dpp, 0) << "calculated total size: " << calculated_total_size << dendl;
     accumulate_raw_stats(iter.second.existing_header, *existing_stats);
     accumulate_raw_stats(iter.second.calculated_header, *calculated_stats);
   }
@@ -6260,6 +6290,7 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
         ldpp_dout(dpp, 20) << "Read xattr rgw_rados: " << iter->first << dendl;
+        ldpp_dout(dpp, 20) << "Read xattr rgw_rados111: " << iter->first << dendl;
       }
     }
   }
@@ -8935,6 +8966,12 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   auto& ioctx = index_pool.ioctx();
   std::map<int, rgw_cls_list_ret> shard_list_results;
   cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
+  // cout << start_after_key << std::endl; 
+  cout << prefix << std::endl; 
+  cout << delimiter << std::endl; 
+  cout << num_entries_per_shard << std::endl; 
+  cout << list_versions << std::endl; 
+
   r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
 			    num_entries_per_shard,
 			    list_versions, shard_oids, shard_list_results,
@@ -9074,8 +9111,15 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     if (r >= 0) { // i.e., if r != -ENOENT
       ldpp_dout(dpp, 10) << __PRETTY_FUNCTION__ << ": got " <<
 	dirent.key << dendl;
-
+      
       auto [it, inserted] = m.insert_or_assign(name, std::move(dirent));
+      // std::unique_ptr<Formatter> formatter;
+      // std::map<std::string, size_t> storage_class_total;
+      // for (auto eiter = m.begin(); eiter != m.end(); ++eiter) {
+      //   rgw_bucket_dir_entry& entry = eiter->second;
+      //   std::string storage_class = entry.meta.storage_class.empty() ? "default_class" : entry.meta.storage_class;
+      //   storage_class_total[storage_class] += entry.meta.size; 
+      // }
       last_entry_visited = &it->second;
       if (inserted) {
 	++count;

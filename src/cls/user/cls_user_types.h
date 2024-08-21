@@ -7,6 +7,7 @@
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/utime.h"
+#include "cls/rgw/cls_rgw_types.h"
 #include "common/ceph_time.h"
 
 /*
@@ -98,6 +99,7 @@ WRITE_CLASS_ENCODER(cls_user_bucket)
  * this structure overrides RGWBucketEnt
  */
 struct cls_user_bucket_entry {
+  rgw_bucket_dir_stats stats;
   cls_user_bucket bucket;
   size_t size;
   size_t size_rounded;
@@ -113,6 +115,7 @@ struct cls_user_bucket_entry {
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
     std::string empty_str;  // originally had the bucket name here, but we encode bucket later
     encode(empty_str, bl);
+    encode(stats, bl);
     encode(s, bl);
     encode(mt, bl);
     encode(count, bl);
@@ -130,6 +133,7 @@ struct cls_user_bucket_entry {
     uint64_t s;
     std::string empty_str;  // backward compatibility
     decode(empty_str, bl);
+    decode(stats, bl);
     decode(s, bl);
     decode(mt, bl);
     size = s;
@@ -192,6 +196,7 @@ WRITE_CLASS_ENCODER(cls_user_stats)
  * this needs to be compatible with rgw_bucket, as it replaces it
  */
 struct cls_user_header {
+  rgw_bucket_dir_stats info;
   cls_user_stats stats;
   ceph::real_time last_stats_sync;     /* last time a full stats sync completed */
   ceph::real_time last_stats_update;   /* last time a stats update was done */
@@ -199,6 +204,7 @@ struct cls_user_header {
   void encode(ceph::buffer::list& bl) const {
      ENCODE_START(1, 1, bl);
     encode(stats, bl);
+    encode(info, bl);
     encode(last_stats_sync, bl);
     encode(last_stats_update, bl);
     ENCODE_FINISH(bl);
@@ -206,6 +212,7 @@ struct cls_user_header {
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(stats, bl);
+    decode(info, bl);
     decode(last_stats_sync, bl);
     decode(last_stats_update, bl);
     DECODE_FINISH(bl);
