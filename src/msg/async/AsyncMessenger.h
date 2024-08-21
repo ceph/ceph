@@ -62,6 +62,7 @@ class Processor {
 	   entity_addrvec_t* bound_addrs);
   void start();
   void accept();
+  friend class AsyncMessenger;
 };
 
 /*
@@ -135,6 +136,8 @@ public:
   int start() override;
   void wait() override;
   int shutdown() override;
+
+  void dump(Formatter* f) override;
 
   /** @} // Startup/Shutdown */
 
