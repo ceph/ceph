@@ -26,6 +26,7 @@ def tmodule():
         path_resolver=smb.handler._FakePathResolver(),
         authorizer=smb.handler._FakeAuthorizer(),
         update_orchestration=False,
+        earmark_resolver=smb.handler._FakeEarmarkResolver(),
     )
 
 

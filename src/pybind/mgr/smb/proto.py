@@ -15,6 +15,7 @@ from typing import (
 import sys
 
 from ceph.deployment.service_spec import SMBSpec
+from ceph.fs.earmarking import EarmarkTopScope
 
 # this uses a version check as opposed to a try/except because this
 # form makes mypy happy and try/except doesn't.
@@ -184,4 +185,19 @@ class AccessAuthorizer(Protocol):
     def authorize_entity(
         self, volume: str, entity: str, caps: str = ''
     ) -> None:
+        ...  # pragma: no cover
+
+
+class EarmarkResolver(Protocol):
+    """A protocol for a type that can resolve earmarks for subvolumes."""
+
+    def get_earmark(self, path: str, volume: str) -> Optional[str]:
+        ...  # pragma: no cover
+
+    def set_earmark(self, path: str, volume: str, earmark: str) -> None:
+        ...  # pragma: no cover
+
+    def check_earmark(
+        self, earmark: str, top_level_scope: EarmarkTopScope
+    ) -> bool:
         ...  # pragma: no cover

@@ -2,8 +2,13 @@ import pytest
 import errno
 from unittest import mock
 
-from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException, EarmarkTopScope
-# Mock constants
+from ceph.fs.earmarking import (
+    CephFSVolumeEarmarking,
+    EarmarkException,
+    EarmarkParseError,
+    EarmarkTopScope
+)
+
 XATTR_SUBVOLUME_EARMARK_NAME = 'user.ceph.subvolume.earmark'
 
 
@@ -17,70 +22,63 @@ class TestCephFSVolumeEarmarking:
     def earmarking(self, mock_fs):
         return CephFSVolumeEarmarking(mock_fs, "/test/path")
 
-    def test_get_earmark_success(self, earmarking, mock_fs):
-        mock_fs.getxattr.return_value = b"nfs"
+    def test_parse_earmark_valid(self):
+        earmark_value = "nfs.subsection1.subsection2"
+        result = CephFSVolumeEarmarking.parse_earmark(earmark_value)
+        assert result.top == EarmarkTopScope.NFS
+        assert result.subsections == ["subsection1", "subsection2"]
+
+    def test_parse_earmark_empty_string(self):
+        result = CephFSVolumeEarmarking.parse_earmark("")
+        assert result is None
+
+    def test_parse_earmark_invalid_scope(self):
+        with pytest.raises(EarmarkParseError):
+            CephFSVolumeEarmarking.parse_earmark("invalid.scope")
+
+    def test_parse_earmark_empty_sections(self):
+        with pytest.raises(EarmarkParseError):
+            CephFSVolumeEarmarking.parse_earmark("nfs..section")
+
+    def test_validate_earmark_valid_empty(self, earmarking):
+        assert earmarking._validate_earmark("")
+
+    def test_validate_earmark_valid_smb(self, earmarking):
+        assert earmarking._validate_earmark("smb.cluster.cluster_id")
+
+    def test_validate_earmark_invalid_smb_format(self, earmarking):
+        assert not earmarking._validate_earmark("smb.invalid.format")
+
+    def test_get_earmark_success(self, earmarking):
+        earmarking.fs.getxattr.return_value = b'nfs.valid.earmark'
         result = earmarking.get_earmark()
-        assert result == "nfs"
-        mock_fs.getxattr.assert_called_once_with("/test/path", XATTR_SUBVOLUME_EARMARK_NAME)
+        assert result == 'nfs.valid.earmark'
 
-    def test_get_earmark_no_earmark_set(self, earmarking, mock_fs):
-        mock_fs.getxattr.return_value = b""
-        result = earmarking.get_earmark()
-
-        assert result == ""
-        mock_fs.getxattr.assert_called_once_with("/test/path", XATTR_SUBVOLUME_EARMARK_NAME)
-
-    def test_get_earmark_error(self, earmarking, mock_fs):
-        mock_fs.getxattr.side_effect = OSError(errno.EIO, "I/O error")
-
+    def test_get_earmark_handle_error(self, earmarking):
+        earmarking.fs.getxattr.side_effect = OSError(errno.EIO, "I/O error")
         with pytest.raises(EarmarkException) as excinfo:
             earmarking.get_earmark()
-
         assert excinfo.value.errno == -errno.EIO
-        assert "I/O error" in str(excinfo.value)
 
-        # Ensure that the getxattr method was called exactly once
-        mock_fs.getxattr.assert_called_once_with("/test/path", XATTR_SUBVOLUME_EARMARK_NAME)
-
-    def test_set_earmark_success(self, earmarking, mock_fs):
-        earmarking.set_earmark(EarmarkTopScope.NFS.value)
-        mock_fs.setxattr.assert_called_once_with(
-            "/test/path", XATTR_SUBVOLUME_EARMARK_NAME, b"nfs", 0
+    def test_set_earmark_valid(self, earmarking):
+        earmark = "nfs.valid.earmark"
+        earmarking.set_earmark(earmark)
+        earmarking.fs.setxattr.assert_called_with(
+            "/test/path", XATTR_SUBVOLUME_EARMARK_NAME, earmark.encode('utf-8'), 0
         )
 
     def test_set_earmark_invalid(self, earmarking):
         with pytest.raises(EarmarkException) as excinfo:
-            earmarking.set_earmark("invalid_scope")
-
+            earmarking.set_earmark("invalid.earmark")
         assert excinfo.value.errno == errno.EINVAL
-        assert "Invalid earmark specified" in str(excinfo.value)
 
-    def test_set_earmark_error(self, earmarking, mock_fs):
-        mock_fs.setxattr.side_effect = OSError(errno.EIO, "I/O error")
-
+    def test_set_earmark_handle_error(self, earmarking):
+        earmarking.fs.setxattr.side_effect = OSError(errno.EIO, "I/O error")
         with pytest.raises(EarmarkException) as excinfo:
-            earmarking.set_earmark(EarmarkTopScope.NFS.value)
-
+            earmarking.set_earmark("nfs.valid.earmark")
         assert excinfo.value.errno == -errno.EIO
-        assert "I/O error" in str(excinfo.value)
-        mock_fs.setxattr.assert_called_once_with(
-            "/test/path", XATTR_SUBVOLUME_EARMARK_NAME, b"nfs", 0
-        )
 
-    def test_clear_earmark_success(self, earmarking, mock_fs):
-        earmarking.clear_earmark()
-        mock_fs.setxattr.assert_called_once_with(
-            "/test/path", XATTR_SUBVOLUME_EARMARK_NAME, b"", 0
-        )
-
-    def test_clear_earmark_error(self, earmarking, mock_fs):
-        mock_fs.setxattr.side_effect = OSError(errno.EIO, "I/O error")
-
-        with pytest.raises(EarmarkException) as excinfo:
+    def test_clear_earmark(self, earmarking):
+        with mock.patch.object(earmarking, 'set_earmark') as mock_set_earmark:
             earmarking.clear_earmark()
-
-        assert excinfo.value.errno == -errno.EIO
-        assert "I/O error" in str(excinfo.value)
-        mock_fs.setxattr.assert_called_once_with(
-            "/test/path", XATTR_SUBVOLUME_EARMARK_NAME, b"", 0
-        )
+            mock_set_earmark.assert_called_once_with("")
