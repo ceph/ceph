@@ -61,6 +61,6 @@ tasks:
         curl -s http://${PROM_IP}:9095/api/v1/alerts
         curl -s http://${PROM_IP}:9095/api/v1/alerts | jq -e '.data | .alerts | .[] | select(.labels | .alertname == "CephMonDown") | .state == "firing"'
         # check alertmanager endpoints are responsive and mon down alert is active
-        curl -s http://${ALERTM_IP}:9093/api/v1/status
-        curl -s http://${ALERTM_IP}:9093/api/v1/alerts
-        curl -s http://${ALERTM_IP}:9093/api/v1/alerts | jq -e '.data | .[] | select(.labels | .alertname == "CephMonDown") | .status | .state == "active"'
+        curl -s http://${ALERTM_IP}:9093/api/v2/status
+        curl -s http://${ALERTM_IP}:9093/api/v2/alerts
+        curl -s http://${ALERTM_IP}:9093/api/v2/alerts | jq -e '.[] | select(.labels | .alertname == "CephMonDown") | .status | .state == "active"'
