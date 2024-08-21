@@ -437,8 +437,7 @@ root_ca_cert = /root.ca.cert
 
 [spdk]
 tgt_path = /usr/local/bin/nvmf_tgt
-rpc_socket_dir = /var/tmp/
-rpc_socket_name = spdk.sock
+rpc_socket = /var/tmp/spdk.sock
 timeout = 60.0
 bdevs_per_cluster = 32
 log_level=
