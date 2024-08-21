@@ -6133,16 +6133,15 @@ void RGWSetRequestPayment::pre_exec()
 void RGWSetRequestPayment::execute(optional_yield y)
 {
 
+  op_ret = get_params(y);
+  if (op_ret < 0)
+    return;
+  
   op_ret = store->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
   }
-
-  op_ret = get_params(y);
-
-  if (op_ret < 0)
-    return;
 
   s->bucket->get_info().requester_pays = requester_pays;
   op_ret = s->bucket->put_info(this, false, real_time());
