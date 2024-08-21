@@ -710,10 +710,10 @@ seastar::future<> SeaStore::report_stats()
     lru_sizes_ps.size /= seastar::smp::count;
     lru_sizes_ps.num_extents /= seastar::smp::count;
     cache_io_stats_t lru_io_ps = cache_total.lru_io;
-    lru_io_ps.in_size /= seastar::smp::count;
-    lru_io_ps.in_num_extents /= seastar::smp::count;
-    lru_io_ps.out_size /= seastar::smp::count;
-    lru_io_ps.out_num_extents /= seastar::smp::count;
+    lru_io_ps.in_sizes.size /= seastar::smp::count;
+    lru_io_ps.in_sizes.num_extents /= seastar::smp::count;
+    lru_io_ps.out_sizes.size /= seastar::smp::count;
+    lru_io_ps.out_sizes.num_extents /= seastar::smp::count;
     INFO("cache lru: total{} {}; per-shard: total{} {}",
          cache_total.lru_sizes,
          cache_io_stats_printer_t{seconds, cache_total.lru_io},

@@ -2355,15 +2355,10 @@ void Cache::LRU::get_stats(
   stats.lru_io.minus(last_overall_io);
 
   if (report_detail && seconds != 0) {
-    cache_io_stats_t _trans_io = trans_io;
-    _trans_io.minus(last_trans_io);
-
-    cache_io_stats_t other_io = stats.lru_io;
-    other_io.minus(_trans_io);
-
     counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
       _trans_io_by_src_ext = trans_io_by_src_ext;
     counter_by_src_t<cache_io_stats_t> trans_io_by_src;
+    cache_io_stats_t trans_io;
     for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
       auto src = static_cast<transaction_type_t>(_src);
       auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
@@ -2376,7 +2371,10 @@ void Cache::LRU::get_stats(
         extent_io.minus(last_extent_io);
         trans_io_per_src.add(extent_io);
       }
+      trans_io.add(trans_io_per_src);
     }
+    cache_io_stats_t other_io = stats.lru_io;
+    other_io.minus(trans_io);
 
     std::ostringstream oss;
     oss << "\nlru total" << stats.lru_sizes;
@@ -2385,7 +2383,7 @@ void Cache::LRU::get_stats(
     cache_size_stats_t phys_sizes;
     for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
       auto ext = static_cast<extent_types_t>(_ext);
-      const auto extent_sizes = get_by_ext(sizes_by_ext, ext);
+      const auto& extent_sizes = get_by_ext(sizes_by_ext, ext);
       if (is_data_type(ext)) {
         data_sizes.add(extent_sizes);
       } else if (is_logical_metadata_type(ext)) {
@@ -2399,7 +2397,7 @@ void Cache::LRU::get_stats(
         << "\n  phys" << phys_sizes;
 
     oss << "\nlru io: trans-"
-        << cache_io_stats_printer_t{seconds, _trans_io}
+        << cache_io_stats_printer_t{seconds, trans_io}
         << "; other-"
         << cache_io_stats_printer_t{seconds, other_io};
     for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
@@ -2434,11 +2432,11 @@ void Cache::LRU::get_stats(
     }
 
     INFO("{}", oss.str());
+
+    last_trans_io_by_src_ext = trans_io_by_src_ext;
   }
 
   last_overall_io = overall_io;
-  last_trans_io = trans_io;
-  last_trans_io_by_src_ext = trans_io_by_src_ext;
 }
 
 }

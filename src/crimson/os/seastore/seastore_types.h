@@ -2557,62 +2557,6 @@ struct shard_stats_t {
   }
 };
 
-struct cache_io_stats_t {
-  uint64_t in_size = 0;
-  uint64_t in_num_extents = 0;
-  uint64_t out_size = 0;
-  uint64_t out_num_extents = 0;
-
-  bool is_empty() const {
-    return in_num_extents == 0 && out_num_extents == 0;
-  }
-
-  double get_in_mbs(double seconds) const {
-    return (in_size>>12)/(seconds*256);
-  }
-
-  double get_in_avg_kb() const {
-    return (in_size>>10)/static_cast<double>(in_num_extents);
-  }
-
-  double get_out_mbs(double seconds) const {
-    return (out_size>>12)/(seconds*256);
-  }
-
-  double get_out_avg_kb() const {
-    return (out_size>>10)/static_cast<double>(out_num_extents);
-  }
-
-  void account_in(extent_len_t size) {
-    in_size += size;
-    ++in_num_extents;
-  }
-
-  void account_out(extent_len_t size) {
-    out_size += size;
-    ++out_num_extents;
-  }
-
-  void minus(const cache_io_stats_t& o) {
-    in_size -= o.in_size;
-    in_num_extents -= o.in_num_extents;
-    out_size -= o.out_size;
-    out_num_extents -= o.out_num_extents;
-  }
-
-  void add(const cache_io_stats_t& o) {
-    in_size += o.in_size;
-    in_num_extents += o.in_num_extents;
-    out_size += o.out_size;
-    out_num_extents += o.out_num_extents;
-  }
-};
-struct cache_io_stats_printer_t {
-  double seconds;
-  const cache_io_stats_t &stats;
-};
-std::ostream& operator<<(std::ostream&, const cache_io_stats_printer_t&);
-
 struct cache_size_stats_t {
   uint64_t size = 0;
   uint64_t num_extents = 0;
@@ -2657,6 +2601,30 @@ struct cache_size_stats_printer_t {
   const cache_size_stats_t& stats;
 };
 std::ostream& operator<<(std::ostream&, const cache_size_stats_printer_t&);
+
+struct cache_io_stats_t {
+  cache_size_stats_t in_sizes;
+  cache_size_stats_t out_sizes;
+
+  bool is_empty() const {
+    return in_sizes.is_empty() && out_sizes.is_empty();
+  }
+
+  void add(const cache_io_stats_t& o) {
+    in_sizes.add(o.in_sizes);
+    out_sizes.add(o.out_sizes);
+  }
+
+  void minus(const cache_io_stats_t& o) {
+    in_sizes.minus(o.in_sizes);
+    out_sizes.minus(o.out_sizes);
+  }
+};
+struct cache_io_stats_printer_t {
+  double seconds;
+  const cache_io_stats_t& stats;
+};
+std::ostream& operator<<(std::ostream&, const cache_io_stats_printer_t&);
 
 struct dirty_io_stats_t {
   cache_size_stats_t in_sizes;

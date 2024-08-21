@@ -1436,7 +1436,6 @@ private:
 
     counter_by_extent_t<cache_size_stats_t> sizes_by_ext;
     cache_io_stats_t overall_io;
-    cache_io_stats_t trans_io;
     counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
       trans_io_by_src_ext;
 
@@ -1459,12 +1458,12 @@ private:
       lru.erase(lru.s_iterator_to(extent));
       current_size -= extent_length;
       get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_length);
-      overall_io.account_out(extent_length);
+      overall_io.out_sizes.account_in(extent_length);
       if (p_src) {
-        trans_io.account_out(extent_length);
         get_by_ext(
           get_by_src(trans_io_by_src_ext, *p_src),
-          extent.get_type()).account_out(extent_length);
+          extent.get_type()
+        ).out_sizes.account_in(extent_length);
       }
       intrusive_ptr_release(&extent);
     }
@@ -1513,12 +1512,12 @@ private:
         // absent, add to top (back)
         current_size += extent_length;
         get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_length);
-        overall_io.account_in(extent_length);
+        overall_io.in_sizes.account_in(extent_length);
         if (p_src) {
-          trans_io.account_in(extent_length);
           get_by_ext(
             get_by_src(trans_io_by_src_ext, *p_src),
-            extent.get_type()).account_in(extent_length);
+            extent.get_type()
+          ).in_sizes.account_in(extent_length);
         }
         intrusive_ptr_add_ref(&extent);
         lru.push_back(extent);
