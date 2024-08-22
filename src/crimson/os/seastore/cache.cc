@@ -148,6 +148,8 @@ void Cache::register_metrics()
   stats = {};
   last_dirty_io = {};
   last_dirty_io_by_src_ext = {};
+  last_trim_rewrites = {};
+  last_reclaim_rewrites = {};
 
   namespace sm = seastar::metrics;
   using src_t = Transaction::src_t;
@@ -705,22 +707,26 @@ void Cache::register_metrics()
     {
       sm::make_counter(
         "version_count_dirty",
-        stats.trim_rewrites.num,
+        [this] {
+          return stats.trim_rewrites.get_num_rewrites();
+        },
         sm::description("total number of rewrite-dirty extents")
       ),
       sm::make_counter(
         "version_sum_dirty",
-        stats.trim_rewrites.version,
+        stats.trim_rewrites.dirty_version,
         sm::description("sum of the version from rewrite-dirty extents")
       ),
       sm::make_counter(
         "version_count_reclaim",
-        stats.reclaim_rewrites.num,
+        [this] {
+          return stats.reclaim_rewrites.get_num_rewrites();
+        },
         sm::description("total number of rewrite-reclaim extents")
       ),
       sm::make_counter(
         "version_sum_reclaim",
-        stats.reclaim_rewrites.version,
+        stats.reclaim_rewrites.dirty_version,
         sm::description("sum of the version from rewrite-reclaim extents")
       ),
     }
@@ -2333,9 +2339,29 @@ cache_stats_t Cache::get_stats(
           << dirty_io_stats_printer_t{seconds, phys_io};
     }
 
+    constexpr const char* dfmt = "{:.2f}";
+    rewrite_stats_t _trim_rewrites = stats.trim_rewrites;
+    _trim_rewrites.minus(last_trim_rewrites);
+    rewrite_stats_t _reclaim_rewrites = stats.reclaim_rewrites;
+    _reclaim_rewrites.minus(last_reclaim_rewrites);
+    oss << "\nrewrite trim ndirty="
+        << fmt::format(dfmt, _trim_rewrites.num_n_dirty/seconds)
+        << "ps, dirty="
+        << fmt::format(dfmt, _trim_rewrites.num_dirty/seconds)
+        << "ps, dversion="
+        << fmt::format(dfmt, _trim_rewrites.get_avg_version())
+        << "; reclaim ndirty="
+        << fmt::format(dfmt, _reclaim_rewrites.num_n_dirty/seconds)
+        << "ps, dirty="
+        << fmt::format(dfmt, _reclaim_rewrites.num_dirty/seconds)
+        << "ps, dversion="
+        << fmt::format(dfmt, _reclaim_rewrites.get_avg_version());
+
     INFO("{}", oss.str());
 
     last_dirty_io_by_src_ext = stats.dirty_io_by_src_ext;
+    last_trim_rewrites = stats.trim_rewrites;
+    last_reclaim_rewrites = stats.reclaim_rewrites;
   }
 
   last_dirty_io = stats.dirty_io;
