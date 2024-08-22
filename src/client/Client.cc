@@ -11110,6 +11110,9 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
+  // get Fc cap ref before commencing read
+  get_cap_ref(in, CEPH_CAP_FILE_CACHE);
+
   if (onfinish != nullptr) {
     io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in,
                                               f->pos, off, len));
@@ -11117,9 +11120,14 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   // trim read based on file size?
   if ((off >= in->size) || (len == 0)) {
+    // read is requested at the EOF or the read len is zero, therefore release
+    // Fc cap first before proceeding further
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+
     // If not async, immediate return of 0 bytes
-    if (onfinish == nullptr) 
+    if (onfinish == nullptr) {
       return 0;
+    }
 
     // Release C_Read_Async_Finisher from managed pointer, we need to complete
     // immediately. The C_Read_Async_Finisher is safely handled and won't be
@@ -11152,6 +11160,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 			      off, len, bl, 0, io_finish.get());
 
   if (onfinish != nullptr) {
+    // put the cap ref since we're releasing C_Read_Async_Finisher
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     // Release C_Read_Async_Finisher from managed pointer, either
     // file_read will result in non-blocking complete, or we need to complete
     // immediately. In either case, the C_Read_Async_Finisher is safely
@@ -11160,19 +11170,19 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     if (r != 0) {
       // need to do readahead, so complete the crf
       crf->complete(r);
-    } else {
-      get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     }
     return 0;
   }
 
+  // Wait for the blocking read to complete and then do readahead
   if (r == 0) {
-    get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.unlock();
     r = io_finish_cond->wait();
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     update_read_io_size(bl->length());
+  } else {
+    put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
 
   do_readahead(f, in, off, len);
