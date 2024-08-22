@@ -5812,7 +5812,7 @@ int BlueStore::_create_alloc()
       cct, cct->_conf->bluestore_allocator,
       bdev->get_conventional_region_size(),
       alloc_size,
-      0, 0,
+      zone_size, 0,
       "zoned_block");
     if (!a) {
       lderr(cct) << __func__ << " failed to create " << cct->_conf->bluestore_allocator
