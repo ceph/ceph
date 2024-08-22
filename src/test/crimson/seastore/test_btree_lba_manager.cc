@@ -500,7 +500,7 @@ struct btree_lba_manager_test : btree_test_base {
 	bottom->first + bottom->second.len <= addr)
       ++bottom;
 
-    auto top = t.mappings.lower_bound(addr + len);
+    auto top = t.mappings.lower_bound((addr + len).checked_to_laddr());
     return std::make_pair(
       bottom,
       top

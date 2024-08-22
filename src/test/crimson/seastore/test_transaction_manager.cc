@@ -254,8 +254,8 @@ struct transaction_manager_test_t :
 	  EXPECT_EQ(addr, last);
 	  break;
 	}
-	EXPECT_FALSE(iter->first - last > len);
-	last = iter->first + iter->second.desc.len;
+	EXPECT_FALSE((iter->first - last).to_byte_offset() > len);
+	last = (iter->first + iter->second.desc.len).checked_to_laddr();
 	++iter;
       }
     }
@@ -1180,7 +1180,7 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
         ).si_then([this, ret = std::move(ret), new_len,
                    new_offset, o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1188,7 +1188,7 @@ struct transaction_manager_test_t :
           ceph_assert(ret.size() == 2);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
-          auto r_laddr = o_laddr + new_offset + new_len;
+          auto r_laddr = (o_laddr + new_offset + new_len).checked_to_laddr();
           // old pins expired after alloc new extent, need to get it.
           return tm->get_pin(t, o_laddr
           ).si_then([this, &t, ext = std::move(ext), r_laddr](auto lpin) mutable {
@@ -1216,7 +1216,7 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
         ).si_then([this, ret = std::move(ret), new_offset, new_len,
                    o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1224,7 +1224,7 @@ struct transaction_manager_test_t :
           ceph_assert(ret.size() == 1);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
-          auto r_laddr = o_laddr + new_offset + new_len;
+          auto r_laddr = (o_laddr + new_offset + new_len).checked_to_laddr();
           return tm->get_pin(t, r_laddr
           ).si_then([ext = std::move(ext)](auto rpin) mutable {
             return _overwrite_pin_iertr::make_ready_future<
@@ -1247,7 +1247,7 @@ struct transaction_manager_test_t :
             new_offset)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
         ).si_then([this, ret = std::move(ret), new_len, o_laddr, &t, &bl]
           (auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1770,9 +1770,9 @@ TEST_P(tm_random_block_device_test_t, scatter_allocation)
     epm->prefill_fragmented_devices();
     auto t = create_transaction();
     for (int i = 0; i < 1991; i++) {
-      auto extents = alloc_extents(t, ADDR + i * 16384, 16384, 'a');
+      auto extents = alloc_extents(t, (ADDR + i * 16384).checked_to_laddr(), 16384, 'a');
     }
-    alloc_extents_deemed_fail(t, ADDR + 1991 * 16384, 16384, 'a');
+    alloc_extents_deemed_fail(t, (ADDR + 1991 * 16384).checked_to_laddr(), 16384, 'a');
     check_mappings(t);
     check();
     submit_transaction(std::move(t));

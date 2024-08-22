@@ -64,7 +64,7 @@ struct extent_to_write_t {
   }
 
   laddr_t get_end_addr() const {
-    return addr + len;
+    return (addr + len).checked_to_laddr();
   }
 
   static extent_to_write_t create_data(
@@ -544,7 +544,7 @@ ObjectDataHandler::write_ret do_insertions(
                 off);
             }
             iter.copy(extent->get_length(), extent->get_bptr().c_str());
-            off = off + extent->get_length();
+            off = (off + extent->get_length()).checked_to_laddr();
             left -= extent->get_length();
           }
 	  return ObjectDataHandler::write_iertr::now();
@@ -708,7 +708,7 @@ public:
 		   extent_len_t block_size) :
       data_base(data_base),
       pin_begin(pins.front()->get_key()),
-      pin_end(pins.back()->get_key() + pins.back()->get_length()),
+      pin_end((pins.back()->get_key() + pins.back()->get_length()).checked_to_laddr()),
       left_paddr(pins.front()->get_val()),
       right_paddr(pins.back()->get_val()),
       data_begin(data_base + offset),
@@ -1127,7 +1127,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
               pin.get_key(),
               size - pin_offset));
 	    to_write.push_back(extent_to_write_t::create_zero(
-	      object_data.get_reserved_data_base() + roundup_size,
+	      (object_data.get_reserved_data_base() + roundup_size).checked_to_laddr(),
 	      object_data.get_reserved_data_len() - roundup_size));
             return clear_iertr::now();
           } else {
@@ -1152,7 +1152,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	        pin.get_key(),
 	        bl));
 	      to_write.push_back(extent_to_write_t::create_zero(
-	        object_data.get_reserved_data_base() + roundup_size,
+	        (object_data.get_reserved_data_base() + roundup_size).checked_to_laddr(),
 	        object_data.get_reserved_data_len() - roundup_size));
               return clear_iertr::now();
             });
@@ -1720,7 +1720,8 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  ceph_assert(offset == last_pos);
 	  auto fut = TransactionManager::alloc_extent_iertr
 	    ::make_ready_future<LBAMappingRef>();
-	  auto addr = object_data.get_reserved_data_base() + offset;
+	  laddr_t addr = (object_data.get_reserved_data_base() + offset)
+	      .checked_to_laddr();
 	  if (pin->get_val().is_zero()) {
 	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length());
 	  } else {
@@ -1738,7 +1739,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  if (last_pos != object_data.get_reserved_data_len()) {
 	    return ctx.tm.reserve_region(
 	      ctx.t,
-	      object_data.get_reserved_data_base() + last_pos,
+	      (object_data.get_reserved_data_base() + last_pos).checked_to_laddr(),
 	      object_data.get_reserved_data_len() - last_pos
 	    ).si_then([](auto) {
 	      return seastar::now();
