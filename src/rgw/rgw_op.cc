@@ -4620,10 +4620,12 @@ void RGWPutObj::execute(optional_yield y)
     obj_retention->encode(obj_retention_bl);
     emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
-  
-  op_ret = do_bucket_logging(driver, s, this, rgw::bucketlogging::EventType::Write, etag, y, false); 
-  if (op_ret  < 0) {
-    return;
+ 
+  if (!multipart) {
+    op_ret = do_bucket_logging(driver, s, this, rgw::bucketlogging::EventType::Write, etag, y, false); 
+    if (op_ret  < 0) {
+      return;
+   }
   }
 
   // don't track the individual parts of multipart uploads. they replicate in

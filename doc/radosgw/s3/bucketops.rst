@@ -779,9 +779,9 @@ Parameters are XML encoded in the body of the request, in the following format:
 |                               |           | between different source buckets writing log records to the same log bucket.         |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``EventType``                 | String    | The type of events to log. Valid values are:                                         | No       |
-|                               |           | ``Write`` (default) will record: PUT, COPY, DELETE, Complete MPU                     |          |
-|                               |           | ``Read`` will record: GET                                                            |          |
-|                               |           | ``ReadWrite`` will record all of the above                                           |          |
+|                               |           | ``Write`` will record: PUT, COPY, DELETE, Complete MPU                               |          |
+|                               |           | ``Read`` will record: GET, HEAD                                                      |          |
+|                               |           | ``ReadWrite`` (default) will record all of the above                                 |          |
 |                               |           | Note this is a Ceph extension.                                                       |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``RecordType``                | String    | The type of log record to create. Valid values are:                                  | No       |

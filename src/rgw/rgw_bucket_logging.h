@@ -69,15 +69,15 @@ struct configuration {
                              // useful when multiple bucket log to the same target 
                              // or when the target bucket is used for other things than logs
   uint32_t obj_roll_time; // time in seconds to move object to bucket and start another object
-  RecordType record_type;
+  RecordType record_type = RecordType::Standard;
   uint32_t records_batch_size = 0; // how many records to batch in memory before writing to the object
                                    // if set to zero, records are written syncronously to the object.
                                    // if obj_roll_time is reached, the batch of records will be written to the object
                                    // regardless of the number of records
-  EventType event_type = EventType::Write;
+  EventType event_type = EventType::ReadWrite;
   // which events to log:
-  // Write: PUT, COPY, DELETE, lifecycle, Complete MPU
-  // Read: GET
+  // Write: PUT, COPY, DELETE, Complete MPU
+  // Read: GET, HEAD
   // ReadWrite: all the above
   PartitionDateSource date_source = PartitionDateSource::DeliveryTime;
   // EventTime: use only year, month, and day. The hour, minutes and seconds are set to 00 in the key

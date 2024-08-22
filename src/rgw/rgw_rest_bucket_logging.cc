@@ -81,7 +81,8 @@ public:
       ldpp_dout(this, 5) << "WARNING: no logging configuration on bucket '" << bucket->get_name() << "'" << dendl;
       return;
     }
-    ldpp_dout(this, 20) << "INFO: found logging configuration on bucket '" << bucket->get_name() << "'" << dendl;
+    ldpp_dout(this, 20) << "INFO: found logging configuration on bucket '" << bucket->get_name() << "'" 
+      << "'. configuration: " << configuration.to_json_str() << dendl;
   }
 
   void send_response() override {
