@@ -33,7 +33,7 @@ using segment_state_t = crimson::os::seastore::Segment::segment_state_t;
 template <> struct fmt::formatter<segment_state_t>: fmt::formatter<std::string_view> {
   // parse is inherited from formatter<string_view>.
   template <typename FormatContext>
-  auto format(segment_state_t s, FormatContext& ctx) {
+  auto format(segment_state_t s, FormatContext& ctx) const {
     std::string_view name = "unknown";
     switch (s) {
     case segment_state_t::EMPTY:

@@ -141,7 +141,7 @@ struct fmt::formatter<crimson::osd::scrub::blocked_range_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const auto &range, FormatContext& ctx)
+  auto format(const auto &range, FormatContext& ctx) const
   {
     return fmt::format_to(
       ctx.out(),

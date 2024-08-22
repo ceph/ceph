@@ -10,6 +10,7 @@
 #include <boost/range/algorithm/copy.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+#include "include/utime_fmt.h"
 #include <seastar/core/print.hh>
 
 #include "messages/MOSDOp.h"
@@ -298,7 +299,7 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
     adjusted_length = adjusted_size - offset;
   }
   logger().trace("sparse_read: {} {}~{}",
-                 os.oi.soid, op.extent.offset, op.extent.length);
+                 os.oi.soid, (uint64_t)op.extent.offset, (uint64_t)op.extent.length);
   return interruptor::make_interruptible(store->fiemap(coll, ghobject_t{os.oi.soid},
     offset, adjusted_length)).safe_then_interruptible(
     [&delta_stats, &os, &osd_op, this](auto&& m) {
@@ -313,7 +314,7 @@ PGBackend::sparse_read(const ObjectState& os, OSDOp& osd_op,
           ceph::encode(extents, osd_op.outdata);
           encode_destructively(bl, osd_op.outdata);
           logger().trace("sparse_read got {} bytes from object {}",
-                         osd_op.op.extent.length, os.oi.soid);
+                         (uint64_t)osd_op.op.extent.length, os.oi.soid);
          delta_stats.num_rd++;
          delta_stats.num_rd_kb += shift_round_up(osd_op.op.extent.length, 10);
           return read_errorator::make_ready_future<>();
@@ -395,7 +396,7 @@ PGBackend::checksum(const ObjectState& os, OSDOp& osd_op)
     auto& checksum = osd_op.op.checksum;
     if (read_bl.length() != checksum.length) {
       logger().warn("checksum: bytes read {} != {}",
-                        read_bl.length(), checksum.length);
+                        read_bl.length(), (uint64_t)checksum.length);
       return crimson::ct_error::invarg::make();
     }
     // calculate its checksum and put the result in outdata

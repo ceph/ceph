@@ -3,6 +3,7 @@
 
 #include "common/ceph_argparse.h"
 #include <fmt/os.h>
+#include <fmt/std.h>
 #include <seastar/core/app-template.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>

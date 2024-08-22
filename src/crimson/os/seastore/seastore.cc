@@ -39,7 +39,7 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
   using op_type_t =  crimson::os::seastore::op_type_t;
   // parse is inherited from formatter<string_view>.
   template <typename FormatContext>
-  auto format(op_type_t op, FormatContext& ctx) {
+  auto format(op_type_t op, FormatContext& ctx) const {
     std::string_view name = "unknown";
     switch (op) {
       case op_type_t::TRANSACTION:
@@ -1557,7 +1557,7 @@ SeaStore::Shard::_do_transaction_step(
 {
   LOG_PREFIX(SeaStore::Shard::_do_transaction_step);
   auto op = i.decode_op();
-  SUBTRACET(seastore_t, "got op {}", *ctx.transaction, op->op);
+  SUBTRACET(seastore_t, "got op {}", *ctx.transaction, (uint32_t)op->op);
 
   using ceph::os::Transaction;
   if (op->op == Transaction::OP_NOP)

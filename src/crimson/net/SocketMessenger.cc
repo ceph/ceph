@@ -19,6 +19,7 @@
 #include <tuple>
 #include <boost/functional/hash.hpp>
 #include <fmt/os.h>
+#include <fmt/std.h>
 
 #include "auth/Auth.h"
 #include "Errors.h"

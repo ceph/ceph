@@ -441,7 +441,7 @@ void FrameAssemblerV2::log_main_preamble(const ceph::bufferlist &bl)
     reinterpret_cast<const preamble_block_t*>(bl.front().c_str());
   logger().trace("{} SEND({}) frame: tag={}, num_segments={}, crc={}",
                  conn, bl.length(), (int)main_preamble->tag,
-                 (int)main_preamble->num_segments, main_preamble->crc);
+                 (int)main_preamble->num_segments, (uint32_t)main_preamble->crc);
 }
 
 FrameAssemblerV2Ref FrameAssemblerV2::create(SocketConnection &conn)

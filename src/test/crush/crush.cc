@@ -12,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <set>
+#include <fmt/ranges.h>
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"

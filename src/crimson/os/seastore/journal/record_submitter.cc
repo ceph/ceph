@@ -5,6 +5,7 @@
 
 #include <fmt/format.h>
 #include <fmt/os.h>
+#include <fmt/std.h>
 
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/async_cleaner.h"
