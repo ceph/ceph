@@ -747,8 +747,12 @@ int PoolReplayer<I>::list_mirroring_namespaces(
   }
 
   for (auto &name : names) {
+    librados::IoCtx ns_ioctx;
+    ns_ioctx.dup(m_local_io_ctx);
+    ns_ioctx.set_namespace(name);
+
     cls::rbd::MirrorMode mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
-    int r = librbd::cls_client::mirror_mode_get(&m_local_io_ctx, &mirror_mode);
+    int r = librbd::cls_client::mirror_mode_get(&ns_ioctx, &mirror_mode);
     if (r < 0 && r != -ENOENT) {
       derr << "failed to get namespace mirror mode: " << cpp_strerror(r)
            << dendl;
