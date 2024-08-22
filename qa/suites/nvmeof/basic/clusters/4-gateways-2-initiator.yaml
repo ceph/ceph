@@ -1,26 +1,26 @@
 roles:
+- - client.0
+- - client.1
 - - host.a
   - mon.a
   - mgr.x
   - osd.0
-  - osd.1
-  - client.0
+  - client.2
   - ceph.nvmeof.nvmeof.a
 - - host.b
   - mon.b
-  - osd.2
-  - osd.3
-  - osd.4
-  - client.1
+  - osd.1
+  - client.3
   - ceph.nvmeof.nvmeof.b
 - - host.c
   - mon.c
-  - osd.5
-  - osd.6
-  - osd.7
-  - client.2
+  - osd.2
+  - client.4
   - ceph.nvmeof.nvmeof.c
-- - client.3 # initiator
+- - host.d
+  - osd.3
+  - client.5
+  - ceph.nvmeof.nvmeof.d
 
 overrides:
   ceph:

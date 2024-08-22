@@ -24,7 +24,7 @@ class Nvmeof(Task):
     Setup nvmeof gateway on client and then share gateway config to target host.
 
         - nvmeof:
-            client: client.0
+            installer: host.a     // or 'nvmeof.nvmeof.a' 
             version: default
             rbd:
                 pool_name: mypool
@@ -41,15 +41,11 @@ class Nvmeof(Task):
     def setup(self):
         super(Nvmeof, self).setup()
         try:
-            self.client = self.config['client']
+            host = self.config['installer']
         except KeyError:
-            raise ConfigError('nvmeof requires a client to connect with')
-
-        self.cluster_name, type_, self.client_id = misc.split_role(self.client)
-        if type_ != 'client':
-            msg = 'client role ({0}) must be a client'.format(self.client)
-            raise ConfigError(msg)
-        self.remote = get_remote_for_role(self.ctx, self.client)
+            raise ConfigError('nvmeof requires a installer host to deploy service') 
+        self.cluster_name, _, _ = misc.split_role(host)
+        self.remote = get_remote_for_role(self.ctx, host)  
 
     def begin(self):
         super(Nvmeof, self).begin()

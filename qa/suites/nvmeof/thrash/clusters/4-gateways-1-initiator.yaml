@@ -1,22 +1,30 @@
 roles:
+- - client.0 # initiator
 - - host.a
   - mon.a
   - mgr.x
   - osd.0
   - osd.1
-  - client.0
+  - client.1
   - ceph.nvmeof.nvmeof.a
 - - host.b
   - mon.b
-  - mon.c
   - osd.2
   - osd.3
   - osd.4
-  - client.1
-- - client.2
-<<<<<<<< HEAD:qa/suites/rbd/nvmeof/cluster/fixed-3.yaml
-========
-- - client.3
+  - client.2
+  - ceph.nvmeof.nvmeof.b
+- - host.c
+  - mon.c
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.3
+  - ceph.nvmeof.nvmeof.c
+- - host.d
+  - client.4
+  - ceph.nvmeof.nvmeof.d
+
 
 overrides:
   ceph:
@@ -24,4 +32,3 @@ overrides:
       mon:
         # cephadm can take up to 5 minutes to bring up remaining mons
         mon down mkfs grace: 300
->>>>>>>> d0c4182bf57 (qa/suites/rbd/nvmeof: add multi-subsystem setup and thrash test):qa/suites/nvmeof/basic/clusters/2-gateways-2-initiator.yaml

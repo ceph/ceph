@@ -1,6 +1,6 @@
 tasks:
 - nvmeof:
-    client: client.0
+    installer: host.a
     gw_image: quay.io/ceph/nvmeof:1.2 # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
     rbd:
       pool_name: mypool
@@ -16,7 +16,7 @@ tasks:
 - workunit:
     no_coverage_and_limits: true
     clients:
-      client.3:
+      client.0:
         - nvmeof/setup_subsystem.sh
         - nvmeof/basic_tests.sh
     env:
