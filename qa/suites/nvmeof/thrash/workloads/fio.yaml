@@ -3,7 +3,7 @@ tasks:
     no_coverage_and_limits: true
     timeout: 30m
     clients:
-      client.3:
+      client.0:
         - nvmeof/fio_test.sh --rbd_iostat
     env:
       RBD_POOL: mypool
