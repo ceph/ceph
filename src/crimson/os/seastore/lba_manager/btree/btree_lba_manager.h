@@ -465,7 +465,7 @@ public:
 	      : L_ADDR_NULL;
 	    auto remap_offset = remap.offset;
 	    auto remap_len = remap.len;
-	    auto remap_laddr = orig_laddr + remap_offset;
+	    auto remap_laddr = (orig_laddr + remap_offset).checked_to_laddr();
 	    ceph_assert(intermediate_base != L_ADDR_NULL);
 	    ceph_assert(intermediate_key != L_ADDR_NULL);
 	    ceph_assert(remap_len < orig_len);
@@ -476,7 +476,7 @@ public:
 	      " intermediate_base: {}, intermediate_key: {}", t,
 	      remap_laddr, orig_paddr, remap_len,
 	      intermediate_base, intermediate_key);
-	    auto remapped_intermediate_key = intermediate_key + remap_offset;
+	    auto remapped_intermediate_key = (intermediate_key + remap_offset).checked_to_laddr();
 	    alloc_infos.emplace_back(
 	      alloc_mapping_info_t::create_indirect(
 		remap_laddr,
@@ -485,7 +485,7 @@ public:
 	  }
 	  fut = alloc_cloned_mappings(
 	    t,
-	    remaps.front().offset + orig_laddr,
+	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
 	    std::move(alloc_infos)
 	  ).si_then([&orig_mapping](auto imappings) mutable {
 	    std::vector<LBAMappingRef> mappings;
@@ -504,7 +504,7 @@ public:
 	} else { // !orig_mapping->is_indirect()
 	  fut = alloc_extents(
 	    t,
-	    remaps.front().offset + orig_laddr,
+	    (remaps.front().offset + orig_laddr).checked_to_laddr(),
 	    std::move(extents),
 	    EXTENT_DEFAULT_REF_COUNT);
 	}

@@ -1325,7 +1325,7 @@ public:
   void on_rewrite(Transaction&, CachedExtent &extent, extent_len_t off) final {
     assert(get_type() == extent.get_type());
     auto &lextent = (LogicalCachedExtent&)extent;
-    set_laddr(lextent.get_laddr() + off);
+    set_laddr((lextent.get_laddr() + off).checked_to_laddr());
   }
 
   bool has_laddr() const {

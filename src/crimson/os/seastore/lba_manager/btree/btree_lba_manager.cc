@@ -316,7 +316,7 @@ BtreeLBAManager::_alloc_extents(
     assert((info.key == L_ADDR_NULL) == (laddr_null));
     if (!laddr_null) {
       assert(info.key >= last_end);
-      last_end = info.key + info.len;
+      last_end = (info.key + info.len).checked_to_laddr();
     }
   }
 #endif
@@ -381,7 +381,7 @@ BtreeLBAManager::_alloc_extents(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::yes);
 	} else {
-	  state.last_end = pos.get_key() + pos.get_val().len;
+	  state.last_end = (pos.get_key() + pos.get_val().len).checked_to_laddr();
 	  TRACET("{}~{}, hint={}, state: {}~{}, repeat ... -- {}",
 		 t, addr, total_len, hint,
 		 pos.get_key(), pos.get_val().len,
@@ -431,7 +431,7 @@ BtreeLBAManager::_alloc_extents(
 	    return iter.next(c).si_then([&state, &alloc_info](auto it) {
 	      state.insert_iter = it;
 	      if (alloc_info.key == L_ADDR_NULL) {
-		state.last_end = state.last_end + alloc_info.len;
+		state.last_end = (state.last_end + alloc_info.len).checked_to_laddr();
 	      }
 	    });
 	  });

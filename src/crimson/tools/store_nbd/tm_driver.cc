@@ -121,7 +121,7 @@ seastar::future<bufferlist> TMDriver::read(
             cur = i.first;
           }
           blret.append(i.second->get_bptr());
-          cur += i.second->get_bptr().length();
+	  cur = (cur + i.second->get_bptr().length()).checked_to_laddr();
         }
         if (blret.length() != size) {
           assert(blret.length() < size);

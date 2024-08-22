@@ -532,7 +532,7 @@ public:
 	  for (auto &remap : remaps) {
 	    auto remap_offset = remap.offset;
 	    auto remap_len = remap.len;
-	    auto remap_laddr = original_laddr + remap_offset;
+	    auto remap_laddr = (original_laddr + remap_offset).checked_to_laddr();
 	    auto remap_paddr = original_paddr.add_offset(remap_offset);
 	    ceph_assert(remap_len < original_len);
 	    ceph_assert(remap_offset + remap_len <= original_len);
