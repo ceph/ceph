@@ -2,14 +2,14 @@
 Mimic
 =====
 
-Mimic is the 13th stable release of Ceph.  It is named after the mimic
-octopus (thaumoctopus mimicus).
+Mimic is the 13th stable release of Ceph.  It is named after the Mimic
+Octopus (Thaumoctopus mimicus).
 
 v13.2.10 Mimic
 ==============
 
-This is the tenth bugfix release of Ceph Mimic, this release fixes a RGW
-vulnerability affecting mimic, and we recommend that all mimic users upgrade.
+This is the tenth bugfix release of Ceph Mimic, this release fixes an RGW
+vulnerability, and we recommend that all Mimic users upgrade.
 
 Notable Changes
 ---------------
@@ -21,8 +21,8 @@ v13.2.9 Mimic
 =============
 
 This is the ninth and very likely the last stable release in the Ceph Mimic
-stable release series. This release fixes bugs across all components and also
-contains a RGW security fix. We recommend all mimic users to upgrade to this
+series. This release fixes bugs across all components and also
+contains a RGW security fix. We recommend all Mimic users to upgrade to this
 version.
 
 Notable Changes
