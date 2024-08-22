@@ -46,9 +46,9 @@ static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush) {
   // FIXME: It is possible that PGs from different pools share the same prefix
   // if the mask 0xFF is not long enough, result in unexpected transaction
   // conflicts.
-  return laddr_t((uint64_t)(shard & 0xFF)<<56 |
-                 (uint64_t)(pool  & 0xFF)<<48 |
-                 (uint64_t)(crush       )<<16);
+  return laddr_t::from_raw_uint((uint64_t)(shard & 0xFF)<<56 |
+                                (uint64_t)(pool  & 0xFF)<<48 |
+                                (uint64_t)(crush       )<<16);
 }
 
 struct node_offset_packed_t {

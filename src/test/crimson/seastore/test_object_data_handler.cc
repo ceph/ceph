@@ -218,14 +218,14 @@ struct object_data_handler_test_t:
     objaddr_t offset,
     extent_len_t length) {
     auto ret = with_trans_intr(t, [&](auto &t) {
-      return tm->get_pins(t, laddr_t(offset), length);
+      return tm->get_pins(t, laddr_t::from_byte_offset(offset), length);
     }).unsafe_get();
     return ret;
   }
   std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
-      return tm->get_pins(t, laddr_t(offset), length);
+      return tm->get_pins(t, laddr_t::from_byte_offset(offset), length);
     }).unsafe_get();
     return ret;
   }
@@ -798,7 +798,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
       auto pins = get_mappings(*t, base, len);
       assert(pins.size() == 1);
       auto pin1 = remap_pin(*t, std::move(pins.front()), 4096, 8192);
-      auto ext = get_extent(*t, laddr_t(base + 4096), 4096 * 2);
+      auto ext = get_extent(*t, laddr_t::from_byte_offset(base + 4096), 4096 * 2);
       ASSERT_TRUE(ext->is_exist_clean());
       write(*t, base + 4096, 4096, 'y');
       ASSERT_TRUE(ext->is_exist_mutation_pending());

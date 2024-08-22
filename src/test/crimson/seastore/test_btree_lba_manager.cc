@@ -378,14 +378,14 @@ TEST_F(lba_btree_test, basic)
   run_async([this] {
     constexpr unsigned total = 16<<10;
     for (unsigned i = 0; i < total; i += 16) {
-      insert(laddr_t(i), 8);
+      insert(laddr_t::from_raw_uint(i), 8);
     }
 
     for (unsigned i = 0; i < total; i += 16) {
-      check_lower_bound(laddr_t(i));
-      check_lower_bound(laddr_t(i + 4));
-      check_lower_bound(laddr_t(i + 8));
-      check_lower_bound(laddr_t(i + 12));
+      check_lower_bound(laddr_t::from_raw_uint(i));
+      check_lower_bound(laddr_t::from_raw_uint(i + 4));
+      check_lower_bound(laddr_t::from_raw_uint(i + 8));
+      check_lower_bound(laddr_t::from_raw_uint(i + 12));
     }
   });
 }
@@ -681,7 +681,7 @@ struct btree_lba_manager_test : btree_test_base {
 TEST_F(btree_lba_manager_test, basic)
 {
   run_async([this] {
-    laddr_t laddr = laddr_t(0x12345678 * block_size);
+    laddr_t laddr = laddr_t::from_byte_offset(0x12345678 * block_size);
     {
       // write initial mapping
       auto t = create_transaction();
@@ -831,23 +831,23 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
       }
     };
     iterate([&](auto &t, auto idx) {
-      alloc_mappings(t, laddr_t(idx * block_size), block_size);
+      alloc_mappings(t, laddr_t::from_byte_offset(idx * block_size), block_size);
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
       if ((idx % 32) > 0) {
-	decref_mapping(t, laddr_t(idx * block_size));
+	decref_mapping(t, laddr_t::from_byte_offset(idx * block_size));
       }
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
       if ((idx % 32) > 0) {
-	alloc_mappings(t, laddr_t(idx * block_size), block_size);
+	alloc_mappings(t, laddr_t::from_byte_offset(idx * block_size), block_size);
       }
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
-      decref_mapping(t, laddr_t(idx * block_size));
+      decref_mapping(t, laddr_t::from_byte_offset(idx * block_size));
     });
     check_mappings();
   });

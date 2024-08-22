@@ -1048,7 +1048,7 @@ class DummyChildPool {
     static Ref<DummyChild> create_new(
         const std::set<ghobject_t>& keys, bool is_level_tail, DummyChildPool& pool) {
       static uint64_t seed = 0;
-      return create(keys, is_level_tail, laddr_t(seed++), pool);
+      return create(keys, is_level_tail, laddr_t::from_raw_uint(seed++), pool);
     }
 
     static eagain_ifuture<Ref<DummyChild>> create_initial(
