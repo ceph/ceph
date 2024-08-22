@@ -27,20 +27,20 @@ seastar::future<> TMDriver::write(
         "write",
         [this, offset, &ptr](auto& t)
       {
-        return tm->remove(t, laddr_t(offset)
+        return tm->remove(t, laddr_t::from_byte_offset(offset)
         ).discard_result().handle_error_interruptible(
           crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
           crimson::ct_error::pass_further_all{}
         ).si_then([this, offset, &t, &ptr] {
           logger().debug("dec_ref complete");
-          return tm->alloc_data_extents<TestBlock>(t, laddr_t(offset), ptr.length());
+          return tm->alloc_data_extents<TestBlock>(t, laddr_t::from_byte_offset(offset), ptr.length());
         }).si_then([this, offset, &t, &ptr](auto extents) mutable {
 	  boost::ignore_unused(offset);  // avoid clang warning;
 	  auto off = offset;
 	  auto left = ptr.length();
 	  size_t written = 0;
 	  for (auto &ext : extents) {
-	    assert(ext->get_laddr() == laddr_t(off));
+	    assert(ext->get_laddr() == laddr_t::from_byte_offset(off));
 	    assert(ext->get_bptr().length() <= left);
 	    ptr.copy_out(written, ext->get_length(), ext->get_bptr().c_str());
 	    off += ext->get_length();
@@ -111,9 +111,9 @@ seastar::future<bufferlist> TMDriver::read(
       "read",
       [=, &blret, this](auto& t)
     {
-      return read_extents(t, laddr_t(offset), size
+      return read_extents(t, laddr_t::from_byte_offset(offset), size
       ).si_then([=, &blret](auto ext_list) {
-        laddr_t cur(offset);
+        auto cur = laddr_t::from_byte_offset(offset);
         for (auto &i: ext_list) {
           if (cur != i.first) {
             assert(cur < i.first);
