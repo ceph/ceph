@@ -161,7 +161,7 @@ class MonitorThrasher(Thrasher):
         """
         Stop the thrashing process.
         """
-        self.stopping = True
+        self.stopping.set()
 
     def join(self):
         """
