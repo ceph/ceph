@@ -253,6 +253,8 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
   ceph_assert(seastar::this_shard_id() == primary_core);
   return device->mount(
   ).safe_then([this] {
+    ceph_assert(device->get_sharded_device().get_block_size()
+		>= laddr_t::UNIT_SIZE);
     auto &sec_devices = device->get_sharded_device().get_secondary_devices();
     return crimson::do_for_each(sec_devices, [this](auto& device_entry) {
       device_id_t id = device_entry.first;
@@ -266,6 +268,8 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
         ).then([this, magic, sec_dev = std::move(sec_dev)]() mutable {
           return sec_dev->mount(
           ).safe_then([this, sec_dev=std::move(sec_dev), magic]() mutable {
+	    ceph_assert(sec_dev->get_sharded_device().get_block_size()
+			>= laddr_t::UNIT_SIZE);
             boost::ignore_unused(magic);  // avoid clang warning;
             assert(sec_dev->get_sharded_device().get_magic() == magic);
             secondaries.emplace_back(std::move(sec_dev));
