@@ -1,0 +1,7 @@
+roles:
+- - host.a
+  - client.a
+- - host.b
+  - client.b
+- - host.c
+  - client.c
