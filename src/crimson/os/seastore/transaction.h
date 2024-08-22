@@ -42,21 +42,41 @@ inline std::ostream& operator<<(std::ostream& out, const io_stat_t& stat) {
 }
 
 struct rewrite_stats_t {
-  uint64_t num = 0;
-  uint64_t version = 0;
+  uint64_t num_n_dirty = 0;
+  uint64_t num_dirty = 0;
+  uint64_t dirty_version = 0;
 
   bool is_clear() const {
-    return num == 0;
+    return (num_n_dirty == 0 && num_dirty == 0);
   }
 
-  void account(extent_version_t v) {
-    ++num;
-    version += v;
+  uint64_t get_num_rewrites() const {
+    return num_n_dirty + num_dirty;
+  }
+
+  double get_avg_version() const {
+    return static_cast<double>(dirty_version)/num_dirty;
+  }
+
+  void account_n_dirty() {
+    ++num_n_dirty;
+  }
+
+  void account_dirty(extent_version_t v) {
+    ++num_dirty;
+    dirty_version += v;
   }
 
   void add(const rewrite_stats_t& o) {
-    num += o.num;
-    version += o.version;
+    num_n_dirty += o.num_n_dirty;
+    num_dirty += o.num_dirty;
+    dirty_version += o.dirty_version;
+  }
+
+  void minus(const rewrite_stats_t& o) {
+    num_n_dirty -= o.num_n_dirty;
+    num_dirty -= o.num_dirty;
+    dirty_version -= o.dirty_version;
   }
 };
 
