@@ -4013,7 +4013,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
       pi->btime = m->get_btime();
     }
     if (m->fscrypt_auth.size())
-      pi->fscrypt_auth = m->fscrypt_auth;
+      pi->fscrypt_auth.assign(m->fscrypt_auth.begin(), m->fscrypt_auth.end());
   }
 }
 
