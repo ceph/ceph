@@ -1631,8 +1631,8 @@ private:
     std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
     counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
 
-    version_stat_t committed_dirty_version;
-    version_stat_t committed_reclaim_version;
+    rewrite_stats_t trim_rewrites;
+    rewrite_stats_t reclaim_rewrites;
   } stats;
 
   mutable dirty_io_stats_t last_dirty_io;

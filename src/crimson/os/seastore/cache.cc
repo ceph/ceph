@@ -705,22 +705,22 @@ void Cache::register_metrics()
     {
       sm::make_counter(
         "version_count_dirty",
-        stats.committed_dirty_version.num,
+        stats.trim_rewrites.num,
         sm::description("total number of rewrite-dirty extents")
       ),
       sm::make_counter(
         "version_sum_dirty",
-        stats.committed_dirty_version.version,
+        stats.trim_rewrites.version,
         sm::description("sum of the version from rewrite-dirty extents")
       ),
       sm::make_counter(
         "version_count_reclaim",
-        stats.committed_reclaim_version.num,
+        stats.reclaim_rewrites.num,
         sm::description("total number of rewrite-reclaim extents")
       ),
       sm::make_counter(
         "version_sum_reclaim",
-        stats.committed_reclaim_version.version,
+        stats.reclaim_rewrites.version,
         sm::description("sum of the version from rewrite-reclaim extents")
       ),
     }
@@ -1586,14 +1586,14 @@ record_t Cache::prepare_record(
   efforts.inline_record_metadata_bytes +=
     (record.size.get_raw_mdlength() - record.get_delta_size());
 
-  auto &rewrite_version_stats = t.get_rewrite_version_stats();
+  auto &rewrite_stats = t.get_rewrite_stats();
   if (trans_src == Transaction::src_t::TRIM_DIRTY) {
-    stats.committed_dirty_version.increment_stat(rewrite_version_stats);
+    stats.trim_rewrites.add(rewrite_stats);
   } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
              trans_src == Transaction::src_t::CLEANER_COLD) {
-    stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
+    stats.reclaim_rewrites.add(rewrite_stats);
   } else {
-    assert(rewrite_version_stats.is_clear());
+    assert(rewrite_stats.is_clear());
   }
 
   return record;

@@ -41,22 +41,22 @@ inline std::ostream& operator<<(std::ostream& out, const io_stat_t& stat) {
   return out << stat.num << "(" << stat.bytes << "B)";
 }
 
-struct version_stat_t {
+struct rewrite_stats_t {
   uint64_t num = 0;
   uint64_t version = 0;
 
   bool is_clear() const {
-    return (num == 0 && version == 0);
+    return num == 0;
   }
 
-  void increment(extent_version_t v) {
+  void account(extent_version_t v) {
     ++num;
     version += v;
   }
 
-  void increment_stat(const version_stat_t& stat) {
-    num += stat.num;
-    version += stat.version;
+  void add(const rewrite_stats_t& o) {
+    num += o.num;
+    version += o.version;
   }
 };
 
@@ -433,7 +433,7 @@ public:
     lba_tree_stats = {};
     backref_tree_stats = {};
     ool_write_stats = {};
-    rewrite_version_stats = {};
+    rewrite_stats = {};
     conflicted = false;
     if (!has_reset) {
       has_reset = true;
@@ -492,8 +492,8 @@ public:
   ool_write_stats_t& get_ool_write_stats() {
     return ool_write_stats;
   }
-  version_stat_t& get_rewrite_version_stats() {
-    return rewrite_version_stats;
+  rewrite_stats_t& get_rewrite_stats() {
+    return rewrite_stats;
   }
 
   struct existing_block_stats_t {
@@ -617,7 +617,7 @@ private:
   tree_stats_t lba_tree_stats;
   tree_stats_t backref_tree_stats;
   ool_write_stats_t ool_write_stats;
-  version_stat_t rewrite_version_stats;
+  rewrite_stats_t rewrite_stats;
 
   bool conflicted = false;
 
