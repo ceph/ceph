@@ -1205,6 +1205,7 @@ def _generate_smb_service_spec(
         user_sources=user_sources,
         custom_dns=cluster.custom_dns,
         include_ceph_users=user_entities,
+        cluster_public_addrs=cluster.service_spec_public_addrs(),
     )
 
 
