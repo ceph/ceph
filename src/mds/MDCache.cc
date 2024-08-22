@@ -6523,7 +6523,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   const auto& pi = in->get_inode();
   dout(10) << "_truncate_inode "
            << pi->truncate_from << " -> " << pi->truncate_size
-           << " fscrypt last block length is " << pi->fscrypt_last_block.length()
+           << " fscrypt last block length is " << pi->fscrypt_last_block.size()
            << " on " << *in << dendl;
 
   ceph_assert(pi->is_truncating());
@@ -6531,7 +6531,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   ceph_assert(pi->truncate_from < (1ULL << 63));
   ceph_assert(pi->truncate_size < pi->truncate_from ||
               (pi->truncate_size == pi->truncate_from &&
-	       pi->fscrypt_last_block.length()));
+	       pi->fscrypt_last_block.size()));
 
 
   SnapRealm *realm = in->find_snaprealm();
@@ -6546,18 +6546,20 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
     ceph_assert(in->last == CEPH_NOSNAP);
   }
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in
-           << " fscrypt_last_block length is " << pi->fscrypt_last_block.length()
+           << " fscrypt_last_block length is " << pi->fscrypt_last_block.size()
            << dendl;
   auto layout = pi->layout;
   struct ceph_fscrypt_last_block_header header;
   memset(&header, 0, sizeof(header));
   bufferlist data;
-  if (pi->fscrypt_last_block.length()) {
-    auto bl = pi->fscrypt_last_block.cbegin();
-    DECODE_START(1, bl);
-    decode(header.change_attr, bl);
-    decode(header.file_offset, bl);
-    decode(header.block_size, bl);
+  if (pi->fscrypt_last_block.size()) {
+    auto _bl = bufferlist();
+    _bl.append(pi->fscrypt_last_block);
+    auto blp = _bl.cbegin();
+    DECODE_START(1, blp);
+    decode(header.change_attr, blp);
+    decode(header.file_offset, blp);
+    decode(header.block_size, blp);
 
     /*
      * The block_size will be in unit of KB, so if the last block is not
@@ -6565,9 +6567,9 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
      * header.block_size.
      */
     if (struct_len > header.block_size) {
-      bl.copy(header.block_size, data);
+      blp.copy(header.block_size, data);
     }
-    DECODE_FINISH(bl);
+    DECODE_FINISH(blp);
   }
 
   if (data.length()) {
@@ -6588,7 +6590,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
      * this case we will always request a larger length to make sure the
      * OSD won't miss truncating the last object.
      */
-    if (pi->fscrypt_last_block.length()) {
+    if (pi->fscrypt_last_block.size()) {
       dout(10) << "_truncate_inode truncate on inode " << *in << " hits a hole!" << dendl;
       length += header.block_size;
     }
@@ -6626,7 +6628,7 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
   ceph_assert(pi->truncate_from < (1ULL << 63));
   ceph_assert(pi->truncate_size < pi->truncate_from ||
               (pi->truncate_size == pi->truncate_from &&
-	       pi->fscrypt_last_block.length()));
+	       pi->fscrypt_last_block.size()));
 
 
   SnapRealm *realm = in->find_snaprealm();
@@ -6641,7 +6643,7 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
     ceph_assert(in->last == CEPH_NOSNAP);
   }
   dout(10) << "_truncate_inode_write  snapc " << snapc << " on " << *in
-           << " fscrypt_last_block length is " << pi->fscrypt_last_block.length()
+           << " fscrypt_last_block length is " << pi->fscrypt_last_block.size()
            << dendl;
   auto layout = pi->layout;
   /*
@@ -6673,7 +6675,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   pi.inode->version = in->pre_dirty();
   pi.inode->truncate_from = 0;
   pi.inode->truncate_pending--;
-  pi.inode->fscrypt_last_block = bufferlist();
+  pi.inode->fscrypt_last_block.clear();
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
 
