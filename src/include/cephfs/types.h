@@ -607,7 +607,7 @@ struct inode_t {
   std::basic_string<char,std::char_traits<char>,Allocator<char>> stray_prior_path; //stores path before unlink
 
   std::vector<uint8_t,Allocator<uint8_t>> fscrypt_auth;
-  std::vector<uint8_t> fscrypt_file;
+  std::vector<uint8_t,Allocator<uint8_t>> fscrypt_file;
 
   bufferlist fscrypt_last_block;
 
