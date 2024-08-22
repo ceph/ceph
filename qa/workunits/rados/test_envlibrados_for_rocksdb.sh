@@ -26,10 +26,10 @@ case $(distro_id) in
         case $(distro_id) in
             rhel)
                 # RHEL needs CRB repo for snappy-devel
-                sudo subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
+                sudo dnf config-manager --set-enabled crb
                 ;;
         esac
-        install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake libarchive-3.3.3
+        install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake libarchive
         ;;
 	opensuse*|suse|sles)
 		install git gcc-c++ snappy-devel zlib-devel libbz2-devel libradospp-devel
