@@ -520,7 +520,6 @@ ObjectDataHandler::write_ret do_insertions(
     [ctx](auto &region) {
       LOG_PREFIX(object_data_handler.cc::do_insertions);
       if (region.is_data()) {
-	ceph_assert(region.addr.is_aligned(ctx.tm.get_block_size()));
 	assert_aligned(region.len);
 	ceph_assert(region.len == region.bl->length());
 	DEBUGT("allocating extent: {}~{}",
@@ -726,11 +725,6 @@ public:
 private:
   // refer to overwrite_plan_t description
   void validate() const {
-    ceph_assert(pin_begin.is_aligned(block_size));
-    ceph_assert(pin_end.is_aligned(block_size));
-    ceph_assert(aligned_data_begin.is_aligned(block_size));
-    ceph_assert(aligned_data_end.is_aligned(block_size));
-
     ceph_assert(pin_begin <= aligned_data_begin);
     ceph_assert(aligned_data_begin <= data_begin);
     ceph_assert(data_begin <= data_end);
@@ -1208,8 +1202,6 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
     (!tailptr && (right == zero_right)));
 
   assert(right > left);
-  assert(left.is_aligned(block_size));
-  assert(right.is_aligned(block_size));
 
   // zero region too small for a reserved section,
   // headptr and tailptr in same extent
@@ -1324,7 +1316,6 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
           if (headptr) {
             write_bl.append(*headptr);
             write_offset = write_offset - headptr->length();
-	    ceph_assert(write_offset.is_aligned(ctx.tm.get_block_size()));
           }
           write_bl.claim_append(*bl);
           if (tailptr) {
