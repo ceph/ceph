@@ -408,9 +408,9 @@ struct inode_t {
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
 
   bool is_truncating() const { return (truncate_pending > 0); }
-  void truncate(uint64_t old_size, uint64_t new_size, const bufferlist &fbl) {
+  void truncate(uint64_t old_size, uint64_t new_size, ::ceph::buffer::list::const_iterator fblp) {
     truncate(old_size, new_size);
-    fscrypt_last_block = fbl;
+    fblp.copy(fblp.get_remaining(), fscrypt_last_block);
   }
   void truncate(uint64_t old_size, uint64_t new_size) {
     ceph_assert(new_size <= old_size);
@@ -608,8 +608,7 @@ struct inode_t {
 
   std::vector<uint8_t,Allocator<uint8_t>> fscrypt_auth;
   std::vector<uint8_t,Allocator<uint8_t>> fscrypt_file;
-
-  bufferlist fscrypt_last_block;
+  std::vector<uint8_t,Allocator<uint8_t>> fscrypt_last_block;
 
 private:
   bool older_is_consistent(const inode_t &other) const;
