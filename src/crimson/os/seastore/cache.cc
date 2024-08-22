@@ -1148,11 +1148,14 @@ record_t Cache::prepare_record(
     if (!i->is_exist_mutation_pending()) {
       DEBUGT("commit replace extent ... -- {}, prior={}",
 	     t, *i, *i->prior_instance);
-      // If inplace rewrite occurs during mutation, prev->version will
-      // be zero. Although this results in the version mismatch here, we can
-      // correct this by changing version to 1. This is because the inplace rewrite
-      // does not introduce any actual modification that could negatively
-      // impact system reliability
+
+      // If inplace rewrite happens from a concurrent transaction,
+      // i->prior_instance will be changed from DIRTY to CLEAN implicitly, thus
+      // i->prior_instance->version become 0. This won't cause conflicts
+      // intentionally because inplace rewrite won't modify the shared extent.
+      //
+      // However, this leads to version mismatch below, thus we reset the
+      // version to 1 in this case.
       if (i->prior_instance->version == 0 && i->version > 1) {
 	assert(can_inplace_rewrite(i->get_type()));
 	assert(can_inplace_rewrite(i->prior_instance->get_type()));
@@ -1162,6 +1165,7 @@ record_t Cache::prepare_record(
 	  paddr_types_t::RANDOM_BLOCK);
 	i->version = 1;
       }
+
       // extent with EXIST_MUTATION_PENDING doesn't have
       // prior_instance field so skip these extents.
       // the existing extents should be added into Cache
@@ -1926,6 +1930,7 @@ Cache::replay_delta(
 	ceph_assert_always(extent->last_committed_crc == delta.final_crc);
       } else {
 	assert(delta.paddr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+	// see prepare_record(), inplace rewrite might cause version mismatch
 	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
 	extent->set_modify_time(modify_time);
 	// crc will be checked after journal replay is done
