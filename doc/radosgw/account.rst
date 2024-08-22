@@ -177,8 +177,8 @@ An existing user can be adopted into an account with ``user modify``::
 .. warning:: Ownership of the user's notification topics will not be
    transferred to the account. Notifications will continue to work, but
    the topics will no longer be visible to SNS Topic APIs. Topics and
-   their associated bucket notifications should be removed before migration
-   and recreated within the account.
+   their associated bucket notifications can be migrated as described below
+   in `Migrating Notification Topics`_.
 
 Because account users have no permissions by default, some identity policy must
 be added to restore the user's original permissions.
@@ -186,6 +186,44 @@ be added to restore the user's original permissions.
 Alternatively, you may want to create a new account for each existing user. In
 that case, you may want to add the ``--account-root`` option to make each user
 the root user of their account.
+
+Migrating Notification Topics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Account topics are supported only when the ``notification_v2`` feature is enabled,
+as described in `Bucket Notifications`_ and `Supported Zone Features`_.
+
+1. ``Migration Impact``: When a non-account user is migrated to an account, the
+the existing notification topics remain accessible through the RadosGW admin API,
+but the user loses access to them via the SNS Topic API. Despite this, the topics
+remain functional, and bucket notifications will continue to be delivered as expected.
+
+2. ``Re-creation of Topics``: The account user should re-create the topics using
+the same names. The old topics (now inaccessible) and the new account-owned topics
+will coexist without interference.
+
+3. ``Updating Bucket Notification Configurations``: Buckets that are subscribed to
+the old user-owned topics should be updated to use the new account-owned topics.
+To prevent duplicate notifications, maintain the same notification IDs.
+For example, if a bucket's existing notification configuration is:
+
+    .. code-block:: json
+
+        {"TopicConfigurations": [{ "Id": "ID1", "TopicArn": "arn:aws:sns:default::topic1", "Events": ["s3:ObjectCreated:*"]}]}
+
+The updated configuration would be:
+
+    .. code-block:: json
+
+        {"TopicConfigurations": [{ "Id": "ID1", "TopicArn": "arn:aws:sns:default:RGW00000000000000001:topic1", "Events": ["s3:ObjectCreated:*"]}]}
+
+In this example, `RGW00000000000000001` is the account ID, `topic1` is the
+topic name and `ID1` is the notification ID.
+
+4. ``Removing Old Topics``: Once no buckets are subscribed to the old user-owned topics,
+they can be removed by an admin::
+
+	$ radosgw-admin topic rm --topic topic1
 
 Account Root example
 --------------------
@@ -252,3 +290,5 @@ This example uses `awscli`_ to create an IAM user for S3 operations.
 .. _Evaluating policies within a single account: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics
 .. _Cross-account policy evaluation logic: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html
 .. _awscli: https://docs.aws.amazon.com/cli/latest/
+.. _Bucket Notifications: ../notifications/
+.. _Supported Zone Features: ../zone-features/#supported-features
