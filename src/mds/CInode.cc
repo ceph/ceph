@@ -4223,7 +4223,7 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
   m->size = i->size;
   m->truncate_seq = i->truncate_seq;
   m->truncate_size = i->truncate_size;
-  m->fscrypt_file = i->fscrypt_file;
+  m->fscrypt_file.assign(i->fscrypt_file.begin(), i->fscrypt_file.end());
   m->fscrypt_auth.assign(i->fscrypt_auth.begin(), i->fscrypt_auth.end());
   m->mtime = i->mtime;
   m->atime = i->atime;

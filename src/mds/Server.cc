@@ -3572,7 +3572,7 @@ CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t 
 
   dout(10) << "copying fscrypt_auth len " << req->fscrypt_auth.size() << dendl;
   _inode->fscrypt_auth.assign(req->fscrypt_auth.begin(), req->fscrypt_auth.end());
-  _inode->fscrypt_file = req->fscrypt_file;
+  _inode->fscrypt_file.assign(req->fscrypt_file.begin(), req->fscrypt_file.end());
 
   if (req->get_data().length()) {
     auto p = req->get_data().cbegin();
@@ -5474,7 +5474,7 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
   if (mask & CEPH_SETATTR_FSCRYPT_AUTH)
     pi.inode->fscrypt_auth.assign(req->fscrypt_auth.begin(), req->fscrypt_auth.end());
   if (mask & CEPH_SETATTR_FSCRYPT_FILE)
-    pi.inode->fscrypt_file = req->fscrypt_file;
+    pi.inode->fscrypt_file.assign(req->fscrypt_file.begin(), req->fscrypt_file.end());
 
   pi.inode->version = cur->pre_dirty();
   pi.inode->ctime = mdr->get_op_stamp();

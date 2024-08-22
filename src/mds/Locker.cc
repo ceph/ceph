@@ -3977,7 +3977,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
       pi->time_warp_seq = m->get_time_warp_seq();
     }
     if (m->fscrypt_file.size())
-      pi->fscrypt_file = m->fscrypt_file;
+      pi->fscrypt_file.assign(m->fscrypt_file.begin(), m->fscrypt_file.end());
   }
   // auth
   if (dirty & CEPH_CAP_AUTH_EXCL) {
