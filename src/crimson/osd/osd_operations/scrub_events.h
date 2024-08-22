@@ -260,6 +260,17 @@ protected:
   ifut<> run(PG &pg) final;
 };
 
+struct obj_scrub_progress_t {
+  // nullopt once complete
+  std::optional<uint64_t> offset = 0;
+  ceph::buffer::hash data_hash{std::numeric_limits<uint32_t>::max()};
+
+  bool header_done = false;
+  std::optional<std::string> next_key;
+  bool keys_done = false;
+  ceph::buffer::hash omap_hash{std::numeric_limits<uint32_t>::max()};
+};
+
 }
 
 namespace crimson {
@@ -279,6 +290,24 @@ struct EventBackendRegistry<osd::ScrubMessage> {
 };
 
 }
+
+template <>
+struct fmt::formatter<crimson::osd::obj_scrub_progress_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const crimson::osd::obj_scrub_progress_t &progress,
+	      FormatContext& ctx) const
+  {
+    return fmt::format_to(
+      ctx.out(),
+      "obj_scrub_progress_t(offset: {}, "
+      "header_done: {}, next_key: {}, keys_done: {})",
+      progress.offset.has_value() ? *progress.offset : 0,
+      progress.header_done,
+      progress.next_key.has_value() ? *progress.next_key : "",
+      progress.keys_done);
+  }
+};
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::osd::ScrubRequested>

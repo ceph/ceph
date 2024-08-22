@@ -617,7 +617,7 @@ struct formatter<M> {
     std::ostringstream oss;
     m.print(oss);
     if (auto ver = m.get_header().version; ver) {
-      return fmt::format_to(ctx.out(), "{} v{}", oss.str(), ver);
+      return fmt::format_to(ctx.out(), "{} v{}", oss.str(), (uint32_t)ver);
     } else {
       return fmt::format_to(ctx.out(), "{}", oss.str());
     }

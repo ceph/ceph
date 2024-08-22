@@ -12,6 +12,7 @@
 #include "crimson/net/SocketMessenger.h"
 #include "msg/Message.h"
 #include "msg/msg_fmt.h"
+#include "include/utime_fmt.h"
 
 using namespace ceph::msgr::v2;
 using crimson::common::local_conf;
@@ -1018,10 +1019,10 @@ IOHandler::read_message(
                    msg_frame.front_len(),
                    msg_frame.middle_len(),
                    msg_frame.data_len(),
-                   current_header.type,
+                   (uint16_t)current_header.type,
                    conn.get_peer_name(),
-                   current_header.data_off,
-                   current_header.seq);
+                   (uint16_t)current_header.data_off,
+                   (uint32_t)current_header.seq);
 
     ceph_msg_header header{current_header.seq,
                            current_header.tid,
@@ -1088,7 +1089,7 @@ IOHandler::read_message(
       logger().debug("{} <== #{},{} === {} ({})",
                      conn,
                      message->get_seq(),
-                     current_header.ack_seq,
+                     (uint32_t)current_header.ack_seq,
                      *message,
                      message->get_type());
     }

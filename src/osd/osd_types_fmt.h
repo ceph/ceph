@@ -2,10 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 /**
- * \file fmtlib formatters for some types.h classes
+ * \file fmtlib formatters for some osd_types.h classes
  */
 
 #include "common/hobject.h"
+#include "include/types_fmt.h"
 #include "osd/osd_types.h"
 #include <fmt/chrono.h>
 #include <fmt/ranges.h>
@@ -14,8 +15,9 @@
 #include <fmt/ostream.h>
 #endif
 
+namespace fmt {
 template <>
-struct fmt::formatter<osd_reqid_t> {
+struct formatter<osd_reqid_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -27,7 +29,7 @@ struct fmt::formatter<osd_reqid_t> {
 };
 
 template <>
-struct fmt::formatter<pg_shard_t> {
+struct formatter<pg_shard_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -39,12 +41,12 @@ struct fmt::formatter<pg_shard_t> {
     if (shrd.shard == shard_id_t::NO_SHARD) {
       return fmt::format_to(ctx.out(), "{}", shrd.get_osd());
     }
-    return fmt::format_to(ctx.out(), "{}({})", shrd.get_osd(), shrd.shard);
+    return fmt::format_to(ctx.out(), "{}({:d})", shrd.get_osd(), shrd.shard);
   }
 };
 
 template <>
-struct fmt::formatter<eversion_t> {
+struct formatter<eversion_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -55,7 +57,7 @@ struct fmt::formatter<eversion_t> {
 };
 
 template <>
-struct fmt::formatter<chunk_info_t> {
+struct formatter<chunk_info_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -68,7 +70,7 @@ struct fmt::formatter<chunk_info_t> {
 };
 
 template <>
-struct fmt::formatter<object_manifest_t> {
+struct formatter<object_manifest_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -85,7 +87,7 @@ struct fmt::formatter<object_manifest_t> {
 };
 
 template <>
-struct fmt::formatter<object_info_t> {
+struct formatter<object_info_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -112,7 +114,7 @@ struct fmt::formatter<object_info_t> {
 };
 
 template <>
-struct fmt::formatter<pg_t> {
+struct formatter<pg_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -124,7 +126,7 @@ struct fmt::formatter<pg_t> {
 
 
 template <>
-struct fmt::formatter<spg_t> {
+struct formatter<spg_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -139,7 +141,7 @@ struct fmt::formatter<spg_t> {
 };
 
 template <>
-struct fmt::formatter<pg_history_t> {
+struct formatter<pg_history_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -167,7 +169,7 @@ struct fmt::formatter<pg_history_t> {
 };
 
 template <>
-struct fmt::formatter<pg_info_t> {
+struct formatter<pg_info_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -200,7 +202,7 @@ struct fmt::formatter<pg_info_t> {
 // snaps and snap-sets
 
 template <>
-struct fmt::formatter<SnapSet> {
+struct formatter<SnapSet> {
   template <typename ParseContext>
   constexpr auto parse(ParseContext& ctx)
   {
@@ -262,7 +264,7 @@ struct fmt::formatter<SnapSet> {
 };
 
 template <>
-struct fmt::formatter<ScrubMap::object> {
+struct formatter<ScrubMap::object> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   ///\todo: consider passing the 'D" flag to control snapset dump
@@ -295,7 +297,7 @@ struct fmt::formatter<ScrubMap::object> {
 };
 
 template <>
-struct fmt::formatter<ScrubMap> {
+struct formatter<ScrubMap> {
   template <typename ParseContext>
   constexpr auto parse(ParseContext& ctx)
   {
@@ -329,7 +331,7 @@ struct fmt::formatter<ScrubMap> {
 };
 
 template <>
-struct fmt::formatter<object_stat_sum_t> {
+struct formatter<object_stat_sum_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
@@ -382,6 +384,8 @@ struct fmt::formatter<object_stat_sum_t> {
 #undef FORMAT
   }
 };
+} // namespace fmt
+
 inline std::ostream &operator<<(std::ostream &lhs, const object_stat_sum_t &sum) {
   return lhs << fmt::format("{}", sum);
 }

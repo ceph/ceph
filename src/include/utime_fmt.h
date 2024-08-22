@@ -23,7 +23,7 @@ struct fmt::formatter<utime_t> {
   }
 
   template <typename FormatContext>
-  auto format(const utime_t& utime, FormatContext& ctx)
+  auto format(const utime_t& utime, FormatContext& ctx) const
   {
     if (utime.sec() < ((time_t)(60 * 60 * 24 * 365 * 10))) {
       // raw seconds.  this looks like a relative time.
