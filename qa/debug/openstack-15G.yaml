@@ -1,0 +1,3 @@
+openstack:
+  - machine:
+      ram: 15000 # MB
