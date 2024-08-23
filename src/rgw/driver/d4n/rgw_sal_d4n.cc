@@ -320,20 +320,6 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
         std::string object_key = dest_object->get_bucket()->get_name() + "_" + dest_object->get_oid();
         driver->get_policy_driver()->get_cache_policy()->updateObj(dpp, object_key, dest_version, true, this->get_size(), creationTime, std::get<rgw_user>(dest_object->get_bucket()->get_owner()), *etag, dest_object->get_bucket()->get_name(), dest_object->get_key(), y);
       }
-
-      //write object to directory.
-      rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
-          .objName = dest_object->get_oid(),
-          .bucketName = dest_object->get_bucket()->get_name(),
-          .creationTime = std::to_string(creationTime),
-          .dirty = dirty,
-          .hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address }
-      };
-      ret = driver->get_obj_dir()->set(dpp, &object, y);
-      if (ret < 0) {
-        ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): ObjectDirectory set method failed with err: " << ret << dendl;
-        return ret;
-      }
     }
   }
 
@@ -988,19 +974,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
         ret = source->set_head_obj_dir_entry(dpp, y, is_latest_version);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
-        }
-        //write object to directory.
-        rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
-          .objName = source->get_oid(),
-          .bucketName = source->get_bucket()->get_name(),
-          .creationTime = std::to_string(ceph::real_clock::to_double(source->get_mtime())),
-          .dirty = false,
-          .hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address }
-        };
-        ret = source->driver->get_obj_dir()->set(dpp, &object, y);
-        if (ret < 0) {
-          ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): ObjectDirectory set method failed with err: " << ret << dendl;
-          return ret;
         }
       } else {
         ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): put for head object failed, ret=" << ret << dendl;
@@ -1677,18 +1650,6 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 	    } else { 
 	      ldpp_dout(dpp, 0) << "Failed to fetch existing block for: " << existing_block.cacheObj.objName << " blockID: " << existing_block.blockID << " block size: " << existing_block.size << ", ret=" << ret << dendl;
             }
-            //write object to directory.
-            rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
-                .objName = source->get_oid(),
-                .bucketName = source->get_bucket()->get_name(),
-                .dirty = dirty,
-                .hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address }
-            };
-            ret = source->driver->get_obj_dir()->set(dpp, &object, *y);
-            if (ret < 0) {
-              ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::::" << __func__ << "(): ObjectDirectory set method failed with err: " << ret << dendl;
-              return ret;
-            }
           } else {
 	    ldpp_dout(dpp, 0) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): put() to cache backend failed, ret=" << ret << dendl;
           }
@@ -2283,21 +2244,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
         ldpp_dout(dpp, 16) << "D4NFilterWriter::" << __func__ << "(): object_key=" << object_key << dendl;
         driver->get_policy_driver()->get_cache_policy()->updateObj(dpp, object_key, version, dirty, accounted_size, creationTime, std::get<rgw_user>(obj->get_bucket()->get_owner()), objEtag, obj->get_bucket()->get_name(), obj->get_key(), y);
       }
-
-      //write object to directory.
-      hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address };
-      rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
-          .objName = obj->get_oid(),
-          .bucketName = obj->get_bucket()->get_name(),
-          .creationTime = std::to_string(creationTime), 
-          .dirty = dirty,
-          .hostsList = hostsList
-      };
-      ret = driver->get_obj_dir()->set(dpp, &object, y);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): ObjectDirectory set method failed, ret=" << ret << dendl;
-        return ret;
-      }
     } else { //if get_cache_driver()->put()
       ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): put failed for head_oid_in_cache, ret=" << ret << dendl;
       return ret;
@@ -2358,19 +2304,6 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
       ret = d4n_target_obj->set_head_obj_dir_entry(dpp, y, true);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "D4NFilterMultipartUpload::" << __func__ << "(): BlockDirectory set method failed for head object, ret=" << ret << dendl;
-      }
-      //write object to directory.
-      rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
-        .objName = d4n_target_obj->get_oid(),
-        .bucketName = d4n_target_obj->get_bucket()->get_name(),
-        .creationTime = std::to_string(ceph::real_clock::to_double(target_obj->get_mtime())),
-        .dirty = false,
-        .hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address }
-      };
-      ret = driver->get_obj_dir()->set(dpp, &object, y);
-      if (ret < 0) {
-        ldpp_dout(dpp, 10) << "D4NFilterMultipartUpload::" << __func__ << "(): ObjectDirectory set method failed with err: " << ret << dendl;
-        return ret;
       }
     } else {
       ldpp_dout(dpp, 0) << "D4NFilterMultipartUpload::" << __func__ << "(): put for head object failed, ret=" << ret << dendl;
