@@ -71,6 +71,169 @@ int check_bool(std::string str) {
   }
 }
 
+int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, bool multi)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("ZADD", bucket_id, "CH", std::to_string(0), member);
+
+    response<std::string> resp;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (!multi) {
+      if (std::get<0>(resp).value() != "1") {
+        ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Response value is: " << std::get<0>(resp).value() << dendl;
+        return -ENOENT;
+      }
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+
+}
+
+int BucketDirectory::zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y, bool multi)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("ZREM", bucket_id, member);
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (!multi) {
+      if (std::get<0>(resp).value() != "1") {
+        ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Response is: " << std::get<0>(resp).value() << dendl;
+        return -ENOENT;
+      }
+    }
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BucketDirectory::zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+    if (offset == 0 && count == 0) {
+      req.push("ZRANGE", bucket_id, start, stop, "bylex");
+    } else {
+      req.push("ZRANGE", bucket_id, start, stop, "bylex", "LIMIT", offset, count);
+    }
+
+    response<std::vector<std::string> > resp;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    if (std::get<0>(resp).value().empty()) {
+      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() Empty response" << dendl;
+      return -ENOENT;
+    }
+
+    members = std::get<0>(resp).value();
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& bucket_id, uint64_t cursor, const std::string& pattern, uint64_t count, std::vector<std::string>& members, uint64_t next_cursor, optional_yield y)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+
+    req.push("ZSCAN", bucket_id, cursor, "MATCH", pattern, "COUNT", count);
+
+    boost::redis::generic_response resp;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    std::vector<boost::redis::resp3::basic_node<std::__cxx11::basic_string<char> > > root_array;
+    if (resp.has_value()) {
+      root_array = resp.value();
+      ldpp_dout(dpp, 20) << "BucketDirectory::" << __func__ << "() aggregate size is: " << root_array.size() << dendl;
+      auto size = root_array.size();
+      if (size >= 2) {
+        //Nothing of interest at index 0, index 1 has the next cursor value
+        next_cursor = std::stoull(root_array[1].value);
+
+        //skip the first 3 values to get the actual member, score
+        for (uint64_t i = 3; i < size; i = i+2) {
+          members.emplace_back(root_array[i].value);
+          ldpp_dout(dpp, 20) << "BucketDirectory::" << __func__ << "() member is: " << root_array[i].value << dendl;
+        }
+      }
+    } else {
+      return -ENOENT;
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int BucketDirectory::zrank(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, uint64_t& rank, optional_yield y)
+{
+  try {
+    boost::system::error_code ec;
+    request req;
+
+    req.push("ZRANK", bucket_id, member);
+
+    response<int> resp;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    rank = std::get<0>(resp).value();
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 std::string ObjectDirectory::build_index(CacheObj* object) 
 {
   return object->bucketName + "_" + object->objName;
@@ -137,7 +300,15 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
   if (!endpoint.empty())
     endpoint.pop_back();
 
-  redisValues.push_back(endpoint); 
+  redisValues.push_back(endpoint);
+  redisValues.push_back("etag");
+  redisValues.push_back(object->etag);
+  redisValues.push_back("objSize");
+  redisValues.push_back(std::to_string(object->size));
+  redisValues.push_back("userId");
+  redisValues.push_back(object->user_id);
+  redisValues.push_back("displayName");
+  redisValues.push_back(object->display_name);
 
   try {
     boost::system::error_code ec;
@@ -170,6 +341,10 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
   fields.push_back("creationTime");
   fields.push_back("dirty");
   fields.push_back("hosts");
+  fields.push_back("etag");
+  fields.push_back("objSize");
+  fields.push_back("userId");
+  fields.push_back("displayName");
 
   try {
     boost::system::error_code ec;
@@ -194,6 +369,10 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
     object->creationTime = std::get<0>(resp).value()[2];
     object->dirty = (std::stoi(std::get<0>(resp).value()[3]) != 0);
     boost::split(object->hostsList, std::get<0>(resp).value()[4], boost::is_any_of("_"));
+    object->etag = std::get<0>(resp).value()[5];
+    object->size = std::stoull(std::get<0>(resp).value()[6]);
+    object->user_id = std::get<0>(resp).value()[7];
+    object->display_name = std::get<0>(resp).value()[8];
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
@@ -395,13 +574,13 @@ int ObjectDirectory::zrange(const DoutPrefixProvider* dpp, CacheObj* object, int
   return 0;
 }
 
-int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, int start, int stop, std::vector<std::string>& members, optional_yield y)
+int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, std::string start, std::string stop, std::vector<std::string>& members, optional_yield y)
 {
   std::string key = build_index(object);
   try {
     boost::system::error_code ec;
     request req;
-    req.push("ZREVRANGE", key, std::to_string(start), std::to_string(stop));
+    req.push("ZREVRANGE", key, start, stop);
 
     response<std::vector<std::string> > resp;
     redis_exec(conn, ec, req, resp, y);
@@ -511,6 +690,31 @@ int ObjectDirectory::incr(const DoutPrefixProvider* dpp, CacheObj* object, optio
   return value;
 }
 
+int ObjectDirectory::zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& index, optional_yield y)
+{
+  std::string key = build_index(object);
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("ZRANK", key, member);
+    response<std::string> resp;
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+
+    index = std::get<0>(resp).value();
+
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 std::string BlockDirectory::build_index(CacheBlock* block) 
 {
   return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
@@ -596,6 +800,14 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
     entries.pop_back();
 
   redisValues.push_back(entries);
+  redisValues.push_back("etag");
+  redisValues.push_back(block->cacheObj.etag);
+  redisValues.push_back("objSize");
+  redisValues.push_back(std::to_string(block->cacheObj.size));
+  redisValues.push_back("userId");
+  redisValues.push_back(block->cacheObj.user_id);
+  redisValues.push_back("displayName");
+  redisValues.push_back(block->cacheObj.display_name);
 
   try {
     boost::system::error_code ec;
@@ -611,6 +823,134 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
+  }
+
+  return 0;
+}
+
+template<typename T, typename Seq>
+struct expander;
+
+template<typename T, std::size_t... Is>
+struct expander<T, std::index_sequence<Is...>> {
+template<typename E, std::size_t>
+using elem = E;
+
+using type = boost::redis::response<elem<T, Is>...>;
+};
+
+template <size_t N, class Type>
+struct redis_response
+{
+  using type = typename expander<Type, std::make_index_sequence<N>>::type;
+};
+
+template <typename Integer, Integer ...I, typename F>
+constexpr void constexpr_for_each(std::integer_sequence<Integer, I...>, F &&func)
+{
+    (func(std::integral_constant<Integer, I>{}) , ...);
+}
+
+template <auto N, typename F>
+constexpr void constexpr_for(F &&func)
+{
+    if constexpr (N > 0)
+    {
+        constexpr_for_each(std::make_integer_sequence<decltype(N), N>{}, std::forward<F>(func));
+    }
+}
+
+template <typename T>
+void parse_response(T t, std::vector<std::vector<std::string>>& responses)
+{
+    constexpr_for<std::tuple_size_v<T>>([&](auto index)
+    {
+      std::vector<std::string> empty_vector;
+      constexpr auto i = index.value;
+      if (std::get<i>(t).value().has_value()) {
+        if (std::get<i>(t).value().value().empty()) {
+          responses.emplace_back(empty_vector);
+        } else {
+          responses.emplace_back(std::get<i>(t).value().value());
+        }
+      } else {
+        responses.emplace_back(empty_vector);
+      }
+    });
+}
+
+int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& blocks, optional_yield y)
+{
+  request req;
+  redis_response<100, std::optional<std::vector<std::string>>>::type resp;
+  for (auto block : blocks) {
+    std::string key = build_index(&block);
+    std::vector<std::string> fields;
+    ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
+
+    fields.push_back("blockID");
+    fields.push_back("version");
+    fields.push_back("deleteMarker");
+    fields.push_back("size");
+    fields.push_back("globalWeight");
+
+    fields.push_back("objName");
+    fields.push_back("bucketName");
+    fields.push_back("creationTime");
+    fields.push_back("dirty");
+    fields.push_back("hosts");
+    fields.push_back("etag");
+    fields.push_back("objSize");
+    fields.push_back("userId");
+    fields.push_back("displayName");
+
+    try {
+      boost::system::error_code ec;
+      req.push_range("HMGET", key, fields);
+    } catch (std::exception &e) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+      return -EINVAL;
+    }
+  } //end - for
+
+  try {
+    boost::system::error_code ec;
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  std::vector<std::vector<std::string>> responses;
+  parse_response<decltype(resp)>(resp, responses);
+
+  for (size_t i = 0; i < blocks.size(); i++) {
+    CacheBlock* block = &blocks[i];
+    auto vec = responses[i];
+    if (vec.empty()) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): No values returned for key=" << build_index(block) << dendl;
+      continue;
+    }
+
+    block->blockID = std::stoull(vec[0]);
+    block->version = vec[1];
+    block->deleteMarker = (std::stoi(vec[2]) != 0);
+    block->size = std::stoull(vec[3]);
+    block->globalWeight = std::stoull(vec[4]);
+    block->cacheObj.objName = vec[5];
+    block->cacheObj.bucketName = vec[6];
+    block->cacheObj.creationTime = vec[7];
+    block->cacheObj.dirty = (std::stoi(vec[8]) != 0);
+    boost::split(block->cacheObj.hostsList, vec[9], boost::is_any_of("_"));
+    block->cacheObj.etag = vec[10];
+    block->cacheObj.size = std::stoull(vec[11]);
+    block->cacheObj.user_id = vec[12];
+    block->cacheObj.display_name = vec[13];
   }
 
   return 0;
@@ -633,6 +973,10 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
   fields.push_back("creationTime");
   fields.push_back("dirty");
   fields.push_back("hosts");
+  fields.push_back("etag");
+  fields.push_back("objSize");
+  fields.push_back("userId");
+  fields.push_back("displayName");
 
   try {
     boost::system::error_code ec;
@@ -662,6 +1006,10 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
     block->cacheObj.creationTime = std::get<0>(resp).value().value()[7];
     block->cacheObj.dirty = (std::stoi(std::get<0>(resp).value().value()[8]) != 0);
     boost::split(block->cacheObj.hostsList, std::get<0>(resp).value().value()[9], boost::is_any_of("_"));
+    block->cacheObj.etag = std::get<0>(resp).value().value()[10];
+    block->cacheObj.size = std::stoull(std::get<0>(resp).value().value()[11]);
+    block->cacheObj.user_id = std::get<0>(resp).value().value()[12];
+    block->cacheObj.display_name = std::get<0>(resp).value().value()[13];
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
