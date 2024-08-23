@@ -910,7 +910,7 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
   // (i.e. truncating from 8M to 4M) passed truncate_seq will be larger
   // than inode truncate_seq. This shows passed size is latest.
   if (truncate_seq > in->truncate_seq ||
-      (truncate_seq == in->truncate_seq && size > in->size)) {
+      (truncate_seq == in->truncate_seq && size > in->effective_size())) {
     ldout(cct, 10) << "size " << in->size << " -> " << size << dendl;
     if (in->is_fscrypt_enabled()) {
       in->set_effective_size(size);
@@ -5629,9 +5629,9 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<M
   mds_rank_t mds = session->mds_num;
   ceph_assert(in->caps.count(mds));
 
-  uint64_t size = m->get_size();
+  uint64_t size = m->effective_size();
   ldout(cct, 10) << __func__ << " on ino " << *in
-	   << " size " << in->size << " -> " << m->get_size()
+	   << " size " << in->size << " -> " << size
 	   << dendl;
 
   int issued;
@@ -5895,7 +5895,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 
   if (new_caps & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR)) {
     in->layout = m->get_layout();
-    update_inode_file_size(in, issued, m->get_size(),
+    update_inode_file_size(in, issued, m->effective_size(),
 			   m->get_truncate_seq(), m->get_truncate_size());
   }
 
