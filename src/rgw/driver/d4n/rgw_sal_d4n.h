@@ -57,6 +57,7 @@ class D4NFilterDriver : public FilterDriver {
     std::unique_ptr<rgw::cache::CacheDriver> cacheDriver;
     std::unique_ptr<rgw::d4n::ObjectDirectory> objDir;
     std::unique_ptr<rgw::d4n::BlockDirectory> blockDir;
+    std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
     boost::asio::io_context& io_context;
 
@@ -79,10 +80,9 @@ class D4NFilterDriver : public FilterDriver {
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
     rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver.get(); }
-
-
     rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir.get(); }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir.get(); }
+    rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
     void shutdown() override;
 };
@@ -100,6 +100,10 @@ class D4NFilterUser : public FilterUser {
 
 class D4NFilterBucket : public FilterBucket {
   private:
+    struct rgw_bucket_list_entries{
+      rgw_obj_key key;
+      uint16_t flags;
+    };
     D4NFilterDriver* filter;
 
   public:
@@ -109,6 +113,8 @@ class D4NFilterBucket : public FilterBucket {
     virtual ~D4NFilterBucket() = default;
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
+    virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
+		   ListResults& results, optional_yield y) override;
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
                        optional_yield y) override;

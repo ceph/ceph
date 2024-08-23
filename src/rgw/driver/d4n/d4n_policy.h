@@ -156,6 +156,7 @@ class LFUDAPolicy : public CachePolicy {
     std::shared_ptr<connection> conn;
     BlockDirectory* blockDir;
     ObjectDirectory* objDir;
+    BucketDirectory* bucketDir;
     rgw::cache::CacheDriver* cacheDriver;
     std::optional<asio::steady_timer> rthread_timer;
     rgw::sal::Driver* driver;
@@ -187,9 +188,11 @@ class LFUDAPolicy : public CachePolicy {
     {
       blockDir = new BlockDirectory{conn};
       objDir = new ObjectDirectory{conn};
+      bucketDir = new BucketDirectory{conn};
     }
     ~LFUDAPolicy() {
       rthread_stop();
+      delete bucketDir;
       delete blockDir;
       delete objDir;
       std::lock_guard l(lfuda_cleaning_lock);
@@ -240,9 +243,9 @@ class LRUPolicy : public CachePolicy {
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual bool update_refcount_if_key_exists(const DoutPrefixProvider* dpp, const std::string& key, uint8_t op, optional_yield y) override { return false; }
     virtual void update(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version, bool dirty, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
-    virtual void update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
-			    time_t creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
-    			    const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
+    virtual void update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size,
+      time_t creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+      const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val=empty) override;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool erase_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual bool invalidate_dirty_object(const DoutPrefixProvider* dpp, const std::string& key) override { return false; }
