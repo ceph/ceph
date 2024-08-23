@@ -167,7 +167,7 @@ class HTTPPostHandler(BaseHTTPRequestHandler):
         """implementation of POST handler"""
         content_length = int(self.headers['Content-Length'])
         if content_length == 0:
-            log.info('HTTP Server received iempty event')
+            log.info('HTTP Server received empty event')
             self.send_response(200)
             self.end_headers()
             return
