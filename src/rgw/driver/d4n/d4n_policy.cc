@@ -870,7 +870,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	  if (op_ret < 0) {
 	    ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
 	  } else {
-	    // if this entry is the latest, it could have been overwritten by a newer one
+	    // if this entry is not the latest, it could have been overwritten by a newer one
 	    if (block.version == e->version) {
 	      rgw::d4n::CacheBlock null_block;
 	      null_block = block;
@@ -878,7 +878,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	      //hash entry for null block
 	      op_ret = blockDir->get(dpp, &null_block, y);
 	      if (op_ret < 0) {
-		ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << null_block.cacheObj.objName << ", ret=" << ret << dendl;
+		      ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << null_block.cacheObj.objName << ", ret=" << ret << dendl;
 	      } else {
 		if (null_block.version == e->version) {
 		  block.cacheObj.dirty = false;
@@ -931,14 +931,21 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	      ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
 	    }
 	    if (latest_block.version == e->version) {
-	      //remove object entry from ordered set
+	      //remove object entry from ordered set of versions
 	      if (c_obj->have_instance()) {
-		blockDir->del(dpp, &latest_block, y);
-		if (ret < 0) {
-		  ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue del for latest hash entry: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
-		  continue;
+          blockDir->del(dpp, &latest_block, y);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue del for latest hash entry: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
+            continue;
 		}
 	      }
+        //delete entry from ordered set of objects, as older versions would have been written to the backend store
+        ret = bucketDir->zrem(dpp, e->bucket_id, c_obj->get_name(), y, true);
+        if (ret < 0) {
+          blockDir->discard(dpp, y);
+          ldpp_dout(dpp, 0) << __func__ << "(): Failed to queue zrem for object entry: " << c_obj->get_name() << ", ret=" << ret << dendl;
+          continue;
+        }
 	    }
 	    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Removing object name: "<< c_obj->get_name() << " score: " << std::setprecision(std::numeric_limits<double>::max_digits10) << e->creationTime << " from ordered set" << dendl;
 	    rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
