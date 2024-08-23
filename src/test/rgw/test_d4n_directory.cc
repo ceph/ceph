@@ -769,6 +769,172 @@ TEST_F(BlockDirectoryFixture, MultiExecuteYield)
   io.run();
 }
 
+TEST_F(BlockDirectoryFixture, ZScan)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    boost::system::error_code ec;
+    {
+      request req;
+      response<std::string> resp;
+      req.push("ZADD", "myzset", "0", "v1");
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+      std::cout << "ZADD value: " << std::get<0>(resp).value() << std::endl;
+    }
+    {
+      request req;
+      response<std::string> resp;
+      req.push("ZADD", "myzset", "0", "v2");
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+      std::cout << "ZADD value: " << std::get<0>(resp).value() << std::endl;
+    }
+    {
+      request req;
+      req.push("ZSCAN", "myzset", 0, "MATCH", "v*", "COUNT", 2);
+
+      boost::redis::generic_response resp;
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+
+      std::vector<boost::redis::resp3::basic_node<std::__cxx11::basic_string<char> > > root_array;
+      if (resp.has_value()) {
+        root_array = resp.value();
+        std::cout << "ZADD aggregate size is: " << root_array.size() << std::endl;
+        auto size = root_array.size();
+        if (size >= 2) {
+          //Nothing of interest at index 0, index 1 has the next cursor value
+          std::string new_cursor = root_array[1].value;
+
+          //skip the first 3 values to get the actual member, score
+          for (uint64_t i = 3; i < size; i = i+2) {
+            std::string member = root_array[i].value;
+            std::cout << "ZADD member: " << member << std::endl;
+          }
+        }
+      }
+    }
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+    }
+
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
+template<typename T, typename Seq>
+struct expander;
+
+template<typename T, std::size_t... Is>
+struct expander<T, std::index_sequence<Is...>> {
+    template<typename E, std::size_t>
+    using elem = E;
+
+    using type = boost::redis::response<elem<T, Is>...>;
+};
+
+template <size_t N, class Type>
+struct my_tuple
+{
+   using type = typename expander<Type, std::make_index_sequence<N>>::type;
+};
+
+template <typename Integer, Integer ...I, typename F>
+constexpr void constexpr_for_each(std::integer_sequence<Integer, I...>, F &&func)
+{
+    (func(std::integral_constant<Integer, I>{}) , ...);
+}
+
+template <auto N, typename F>
+constexpr void constexpr_for(F &&func)
+{
+    if constexpr (N > 0)
+    {
+        constexpr_for_each(std::make_integer_sequence<decltype(N), N>{}, std::forward<F>(func));
+    }
+}
+
+template <typename T>
+void foo(T t, std::vector<std::vector<std::string>>& responses)
+{
+    constexpr_for<std::tuple_size_v<T>>([&](auto index)
+    {
+        constexpr auto i = index.value;
+        std::vector<std::string> empty_vector;
+        if (std::get<i>(t).value().has_value()) {
+          if (std::get<i>(t).value().value().empty()) {
+            responses.emplace_back(empty_vector);
+            std::cout << "Empty value for i: " << i << std::endl;
+          } else {
+            responses.emplace_back(std::get<i>(t).value().value());
+          }
+        } else {
+          std::cout << "No value for i: " << i << std::endl;
+          responses.emplace_back(empty_vector);
+        }
+    });
+}
+
+TEST_F(BlockDirectoryFixture, Pipeline)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    boost::system::error_code ec;
+    {
+      request req;
+      response<boost::redis::ignore_t> resp;
+      req.push("HSET", "testkey1", "name", "abc");
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+    }
+    {
+      request req;
+      response<boost::redis::ignore_t> resp;
+      req.push("HSET", "testkey2", "name", "def");
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+    }
+    {
+      std::vector<std::string> fields;
+      fields.push_back("name");
+      request req;
+      req.push_range("HMGET", "testkey1", fields);
+      req.push_range("HMGET", "abc", fields);
+
+      ASSERT_EQ(req.get_commands(), 2);
+      //using template parameterization in case we need to read responses for large numebr of elements (1000 elements)
+      my_tuple<5, std::optional<std::vector<std::string>>>::type resp;
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+      std::vector<std::vector<std::string>> responses;
+      foo<decltype(resp)>(resp, responses);
+      for (auto vec : responses) {
+        if (!vec.empty()) {
+          std::cout << "HMGET: " << vec[0] << std::endl;
+        }
+      }
+    }
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+    }
+
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
 

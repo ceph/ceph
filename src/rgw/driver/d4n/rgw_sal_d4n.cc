@@ -50,6 +50,7 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
   cacheDriver = new rgw::cache::SSDDriver(partition_info);
   objDir = new rgw::d4n::ObjectDirectory(conn);
   blockDir = new rgw::d4n::BlockDirectory(conn);
+  bucketDir = new rgw::d4n::BucketDirectory(conn);
   policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda");
 }
 
@@ -60,7 +61,8 @@ D4NFilterDriver::~D4NFilterDriver()
 
   delete cacheDriver;
   delete objDir; 
-  delete blockDir; 
+  delete blockDir;
+  delete bucketDir;
   delete policyDriver;
 }
 
@@ -123,6 +125,487 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
                             optional_yield y)
 {
   return next->create(dpp, params, y);
+}
+
+int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
+                          ListResults& results, optional_yield y)
+{
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " params.marker.name: " << params.marker.name << dendl;
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " params.marker.instance: " << params.marker.instance << dendl;
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " params.end_marker.key: " << params.end_marker.name << dendl;
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " max: " << max << dendl;
+
+  if (max == 0) {
+    return 0;
+  }
+
+  //Get objects from cache
+  auto bucketDir = this->filter->get_bucket_dir();
+  auto objDir = this->filter->get_obj_dir();
+  std::vector<rgw_obj_key> objects;
+  std::vector<rgw_bucket_list_entries> entries;
+
+  ListResults cache_results;
+  ListResults store_results;
+  if (g_conf()->d4n_writecache_enabled) {
+    cache_results.is_truncated = false;
+    if (!params.prefix.empty()) {
+      std::string pattern = params.prefix + "*";
+      /* zscan does not always take into account COUNT as smaller sizes of ordered set are stored as one sequential blob of memory
+        so the entire set might be returned regarless of value of COUNT.
+        also valid values of cursor are only zero during start of iteration and cursor returned by previous zscan call
+        Refer: https://valkey.io/commands/scan/ */
+      uint64_t cursor = 0, next_cursor = 0;
+      int num_objs = 0;
+      bool instance_marker_processed = false;
+      std::string last_version;
+      do {
+        std::vector<std::string> temp_objects;
+        auto ret = bucketDir->zscan(dpp, this->get_bucket_id(), cursor, pattern, (max + 1), temp_objects, next_cursor, y);
+        if (ret < 0 && ret != -ENOENT) {
+          ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " zscan failed with ret: " << ret << dendl;
+          return ret;
+        }
+        //filter elements before marker (exclude marker from output)
+        std::string last_element_processed;
+        for (auto it = temp_objects.begin(); it != temp_objects.end(); it++) {
+          last_element_processed = *it;
+          if (!params.marker.name.empty() && *it <= params.marker.name) {
+            if (*it != params.marker.name || !params.list_versions || params.marker.instance.empty()) {
+              continue;
+            }
+          } else {
+            auto pos = it->find(params.delim, params.prefix.length());
+            if (!params.delim.empty() && pos != std::string::npos) {
+              std::string delim_str = it->erase((pos + 1), (it->length() - 1));
+              ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " delim_str: " << delim_str << dendl;
+              if (cache_results.common_prefixes.find(delim_str) == cache_results.common_prefixes.end()) {
+                cache_results.common_prefixes.emplace(std::make_pair(delim_str, true));
+                store_results.common_prefixes.emplace(std::make_pair(delim_str, true));
+                num_objs++; //all objects under a common prefix are counted as one
+              }
+            } else {
+              std::vector<std::string> temp_versions;
+              //if params.list_versions is given, get the versions of the object
+              if (params.list_versions) {
+                std::string objName = *it;
+                // special handling for name starting with '_'
+                if (objName[0] == '_') {
+                  objName = "_" + *it;
+                }
+                rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
+                  .objName = objName,
+                  .bucketName = this->get_bucket_id(),
+                };
+                std::string start;
+                if (params.marker.instance.empty() || instance_marker_processed || params.marker.name.empty()) {
+                  start = "0";
+                } else {
+                  if (!instance_marker_processed) {
+                    std::string member = params.marker.instance;
+                    std::string index;
+                    auto ret = objDir->zrank(dpp, &dir_obj, member, index, y);
+                    if (ret < 0) {
+                      ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " zrank failed with: " << ret << dendl;
+                      return ret;
+                    }
+                    ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " start: " << index << dendl;
+                    start = index;
+                    instance_marker_processed = true;
+                  }
+                }
+                auto ret = objDir->zrevrange(dpp, &dir_obj, start, "-1", temp_versions, y);
+                if (ret < 0 && ret != -ENOENT) {
+                  ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " zrevrange failed with ret: " << ret << dendl;
+                  return ret;
+                }
+              } //params.list_version
+              if (!temp_versions.empty()) {
+              for (auto version_it = temp_versions.begin(); version_it != temp_versions.end(); version_it++) {
+                std::string version = *(version_it);
+                if (std::next(version_it) == temp_versions.end()) {
+                  last_version = *version_it;
+                }
+                rgw_bucket_list_entries entry;
+                entry.flags = rgw_bucket_dir_entry::FLAG_VER;
+                if (version_it == temp_versions.begin()) {
+                  entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+                } else {
+                  entry.flags |= rgw_bucket_dir_entry::FLAG_VER_MARKER;
+                }
+                rgw_obj_key key{std::move(*it), std::move(*version_it)};
+                entry.key = std::move(key);
+                entries.emplace_back(entry);
+                num_objs++;
+                if (num_objs == max) {
+                  if (std::next(version_it) != temp_versions.end()) {
+                    cache_results.is_truncated = true;
+                    cache_results.next_marker.instance = version;
+                    cache_results.next_marker.name = last_element_processed;
+                  }
+                  break; //break from the 'for' loop that processes temp_versions
+                }
+              }
+            } else {
+                rgw_bucket_list_entries entry;
+                entry.key.name = std::move(*it);
+                entries.emplace_back(entry);
+                num_objs++;
+              }
+            }
+          }
+          if (num_objs == max) {
+            if (std::next(it) != temp_objects.end()) {
+              if (cache_results.next_marker.empty()) {
+                cache_results.is_truncated = true;
+                cache_results.next_marker.name = last_element_processed;
+                if (cache_results.next_marker.instance.empty() && params.list_versions) {
+                  cache_results.next_marker.instance = last_version;
+                }
+              }
+              break; //break from the 'for' loop that processes temp_objects
+            }
+          }
+        }
+        /* break if next_cursor is 0 which means end of ordered set or if no entries are found in ordered set
+           or if num_objs after filtering is equal to max */
+        if ((next_cursor == 0) || (ret == -ENOENT) || (num_objs == max)) {
+          if ((num_objs == max) && (next_cursor != 0)) {
+            if (cache_results.next_marker.empty()) {
+              cache_results.is_truncated = true;
+              cache_results.next_marker.name = entries[(max - 1)].key.name;
+            }
+          }
+          break;
+        }
+        cursor = next_cursor;
+      } while(next_cursor != 0);
+    } else { //no prefix is specified
+      std::string start;
+      if (params.marker.name.empty()) {
+        start = "-";
+      } else {
+        if (!params.marker.instance.empty()) {
+          start = "[" + params.marker.name;
+        } else {
+          start = "(" + params.marker.name;
+        }
+      }
+      int num_objs = 0;
+      bool instance_marker_processed = false;
+      std::string last_version;
+      do {
+        std::vector<std::string> temp_objects;
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " zrange start is: " << start << dendl;
+        auto ret = bucketDir->zrange(dpp, this->get_bucket_id(), start, "+", 0, (max + 1), temp_objects, y);
+        if (ret < 0 && ret != -ENOENT) {
+          ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " zrange failed with ret: " << ret << dendl;
+          return ret;
+        }
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " params.delim: " << params.delim << dendl;
+        std::string last_element_processed;
+        for (auto it = temp_objects.begin(); it != temp_objects.end(); it++) {
+          last_element_processed = *it;
+          auto pos = it->find(params.delim);
+          if (!params.delim.empty() && pos != std::string::npos) {
+            std::string delim_str = it->erase((pos + 1), (it->length() - 1));
+            ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " delim_str: " << delim_str << dendl;
+            if (cache_results.common_prefixes.find(delim_str) == cache_results.common_prefixes.end()) {
+              cache_results.common_prefixes.emplace(std::make_pair(delim_str, true));
+              store_results.common_prefixes.emplace(std::make_pair(delim_str, true));
+              num_objs++; //all objects under a common prefix are counted as one
+              if (num_objs == max) {
+                uint64_t cursor = 0, next_cursor = 0;
+                //get all the keys matching with delim_str so as to find the last element which will be the next marker
+                do {
+                  std::vector<std::string> delim_objects;
+                  std::string delim_pattern = delim_str + "*";
+                  auto ret = bucketDir->zscan(dpp, this->get_bucket_id(), cursor, delim_pattern, 10, delim_objects, next_cursor, y);
+                  if (ret < 0 && ret != -ENOENT) {
+                    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << " zscan failed with ret: " << ret << dendl;
+                    return ret;
+                  }
+                  if ((next_cursor == 0) || (ret == -ENOENT)) {
+                    if (!delim_objects.empty()) {
+                      cache_results.next_marker.name = delim_objects.back();
+                      std::string start = "(" + cache_results.next_marker.name;
+                      std::vector<std::string> one_object;
+                      auto ret = bucketDir->zrange(dpp, this->get_bucket_id(), start, "+", 0, 1, one_object, y);
+                      if (ret < 0 && ret != -ENOENT) {
+                        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << " zrange failed with ret: " << ret << dendl;
+                        return ret;
+                      }
+                      if (one_object.size() >= 1) {
+                        cache_results.is_truncated = true;
+                      } else {
+                        cache_results.is_truncated = false;
+                      }
+                    }
+                    break;
+                  }
+                  cursor = next_cursor;
+                  next_cursor = 0;
+                } while(next_cursor != 0);
+              } //end-if num_objs == max
+            } //end-if cache_results.common_prefixes
+          } else {
+            std::vector<std::string> temp_versions;
+            //if params.list_versions is given, get the versions of the object
+            if (params.list_versions) {
+              std::string objName = *it;
+              // special handling for name starting with '_'
+              if (objName[0] == '_') {
+                objName = "_" + *it;
+              }
+              rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
+                .objName = objName,
+                .bucketName = this->get_bucket_id(),
+              };
+              std::string start;
+              if (params.marker.instance.empty() || instance_marker_processed || params.marker.name.empty()) {
+                start = "0";
+              } else {
+                if (!instance_marker_processed) {
+                  std::string member = params.marker.instance;
+                  std::string index;
+                  auto ret = objDir->zrank(dpp, &dir_obj, member, index, y);
+                  if (ret < 0) {
+                    ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " zrank failed with: " << ret << dendl;
+                    return ret;
+                  }
+                  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " start: " << index << dendl;
+                  start = index;
+                  instance_marker_processed = true;
+                }
+              }
+              auto ret = objDir->zrevrange(dpp, &dir_obj, start, "-1", temp_versions, y);
+              if (ret < 0 && ret != -ENOENT) {
+                ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " zrevrange failed with ret: " << ret << dendl;
+                return ret;
+              }
+            } //params.list_version
+            if (!temp_versions.empty()) {
+              for (auto version_it = temp_versions.begin(); version_it != temp_versions.end(); version_it++) {
+                std::string version = *(version_it);
+                if (std::next(version_it) == temp_versions.end()) {
+                  last_version = *version_it;
+                }
+                rgw_bucket_list_entries entry;
+                entry.flags = rgw_bucket_dir_entry::FLAG_VER;
+                if (version_it == temp_versions.begin()) {
+                  entry.flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
+                } else {
+                  entry.flags |= rgw_bucket_dir_entry::FLAG_VER_MARKER;
+                }
+                rgw_obj_key key{std::move(*it), std::move(*version_it)};
+                entry.key = std::move(key);
+                entries.emplace_back(entry);
+                num_objs++;
+                if (num_objs == max) {
+                  if (std::next(version_it) != temp_versions.end()) {
+                    cache_results.is_truncated = true;
+                    cache_results.next_marker.instance = version;
+                    cache_results.next_marker.name = *it;
+                  }
+                  break; //break from the 'for' loop that processes temp_versions
+                }
+              }
+            } else {
+              rgw_bucket_list_entries entry;
+              entry.key.name = std::move(*it);
+              entries.emplace_back(entry);
+              num_objs++;
+            }
+          }
+          if (num_objs == max) {
+            if (std::next(it) != temp_objects.end()) {
+              //could have been set due to delimiter processing
+              if (cache_results.next_marker.name.empty()) {
+                cache_results.is_truncated = true;
+                cache_results.next_marker.name = last_element_processed;
+                if (cache_results.next_marker.instance.empty() && params.list_versions) {
+                  cache_results.next_marker.instance = last_version;
+                }
+              }
+            }
+            break; //break from the 'for' loop that processes temp_objects
+          }
+        } //for - processes temp_objects
+        //break from while loop if max+1 elements have been found or there are no more elements in the ordered set
+        if ((num_objs == max) || (ret == -ENOENT) || temp_objects.empty()) {
+          ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " Breaking out! " << dendl;
+          ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " num_objs " << num_objs << dendl;
+          ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " ret " << ret << dendl;
+          break;
+        }
+        //adjust start to begin from the last element of objects, and exclude that element
+        start = "(" + last_element_processed;
+      } while(num_objs <= max);
+    } //end - else
+
+    rgw::d4n::BlockDirectory* blockDir = this->filter->get_block_dir();
+    auto remainder_size = entries.size();
+    size_t j = 0, start_j = 0;
+    while (remainder_size > 0) {
+      std::vector<rgw::d4n::CacheBlock> blocks(100);
+      start_j = j;
+      size_t batch_size = std::min(static_cast<size_t>(100), remainder_size);
+      for (size_t i = 0; i < batch_size; i++) {
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " objects[j]: " << entries[j].key.name << dendl;
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " remainder_size: " << remainder_size << dendl;
+        if (entries[j].key.instance == "null") {
+          blocks[i].cacheObj.objName = "_:null_" + entries[j].key.name;
+        } else {
+          blocks[i].cacheObj.objName = entries[j].key.get_oid();
+        }
+        blocks[i].cacheObj.bucketName = this->get_bucket_id();
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " blocks[i].cacheObj.objName: " << blocks[i].cacheObj.objName << dendl;
+        j++;
+      }
+      auto ret = blockDir->get(dpp, blocks, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " blockDir->get() returned error: " << ret << dendl;
+        return ret;
+      }
+
+      for (auto block : blocks) {
+        if (block.cacheObj.objName.empty()) {
+          start_j++;
+          continue;
+        }
+        rgw_bucket_dir_entry entry;
+        entry.key.name = entries[start_j].key.name;
+        // special handling for name starting with '_'
+        if (entry.key.name[0] == '_') {
+          entry.key.name = "_" + entries[start_j].key.name;
+        }
+        entry.key.instance = entries[start_j].key.instance;
+        entry.flags = entries[start_j].flags;
+        if (block.deleteMarker) {
+          entry.flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
+        }
+        entry.meta.storage_class = "CACHE";
+        entry.meta.size = block.cacheObj.size;
+        entry.meta.accounted_size = block.cacheObj.size;
+        struct std::tm tm;
+        std::istringstream ss(block.cacheObj.creationTime);
+        ss >> std::get_time(&tm, "%H:%M:%S");
+        std::time_t creationTime = mktime(&tm);
+        entry.meta.mtime = ceph::real_clock::from_time_t(creationTime);
+        entry.meta.etag = block.cacheObj.etag;
+        entry.meta.owner = block.cacheObj.user_id;
+        entry.meta.owner_display_name = block.cacheObj.display_name;
+        cache_results.objs.emplace_back(entry);
+        start_j++;
+      }
+
+      if (remainder_size <= 100) {
+        remainder_size = 0;
+      } else {
+        remainder_size = remainder_size - 100;
+      }
+    }
+  } //d4n_write_cache_enabled = true
+
+  //Get objects from backend store
+  auto ret = next->list(dpp, params, max, store_results, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " next->list returned: " << ret << dendl;
+    return ret;
+  }
+
+  //return store results if cache results is empty
+  if (cache_results.objs.empty() && !store_results.objs.empty()) {
+    results = std::move(store_results);
+    return 0;
+  }
+
+  //return cache results if store results is empty
+  if (store_results.objs.empty() && !cache_results.objs.empty()) {
+    results = std::move(cache_results);
+    return 0;
+  }
+
+  //if both lists are non-empty then merge them, as they are already sorted
+  if (!cache_results.objs.empty() && !store_results.objs.empty()) {
+    std::vector<rgw_bucket_dir_entry> objs;
+    objs.reserve(max);
+
+    size_t i = 0, j = 0;
+    int elementsAdded = 0;
+
+    // Compare elements from both vectors and merge in sorted order
+    while (elementsAdded < max && i < cache_results.objs.size() && j < store_results.objs.size()) {
+      std::string key_name_in_cache = cache_results.objs[i].key.name;
+      std::string key_name_in_store = store_results.objs[j].key.name;
+      ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " key_name_in_cache: " << key_name_in_cache << dendl;
+      ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " key_name_in_store: " << key_name_in_store << dendl;
+      std::string key_instance_in_cache = cache_results.objs[i].key.instance;
+      std::string key_instance_in_store = store_results.objs[j].key.instance;
+      if (key_name_in_cache == key_name_in_store) {
+        objs.push_back(cache_results.objs[i]);
+        i++;
+        //if list versions is not given or if instance values are different then skip the store result
+        if (!params.list_versions ||  key_instance_in_cache == key_instance_in_store) {
+          j++;
+        }
+      }
+      else if (key_name_in_cache < key_name_in_store) {
+        objs.push_back(cache_results.objs[i]);
+        i++;
+      } else {
+        objs.push_back(store_results.objs[j]);
+        j++;
+      }
+      elementsAdded++;
+    }
+
+    while (elementsAdded < max && i < cache_results.objs.size()) {
+      objs.push_back(cache_results.objs[i]);
+      i++;
+      elementsAdded++;
+    }
+
+    while (elementsAdded < max && j < store_results.objs.size()) {
+      objs.push_back(store_results.objs[j]);
+      j++;
+      elementsAdded++;
+    }
+
+    //there are elements in cache_results
+    if (i < (cache_results.objs.size() - 1)) {
+      results.is_truncated = true;
+      results.next_marker.name = cache_results.objs[(i - 1)].key.to_string();
+    }
+
+    //there are elements in store_results
+    if (j < (store_results.objs.size() - 1)) {
+      results.is_truncated = true;
+      results.next_marker.name = store_results.objs[(j - 1)].key.to_string();
+    }
+    results.objs = std::move(objs);
+  }
+
+  if (!store_results.common_prefixes.empty()) {
+    results.common_prefixes = std::move(store_results.common_prefixes);
+    //results next_marker is not set at this point which means result.objs is empty
+    if (results.next_marker.empty()) {
+      results.is_truncated = store_results.is_truncated | cache_results.is_truncated;
+      if (store_results.is_truncated && cache_results.is_truncated) {
+        if (cache_results.next_marker <= store_results.next_marker) {
+          results.next_marker = std::move(cache_results.next_marker);
+        } else {
+          results.next_marker = std::move(store_results.next_marker);
+        }
+      } else if (store_results.is_truncated && !cache_results.is_truncated) {
+        results.next_marker = std::move(store_results.next_marker);
+      } else if (!store_results.is_truncated && cache_results.is_truncated) {
+        results.next_marker = std::move(cache_results.next_marker);
+      }
+    }
+  }
+
+  return 0;
 }
 
 std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
@@ -610,12 +1093,41 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
 for "null" versions, when bucket is non-versioned.
 3. The "null" hash entry is overwritten when we have a "null" instance when bucket versioning is suspended.
 4. A versioned hash entry for every version for a version enabled bucket - this helps in get/delete requests with version-id specified
-5. Redis ordered set to maintain the order of dirty objects added for a version enabled bucket. Even when the bucket is non-versioned, this set maintains a "null" entry */
+5. Redis ordered set to maintain the order of dirty objects added for a version enabled bucket. Even when the bucket is non-versioned, this set maintains a "null" entry
+6. Another ordered set to maintain a lexicographically sorted order of objects for a bucket - used for bucket listing */
 int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::vector<std::string>* exec_responses, optional_yield y, bool is_latest_version, bool dirty)
 {
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " bucket name: " << this->get_bucket()->get_name() << dendl;
   rgw::d4n::CacheBlock block; 
   rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
+  auto attrs = this->get_attrs();
+  bufferlist bl_etag, bl_acl;
+  auto etag_it = attrs.find(RGW_ATTR_ETAG);
+  if (etag_it != attrs.end()) {
+    bl_etag = etag_it->second;
+  }
+  auto etag = bl_etag.to_str();
+  ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): etag: " << etag << dendl;
+
+  auto acl_it = attrs.find(RGW_ATTR_ACL);
+  RGWAccessControlPolicy policy;
+  std::string user_id, display_name;
+  if (acl_it != attrs.end()) {
+    auto bliter = acl_it->second.cbegin();
+    try {
+      policy.decode(bliter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): ERROR: could not decode policy, caught buffer::error" << dendl;
+      return -EIO;
+    }
+    ACLOwner owner = policy.get_owner();
+    rgw_user user = std::get<rgw_user>(owner.id);
+    ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): INFO: user_d: " << user.to_str() << dendl;
+    ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): INFO: display_name: " << owner.display_name << dendl;
+    user_id = user.to_str();
+    display_name = owner.display_name;
+  }
+
   if (is_latest_version) {
     std::string objName = this->get_name();
     // special handling for name starting with '_'
@@ -629,6 +1141,10 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       .creationTime = std::to_string(ceph::real_clock::to_time_t(this->get_mtime())),
       .dirty = dirty,
       .hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address },
+      .etag = etag,
+      .size = this->get_accounted_size(),
+      .user_id = user_id,
+      .display_name = display_name,
       };
 
     block.cacheObj = object;
@@ -671,6 +1187,14 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Score of object name: "<< this->get_name() << " version: " << object_version << " is: "  << std::setprecision(std::numeric_limits<double>::max_digits10) << score << ret << dendl;
       rgw::d4n::ObjectDirectory* objDir = this->driver->get_obj_dir();
       ret = objDir->zadd(dpp, &object, score, object_version, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add version to ordered set with error: " << ret << dendl;
+        blockDir->discard(dpp, y);
+        return ret;
+      }
+      //add an entry to ordered set containing objects for bucket listing, set score to 0 always to lexicographically order the objects
+      rgw::d4n::BucketDirectory* bucketDir = this->driver->get_bucket_dir();
+      ret = bucketDir->zadd(dpp, this->get_bucket()->get_bucket_id(), 0, this->get_name(), y, true);
       if (ret < 0) {
         ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to add object to ordered set with error: " << ret << dendl;
         return ret;
@@ -740,6 +1264,10 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
     .bucketName = this->get_bucket()->get_bucket_id(),
     .creationTime = std::to_string(ceph::real_clock::to_time_t(this->get_mtime())),
     .dirty = dirty,
+    .etag = etag,
+    .size = this->get_accounted_size(),
+    .user_id = user_id,
+    .display_name = display_name,
     };
 
     version_object.hostsList.insert({ dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address });
@@ -1955,6 +2483,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     bool objDirty = block.cacheObj.dirty;
     auto blockDir = source->driver->get_block_dir();
     auto objDir = source->driver->get_obj_dir();
+    auto bucketDir = source->driver->get_bucket_dir();
     std::string version = source->get_object_version();
     std::string objName = source->get_name();
     // special handling for name starting with '_'
@@ -2040,7 +2569,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
                 if (latest_block.version == block.version) {
                   std::vector<std::string> members;
                   //get the second latest version
-                  ret = objDir->zrevrange(dpp, &dir_obj, 0, 1, members, y);
+                  ret = objDir->zrevrange(dpp, &dir_obj, std::to_string(0), std::to_string(1), members, y);
                   if (ret < 0) {
                     ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get the second latest version for: " << dir_obj.objName << ", ret=" << ret << dendl;
                     return ret;
@@ -2070,6 +2599,12 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
                       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete latest entry in block directory, when it is the same as version requested, for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
                       return ret;
                     }
+                    //delete entry from ordered set of objects
+                    ret = bucketDir->zrem(dpp, source->get_bucket()->get_bucket_id(), source->get_name(), y, true);
+                    if (ret < 0) {
+                      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue zrem request in bucket directory for: " << source->get_name() << ", ret=" << ret << dendl;
+                      return ret;
+                    }
                   }
                 } //end-if latest_block.version == block.version
                 //delete versioned entry (handles delete markers also)
@@ -2077,7 +2612,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
                   ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
                   return ret;
                 }
-                //delete entry from ordered set
+                //delete entry from ordered set of versions
                 std::string version = source->get_instance();
                 ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): Version to be deleted is: " << version << dendl;
                 ret = objDir->zrem(dpp, &dir_obj, version, y, true);
@@ -2124,15 +2659,23 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
         ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
         return ret;
       }
-      //dirty objects - delete from ordered set
+      //dirty objects - delete from ordered set of versions and objects
       if (objDirty) {
         rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
           .objName = source->get_name(),
           .bucketName = source->get_bucket()->get_bucket_id(),
         };
+        //delete entry from ordered set of object versions
         ret = objDir->zrem(dpp, &dir_obj, "null", y, true);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue zrem request in object directory for: " << source->get_name() << ", ret=" << ret << dendl;
+          return ret;
+        }
+        //delete entry from ordered set of objects
+        ret = bucketDir->zrem(dpp, source->get_bucket()->get_bucket_id(), source->get_name(), y, true);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue zrem request in bucket directory for: " << source->get_name() << ", ret=" << ret << dendl;
+          blockDir->discard(dpp, y);
           return ret;
         }
       }

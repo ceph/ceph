@@ -156,6 +156,7 @@ class LFUDAPolicy : public CachePolicy {
     std::shared_ptr<connection> conn;
     BlockDirectory* blockDir;
     ObjectDirectory* objDir;
+    BucketDirectory* bucketDir;
     rgw::cache::CacheDriver* cacheDriver;
     std::optional<asio::steady_timer> rthread_timer;
     rgw::sal::Driver* driver;
@@ -187,9 +188,11 @@ class LFUDAPolicy : public CachePolicy {
     {
       blockDir = new BlockDirectory{conn};
       objDir = new ObjectDirectory{conn};
+      bucketDir = new BucketDirectory{conn};
     }
     ~LFUDAPolicy() {
       rthread_stop();
+      delete bucketDir;
       delete blockDir;
       delete objDir;
       std::lock_guard l(lfuda_cleaning_lock);
