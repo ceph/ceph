@@ -111,7 +111,7 @@ do
   snap_name="snap${i}"
   create_snap ${CLUSTER2} ${POOL} ${image} ${snap_name}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   wait_for_snap_present ${CLUSTER1} ${POOL} ${image} ${snap_name}
 
   if [ -n "${clean_snap_name}" ]; then
@@ -124,7 +124,7 @@ do
 done
 
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
 wait_for_snap_present ${CLUSTER1} ${POOL} ${image} ${clean_snap_name}
 
 for i in `seq 1 10`
@@ -173,7 +173,7 @@ do
   image="image_${i}"
   create_snap ${CLUSTER2} ${POOL} ${image} ${snap_name}
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
   wait_for_snap_present ${CLUSTER1} ${POOL} ${image} ${snap_name}
   compare_image_snaps ${POOL} ${image} ${snap_name}
 done

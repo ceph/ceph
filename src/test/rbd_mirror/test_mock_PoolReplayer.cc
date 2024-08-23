@@ -129,7 +129,8 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
   static std::map<std::string, NamespaceReplayer *> s_instances;
 
   static NamespaceReplayer *create(
-      const std::string &name,
+      const std::string &local_name,
+      const std::string &remote_name,
       librados::IoCtx &local_ioctx,
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
@@ -141,14 +142,15 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
       ServiceDaemon<librbd::MockTestImageCtx> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache* pool_meta_cache) {
-    ceph_assert(s_instances.count(name));
-    auto namespace_replayer = s_instances[name];
-    s_instances.erase(name);
+    ceph_assert(s_instances.count(local_name));
+    auto namespace_replayer = s_instances[local_name];
+    s_instances.erase(local_name);
     return namespace_replayer;
   }
 
   MOCK_METHOD0(is_blocklisted, bool());
   MOCK_METHOD0(get_instance_id, std::string());
+  MOCK_METHOD0(get_remote_namespace, std::string());
 
   MOCK_METHOD1(init, void(Context*));
   MOCK_METHOD1(shut_down, void(Context*));
@@ -363,6 +365,18 @@ public:
           Return(0)));
   }
 
+  void expect_mirror_remote_namespace_get(
+      librados::MockTestMemIoCtxImpl *io_ctx_impl,
+      const std::string &remote_namespace, int r) {
+    EXPECT_CALL(*io_ctx_impl,
+                exec(RBD_MIRRORING, _, StrEq("rbd"),
+                     StrEq("mirror_remote_namespace_get"), _, _, _, _))
+      .WillRepeatedly(DoAll(WithArg<5>(Invoke([remote_namespace](bufferlist *bl) {
+                encode(remote_namespace, *bl);
+              })),
+          Return(r)));
+  }
+
   void expect_clone(librados::MockTestMemIoCtxImpl* mock_io_ctx) {
     EXPECT_CALL(*mock_io_ctx, clone())
       .WillRepeatedly(Invoke([mock_io_ctx]() {
@@ -508,6 +522,13 @@ public:
   void expect_namespace_replayer_handle_instances_removed(
       MockNamespaceReplayer &mock_namespace_replayer) {
     EXPECT_CALL(mock_namespace_replayer, handle_instances_removed(_));
+  }
+
+  void expect_namespace_replayer_get_remote_namespace(
+      MockNamespaceReplayer &mock_namespace_replayer,
+      const std::string& remote_namespace) {
+    EXPECT_CALL(mock_namespace_replayer, get_remote_namespace())
+      .WillRepeatedly(Return(remote_namespace));
   }
 
   void expect_service_daemon_add_namespace(
@@ -714,10 +735,14 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   auto mock_ns1_namespace_replayer = new MockNamespaceReplayer("ns1");
   expect_namespace_replayer_is_blocklisted(*mock_ns1_namespace_replayer,
                                            false);
+  expect_namespace_replayer_get_remote_namespace(*mock_ns1_namespace_replayer,
+                                                 "ns1");
 
   auto mock_ns2_namespace_replayer = new MockNamespaceReplayer("ns2");
   expect_namespace_replayer_is_blocklisted(*mock_ns2_namespace_replayer,
                                            false);
+  expect_namespace_replayer_get_remote_namespace(*mock_ns2_namespace_replayer,
+                                                 "ns2");
 
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
@@ -737,6 +762,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
 
   expect_clone(mock_local_io_ctx);
   expect_mirror_mode_get(mock_local_io_ctx);
+  expect_mirror_remote_namespace_get(mock_local_io_ctx, "", -ENOENT);
 
   InSequence seq;
 
@@ -856,6 +882,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
 
   expect_clone(mock_local_io_ctx);
   expect_mirror_mode_get(mock_local_io_ctx);
+  expect_mirror_remote_namespace_get(mock_local_io_ctx, "", -ENOENT);
 
   InSequence seq;
 

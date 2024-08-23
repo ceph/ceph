@@ -43,7 +43,8 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class NamespaceReplayer {
 public:
   static NamespaceReplayer *create(
-      const std::string &name,
+      const std::string &local_name,
+      const std::string &remote_name,
       librados::IoCtx &local_ioctx,
       librados::IoCtx &remote_ioctx,
       const std::string &local_mirror_uuid,
@@ -55,7 +56,7 @@ public:
       ServiceDaemon<ImageCtxT> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache* pool_meta_cache) {
-    return new NamespaceReplayer(name, local_ioctx, remote_ioctx,
+    return new NamespaceReplayer(local_name, remote_name, local_ioctx, remote_ioctx,
                                  local_mirror_uuid, local_mirror_peer_uuid,
                                  remote_pool_meta, threads,
                                  image_sync_throttler, image_deletion_throttler,
@@ -63,7 +64,8 @@ public:
                                  pool_meta_cache);
   }
 
-  NamespaceReplayer(const std::string &name,
+  NamespaceReplayer(const std::string &local_name,
+                    const std::string &remote_name,
                     librados::IoCtx &local_ioctx,
                     librados::IoCtx &remote_ioctx,
                     const std::string &local_mirror_uuid,
@@ -94,6 +96,9 @@ public:
   void stop();
   void restart();
   void flush();
+
+  std::string get_local_namespace();
+  std::string get_remote_namespace();
 
 private:
   /**
@@ -264,7 +269,8 @@ private:
                            const std::string &instance_id,
                            Context* on_finish);
 
-  std::string m_namespace_name;
+  std::string m_local_namespace_name;
+  std::string m_remote_namespace_name;
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
   std::string m_local_mirror_uuid;

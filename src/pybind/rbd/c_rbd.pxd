@@ -394,6 +394,12 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
     int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
 
+    int rbd_mirror_remote_namespace_get(rados_ioctx_t io_ctx,
+                                        char *remote_namespace,
+                                        size_t *max_len)
+    int rbd_mirror_remote_namespace_set(rados_ioctx_t io_ctx,
+                                        const char *remote_namespace)
+
     int rbd_mirror_uuid_get(rados_ioctx_t io_ctx, char *mirror_uuid,
                             size_t *max_len)
 

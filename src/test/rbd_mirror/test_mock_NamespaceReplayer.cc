@@ -409,7 +409,7 @@ TEST_F(TestMockNamespaceReplayer, Init_LocalMirrorStatusUpdaterError) {
   expect_mirror_status_updater_init(*mock_local_mirror_status_updater, -EINVAL);
 
   MockNamespaceReplayer namespace_replayer(
-      {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
+      {}, {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
       nullptr, nullptr, nullptr, nullptr, nullptr);
 
@@ -432,7 +432,7 @@ TEST_F(TestMockNamespaceReplayer, Init_RemoteMirrorStatusUpdaterError) {
   expect_mirror_status_updater_shut_down(*mock_local_mirror_status_updater);
 
   MockNamespaceReplayer namespace_replayer(
-      {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
+      {}, {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
       nullptr, nullptr, nullptr, nullptr, nullptr);
 
@@ -458,7 +458,7 @@ TEST_F(TestMockNamespaceReplayer, Init_InstanceReplayerError) {
   expect_mirror_status_updater_shut_down(*mock_local_mirror_status_updater);
 
   MockNamespaceReplayer namespace_replayer(
-      {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
+      {}, {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
       nullptr, nullptr, nullptr, nullptr, nullptr);
 
@@ -489,7 +489,7 @@ TEST_F(TestMockNamespaceReplayer, Init_InstanceWatcherError) {
   expect_mirror_status_updater_shut_down(*mock_local_mirror_status_updater);
 
   MockNamespaceReplayer namespace_replayer(
-      {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
+      {}, {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
       nullptr, nullptr, nullptr, nullptr, nullptr);
 
@@ -517,7 +517,7 @@ TEST_F(TestMockNamespaceReplayer, Init) {
 
   MockServiceDaemon mock_service_daemon;
   MockNamespaceReplayer namespace_replayer(
-      {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
+      {}, {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
       nullptr, nullptr, &mock_service_daemon, nullptr, nullptr);
 
@@ -557,7 +557,7 @@ TEST_F(TestMockNamespaceReplayer, AcquireLeader) {
 
   MockServiceDaemon mock_service_daemon;
   MockNamespaceReplayer namespace_replayer(
-      {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
+      {}, {}, m_local_io_ctx, m_remote_io_ctx, "local mirror uuid",
       "local peer uuid", {"remote mirror uuid", ""}, m_mock_threads,
       nullptr, nullptr, &mock_service_daemon, nullptr, nullptr);
 

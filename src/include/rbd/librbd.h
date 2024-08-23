@@ -577,6 +577,16 @@ CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t *mirror_mode);
 CEPH_RBD_API int rbd_mirror_mode_set(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t mirror_mode);
+CEPH_RBD_API int rbd_mirror_remote_namespace_get(rados_ioctx_t io_ctx,
+                                                 char *remote_namespace,
+				                 size_t *max_len);
+/**
+ * The value can be set only if mirroring on io_ctx is disabled. The previously
+ * set value will be automatically reset to io_ctx's namespace when mirroring on
+ * io_ctx is disabled.
+ */
+CEPH_RBD_API int rbd_mirror_remote_namespace_set(rados_ioctx_t io_ctx,
+                                                 const char *remote_namespace);
 
 CEPH_RBD_API int rbd_mirror_uuid_get(rados_ioctx_t io_ctx,
                                      char *uuid, size_t *max_len);
