@@ -325,7 +325,8 @@ BtreeLBAManager::_alloc_extents(
       total_len += info.len;
     }
   } else {
-    total_len = alloc_infos.back().key + alloc_infos.back().len - hint;
+    auto end = alloc_infos.back().key + alloc_infos.back().len;
+    total_len = end.get_byte_distance<extent_len_t>(hint);
   }
 
   struct state_t {

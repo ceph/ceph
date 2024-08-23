@@ -117,7 +117,7 @@ seastar::future<bufferlist> TMDriver::read(
         for (auto &i: ext_list) {
           if (cur != i.first) {
             assert(cur < i.first);
-            blret.append_zero(i.first - cur);
+            blret.append_zero(i.first.template get_byte_distance<size_t>(cur));
             cur = i.first;
           }
           blret.append(i.second->get_bptr());
