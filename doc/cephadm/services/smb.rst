@@ -105,20 +105,42 @@ custom_dns
     Active Directory even if the Ceph host nodes are not tied into the Active
     Directory DNS domain(s).
 
-include_ceph_users:
+include_ceph_users
     A list of cephx user (aka entity) names that the Samba Containers may use.
     The cephx keys for each user in the list will automatically be added to
     the keyring in the container.
 
-cluster_meta_uri:
+cluster_meta_uri
     A string containing a URI that identifies where the cluster structure
     metadata will be stored. Required if ``clustered`` feature is set. Must be
     a RADOS pseudo-URI.
 
-cluster_lock_uri:
+cluster_lock_uri
     A string containing a URI that identifies where Samba/CTDB will store a
     cluster lock. Required if ``clustered`` feature is set. Must be a RADOS
     pseudo-URI.
+
+cluster_public_addrs
+    List of objects; optional. Supported only when using Samba's clustering.
+    Assign "virtual" IP addresses that will be managed by the clustering
+    subsystem and may automatically move between nodes running Samba
+    containers.
+    Fields:
+
+    address
+        Required string. An IP address with a required prefix length (example:
+        ``192.168.4.51/24``). This address will be assigned to one of the
+        host's network devices and managed automatically.
+    destination
+        Optional. String or list of strings. A ``destination`` defines where
+        the system will assign the managed IPs. Each string value must be a
+        network address (example ``192.168.4.0/24``). One or more destinations
+        may be supplied. The typical case is to use exactly one destination and
+        so the value may be supplied as a string, rather than a list with a
+        single item. Each destination network will be mapped to a device on a
+        host. Run ``cephadm list-networks`` for an example of these mappings.
+        If destination is not supplied the network is automatically determined
+        using the address value supplied and taken as the destination.
 
 
 .. note::
