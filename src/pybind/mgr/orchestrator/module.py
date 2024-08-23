@@ -1337,7 +1337,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         usage = """
 Usage:
   ceph orch daemon add osd host:device1,device2,...
-  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2,...
+  ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2[,encrypted=true|True|1]
+  ceph orch daemon add osd host:data_devices=device1[,encrypted=false|False|0]
 """
         if not svc_arg:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
@@ -1369,6 +1370,16 @@ Usage:
             for dev_type in ['data_devices', 'db_devices', 'wal_devices', 'journal_devices']:
                 drive_group_spec[dev_type] = DeviceSelection(
                     paths=drive_group_spec[dev_type]) if drive_group_spec.get(dev_type) else None
+
+            valid_true_vals = {'true', '1'}
+            valid_false_vals = {'false', '0'}
+            for drive_group_spec_bool_arg in ['encrypted', 'unmanaged', 'preview_only']:
+                drive_group_spec_value: Optional[str] = drive_group_spec.get(drive_group_spec_bool_arg)
+                if isinstance(drive_group_spec_value, str):
+                    value_lower = drive_group_spec_value.lower()
+                    if value_lower not in valid_true_vals and value_lower not in valid_false_vals:
+                        raise OrchestratorValidationError(usage)
+                    drive_group_spec[drive_group_spec_bool_arg] = value_lower in valid_true_vals
 
             drive_group = DriveGroupSpec(
                 placement=PlacementSpec(host_pattern=host_name),
