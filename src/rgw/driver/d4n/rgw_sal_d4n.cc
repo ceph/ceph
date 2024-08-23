@@ -138,6 +138,41 @@ std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
   return std::make_unique<D4NFilterMultipartUpload>(std::move(nmu), this, this->filter);
 }
 
+int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
+		       ListResults& results, optional_yield y)
+{
+  std::string bucket_name = next->get_name();
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " Bucket Name: " << bucket_name << dendl;  
+  rgw::d4n::ObjectDirectory* obj_dir = filter->get_obj_dir();
+  std::vector <rgw::d4n::CacheObj*> dir_objs;
+  obj_dir->get_bucket_keys(dpp, bucket_name, &dir_objs, y);
+
+  int ret = next->list(dpp, params, max, results, y);
+
+  if (ret >= 0) {
+    for (const auto& obj : dir_objs) {
+      rgw_bucket_dir_entry new_entry;
+      new_entry.key.name = obj->objName;
+      new_entry.exists = true;
+
+      new_entry.meta.mtime = ceph::real_clock::from_time_t((time_t) strtol(obj->creationTime.c_str(), NULL, 10));
+      new_entry.meta.accounted_size = obj->size;
+
+      results.objs.erase(
+            std::remove_if(results.objs.begin(), results.objs.end(),
+                           [&new_entry](const rgw_bucket_dir_entry& entry) {
+                               return entry.key.name == new_entry.key.name;
+                           }),
+            results.objs.end());
+
+      results.objs.push_back(new_entry);
+
+    }
+  }
+
+  return ret;
+}
+
 int D4NFilterObject::copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
                               req_info* info,

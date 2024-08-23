@@ -202,6 +202,78 @@ int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, option
   return 0;
 }
 
+int ObjectDirectory::get_bucket_keys(const DoutPrefixProvider* dpp, std::string bucket_name, std::vector <CacheObj*>* objects, optional_yield y) 
+{
+  response< std::vector<std::string> > resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("KEYS", "*");
+    redis_exec(conn, ec, req, resp, y);
+    const auto& keys = std::get<0>(resp).value();
+    for (const auto& key : keys) {
+      std::string is_dirty = key.substr(0, key.find("_"));
+      ldpp_dout(dpp, 20) << "SINA: " << __func__ << "(): Dirty: " << is_dirty << dendl;
+      if (is_dirty == "D") {
+        size_t first_underscore = key.find("_");
+        size_t second_underscore = key.find("_", first_underscore + 1);
+        std::string key_bucket_name = key.substr(first_underscore + 1, second_underscore - first_underscore - 1);
+        ldpp_dout(dpp, 20) << "SINA: " << __func__ << "(): Bucket Name: " << key_bucket_name << dendl;
+        if (key_bucket_name == bucket_name) {
+          //std::string object_name = key.substr(key.find("_") + 1);
+          CacheObj* object = new CacheObj();
+          
+          std::vector<std::string> fields;
+          fields.push_back("objName");
+          fields.push_back("bucketName");
+          fields.push_back("creationTime");
+          fields.push_back("dirty");
+          fields.push_back("objHosts");
+          fields.push_back("version");
+          fields.push_back("size");
+          fields.push_back("in_lsvd");
+          fields.push_back(RGW_ATTR_ACL);
+          try {
+            boost::system::error_code ec;
+            request req;
+            req.push_range("HMGET", key, fields);
+            response< std::vector<std::string> > resp;
+            redis_exec(conn, ec, req, resp, y);
+            if (std::get<0>(resp).value().empty()) {
+        return -ENOENT;
+            } else if (ec) {
+        return -ec.value();
+            }
+            object->objName = std::get<0>(resp).value()[0];
+            object->bucketName = std::get<0>(resp).value()[1];
+            object->creationTime = std::get<0>(resp).value()[2];
+            object->dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[3]);
+            {
+              std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[4]));
+        while (!ss.eof()) {
+                std::string host;
+          std::getline(ss, host, '_');
+          object->hostsList.push_back(host);
+        }
+            }
+            object->version = std::get<0>(resp).value()[5];
+            object->size = boost::lexical_cast<uint64_t>(std::get<0>(resp).value()[6]);
+            object->in_lsvd = boost::lexical_cast<bool>(std::get<0>(resp).value()[7]);
+            object->attrs[RGW_ATTR_ACL] = buffer::list::static_from_string(std::get<0>(resp).value()[8]);
+          } catch (std::exception &e) {
+            return -EINVAL;
+          }
+          objects->push_back(object); // Push the key into objects if it matches the bucket_name
+        }
+    }
+    }
+    if ((bool)ec)
+      return false;
+  } catch (std::exception &e) {}
+
+  return 0;
+}
+
 /* Note: This method is not compatible for use on Ubuntu systems. */
 int ObjectDirectory::copy(const DoutPrefixProvider* dpp, CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) 
 {

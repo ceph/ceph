@@ -101,6 +101,8 @@ class D4NFilterBucket : public FilterBucket {
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
+    int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
+		       ListResults& results, optional_yield y);
 };
 
 class D4NFilterObject : public FilterObject {
