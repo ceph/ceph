@@ -320,6 +320,12 @@
 	Node
                 See :term:`Ceph Node`.
 
+	Object Storage
+                Object storage is one of three kinds of storage relevant to
+                Ceph. The other two kinds of storage relevant to Ceph are file
+                storage and block storage. Object storage is the category of
+                storage most fundamental to Ceph.
+
 	Object Storage Device
                 See :term:`OSD`.
 
