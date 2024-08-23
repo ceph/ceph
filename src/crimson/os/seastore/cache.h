@@ -167,7 +167,7 @@ using backref_entry_query_set_t = std::set<
  * - Remove all extents in the retired_set from Cache::extents
  * - Mark all extents in the write_set wait_io(), add promises to
  *   transaction
- * - Merge Transaction::write_set into Cache::extents
+ * - Merge Transaction::write_set into Cache::extents_index
  *
  * After phase 2, the user will submit the record to the journal.
  * Once complete, we perform phase 3:
@@ -610,7 +610,7 @@ private:
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent(placeholder), reading ... -- {}",
           T::TYPE, offset, length, *ret);
-      extents.replace(*ret, *cached);
+      extents_index.replace(*ret, *cached);
       on_cache(*ret);
 
       // replace placeholder in transactions
@@ -1141,8 +1141,8 @@ public:
     SUBINFOT(seastore_cache,
         "start with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
         t,
-        extents.size(),
-        extents.get_bytes(),
+        extents_index.size(),
+        extents_index.get_bytes(),
         dirty.size(),
         get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
         get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL));
@@ -1151,7 +1151,7 @@ public:
     // Cache::root should have been inserted to the dirty list
     assert(root->is_dirty());
     std::vector<CachedExtentRef> _dirty;
-    for (auto &e : extents) {
+    for (auto &e : extents_index) {
       _dirty.push_back(CachedExtentRef(&e));
     }
     return seastar::do_with(
@@ -1184,8 +1184,8 @@ public:
       SUBINFOT(seastore_cache,
           "finish with {}({}B) extents, {} dirty, dirty_from={}, alloc_from={}",
           t,
-          extents.size(),
-          extents.get_bytes(),
+          extents_index.size(),
+          extents_index.get_bytes(),
           dirty.size(),
           get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
           get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL));
@@ -1370,7 +1370,7 @@ private:
 
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
-  ExtentIndex extents;             ///< set of live extents
+  ExtentIndex extents_index;             ///< set of live extents
 
   journal_seq_t last_commit = JOURNAL_SEQ_MIN;
 
@@ -1784,8 +1784,8 @@ private:
       p_counters = &get_by_src(stats.cache_query_by_src, p_metric_key->first);
       ++p_counters->access;
     }
-    if (auto iter = extents.find_offset(offset);
-        iter != extents.end()) {
+    if (auto iter = extents_index.find_offset(offset);
+        iter != extents_index.end()) {
       if (p_metric_key &&
           // retired_placeholder is not really cached yet
           !is_retired_placeholder_type(iter->get_type())) {

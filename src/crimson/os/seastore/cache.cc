@@ -52,10 +52,10 @@ Cache::Cache(
 Cache::~Cache()
 {
   LOG_PREFIX(Cache::~Cache);
-  for (auto &i: extents) {
+  for (auto &i: extents_index) {
     ERROR("extent is still alive -- {}", i);
   }
-  ceph_assert(extents.empty());
+  ceph_assert(extents_index.empty());
 }
 
 // TODO: this method can probably be removed in the future
@@ -134,7 +134,7 @@ void Cache::dump_contents()
 {
   LOG_PREFIX(Cache::dump_contents);
   DEBUG("enter");
-  for (auto &&i: extents) {
+  for (auto &&i: extents_index) {
     DEBUG("live {}", i);
   }
   DEBUG("exit");
@@ -487,14 +487,14 @@ void Cache::register_metrics()
       sm::make_counter(
         "cached_extents",
         [this] {
-          return extents.size();
+          return extents_index.size();
         },
         sm::description("total number of cached extents")
       ),
       sm::make_counter(
         "cached_extent_bytes",
         [this] {
-          return extents.get_bytes();
+          return extents_index.get_bytes();
         },
         sm::description("total bytes of cached extents")
       ),
@@ -738,7 +738,7 @@ void Cache::add_extent(CachedExtentRef ref)
   assert(ref->is_valid());
   assert(ref->user_hint == PLACEMENT_HINT_NULL);
   assert(ref->rewrite_generation == NULL_GENERATION);
-  extents.insert(*ref);
+  extents_index.insert(*ref);
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
@@ -876,7 +876,7 @@ void Cache::remove_extent(
   } else if (!ref->is_placeholder()) {
     lru.remove_from_lru(*ref);
   }
-  extents.erase(*ref);
+  extents_index.erase(*ref);
 }
 
 void Cache::commit_retire_extent(
@@ -897,7 +897,7 @@ void Cache::commit_replace_extent(
 {
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->version == prev->version + 1);
-  extents.replace(*next, *prev);
+  extents_index.replace(*next, *prev);
 
   const auto t_src = t.get_src();
   if (is_root_type(prev->get_type())) {
@@ -1822,7 +1822,7 @@ void Cache::init()
              NULL_GENERATION,
 	     TRANS_ID_NULL);
   INFO("init root -- {}", *root);
-  extents.insert(*root);
+  extents_index.insert(*root);
 }
 
 Cache::mkfs_iertr::future<> Cache::mkfs(Transaction &t)
@@ -1851,8 +1851,8 @@ Cache::close_ertr::future<> Cache::close()
        get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
        lru.get_current_num_extents(),
        lru.get_current_size_bytes(),
-       extents.size(),
-       extents.get_bytes());
+       extents_index.size(),
+       extents_index.get_bytes());
   root.reset();
   clear_dirty();
   backref_extents.clear();
@@ -2362,6 +2362,9 @@ cache_stats_t Cache::get_stats(
         << fmt::format(dfmt, _reclaim_rewrites.num_dirty/seconds)
         << "ps, dversion="
         << fmt::format(dfmt, _reclaim_rewrites.get_avg_version());
+
+    oss << "\ncache total"
+        << cache_size_stats_t{extents_index.get_bytes(), extents_index.size()};
 
     INFO("{}", oss.str());
 
