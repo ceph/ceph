@@ -223,6 +223,7 @@ void usage()
   cout << "  realm rename                     rename a realm\n";
   cout << "  realm set                        set realm info (requires infile)\n";
   cout << "  realm default                    set realm as default\n";
+  cout << "  realm default rm                 clear the current default realm\n";
   cout << "  realm pull                       pull a realm and its current period\n";
   cout << "  zonegroup add                    add a zone to a zonegroup\n";
   cout << "  zonegroup create                 create a new zone group info\n";
@@ -815,6 +816,7 @@ enum class OPT {
   REALM_RENAME,
   REALM_SET,
   REALM_DEFAULT,
+  REALM_DEFAULT_RM,
   REALM_PULL,
   PERIOD_DELETE,
   PERIOD_GET,
@@ -1056,6 +1058,7 @@ static SimpleCmd::Commands all_cmds = {
   { "realm rename", OPT::REALM_RENAME },
   { "realm set", OPT::REALM_SET },
   { "realm default", OPT::REALM_DEFAULT },
+  { "realm default rm", OPT::REALM_DEFAULT_RM },
   { "realm pull", OPT::REALM_PULL },
   { "period delete", OPT::PERIOD_DELETE },
   { "period get", OPT::PERIOD_GET },
@@ -4252,7 +4255,7 @@ int main(int argc, const char **argv)
 			 OPT::REALM_LIST_PERIODS,
 			 OPT::REALM_GET_DEFAULT,
 			 OPT::REALM_RENAME, OPT::REALM_SET,
-			 OPT::REALM_DEFAULT, OPT::REALM_PULL};
+			 OPT::REALM_DEFAULT, OPT::REALM_DEFAULT_RM, OPT::REALM_PULL};
 
     std::set<OPT> readonly_ops_list = {
                          OPT::USER_INFO,
@@ -5106,6 +5109,12 @@ int main(int argc, const char **argv)
 	  cerr << "failed to set realm as default: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+      }
+      break;
+    case OPT::REALM_DEFAULT_RM:
+      if (int ret = cfgstore->delete_default_realm_id(dpp(), null_yield); ret < 0) {
+        cerr << "failed to remove default realm: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
       }
       break;
     case OPT::REALM_PULL:
