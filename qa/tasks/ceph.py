@@ -376,7 +376,7 @@ def module_setup(ctx, config):
            cluster_name,
            'mgr',
            'module',
-           'emable',
+           'enable',
            m,
         ]
         log.info("enabling module %s", m)
