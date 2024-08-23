@@ -27,18 +27,20 @@ public:
                                         ImageCtxT* destination_image_ctx,
                                         uint64_t src_snap_id,
                                         const MigrationInfo &migration_info,
-                                        ImageCtxT** source_image_ctx,
+                                        ImageCtxT** src_image_ctx,
+                                        librados::Rados** src_rados,
                                         Context* on_finish) {
     return new OpenSourceImageRequest(dst_io_ctx, destination_image_ctx,
                                       src_snap_id, migration_info,
-                                      source_image_ctx, on_finish);
+                                      src_image_ctx, src_rados, on_finish);
   }
 
   OpenSourceImageRequest(librados::IoCtx& dst_io_ctx,
                          ImageCtxT* destination_image_ctx,
                          uint64_t src_snap_id,
                          const MigrationInfo &migration_info,
-                         ImageCtxT** source_image_ctx,
+                         ImageCtxT** src_image_ctx,
+                         librados::Rados** src_rados,
                          Context* on_finish);
 
   void send();
@@ -79,6 +81,7 @@ private:
   uint64_t m_src_snap_id;
   MigrationInfo m_migration_info;
   ImageCtxT** m_src_image_ctx;
+  librados::Rados** m_src_rados;
   Context* m_on_finish;
 
   std::unique_ptr<FormatInterface> m_format;

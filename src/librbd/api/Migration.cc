@@ -527,11 +527,13 @@ int Migration<I>::prepare_import(
                  << dest_io_ctx.get_pool_name() << "/"
                  << dest_image_name << ", opts=" << opts << dendl;
 
-  I* src_image_ctx = nullptr;
+  I* src_image_ctx;
+  librados::Rados* src_rados;
   C_SaferCond open_ctx;
   auto req = migration::OpenSourceImageRequest<I>::create(
     dest_io_ctx, nullptr, CEPH_NOSNAP,
-    {-1, "", "", "", source_spec, {}, 0, false}, &src_image_ctx, &open_ctx);
+    {-1, "", "", "", source_spec, {}, 0, false}, &src_image_ctx, &src_rados,
+    &open_ctx);
   req->send();
 
   int r = open_ctx.wait();
@@ -540,8 +542,9 @@ int Migration<I>::prepare_import(
     return r;
   }
 
-  BOOST_SCOPE_EXIT_TPL(src_image_ctx) {
+  BOOST_SCOPE_EXIT_TPL(src_image_ctx, src_rados) {
     src_image_ctx->state->close();
+    delete src_rados;
   } BOOST_SCOPE_EXIT_END;
 
   uint64_t image_format = 2;
@@ -1485,7 +1488,7 @@ int Migration<I>::create_dst_image(I** image_ctx) {
   int r;
   C_SaferCond on_create;
   librados::IoCtx parent_io_ctx;
-  if (parent_spec.pool_id == -1) {
+  if (parent_spec.pool_id == -1 || m_flatten) {
     auto *req = image::CreateRequest<I>::create(
       config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
       m_image_options, image::CREATE_FLAG_SKIP_MIRROR_ENABLE,
