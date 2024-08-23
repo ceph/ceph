@@ -727,10 +727,6 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
       if (dest_object->get_bucket()->versioned() && !dest_object->get_bucket()->versioning_enabled()) { //if versioning is suspended
         dest_version = "null";
       } else {
-<<<<<<< HEAD
-=======
-        enum { OBJ_INSTANCE_LEN = 32 };
->>>>>>> a711eb9d7aa (rgw/d4n: squashing the following commits that fix s3 test)
         char buf[OBJ_INSTANCE_LEN + 1];
         gen_rand_alphanumeric_no_underscore(dpp->get_cct(), buf, OBJ_INSTANCE_LEN);
         dest_version = buf; //version for non-versioned objects, using gen_rand_alphanumeric_no_underscore for the time being
