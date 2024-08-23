@@ -7,6 +7,7 @@
 #include "crimson/common/log.h"
 
 #include "crimson/os/seastore/object_data_handler.h"
+#include "crimson/os/seastore/laddr_interval_set.h"
 
 namespace {
   seastar::logger& logger() {
@@ -169,7 +170,7 @@ struct extent_to_remap_t {
       nullptr, new_offset, new_len, p->get_key(), p->get_length(), b);
   }
 
-  uint64_t laddr_start;
+  laddr_t laddr_start;
   extent_len_t length;
   std::optional<bufferlist> bl;
 
@@ -180,7 +181,7 @@ private:
       pin(std::move(pin)), new_offset(new_offset), new_len(new_len) {}
   extent_to_remap_t(type_t type,
     LBAMappingRef &&pin, extent_len_t new_offset, extent_len_t new_len,
-    uint64_t ori_laddr, extent_len_t ori_len, std::optional<bufferlist> b)
+    laddr_t ori_laddr, extent_len_t ori_len, std::optional<bufferlist> b)
     : type(type),
       pin(std::move(pin)), new_offset(new_offset), new_len(new_len),
       laddr_start(ori_laddr), length(ori_len), bl(b) {}
@@ -294,7 +295,7 @@ overwrite_ops_t prepare_ops_list(
     }
   }
 
-  interval_set<uint64_t> pre_alloc_addr_removed, pre_alloc_addr_remapped;
+  laddr_interval_set_t pre_alloc_addr_removed, pre_alloc_addr_remapped;
   if (delta_based_overwrite_max_extent_size) {
     for (auto &r : ops.to_remove) {
       if (r->is_data_stable() && !r->is_zero_reserved()) {
@@ -321,7 +322,7 @@ overwrite_ops_t prepare_ops_list(
 	erased_num = std::erase_if(
 	  ops.to_remove,
 	  [&region, &to_remap](auto &r) {
-	    interval_set<uint64_t> range;
+	    laddr_interval_set_t range;
 	    range.insert(r->get_key(), r->get_length());
 	    if (range.contains(region.addr, region.len) && !r->is_clone()) {
 	      to_remap.push_back(extent_to_remap_t::create_overwrite(
@@ -337,7 +338,7 @@ overwrite_ops_t prepare_ops_list(
 	erased_num = std::erase_if(
 	  ops.to_remap,
 	  [&region, &to_remap](auto &r) {
-	    interval_set<uint64_t> range;
+	    laddr_interval_set_t range;
 	    range.insert(r.pin->get_key(), r.pin->get_length());
 	    if (range.contains(region.addr, region.len) && !r.pin->is_clone()) {
 	      to_remap.push_back(extent_to_remap_t::create_overwrite(
@@ -519,7 +520,7 @@ ObjectDataHandler::write_ret do_insertions(
     [ctx](auto &region) {
       LOG_PREFIX(object_data_handler.cc::do_insertions);
       if (region.is_data()) {
-	assert_aligned(region.addr);
+	ceph_assert(region.addr.is_aligned(ctx.tm.get_block_size()));
 	assert_aligned(region.len);
 	ceph_assert(region.len == region.bl->length());
 	DEBUGT("allocating extent: {}~{}",
@@ -544,7 +545,7 @@ ObjectDataHandler::write_ret do_insertions(
                 off);
             }
             iter.copy(extent->get_length(), extent->get_bptr().c_str());
-            off += extent->get_length();
+            off = off + extent->get_length();
             left -= extent->get_length();
           }
 	  return ObjectDataHandler::write_iertr::now();
@@ -707,8 +708,8 @@ public:
       right_paddr(pins.back()->get_val()),
       data_begin(offset),
       data_end(offset + len),
-      aligned_data_begin(p2align((uint64_t)data_begin, (uint64_t)block_size)),
-      aligned_data_end(p2roundup((uint64_t)data_end, (uint64_t)block_size)),
+      aligned_data_begin(data_begin.get_aligned_laddr(block_size)),
+      aligned_data_end(data_end.get_roundup_laddr(block_size)),
       left_operation(overwrite_operation_t::UNKNOWN),
       right_operation(overwrite_operation_t::UNKNOWN),
       block_size(block_size),
@@ -725,10 +726,10 @@ public:
 private:
   // refer to overwrite_plan_t description
   void validate() const {
-    ceph_assert(pin_begin % block_size == 0);
-    ceph_assert(pin_end % block_size == 0);
-    ceph_assert(aligned_data_begin % block_size == 0);
-    ceph_assert(aligned_data_end % block_size == 0);
+    ceph_assert(pin_begin.is_aligned(block_size));
+    ceph_assert(pin_end.is_aligned(block_size));
+    ceph_assert(aligned_data_begin.is_aligned(block_size));
+    ceph_assert(aligned_data_end.is_aligned(block_size));
 
     ceph_assert(pin_begin <= aligned_data_begin);
     ceph_assert(aligned_data_begin <= data_begin);
@@ -1190,8 +1191,8 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
   laddr_t offset, extent_len_t len,
   std::optional<bufferptr> &&headptr, std::optional<bufferptr> &&tailptr)
 {
-  auto zero_left = p2roundup(offset, (laddr_t)block_size);
-  auto zero_right = p2align(offset + len, (laddr_t)block_size);
+  auto zero_left = offset.get_roundup_laddr(block_size);
+  auto zero_right = (offset + len).get_aligned_laddr(block_size);
   auto left = headptr ? (offset - headptr->length()) : offset;
   auto right = tailptr ?
     (offset + len + tailptr->length()) :
@@ -1207,8 +1208,8 @@ extent_to_write_list_t get_to_writes_with_zero_buffer(
     (!tailptr && (right == zero_right)));
 
   assert(right > left);
-  assert((left % block_size) == 0);
-  assert((right % block_size) == 0);
+  assert(left.is_aligned(block_size));
+  assert(right.is_aligned(block_size));
 
   // zero region too small for a reserved section,
   // headptr and tailptr in same extent
@@ -1322,8 +1323,8 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
           bufferlist write_bl;
           if (headptr) {
             write_bl.append(*headptr);
-            write_offset -= headptr->length();
-            assert_aligned(write_offset);
+            write_offset = write_offset - headptr->length();
+	    ceph_assert(write_offset.is_aligned(ctx.tm.get_block_size()));
           }
           write_bl.claim_append(*bl);
           if (tailptr) {

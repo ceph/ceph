@@ -431,7 +431,7 @@ BtreeLBAManager::_alloc_extents(
 	    return iter.next(c).si_then([&state, &alloc_info](auto it) {
 	      state.insert_iter = it;
 	      if (alloc_info.key == L_ADDR_NULL) {
-		state.last_end += alloc_info.len;
+		state.last_end = state.last_end + alloc_info.len;
 	      }
 	    });
 	  });

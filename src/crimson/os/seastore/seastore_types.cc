@@ -92,6 +92,10 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
+  return out << 'L' << std::hex << laddr.value << std::dec;
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
   if (pladdr.is_laddr()) {

@@ -192,7 +192,7 @@ private:
 std::ostream &operator<<(std::ostream &out, const segment_id_t&);
 
 // ondisk type of segment_id_t
-struct __attribute((packed)) segment_id_le_t {
+struct __attribute__((packed)) segment_id_le_t {
   ceph_le32 segment = ceph_le32(segment_id_t().segment);
 
   segment_id_le_t(const segment_id_t id) :
@@ -853,7 +853,7 @@ inline paddr_t paddr_t::block_relative_to(paddr_t rhs) const {
   return as_res_paddr().block_relative_to(rhs.as_res_paddr());
 }
 
-struct __attribute((packed)) paddr_le_t {
+struct __attribute__((packed)) paddr_le_t {
   ceph_le64 internal_paddr =
     ceph_le64(P_ADDR_NULL.internal_paddr);
 
@@ -1007,32 +1007,100 @@ constexpr journal_seq_t JOURNAL_SEQ_MAX{
 constexpr journal_seq_t JOURNAL_SEQ_NULL = JOURNAL_SEQ_MAX;
 
 // logical addr, see LBAManager, TransactionManager
-using laddr_t = uint64_t;
-constexpr laddr_t L_ADDR_MIN = std::numeric_limits<laddr_t>::min();
-constexpr laddr_t L_ADDR_MAX = std::numeric_limits<laddr_t>::max();
-constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
-constexpr laddr_t L_ADDR_ROOT = L_ADDR_MAX - 1;
-constexpr laddr_t L_ADDR_LBAT = L_ADDR_MAX - 2;
+class laddr_t {
+public:
+  // the type of underlying integer
+  using Unsigned = uint64_t;
+  static constexpr Unsigned RAW_VALUE_MAX =
+      std::numeric_limits<Unsigned>::max();
 
-struct __attribute((packed)) laddr_le_t {
-  ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
+  constexpr laddr_t() : laddr_t(RAW_VALUE_MAX) {}
+  constexpr explicit laddr_t(Unsigned value) : value(value) {}
+
+  bool is_aligned(Unsigned alignment) const {
+    assert(alignment != 0);
+    assert((alignment & (alignment - 1)) == 0);
+    return value == p2align(value, alignment);
+  }
+
+  laddr_t get_aligned_laddr(Unsigned alignment) const {
+    assert(alignment != 0);
+    assert((alignment & (alignment - 1)) == 0);
+    return laddr_t(p2align(value, alignment));
+  }
+
+  laddr_t get_roundup_laddr(Unsigned alignment) const {
+    assert(alignment != 0);
+    assert((alignment & (alignment - 1)) == 0);
+    return laddr_t(p2roundup(value, alignment));
+  }
+
+  /// laddr_t works like primitive integer type, encode/decode it manually
+  void encode(::ceph::buffer::list::contiguous_appender& p) const {
+    p.append(reinterpret_cast<const char *>(&value), sizeof(Unsigned));
+  }
+  void bound_encode(size_t& p) const {
+    p += sizeof(Unsigned);
+  }
+  void decode(::ceph::buffer::ptr::const_iterator& p) {
+    assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(Unsigned));
+    memcpy((char *)&value, p.get_pos_add(sizeof(Unsigned)), sizeof(Unsigned));
+  }
+
+  friend std::ostream &operator<<(std::ostream &, const laddr_t &);
+
+  friend auto operator<=>(const laddr_t&, const laddr_t&) = default;
+
+  friend laddr_t operator+(const laddr_t &laddr, const Unsigned &i) {
+    return laddr_t{laddr.value + i};
+  }
+
+  friend laddr_t operator+(const Unsigned &i, const laddr_t &laddr) {
+    return laddr_t{laddr.value + i};
+  }
+
+  friend laddr_t operator-(const laddr_t &laddr, const Unsigned &i) {
+    return laddr_t{laddr.value - i};
+  }
+
+  friend Unsigned operator-(const laddr_t &l, const laddr_t &r) {
+    return l.value - r.value;
+  }
+
+  friend struct laddr_le_t;
+  friend struct pladdr_le_t;
+
+private:
+  Unsigned value;
+};
+
+constexpr laddr_t L_ADDR_MAX = laddr_t(laddr_t::RAW_VALUE_MAX);
+constexpr laddr_t L_ADDR_MIN = laddr_t(0);
+constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
+constexpr laddr_t L_ADDR_ROOT = laddr_t(laddr_t::RAW_VALUE_MAX - 1);
+constexpr laddr_t L_ADDR_LBAT = laddr_t(laddr_t::RAW_VALUE_MAX - 2);
+
+struct __attribute__((packed)) laddr_le_t {
+  ceph_le64 laddr;
 
   using orig_type = laddr_t;
 
-  laddr_le_t() = default;
+  laddr_le_t() : laddr_le_t(L_ADDR_NULL) {}
   laddr_le_t(const laddr_le_t &) = default;
   explicit laddr_le_t(const laddr_t &addr)
-    : laddr(ceph_le64(addr)) {}
+    : laddr(addr.value) {}
 
   operator laddr_t() const {
     return laddr_t(laddr);
   }
   laddr_le_t& operator=(laddr_t addr) {
     ceph_le64 val;
-    val = addr;
+    val = addr.value;
     laddr = val;
     return *this;
   }
+
+  bool operator==(const laddr_le_t&) const = default;
 };
 
 constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
@@ -1087,7 +1155,7 @@ enum class addr_type_t : uint8_t {
   MAX=2	// or NONE
 };
 
-struct __attribute((packed)) pladdr_le_t {
+struct __attribute__((packed)) pladdr_le_t {
   ceph_le64 pladdr = ceph_le64(PL_ADDR_NULL);
   addr_type_t addr_type = addr_type_t::MAX;
 
@@ -1097,7 +1165,7 @@ struct __attribute((packed)) pladdr_le_t {
     : pladdr(
 	ceph_le64(
 	  addr.is_laddr() ?
-	    std::get<0>(addr.pladdr) :
+	    std::get<0>(addr.pladdr).value :
 	    std::get<1>(addr.pladdr).internal_paddr)),
       addr_type(
 	addr.is_laddr() ?
@@ -2658,6 +2726,7 @@ struct cache_stats_t {
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_id_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::laddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
@@ -2679,6 +2748,7 @@ template <> struct fmt::formatter<crimson::os::seastore::device_id_printer_t> : 
 template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
