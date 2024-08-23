@@ -28,7 +28,6 @@ RefreshParentRequest<I>::RefreshParentRequest(
     const MigrationInfo &migration_info, Context *on_finish)
   : m_child_image_ctx(child_image_ctx), m_parent_md(parent_md),
     m_migration_info(migration_info), m_on_finish(on_finish),
-    m_parent_image_ctx(nullptr), m_parent_snap_id(CEPH_NOSNAP),
     m_error_result(0) {
 }
 
@@ -91,6 +90,7 @@ template <typename I>
 void RefreshParentRequest<I>::apply() {
   ceph_assert(ceph_mutex_is_wlocked(m_child_image_ctx.image_lock));
   std::swap(m_child_image_ctx.parent, m_parent_image_ctx);
+  std::swap(m_child_image_ctx.parent_rados, m_parent_rados);
 }
 
 template <typename I>
@@ -102,6 +102,7 @@ void RefreshParentRequest<I>::finalize(Context *on_finish) {
   if (m_parent_image_ctx != nullptr) {
     send_close_parent();
   } else {
+    ceph_assert(m_parent_rados == nullptr);
     send_complete(0);
   }
 }
@@ -120,7 +121,7 @@ void RefreshParentRequest<I>::send_open_parent() {
         &RefreshParentRequest<I>::handle_open_parent, false>(this));
     auto req = migration::OpenSourceImageRequest<I>::create(
       m_child_image_ctx.md_ctx, &m_child_image_ctx, m_parent_md.spec.snap_id,
-      m_migration_info, &m_parent_image_ctx, ctx);
+      m_migration_info, &m_parent_image_ctx, &m_parent_rados, ctx);
     req->send();
     return;
   }
@@ -189,6 +190,10 @@ Context *RefreshParentRequest<I>::handle_close_parent(int *result) {
   ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
 
   m_parent_image_ctx = nullptr;
+  if (m_parent_rados != nullptr) {
+    delete m_parent_rados;
+    m_parent_rados = nullptr;
+  }
 
   if (*result < 0) {
     lderr(cct) << "failed to close parent image: " << cpp_strerror(*result)

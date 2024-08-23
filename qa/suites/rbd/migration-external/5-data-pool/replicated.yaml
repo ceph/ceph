@@ -1,0 +1,14 @@
+tasks:
+- exec:
+    cluster1.client.0:
+      - sudo ceph --cluster cluster1 osd pool create datapool 4
+      - rbd --cluster cluster1 pool init datapool
+    cluster2.client.0:
+      - sudo ceph --cluster cluster2 osd pool create datapool 4
+      - rbd --cluster cluster2 pool init datapool
+
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default data pool: datapool
