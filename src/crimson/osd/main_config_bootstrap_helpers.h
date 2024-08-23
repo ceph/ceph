@@ -14,6 +14,7 @@
 
 #include "common/ceph_argparse.h"
 #include "include/expected.hpp"
+#include "include/random.h"
 
 namespace crimson::osd {
 
@@ -21,14 +22,7 @@ void usage(const char* prog);
 
 inline uint64_t get_nonce()
 {
-  if (auto pid = getpid(); pid == 1 || std::getenv("CEPH_USE_RANDOM_NONCE")) {
-    // we're running in a container; use a random number instead!
-    std::random_device rd;
-    std::default_random_engine rng{rd()};
-    return std::uniform_int_distribution<uint64_t>{}(rng);
-  } else {
-    return pid;
-  }
+  return ceph::util::generate_random_number<uint64_t>();
 }
 
 seastar::future<> populate_config_from_mon();
