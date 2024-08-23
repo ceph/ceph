@@ -21,6 +21,7 @@
 #include "compressor/Compressor.h"
 
 class QatAccel;
+class UadkAccel;
 
 class ZlibCompressor : public Compressor {
   bool isal_enabled;
@@ -28,6 +29,10 @@ class ZlibCompressor : public Compressor {
 #ifdef HAVE_QATZIP
   bool qat_enabled;
   static QatAccel qat_accel;
+#endif
+#ifdef HAVE_UADK
+  bool uadk_enabled;
+  static UadkAccel uadk_accel;
 #endif
 
  public:

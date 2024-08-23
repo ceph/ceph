@@ -442,6 +442,7 @@ BuildRequires:	libibverbs-devel
 BuildRequires:  librdmacm-devel
 BuildRequires:  ninja-build
 BuildRequires:  openldap-devel
+BuildRequires:  numactl-devel
 #BuildRequires:  krb5-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
@@ -511,7 +512,6 @@ BuildRequires:  openEuler-rpm-config
 %if 0%{with seastar}
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 BuildRequires:  cryptopp-devel
-BuildRequires:  numactl-devel
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libcryptopp-devel
