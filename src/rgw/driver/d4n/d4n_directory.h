@@ -55,6 +55,7 @@ class ObjectDirectory: public Directory {
     int zremrangebyscore(const DoutPrefixProvider* dpp, CacheObj* object, double min, double max, optional_yield y, bool multi=false);
     //Return value is the incremented value, else return error
     int incr(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
+    int get_bucket_keys(const DoutPrefixProvider* dpp, std::string bucket_name, std::vector <CacheObj*>* objects, optional_yield y);
 
   private:
     std::shared_ptr<connection> conn;
