@@ -532,14 +532,6 @@ int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
     return r;
   }
 
-  // try to set as default. may race with another create, so pass exclusive=true
-  // so we don't override an existing default
-  r = set_default_realm(dpp, y, cfgstore, info, true);
-  if (r < 0 && r != -EEXIST) {
-    ldpp_dout(dpp, 0) << "WARNING: failed to set realm as default: "
-        << cpp_strerror(r) << dendl;
-  }
-
   if (writer_out) {
     *writer_out = std::move(writer);
   }

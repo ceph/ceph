@@ -103,6 +103,8 @@
   config option. Previously, they would ignore invalid or missing realms and
   go on to load a zone/zonegroup in a different realm. If startup fails with
   a  "failed to load realm" error, fix or remove the ``rgw_realm`` option.
+* rgw: The radosgw-admin commands ``realm create`` and ``realm pull`` no
+  longer set the default realm without ``--default``.
 * CephFS: Running the command "ceph fs authorize" for an existing entity now
   upgrades the entity's capabilities instead of printing an error. It can now
   also change read/write permissions in a capability that the entity already
