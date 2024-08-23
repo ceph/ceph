@@ -9,10 +9,10 @@ SMB Service
 .. warning::
 
     SMB support is under active development and many features may be
-    missing or immature. Additionally, a Manager module to automate
-    SMB clusters and SMB shares is in development. Once that feature
-    is developed it will be the preferred method for managing
-    SMB on ceph.
+    missing or immature. A Ceph MGR module, named smb, is available to help
+    organize and manage SMB related featues. Unless the smb module
+    has been determined to be unsuitable for your needs we recommend using that
+    module over directly using the smb service spec.
 
 
 Deploying Samba Containers
@@ -78,6 +78,7 @@ features
     An empty list is valid. Supported terms:
 
     * ``domain``: Enable domain member mode
+    * ``clustered``: Enable Samba native cluster mode
 
 config_uri
     A string containing a (standard or de-facto) URI that identifies a
@@ -109,6 +110,30 @@ include_ceph_users:
     The cephx keys for each user in the list will automatically be added to
     the keyring in the container.
 
+cluster_meta_uri:
+    A string containing a URI that identifies where the cluster structure
+    metadata will be stored. Required if ``clustered`` feature is set. Must be
+    a RADOS pseudo-URI.
+
+cluster_lock_uri:
+    A string containing a URI that identifies where Samba/CTDB will store a
+    cluster lock. Required if ``clustered`` feature is set. Must be a RADOS
+    pseudo-URI.
+
+
+.. note::
+
+   If one desires clustering between smbd instances (also known as
+   High-Availability or "transparent state migration") the feature flag
+   ``clustered`` is needed. If this flag is not specified cephadm may deploy
+   multiple smb servers but they will lack the coordination needed of an actual
+   Highly-Avaiable cluster. When the ``clustered`` flag is specified cephadm
+   will deploy additional containers that manage this coordination.
+   Additionally, the cluster_meta_uri and cluster_lock_uri values must be
+   specified. The former is used by cephadm to describe the smb cluster layout
+   to the samba containers. The latter is used by Samba's CTDB component to
+   manage an internal cluster lock.
+
 
 Configuring an SMB Service
 --------------------------
@@ -134,7 +159,7 @@ it accepts.
 When one has composed a configuration it should be stored in a location
 that the Samba Container can access. The recommended approach for running
 Samba Containers within Ceph orchestration is to store the configuration
-in the Ceph cluster. There are two ways to store the configuration
+in the Ceph cluster. There are a few ways to store the configuration
 in ceph:
 
 RADOS
@@ -202,9 +227,5 @@ A non-exhaustive list of important limitations for the SMB service follows:
   configured so that it can resolve the Active Directory (AD) domain or the
   ``custom_dns`` option may be used. In both cases DNS hosts for the AD domain
   must still be reachable from whatever network segment the ceph cluster is on.
-* Proper clustering/high-availability/"transparent state migration" is not yet
-  supported. If a placement causes more than service to be created these
-  services will act independently and may lead to unexpected behavior if clients
-  access the same files at once.
 * Services must bind to TCP port 445. Running multiple SMB services on the same
   node is not yet supported and will trigger a port-in-use conflict.

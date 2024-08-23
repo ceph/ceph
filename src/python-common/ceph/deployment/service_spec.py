@@ -2844,7 +2844,9 @@ yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)
 
 class SMBSpec(ServiceSpec):
     service_type = 'smb'
-    _valid_features = {'domain'}
+    _valid_features = {'domain', 'clustered'}
+    _default_cluster_meta_obj = 'cluster.meta.json'
+    _default_cluster_lock_obj = 'cluster.meta.lock'
 
     def __init__(
         self,
@@ -2888,6 +2890,12 @@ class SMBSpec(ServiceSpec):
         # automatically added to the ceph keyring provided to the samba
         # container.
         include_ceph_users: Optional[List[str]] = None,
+        # cluster_meta_uri - a pseudo-uri that resolves to a (rados) object
+        # that will store information about the state of samba cluster members
+        cluster_meta_uri: Optional[str] = None,
+        # cluster_lock_uri - a pseudo-uri that resolves to a (rados) object
+        # that will be used by CTDB for a cluster leader / recovery lock.
+        cluster_lock_uri: Optional[str] = None,
         # --- genearal tweaks ---
         extra_container_args: Optional[GeneralArgList] = None,
         extra_entrypoint_args: Optional[GeneralArgList] = None,
@@ -2915,6 +2923,8 @@ class SMBSpec(ServiceSpec):
         self.user_sources = user_sources or []
         self.custom_dns = custom_dns or []
         self.include_ceph_users = include_ceph_users or []
+        self.cluster_meta_uri = cluster_meta_uri
+        self.cluster_lock_uri = cluster_lock_uri
         self.validate()
 
     def validate(self) -> None:
@@ -2925,7 +2935,37 @@ class SMBSpec(ServiceSpec):
         if self.features:
             invalid = set(self.features).difference(self._valid_features)
             if invalid:
-                raise ValueError(f'invalid feature flags: {", ".join(invalid)}')
+                raise ValueError(
+                    f'invalid feature flags: {", ".join(invalid)}'
+                )
+        if 'clustered' in self.features and not self.cluster_meta_uri:
+            # derive a cluster meta uri from config uri by default (if possible)
+            self.cluster_meta_uri = self._derive_cluster_uri(
+                self.config_uri,
+                self._default_cluster_meta_obj,
+            )
+        if 'clustered' not in self.features and self.cluster_meta_uri:
+            raise ValueError(
+                'cluster meta uri unsupported when "clustered" feature not set'
+            )
+        if 'clustered' in self.features and not self.cluster_lock_uri:
+            # derive a cluster meta uri from config uri by default (if possible)
+            self.cluster_lock_uri = self._derive_cluster_uri(
+                self.config_uri,
+                self._default_cluster_lock_obj,
+            )
+        if 'clustered' not in self.features and self.cluster_lock_uri:
+            raise ValueError(
+                'cluster lock uri unsupported when "clustered" feature not set'
+            )
+
+    def _derive_cluster_uri(self, uri: str, objname: str) -> str:
+        if not uri.startswith('rados://'):
+            raise ValueError('invalid uri scheme for cluster metadata')
+        parts = uri[8:].split('/')
+        parts[-1] = objname
+        uri = 'rados://' + '/'.join(parts)
+        return uri
 
 
 yaml.add_representer(SMBSpec, ServiceSpec.yaml_representer)
