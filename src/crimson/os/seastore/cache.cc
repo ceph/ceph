@@ -1954,6 +1954,7 @@ Cache::replay_delta(
     root->apply_delta_and_adjust_crc(record_base, delta.bl);
     root->dirty_from_or_retired_at = journal_seq;
     root->state = CachedExtent::extent_state_t::DIRTY;
+    root->version = 1; // shouldn't be 0 as a dirty extent
     DEBUG("replayed root delta at {} {}, add extent -- {}, root={}",
           journal_seq, record_base, delta, *root);
     root->set_modify_time(modify_time);
