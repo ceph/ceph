@@ -254,7 +254,7 @@ struct transaction_manager_test_t :
 	  EXPECT_EQ(addr, last);
 	  break;
 	}
-	EXPECT_FALSE((iter->first - last).to_byte_offset() > len);
+	EXPECT_FALSE(iter->first.get_byte_distance<extent_len_t>(last) > len);
 	last = (iter->first + iter->second.desc.len).checked_to_laddr();
 	++iter;
       }
@@ -1575,7 +1575,8 @@ struct transaction_manager_test_t :
 	      if (off == 0 || off >= 255) {
 		continue;
 	      }
-              auto new_off = laddr_t(off << 10) - last_pin->get_key();
+              auto new_off = laddr_t::from_byte_offset(off << 10)
+		  .get_byte_distance<extent_len_t>(last_pin->get_key());
               auto new_len = last_pin->get_length() - new_off;
               //always remap right extent at new split_point
 	      auto pin = remap_pin(t, std::move(last_pin), new_off, new_len);
@@ -1674,7 +1675,8 @@ struct transaction_manager_test_t :
                 continue;
               }
               empty_transaction = false;
-              auto new_off = laddr_t(start_off << 10) - last_rpin->get_key();
+              auto new_off = laddr_t::from_byte_offset(start_off << 10)
+		  .get_byte_distance<extent_len_t>(last_rpin->get_key());
               auto new_len = (end_off - start_off) << 10;
               bufferlist bl;
               bl.append(ceph::bufferptr(ceph::buffer::create(new_len, 0)));

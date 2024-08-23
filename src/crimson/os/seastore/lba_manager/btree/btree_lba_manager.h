@@ -128,7 +128,7 @@ public:
     assert(intermediate_key >= intermediate_base);
     assert((intermediate_key == L_ADDR_NULL)
       == (intermediate_base == L_ADDR_NULL));
-    return intermediate_key - intermediate_base;
+    return intermediate_key.get_byte_distance<extent_len_t>(intermediate_base);
   }
 
   extent_len_t get_intermediate_length() const final {

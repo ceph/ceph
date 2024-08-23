@@ -632,7 +632,7 @@ TEST_P(object_data_handler_test_t, remap_left) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     read(0, 128<<10);
@@ -666,7 +666,7 @@ TEST_P(object_data_handler_test_t, remap_right) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     read(0, 128<<10);
@@ -699,7 +699,7 @@ TEST_P(object_data_handler_test_t, remap_right_left) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     enable_max_extent_size();
@@ -730,7 +730,7 @@ TEST_P(object_data_handler_test_t, multiple_remap) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     read(0, 128<<10);
