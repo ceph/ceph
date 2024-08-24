@@ -243,7 +243,7 @@ namespace fmt {
 template <>
 struct formatter<Scrub::delay_cause_t> : ::fmt::formatter<std::string_view> {
   template <typename FormatContext>
-  auto format(Scrub::delay_cause_t cause, FormatContext& ctx)
+  auto format(Scrub::delay_cause_t cause, FormatContext& ctx) const
   {
     using enum Scrub::delay_cause_t;
     std::string_view desc;
@@ -359,7 +359,7 @@ struct fmt::formatter<requested_scrub_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const requested_scrub_t& rs, FormatContext& ctx)
+  auto format(const requested_scrub_t& rs, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
                           "(plnd:{}{}{}{}{}{})",
