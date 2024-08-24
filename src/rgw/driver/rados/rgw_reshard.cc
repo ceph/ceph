@@ -237,8 +237,7 @@ public:
     return 0;
   }
 
-  int flush(bool process_log = false, RGWBucketReshard *br = nullptr,
-            const DoutPrefixProvider *dpp = nullptr) {
+  int flush(bool process_log = false) {
     if (entries.size() == 0) {
       return 0;
     }
@@ -294,12 +293,6 @@ public:
     entries.clear();
     stats.clear();
 
-    if (br != nullptr) {
-      ret = br->renew_lock_if_needed(dpp);
-      if (ret < 0) {
-        return ret;
-      }
-    }
     return 0;
   }
 
@@ -365,7 +358,7 @@ public:
              const DoutPrefixProvider *dpp = nullptr) {
     int ret = 0;
     for (auto& shard : target_shards) {
-      int r = shard.flush(process_log, br, dpp);
+      int r = shard.flush(process_log);
       if (r < 0) {
         derr << "ERROR: target_shards[" << shard.get_shard_id() << "].flush() returned error: " << cpp_strerror(-r) << dendl;
         ret = r;
@@ -375,6 +368,13 @@ public:
       int r = shard.wait_all_aio();
       if (r < 0) {
         derr << "ERROR: target_shards[" << shard.get_shard_id() << "].wait_all_aio() returned error: " << cpp_strerror(-r) << dendl;
+        ret = r;
+      }
+      if (br != nullptr) {
+        r = br->renew_lock_if_needed(dpp);
+      }
+      if (r < 0) {
+        derr << "ERROR: br->renew_lock_if_needed() returned error: " << cpp_strerror(-r) << dendl;
         ret = r;
       }
     }
@@ -395,13 +395,12 @@ RGWBucketReshard::RGWBucketReshard(rgw::sal::RadosStore* _store,
 static int set_resharding_status(const DoutPrefixProvider *dpp,
 				 rgw::sal::RadosStore* store,
 				 const RGWBucketInfo& bucket_info,
-                                 cls_rgw_reshard_status status,
-                                 bool judge_support_logrecord = false)
+                                 cls_rgw_reshard_status status)
 {
   cls_rgw_bucket_instance_entry instance_entry;
   instance_entry.set_status(status);
 
-  int ret = store->getRados()->bucket_set_reshard(dpp, bucket_info, instance_entry, judge_support_logrecord);
+  int ret = store->getRados()->bucket_set_reshard(dpp, bucket_info, instance_entry);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
 		  << cpp_strerror(-ret) << dendl;
@@ -431,17 +430,22 @@ static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
 static int init_target_index(rgw::sal::RadosStore* store,
                              RGWBucketInfo& bucket_info,
                              const rgw::bucket_index_layout_generation& index,
+                             ReshardFaultInjector& fault,
                              bool& support_logrecord,
                              const DoutPrefixProvider* dpp)
 {
-  int ret = store->svc()->bi->init_index(dpp, bucket_info, index, true);
+
+  int ret = 0;
+  if (ret = fault.check("init_index");
+      ret == 0) { // no fault injected, initialize index
+    ret = store->svc()->bi->init_index(dpp, bucket_info, index, true);
+  }
   if (ret == -EOPNOTSUPP) {
     ldpp_dout(dpp, 0) << "WARNING: " << "init_index() does not supported logrecord, "
                       << "falling back to block reshard mode." << dendl;
     support_logrecord = false;
     ret = store->svc()->bi->init_index(dpp, bucket_info, index, false);
-  }
-  if (ret < 0) {
+  } else if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to initialize "
        "target index shard objects: " << cpp_strerror(ret) << dendl;
     return ret;
@@ -508,7 +512,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
   }
 
   // create the index shard objects
-  int ret = init_target_index(store, bucket_info, target, support_logrecord, dpp);
+  int ret = init_target_index(store, bucket_info, target, fault, support_logrecord, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -573,24 +577,6 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     return ret;
   }
 
-  // trim the reshard log entries to guarantee that any existing log entries are cleared,
-  // if there are no reshard log entries, this is a no-op that costs little time
-  if (support_logrecord) {
-    ret = store->getRados()->trim_reshard_log_entries(dpp, bucket_info, null_yield);
-    if (ret == -EOPNOTSUPP) {
-      // not an error, logrecord is not supported, change to block reshard
-      ldpp_dout(dpp, 0) << "WARNING: " << "trim_reshard_log_entries() does not supported"
-                        << " logrecord, falling back to block reshard mode." << dendl;
-      bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
-      support_logrecord = false;
-      return 0;
-    }
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to trim reshard log entries: "
-          << cpp_strerror(ret) << dendl;
-      return ret;
-    }
-  }
   return 0;
 } // init_target_layout
 
@@ -612,7 +598,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
     ret = 0; // non-fatal error
   }
   // trim the reshard log entries written in logrecord state
-  ret = store->getRados()->trim_reshard_log_entries(dpp, bucket_info, null_yield);
+  ret = store->getRados()->trim_reshard_log_entries(dpp, bucket_info, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to trim "
         "reshard log entries: " << cpp_strerror(ret) << dendl;
@@ -695,26 +681,35 @@ static int init_reshard(rgw::sal::RadosStore* store,
     return ret;
   }
 
+  // trim the reshard log entries to guarantee that any existing log entries are cleared,
+  // if there are no reshard log entries, this is a no-op that costs little time
+  if (support_logrecord) {
+    if (ret = fault.check("trim_reshard_log_entries");
+        ret == 0) { // no fault injected, trim reshard log entries
+      ret = store->getRados()->trim_reshard_log_entries(dpp, bucket_info, y);
+    }
+    if (ret == -EOPNOTSUPP) {
+      // not an error, logrecord is not supported, change to block reshard
+      ldpp_dout(dpp, 0) << "WARNING: " << "trim_reshard_log_entries() does not supported"
+                        << " logrecord, falling back to block reshard mode." << dendl;
+      bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
+      support_logrecord = false;
+    } else if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to trim reshard log entries: "
+                        << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  }
+
   if (support_logrecord) {
     if (ret = fault.check("logrecord_writes");
         ret == 0) { // no fault injected, record log with writing to the current index shards
       ret = set_resharding_status(dpp, store, bucket_info,
-                                  cls_rgw_reshard_status::IN_LOGRECORD,
-                                  true);
+                                  cls_rgw_reshard_status::IN_LOGRECORD);
     }
-    if (ret == -EOPNOTSUPP) {
-      ldpp_dout(dpp, 0) << "WARNING: " << "set_resharding_status()"
-                        << " doesn't support logrecords,"
-                        << " fallback to blocking mode." << dendl;
-      bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
-      support_logrecord = false;
-    }
-  }
-
-  if (!support_logrecord) {
+  } else {
     ret = set_resharding_status(dpp, store, bucket_info,
-                                cls_rgw_reshard_status::IN_PROGRESS,
-                                false);
+                                cls_rgw_reshard_status::IN_PROGRESS);
   }
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to pause "
