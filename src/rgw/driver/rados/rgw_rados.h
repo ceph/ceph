@@ -1337,9 +1337,9 @@ public:
 		    RGWBucketInfo& bucket_info,
 		    std::function<int(BucketShard *)> call, optional_yield y);
   /* clear the progress flag when reshard failed */
-  int reshard_failed_while_logrecord(RGWBucketInfo& bucket_info, optional_yield y,
+  int check_reshard_logrecord_status(RGWBucketInfo& bucket_info, optional_yield y,
                                      const DoutPrefixProvider *dpp);
-  int reshard_failed_while_logrecord(RGWBucketInfo& bucket_info,
+  int recover_reshard_logrecord(RGWBucketInfo& bucket_info,
                                      std::map<std::string, bufferlist>& bucket_attrs,
                                      optional_yield y,
                                      const DoutPrefixProvider *dpp);
@@ -1589,8 +1589,7 @@ public:
                                         RGWFormatterFlusher& flusher);
 
   int bucket_set_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
-                         const cls_rgw_bucket_instance_entry& entry,
-                         bool judge_support_logrecord = false);
+                         const cls_rgw_bucket_instance_entry& entry);
   int remove_objs_from_index(const DoutPrefixProvider *dpp,
 			     RGWBucketInfo& bucket_info,
 			     const std::list<rgw_obj_index_key>& oid_list);

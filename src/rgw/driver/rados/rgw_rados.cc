@@ -5595,8 +5595,7 @@ int RGWRados::bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
 
 int RGWRados::bucket_set_reshard(const DoutPrefixProvider *dpp,
                                  const RGWBucketInfo& bucket_info,
-                                 const cls_rgw_bucket_instance_entry& entry,
-                                 bool judge_support_logrecord)
+                                 const cls_rgw_bucket_instance_entry& entry)
 {
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;
@@ -5608,11 +5607,7 @@ int RGWRados::bucket_set_reshard(const DoutPrefixProvider *dpp,
       cpp_strerror(-r) << ")" << dendl;
     return r;
   }
-
-  if (judge_support_logrecord)
-    r = CLSRGWIssueSetBucketResharding2(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
-  else
-    r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
       ": unable to issue set bucket resharding, r=" << r << " (" <<
@@ -6970,7 +6965,7 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
   }
 
   if (target->bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
-    store->reshard_failed_while_logrecord(target->bucket_info, y, dpp);
+    store->check_reshard_logrecord_status(target->bucket_info, y, dpp);
   }
 
   return 0;
@@ -7667,13 +7662,13 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
   }
 
   if (bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
-    reshard_failed_while_logrecord(bucket_info, y, dpp);
+    check_reshard_logrecord_status(bucket_info, y, dpp);
   }
 
   return 0;
 }
 
-int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info, optional_yield y,
+int RGWRados::check_reshard_logrecord_status(RGWBucketInfo& bucket_info, optional_yield y,
                                              const DoutPrefixProvider *dpp)
 {
   real_time now = real_clock::now();
@@ -7694,12 +7689,12 @@ int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info, optiona
     }
     if (bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord &&
         now - bucket_info.layout.judge_reshard_lock_time >= make_timespan(reshard_progress_judge_interval))
-      return reshard_failed_while_logrecord(bucket_info, bucket_attrs, y, dpp);
+      return recover_reshard_logrecord(bucket_info, bucket_attrs, y, dpp);
   }
   return 0;
 }
 
-int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info,
+int RGWRados::recover_reshard_logrecord(RGWBucketInfo& bucket_info,
                                             map<string, bufferlist>& bucket_attrs,
                                             optional_yield y,
                                             const DoutPrefixProvider *dpp)

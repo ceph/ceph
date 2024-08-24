@@ -1346,7 +1346,7 @@ void set_reshard_status(librados::IoCtx& ioctx, const std::string& oid,
 {
   map<int, string> bucket_objs;
   bucket_objs[0] = oid;
-  int r = CLSRGWIssueSetBucketResharding2(ioctx, bucket_objs, entry, 1)();
+  int r = CLSRGWIssueSetBucketResharding(ioctx, bucket_objs, entry, 1)();
   ASSERT_EQ(0, r);
 }
 
@@ -1467,6 +1467,6 @@ TEST_F(cls_rgw, reshardlog_num)
 
   // record a log in deleting obj not add reshardlog_entry
   index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj1, loc);
-  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 1, obj1, meta);
-  reshardlog_entries(ioctx, bucket_oid, 1u);
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, 2, obj1, meta);
+  reshardlog_entries(ioctx, bucket_oid, 2u);
 }

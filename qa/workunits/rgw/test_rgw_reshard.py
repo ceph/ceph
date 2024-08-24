@@ -114,7 +114,7 @@ def test_bucket_reshard(conn, name, **fault):
         # try reshard with fault injection
         _, ret = run_bucket_reshard_cmd(name, num_shards_expected, check_retcode=False, **fault)
 
-        if fault.get('error_code') == errno.ECANCELED:
+        if fault.get('error_code') == errno.ECANCELED or fault.get('error_code') == errno.EOPNOTSUPP:
             assert(ret == 0) # expect ECANCELED to retry and succeed
         else:
             assert(ret != 0 and ret != errno.EBUSY)
@@ -214,12 +214,26 @@ def main():
         log.error("Resharding failed on bucket {}. Expected number of shards are not created\n".format(BUCKET_NAME))
 
     # TESTCASE 'manual bucket resharding','inject error','fail','check bucket accessibility', 'retry reshard'
+    log.debug('TEST: reshard bucket with EIO injected at init_index\n')
+    test_bucket_reshard(connection, 'error-at-init-index', error_at='init_index')
+    log.debug('TEST: reshard bucket with EOPNOTSUPP injected at init_index\n')
+    test_bucket_reshard(connection, 'error-at-init-index', error_at='init_index', error_code=errno.EOPNOTSUPP)
+    log.debug('TEST: reshard bucket with abort at init_index\n')
+    test_bucket_reshard(connection, 'abort-at-init-indext', abort_at='init_index')
+
     log.debug('TEST: reshard bucket with EIO injected at set_target_layout\n')
     test_bucket_reshard(connection, 'error-at-set-target-layout', error_at='set_target_layout')
     log.debug('TEST: reshard bucket with ECANCELED injected at set_target_layout\n')
     test_bucket_reshard(connection, 'error-at-set-target-layout', error_at='set_target_layout', error_code=errno.ECANCELED)
     log.debug('TEST: reshard bucket with abort at set_target_layout\n')
     test_bucket_reshard(connection, 'abort-at-set-target-layout', abort_at='set_target_layout')
+
+    log.debug('TEST: reshard bucket with EIO injected at trim_reshard_log_entries\n')
+    test_bucket_reshard(connection, 'error-at-trim-reshard-log-entries', error_at='trim_reshard_log_entries')
+    log.debug('TEST: reshard bucket with EOPNOTSUPP injected at trim_reshard_log_entries\n')
+    test_bucket_reshard(connection, 'error-at-trim-reshard-log-entries', error_at='trim_reshard_log_entries', error_code=errno.EOPNOTSUPP)
+    log.debug('TEST: reshard bucket with abort at trim_reshard_log_entries\n')
+    test_bucket_reshard(connection, 'abort-at-trim-reshard-log-entries', abort_at='trim_reshard_log_entries')
 
     log.debug('TEST: reshard bucket with EIO injected at block_writes\n')
     test_bucket_reshard(connection, 'error-at-block-writes', error_at='block_writes')

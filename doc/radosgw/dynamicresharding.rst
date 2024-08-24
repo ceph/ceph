@@ -51,10 +51,8 @@ Configuration
 .. confval:: rgw_reshard_bucket_lock_duration
 .. confval:: rgw_reshard_thread_interval
 .. confval:: rgw_reshard_num_logs
-
-- ``rgw_reshard_progress_judge_interval``: interval of judging if bucket reshard failed in reshard log process state, default: 120 seconds
-
-- ``rgw_reshard_progress_judge_ratio``: ratio of reshard progress judge interval to randomly vary, default: 0.5
+.. confval:: rgw_reshard_progress_judge_interval
+.. confval:: rgw_reshard_progress_judge_ratio
 
 Admin commands
 ==============
