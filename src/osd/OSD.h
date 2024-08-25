@@ -514,8 +514,6 @@ public:
   void queue_for_snap_trim(PG *pg, uint64_t cost);
   void queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority);
 
-  void queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority);
-
   /// Signals either (a) the end of a sleep period, or (b) a recheck of the availability
   /// of the primary map being created by the backend.
   void queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority);

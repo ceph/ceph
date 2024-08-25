@@ -67,16 +67,10 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
     out << " MUST_REPAIR";
   if (sf.auto_repair)
     out << " planned AUTO_REPAIR";
-  if (sf.check_repair)
-    out << " planned CHECK_REPAIR";
-  if (sf.deep_scrub_on_error)
-    out << " planned DEEP_SCRUB_ON_ERROR";
   if (sf.must_deep_scrub)
     out << " MUST_DEEP_SCRUB";
   if (sf.must_scrub)
     out << " MUST_SCRUB";
-  if (sf.time_for_deep)
-    out << " TIME_FOR_DEEP";
   if (sf.need_auto)
     out << " NEED_AUTO";
   if (sf.req_scrub)
@@ -189,7 +183,7 @@ bool PgScrubber::should_abort() const
 /*
  * a note re the checks performed before sending scrub-initiating messages:
  *
- * For those ('StartScrub', 'AfterRepairScrub') scrub-initiation messages that
+ * For those scrub-initiation messages ('StartScrub') that
  * possibly were in the queue while the PG changed state and became unavailable
  * for scrubbing:
  *
@@ -226,22 +220,6 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
 void PgScrubber::advance_token()
 {
   m_current_token++;
-}
-
-void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
-{
-  dout(10) << fmt::format(
-		  "{}: epoch:{} is PrimaryIdle:{}", __func__, epoch_queued,
-		  m_fsm->is_primary_idle())
-	   << dendl;
-  // we may have lost our Primary status while the message languished in the
-  // queue
-  if (check_interval(epoch_queued)) {
-    dout(10) << "scrubber event -->> AfterRepairScrub epoch: " << epoch_queued
-	     << dendl;
-    m_fsm->process_event(AfterRepairScrub{});
-    dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
-  }
 }
 
 void PgScrubber::send_scrub_unblock(epoch_t epoch_queued)
@@ -470,6 +448,7 @@ void PgScrubber::on_new_interval()
 		  (is_primary() ? "Primary" : "Replica/other"),
 		  is_scrub_active(), is_queued_or_active())
 	   << dendl;
+  m_after_repair_scrub_required = false;
   m_fsm->process_event(IntervalChanged{});
   // the following asserts were added due to a past bug, where PG flags were
   // left set in some scenarios.
@@ -498,39 +477,86 @@ void PgScrubber::rm_from_osd_scrubbing()
 		    "{}: prev. state: {}", __func__, registration_state())
 	     << dendl;
     m_osds->get_scrub_services().remove_from_osd_queue(m_pg_id);
+    m_scrub_job->clear_both_targets_queued();
     m_scrub_job->registered = false;
   }
 }
 
-sched_params_t PgScrubber::determine_initial_schedule(
+
+bool PgScrubber::flags_to_deep_priority(
     const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now) const
+    utime_t scrub_clock_now)
 {
-  sched_params_t res;
+  auto& targ = m_scrub_job->deep_target;
+  auto& entry = m_scrub_job->deep_target.sched_info_ref();
 
-  if (m_planned_scrub.must_scrub || m_planned_scrub.need_auto) {
-
-    // Set the smallest time that isn't utime_t()
-    res.proposed_time = PgScrubber::scrub_must_stamp();
-    res.is_must = Scrub::must_scrub_t::mandatory;
-
-  } else if (m_pg->info.stats.stats_invalid && app_conf.mandatory_on_invalid) {
-    res.proposed_time = scrub_clock_now;
-    res.is_must = Scrub::must_scrub_t::mandatory;
-
-  } else {
-    res.proposed_time = m_pg->info.history.last_scrub_stamp;
+  // note: as we depend on the returned value to distinguish between existing h.p.
+  // and an instance in which that is set here, there is the added "not already
+  // high-priority" condition.
+  if (targ.urgency() >= urgency_t::operator_requested) {
+    return false;
   }
 
-  dout(15) << fmt::format(
-		  "{}: suggested:{:s}(must:{:c}) hist:{:s} valid:{}/{} flags:{}",
-		  __func__, res.proposed_time,
-		  (res.is_must == must_scrub_t::mandatory ? 'y' : 'n'),
-		  m_pg->info.history.last_scrub_stamp,
-		  !(bool)m_pg->info.stats.stats_invalid,
-		  app_conf.mandatory_on_invalid, m_planned_scrub)
+  if (m_planned_scrub.need_auto || m_planned_scrub.must_deep_scrub) {
+    // Set the smallest time that isn't utime_t()
+    entry.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
+    entry.urgency = urgency_t::operator_requested;
+    return true;
+  }
+
+  return false; // not set to high-priority *by this function*
+}
+
+
+void PgScrubber::flags_to_shallow_priority(
+    const Scrub::sched_conf_t& app_conf,
+    utime_t scrub_clock_now)
+{
+  auto& entry = m_scrub_job->shallow_target.sched_info_ref();
+
+  if (m_planned_scrub.must_scrub) {
+
+    // Set the smallest time that isn't utime_t()
+    entry.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
+    ///\todo missing a distinct urgency level for 'must' scrubs
+    entry.urgency = urgency_t::operator_requested;
+
+  } else if (m_pg->info.stats.stats_invalid && app_conf.mandatory_on_invalid) {
+    entry.schedule.scheduled_at = scrub_clock_now;
+    entry.urgency = urgency_t::operator_requested;
+  }
+}
+
+
+void PgScrubber::update_targets(
+    const requested_scrub_t& planned,
+    utime_t scrub_clock_now)
+{
+  const auto applicable_conf = populate_config_params();
+
+  dout(10) << fmt::format(
+		  "{}: config:{} flags:<{}> job on entry:{}{}", __func__,
+		  applicable_conf, planned, *m_scrub_job,
+		  m_pg->info.stats.stats_invalid ? " invalid-stats" : "")
 	   << dendl;
-  return res;
+
+  // first, use the planned-scrub flags to possibly set one of the
+  // targets as high-priority.
+  // Note - this step is to be removed in the followup commits.
+  auto deep_hp_set = flags_to_deep_priority(applicable_conf, scrub_clock_now);
+  if (!deep_hp_set) {
+    flags_to_shallow_priority(populate_config_params(), scrub_clock_now);
+  }
+
+  // the next periodic scrubs:
+  m_scrub_job->adjust_shallow_schedule(
+      m_pg->info.history.last_scrub_stamp, applicable_conf, scrub_clock_now,
+      delay_ready_t::delay_ready);
+  m_scrub_job->adjust_deep_schedule(
+      m_pg->info.history.last_deep_scrub_stamp, applicable_conf,
+      scrub_clock_now, delay_ready_t::delay_ready);
+
+  dout(10) << fmt::format("{}: adjusted:{}", __func__, *m_scrub_job) << dendl;
 }
 
 
@@ -559,7 +585,8 @@ void PgScrubber::on_primary_active_clean()
 /*
  * A note re the call to publish_stats_to_osd() below:
  * - we are called from either request_rescrubbing() or scrub_requested().
- * - in both cases - the schedule was modified, and needs to be published;
+ * Update: also from scrub_finish() & schedule_scrub_with_osd().
+ * - in all cases - the schedule was modified, and needs to be published;
  * - we are a Primary.
  * - in the 1st case - the call is made as part of scrub_finish(), which
  *   guarantees that the PG is locked and the interval is still the same.
@@ -576,52 +603,49 @@ void PgScrubber::update_scrub_job(Scrub::delay_ready_t delay_ready)
     return;
   }
 
-  // if we were marked as 'not registered' - do not try to push into
-  // the queue. And if we are already in the queue - do not push again.
-  if (!m_scrub_job->registered) {
-    dout(10) << fmt::format("{}: PG[{}] not registered", __func__, m_pg_id)
-	     << dendl;
-    return;
-  }
-
   dout(15) << fmt::format(
 		  "{}: flags:<{}> job on entry:{}", __func__, m_planned_scrub,
 		  *m_scrub_job)
 	   << dendl;
-  if (m_scrub_job->target_queued) {
+
+  // if we were marked as 'not registered' - do not try to push into
+  // the queue. And if we are already in the queue - dequeue.
+  if (!m_scrub_job->is_registered()) {
+    dout(10) << fmt::format("{}: PG[{}] not registered", __func__, m_pg_id)
+	     << dendl;
+    return;
+  }
+  ceph_assert(m_pg->is_locked());
+  if (m_scrub_job->is_queued()) {
+    // one or both of the targets are in the queue. Remove them.
     m_osds->get_scrub_services().remove_from_osd_queue(m_pg_id);
-    m_scrub_job->target_queued = false;
+    m_scrub_job->clear_both_targets_queued();
     dout(20) << fmt::format(
 		    "{}: PG[{}] dequeuing for an update", __func__, m_pg_id)
 	     << dendl;
   }
 
-  ceph_assert(m_pg->is_locked());
-  const auto applicable_conf = populate_config_params();
   const auto scrub_clock_now = ceph_clock_now();
-  const auto suggested =
-      determine_initial_schedule(applicable_conf, scrub_clock_now);
-
-  ceph_assert(m_scrub_job->is_registered());
-  m_scrub_job->adjust_schedule(
-      suggested, applicable_conf, scrub_clock_now, delay_ready);
-  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
-  m_scrub_job->target_queued = true;
+  update_targets(m_planned_scrub, scrub_clock_now);
+  m_osds->get_scrub_services().enqueue_scrub_job(*m_scrub_job);
+  m_scrub_job->set_both_targets_queued();
   m_pg->publish_stats_to_osd();
-
   dout(10) << fmt::format(
 		  "{}: flags:<{}> job on exit:{}", __func__, m_planned_scrub,
 		  *m_scrub_job)
 	   << dendl;
 }
 
+
 scrub_level_t PgScrubber::scrub_requested(
     scrub_level_t scrub_level,
     scrub_type_t scrub_type,
     requested_scrub_t& req_flags)
 {
-  const bool deep_requested = (scrub_level == scrub_level_t::deep) ||
-			      (scrub_type == scrub_type_t::do_repair);
+  const bool repair_requested = (scrub_type == scrub_type_t::do_repair);
+  const bool deep_requested =
+      (scrub_level == scrub_level_t::deep) || repair_requested;
+  scrub_level = deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
   dout(10) << fmt::format(
 		  "{}: {}{} scrub requested. "
 		  "@entry:{},last-stamp:{:s},Registered?{}",
@@ -632,43 +656,99 @@ scrub_level_t PgScrubber::scrub_requested(
 		  m_scrub_job->get_sched_time(), registration_state())
 	   << dendl;
 
+  // if we were marked as 'not registered' - do not try to push into
+  // the queue.
+  if (!m_scrub_job->is_registered()) {
+    dout(10) << fmt::format(
+		    "{}: pg[{}]: not registered for scrubbing on this OSD",
+		    __func__, m_pg_id)
+	     << dendl;
+    return scrub_level_t::shallow;
+  }
+
+  // modifying the planned-scrub flags - to be removed shortly
   req_flags.must_scrub = true;
   req_flags.must_deep_scrub = deep_requested;
-  req_flags.must_repair = (scrub_type == scrub_type_t::do_repair);
+  req_flags.must_repair = repair_requested;
   // User might intervene, so clear this
   req_flags.need_auto = false;
   req_flags.req_scrub = true;
   dout(20) << fmt::format("{}: planned scrub:{}", __func__, req_flags) << dendl;
 
-  update_scrub_job(delay_ready_t::no_delay);
-  return deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
+  // update the relevant SchedTarget (either shallow or deep). Set its urgency
+  // to either operator_requested or must_repair. Push it into the queue
+  auto& trgt = m_scrub_job->get_target(scrub_level);
+  m_osds->get_scrub_services().dequeue_target(m_pg_id, scrub_level);
+  m_scrub_job->operator_forced(scrub_level, scrub_type);
+  m_osds->get_scrub_services().enqueue_target(trgt);
+
+  return scrub_level;
 }
 
 
+void PgScrubber::recovery_completed()
+{
+  dout(15) << fmt::format(
+		  "{}: is scrub required? {}", __func__,
+		  m_after_repair_scrub_required)
+	   << dendl;
+  if (m_after_repair_scrub_required) {
+    m_after_repair_scrub_required = false;
+    m_osds->get_scrub_services().dequeue_target(m_pg_id, scrub_level_t::deep);
+    auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
+    trgt.up_urgency_to(urgency_t::after_repair);
+    trgt.sched_info.schedule.scheduled_at = {0, 0};
+    trgt.sched_info.schedule.not_before = ceph_clock_now();
+    m_osds->get_scrub_services().enqueue_target(trgt);
+  }
+}
+
+
+bool PgScrubber::is_after_repair_required() const
+{
+  return m_after_repair_scrub_required;
+}
+
+
+/**
+ * mark for a deep-scrub after the current scrub ended with errors.
+ * Note that no need to requeue the target, as it will be requeued
+ * when the scrub ends.
+ */
 void PgScrubber::request_rescrubbing(requested_scrub_t& request_flags)
 {
   dout(10) << __func__ << " flags: " << request_flags << dendl;
 
   request_flags.need_auto = true;
-  update_scrub_job(delay_ready_t::no_delay);
+  auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
+  trgt.up_urgency_to(urgency_t::must_repair);
+  trgt.sched_info.schedule.scheduled_at = {0, 0};
+  trgt.sched_info.schedule.not_before = ceph_clock_now();
+  // no need to requeue, as scrub_finish() will do that.
 }
 
-bool PgScrubber::reserve_local()
+
+/*
+ * Implementation:
+ * try to create the reservation object (which translates into asking the
+ * OSD for a local scrub resource). The object returned is a
+ * a wrapper around the actual reservation, and that object releases
+ * the local resource automatically when reset.
+ */
+bool PgScrubber::reserve_local(const Scrub::SchedTarget& trgt)
 {
-  // try to create the reservation object (which translates into asking the
-  // OSD for a local scrub resource). The object returned is a
-  // a wrapper around the actual reservation, and that object releases
-  // the local resource automatically when reset.
-  m_local_osd_resource = m_osds->get_scrub_services().inc_scrubs_local(
-      m_scrub_job->is_high_priority());
+  const bool is_hp = !ScrubJob::observes_max_concurrency(trgt.urgency());
+
+  m_local_osd_resource = m_osds->get_scrub_services().inc_scrubs_local(is_hp);
   if (m_local_osd_resource) {
-    dout(15) << __func__ << ": local resources reserved" << dendl;
+    dout(10) << __func__ << ": local resources reserved" << dendl;
     return true;
   }
 
   dout(15) << __func__ << ": failed to reserve local scrub resources" << dendl;
   return false;
 }
+
 
 Scrub::sched_conf_t PgScrubber::populate_config_params() const
 {
@@ -878,9 +958,10 @@ int PgScrubber::get_whoami() const
   return m_osds->whoami;
 }
 
-[[nodiscard]] bool PgScrubber::is_high_priority() const
+[[nodiscard]] bool PgScrubber::is_reservation_required() const
 {
-  return m_flags.required;
+  ceph_assert(m_active_target);
+  return ScrubJob::requires_reservation(m_active_target->urgency());
 }
 
 /*
@@ -1624,7 +1705,9 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
 			      cost);
 }
 
-void PgScrubber::set_op_parameters(const requested_scrub_t& request)
+void PgScrubber::set_op_parameters(
+    ScrubPGPreconds pg_cond,
+    const requested_scrub_t& request)
 {
   dout(10) << fmt::format("{}: @ input: {}", __func__, request) << dendl;
 
@@ -1634,24 +1717,35 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
   // to discard stale messages from previous aborted scrubs.
   m_epoch_start = m_pg->get_osdmap_epoch();
 
-  m_flags.check_repair = request.check_repair;
-  m_flags.auto_repair = request.auto_repair || request.need_auto;
+  m_flags.check_repair = m_active_target->urgency() == urgency_t::after_repair;
+  m_flags.auto_repair = false;
   m_flags.required = request.req_scrub || request.must_scrub;
 
   m_flags.priority = (request.must_scrub || request.need_auto)
 		       ? get_pg_cct()->_conf->osd_requested_scrub_priority
 		       : m_pg->get_scrub_priority();
 
+  // 'deep-on-error' is set for periodic shallow scrubs, if allowed
+  // by the environment
+  if (m_active_target->is_shallow() && pg_cond.can_autorepair &&
+      m_active_target->urgency() == urgency_t::periodic_regular) {
+    m_flags.deep_scrub_on_error = true;
+    dout(10) << fmt::format(
+		    "{}: auto repair with scrubbing, rescrub if errors found",
+		    __func__)
+	     << dendl;
+  }
+
   state_set(PG_STATE_SCRUBBING);
 
   // will we be deep-scrubbing?
-  if (request.calculated_to_deep) {
+  m_is_deep = m_active_target->sched_info.level == scrub_level_t::deep;
+  if (m_is_deep) {
     state_set(PG_STATE_DEEP_SCRUB);
-    m_is_deep = true;
+    if (pg_cond.can_autorepair || request.auto_repair) {
+      m_flags.auto_repair = true;
+    }
   } else {
-    m_is_deep = false;
-
-    // make sure we got the 'calculated_to_deep' flag right
     ceph_assert(!request.must_deep_scrub);
     ceph_assert(!request.need_auto);
   }
@@ -1671,7 +1765,6 @@ void PgScrubber::set_op_parameters(const requested_scrub_t& request)
   // The publishing here is required for tests synchronization.
   // The PG state flags were modified.
   m_pg->publish_stats_to_osd();
-  m_flags.deep_scrub_on_error = request.deep_scrub_on_error;
 }
 
 
@@ -1831,8 +1924,12 @@ void PgScrubber::clear_scrub_blocked()
 void PgScrubber::flag_reservations_failure()
 {
   dout(10) << __func__ << dendl;
-  // delay the next invocation of the scrubber on this target
-  requeue_penalized(Scrub::delay_cause_t::replicas);
+  // delay the next invocation of the scrubber on this target. Note that
+  // we use 'delay_both_targets_t::yes', as requeue_penalized() knows not to
+  // penalize the sister target if its priority is higher.
+  requeue_penalized(
+      m_active_target->level(), delay_both_targets_t::yes,
+      delay_cause_t::replicas, ceph_clock_now());
 }
 
 /*
@@ -1945,7 +2042,7 @@ void PgScrubber::scrub_finish()
     } else if (has_error) {
 
       // Deep scrub in order to get corrected error counts
-      m_pg->scrub_after_recovery = true;
+      m_after_repair_scrub_required = true;
       m_planned_scrub.req_scrub = m_planned_scrub.req_scrub || m_flags.required;
 
       dout(20) << __func__ << " Current 'required': " << m_flags.required
@@ -2022,9 +2119,6 @@ void PgScrubber::scrub_finish()
     ceph_assert(tr == 0);
   }
 
-  // determine the next scrub time
-  update_scrub_job(delay_ready_t::delay_ready);
-
   if (has_error) {
     m_pg->queue_peering_event(PGPeeringEventRef(
       std::make_shared<PGPeeringEvent>(get_osdmap_epoch(),
@@ -2040,6 +2134,8 @@ void PgScrubber::scrub_finish()
   if (do_auto_scrub) {
     request_rescrubbing(m_planned_scrub);
   }
+  // determine the next scrub time
+  update_scrub_job(delay_ready_t::delay_ready);
 
   if (m_pg->is_active() && m_pg->is_primary()) {
     m_pg->recovery_state.share_pg_info();
@@ -2080,34 +2176,31 @@ void PgScrubber::on_digest_updates()
  * have had its priority, flags, or schedule modified in the meantime.
  * And - it does not (at least initially, i.e. immediately after
  * set_op_parameters()), have high priority.
- *
- * Alas, the scrub session that was initiated was aborted. We must now
- * merge the two sets of parameters, using the highest priority and the
- * nearest target time for the next scrub.
- *
- * Note: only half-functioning in this commit. As the scrub-job copy
- * (the one that was in the scheduling queue, and was passed to the scrubber)
- * does not have the 'urgency' parameter, we are missing some information
- * that is still encoded in the 'planned scrub' flags. This will be fixed in
- * the next step.
  */
 void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 {
   if (!m_scrub_job->is_registered()) {
     dout(10) << fmt::format(
-                    "{}: PG not registered for scrubbing on this OSD. Won't "
-                    "requeue!",
-                    __func__)
-             << dendl;
+		    "{}: PG not registered for scrubbing on this OSD. Won't "
+		    "requeue!",
+		    __func__)
+	     << dendl;
     return;
   }
+
+  dout(10) << fmt::format(
+		  "{}: executing target: {}. Session flags: {} up-to-date job: "
+		  "{} planned: {}",
+		  __func__, *m_active_target, m_flags, *m_scrub_job,
+		  m_planned_scrub)
+	   << dendl;
 
   // assuming we can still depend on the 'scrubbing' flag being set;
   // Also on Queued&Active.
 
   // note again: this is not how merging should work in the final version:
   // e.g. - the 'aborted_schedule' data should be passed thru the scrubber.
-  // In this current patchworik, for example, we are only guessing at
+  // In this current patchwork, for example, we are only guessing at
   // the original value of 'must_deep_scrub'.
   m_planned_scrub.must_deep_scrub =
       m_planned_scrub.must_deep_scrub || (m_flags.required && m_is_deep);
@@ -2115,20 +2208,39 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 			       m_planned_scrub.must_scrub || m_flags.required;
   m_planned_scrub.must_repair = m_planned_scrub.must_repair || m_is_repair;
   m_planned_scrub.need_auto = m_planned_scrub.need_auto || m_flags.auto_repair;
-  m_planned_scrub.deep_scrub_on_error =
-      m_planned_scrub.deep_scrub_on_error || m_flags.deep_scrub_on_error;
-  m_planned_scrub.check_repair =
-      m_planned_scrub.check_repair || m_flags.check_repair;
 
-  m_scrub_job->merge_and_delay(
-      m_active_target->schedule, issue, m_planned_scrub, ceph_clock_now());
-  ceph_assert(!m_scrub_job->target_queued);
-  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
-  m_scrub_job->target_queued = true;
+  // copy the aborted target
+  const auto aborted_target = *m_active_target;
+  m_active_target.reset();
+
+  const auto scrub_clock_now = ceph_clock_now();
+  update_targets(m_planned_scrub, scrub_clock_now);
+
+  // we may have updated both targets. For sure - we took notice of any change
+  // that made any of the targets into a high-priority one. All that's left:
+  // delay the specific target that was aborted.
+
+  auto& trgt = m_scrub_job->delay_on_failure(aborted_target.level(), 5s, issue,
+      scrub_clock_now);
+
+  /// \todo complete the merging of the deadline & target for non-hp targets
+#ifdef NOT_YET
+  if (!aborted_target.is_high_priority()) {
+    std::ignore = aborted_target;
+  }
+#endif
+  ceph_assert(!trgt.queued);
+  ceph_assert(!m_scrub_job->is_queued());
+  m_osds->get_scrub_services().enqueue_target(trgt);
+  trgt.queued = true;
 }
 
 
-void PgScrubber::requeue_penalized(Scrub::delay_cause_t cause)
+void PgScrubber::requeue_penalized(
+    scrub_level_t s_or_d,
+    delay_both_targets_t delay_both,
+    Scrub::delay_cause_t cause,
+    utime_t scrub_clock_now)
 {
   if (!m_scrub_job->is_registered()) {
     dout(10) << fmt::format(
@@ -2139,29 +2251,61 @@ void PgScrubber::requeue_penalized(Scrub::delay_cause_t cause)
     return;
   }
   /// \todo fix the 5s' to use a cause-specific delay parameter
-  m_scrub_job->delay_on_failure(5s, cause, ceph_clock_now());
-  ceph_assert(!m_scrub_job->target_queued);
-  m_osds->get_scrub_services().enqueue_target(*m_scrub_job);
-  m_scrub_job->target_queued = true;
+  auto& trgt =
+      m_scrub_job->delay_on_failure(s_or_d, 5s, cause, scrub_clock_now);
+  ceph_assert(!trgt.queued);
+  m_osds->get_scrub_services().enqueue_target(trgt);
+  trgt.queued = true;
+
+  if (delay_both == delay_both_targets_t::yes) {
+    const auto sister_level = (s_or_d == scrub_level_t::deep)
+				  ? scrub_level_t::shallow
+				  : scrub_level_t::deep;
+    auto& trgt2 = m_scrub_job->get_target(sister_level);
+    // do not delay if the other target has higher urgency
+    if (trgt2.urgency() > trgt.urgency()) {
+      dout(10) << fmt::format(
+		      "{}: not delaying the other target (urgency: {})",
+		      __func__, trgt2.urgency())
+	       << dendl;
+      return;
+    }
+    if (trgt2.queued) {
+      m_osds->get_scrub_services().dequeue_target(m_pg_id, sister_level);
+      trgt2.queued = false;
+    }
+    m_scrub_job->delay_on_failure(sister_level, 5s, cause, scrub_clock_now);
+    m_osds->get_scrub_services().enqueue_target(trgt2);
+    trgt2.queued = true;
+  }
 }
 
 
 Scrub::schedule_result_t PgScrubber::start_scrub_session(
-    std::unique_ptr<Scrub::ScrubJob> candidate,
+    scrub_level_t s_or_d,
     Scrub::OSDRestrictions osd_restrictions,
     Scrub::ScrubPGPreconds pg_cond,
     const requested_scrub_t& requested_flags)
 {
-  m_scrub_job->target_queued = false;
+  auto& trgt = m_scrub_job->get_target(s_or_d);
+  dout(10) << fmt::format(
+		  "{}: pg[{}] {} {} target: {}", __func__, m_pg_id,
+		  (m_pg->is_active() ? "<active>" : "<not-active>"),
+		  (m_pg->is_clean() ? "<clean>" : "<not-clean>"), trgt)
+	   << dendl;
+  // mark our target as not-in-queue. If any error is encountered - that
+  // target must be requeued!
+  trgt.queued = false;
 
   if (is_queued_or_active()) {
-    // not a real option when the queue entry is the whole ScrubJob, but
-    // will be possible when using level-specific targets
     dout(10) << __func__ << ": scrub already in progress" << dendl;
+    // no need to requeue
     return schedule_result_t::target_specific_failure;
   }
 
-  m_active_target = std::move(candidate);
+  // a few checks. If failing - the 'not-before' is modified, and the target
+  // is requeued.
+  auto clock_now = ceph_clock_now();
 
   if (!is_primary() || !m_pg->is_active()) {
     // the PG is not expected to be 'registered' in this state. And we should
@@ -2171,13 +2315,15 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     return schedule_result_t::target_specific_failure;
   }
 
-  // for all other failures - we must reinstate our entry in the Scrub Queue
+  // for all other failures - we must reinstate our entry in the Scrub Queue.
+  // For some of the failures, we will also delay the 'other' target.
   if (!m_pg->is_clean()) {
     dout(10) << fmt::format(
 		    "{}: cannot scrub (not clean). Registered?{:c}", __func__,
 		    m_scrub_job->is_registered() ? 'Y' : 'n')
 	     << dendl;
-    requeue_penalized(Scrub::delay_cause_t::pg_state);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state, clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -2186,54 +2332,96 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     // (on the transition from NotTrimming to Trimming/WaitReservation),
     // i.e. some time before setting 'snaptrim'.
     dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
-    requeue_penalized(Scrub::delay_cause_t::pg_state);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state, clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
-  // analyze the combination of the requested scrub flags, the osd/pool
-  // configuration and the PG status to determine whether we should scrub
-  // now, and what type of scrub should that be.
-  auto updated_flags = validate_scrub_mode(osd_restrictions, pg_cond);
-  if (!updated_flags) {
-    dout(10) << __func__ << ": scrub not allowed" << dendl;
-    requeue_penalized(Scrub::delay_cause_t::scrub_params);
-    return schedule_result_t::target_specific_failure;
+  // is there a 'no-scrub' flag set for the initiated scrub level? note:
+  // won't affect operator-initiated (and some other types of) scrubs.
+  if (ScrubJob::observes_noscrub_flags(trgt.urgency())) {
+    if (trgt.is_shallow()) {
+      if (!pg_cond.allow_shallow) {
+	// can't scrub at all
+	dout(10) << __func__ << ": shallow not allowed" << dendl;
+	requeue_penalized(
+	    s_or_d, delay_both_targets_t::no, delay_cause_t::flags, clock_now);
+	return schedule_result_t::target_specific_failure;
+      }
+    } else if (!pg_cond.allow_deep) {
+      // can't scrub at all
+      dout(10) << __func__ << ": deep not allowed" << dendl;
+      requeue_penalized(
+	  s_or_d, delay_both_targets_t::no, delay_cause_t::flags, clock_now);
+      return schedule_result_t::target_specific_failure;
+    }
+  }
+
+  // restricting shallow scrubs of PGs that have deep errors:
+  if (pg_cond.has_deep_errors && trgt.is_shallow()) {
+    if (trgt.urgency() < urgency_t::operator_requested) {
+      // if there are deep errors, we should have scheduled a deep scrub first.
+      // If we are here trying to perform a shallow scrub, it means that for some
+      // reason that deep scrub failed to be initiated. We will not try a shallow
+      // scrub until this is solved.
+      dout(10) << __func__ << ": Regular scrub skipped due to deep-scrub errors"
+	       << dendl;
+      requeue_penalized(
+	  s_or_d, delay_both_targets_t::no, delay_cause_t::pg_state, clock_now);
+      return schedule_result_t::target_specific_failure;
+    } else {
+      // we will honor the request anyway, but will report the issue
+      m_osds->clog->error() << fmt::format(
+	  "osd.{} pg {} Regular scrub request, deep-scrub details will be lost",
+	  m_osds->whoami, m_pg_id);
+    }
   }
 
   // if only explicitly requested repairing is allowed - skip other types
   // of scrubbing
   if (osd_restrictions.allow_requested_repair_only &&
-      !updated_flags->must_repair) {
+      !m_planned_scrub.must_repair) {
     dout(10) << __func__
 	     << ": skipping this PG as repairing was not explicitly "
 		"requested for it"
 	     << dendl;
-    requeue_penalized(Scrub::delay_cause_t::scrub_params);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::scrub_params,
+	clock_now);
     return schedule_result_t::target_specific_failure;
   }
 
   // try to reserve the local OSD resources. If failing: no harm. We will
   // be retried by the OSD later on.
-  if (!reserve_local()) {
+  if (!reserve_local(trgt)) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
-    requeue_penalized(Scrub::delay_cause_t::local_resources);
+    requeue_penalized(
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::local_resources,
+	clock_now);
     return schedule_result_t::osd_wide_failure;
   }
 
-  // can commit to the updated flags now, as nothing will stop the scrub
-  m_planned_scrub = *updated_flags;
+  // can commit now to the specific scrub details, as nothing will
+  // stop the scrub
 
   // An interrupted recovery repair could leave this set.
   state_clear(PG_STATE_REPAIR);
 
-  set_op_parameters(m_planned_scrub);
+  m_active_target = trgt;
+  set_op_parameters(pg_cond, m_planned_scrub);
+  // dequeue the PG's "other" target
+  m_osds->get_scrub_services().remove_from_osd_queue(m_pg_id);
+  m_scrub_job->clear_both_targets_queued();
+
+  // clear all special handling urgency/flags from the target that is
+  // executing now.
+  trgt.reset();
 
   // using the OSD queue, as to not execute the scrub code as part of the tick.
   dout(10) << __func__ << ": queueing" << dendl;
   m_osds->queue_for_scrub(m_pg, Scrub::scrub_prio_t::low_priority);
   return schedule_result_t::scrub_initiated;
 }
-
 
 /*
  * note that the flags-set fetched from the PG (m_pg->m_planned_scrub)
@@ -2245,47 +2433,40 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f,
 {
   f->open_object_section("scrubber");
 
-  if (m_active) {  // TBD replace with PR#42780's test
+  if (m_active_target) {
     f->dump_bool("active", true);
-    dump_active_scrubber(f, state_test(PG_STATE_DEEP_SCRUB));
+    dump_active_scrubber(f);
   } else {
     f->dump_bool("active", false);
-    f->dump_bool("must_scrub",
-		 (m_planned_scrub.must_scrub || m_flags.required));
-    f->dump_bool("must_deep_scrub", request_flags.must_deep_scrub);
+    const auto now_is = ceph_clock_now();
+    const auto& earliest = m_scrub_job->earliest_target(now_is);
+    f->dump_bool("must_scrub", earliest.is_high_priority());
+    f->dump_bool("must_deep_scrub", request_flags.must_deep_scrub); // RRR
     f->dump_bool("must_repair", request_flags.must_repair);
     f->dump_bool("need_auto", request_flags.need_auto);
 
-    f->dump_stream("scrub_reg_stamp") << m_scrub_job->get_sched_time();
-
-    // note that we are repeating logic that is coded elsewhere (currently
-    // PG.cc). This is not optimal.
-    bool deep_expected =
-      (ceph_clock_now() >= m_pg->next_deepscrub_interval()) ||
-      request_flags.must_deep_scrub || request_flags.need_auto;
-    auto sched_state =
-      m_scrub_job->scheduling_state(ceph_clock_now(), deep_expected);
+    f->dump_stream("scrub_reg_stamp") << earliest.sched_info.schedule.not_before;
+    auto sched_state = m_scrub_job->scheduling_state(now_is);
     f->dump_string("schedule", sched_state);
   }
 
   if (m_publish_sessions) {
-    f->dump_int("test_sequence",
-		m_sessions_counter);  // an ever-increasing number used by tests
+    // this is a test-only feature. It is not expected to be used in production.
+    // The 'test_sequence' is an ever-increasing number used by tests.
+    f->dump_int("test_sequence", m_sessions_counter);
   }
 
   f->close_section();
 }
 
-void PgScrubber::dump_active_scrubber(ceph::Formatter* f, bool is_deep) const
+void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
 {
   f->dump_stream("epoch_start") << m_interval_start;
   f->dump_stream("start") << m_start;
   f->dump_stream("end") << m_end;
   f->dump_stream("max_end") << m_max_end;
   f->dump_stream("subset_last_update") << m_subset_last_update;
-  // note that m_is_deep will be set some time after PG_STATE_DEEP_SCRUB is
-  // asserted. Thus, using the latter.
-  f->dump_bool("deep", is_deep);
+  f->dump_bool("deep", m_active_target->is_deep());
 
   // dump the scrub-type flags
   f->dump_bool("req_scrub", m_flags.required);
@@ -2317,10 +2498,9 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
     return pg_scrubbing_status_t{};
   }
 
-  dout(25) << fmt::format("{}: active:{} blocked:{}",
-			  __func__,
-			  m_active,
-			  m_scrub_job->blocked)
+  dout(25) << fmt::format(
+		  "{}: active:{} blocked:{}", __func__, m_active,
+		  m_scrub_job->blocked)
 	   << dendl;
 
   auto now_is = ceph_clock_now();
@@ -2331,14 +2511,14 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
     if (m_scrub_job->blocked) {
       // a bug. An object is held locked.
       int32_t blocked_for =
-	(utime_t{now_is} - m_scrub_job->blocked_since).sec();
+	  (utime_t{now_is} - m_scrub_job->blocked_since).sec();
       return pg_scrubbing_status_t{
-	utime_t{},
-	blocked_for,
-	pg_scrub_sched_status_t::blocked,
-	true,  // active
-	(m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
-	false};
+	  utime_t{},
+	  blocked_for,
+	  pg_scrub_sched_status_t::blocked,
+	  true,	 // active
+	  (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
+	  false};
 
     } else {
       int32_t dur_seconds =
@@ -2353,42 +2533,39 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
     }
   }
   if (!m_scrub_job->is_registered()) {
-    return pg_scrubbing_status_t{utime_t{},
-				 0,
-				 pg_scrub_sched_status_t::not_queued,
-				 false,
-				 scrub_level_t::shallow,
-				 false};
+    return pg_scrubbing_status_t{
+	utime_t{},
+	0,
+	pg_scrub_sched_status_t::not_queued,
+	false,
+	scrub_level_t::shallow,
+	false};
   }
 
-  // Will next scrub surely be a deep one? note that deep-scrub might be
-  // selected even if we report a regular scrub here.
-  bool deep_expected = (now_is >= m_pg->next_deepscrub_interval()) ||
-		       m_planned_scrub.must_deep_scrub ||
-		       m_planned_scrub.need_auto;
-  scrub_level_t expected_level =
-    deep_expected ? scrub_level_t::deep : scrub_level_t::shallow;
-  bool periodic = !m_planned_scrub.must_scrub && !m_planned_scrub.need_auto &&
-		  !m_planned_scrub.must_deep_scrub;
-
-  // are we ripe for scrubbing?
-  if (now_is > m_scrub_job->schedule.not_before) {
-    // we are waiting for our turn at the OSD.
-    return pg_scrubbing_status_t{m_scrub_job->schedule.scheduled_at,
-				 0,
-				 pg_scrub_sched_status_t::queued,
-				 false,
-				 expected_level,
-				 periodic};
+  // not taking 'no-*scrub' flags into account here.
+  const auto first_ready = m_scrub_job->earliest_eligible(now_is);
+  if (first_ready) {
+    const auto& targ = first_ready->get();
+    return pg_scrubbing_status_t{
+	targ.sched_info.schedule.not_before,
+	0,
+	pg_scrub_sched_status_t::queued,
+	false,
+	(targ.is_deep() ? scrub_level_t::deep : scrub_level_t::shallow),
+	!targ.is_high_priority()};
   }
 
-  return pg_scrubbing_status_t{m_scrub_job->schedule.not_before,
-			       0,
-			       pg_scrub_sched_status_t::scheduled,
-			       false,
-			       expected_level,
-			       periodic};
+  // both targets are not ready yet
+  const auto targ = m_scrub_job->earliest_target();
+  return pg_scrubbing_status_t{
+      targ.sched_info.schedule.not_before,
+      0,
+      pg_scrub_sched_status_t::scheduled,
+      false,
+      (targ.is_deep() ? scrub_level_t::deep : scrub_level_t::shallow),
+      !targ.is_high_priority()};
 }
+
 
 void PgScrubber::handle_query_state(ceph::Formatter* f)
 {
@@ -2664,284 +2841,6 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
     m_pg->publish_stats_to_osd();
     m_last_stat_upd = now_is;
   }
-}
-
-
-bool PgScrubber::is_time_for_deep(
-    Scrub::ScrubPGPreconds pg_cond,
-    const requested_scrub_t& planned) const
-{
-  const auto last_deep = m_pg->info.history.last_deep_scrub_stamp;  // shorthand
-  dout(10) << fmt::format(
-		  "{}: pg_cond:({}) need-auto?{} last_deep_scrub_stamp:{}",
-		  __func__, pg_cond, planned.need_auto, last_deep)
-	   << dendl;
-
-  if (!pg_cond.allow_deep)
-    return false;
-
-  if (planned.need_auto) {
-    dout(10) << __func__ << ": need repair after scrub errors" << dendl;
-    return true;
-  }
-
-  const auto sched_conf = populate_config_params();
-  const auto next_deep = last_deep + sched_conf.deep_interval;
-  const auto timenow = ceph_clock_now();
-  if (timenow >= next_deep) {
-    dout(20) << fmt::format(
-		    "{}: now ({}) >= time for deep ({})", __func__, timenow,
-		    next_deep)
-	     << dendl;
-    return true;
-  }
-
-  if (pg_cond.has_deep_errors) {
-    // note: the text below is matched by 'standalone' tests
-    get_clog()->info() << fmt::format(
-	"osd.{} pg {} Deep scrub errors, upgrading scrub to deep-scrub",
-	get_whoami(), m_pg_id);
-    return true;
-  }
-
-  // we only flip coins if 'allow_shallow_scrub' is asserted. Otherwise - as
-  // this function is called often, we will probably be deep-scrubbing most of
-  // the time.
-  if (pg_cond.allow_shallow) {
-    const bool deep_coin_flip =
-	random_bool_with_probability(sched_conf.deep_randomize_ratio);
-    if (deep_coin_flip) {
-      dout(10) << fmt::format(
-		      "{}: scrub upgraded to deep (coin flip)", __func__)
-	       << dendl;
-      return true;
-    }
-  }
-
-  return false;
-}
-
-
-/*
- clang-format off
-
-   Request details    |  none    |  no-scrub  | no-scrub+no-deep | no-deep
-   ------------------------------------------------------------------------
-   ------------------------------------------------------------------------
-   initiated          |  shallow |  shallow   |  shallow         | shallow
-   ------------------------------------------------------------------------
-   init. + t.f.deep   |  deep    |  deep      |  shallow         | shallow
-   ------------------------------------------------------------------------
-   initiated deep     |  deep    |  deep      |  deep            | deep
-   ------------------------------------------------------------------------
-
- clang-format on
-*/
-std::optional<requested_scrub_t> PgScrubber::validate_initiated_scrub(
-    Scrub::ScrubPGPreconds pg_cond,
-    bool time_for_deep,
-    const requested_scrub_t& planned) const
-{
-  requested_scrub_t upd_flags{planned};
-
-  upd_flags.time_for_deep = time_for_deep;
-  upd_flags.deep_scrub_on_error = false;
-  upd_flags.auto_repair = false;
-
-  if (upd_flags.must_deep_scrub) {
-    upd_flags.calculated_to_deep = true;
-  } else if (
-      upd_flags.time_for_deep && pg_cond.allow_deep) {
-    upd_flags.calculated_to_deep = true;
-  } else {
-    upd_flags.calculated_to_deep = false;
-    if (pg_cond.has_deep_errors) {
-      get_clog()->error() << fmt::format(
-	  "osd.{} pg {} Regular scrub request, deep-scrub details will be lost",
-	  get_whoami(), m_pg_id);
-    }
-  }
-
-  if (pg_cond.can_autorepair) {
-    // for shallow scrubs: rescrub if errors found
-    // for deep: turn 'auto-repair' on
-    if (upd_flags.calculated_to_deep) {
-      dout(10) << fmt::format(
-		      "{}: performing an auto-repair deep scrub", __func__)
-	       << dendl;
-      upd_flags.auto_repair = true;
-    } else {
-      dout(10) << fmt::format(
-		      "{}: will perform an auto-repair deep scrub if errors "
-		      "are found",
-		      __func__)
-	       << dendl;
-      upd_flags.deep_scrub_on_error = true;
-    }
-  }
-
-  return upd_flags;
-}
-
-/*
- clang-format off
-
-   for periodic scrubs:
-
-   Periodic  type     |  none    |  no-scrub  | no-scrub+no-deep | no-deep
-   ------------------------------------------------------------------------
-   ------------------------------------------------------------------------
-   periodic           |  shallow |  x         |  x               | shallow
-   ------------------------------------------------------------------------
-   periodic + t.f.deep|  deep    |  deep      |  x               | shallow
-   ------------------------------------------------------------------------
-
- clang-format on
-*/
-std::optional<requested_scrub_t> PgScrubber::validate_periodic_mode(
-  Scrub::ScrubPGPreconds pg_cond,
-  bool time_for_deep,
-  const requested_scrub_t& planned) const
-
-{
-  ceph_assert(!planned.must_deep_scrub && !planned.must_repair);
-
-  if (!pg_cond.allow_deep && pg_cond.has_deep_errors) {
-    get_clog()->error() << fmt::format(
-	"osd.{} pg {} Regular scrub skipped due to deep-scrub errors and "
-	"nodeep-scrub set",
-	get_whoami(), m_pg_id);
-    return std::nullopt;  // no scrubbing
-  }
-
-  requested_scrub_t upd_flags{planned};
-
-  upd_flags.time_for_deep = time_for_deep;
-  upd_flags.deep_scrub_on_error = false;
-  upd_flags.auto_repair = false;
-  upd_flags.calculated_to_deep = false;
-
-  dout(20) << fmt::format(
-		  "{}: allowed:{}/{} t.f.d:{} req:{}", __func__,
-		  pg_cond.allow_shallow, pg_cond.allow_deep,
-		  upd_flags.time_for_deep, planned)
-	   << dendl;
-
-  // should we perform a shallow scrub?
-  if (pg_cond.allow_shallow) {
-    if (!upd_flags.time_for_deep || !pg_cond.allow_deep) {
-      if (pg_cond.can_autorepair) {
-	dout(10) << __func__
-		 << ": auto repair with scrubbing, rescrub if errors found"
-		 << dendl;
-	upd_flags.deep_scrub_on_error = true;
-      }
-      dout(20) << __func__ << " will do shallow scrub (time_for_deep = "
-	       << upd_flags.time_for_deep << ")" << dendl;
-      return upd_flags;
-    }
-    // else - either deep-scrub or nothing
-  }
-
-  if (upd_flags.time_for_deep) {
-    if (pg_cond.allow_deep) {
-      if (pg_cond.can_autorepair) {
-	dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
-	upd_flags.auto_repair = true;
-      }
-      upd_flags.calculated_to_deep = true;
-      dout(20) << fmt::format("{}: final: {}", __func__, upd_flags) << dendl;
-      return upd_flags;
-    }
-    if (pg_cond.allow_shallow) {
-      dout(20) << fmt::format("{}: final:{}", __func__, upd_flags) << dendl;
-      return upd_flags;
-    }
-    // else - no scrubbing
-  }
-
-  return std::nullopt;	// no scrubbing
-}
-
-
-/*
- From docs.ceph.com (osd-internals/scrub):
-
- clang-format off
-
-   Desired no-scrub flags & scrub type interactions:
-
-   Periodic  type     |  none    |  no-scrub  | no-scrub+no-deep | no-deep
-   ------------------------------------------------------------------------
-   ------------------------------------------------------------------------
-   periodic           |  shallow |  x         |  x               | shallow
-   ------------------------------------------------------------------------
-   periodic + t.f.deep|  deep    |  deep      |  x               | shallow
-   ------------------------------------------------------------------------
-   initiated          |  shallow |  shallow   |  shallow         | shallow
-   ------------------------------------------------------------------------
-   init. + t.f.deep   |  deep    |  deep      |  shallow         | shallow
-   ------------------------------------------------------------------------
-   initiated deep     |  deep    |  deep      |  deep            | deep
-   ------------------------------------------------------------------------
-
-   "periodic" - if !must_scrub && !must_deep_scrub;
-   "initiated deep" - if must_scrub && must_deep_scrub;
-   "initiated" - if must_scrub && !must_deep_scrub;
-
- clang-format on
-*/
-/*
- *  The returned flags collection (requested_scrub_t) is based on
- *   m_planned_scrub with the following modifications:
- *
- *   - calculated_to_deep will be set to shallow or deep, depending on the
- *     scrub type (according to the decision table above);
- *   - deep_scrub_on_error will be determined;
- *   - same for auto_repair;
- *   - time_for_deep will be set to true if the scrub is periodic and the
- *     time for a deep scrub has been reached (+ some other conditions);
- *   and
- *   - need_auto is cleared
- */
-std::optional<requested_scrub_t> PgScrubber::validate_scrub_mode(
-    Scrub::OSDRestrictions osd_restrictions,
-    Scrub::ScrubPGPreconds pg_cond) const
-{
-  dout(10) << fmt::format(
-		  "{}: osd_restrictions:{} pg_cond:{}", __func__,
-		  osd_restrictions, pg_cond)
-	   << dendl;
-
-  const bool time_for_deep = is_time_for_deep(pg_cond, m_planned_scrub);
-  std::optional<requested_scrub_t> upd_flags;
-
-  if (m_scrub_job->is_high_priority()) {
-    // 'initiated' scrubs
-    dout(10) << fmt::format(
-		    "{}: initiated (\"must\") scrub (target:{} pg:{})",
-		    __func__, *m_scrub_job, pg_cond)
-	     << dendl;
-    upd_flags =
-	validate_initiated_scrub(pg_cond, time_for_deep, m_planned_scrub);
-
-  } else {
-    // --------  a periodic scrub
-    dout(10) << fmt::format(
-		    "{}: periodic target:{} pg:{}", __func__, *m_scrub_job,
-		    pg_cond)
-	     << dendl;
-    upd_flags = validate_periodic_mode(pg_cond, time_for_deep, m_planned_scrub);
-    if (!upd_flags) {
-      dout(20) << __func__ << ": no periodic scrubs allowed" << dendl;
-      return std::nullopt;
-    }
-  }
-
-  dout(10) << fmt::format("{}: next scrub flags: {}", __func__, *upd_flags)
-	   << dendl;
-  upd_flags->need_auto = false;
-  return upd_flags;
 }
 
 

@@ -80,8 +80,18 @@ class OsdScrub {
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
    * scrubbed by the OSD.
    */
-  void enqueue_target(const Scrub::ScrubJob& sjob);
+  void enqueue_scrub_job(const Scrub::ScrubJob& sjob);
 
+  /**
+   * copy the scheduling element (the SchedEntry sub-object) part of
+   * the SchedTarget to the queue.
+   */
+  void enqueue_target(const Scrub::SchedTarget& trgt);
+
+  /**
+   * remove the specified scheduling target from the OSD scrub queue
+   */
+  void dequeue_target(spg_t pgid, scrub_level_t s_or_d);
 
   /**
    * remove the pg from set of PGs to be scanned for scrubbing.
@@ -143,6 +153,11 @@ class OsdScrub {
       bool is_recovery_active,
       utime_t scrub_clock_now) const;
 
+  static bool is_sched_target_eligible(
+      const Scrub::SchedEntry& e,
+      const Scrub::OSDRestrictions& r,
+      utime_t time_now);
+
   /**
    * initiate a scrub on a specific PG
    * The PG is locked, enabling us to query its state. Specifically, we
@@ -153,7 +168,7 @@ class OsdScrub {
    *          initiated, and if not - why.
    */
   Scrub::schedule_result_t initiate_a_scrub(
-      std::unique_ptr<Scrub::ScrubJob> candidate,
+      const Scrub::SchedEntry& candidate,
       Scrub::OSDRestrictions restrictions);
 
   /// resource reservation management
