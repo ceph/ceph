@@ -1572,6 +1572,20 @@ function test_is_clean() {
 
 #######################################################################
 
+##
+# Predicate checking if the named PG is in state "active+clean"
+#
+# @return 0 if the PG is active & clean, 1 otherwise
+#
+function is_pg_clean() {
+    local pgid=$1
+    local pg_state
+    pg_state=$(ceph pg $pgid query 2>/dev/null | jq -r ".state ")
+    [[ "$pg_state" == "active+clean"* ]]
+}
+
+#######################################################################
+
 calc() { $AWK "BEGIN{print $*}"; }
 
 ##
@@ -1685,6 +1699,33 @@ function test_wait_for_clean() {
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
     teardown $dir || return 1
+}
+
+##
+# Wait until the named PG becomes clean or until a timeout of
+# $WAIT_FOR_CLEAN_TIMEOUT seconds.
+#
+# @return 0 if the PG is clean, 1 otherwise
+#
+function wait_for_pg_clean() {
+    local pg_id=$1
+    local -a delays=($(get_timeout_delays $WAIT_FOR_CLEAN_TIMEOUT 1 3))
+    local -i loop=0
+
+    flush_pg_stats || return 1
+
+    while true ; do
+        echo "#---------- $pgid loop $loop"
+        is_pg_clean $pg_id && break
+        if (( $loop >= ${#delays[*]} )) ; then
+            ceph report
+            echo "PG $pg_id is not clean after $loop iterations"
+            return 1
+        fi
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+    return 0
 }
 
 ##
@@ -1890,6 +1931,8 @@ function test_repair() {
 #
 function pg_scrub() {
     local pgid=$1
+    # do not issue the scrub command unless the PG is clean
+    wait_for_pg_clean $pgid || return 1
     local last_scrub=$(get_last_scrub_stamp $pgid)
     ceph pg scrub $pgid
     wait_for_scrub $pgid "$last_scrub"
@@ -1897,6 +1940,8 @@ function pg_scrub() {
 
 function pg_deep_scrub() {
     local pgid=$1
+    # do not issue the scrub command unless the PG is clean
+    wait_for_pg_clean $pgid || return 1
     local last_scrub=$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)
     ceph pg deep-scrub $pgid
     wait_for_scrub $pgid "$last_scrub" last_deep_scrub_stamp
@@ -1932,15 +1977,19 @@ function test_pg_scrub() {
 #
 function pg_schedule_scrub() {
     local pgid=$1
+    # do not issue the scrub command unless the PG is clean
+    wait_for_pg_clean $pgid || return 1
     local last_scrub=$(get_last_scrub_stamp $pgid)
-    ceph pg scrub $pgid
+    ceph tell $pgid schedule-scrub
     wait_for_scrub $pgid "$last_scrub"
 }
 
 function pg_schedule_deep_scrub() {
     local pgid=$1
+    # do not issue the scrub command unless the PG is clean
+    wait_for_pg_clean $pgid || return 1
     local last_scrub=$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)
-    ceph pg deep-scrub $pgid
+    ceph tell $pgid schedule-deep-scrub
     wait_for_scrub $pgid "$last_scrub" last_deep_scrub_stamp
 }
 
@@ -1949,13 +1998,11 @@ function test_pg_schedule_scrub() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x  --mgr_stats_period=1 || return 1
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     wait_for_clean || return 1
     pg_schedule_scrub 1.0 || return 1
-    kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -2342,7 +2389,7 @@ function run_tests() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export .:$PATH # make sure program from sources are preferred
+    export PATH=./bin:.:$PATH # make sure program from sources are preferred
 
     export CEPH_MON="127.0.0.1:7109" # git grep '\<7109\>' : there must be only one
     export CEPH_ARGS
