@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -ex
 
-. $(dirname $0)/../../standalone/ceph-helpers.sh
-
 POOL=rbd
 ANOTHER_POOL=new_default_pool$$
 NS=ns
@@ -105,7 +103,7 @@ function get_pid()
     local pool=$1
     local ns=$2
 
-    PID=$(rbd device --device-type nbd --format xml list | $XMLSTARLET sel -t -v \
+    PID=$(rbd device --device-type nbd --format xml list | xmlstarlet sel -t -v \
       "//devices/device[pool='${pool}'][namespace='${ns}'][image='${IMAGE}'][device='${DEV}']/id")
     test -n "${PID}" || return 1
     ps -p ${PID} -C rbd-nbd
@@ -172,17 +170,17 @@ unmap_device ${DEV} ${PID}
 DEV=`_sudo rbd device --device-type nbd --options notrim map ${POOL}/${IMAGE}`
 get_pid ${POOL}
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -eq "${provisioned}" ]
 # should fail discard as at time of mapping notrim was used
 expect_false _sudo blkdiscard ${DEV}
 sync
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -eq "${provisioned}" ]
 unmap_device ${DEV} ${PID}
 
@@ -190,17 +188,17 @@ unmap_device ${DEV} ${PID}
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
 get_pid ${POOL}
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -eq "${provisioned}" ]
 # should honor discard as at time of mapping trim was considered by default
 _sudo blkdiscard ${DEV}
 sync
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -lt "${provisioned}" ]
 unmap_device ${DEV} ${PID}
 

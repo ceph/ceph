@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -ex
 
-. $(dirname $0)/../../standalone/ceph-helpers.sh
-
 TEMPDIR=
 IMAGE1=image1
 IMAGE2=image2

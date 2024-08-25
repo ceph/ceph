@@ -25,15 +25,6 @@ TMPDIR=${TMPDIR:-/tmp}
 CEPH_BUILD_VIRTUALENV=${TMPDIR}
 TESTDIR=${TESTDIR:-${TMPDIR}}
 
-if type xmlstarlet > /dev/null 2>&1; then
-    XMLSTARLET=xmlstarlet
-elif type xml > /dev/null 2>&1; then
-    XMLSTARLET=xml
-else
-	echo "Missing xmlstarlet binary!"
-	exit 1
-fi
-
 if [ `uname` = FreeBSD ]; then
     SED=gsed
     AWK=gawk
