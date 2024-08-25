@@ -21,17 +21,20 @@ int extent_cb(void* data, const char* metacontext, uint64_t offset,
               uint32_t* entries, size_t nr_entries, int* error) {
   auto sparse_extents = reinterpret_cast<io::SparseExtents*>(data);
 
-  uint64_t length = 0;
-  for (size_t i=0; i<nr_entries; i+=2) {
-    length += entries[i];
-  }
-  auto state = io::SPARSE_EXTENT_STATE_DATA;
-  if (nr_entries == 2) {
-    if (entries[1] & (LIBNBD_STATE_HOLE | LIBNBD_STATE_ZERO)) {
-      state = io::SPARSE_EXTENT_STATE_ZEROED;
+  // "[...] always check the metacontext field to ensure you are
+  // receiving the data you expect."
+  if (strcmp(metacontext, LIBNBD_CONTEXT_BASE_ALLOCATION) == 0) {
+    for (size_t i = 0; i < nr_entries; i += 2) {
+      auto length = entries[i];
+      auto state = entries[i + 1];
+      if (length > 0 && state & (LIBNBD_STATE_HOLE | LIBNBD_STATE_ZERO)) {
+        sparse_extents->insert(offset, length,
+                               {io::SPARSE_EXTENT_STATE_ZEROED, length});
+      }
+      offset += length;
     }
   }
-  sparse_extents->insert(offset, length, {state, length});
+
   return 1;
 }
 
@@ -139,16 +142,32 @@ struct NBDStream<I>::ListSparseExtentsRequest {
     ldout(cct, 20) << "byte_offset=" << byte_offset << " byte_length="
                    << byte_length << dendl;
 
+    // nbd_block_status() is specified to be really loose:
+    // "The count parameter is a hint: the server may choose to
+    // return less status, or the final block may extend beyond the
+    // requested range. [...] It is possible for the extent function
+    // to be called more times than you expect [...] It is also
+    // possible that the extent function is not called at all, even
+    // for metadata contexts that you requested."
+    io::SparseExtents tmp_sparse_extents;
+    tmp_sparse_extents.insert(byte_offset, byte_length,
+                              {io::SPARSE_EXTENT_STATE_DATA, byte_length});
+
     int rc = nbd_block_status(nbd_stream->m_nbd, byte_length, byte_offset,
-                              {extent_cb, sparse_extents}, 0);
+                              {extent_cb, &tmp_sparse_extents}, 0);
     if (rc == -1) {
       rc = nbd_get_errno();
       lderr(cct) << "block_status " << byte_offset << "~" << byte_length << ": "
                  << nbd_get_error() << " (errno = " << rc << ")"
                  << dendl;
-      finish(rc);
-      return;
+      // don't propagate errors -- we are set up to list any missing
+      // parts of the range as DATA if nbd_block_status() returns less
+      // status or none at all
     }
+
+    // trim the result in case more status was returned
+    sparse_extents->insert(tmp_sparse_extents.intersect(byte_offset,
+                                                        byte_length));
 
     boost::asio::post(nbd_stream->m_strand, [this] { list_sparse_extents(); });
   }
