@@ -43,7 +43,7 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
   client{client_messenger.get(), &monc, &objecter},
-  timer(g_ceph_context, lock),
+  timer(g_ceph_context, beacon_lock),
   orig_argc(argc),
   orig_argv(argv)
 {
@@ -193,7 +193,10 @@ int NVMeofGwMonitorClient::init()
   client.init();
   timer.init();
 
-  tick();
+  {
+    std::lock_guard bl(beacon_lock);
+    tick();
+  }
 
   dout(10) << "Complete." << dendl;
   return 0;
@@ -217,7 +220,7 @@ static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMo
 
 void NVMeofGwMonitorClient::send_beacon()
 {
-  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(beacon_lock));
   gw_availability_t gw_availability = gw_availability_t::GW_CREATED;
   BeaconSubsystems subs;
   NVMeofGwClient gw_client(
@@ -295,7 +298,10 @@ void NVMeofGwMonitorClient::shutdown()
 
 
   // stop sending beacon first, I use monc to talk with monitors
-  timer.shutdown();
+  {
+    std::lock_guard bl(beacon_lock);
+    timer.shutdown();
+  }
   // client uses monc and objecter
   client.shutdown();
   // Stop asio threads, so leftover events won't call into shut down
