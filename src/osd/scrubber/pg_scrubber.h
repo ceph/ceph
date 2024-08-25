@@ -150,7 +150,8 @@ struct scrub_flags_t {
   bool auto_repair{false};
 
   /// this flag indicates that we are scrubbing post repair to verify everything
-  /// is fixed
+  /// is fixed (otherwise - PG_STATE_FAILED_REPAIR will be asserted.)
+  /// Update (July 2024): now reflects an 'after-repair' urgency.
   bool check_repair{false};
 
   /// checked at the end of the scrub, to possibly initiate a deep-scrub
@@ -165,6 +166,35 @@ struct scrub_flags_t {
 };
 
 ostream& operator<<(ostream& out, const scrub_flags_t& sf);
+
+namespace fmt {
+template <>
+struct formatter<scrub_flags_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(scrub_flags_t& sf, FormatContext& ctx) const
+  {
+    std::string txt;
+    bool sep{false};
+    if (sf.auto_repair) {
+      txt = "auto-repair";
+      sep = true;
+    }
+    if (sf.check_repair) {
+      txt += sep ? ",check-repair" : "check-repair";
+      sep = true;
+    }
+    if (sf.deep_scrub_on_error) {
+      txt += sep ? ",deep-scrub-on-error" : "deep-scrub-on-error";
+      sep = true;
+    }
+    if (sf.required) {
+      txt += sep ? ",required" : "required";
+    }
+    return fmt::format_to(ctx.out(), "{}", txt);
+  }
+};
+}  // namespace fmt
 
 
 /**
@@ -188,14 +218,12 @@ class PgScrubber : public ScrubPgIF,
   [[nodiscard]] bool is_reserving() const final;
 
   Scrub::schedule_result_t start_scrub_session(
-      std::unique_ptr<Scrub::ScrubJob> candidate,
+      scrub_level_t s_or_d,
       Scrub::OSDRestrictions osd_restrictions,
       Scrub::ScrubPGPreconds pg_cond,
       const requested_scrub_t& requested_flags) final;
 
   void initiate_regular_scrub(epoch_t epoch_queued) final;
-
-  void initiate_scrub_after_repair(epoch_t epoch_queued) final;
 
   void send_scrub_resched(epoch_t epoch_queued) final;
 
@@ -268,12 +296,20 @@ class PgScrubber : public ScrubPgIF,
       requested_scrub_t& req_flags) final;
 
   /**
+   * let the scrubber know that a recovery operation has completed.
+   * This might trigger an 'after repair' scrub.
+   */
+  void recovery_completed() final;
+
+  bool is_after_repair_required() const final;
+
+  /**
    * Reserve local scrub resources (managed by the OSD)
    *
    * Fails if OSD's local-scrubs budget was exhausted
    * \returns were local resources reserved?
    */
-  bool reserve_local() final;
+  bool reserve_local(const Scrub::SchedTarget& trgt);
 
   void handle_query_state(ceph::Formatter* f) final;
 
@@ -344,7 +380,9 @@ class PgScrubber : public ScrubPgIF,
    * flag-set; PG_STATE_SCRUBBING, and possibly PG_STATE_DEEP_SCRUB &
    * PG_STATE_REPAIR are set.
    */
-  void set_op_parameters(const requested_scrub_t& request) final;
+  void set_op_parameters(
+      Scrub::ScrubPGPreconds pg_cond,
+      const requested_scrub_t& request) final;
 
   void cleanup_store(ObjectStore::Transaction* t) final;
 
@@ -398,8 +436,8 @@ class PgScrubber : public ScrubPgIF,
     return m_pg->recovery_state.is_primary();
   }
 
-  /// is this scrub more than just regular periodic scrub?
-  [[nodiscard]] bool is_high_priority() const final;
+  /// is this scrub's urgency high enough, or must it reserve its replicas?
+  [[nodiscard]] bool is_reservation_required() const final;
 
   void set_state_name(const char* name) final
   {
@@ -506,6 +544,11 @@ class PgScrubber : public ScrubPgIF,
   /// control the order of construction/destruction.
   std::optional<Scrub::ScrubJob> m_scrub_job;
 
+
+  /// the scrubber has initiated a recovery, and is waiting for the recovery
+  /// to complete (in order to perform an 'after-repair' scrub)
+  bool m_after_repair_scrub_required{false};
+
   ostream& show(ostream& out) const override;
 
  public:
@@ -565,14 +608,27 @@ class PgScrubber : public ScrubPgIF,
   void run_callbacks();
 
   // 'query' command data for an active scrub
-  void dump_active_scrubber(ceph::Formatter* f, bool is_deep) const;
+  void dump_active_scrubber(ceph::Formatter* f) const;
+
+  /**
+   * Used as a parameter of requeue_penalized() to indicate whether the
+   * both targets of this PG should be delayed (and not just the named one).
+   */
+  enum class delay_both_targets_t { no, yes };
 
   /**
    * move the 'not before' to a later time (with a delay amount that is
    * based on the delay cause). Also saves the cause.
-   * Pushes the updated scrub-job into the OSD's queue.
+   * Pushes the updated scheduling entry into the OSD's queue.
+   * @param s_or_d - the specific target (shallow or deep) to delay;
+   * @param delay_both - should both targets be delayed? note - the
+   *  'other' target will not be delayed if it has higher priority.
    */
-  void requeue_penalized(Scrub::delay_cause_t cause);
+  void requeue_penalized(
+      scrub_level_t s_or_d,
+      delay_both_targets_t delay_both,
+      Scrub::delay_cause_t cause,
+      utime_t scrub_clock_now);
 
   // -----     methods used to verify the relevance of incoming events:
 
@@ -732,14 +788,9 @@ class PgScrubber : public ScrubPgIF,
    */
   bool m_queued_or_active{false};
 
-  /**
-   * A copy of the specific scheduling target (either shallow_target or
-   * deep_target in the scrub_job) that was selected for this active scrub
-   * session.
-   * \ATTN: in this initial step - a copy of the whole scrub-job is passed
-   * around. Later on this would be just a part of a Scrub::SchedTarget
-   */
-  std::unique_ptr<Scrub::ScrubJob> m_active_target;
+  /// A copy of the specific scheduling target (either shallow_target or
+  /// deep_target in the scrub_job) that was selected for this active scrub
+  std::optional<Scrub::SchedTarget> m_active_target;
 
   eversion_t m_subset_last_update{};
 
@@ -809,40 +860,37 @@ class PgScrubber : public ScrubPgIF,
   Scrub::sched_conf_t populate_config_params() const;
 
   /**
-   * determine the time when the next scrub should be scheduled
+   * use the 'planned scrub' flags to determine the urgency attribute
+   * of the 'deep target' part of the ScrubJob object.
    *
-   * based on the planned scrub's flags, time of last scrub, and
-   * the pool's scrub configuration. This is only an initial "proposal",
-   * and will be further adjusted based on the scheduling parameters.
+   * Returns 'true' if a high-priority 'urgency' level was set by this
+   * call (note: not if it was already set).
+   *
+   * Note: in the previous implementation, if the shallow scrub had
+   * high priority, and it was time for the periodic deep scrub, a
+   * high priority deep scrub was initiated. This behavior is not
+   * replicated here.
    */
-  Scrub::sched_params_t determine_initial_schedule(
+  bool flags_to_deep_priority(
       const Scrub::sched_conf_t& app_conf,
-      utime_t scrub_clock_now) const;
-
-  /// should we perform deep scrub?
-  bool is_time_for_deep(
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t& planned) const;
+      utime_t scrub_clock_now);
 
   /**
-   * Validate the various 'next scrub' flags against configuration
-   * and scrub-related timestamps.
-   *
-   * @returns an updated copy of the m_planned_flags (or nothing if no scrubbing)
+   * use the 'planned scrub' flags to determine the urgency attribute
+   * of the 'shallow target' part of the ScrubJob object.
    */
-  std::optional<requested_scrub_t> validate_scrub_mode(
-      Scrub::OSDRestrictions osd_restrictions,
-      Scrub::ScrubPGPreconds pg_cond) const;
+  void flags_to_shallow_priority(
+      const Scrub::sched_conf_t& app_conf,
+      utime_t scrub_clock_now);
 
-  std::optional<requested_scrub_t> validate_periodic_mode(
-      Scrub::ScrubPGPreconds pg_cond,
-      bool time_for_deep,
-      const requested_scrub_t& planned) const;
-
-  std::optional<requested_scrub_t> validate_initiated_scrub(
-      Scrub::ScrubPGPreconds pg_cond,
-      bool time_for_deep,
-      const requested_scrub_t& planned) const;
+  /**
+   * recompute the two ScrubJob targets, taking into account not
+   * only the up-to-date 'last' stamps, but also the 'planned scrub'
+   * flags.
+   */
+  void update_targets(
+      const requested_scrub_t& planned,
+      utime_t scrub_clock_now);
 
   /*
    * Select a range of objects to scrub.

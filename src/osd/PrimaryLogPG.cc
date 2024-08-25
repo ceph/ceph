@@ -12384,7 +12384,10 @@ int PrimaryLogPG::recover_missing(
   int priority,
   PGBackend::RecoveryHandle *h)
 {
-  dout(10) << __func__ << " sar: " << scrub_after_recovery << dendl;
+  dout(10) << fmt::format(
+		  "{} sar: {}", __func__,
+		  m_scrubber->is_after_repair_required())
+	   << dendl;
 
   if (recovery_state.get_missing_loc().is_unfound(soid)) {
     dout(7) << __func__ << " " << soid
@@ -12415,7 +12418,7 @@ int PrimaryLogPG::recover_missing(
 	 if (!object_missing) {
 	   object_stat_sum_t stat_diff;
 	   stat_diff.num_objects_recovered = 1;
-	   if (scrub_after_recovery)
+	   if (m_scrubber->is_after_repair_required())
 	     stat_diff.num_objects_repaired = 1;
 	   on_global_recover(soid, stat_diff, true);
 	 } else {

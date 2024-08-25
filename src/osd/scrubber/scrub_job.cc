@@ -2,16 +2,46 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "./scrub_job.h"
+
 #include "pg_scrubber.h"
 
 using must_scrub_t = Scrub::must_scrub_t;
-using ScrubQContainer = Scrub::ScrubQContainer;
 using sched_params_t = Scrub::sched_params_t;
 using OSDRestrictions = Scrub::OSDRestrictions;
 using sched_conf_t = Scrub::sched_conf_t;
 using scrub_schedule_t = Scrub::scrub_schedule_t;
 using ScrubJob = Scrub::ScrubJob;
 using delay_ready_t = Scrub::delay_ready_t;
+
+namespace {
+utime_t add_double(utime_t t, double d)
+{
+  double int_part;
+  double frac_as_ns = 1'000'000'000 * std::modf(d, &int_part);
+  return utime_t{
+      t.sec() + static_cast<int>(int_part),
+      static_cast<int>(t.nsec() + frac_as_ns)};
+}
+}  // namespace
+
+using SchedEntry = Scrub::SchedEntry;
+
+// ////////////////////////////////////////////////////////////////////////// //
+// SchedTarget
+
+using SchedTarget = Scrub::SchedTarget;
+
+void SchedTarget::reset()
+{
+  // a bit convoluted, but the standard way to guarantee we keep the
+  // same set of member defaults as the constructor
+  *this = SchedTarget{sched_info.pgid, sched_info.level};
+}
+
+void SchedTarget::up_urgency_to(urgency_t u)
+{
+  sched_info.urgency = std::max(sched_info.urgency, u);
+}
 
 
 // ////////////////////////////////////////////////////////////////////////// //
@@ -32,6 +62,8 @@ static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
 ScrubJob::ScrubJob(CephContext* cct, const spg_t& pg, int node_id)
     : pgid{pg}
     , whoami{node_id}
+    , shallow_target{pg, scrub_level_t::shallow}
+    , deep_target{pg, scrub_level_t::deep}
     , cct{cct}
     , log_msg_prefix{fmt::format("osd.{} scrub-job:pg[{}]:", node_id, pgid)}
 {}
@@ -45,27 +77,59 @@ ostream& operator<<(ostream& out, const ScrubJob& sjob)
 }  // namespace std
 
 
-void ScrubJob::adjust_schedule(
-    const Scrub::sched_params_t& suggested,
+SchedTarget& ScrubJob::get_target(scrub_level_t s_or_d)
+{
+  return (s_or_d == scrub_level_t::deep) ? deep_target : shallow_target;
+}
+
+
+bool ScrubJob::is_queued() const
+{
+  return shallow_target.queued || deep_target.queued;
+}
+
+
+void ScrubJob::clear_both_targets_queued()
+{
+  shallow_target.queued = false;
+  deep_target.queued = false;
+}
+
+
+void ScrubJob::set_both_targets_queued()
+{
+  shallow_target.queued = true;
+  deep_target.queued = true;
+}
+
+
+void ScrubJob::adjust_shallow_schedule(
+    utime_t last_scrub,
     const Scrub::sched_conf_t& app_conf,
     utime_t scrub_clock_now,
     delay_ready_t modify_ready_targets)
 {
   dout(10) << fmt::format(
-		  "{} current h.p.:{:c} conf:{} also-ready?{:c} "
-		  "sjob@entry:{}",
-		  suggested, high_priority ? 'y' : 'n', app_conf,
+		  "at entry: shallow target:{}, conf:{}, last-stamp:{:s} "
+		  "also-ready?{:c}",
+		  shallow_target, app_conf, last_scrub,
 		  (modify_ready_targets == delay_ready_t::delay_ready) ? 'y'
-								       : 'n',
-		  *this)
+								       : 'n')
 	   << dendl;
 
-  high_priority = (suggested.is_must == must_scrub_t::mandatory);
-  utime_t adj_not_before = suggested.proposed_time;
-  utime_t adj_target = suggested.proposed_time;
-  schedule.deadline = adj_target;
+  auto& sh_times = shallow_target.sched_info.schedule;	// shorthand
 
-  if (!high_priority) {
+  if (!ScrubJob::requires_randomization(shallow_target.urgency())) {
+    // the target time is already set. Make sure to reset the n.b. and
+    // the (irrelevant) deadline
+    sh_times.not_before = sh_times.scheduled_at;
+    sh_times.deadline = sh_times.scheduled_at;
+
+  } else {
+    utime_t adj_not_before = last_scrub;
+    utime_t adj_target = last_scrub;
+    sh_times.deadline = adj_target;
+
     // add a random delay to the proposed scheduled time - but only for periodic
     // scrubs that are not already eligible for scrubbing.
     if ((modify_ready_targets == delay_ready_t::delay_ready) ||
@@ -78,74 +142,204 @@ void ScrubJob::adjust_schedule(
 
     // the deadline can be updated directly into the scrub-job
     if (app_conf.max_shallow) {
-      schedule.deadline += *app_conf.max_shallow;
+      sh_times.deadline += *app_conf.max_shallow;
     } else {
-      schedule.deadline = utime_t{};
+      sh_times.deadline = utime_t{};
     }
-
     if (adj_not_before < adj_target) {
       adj_not_before = adj_target;
     }
+    sh_times.scheduled_at = adj_target;
+    sh_times.not_before = adj_not_before;
   }
 
-  schedule.scheduled_at = adj_target;
-  schedule.not_before = adj_not_before;
   dout(10) << fmt::format(
 		  "adjusted: nb:{:s} target:{:s} deadline:{:s} ({})",
-		  schedule.not_before, schedule.scheduled_at, schedule.deadline,
+		  sh_times.not_before, sh_times.scheduled_at, sh_times.deadline,
 		  state_desc())
 	   << dendl;
 }
 
 
-void ScrubJob::merge_and_delay(
-    const scrub_schedule_t& aborted_schedule,
-    delay_cause_t issue,
-    requested_scrub_t updated_flags,
-    utime_t scrub_clock_now)
+void ScrubJob::operator_forced(scrub_level_t s_or_d, scrub_type_t scrub_type)
 {
-  // merge the schedule targets:
-  schedule.scheduled_at =
-      std::min(aborted_schedule.scheduled_at, schedule.scheduled_at);
-  high_priority = high_priority || updated_flags.must_scrub;
-  delay_on_failure(5s, issue, scrub_clock_now);
-
-  // the new deadline is the minimum of the two
-  schedule.deadline = std::min(aborted_schedule.deadline, schedule.deadline);
+  auto& trgt = get_target(s_or_d);
+  trgt.up_urgency_to(
+      (scrub_type == scrub_type_t::do_repair) ? urgency_t::must_repair
+					      : urgency_t::operator_requested);
+  trgt.sched_info.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
+  trgt.sched_info.schedule.not_before = PgScrubber::scrub_must_stamp();
 }
 
 
-void ScrubJob::delay_on_failure(
+std::optional<std::reference_wrapper<SchedTarget>> ScrubJob::earliest_eligible(
+    utime_t scrub_clock_now)
+{
+  std::weak_ordering compr = cmp_entries(
+      scrub_clock_now, shallow_target.queued_element(),
+      deep_target.queued_element());
+
+  auto poss_ret = (compr == std::weak_ordering::less)
+		      ? std::ref<SchedTarget>(shallow_target)
+		      : std::ref<SchedTarget>(deep_target);
+  if (poss_ret.get().sched_info.schedule.not_before <= scrub_clock_now) {
+    return poss_ret;
+  }
+  return std::nullopt;
+}
+
+std::optional<std::reference_wrapper<const SchedTarget>>
+ScrubJob::earliest_eligible(utime_t scrub_clock_now) const
+{
+  std::weak_ordering compr = cmp_entries(
+      scrub_clock_now, shallow_target.queued_element(),
+      deep_target.queued_element());
+
+  auto poss_ret = (compr == std::weak_ordering::less)
+		      ? std::cref<SchedTarget>(shallow_target)
+		      : std::cref<SchedTarget>(deep_target);
+  if (poss_ret.get().sched_info.schedule.not_before <= scrub_clock_now) {
+    return poss_ret;
+  }
+  return std::nullopt;
+}
+
+
+SchedTarget& ScrubJob::earliest_target()
+{
+  std::weak_ordering compr = cmp_future_entries(
+      shallow_target.queued_element(), deep_target.queued_element());
+  return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
+}
+
+const SchedTarget& ScrubJob::earliest_target() const
+{
+  std::weak_ordering compr = cmp_future_entries(
+      shallow_target.queued_element(), deep_target.queued_element());
+  return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
+}
+
+
+SchedTarget& ScrubJob::earliest_target(utime_t scrub_clock_now)
+{
+  std::weak_ordering compr = cmp_entries(scrub_clock_now,
+      shallow_target.queued_element(), deep_target.queued_element());
+  return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
+}
+
+const SchedTarget& ScrubJob::earliest_target(utime_t scrub_clock_now) const
+{
+  std::weak_ordering compr = cmp_entries(scrub_clock_now,
+      shallow_target.queued_element(), deep_target.queued_element());
+  return (compr == std::weak_ordering::less) ? shallow_target : deep_target;
+}
+
+
+utime_t ScrubJob::get_sched_time() const
+{
+  return earliest_target().sched_info.schedule.not_before;
+}
+
+void ScrubJob::adjust_deep_schedule(
+    utime_t last_deep,
+    const Scrub::sched_conf_t& app_conf,
+    utime_t scrub_clock_now,
+    delay_ready_t modify_ready_targets)
+{
+  dout(10) << fmt::format(
+		  "at entry: deep target:{}, conf:{}, last-stamp:{:s} "
+		  "also-ready?{:c}",
+		  deep_target, app_conf, last_deep,
+		  (modify_ready_targets == delay_ready_t::delay_ready) ? 'y'
+								       : 'n')
+	   << dendl;
+
+  auto& dp_times = deep_target.sched_info.schedule;  // shorthand
+
+  if (!ScrubJob::requires_randomization(deep_target.urgency())) {
+    // the target time is already set. Make sure to reset the n.b. and
+    // the (irrelevant) deadline
+    dp_times.not_before = dp_times.scheduled_at;
+    dp_times.deadline = dp_times.scheduled_at;
+
+  } else {
+    utime_t adj_not_before = last_deep;
+    utime_t adj_target = last_deep;
+    dp_times.deadline = adj_target;
+
+    // add a random delay to the proposed scheduled time - but only for periodic
+    // scrubs that are not already eligible for scrubbing.
+    if ((modify_ready_targets == delay_ready_t::delay_ready) ||
+	adj_not_before > scrub_clock_now) {
+      adj_target += app_conf.deep_interval;
+      double r = rand() / (double)RAND_MAX;
+      adj_target += app_conf.deep_interval * app_conf.interval_randomize_ratio *
+		    r;	// RRR fix
+    }
+
+    // the deadline can be updated directly into the scrub-job
+    if (app_conf.max_shallow) {
+      dp_times.deadline += *app_conf.max_shallow;  // RRR fix
+    } else {
+      dp_times.deadline = utime_t{};
+    }
+    if (adj_not_before < adj_target) {
+      adj_not_before = adj_target;
+    }
+    dp_times.scheduled_at = adj_target;
+    dp_times.not_before = adj_not_before;
+  }
+
+  dout(10) << fmt::format(
+		  "adjusted: nb:{:s} target:{:s} deadline:{:s} ({})",
+		  dp_times.not_before, dp_times.scheduled_at, dp_times.deadline,
+		  state_desc())
+	   << dendl;
+}
+
+
+SchedTarget& ScrubJob::delay_on_failure(
+    scrub_level_t level,
     std::chrono::seconds delay,
     Scrub::delay_cause_t delay_cause,
     utime_t scrub_clock_now)
 {
-  schedule.not_before =
-      std::max(scrub_clock_now, schedule.not_before) + utime_t{delay};
-  last_issue = delay_cause;
+  auto& delayed_target =
+      (level == scrub_level_t::deep) ? deep_target : shallow_target;
+  delayed_target.sched_info.schedule.not_before =
+      std::max(scrub_clock_now, delayed_target.sched_info.schedule.not_before) +
+      utime_t{delay};
+  delayed_target.sched_info.last_issue = delay_cause;
+  return delayed_target;
 }
 
-std::string ScrubJob::scheduling_state(utime_t now_is, bool is_deep_expected)
-    const
+
+std::string ScrubJob::scheduling_state(utime_t now_is) const
 {
   // if not registered, not a candidate for scrubbing on this OSD (or at all)
   if (!registered) {
     return "not registered for scrubbing";
   }
-  if (!target_queued) {
+  if (!is_queued()) {
     // if not currently queued - we are being scrubbed
     return "scrubbing";
   }
 
-  // if the time has passed, we are surely in the queue
-  if (now_is > schedule.not_before) {
-    // we are never sure that the next scrub will indeed be shallow:
-    return fmt::format("queued for {}scrub", (is_deep_expected ? "deep " : ""));
+  const auto first_ready = earliest_eligible(now_is);
+  if (first_ready) {
+    // the target is ready to be scrubbed
+    return fmt::format(
+	"queued for {}scrub at {:s}",
+	(first_ready->get().is_deep() ? "deep " : ""),
+	first_ready->get().sched_info.schedule.scheduled_at);
+  } else {
+    // both targets are in the future
+    const auto& nearest = earliest_target();
+    return fmt::format(
+	"{}scrub scheduled @ {:s} ({:s})", (nearest.is_deep() ? "deep " : ""),
+	nearest.sched_info.schedule.not_before,
+	nearest.sched_info.schedule.scheduled_at);
   }
-
-  return fmt::format(
-      "{}scrub scheduled @ {:s} ({:s})", (is_deep_expected ? "deep " : ""),
-      schedule.not_before, schedule.scheduled_at);
 }
 
 std::ostream& ScrubJob::gen_prefix(std::ostream& out, std::string_view fn) const
@@ -155,12 +349,56 @@ std::ostream& ScrubJob::gen_prefix(std::ostream& out, std::string_view fn) const
 
 void ScrubJob::dump(ceph::Formatter* f) const
 {
+  const auto& entry = earliest_target().sched_info;
+  const auto& sch = entry.schedule;
   f->open_object_section("scrub");
   f->dump_stream("pgid") << pgid;
-  f->dump_stream("sched_time") << schedule.not_before;
-  f->dump_stream("orig_sched_time") << schedule.scheduled_at;
-  f->dump_stream("deadline") << schedule.deadline;
-  f->dump_bool("forced",
-	       schedule.scheduled_at == PgScrubber::scrub_must_stamp());
+  f->dump_stream("sched_time") << get_sched_time();
+  f->dump_stream("orig_sched_time") << sch.scheduled_at;
+  f->dump_stream("deadline") << sch.deadline;
+  f->dump_bool("forced", entry.urgency >= urgency_t::operator_requested);
   f->close_section();
+}
+
+// a set of static functions to determine, given a scheduling target's urgency,
+// what restrictions apply to that target (and what exemptions it has).
+
+bool ScrubJob::observes_noscrub_flags(urgency_t urgency)
+{
+  return urgency < urgency_t::after_repair;
+}
+
+bool ScrubJob::observes_allowed_hours(urgency_t urgency)
+{
+  return urgency < urgency_t::operator_requested;
+}
+
+bool ScrubJob::observes_load_limit(urgency_t urgency)
+{
+  return urgency < urgency_t::after_repair;
+}
+
+bool ScrubJob::requires_reservation(urgency_t urgency)
+{
+  return urgency < urgency_t::after_repair;
+}
+
+bool ScrubJob::requires_randomization(urgency_t urgency)
+{
+  return urgency == urgency_t::periodic_regular;
+}
+
+bool ScrubJob::observes_max_concurrency(urgency_t urgency)
+{
+  return urgency < urgency_t::operator_requested;
+}
+
+bool ScrubJob::observes_random_backoff(urgency_t urgency)
+{
+  return urgency < urgency_t::after_repair;
+}
+
+bool ScrubJob::observes_recovery(urgency_t urgency)
+{
+  return urgency < urgency_t::operator_requested;
 }

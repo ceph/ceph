@@ -54,15 +54,15 @@ ReplicaReservations::ReplicaReservations(
   m_perf_set.set(scrbcnt_resrv_replicas_num, m_sorted_secondaries.size());
 
   m_next_to_request = m_sorted_secondaries.cbegin();
-  if (m_scrubber.is_high_priority()) {
+  if (m_scrubber.is_reservation_required()) {
+    // send out the 1'st request (unless we have no replicas)
+    m_process_started_at = ScrubClock::now();
+    send_next_reservation_or_complete();
+  } else {
     // for high-priority scrubs (i.e. - user-initiated), no reservations are
     // needed. Note: not perf-counted as either success or failure.
     dout(10) << "high-priority scrub - no reservations needed" << dendl;
     m_perf_set.inc(scrbcnt_resrv_skipped);
-  } else {
-    // send out the 1'st request (unless we have no replicas)
-    m_process_started_at = ScrubClock::now();
-    send_next_reservation_or_complete();
   }
 }
 

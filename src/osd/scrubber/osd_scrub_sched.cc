@@ -12,10 +12,10 @@ using namespace ::std::chrono_literals;
 using namespace ::std::literals;
 
 using must_scrub_t = Scrub::must_scrub_t;
-using ScrubQContainer = Scrub::ScrubQContainer;
 using sched_params_t = Scrub::sched_params_t;
 using OSDRestrictions = Scrub::OSDRestrictions;
 using ScrubJob = Scrub::ScrubJob;
+using SchedEntry = ::Scrub::SchedEntry;
 
 
 
@@ -55,102 +55,87 @@ void ScrubQueue::remove_from_osd_queue(spg_t pgid)
   dout(10) << fmt::format(
 		  "removing pg[{}] from OSD scrub queue", pgid)
 	   << dendl;
-
   std::unique_lock lck{jobs_lock};
-  std::erase_if(to_scrub, [pgid](const auto& job) {
-    return job->pgid == pgid;
-  });
+  to_scrub.remove_by_class<spg_t>(pgid);
 }
 
 
-void ScrubQueue::enqueue_target(const Scrub::ScrubJob& sjob)
+void ScrubQueue::enqueue_scrub_job(const Scrub::ScrubJob& sjob)
 {
   std::unique_lock lck{jobs_lock};
-  // the costly copying is only for this stage
-  to_scrub.push_back(std::make_unique<ScrubJob>(sjob));
+  to_scrub.enqueue(sjob.shallow_target.queued_element());
+  to_scrub.enqueue(sjob.deep_target.queued_element());
+}
+
+void ScrubQueue::enqueue_target(const Scrub::SchedTarget& trgt)
+{
+  std::unique_lock lck{jobs_lock};
+  to_scrub.enqueue(trgt.queued_element());
 }
 
 
-std::unique_ptr<ScrubJob> ScrubQueue::pop_ready_pg(
-    OSDRestrictions restrictions,  // note: 4B in size! (thus - copy)
+void ScrubQueue::dequeue_target(spg_t pgid, scrub_level_t s_or_d)
+{
+  std::unique_lock lck{jobs_lock};
+  remove_entry_unlocked(pgid, s_or_d);
+}
+
+
+std::optional<Scrub::SchedEntry> ScrubQueue::pop_ready_entry(
+    EligibilityPred eligibility_pred,
+    OSDRestrictions restrictions,
     utime_t time_now)
 {
-  std::unique_lock lck{jobs_lock};
+  /// \todo must handle 'only_deadlined'!
 
-  const auto eligible_filtr = [time_now, rst = restrictions](
-				  const std::unique_ptr<ScrubJob>& jb) -> bool {
-    // look for jobs that have their n.b. in the past, and are not
-    // blocked by restrictions
-    return jb->get_sched_time() <= time_now &&
-	   (jb->high_priority ||
-	    (!rst.high_priority_only &&
-	     (!rst.only_deadlined || (!jb->schedule.deadline.is_zero() &&
-				      jb->schedule.deadline <= time_now))));
+  auto eligible_filtr = [&, rst = restrictions](
+				  const SchedEntry& e) -> bool {
+      return eligibility_pred(e, rst, time_now);
   };
 
-  auto not_ripes =
-      std::partition(to_scrub.begin(), to_scrub.end(), eligible_filtr);
-  if (not_ripes == to_scrub.begin()) {
-    return nullptr;
-  }
-  auto top = std::min_element(
-      to_scrub.begin(), not_ripes,
-      [](const std::unique_ptr<ScrubJob>& lhs,
-	 const std::unique_ptr<ScrubJob>& rhs) -> bool {
-	return lhs->get_sched_time() < rhs->get_sched_time();
-      });
-
-  if (top == not_ripes) {
-    return nullptr;
-  }
-
-  auto top_job = std::move(*top);
-  to_scrub.erase(top);
-  return top_job;
+  std::unique_lock lck{jobs_lock};
+  to_scrub.advance_time(time_now);
+  return to_scrub.dequeue_by_pred(eligible_filtr);
 }
-
-
-namespace {
-struct cmp_time_n_priority_t {
-  bool operator()(const Scrub::ScrubJob& lhs, const Scrub::ScrubJob& rhs)
-      const
-  {
-    return lhs.is_high_priority() > rhs.is_high_priority() ||
-	   (lhs.is_high_priority() == rhs.is_high_priority() &&
-	    lhs.schedule.scheduled_at < rhs.schedule.scheduled_at);
-  }
-};
-}  // namespace
 
 
 /**
  * the set of all PGs named by the entries in the queue (but only those
  * entries that satisfy the predicate)
  */
-std::set<spg_t> ScrubQueue::get_pgs(const ScrubQueue::EntryPred& cond) const
+std::set<spg_t> ScrubQueue::get_pgs(const ScrubQueue::EntryPred& pred) const
 {
-  std::lock_guard lck{jobs_lock};
-  std::set<spg_t> pgs_w_matching_entries;
-  for (const auto& job : to_scrub) {
-    if (cond(*job)) {
-      pgs_w_matching_entries.insert(job->pgid);
-    }
-  }
-  return pgs_w_matching_entries;
+  std::lock_guard lck(jobs_lock);
+
+  using acc_t = std::set<spg_t>;
+  auto extract_pg =
+      [pred](acc_t&& acc, const SchedEntry& se, bool is_eligible) {
+	if (pred(se, is_eligible)) {
+	  acc.insert(se.pgid);
+	}
+	return std::move(acc);
+      };
+
+  return to_scrub.accumulate<acc_t, decltype(extract_pg)>(
+      std::move(extract_pg));
 }
 
 
 void ScrubQueue::for_each_job(
-    std::function<void(const Scrub::ScrubJob&)> fn,
+    std::function<void(const Scrub::SchedEntry&)> fn,
     int max_jobs) const
 {
+  auto fn_call = [fn](const SchedEntry& e, bool) -> void { fn(e); };
   std::lock_guard lck(jobs_lock);
-  // implementation note: not using 'for_each_n()', as it is UB
-  // if there aren't enough elements
-  std::for_each(
-      to_scrub.begin(),
-      to_scrub.begin() + std::min(max_jobs, static_cast<int>(to_scrub.size())),
-      [fn](const auto& job) { fn(*job); });
+  to_scrub.for_each_n<decltype(fn_call)>(std::move(fn_call), max_jobs);
+}
+
+
+bool ScrubQueue::remove_entry_unlocked(spg_t pgid, scrub_level_t s_or_d)
+{
+  auto same_lvl = [s_or_d](const SchedEntry& e) { return e.level == s_or_d; };
+  return to_scrub.remove_if_by_class<spg_t, decltype(same_lvl)>(
+      pgid, std::move(same_lvl), 1);
 }
 
 
@@ -159,11 +144,20 @@ void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
   ceph_assert(f != nullptr);
   f->open_array_section("scrubs");
   for_each_job(
-      [&f](const Scrub::ScrubJob& j) { j.dump(f); },
+      [&f](const Scrub::SchedEntry& e) {
+	f->open_object_section("scrub");
+	f->dump_stream("pgid") << e.pgid;
+	f->dump_stream("sched_time") << e.schedule.not_before;
+	f->dump_stream("orig_sched_time") << e.schedule.scheduled_at;
+	f->dump_stream("deadline") << e.schedule.deadline;
+	f->dump_bool(
+	    "forced",
+	    e.schedule.scheduled_at == PgScrubber::scrub_must_stamp());
+	f->close_section();
+      },
       std::numeric_limits<int>::max());
   f->close_section();
 }
-
 
 // ////////////////////////////////////////////////////////////////////////// //
 // ScrubQueue - maintaining the 'blocked on a locked object' count

@@ -5754,11 +5754,13 @@ function TEST_corrupt_scrub_erasure_overwrites() {
 
 #
 # Test to make sure that a periodic scrub won't cause deep-scrub info to be lost
+# Update 2024: this functionality was removed from the code. The test will be skipped.
 #
 function TEST_periodic_scrub_replicated() {
     local dir=$1
     local poolname=psr_pool
     local objname=POBJ
+    return 0
 
     run_mon $dir a --osd_pool_default_size=2 || return 1
     run_mgr $dir x || return 1
@@ -5795,12 +5797,13 @@ function TEST_periodic_scrub_replicated() {
 
     flush_pg_stats
     local last_scrub=$(get_last_scrub_stamp $pg)
-    # Fake a schedule scrub
+    # Fake a scheduled deep scrub
     ceph tell $pg schedule-scrub || return 1
     # Wait for schedule regular scrub
     wait_for_scrub $pg "$last_scrub"
 
     # It needed to be upgraded
+    # update 2024: the "upgrade" functionality has been removed
     grep -q "Deep scrub errors, upgrading scrub to deep-scrub" $dir/osd.${primary}.log || return 1
 
     # Bad object still known

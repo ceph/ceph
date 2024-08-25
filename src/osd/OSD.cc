@@ -1819,11 +1819,6 @@ void OSDService::queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority)
   queue_scrub_event_msg_default_cost<PGScrub>(pg, with_priority);
 }
 
-void OSDService::queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority)
-{
-  queue_scrub_event_msg_default_cost<PGScrubAfterRepair>(pg, with_priority);
-}
-
 void OSDService::queue_for_rep_scrub(PG* pg,
 				     Scrub::scrub_prio_t with_priority,
 				     unsigned int qu_priority,

@@ -205,7 +205,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   recovery_ops_active(0),
   backfill_reserving(false),
   finish_sync_event(NULL),
-  scrub_after_recovery(false),
   active_pushes(0),
   recovery_state(
     o->cct,
@@ -361,7 +360,6 @@ void PG::clear_primary_state()
   if (m_scrubber) {
     m_scrubber->on_new_interval();
   }
-  scrub_after_recovery = false;
 
   agent_clear();
 }
@@ -427,27 +425,6 @@ void PG::queue_recovery()
   }
 }
 
-void PG::queue_scrub_after_repair()
-{
-  dout(10) << __func__ << dendl;
-  ceph_assert(ceph_mutex_is_locked(_lock));
-
-  m_planned_scrub.must_deep_scrub = true;
-  m_planned_scrub.check_repair = true;
-  m_planned_scrub.must_scrub = true;
-  m_planned_scrub.calculated_to_deep = true;
-
-  if (is_scrub_queued_or_active()) {
-    dout(10) << __func__ << ": scrubbing already ("
-             << (is_scrubbing() ? "active)" : "queued)") << dendl;
-    return;
-  }
-
-  m_scrubber->set_op_parameters(m_planned_scrub);
-  dout(15) << __func__ << ": queueing" << dendl;
-
-  osd->queue_scrub_after_repair(this, Scrub::scrub_prio_t::high_priority);
-}
 
 unsigned PG::get_scrub_priority()
 {
@@ -484,17 +461,15 @@ void PG::_finish_recovery(Context* c)
   // When recovery is initiated by a repair, that flag is left on
   state_clear(PG_STATE_REPAIR);
   if (c == finish_sync_event) {
-    dout(15) << __func__ << " scrub_after_recovery? " << scrub_after_recovery << dendl;
+    dout(15) << fmt::format("{}: scrub_after_recovery: {}", __func__,
+      m_scrubber->is_after_repair_required()) << dendl;
     finish_sync_event = 0;
     recovery_state.purge_strays();
 
     publish_stats_to_osd();
 
-    if (scrub_after_recovery) {
-      dout(10) << "_finish_recovery requeueing for scrub" << dendl;
-      scrub_after_recovery = false;
-      queue_scrub_after_repair();
-    }
+    // notify the scrubber that recovery is done. This may trigger a scrub.
+    m_scrubber->recovery_completed();
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
@@ -1325,12 +1300,12 @@ unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsig
 
 
 Scrub::schedule_result_t PG::start_scrubbing(
-    std::unique_ptr<Scrub::ScrubJob> candidate,
+    const Scrub::SchedEntry& candidate,
     Scrub::OSDRestrictions osd_restrictions)
 {
   dout(10) << fmt::format(
-		  "{}: {}+{} (env restrictions:{})", __func__,
-		  (is_active() ? "<active>" : "<not-active>"),
+		  "{}: scrubbing {}. {}+{} (env restrictions:{})", __func__,
+		  candidate, (is_active() ? "<active>" : "<not-active>"),
 		  (is_clean() ? "<clean>" : "<not-clean>"), osd_restrictions)
 	   << dendl;
   ceph_assert(ceph_mutex_is_locked(_lock));
@@ -1349,7 +1324,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
        get_pgbackend()->auto_repair_supported());
 
   return m_scrubber->start_scrub_session(
-      std::move(candidate), osd_restrictions, pg_cond, m_planned_scrub);
+      candidate.level, osd_restrictions, pg_cond, m_planned_scrub);
 }
 
 double PG::next_deepscrub_interval() const
