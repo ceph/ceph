@@ -99,11 +99,11 @@ function TEST_recovery_scrub_1() {
     kill_daemons $dir #|| return 1
 
     declare -a err_strings
-    err_strings[0]="recovery in progress. Only high priority scrubs allowed."
+    err_strings[0]="recovery in progress.*scrubs"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        grep "recovery in progress. Only high priority scrubs allowed." $dir/osd.${osd}.log
+        grep "recovery in progress.*scrubs" $dir/osd.${osd}.log
     done
     for err_string in "${err_strings[@]}"
     do
@@ -269,7 +269,7 @@ function TEST_recovery_scrub_2() {
     ceph pg dump pgs
 
     # note that the following will be needed if the mclock scheduler is specified
-    #ceph tell osd.* config get osd_mclock_override_recovery_settings
+    ceph tell osd.* config get osd_mclock_override_recovery_settings
 
     # the '_max_active' is expected to be 0
     ceph tell osd.1 config get osd_recovery_max_active
@@ -327,11 +327,11 @@ function TEST_recovery_scrub_2() {
     kill_daemons $dir #|| return 1
 
     declare -a err_strings
-    err_strings[0]="not scheduling scrubs due to active recovery"
-
+    ## we do not expect a refusal to scrub
+    err_strings[0]="recovery in progress.*scrubs"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        grep "not scheduling scrubs" $dir/osd.${osd}.log
+        grep "recovery in progress.*scrubs" $dir/osd.${osd}.log
     done
     for err_string in "${err_strings[@]}"
     do
