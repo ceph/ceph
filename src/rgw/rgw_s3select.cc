@@ -1026,6 +1026,13 @@ int RGWSelectObj_ObjStore_S3::json_processing(bufferlist& bl, off_t ofs, off_t l
 int RGWSelectObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t ofs, off_t len)
 {
 
+  {int static first_time=1;
+    if(first_time) {
+      ldpp_dout(this, 10) << "s3select : running -debug version" << dendl;
+      first_time=0;
+    }
+  }
+
   if (m_scan_range_ind == false){
     m_object_size_for_processing = s->obj_size;
   }
