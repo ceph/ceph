@@ -84,6 +84,39 @@ information about interacting with these LEDs, refer to :ref:`devices`.
     The current release of `libstoragemgmt`_ (1.8.8) supports SCSI, SAS, and SATA based
     local disks only. There is no official support for NVMe devices (PCIe)
 
+Retrieve Exact Size of Block Devices
+====================================
+
+Run a command of the following form to discover the exact size of a block
+device. The value returned here is used by the orchestrator when comparing high
+and low values:
+
+.. prompt:: bash #
+
+   cephadm shell ceph-volume inventory </dev/sda> --format json | jq .sys_api.human_readable_size
+
+The exact size in GB is the size reported in TB, multiplied by 1000.
+
+Example
+-------
+The following provides a specific example of this command based upon the
+general form of the command above:
+
+.. prompt:: bash #
+
+   cephadm shell ceph-volume inventory /dev/sdc --format json | jq .sys_api.human_readable_size
+
+::
+
+   "3.64 TB"
+
+This means that the exact device size is 3.64 * 1000, or 3640GB.
+
+This procedure was developed by Frédéric Nass. See `this thread on the
+[ceph-users] mailing list
+<https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/message/5BAAYFCQAZZDRSNCUPCVBNEPGJDARRZA/>`_
+for discussion of this matter.
+
 .. _cephadm-deploy-osds:
 
 Deploy OSDs
