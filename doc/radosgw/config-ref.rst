@@ -202,7 +202,6 @@ Keystone Settings
 =================
 
 .. confval:: rgw_keystone_url
-.. confval:: rgw_keystone_api_version
 .. confval:: rgw_keystone_admin_domain
 .. confval:: rgw_keystone_admin_project
 .. confval:: rgw_keystone_admin_token
