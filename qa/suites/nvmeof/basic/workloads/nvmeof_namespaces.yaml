@@ -11,7 +11,7 @@ tasks:
       cli_image: quay.io/ceph/nvmeof-cli:1.2
 
 - cephadm.wait_for_service:
-    service: nvmeof.mypool
+    service: nvmeof.mypool.mygroup0
 
 - workunit:
     no_coverage_and_limits: true
