@@ -75,7 +75,8 @@ void tri_mutex::unlock_for_read()
   DEBUGDPP("", *this);
   assert(readers > 0);
   if (--readers == 0) {
-    wake();
+    assert(!readers && !writers && !exclusively_used);
+    wake(type_t::none);
   }
 }
 
@@ -85,7 +86,9 @@ void tri_mutex::demote_to_read()
   DEBUGDPP("", *this);
   assert(exclusively_used);
   exclusively_used = false;
+  assert(!readers && !writers && !exclusively_used);
   ++readers;
+  wake(type_t::read);
 }
 
 seastar::future<> tri_mutex::lock_for_write()
@@ -118,7 +121,8 @@ void tri_mutex::unlock_for_write()
   DEBUGDPP("", *this);
   assert(writers > 0);
   if (--writers == 0) {
-    wake();
+    assert(!readers && !writers && !exclusively_used);
+    wake(type_t::none);
   }
 }
 
@@ -128,7 +132,9 @@ void tri_mutex::demote_to_write()
   DEBUGDPP("", *this);
   assert(exclusively_used);
   exclusively_used = false;
+  assert(!readers && !writers && !exclusively_used);
   ++writers;
+  wake(type_t::write);
 }
 
 // for exclusive users
@@ -163,7 +169,8 @@ void tri_mutex::unlock_for_excl()
   DEBUGDPP("", *this);
   assert(exclusively_used);
   exclusively_used = false;
-  wake();
+  assert(!readers && !writers && !exclusively_used);
+  wake(type_t::none);
 }
 
 bool tri_mutex::is_acquired() const
@@ -181,23 +188,22 @@ bool tri_mutex::is_acquired() const
   }
 }
 
-void tri_mutex::wake()
+void tri_mutex::wake(type_t type_to_wake)
 {
   LOG_PREFIX(tri_mutex::wake());
   DEBUGDPP("", *this);
-  assert(!readers && !writers && !exclusively_used);
-  type_t type = type_t::none;
+  assert(type_to_wake != type_t::exclusive);
   while (!waiters.empty()) {
     auto& waiter = waiters.front();
-    if (type == type_t::exclusive) {
+    if (type_to_wake == type_t::exclusive) {
       break;
-    } if (type == type_t::none) {
-      type = waiter.type;
-    } else if (type != waiter.type) {
+    } if (type_to_wake == type_t::none) {
+      type_to_wake = waiter.type;
+    } else if (type_to_wake != waiter.type) {
       // to be woken in the next batch
       break;
     }
-    switch (type) {
+    switch (type_to_wake) {
     case type_t::read:
       ++readers;
       break;

@@ -308,9 +308,9 @@ ClientRequest::recover_missing_snaps(
     if (oid) {
       auto unfound = co_await do_recover_missing(pg, *oid, m->get_reqid());
       if (unfound) {
-        DEBUGDPP("{} unfound, hang it for now", *pg, m->get_hobj().get_head());
+        DEBUGDPP("{} unfound, hang it for now", *pg, *oid);
         co_await interruptor::make_interruptible(
-          pg->get_recovery_backend()->add_unfound(m->get_hobj().get_head()));
+          pg->get_recovery_backend()->add_unfound(*oid));
       }
     }
   }
