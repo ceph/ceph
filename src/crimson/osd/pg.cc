@@ -911,9 +911,9 @@ PG::submit_transaction(
   ceph_assert(log_entries.rbegin()->version >= projected_last_update);
   projected_last_update = log_entries.rbegin()->version;
 
-  auto [submitted, all_completed] = backend->mutate_object(
+  auto [submitted, all_completed] = backend->submit_transaction(
       peering_state.get_acting_recovery_backfill(),
-      std::move(obc),
+      obc->obs.oi.soid,
       std::move(txn),
       std::move(osd_op_p),
       peering_state.get_last_peering_reset(),
