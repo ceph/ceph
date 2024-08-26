@@ -244,6 +244,93 @@ inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
     (l.ino == r.ino && l.snapid < r.snapid);
 }
 
+template<template<typename> class Allocator>
+class charmap_md_t {
+public:
+  static constexpr int STRUCT_V = 1;
+  static constexpr int COMPAT_V = 1;
+
+  using str_t = std::basic_string<char, std::char_traits<char>, Allocator<char>>;
+
+  charmap_md_t() = default;
+  charmap_md_t(auto const& cimd) {
+    casesensitive = cimd.casesensitive;
+    normalization = cimd.normalization;
+    encoding = cimd.encoding;
+  }
+  charmap_md_t<Allocator>& operator=(auto const& other) {
+    casesensitive = other.is_casesensitive();
+    normalization = other.get_normalization();
+    encoding = other.get_encoding();
+    return *this;
+  }
+
+  void encode(ceph::buffer::list& bl, uint64_t features) const {
+    ENCODE_START(STRUCT_V, COMPAT_V, bl);
+    ceph::encode(casesensitive, bl);
+    ceph::encode(normalization, bl);
+    ceph::encode(encoding, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(STRUCT_V, p);
+    ceph::decode(casesensitive, p);
+    ceph::decode(normalization, p);
+    ceph::decode(encoding, p);
+    DECODE_FINISH(p);
+  }
+
+  void print(std::ostream& os) const {
+    os << "charmap_md_t(s=" << casesensitive << " f=" << normalization << " e=" << encoding << ")";
+  }
+
+  std::string_view get_normalization() const {
+    return std::string_view(normalization);
+  }
+  std::string_view get_encoding() const {
+    return std::string_view(encoding);
+  }
+  void set_normalization(std::string_view sv) {
+    normalization = sv;
+  }
+  void set_encoding(std::string_view sv) {
+    encoding = sv;
+  }
+  void mark_casesensitive() {
+    casesensitive = true;
+  }
+  void mark_caseinsensitive() {
+    casesensitive = false;
+  }
+  bool is_casesensitive() const {
+    return casesensitive;
+  }
+
+  void dump(ceph::Formatter* f) const {
+    f->dump_bool("casesensitive", casesensitive);
+    f->dump_string("normalization", normalization);
+    f->dump_string("encoding", encoding);
+  }
+
+  constexpr std::string_view get_default_normalization() const {
+    return DEFAULT_NORMALIZATION;
+  }
+
+  constexpr std::string_view get_default_encoding() const {
+    return DEFAULT_ENCODING;
+  }
+
+private:
+  static constexpr std::string_view DEFAULT_NORMALIZATION = "nfd";
+  static constexpr std::string_view DEFAULT_ENCODING = "utf8";
+
+  bool casesensitive = true;
+  str_t normalization{DEFAULT_NORMALIZATION};
+  str_t encoding{DEFAULT_ENCODING};
+};
+
+
+
 typedef enum {
   QUOTA_MAX_FILES,
   QUOTA_MAX_BYTES,
@@ -414,9 +501,11 @@ template<template<typename> class Allocator>
 struct optmetadata_server_t {
   using opts = std::variant<
     unknown_md_t<Allocator>,
+    charmap_md_t<Allocator>
   >;
   enum kind_t : uint64_t {
     UNKNOWN,
+    CHARMAP,
     _MAX
   };
 };
@@ -425,9 +514,11 @@ template<template<typename> class Allocator>
 struct optmetadata_client_t {
   using opts = std::variant<
     unknown_md_t<Allocator>,
+    charmap_md_t<Allocator>
   >;
   enum kind_t : uint64_t {
     UNKNOWN,
+    CHARMAP,
     _MAX
   };
 };
@@ -729,6 +820,25 @@ struct inode_t {
   }
   bool get_quiesce_block() const {
     return get_flag(F_QUIESCE_BLOCK);
+  }
+
+  bool has_charmap() const {
+    return optmetadata.has_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
+  }
+  auto& get_charmap() const {
+    auto& opt = optmetadata.get_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
+    return opt.template get_meta< charmap_md_t >();
+  }
+  auto& get_charmap() {
+    auto& opt = optmetadata.get_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
+    return opt.template get_meta< charmap_md_t >();
+  }
+  auto& set_charmap() {
+    auto& opt = optmetadata.get_or_create_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
+    return opt.template get_meta< charmap_md_t >();
+  }
+  void del_charmap() {
+    optmetadata.del_opt(optmetadata_singleton_server_t::kind_t::CHARMAP);
   }
 
   void encode(ceph::buffer::list &bl, uint64_t features) const;
