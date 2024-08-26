@@ -313,6 +313,9 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.get_inode()->get_quiesce_block()) {
     out << " qblock";
   }
+  if (in.get_inode()->optmetadata.size() > 0) {
+    out << " " << in.get_inode()->optmetadata;
+  }
 
   out << " " << &in;
   out << "]";
@@ -5491,6 +5494,16 @@ void CInode::set_export_pin(mds_rank_t rank)
   ceph_assert(is_dir());
   _get_projected_inode()->export_pin = rank;
   maybe_export_pin(true);
+}
+
+charmap_md_t<mempool::mds_co::pool_allocator> const* CInode::get_charmap() const
+{
+  dout(25) << __func__ << ": " << *this << dendl;
+  auto const& pi = get_projected_inode();
+  if (pi->has_charmap()) {
+    return &pi->get_charmap();
+  }
+  return nullptr;
 }
 
 mds_rank_t CInode::get_export_pin(bool inherit) const
