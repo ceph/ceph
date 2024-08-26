@@ -18,6 +18,7 @@ namespace rgw::dedup {
     cluster(const DoutPrefixProvider   *_dpp);
 
     int          init(rgw::sal::RadosStore *store, librados::IoCtx *p_ioctx);
+    bool         was_initialized() { return d_was_initialized; }
     work_shard_t get_next_work_shard_token(librados::IoCtx *p_ioctx);
     md5_shard_t  get_next_md5_shard_token(librados::IoCtx *p_ioctx);
 
@@ -91,12 +92,11 @@ namespace rgw::dedup {
 				   const bufferlist &bl);
 
     const DoutPrefixProvider *dpp;
-    std::string               cluster_id;
-    bool                      is_leader = false;
-    bool                      was_initialized = false;
-    md5_shard_t               curr_md5_shard = 0;
-    work_shard_t              curr_worker_shard = 0;
-    utime_t                   epoch;
+    std::string               d_cluster_id;
+    bool                      d_was_initialized = false;
+    md5_shard_t               d_curr_md5_shard = 0;
+    work_shard_t              d_curr_worker_shard = 0;
+    utime_t                   d_epoch;
   };
 
 } //namespace rgw::dedup

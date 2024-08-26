@@ -103,12 +103,6 @@ namespace rgw::dedup {
     }
     p_dedup_cluster_ioctx = new librados::IoCtx();
     ceph_assert(p_dedup_cluster_ioctx);
-    init_rados_access_handles();
-    int ret = d_cluster.init(store, p_dedup_cluster_ioctx);
-    if (ret != 0) {
-      derr << __func__ << "::failed cluster.init()" << dendl;
-      return;
-    }
 
     d_heart_beat_last_update = ceph_clock_now();
     d_heart_beat_max_elapsed_sec = 3;
@@ -1152,6 +1146,14 @@ namespace rgw::dedup {
   int Background::setup()
   {
     ceph::real_time last_scan_time;
+
+    init_rados_access_handles();
+    int ret = d_cluster.init(store, p_dedup_cluster_ioctx);
+    if (ret != 0) {
+      derr << __func__ << "::failed cluster.init()" << dendl;
+      return -1;
+    }
+
     return 0;
   }
 

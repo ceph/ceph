@@ -16,7 +16,7 @@
 #include <random>
 #include <cstdlib>
 #include <ctime>
-
+#include <string>
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 using namespace ::cls::cmpxattr;
@@ -35,11 +35,28 @@ namespace rgw::dedup {
 			    librados::IoCtx          *p_ioctx)
   {
     rgw_pool dedup_pool(DEDUP_POOL_NAME);
-    int ret = rados->create_pool(dpp, dedup_pool);
-    if (ret != 0 && ret != -EEXIST) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to create pool - " << dedup_pool << " with: "
-			<< cpp_strerror(ret) << ", ret=" << ret << dendl;
-      return -1;
+    std::string pool_name(DEDUP_POOL_NAME);
+    // using Replica-1 for the intermediate data
+    // since it can be regenerated in case of a failure
+    std::string replica_count(std::to_string(1));
+    librados::bufferlist inbl;
+    std::string output;
+    std::string command = R"(
+    {
+      "prefix": "osd pool create",
+      "pool": ")" + pool_name +
+      R"(",
+      "pool_type": "replicated",
+      "size": )" + replica_count +
+      R"(
+    })";
+    int ret = rados->get_rados_handle()->mon_command(command, inbl, nullptr, &output);
+    if (output.length()) {
+      ldpp_dout(dpp, 0) << __func__ << "::" << output << dendl;
+    }
+    if (ret != 0) {
+      ldpp_dout(dpp, 0) << __func__ << "::failed to create pool " << DEDUP_POOL_NAME
+			<< " with: " << cpp_strerror(ret) << ", ret=" << ret << dendl;
     }
 
     ret = rgw_init_ioctx(dpp, rados->get_rados_handle(), dedup_pool, *p_ioctx);
@@ -47,6 +64,7 @@ namespace rgw::dedup {
       ldpp_dout(dpp, 1) << "failed to initialize log pool for listing with: "
 			<< cpp_strerror(ret) << dendl;
     }
+
     return ret;
   }
 
@@ -63,19 +81,17 @@ namespace rgw::dedup {
     char buff[16];
     memset(buff, 0, sizeof(buff));
     int n = snprintf(buff, sizeof(buff), "%014lx%c", rand_high, '\0');
-    cluster_id.insert(0, buff, n);
+    d_cluster_id.insert(0, buff, n);
 
-    ldpp_dout(dpp, 1) << __func__ << "::" << cluster_id << "::" << dendl;
+    ldpp_dout(dpp, 1) << __func__ << "::" << d_cluster_id << "::" << dendl;
   }
 
   //---------------------------------------------------------------------------
   cluster::cluster(const DoutPrefixProvider *_dpp) : dpp(_dpp)
   {
-
-    is_leader = false;
-    was_initialized = false;
-    curr_md5_shard = 0;
-    curr_worker_shard = 0;
+    d_was_initialized = false;
+    d_curr_md5_shard = 0;
+    d_curr_worker_shard = 0;
     // use current time as seed for random generator
     std::srand(std::time(nullptr));
     assign_cluster_id();
@@ -92,7 +108,7 @@ namespace rgw::dedup {
     create_shard_tokens(p_ioctx, MAX_WORK_SHARD, WORKER_SHARD_PREFIX);
     create_shard_tokens(p_ioctx, MAX_MD5_SHARD, MD5_SHARD_PREFIX);
 
-    was_initialized = true;
+    d_was_initialized = true;
 
     return 0;
   }
@@ -122,13 +138,14 @@ namespace rgw::dedup {
 	uint64_t size;
 	struct timespec tspec;
 	if (p_ioctx->stat2(oid, &size, &tspec) != 0) {
-	  ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.stat( " << oid << " )" << dendl;
+	  ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.stat( " << oid << " )" << dendl;
+	  failed_count++;
 	  continue;
 	}
 	utime_t mtime(tspec);
-	if (epoch < mtime) {
+	if (d_epoch < mtime) {
 	  ldpp_dout(dpp, 10) << __func__ << "::skipping new obj! "
-			     << "::EPOCH={" << epoch.tv.tv_sec << ":" << epoch.tv.tv_nsec << "} "
+			     << "::EPOCH={" << d_epoch.tv.tv_sec << ":" << d_epoch.tv.tv_nsec << "} "
 			     << "::mtime={" << mtime.tv.tv_sec << ":" << mtime.tv.tv_nsec << "}" << dendl;
 	  skipped_count++;
 	  continue;
@@ -139,8 +156,8 @@ namespace rgw::dedup {
 	}
 	else {
 	  failed_count++;
-	  ldpp_dout(dpp, 1) << __func__ << "::failed ioctx.remove( " << oid << " ), ret="
-			    << ret << "::" << cpp_strerror(ret) << dendl;
+	  ldpp_dout(dpp, 10) << __func__ << "::failed ioctx.remove( " << oid << " ), ret="
+			     << ret << "::" << cpp_strerror(ret) << dendl;
 	}
       }
       ldpp_dout(dpp, 0) << __func__ << "::oids.size()=" << oids.size()
@@ -180,7 +197,7 @@ namespace rgw::dedup {
     utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
     operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK |
 			       operation_flags_t::LOCK_UPDATE_OP_SET_EPOCH);
-    ret = lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl);
+    ret = lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl);
     if (ret != 0) {
       ldpp_dout(dpp, 0) << __func__ << "::ERR: failed lock_update()" << dendl;
       return -1;
@@ -198,7 +215,6 @@ namespace rgw::dedup {
     ret = ioctx.operate(oid, &op);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::I'm Cluster Leader" << dendl;
-      is_leader = true;
     }
     else if (ret == -EBUSY) {
       ldpp_dout(dpp, 10) << __func__ << "::I'm Cluster Member" << dendl;
@@ -213,12 +229,12 @@ namespace rgw::dedup {
     if (ret > 0) {
       try {
 	auto p = bl.cbegin();
-	decode(epoch, p);
+	decode(d_epoch, p);
       }catch (const buffer::error&) {
 	ldpp_dout(dpp, 0) << __func__ << "::failed epoch decode!" << dendl;
       }
-      ldpp_dout(dpp, 0) << __func__ << "::EPOCH={" << epoch.tv.tv_sec
-			<< ":" << epoch.tv.tv_nsec << "}" << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "::EPOCH={" << d_epoch.tv.tv_sec
+			<< ":" << d_epoch.tv.tv_nsec << "}" << dendl;
       return 0;
     }
     else {
@@ -261,7 +277,7 @@ namespace rgw::dedup {
 					    unsigned shard,
 					    const char *prefix)
   {
-    ceph_assert(was_initialized);
+    ceph_assert(d_was_initialized);
     char buff[16];
     int n = snprintf(buff, sizeof(buff), "%s%02x", prefix, shard);
     std::string oid(buff, n);
@@ -269,7 +285,7 @@ namespace rgw::dedup {
     librados::ObjectWriteOperation op;
     utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
     operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK);
-    int ret = lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl);
+    int ret = lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl);
     if (ret != 0) {
       ldpp_dout(dpp, 0) << __func__ << "::Failed lock_update()::" << oid << dendl;
       return -1;
@@ -289,7 +305,7 @@ namespace rgw::dedup {
 				    unsigned max_shard,
 				    const char *prefix)
   {
-    ceph_assert(was_initialized);
+    ceph_assert(d_was_initialized);
     char buff[16];
     int prefix_len = snprintf(buff, sizeof(buff), "%s", prefix);
 
@@ -300,7 +316,7 @@ namespace rgw::dedup {
       librados::ObjectWriteOperation op;
       utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
       operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK);
-      int ret = lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl);
+      int ret = lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags, null_bl);
       if (ret != 0) {
 	ldpp_dout(dpp, 0) << __func__ << "::ERR: failed lock_update()" << dendl;
 	return -1;
@@ -319,9 +335,9 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   work_shard_t cluster::get_next_work_shard_token(librados::IoCtx *p_ioctx)
   {
-    int shard = get_next_shard_token(p_ioctx, curr_worker_shard, MAX_WORK_SHARD, WORKER_SHARD_PREFIX);
+    int shard = get_next_shard_token(p_ioctx, d_curr_worker_shard, MAX_WORK_SHARD, WORKER_SHARD_PREFIX);
     if (shard >= 0 && shard < MAX_WORK_SHARD) {
-      curr_worker_shard = shard + 1;
+      d_curr_worker_shard = shard + 1;
       return shard;
     }
     else {
@@ -332,9 +348,9 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   md5_shard_t cluster::get_next_md5_shard_token(librados::IoCtx *p_ioctx)
   {
-    int shard = get_next_shard_token(p_ioctx, curr_md5_shard, MAX_MD5_SHARD, MD5_SHARD_PREFIX);
+    int shard = get_next_shard_token(p_ioctx, d_curr_md5_shard, MAX_MD5_SHARD, MD5_SHARD_PREFIX);
     if (shard >= 0 && shard < MAX_MD5_SHARD) {
-      curr_md5_shard = shard + 1;
+      d_curr_md5_shard = shard + 1;
       return shard;
     }
     else {
@@ -348,7 +364,7 @@ namespace rgw::dedup {
 					  const char *prefix,
 					  const bufferlist &bl)
   {
-    ceph_assert(was_initialized);
+    ceph_assert(d_was_initialized);
     char buff[16];
     int n = snprintf(buff, sizeof(buff), "%s%02x", prefix, shard);
     std::string oid(buff,  n);
@@ -358,7 +374,7 @@ namespace rgw::dedup {
     utime_t max_lock_duration(MAX_LOCK_DURATION_SEC, 0);
     operation_flags_t op_flags(operation_flags_t::LOCK_UPDATE_OP_SET_LOCK |
 			       operation_flags_t::LOCK_UPDATE_OP_MARK_COMPLETED);
-    int ret = lock_update(op, cluster_id, KEY_NAME, max_lock_duration, op_flags, bl);
+    int ret = lock_update(op, d_cluster_id, KEY_NAME, max_lock_duration, op_flags, bl);
     if (ret != 0) {
       ldpp_dout(dpp, 0) << __func__ << "::ERR: failed lock_update()" << dendl;
       return -1;
@@ -381,7 +397,7 @@ namespace rgw::dedup {
 					   const char *prefix,
 					   uint32_t *ttl)
   {
-    ceph_assert(was_initialized);
+    ceph_assert(d_was_initialized);
     *ttl = 60; // wait 60 seconds before retry if no one finished yet
     unsigned count = 0;
     char buff[16];
