@@ -314,6 +314,24 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.get_inode()->get_quiesce_block()) {
     out << " qblock";
   }
+#if 0
+  if (in.get_inode()->has_casesensitivity()) {
+    auto& c = in.get_inode()->get_casesensitivity();
+    if (c.is_insensitive()) {
+      out << " casei=y folda=" << c.get_casefolder();
+    } else {
+      out << " casei=n";
+      auto folda = c.get_casefolder();
+      if (!folda.empty()) {
+        out << " folda=" << folda;
+      }
+    }
+  }
+#endif
+
+  if (in.get_inode()->optmetadata.size() > 0) {
+    out << " " << in.get_inode()->optmetadata;
+  }
 
   out << " " << &in;
   out << "]";
@@ -5539,6 +5557,16 @@ void CInode::set_export_pin(mds_rank_t rank)
   ceph_assert(is_dir());
   _get_projected_inode()->export_pin = rank;
   maybe_export_pin(true);
+}
+
+casesensitivity_md_t<mempool::mds_co::pool_allocator> const* CInode::get_casesensitivity() const
+{
+  dout(25) << __func__ << ": " << *this << dendl;
+  auto const& pi = get_projected_inode();
+  if (pi->has_casesensitivity()) {
+    return &pi->get_casesensitivity();
+  }
+  return nullptr;
 }
 
 mds_rank_t CInode::get_export_pin(bool inherit) const
