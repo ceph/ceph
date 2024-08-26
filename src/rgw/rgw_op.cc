@@ -8231,7 +8231,7 @@ void RGWGetBucketPolicy::execute(optional_yield y)
   rgw::sal::Attrs attrs(s->bucket_attrs);
   auto aiter = attrs.find(RGW_ATTR_IAM_POLICY);
   if (aiter == attrs.end()) {
-    ldpp_dout(this, 0) << "can't find bucket IAM POLICY attr bucket_name = "
+    ldpp_dout(this, 20) << "can't find bucket IAM POLICY attr bucket_name = "
         << s->bucket_name << dendl;
     op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
     s->err.message = "The bucket policy does not exist";
@@ -8746,7 +8746,7 @@ void RGWGetBucketPublicAccessBlock::execute(optional_yield y)
   auto attrs = s->bucket_attrs;
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
       aiter == attrs.end()) {
-    ldpp_dout(this, 0) << "can't find bucket IAM POLICY attr bucket_name = "
+    ldpp_dout(this, 20) << "can't find bucket IAM POLICY attr bucket_name = "
 		       << s->bucket_name << dendl;
 
     op_ret = -ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION;
@@ -8878,7 +8878,7 @@ void RGWGetBucketEncryption::execute(optional_yield y)
   const auto& attrs = s->bucket_attrs;
   if (auto aiter = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
       aiter == attrs.end()) {
-    ldpp_dout(this, 0) << "can't find BUCKET ENCRYPTION attr for bucket_name = " << s->bucket_name << dendl;
+    ldpp_dout(this, 20) << "can't find BUCKET ENCRYPTION attr for bucket_name = " << s->bucket_name << dendl;
     op_ret = -ENOENT;
     s->err.message = "The server side encryption configuration was not found";
     return;
