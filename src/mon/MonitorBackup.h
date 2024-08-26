@@ -25,7 +25,6 @@
 #include "common/ceph_context.h"
 #include "kv/KeyValueDB.h"
 #include "mon/MonitorDBStore.h"
-#include "mon/Monitor.h"
 
 using std::shared_ptr;
 class Monitor;

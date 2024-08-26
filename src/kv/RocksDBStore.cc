@@ -2222,7 +2222,7 @@ KeyValueDB::BackupCleanupStats RocksDBStore::backup_cleanup(const std::string& p
   for (size_t i = 0; i < backup_infos.size(); i++)
   {
     rocksdb::BackupInfo bi = backup_infos[i];
-    if(std::find(keep_backups.begin(), keep_backups.end(), bi.backup_id) != keep_backups.end()) {
+    if (std::find(keep_backups.begin(), keep_backups.end(), bi.backup_id) != keep_backups.end()) {
       rv.size += bi.size;
       continue;
     } else {

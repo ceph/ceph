@@ -52,6 +52,7 @@
 #include "include/common_fwd.h"
 #include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/MonitorBackup.h"
 #include "mgr/MgrClient.h"
 
 #include "mon/MonOpRequest.h"
@@ -1049,8 +1050,8 @@ private:
 
   OpTracker op_tracker;
 
-  MonitorBackupManager *backup_manager;
-  bool mon_backup_requested;
+  MonitorBackupManager backup_manager;
+  bool mon_backup_requested = false;
 
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
