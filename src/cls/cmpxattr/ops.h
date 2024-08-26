@@ -50,10 +50,55 @@ namespace cls::cmpxattr {
   }
 
   //===========================================================================
+
+  struct operation_flags_t {
+    friend inline void encode(const operation_flags_t& o, ceph::bufferlist& bl);
+    friend inline void decode(operation_flags_t& o, ceph::bufferlist::const_iterator& bl);
+    static constexpr uint8_t LOCK_UPDATE_OP_SET_LOCK       = 0x01;
+    static constexpr uint8_t LOCK_UPDATE_OP_SET_EPOCH      = 0x02;
+    static constexpr uint8_t LOCK_UPDATE_OP_MARK_COMPLETED = 0x04;
+
+    operation_flags_t() : flags(0) {}
+    operation_flags_t(uint8_t _flags) : flags(_flags) {}
+    inline void clear() { this->flags = 0; }
+    inline operator uint16_t() const {
+      return this->flags;
+    }
+
+    inline void set_lock()              {this->flags |= LOCK_UPDATE_OP_SET_LOCK; }
+    inline bool is_set_lock() const     { return ((flags & LOCK_UPDATE_OP_SET_LOCK) != 0); }
+
+    inline void set_epoch()              {this->flags |= LOCK_UPDATE_OP_SET_EPOCH; }
+    inline bool is_set_epoch() const     { return ((flags & LOCK_UPDATE_OP_SET_EPOCH) != 0); }
+
+    inline bool is_mark_completed() const {
+      return ((flags & LOCK_UPDATE_OP_MARK_COMPLETED) != 0);
+    }
+
+  private:
+    uint16_t flags;
+  };
+
+  inline void encode(const operation_flags_t& o, ceph::bufferlist& bl)
+  {
+    ENCODE_START(1, 1, bl);
+    encode(o.flags, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  inline void decode(operation_flags_t& o, ceph::bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    decode(o.flags, bl);
+    DECODE_FINISH(bl);
+  }
+
   struct lock_update_op {
-    utime_t     max_lock_duration; // max duration for holding a lock
-    std::string owner;
-    std::string key_name;
+    utime_t           max_lock_duration; // max duration for holding a lock
+    std::string       owner;
+    std::string       key_name;
+    operation_flags_t op_flags;
+    ceph::bufferlist  in_bl;
   };
 
   inline void encode(const lock_update_op& o, ceph::bufferlist& bl)
@@ -62,6 +107,8 @@ namespace cls::cmpxattr {
     encode(o.max_lock_duration, bl);
     encode(o.owner, bl);
     encode(o.key_name, bl);
+    encode(o.op_flags, bl);
+    encode(o.in_bl, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -71,6 +118,8 @@ namespace cls::cmpxattr {
     decode(o.max_lock_duration, bl);
     decode(o.owner, bl);
     decode(o.key_name, bl);
+    decode(o.op_flags, bl);
+    decode(o.in_bl, bl);
     DECODE_FINISH(bl);
   }
 

@@ -1,7 +1,9 @@
 #pragma once
 #include "common/dout.h"
 #include "rgw_common.h"
+#include "rgw_dedup_utils.h"
 #include "rgw_dedup_table.h"
+#include "rgw_dedup_cluster.h"
 #include "rgw_realm_reloader.h"
 #include <string>
 #include <unordered_map>
@@ -15,8 +17,6 @@ namespace rgw::dedup {
   struct key_t;
   //Interval between each execution of the script is set to 5 seconds
   static inline constexpr int INIT_EXECUTE_INTERVAL = 5;
-  const work_shard_t MAX_WORK_SHARD = 1;
-  const md5_shard_t  MAX_MD5_SHARD  = 2;
   class Background : public RGWRealmReloader::Pauser {
   public:
     Background(rgw::sal::Driver* _driver,
@@ -37,38 +37,44 @@ namespace rgw::dedup {
     };
     void run();
     int  setup();
-    int  scan_bucket_list(bool deep_scan, ceph::real_time last_scan_time);
     int  read_buckets();
-    int  process_single_entry(rgw::sal::Bucket           *bucket,
-			      const rgw_bucket_dir_entry &entry,
-			      work_shard_t                worker_id,
-			      const ceph::real_time      &last_scan_time);
+    int  check_and_update_heartbeat(unsigned shard, bool worker_shard);
+    int  check_and_update_worker_heartbeat(work_shard_t worker_id);
+    int  check_and_update_md5_heartbeat(md5_shard_t md5_id);
+    int  ingress_single_object(rgw::sal::Bucket           *bucket,
+			       const rgw_bucket_dir_entry &entry,
+			       work_shard_t                worker_id,
+			       worker_stats_t             *p_worker_stats /*IN-OUT*/);
     int  process_bucket_shards(rgw::sal::Bucket     *bucket,
 			       std::map<int, string> &oids,
 			       librados::IoCtx       &ioctx,
 			       work_shard_t           shard_id,
-			       const ceph::real_time &last_scan_time,
-			       uint64_t              *p_obj_count /* IN-OUT */);
-    int  list_bucket_by_shard(const string   &bucket_name,
-			      ceph::real_time last_scan_time,
-			      work_shard_t    worker_id,
-			      uint64_t       *p_obj_count /* IN-OUT */);
-    int  read_bucket_stats(rgw::sal::Bucket *bucket, const std::string &bucket_name);
-    int run_dedup_step(dedup_step_t step,
-		       md5_shard_t md5_shard,
-		       work_shard_t work_shard,
-		       uint32_t *p_rec_count);
+			       worker_stats_t        *p_worker_stats /*IN-OUT*/);
+    int  ingress_bucket_objects_single_shard(const string   &bucket_name,
+					     work_shard_t    worker_id,
+					     worker_stats_t *p_worker_stats /*IN-OUT*/);
+    int  objects_ingress_single_shard(work_shard_t worker_id,
+				      worker_stats_t *p_worker_stats);
+    int  objects_ingress();
 
+    int  read_bucket_stats(rgw::sal::Bucket *bucket, const std::string &bucket_name);
+    int  run_dedup_step(dedup_step_t step,
+			md5_shard_t md5_shard,
+			work_shard_t work_shard,
+			md5_stats_t *p_stats /* IN-OUT */);
+
+    int objects_dedup_single_shard(md5_shard_t md5_shard, md5_stats_t *p_stats);
+    int objects_dedup();
     int add_disk_record(const rgw::sal::Bucket *p_bucket,
 			const rgw::sal::Object *p_obj,
-			work_shard_t            worker_id,
 			uint64_t                obj_size);
 
     //void calc_object_key(uint64_t object_size, bufferlist &etag_bl, struct Key *p_key);
     int try_deduping_record(const disk_record_t *p_rec,
 			    disk_block_id_t      block_id,
 			    record_id_t          rec_id,
-			    md5_shard_t          md5_shard);
+			    md5_shard_t          md5_shard,
+			    md5_stats_t         *p_stats /* IN-OUT */);
     int add_record_to_dedup_table(const struct disk_record_t *p_rec,
 				  disk_block_id_t block_id,
 				  record_id_t rec_id);
@@ -101,38 +107,15 @@ namespace rgw::dedup {
     const DoutPrefixProvider* const dpp;
     CephContext* const cct;
     dedup_table_t d_table;
-    disk_block_array_t *p_disk_arr[MAX_MD5_SHARD][MAX_WORK_SHARD];
+    cluster d_cluster;
+    disk_block_array_t *p_disk_arr[MAX_MD5_SHARD];
+    librados::IoCtx    *p_dedup_cluster_ioctx = nullptr;
+    utime_t  d_heart_beat_last_update;
+    unsigned d_heart_beat_max_elapsed_sec;
     std::thread runner;
-    //mutable std::mutex table_mutex;
     std::mutex cond_mutex;
     std::mutex pause_mutex;
     std::condition_variable cond;
-
-    struct bucket_state_t {
-      uint64_t num_objects = 0;
-      uint64_t size = 0;
-      utime_t  modification_time;
-    };
-    std::unordered_map<std::string, bucket_state_t> bucket_set;
-    struct stats_t {
-      uint64_t ingress_obj = 0;
-      uint64_t egress_slabs = 0;
-      uint64_t records_inserts = 0;
-      uint64_t records_searched = 0;
-
-      uint64_t skipped_shared_manifest = 0;
-      uint64_t skipped_singleton = 0;
-      uint64_t skipped_source_record = 0;
-      uint64_t skipped_duplicate = 0;
-      uint64_t skipped_bad_sha256 = 0;
-      uint64_t total_objects = 0;
-      uint64_t singleton_count = 0;
-      uint64_t duplicate_count = 0;
-      uint64_t unique_count = 0;
-      uint64_t deduped_objects = 0;
-      uint64_t set_shared_manifest = 0;
-    }stats;
-    friend std::ostream &operator<<(std::ostream &out, const Background::stats_t &s);
   };
-  std::ostream &operator<<(std::ostream &out, const Background::stats_t &s);
+
 } //namespace rgw::dedup

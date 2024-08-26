@@ -2754,7 +2754,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     else
       ret = 0;
 
-    cout << "\nattr_name=" << attr_name << std::endl;
+    cout << "\nattribute_name=" << attr_name << std::endl;
     if (attr_name == "refcount")  {
       obj_refcount oref;
       auto p = bl.cbegin();
@@ -2780,7 +2780,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       decode(sha1, p);
       cout << sha1.to_str() << std::endl;
     }
-    if (attr_name == "cluster_lock") {
+    else if (attr_name == "epoch")  {
+      utime_t epoch;
+      auto p = bl.cbegin();
+      decode(epoch, p);
+      cout << "Epoch time is [" << epoch.tv.tv_sec << ":" << epoch.tv.tv_nsec << "]" << std::endl;
+    }
+    else if (attr_name == "cluster_lock") {
       named_time_lock_t ntl;
       auto p = bl.cbegin();
       decode(ntl, p);
@@ -2790,6 +2796,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     else {
       string s(bl.c_str(), bl.length());
+      cout << s << std::endl;
     }
   } else if (strcmp(nargs[0], "rmxattr") == 0) {
     if (!pool_name || nargs.size() < (obj_name ? 2 : 3)) {

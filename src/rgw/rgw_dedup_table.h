@@ -53,7 +53,7 @@ namespace rgw::dedup {
 	this->pad_16 = 0;
 	this->rec_id = 0xFF;
 	this->flags.clear();
-	
+
       }
 
       value_t(disk_block_id_t block_id, record_id_t rec_id, bool shared_manifest, bool valid_sha256) {
@@ -85,13 +85,14 @@ namespace rgw::dedup {
 
       disk_block_id_t block_idx;
       uint16_t        count;
-      uint16_t        pad_16;     
+      uint16_t        pad_16;
       record_id_t     rec_id;	// TBD use 16bits rec_id
       dedup_flags_t   flags;
     } __attribute__((__packed__));
 
     dedup_table_t(uint32_t entries_count, const DoutPrefixProvider* _dpp);
     ~dedup_table_t();
+    void reset();
     uint32_t find_entry(const key_t *p_key);
     int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
 		  bool shared_manifest, bool has_sha256);

@@ -135,4 +135,70 @@ namespace rgw::dedup {
     return crypto::digest<crypto::SHA1>(bl).to_str();
   }
 
+  //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const worker_stats_t &s)
+  {
+    out << "Ingress Objs count             = " << s.ingress_obj << "\n";
+    out << "Egress  Records count          = " << s.egress_records << "\n";
+    out << "Egress  Blocks count           = " << s.egress_blocks << "\n";
+    out << "Egress  Slabs count            = " << s.egress_slabs << "\n";
+
+    out << "Valid   SHA256 count           = " << s.valid_sha256 << "\n";
+    out << "Invalid SHA256 count           = " << s.invalid_sha256 << "\n";
+
+    if(s.ingress_failed_get_object) {
+      out << "Ingress failed get_object()    = "
+	  << s.ingress_failed_get_object << "\n";
+    }
+    if(s.ingress_failed_get_obj_attrs) {
+      out << "Ingress failed get_obj_attrs() = "
+	  << s.ingress_failed_get_obj_attrs << "\n";
+    }
+    if(s.ingress_skip_too_small) {
+      out << "Ingress skip: too small        = "
+	  << s.ingress_skip_too_small << "\n";
+    }
+    if(s.ingress_skip_encrypted) {
+      out << "Ingress skip: Encrypted        = "
+	  << s.ingress_skip_encrypted << "\n";
+    }
+    if(s.ingress_skip_compressed) {
+      out << "Ingress skip: Compressed       = "
+	  << s.ingress_skip_compressed << "\n";
+    }
+
+    out << "Shard Process Duration   = " << s.duration << "\n";
+    return out;
+  }
+
+  //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const md5_stats_t &s)
+  {
+    out << "Total processed objects  = " << s.processed_objects << "\n";
+
+    out << "Skipped shared_manifest  = " << s.skipped_shared_manifest << "\n";
+    out << "Skipped singleton        = " << s.skipped_singleton << "\n";
+    out << "Skipped source record    = " << s.skipped_source_record << "\n";
+    out << "================================\n";
+    out << "Skipped total            = " << s.get_skipped_total() << "\n\n";
+
+    if (s.skip_sha256_cmp) {
+      out << "Can't run SHA256 compare = " << s.skip_sha256_cmp << "\n";
+    }
+    out << "Set Shared-Manifest      = " << s.set_shared_manifest << "\n";
+    out << "Deduped Obj (this cycle) = " << s.deduped_objects << "\n";
+    out << "Singleton Obj            = " << s.singleton_count << "\n";
+    out << "Unique Obj               = " << s.unique_count << "\n";
+    out << "Duplicate Obj            = " << s.duplicate_count << "\n";
+    out << "Shard Process Duration   = " << s.duration << "\n";
+    if (s.skipped_duplicate) {
+      out << "\n\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n\n\n";
+    }
+
+    if (s.skipped_bad_sha256) {
+      out << "\n\n***ERR:Skipped SHA256 = " << s.skipped_bad_sha256 << "***\n\n\n";
+    }
+
+    return out;
+  }
 } //namespace rgw::dedup

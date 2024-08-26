@@ -65,7 +65,7 @@ extern "C" {
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
 #include "rgw_data_access.h"
-
+#include "rgw_dedup_cluster.h"
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
@@ -145,6 +145,9 @@ void usage()
   cout << "  user list                        list users\n";
   cout << "  caps add                         add user capabilities\n";
   cout << "  caps rm                          remove user capabilities\n";
+
+  cout << "  dedup stats                      Collcet & display dedup statistics\n";
+
   cout << "  subuser create                   create a new subuser\n" ;
   cout << "  subuser modify                   modify subuser\n";
   cout << "  subuser rm                       remove subuser\n";
@@ -701,6 +704,9 @@ enum class OPT {
   QUOTA_SET,
   QUOTA_ENABLE,
   QUOTA_DISABLE,
+
+  DEDUP_STATS,
+
   GC_LIST,
   GC_PROCESS,
   LC_LIST,
@@ -927,6 +933,9 @@ static SimpleCmd::Commands all_cmds = {
   { "ratelimit set", OPT::RATELIMIT_SET },
   { "ratelimit enable", OPT::RATELIMIT_ENABLE },
   { "ratelimit disable", OPT::RATELIMIT_DISABLE },
+
+  { "dedup stats", OPT::DEDUP_STATS },
+
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
   { "lc list", OPT::LC_LIST },
@@ -4205,6 +4214,9 @@ int main(int argc, const char **argv)
 			 OPT::BI_LIST,
 			 OPT::OLH_GET,
 			 OPT::OLH_READLOG,
+
+			 OPT::DEDUP_STATS,
+
 			 OPT::GC_LIST,
 			 OPT::LC_LIST,
 			 OPT::ORPHANS_LIST_JOBS,
@@ -8529,6 +8541,17 @@ next:
       }
       RGWBucketAdminOp::remove_bucket(driver, bucket_op, null_yield, dpp(), bypass_gc, false);
     }
+  }
+
+  if (opt_cmd == OPT::DEDUP_STATS) {
+    RGWRados *rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
+    rgw::dedup::worker_stats_t wrk_stats;
+    rgw::dedup::cluster::collect_all_work_shard_stats(rados, dpp(), &wrk_stats);
+    cout << "Aggreagted work-shard stats counters:\n" << wrk_stats << std::endl;
+
+    rgw::dedup::md5_stats_t md5_stats;
+    rgw::dedup::cluster::collect_all_md5_shard_stats(rados, dpp(), &md5_stats);
+    cout << "Aggreagted md5-shard stats counters:\n" << md5_stats << std::endl;
   }
 
   if (opt_cmd == OPT::GC_LIST) {

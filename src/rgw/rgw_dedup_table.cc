@@ -15,8 +15,7 @@ namespace rgw::dedup {
     entries_count = _entries_count;
     hash_tab = new table_entry_t[entries_count];
     if (hash_tab) {
-      char *p = (char*)hash_tab;
-      memset(p, 0, sizeof(table_entry_t)*entries_count);
+      reset();
     }
     occupied_count = 0;
   }
@@ -27,6 +26,13 @@ namespace rgw::dedup {
     if (hash_tab) {
       delete [] hash_tab;
     }
+  }
+
+  //---------------------------------------------------------------------------
+  void dedup_table_t::reset()
+  {
+    char *p = (char*)hash_tab;
+    memset(p, 0, sizeof(table_entry_t)*entries_count);
   }
 
   //---------------------------------------------------------------------------
@@ -148,7 +154,7 @@ namespace rgw::dedup {
     ldpp_dout(dpp, 20) << __func__ << "::DUP COUNT=" << hash_tab[idx].val.count << dendl;
     return 0;
   }
-  
+
   //---------------------------------------------------------------------------
   int dedup_table_t::set_shared_manifest_mode(const key_t *p_key,
 					      disk_block_id_t block_id,

@@ -40,7 +40,9 @@ namespace cls::cmpxattr {
   int lock_update(librados::ObjectWriteOperation& writeop,
 		  const std::string& owner,
 		  const std::string& key_name,
-		  const utime_t& max_lock_duration)
+		  const utime_t& max_lock_duration,
+		  operation_flags_t op_flags,
+		  ceph::bufferlist  in_bl)
   {
     // TBD: snaity check paramters
 
@@ -48,7 +50,8 @@ namespace cls::cmpxattr {
     call.owner = owner;
     call.key_name = key_name;
     call.max_lock_duration = max_lock_duration;
-
+    call.op_flags = op_flags;
+    call.in_bl = in_bl;
     bufferlist in;
     encode(call, in);
     writeop.exec("cmpxattr", "lock_update", in);

@@ -17,6 +17,7 @@
 #include <optional>
 #include "include/rados/librados_fwd.hpp"
 #include "types.h"
+#include "ops.h"
 #include "include/utime.h"
 #include "common/ceph_time.h"
 
@@ -48,7 +49,9 @@ namespace cls::cmpxattr {
   [[nodiscard]] int lock_update(librados::ObjectWriteOperation& writeop,
 				const std::string& owner,
 				const std::string& key_name,
-				const utime_t& max_lock_duration);
+				const utime_t& max_lock_duration,
+				operation_flags_t op_flags,
+				ceph::bufferlist in_bl);
 
   // bufferlist factories for comparison values
   inline ceph::bufferlist string_buffer(const std::string_view& value) {

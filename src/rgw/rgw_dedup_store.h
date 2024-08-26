@@ -13,7 +13,6 @@
 #include "include/rados/buffer.h"
 #include "include/rados/librados.hpp"
 #include "rgw_dedup_utils.h"
-//#include "rgw_dedup_table.h"
 
 namespace rgw::dedup {
   struct key_t;
@@ -30,8 +29,6 @@ namespace rgw::dedup {
   //static inline constexpr unsigned DISK_BLOCK_COUNT = std::min(((2*1024*1024)/DISK_BLOCK_SIZE), 256);
   static inline constexpr unsigned DISK_BLOCK_COUNT = 256;
 
-  using work_shard_t   = uint8_t;
-  using md5_shard_t    = uint8_t;
   using slab_id_t      = uint16_t;
   using block_offset_t = uint8_t;
   using record_id_t    = uint8_t;
@@ -154,7 +151,7 @@ namespace rgw::dedup {
   static constexpr unsigned LAST_BLOCK_MAGIC = 0xCAD7;
   static constexpr unsigned AVG_REC_SIZE = 400;
   //static constexpr unsigned MAX_REC_IN_BLOCK = DISK_BLOCK_SIZE / AVG_REC_SIZE;
-  static constexpr unsigned MAX_REC_IN_BLOCK = 3;
+  static constexpr unsigned MAX_REC_IN_BLOCK = 32;
   struct  __attribute__ ((packed)) disk_block_header_t {
     void deserialize();
     int verify(disk_block_id_t block_id, const DoutPrefixProvider* dpp);
@@ -176,22 +173,22 @@ namespace rgw::dedup {
     char data[DISK_BLOCK_SIZE];
   };
 
-  int load_record(rgw::sal::RadosStore       *store,
-		  disk_record_t              *p_rec, /* OUT */
-		  disk_block_id_t             block_id,
-		  record_id_t                 rec_id,
-		  md5_shard_t                 md5_shard,
-		  const struct key_t         *p_key,
-		  const DoutPrefixProvider   *dpp);
+  int load_record(librados::IoCtx          *p_ioctx,
+		  disk_record_t            *p_rec, /* OUT */
+		  disk_block_id_t           block_id,
+		  record_id_t               rec_id,
+		  md5_shard_t               md5_shard,
+		  const struct key_t       *p_key,
+		  const DoutPrefixProvider *dpp);
 
-  int load_slab(rgw::sal::RadosStore* store,
+  int load_slab(librados::IoCtx *p_ioctx,
 		bufferlist &bl,
 		md5_shard_t md5_shard,
 		work_shard_t worker_id,
 		uint32_t seq_number,
 		const DoutPrefixProvider* dpp);
 
-  int store_slab(rgw::sal::RadosStore* store,
+  int store_slab(librados::IoCtx *p_ioctx,
 		 bufferlist &bl,
 		 md5_shard_t md5_shard,
 		 work_shard_t worker_id,
@@ -201,46 +198,51 @@ namespace rgw::dedup {
   class disk_block_array_t
   {
   public:
-    disk_block_array_t(const DoutPrefixProvider* _dpp,
-		       md5_shard_t md5_shard,
-		       work_shard_t worker_id) {
+    disk_block_array_t(const DoutPrefixProvider* _dpp, md5_shard_t md5_shard) {
       d_md5_shard = md5_shard;
-      d_worker_id = worker_id;
+      d_worker_id = NULL_WORK_SHARD;
       dpp = _dpp;
-      reset();
+      slab_reset();
+    }
+
+    void set_worker_id(work_shard_t worker_id, worker_stats_t *_p_stats) {
+      memset(d_arr, 0, sizeof(d_arr));
+      d_worker_id  = worker_id;
+      d_seq_number = 0;
+      p_stats      = _p_stats;
+      slab_reset();
     }
 
     md5_shard_t get_md5_shard() {
       return d_md5_shard;
     }
 
-    int add_record(rgw::sal::RadosStore   *store,
-		   RGWRados               *rados,
+    int add_record(librados::IoCtx        *p_ioctx,
 		   const rgw::sal::Bucket *p_bucket,
 		   const rgw::sal::Object *p_obj,
 		   const parsed_etag_t    *p_parsed_etag,
 		   uint64_t                obj_size);
-    int flush_disk_records(rgw::sal::RadosStore *store, RGWRados *rados);
+    int flush_disk_records(librados::IoCtx *p_ioctx);
 
   private:
     inline const disk_block_t* last_block() { return &d_arr[DISK_BLOCK_COUNT-1]; }
-    int flush(rgw::sal::RadosStore* store);
-    int fill_disk_record(RGWRados               *rados,
-			 disk_record_t          *p_rec,
+    int flush(librados::IoCtx *p_ioctx);
+    int fill_disk_record(disk_record_t          *p_rec,
 			 const rgw::sal::Bucket *p_bucket,
 			 const rgw::sal::Object *p_obj,
 			 const parsed_etag_t    *p_parsed_etag,
 			 uint64_t                obj_size);
-    void reset() {
+    void slab_reset() {
       p_curr_block = d_arr;
       p_curr_block->init(d_worker_id, d_seq_number);
     }
 
-    disk_block_t  d_arr[DISK_BLOCK_COUNT];
-    disk_block_t *p_curr_block = nullptr;
-    work_shard_t  d_md5_shard = 0;
-    md5_shard_t   d_worker_id = 0;
-    uint32_t      d_seq_number = 0;
+    disk_block_t    d_arr[DISK_BLOCK_COUNT];
+    disk_block_t   *p_curr_block = nullptr;
+    work_shard_t    d_md5_shard = 0;
+    md5_shard_t     d_worker_id = 0;
+    uint32_t        d_seq_number = 0;
     const DoutPrefixProvider* dpp;
+    worker_stats_t *p_stats = nullptr;
   };
 } //namespace rgw::dedup

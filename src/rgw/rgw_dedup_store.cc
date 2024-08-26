@@ -17,6 +17,7 @@ static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 namespace rgw::dedup {
 
+  rgw_pool pool(DEDUP_POOL_NAME);
   //---------------------------------------------------------------------------
   disk_record_t::disk_record_t(const char *buff)
   {
@@ -197,10 +198,9 @@ namespace rgw::dedup {
   void disk_block_t::close_block(const DoutPrefixProvider* dpp, bool has_more)
   {
     disk_block_header_t *p_header = get_header();
-    if (!has_more) {
-      ldpp_dout(dpp, 1)  << __func__ << "::rec_count=" << p_header->rec_count
-			 << ", has_more=" << (has_more? "TRUE" : "FALSE") << dendl;
-    }
+    ldpp_dout(dpp, 20) << __func__ << "::rec_count=" << p_header->rec_count
+		       << ", has_more=" << (has_more? "TRUE" : "FALSE") << dendl;
+
     memset(data + p_header->offset, 0, (DISK_BLOCK_SIZE - p_header->offset));
     if (has_more) {
       p_header->offset = HTOCEPH_16(BLOCK_MAGIC);
@@ -230,8 +230,7 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::fill_disk_record(RGWRados               *rados,
-					   disk_record_t          *p_rec,
+  int disk_block_array_t::fill_disk_record(disk_record_t          *p_rec,
 					   const rgw::sal::Bucket *p_bucket,
 					   const rgw::sal::Object *p_obj,
 					   const parsed_etag_t    *p_parsed_etag,
@@ -267,15 +266,17 @@ namespace rgw::dedup {
 			   << "::ERROR: unable to decode manifest" << dendl;
 	return -1;
       }
+#if 0
       unsigned idx = 0;
       for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p, ++idx) {
 	rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
-	ldpp_dout(dpp, 1) << __func__ << "::[" << idx << "]tail object=" << raw_obj.oid << dendl;
+	ldpp_dout(dpp, 20) << __func__ << "::[" << idx << "]tail object=" << raw_obj.oid << dendl;
       }
+#endif
       // force explicit tail_placement as the dedup could be on another bucket
       const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
       if (tail_placement.bucket.name.empty()) {
-	ldpp_dout(dpp, 1) << "dedup::updating tail placement" << dendl;
+	ldpp_dout(dpp, 10) << "dedup::updating tail placement" << dendl;
 	rgw_bucket b{"", p_bucket->get_name(), ""};
 	manifest.set_tail_placement(tail_placement.placement_rule, b);
 	encode(manifest, p_rec->manifest_bl);
@@ -319,6 +320,7 @@ namespace rgw::dedup {
 	p_rec->s.sha256[idx++] = hex2int(p, p+HEX_UNIT_SIZE);
       }
       p_rec->s.flags.set_valid_sha256();
+      p_stats->valid_sha256++;
 #if 0
       bufferlist sha_bl;
       sha256_to_bufferlist(p_rec->s.sha256[0], p_rec->s.sha256[1],
@@ -334,6 +336,7 @@ namespace rgw::dedup {
 #endif
     }
     else {
+      p_stats->invalid_sha256++;
       memset(p_rec->s.sha256, 0, sizeof(p_rec->s.sha256));
     }
 
@@ -435,6 +438,7 @@ namespace rgw::dedup {
     return oid;
   }
 
+#if 0
   //---------------------------------------------------------------------------
   int load_record(rgw::sal::RadosStore       *store,
 		  disk_record_t              *p_rec, /* OUT */
@@ -447,7 +451,7 @@ namespace rgw::dedup {
     rgw_rados_ref obj;
     std::string oid(block_id.get_slab_name(md5_shard));
     librados::Rados* rados_handle = store->getRados()->get_rados_handle();
-    auto& pool = store->svc()->zone->get_zone_params().log_pool;
+    //auto& pool = store->svc()->zone->get_zone_params().log_pool;
     rgw_raw_obj raw_obj(pool, oid);	// TBD: what about loc ???
     int ret = rgw_get_rados_ref(dpp, rados_handle, raw_obj, &obj);
     if (ret < 0) {
@@ -500,9 +504,63 @@ namespace rgw::dedup {
 
     return 0;
   }
-
+#else
   //---------------------------------------------------------------------------
-  int load_slab(rgw::sal::RadosStore* store,
+  int load_record(librados::IoCtx          *p_ioctx,
+		  disk_record_t            *p_rec, /* OUT */
+		  disk_block_id_t           block_id,
+		  record_id_t               rec_id,
+		  md5_shard_t               md5_shard,
+		  const struct key_t       *p_key,
+		  const DoutPrefixProvider *dpp)
+  {
+    std::string oid(block_id.get_slab_name(md5_shard));
+    //p_obj_ioctx->set_namespace(itr->get_nspace());
+    int read_len = DISK_BLOCK_SIZE;
+    int byte_offset = block_id.get_block_offset() * DISK_BLOCK_SIZE;
+    bufferlist bl;
+    int ret = p_ioctx->read(oid, bl, read_len, byte_offset);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERR: failed to read block from "
+			<< oid << ", error is " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+
+    const char *p = nullptr;
+    auto bl_itr = bl.cbegin();
+    size_t n = bl_itr.get_ptr_and_advance(sizeof(disk_block_t), &p);
+    if (n == sizeof(disk_block_t)) {
+      disk_block_t *p_disk_block = (disk_block_t*)p;
+      disk_block_header_t *p_header = p_disk_block->get_header();
+      p_header->deserialize();
+      if (p_header->verify(block_id, dpp) != 0) {
+	return -1;
+      }
+
+      unsigned offset = p_header->rec_offsets[rec_id];
+      // We deserialize the record inside the CTOR
+      disk_record_t rec(p + offset);
+      struct key_t key(rec.s.md5_high, rec.s.md5_low, rec.s.size_4k_units, rec.s.num_parts);
+      if (key == *p_key) {
+	*p_rec = rec;
+	return 0;
+      }
+      else {
+	ldpp_dout(dpp, 1) << __func__ << "::Bad record in block=" << block_id
+			  << ", rec_id=" << rec_id << dendl;
+	return -1;
+      }
+    }
+    else {
+      ldpp_dout(dpp, 1) << __func__ << "::unexpected short read n=" << n << dendl;
+      return -1;
+    }
+
+    return 0;
+  }
+#endif
+  //---------------------------------------------------------------------------
+  int load_slab(librados::IoCtx *p_ioctx,
 		bufferlist &bl,
 		md5_shard_t md5_shard,
 		work_shard_t worker_id,
@@ -511,23 +569,22 @@ namespace rgw::dedup {
   {
     disk_block_id_t block_id(worker_id, seq_number);
     std::string oid(block_id.get_slab_name(md5_shard));
-    auto sysobj = store->svc()->sysobj;
-    auto& pool  = store->svc()->zone->get_zone_params().log_pool;
 
     ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)worker_id
 		       << ", md5_shard=" << (uint32_t)md5_shard
 		       << ", seq_number=" << seq_number
 		       << ":: oid=" << oid << dendl;
-    real_time mtime;
-    int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, &mtime, null_yield, dpp);
+
+    int ret = p_ioctx->read_full(oid, bl);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERR: failed to read log obj " << oid << ", error is " << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 1) << "ERR: failed to read " << oid
+			<< ", error is " << cpp_strerror(ret) << dendl;
     }
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int store_slab(rgw::sal::RadosStore* store,
+  int store_slab(librados::IoCtx *p_ioctx,
 		 bufferlist &bl,
 		 md5_shard_t md5_shard,
 		 work_shard_t worker_id,
@@ -536,77 +593,74 @@ namespace rgw::dedup {
   {
     disk_block_id_t block_id(worker_id, seq_number);
     std::string oid(block_id.get_slab_name(md5_shard));
-    auto sysobj = store->svc()->sysobj;
-    auto& pool  = store->svc()->zone->get_zone_params().log_pool;
-
     ldpp_dout(dpp, 20) << __func__ << "::oid=" << oid << ", len=" << bl.length() << dendl;
-    //bool exclusive = true;
-    bool exclusive = false; // allow overwrite of old objects
-    int ret = rgw_put_system_obj(dpp, sysobj, pool, oid, bl, exclusive, nullptr, real_time(), null_yield);
+    int ret = p_ioctx->write_full(oid, bl);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to write log obj " << oid << " with: " << cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: failed to write " << oid
+			<< " with: " << cpp_strerror(ret) << dendl;
     }
 
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::flush(rgw::sal::RadosStore* store)
+  int disk_block_array_t::flush(librados::IoCtx *p_ioctx)
   {
     unsigned len = (p_curr_block + 1 - d_arr) * sizeof(disk_block_t);
     bufferlist bl = bufferlist::static_from_mem((char*)d_arr, len);
-    int ret = store_slab(store, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
+    int ret = store_slab(p_ioctx, bl, d_md5_shard, d_worker_id, d_seq_number, dpp);
     // TBD: Can we recycle the buffers?
     // Need to make sure the call to rgw_put_system_obj was fully synchronous
 
     // d_seq_number++ must be called **after** flush!!
     d_seq_number++;
-
-    reset();
+    p_stats->egress_slabs++;
+    slab_reset();
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::flush_disk_records(rgw::sal::RadosStore *store,
-					     RGWRados             *rados)
+  int disk_block_array_t::flush_disk_records(librados::IoCtx *p_ioctx)
   {
+    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)d_worker_id
+		       << ", md5_shard=" << (uint32_t)d_md5_shard << dendl;
+
     // we need to force flush at the end of a cycle even if there was no work done
     // it is used as a signal to worker in the next step
-
     if (p_curr_block == &d_arr[0] && p_curr_block->is_empty()) {
       ldpp_dout(dpp, 20) << __func__ << "::Empty buffers, generate terminating block" << dendl;
     }
+    p_stats->egress_blocks++;
     p_curr_block->close_block(dpp, false);
 
-    ldpp_dout(dpp, 20) << __func__ << "::worker_id=" << (uint32_t)d_worker_id
-		      << ", md5_shard=" << (uint32_t)d_md5_shard << dendl;
-    int ret = flush(store);
+    int ret = flush(p_ioctx);
     return ret;
   }
 
   //---------------------------------------------------------------------------
-  int disk_block_array_t::add_record(rgw::sal::RadosStore   *store,
-				     RGWRados               *rados,
+  int disk_block_array_t::add_record(librados::IoCtx        *p_ioctx,
 				     const rgw::sal::Bucket *p_bucket,
 				     const rgw::sal::Object *p_obj,
 				     const parsed_etag_t    *p_parsed_etag,
 				     uint64_t                obj_size)
   {
     ldpp_dout(dpp, 20) << __func__  << "::worker_id=" << (uint32_t)d_worker_id
-		      << ", md5_shard=" << (uint32_t)d_md5_shard
-		      << "::" << p_bucket->get_name() << "/" << p_obj->get_name() << dendl;
+		       << ", md5_shard=" << (uint32_t)d_md5_shard
+		       << "::" << p_bucket->get_name() << "/" << p_obj->get_name() << dendl;
     disk_record_t rec;
-    int ret = fill_disk_record(rados, &rec, p_bucket, p_obj, p_parsed_etag, obj_size);
+    int ret = fill_disk_record(&rec, p_bucket, p_obj, p_parsed_etag, obj_size);
     if (unlikely(ret != 0)) {
       return ret;
     }
-
+    p_stats->egress_records ++;
     // first, try and add the record to the current open block
     if (p_curr_block->add_record(&rec, dpp) == 0) {
       return 0;
     }
     else {
       // Not enough space left in current block, close it and open the next block
+      ldpp_dout(dpp, 20) << __func__ << "::Block is full-> close and move to next" << dendl;
+      p_stats->egress_blocks++;
       p_curr_block->close_block(dpp, true);
     }
 
@@ -620,7 +674,7 @@ namespace rgw::dedup {
     }
     else {
       ldpp_dout(dpp, 20)  << __func__ << "::calling flush()" << dendl;
-      ret = flush(store);
+      ret = flush(p_ioctx);
       p_curr_block->add_record(&rec, dpp);
 
       return ret;

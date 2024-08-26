@@ -78,6 +78,11 @@ namespace rgw::dedup {
 
     rados = store->getRados();
     rados_handle = rados->get_rados_handle();
+
+    if (init_dedup_pool_ioctx(rados, dpp, p_dedup_cluster_ioctx) != 0) {
+      //return -1;
+      return;
+    }
   }
 
   //---------------------------------------------------------------------------
@@ -89,26 +94,32 @@ namespace rgw::dedup {
     dp(_cct, dout_subsys, "dedup background: "),
     dpp(&dp),
     cct(_cct),
-    d_table(16*1024, dpp)
+    d_table(128*1024*1024, dpp), // 128M entries per-shard
+    d_cluster(dpp)
   {
     for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-      for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	// TBD: check allocation success
-	p_disk_arr[md5_shard][worker_id] = new disk_block_array_t(dpp, md5_shard, worker_id);
-      }
+      // TBD: check allocation success
+      p_disk_arr[md5_shard] = new disk_block_array_t(dpp, md5_shard);
     }
-    // TBD: check allocation success
+    p_dedup_cluster_ioctx = new librados::IoCtx();
+    ceph_assert(p_dedup_cluster_ioctx);
     init_rados_access_handles();
+    int ret = d_cluster.init(store, p_dedup_cluster_ioctx);
+    if (ret != 0) {
+      derr << __func__ << "::failed cluster.init()" << dendl;
+      return;
+    }
+
+    d_heart_beat_last_update = ceph_clock_now();
+    d_heart_beat_max_elapsed_sec = 3;
   }
 
   //---------------------------------------------------------------------------
   Background::~Background()
   {
     for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-      for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	if (p_disk_arr[md5_shard][worker_id]) {
-	  delete p_disk_arr[md5_shard][worker_id];
-	}
+      if (p_disk_arr[md5_shard]) {
+	delete p_disk_arr[md5_shard];
       }
     }
   }
@@ -397,7 +408,6 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::add_disk_record(const rgw::sal::Bucket *p_bucket,
 				  const rgw::sal::Object *p_obj,
-				  work_shard_t            worker_id,
 				  uint64_t                obj_size)
   {
     parsed_etag_t parsed_etag;
@@ -405,7 +415,9 @@ namespace rgw::dedup {
     auto itr = attrs.find(RGW_ATTR_ETAG);
     if (itr != attrs.end()) {
       parse_etag_string(itr->second.to_str(), &parsed_etag);
-      ldpp_dout(dpp, 20) << __func__ << "::num_parts=" << parsed_etag.num_parts
+      ldpp_dout(dpp, 20) << __func__ << "::(1)::" << p_bucket->get_name()
+			 << "/" << p_obj->get_name()
+			 << "::num_parts=" << parsed_etag.num_parts
 			 << "::ETAG=" << std::hex << parsed_etag.md5_high
 			 << parsed_etag.md5_low << std::dec << dendl;
     }
@@ -415,10 +427,9 @@ namespace rgw::dedup {
     }
 
     md5_shard_t md5_shard = parsed_etag.md5_low % MAX_MD5_SHARD;
-    auto p_disk = p_disk_arr[md5_shard][worker_id];
+    auto p_disk = p_disk_arr[md5_shard];
     if (p_disk) {
-      stats.records_inserts++;
-      int ret = p_disk->add_record(store, rados, p_bucket, p_obj, &parsed_etag, obj_size);
+      int ret = p_disk->add_record(p_dedup_cluster_ioctx, p_bucket, p_obj, &parsed_etag, obj_size);
       if (unlikely(ret != 0)) {
 	return ret;
       }
@@ -444,6 +455,11 @@ namespace rgw::dedup {
 		       << ", obj=" << p_rec->obj_name << ", block_id="
 		       << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
 		       << ", shared_manifest=" << has_shared_manifest << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::(2)::" << p_rec->bucket_name
+		       << "/" << p_rec->obj_name
+		       << "::num_parts=" << p_rec->s.num_parts
+		       << "::ETAG=" << std::hex << p_rec->s.md5_high
+		       << p_rec->s.md5_low << std::dec << dendl;
 
     return d_table.add_entry(&key, block_id, rec_id, has_shared_manifest, has_valid_sha256);
   }
@@ -637,18 +653,26 @@ namespace rgw::dedup {
   int Background::try_deduping_record(const disk_record_t *p_tgt_rec,
 				      disk_block_id_t      block_id,
 				      record_id_t          rec_id,
-				      md5_shard_t          md5_shard)
+				      md5_shard_t          md5_shard,
+				      md5_stats_t         *p_stats /* IN-OUT */)
   {
     ldpp_dout(dpp, 20) << __func__ << "::bucket=" << p_tgt_rec->bucket_name
 		       << ", obj=" << p_tgt_rec->obj_name
 		       << ", block_id=" << (uint32_t)block_id << ", rec_id=" << (uint32_t)rec_id
 		       << ", md5_shard=" << (int)md5_shard << dendl;
 
-    stats.total_objects ++;
+    ldpp_dout(dpp, 20) << __func__ << "::(3)::md5_shard=" << (int)md5_shard
+		       << "::"<< p_tgt_rec->bucket_name
+		       << "/" << p_tgt_rec->obj_name
+		       << "::num_parts=" << p_tgt_rec->s.num_parts
+		       << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
+		       << p_tgt_rec->s.md5_low << std::dec << dendl;
+
+    p_stats->processed_objects ++;
     if (p_tgt_rec->s.flags.has_shared_manifest()) {
       // record holds a shared_manifest object so can't be a dedup target
       ldpp_dout(dpp, 20) << __func__ << "::skipped shared_manifest" << dendl;
-      stats.skipped_shared_manifest++;
+      p_stats->skipped_shared_manifest++;
       return 0;
     }
 
@@ -657,8 +681,12 @@ namespace rgw::dedup {
     int ret = d_table.get_val(&key, &val);
     if (ret != 0) {
       // record has no valid entry in table because it is a singleton
-      stats.skipped_singleton++;
-      ldpp_dout(dpp, 20) << __func__ << "::skipped singleton" << dendl;
+      p_stats->skipped_singleton++;
+      ldpp_dout(dpp, 20) << __func__ << ":(4)skipped singleton:" << p_tgt_rec->bucket_name
+			 << "/" << p_tgt_rec->obj_name
+			 << "::num_parts=" << p_tgt_rec->s.num_parts
+			 << "::ETAG=" << std::hex << p_tgt_rec->s.md5_high
+			 << p_tgt_rec->s.md5_low << std::dec << dendl;
       return 0;
     }
 
@@ -669,21 +697,21 @@ namespace rgw::dedup {
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
       ldpp_dout(dpp, 20) << __func__ << "::skipped source-record" << dendl;
-      stats.skipped_source_record++;
+      p_stats->skipped_source_record++;
       return 0;
     }
 
-    stats.records_searched++;
+    check_and_update_md5_heartbeat(md5_shard);
     // This records is a dedup target with source record on source_block_id
     disk_record_t src_rec;
-    ret = load_record(store, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
+    ret = load_record(p_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << __func__ << "::src_bucket=" << src_rec.bucket_name
 			 << ", src_object=" << src_rec.obj_name << dendl;
       // verify that SRC and TGT records don't refer to the same physical object
       // This could happen in theory if we read the same objects twice
       if (src_rec.obj_name == p_tgt_rec->obj_name && src_rec.bucket_name == p_tgt_rec->bucket_name) {
-	stats.skipped_duplicate++;
+	p_stats->skipped_duplicate++;
 	ldpp_dout(dpp, 10) << __func__ << "::WARN: Duplicate records for object=" << src_rec.obj_name << dendl;
 	return 0;
       }
@@ -705,20 +733,22 @@ namespace rgw::dedup {
       if (src_has_sha256 && p_tgt_rec->s.flags.has_valid_sha256()) {
 	if (memcmp(src_rec.s.sha256, p_tgt_rec->s.sha256, sizeof(src_rec.s.sha256)) != 0) {
 	  derr << __func__ << "::SHA256 mismatch" << dendl;
-	  stats.skipped_bad_sha256++;
+	  p_stats->skipped_bad_sha256++;
 	  return 0;
 	}
       }
-
+      else {
+	p_stats->skip_sha256_cmp++;
+      }
       ret = dedup_object(&src_rec, p_tgt_rec, has_shared_manifest, src_has_sha256);
       if (ret == 0) {
-	stats.deduped_objects++;
+	p_stats->deduped_objects++;
 	if (!src_has_sha256) {
 	  // TBD: calculate SHA256 for SRC and set flag in table!!
 	}
 	// mark the SRC object as a providor of a shared manifest
 	if (!has_shared_manifest) {
-	  stats.set_shared_manifest++;
+	  p_stats->set_shared_manifest++;
 	  // set the shared manifest flag in the dedup table
 	  d_table.set_shared_manifest_mode(&key, src_block_id, src_rec_id);
 	}
@@ -734,22 +764,24 @@ namespace rgw::dedup {
   int Background::run_dedup_step(dedup_step_t step,
 				 md5_shard_t md5_shard,
 				 work_shard_t worker_id,
-				 uint32_t *p_rec_count /* IN-OUT */)
+				 md5_stats_t *p_stats /* IN-OUT */)
   {
     const int MAX_OBJ_LOAD_FAILURE = 3;
     bool      has_more = true;
     uint32_t  seq_number = 0;
     int       failure_count = 0;
-    ldpp_dout(dpp, 20)  << "\n>>>>>>>>>>>" << __func__
-			<< ((step==STEP_BUILD_TABLE) ? "::Build Table" : "::REMOVE_DUPS")
-			<< "::worker_id=" << (uint32_t)worker_id
-			<< ", md5_shard=" << (uint32_t)md5_shard << dendl;
+    ldpp_dout(dpp, 10) << __func__
+		       << ((step==STEP_BUILD_TABLE) ? "::Build Table" : "::REMOVE_DUPS")
+		       << "::worker_id=" << (uint32_t)worker_id
+		       << ", md5_shard=" << (uint32_t)md5_shard << dendl;
     while (has_more) {
       bufferlist bl;
-      int ret = load_slab(store, bl, md5_shard, worker_id, seq_number, dpp);
+      check_and_update_md5_heartbeat(md5_shard);
+      int ret = load_slab(p_dedup_cluster_ioctx, bl, md5_shard, worker_id, seq_number, dpp);
       if (unlikely(ret < 0)) {
-	derr << __func__ << "::ERROR::Failed loading object!! md5_shard=" << (uint32_t)md5_shard
-	     << ", worker_id=" << (uint32_t)worker_id << ", seq_number=" << seq_number << dendl;
+	derr << __func__ << "::ERROR::Failed loading object!! md5_shard="
+	     << (uint32_t)md5_shard << ", worker_id=" << (uint32_t)worker_id
+	     << ", seq_number=" << seq_number << ", failure_count=" << failure_count << dendl;
 	// skip to the next SLAB stopping after 3 bad objects
 	if (failure_count++ < MAX_OBJ_LOAD_FAILURE) {
 	  seq_number += DISK_BLOCK_COUNT;
@@ -759,6 +791,7 @@ namespace rgw::dedup {
 	  return -1;
 	}
       }
+      unsigned slab_rec_count = 0;
       auto bl_itr = bl.cbegin();
       for (uint32_t block_num = 0; block_num < DISK_BLOCK_COUNT; block_num++, seq_number++) {
 	disk_block_id_t disk_block_id(worker_id, seq_number);
@@ -772,30 +805,34 @@ namespace rgw::dedup {
 	    return -1;
 	  }
 	  if (p_header->rec_count == 0) {
-	    ldpp_dout(dpp, 20)  << __func__ << "::Empty header, no more blocks!" << dendl;
+	    ldpp_dout(dpp, 20) << __func__ << "::Block #" << block_num
+			       << " has an empty header, no more blocks" << dendl;
 	    has_more = false;
 	    break;
 	  }
+
 	  for (unsigned rec_id = 0; rec_id < p_header->rec_count; rec_id++) {
 	    unsigned offset = p_header->rec_offsets[rec_id];
 	    // We deserialize the record inside the CTOR
 	    disk_record_t rec(p + offset);
 	    if (step == STEP_BUILD_TABLE) {
 	      add_record_to_dedup_table(&rec, disk_block_id, rec_id);
+	      slab_rec_count++;
 	    }
 	    else if (step == STEP_REMOVE_DUPLICATES) {
-	      try_deduping_record(&rec, disk_block_id, rec_id, md5_shard);
+	      try_deduping_record(&rec, disk_block_id, rec_id, md5_shard, p_stats);
+	      slab_rec_count++;
 	    }
 	    else {
 	      ceph_abort("unexpected step");
 	    }
 	  }
-	  *p_rec_count += p_header->rec_count;
+
 	  has_more = (p_header->offset == BLOCK_MAGIC);
 	  ceph_assert(p_header->offset == BLOCK_MAGIC || p_header->offset == LAST_BLOCK_MAGIC);
 	  if (!has_more) {
-	    ldpp_dout(dpp, 20)  << __func__ << "::No more blocks! block_id=" << disk_block_id
-				<< ", rec_count=" << p_header->rec_count << dendl;
+	    ldpp_dout(dpp, 20) << __func__ << "::No more blocks! block_id=" << disk_block_id
+			       << ", rec_count=" << p_header->rec_count << dendl;
 	    break;
 	  }
 	}
@@ -806,61 +843,100 @@ namespace rgw::dedup {
 	  break;
 	}
       }
-      ldpp_dout(dpp, 20) <<__func__ << "::Finished processing slab at seq_number=" << seq_number << dendl;
-    }
-    if (step == STEP_BUILD_TABLE) {
-      uint64_t singleton_count = 0, unique_count = 0, duplicate_count = 0;
-      d_table.count_duplicates(&singleton_count, &unique_count, &duplicate_count);
-      ldpp_dout(dpp, 1) <<__func__ << "::STATS::singleton_count=" << singleton_count
-			<< ", unique_count=" << unique_count
-			<< ", duplicate_count=" << duplicate_count << dendl;
+      ldpp_dout(dpp, 10) <<__func__ << "::slab seq_number=" << seq_number
+			 << ", rec_count=" << slab_rec_count << dendl;
     }
     return 0;
   }
 
   //---------------------------------------------------------------------------
-  int Background::process_single_entry(rgw::sal::Bucket           *bucket,
-				       const rgw_bucket_dir_entry &entry,
-				       work_shard_t                worker_id,
-				       const ceph::real_time      &last_scan_time)
+  int Background::ingress_single_object(rgw::sal::Bucket           *bucket,
+					const rgw_bucket_dir_entry &entry,
+					work_shard_t                worker_id,
+					worker_stats_t             *p_worker_stats /*IN-OUT*/)
   {
     ldpp_dout(dpp, 20) << __func__ << ": got " << entry.key << dendl;
     unique_ptr<rgw::sal::Object> obj = bucket->get_object(entry.key);
     if (unlikely(!obj)) {
       derr << "ERROR: failed bucket->get_object(" << entry.key << ")" << dendl;
+      p_worker_stats->ingress_failed_get_object++;
       return 1;
     }
     int ret = obj->get_obj_attrs(null_yield, dpp);
     if (unlikely(ret < 0)) {
-      derr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
+      derr << "ERROR: failed to stat object(" << entry.key << "), returned error: "
+	   << cpp_strerror(-ret) << dendl;
+      p_worker_stats->ingress_failed_get_obj_attrs++;
       return 1;
     }
     uint64_t size = obj->get_obj_size();
-#if 1
+#if 0
     if (size <= 4*1024*1024) {
+      p_worker_stats->ingress_skip_too_small++;
       // dedup only useful for objects bigger than 4MB
       return 0;
     }
 #endif
+#if 0
+    //(const ceph::real_time      &last_scan_time);
     ceph::real_time mtime = obj->get_mtime();
-    //ldpp_dout(dpp, 1) <<__func__ << "::entry.key=" << entry.key << "::size=" << size << dendl;
-    // check if object was modified since last scan
     if (mtime < last_scan_time) {
       return 0;
     }
-
+#endif
     if (obj->get_attrs().find(RGW_ATTR_CRYPT_MODE) != obj->get_attrs().end()) {
       ldpp_dout(dpp, 10) <<__func__ << "::Skipping encrypted object " << entry.key << dendl;
+      p_worker_stats->ingress_skip_encrypted++;
       return 0;
     }
 
     // TBD: We should be able to support RGW_ATTR_COMPRESSION when all copies are compressed
     if (obj->get_attrs().find(RGW_ATTR_COMPRESSION) != obj->get_attrs().end()) {
       ldpp_dout(dpp, 10) <<__func__ << "::Skipping compressed object " << entry.key << dendl;
+      p_worker_stats->ingress_skip_compressed++;
       return 0;
     }
 
-    return add_disk_record(bucket, obj.get(), worker_id, size);
+    return add_disk_record(bucket, obj.get(), size);
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::check_and_update_heartbeat(unsigned shard, bool worker_shard)
+  {
+    static unsigned s_count = 0;
+    int ret = 0;
+    utime_t now = ceph_clock_now();
+    utime_t time_elapsed = now - d_heart_beat_last_update;
+    if (time_elapsed.tv.tv_sec < d_heart_beat_max_elapsed_sec) {
+      s_count++;
+    }
+    else {
+      ldpp_dout(dpp, 10) << __func__ << "::s_count=" << s_count
+			 << "::max_elapsed_sec=" << d_heart_beat_max_elapsed_sec
+			 << dendl;
+      s_count = 0;
+      if (worker_shard) {
+	ret = d_cluster.update_work_shard_token_heartbeat(p_dedup_cluster_ioctx, shard);
+      }
+      else {
+	ret = d_cluster.update_md5_shard_token_heartbeat(p_dedup_cluster_ioctx, shard);
+      }
+      d_heart_beat_last_update = now;
+    }
+
+    return ret;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::check_and_update_worker_heartbeat(work_shard_t worker_id)
+  {
+    return check_and_update_heartbeat(worker_id, true);
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::check_and_update_md5_heartbeat(md5_shard_t md5_id)
+  {
+    return check_and_update_heartbeat(md5_id, false);
   }
 
   //---------------------------------------------------------------------------
@@ -868,8 +944,7 @@ namespace rgw::dedup {
 					std::map<int, string> &oids,
 					librados::IoCtx       &ioctx,
 					work_shard_t           worker_id,
-					const ceph::real_time &last_scan_time,
-					uint64_t              *p_obj_count /* IN-OUT */)
+					worker_stats_t        *p_worker_stats /*IN-OUT*/)
   {
     const uint32_t num_shards = oids.size();
     uint32_t current_shard = worker_id;
@@ -893,6 +968,7 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_operate() ret=" << ret << dendl;
 	return ret;
       }
+      check_and_update_worker_heartbeat(worker_id);
 
       obj_count += result.dir.m.size();
       for (auto& entry : result.dir.m) {
@@ -906,8 +982,8 @@ namespace rgw::dedup {
 	  continue;
 	}
 	marker = dirent.key;
-	stats.ingress_obj++;
-	ret = process_single_entry(bucket, dirent, worker_id, last_scan_time);
+	p_worker_stats->ingress_obj++;
+	ret = ingress_single_object(bucket, dirent, worker_id, p_worker_stats);
       }
       // TBD: advance marker only once here!
       if (result.is_truncated) {
@@ -921,17 +997,15 @@ namespace rgw::dedup {
 	marker = rgw_obj_index_key(); // reset marker to empty index
       }
     }
-    *p_obj_count += obj_count;
     ldpp_dout(dpp, 20) << __func__ << "::Finished processing Bucket " << bucket->get_name()
 		       << ", num_shards=" << num_shards << ", obj_count=" << obj_count << dendl;
     return 0;
   }
 
   //---------------------------------------------------------------------------
-  int Background::list_bucket_by_shard(const string   &bucket_name,
-				       ceph::real_time last_scan_time,
-				       work_shard_t    worker_id,
-				       uint64_t       *p_obj_count /* IN-OUT */)
+  int Background::ingress_bucket_objects_single_shard(const string   &bucket_name,
+						      work_shard_t    worker_id,
+						      worker_stats_t *p_worker_stats /*IN-OUT*/)
   {
     //ldpp_dout(dpp, 20) << __func__ << "::bucket_name=" << bucket_name << dendl;
     unique_ptr<rgw::sal::Bucket> bucket;
@@ -942,12 +1016,6 @@ namespace rgw::dedup {
       derr << "ERROR: driver->load_bucket(): " << cpp_strerror(-ret) << dendl;
       return -ret;
     }
-
-    utime_t ut(bucket->get_modification_time());
-    if (bucket_set[bucket_name].modification_time == ut && worker_id == 0) {
-      return 0;
-    }
-    bucket_set[bucket_name].modification_time = ut;
 
     const std::string bucket_id = bucket->get_key().get_key();
     RGWBucketInfo bucket_info;
@@ -970,24 +1038,43 @@ namespace rgw::dedup {
     if (ret < 0) {
       return ret;
     }
-
-    return process_bucket_shards(bucket.get(), oids, ioctx, worker_id, last_scan_time, p_obj_count);
+    // process all the shards in this bucket owned by the worker_id
+    return process_bucket_shards(bucket.get(), oids, ioctx, worker_id, p_worker_stats);
   }
 
   //---------------------------------------------------------------------------
-  int Background::scan_bucket_list(bool deep_scan, ceph::real_time last_scan_time)
+  int Background::objects_dedup_single_shard(md5_shard_t md5_shard, md5_stats_t *p_stats)
   {
-    static bool first_time = true;
-    if (!first_time) return 0;
-    if (deep_scan) {
-      first_time = false;
+    for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
+      run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, p_stats);
     }
-    bucket_state_t null_bucket_state;
+
+    d_table.count_duplicates(&(p_stats->singleton_count), &(p_stats->unique_count),
+			     &(p_stats->duplicate_count));
+    ldpp_dout(dpp, 1) << "\n>>>>>" << __func__ << "::FINISHED STEP_BUILD_TABLE"
+		      << "::singleton_count="  << p_stats->singleton_count
+		      << "::unique_count="     << p_stats->unique_count
+		      << "::duplicate_count="  << p_stats->duplicate_count << dendl;
+
+    d_table.remove_singletons_and_redistribute_keys();
+    for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
+      run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, p_stats);
+    }
+
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::objects_ingress_single_shard(work_shard_t worker_id,
+					       worker_stats_t *p_worker_stats)
+  {
+    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
+      p_disk_arr[md5_shard]->set_worker_id(worker_id, p_worker_stats);
+    }
     int ret = 0;
     std::string section("bucket");
     std::string marker;
     void *handle = nullptr;
-    uint64_t obj_count = 0;
     ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
 
     bool has_more = true;
@@ -996,25 +1083,10 @@ namespace rgw::dedup {
       constexpr int max_keys = 1000;
       ret = driver->meta_list_keys_next(dpp, handle, max_keys, buckets, &has_more);
       if (ret == 0) {
-	for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	  ldpp_dout(dpp, 20) <<__func__ << "::listing buckets:: worker_id=" << (uint32_t)worker_id << dendl;
-	  for (auto& bucket_name : buckets) {
-	    if (bucket_set.try_emplace(bucket_name, null_bucket_state).second) {
-	      ldpp_dout(dpp, 1) << __func__ << "::" << bucket_name << "::"
-				<< (deep_scan ? "Deep Scan" : "Shallow Scan") << dendl;
-	    }
-	    if (deep_scan) {
-	      //ldpp_dout(dpp, 20) <<__func__ << "::list_bucket_by_shard:: bucket_name=" << bucket_name << dendl;
-	      list_bucket_by_shard(bucket_name, last_scan_time, worker_id, &obj_count);
-	    }
-	  }
-	  if (deep_scan) {
-	    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-	      ldpp_dout(dpp, 20) <<__func__ << "::flush buffers:: worker_id=" << (uint32_t)worker_id
-				 << ", md5_shard=" << (uint32_t) md5_shard << dendl;
-	      p_disk_arr[md5_shard][worker_id]->flush_disk_records(store, rados);
-	    }
-	  }
+	ldpp_dout(dpp, 20) <<__func__ << "::listing buckets:: worker_id=" << (uint32_t)worker_id << dendl;
+	for (auto& bucket_name : buckets) {
+	  //ldpp_dout(dpp, 20) <<__func__ << "::ingress_bucket_objects_single_shard:: bucket_name=" << bucket_name << dendl;
+	  ingress_bucket_objects_single_shard(bucket_name, worker_id, p_worker_stats);
 	}
 	driver->meta_list_keys_complete(handle);
       }
@@ -1023,50 +1095,70 @@ namespace rgw::dedup {
       }
     }
 
-    if (!deep_scan) {
-      ldpp_dout(dpp, 20) <<__func__ << "::shallow scan -> return" << dendl;
-      return ret;
-    }
-
-    ldpp_dout(dpp, 20) <<__func__ << "::Worker Flow!!" << dendl;
-    if (deep_scan && obj_count) {
-      uint32_t rec_count = 0;
-      for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-	for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	  run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, &rec_count);
-	}
-      }
-      ldpp_dout(dpp, 20) <<__func__ << "::BUILD_TABLE::scanned records count = " << rec_count << dendl;
-      d_table.count_duplicates(&stats.singleton_count, &stats.unique_count, &stats.duplicate_count);
-
-      ldpp_dout(dpp, 1) <<__func__ << "::STATS::singleton_count=" << stats.singleton_count
-			<< ", unique_count=" << stats.unique_count
-			<< ", duplicate_count=" << stats.duplicate_count << dendl;
-
-      d_table.remove_singletons_and_redistribute_keys();
-      rec_count = 0;
-      for (md5_shard_t md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
-	for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
-	  run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, &rec_count);
-	}
-      }
-      ldpp_dout(dpp, 20) <<__func__ << "::REMOVE_DUPLICATES::scanned records count = " << rec_count << dendl;
-      ldpp_dout(dpp, 1) << "stat counters:\n" << stats << dendl;
+    for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
+      ldpp_dout(dpp, 20) <<__func__ << "::flush buffers:: worker_id="
+			 << (int)worker_id<< ", md5_shard=" << (int) md5_shard << dendl;
+      p_disk_arr[md5_shard]->flush_disk_records(p_dedup_cluster_ioctx);
     }
     return ret;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::objects_ingress()
+  {
+    while (true) {
+      d_heart_beat_last_update = ceph_clock_now();
+      work_shard_t worker_id = d_cluster.get_next_work_shard_token(p_dedup_cluster_ioctx);
+      if (worker_id != NULL_WORK_SHARD) {
+	worker_stats_t worker_stats;
+	utime_t start_time = ceph_clock_now();
+	objects_ingress_single_shard(worker_id, &worker_stats);
+	worker_stats.duration = ceph_clock_now() - start_time;
+	d_cluster.mark_work_shard_token_completed(p_dedup_cluster_ioctx, worker_id, &worker_stats);
+	ldpp_dout(dpp, 1) << "stat counters[" << (int)worker_id << "]\n"
+			  << worker_stats << dendl;
+      }
+      else {
+	break;
+      }
+    }
+    return 0;
+  }
+
+  //---------------------------------------------------------------------------
+  int Background::objects_dedup()
+  {
+    while (true) {
+      d_heart_beat_last_update = ceph_clock_now();
+      md5_shard_t md5_shard = d_cluster.get_next_md5_shard_token(p_dedup_cluster_ioctx);
+      if (md5_shard != NULL_MD5_SHARD) {
+	md5_stats_t md5_stats;
+	utime_t start_time = ceph_clock_now();
+	objects_dedup_single_shard(md5_shard, &md5_stats);
+	md5_stats.duration = ceph_clock_now() - start_time;
+	d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
+	ldpp_dout(dpp, 1) << "stat counters[" << (int)md5_shard << "]\n"
+			  << md5_stats << dendl;
+	d_table.reset();
+      }
+      else {
+	break;
+      }
+    }
+    return 0;
   }
 
   //---------------------------------------------------------------------------
   int Background::setup()
   {
     ceph::real_time last_scan_time;
-    cluster cl(store, dpp);
-    return scan_bucket_list(false, last_scan_time);
+    return 0;
   }
 
   //---------------------------------------------------------------------------
   void Background::run()
   {
+    bool first_time = true;
     if (setup() != 0) {
       derr << "failed setup()" << dendl;
       return;
@@ -1091,10 +1183,26 @@ namespace rgw::dedup {
       // -->
       // Do Work !!!
       // -->
-      int ret = scan_bucket_list(true, last_scan_time);
-      if (ret != 0) {
-	derr << "failed scan_bucket_list(), ret=" << ret << dendl;
-	return;
+      if (first_time) {
+	first_time = false;
+	if (objects_ingress() != 0) {
+	  derr << __func__ << "::failed objects_ingress()" << dendl;
+	  return;
+	}
+
+	// TBD:
+	// Wait for other worker to finish ingress step
+	uint32_t ttl = 0;
+	while (d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx, &ttl) == false) {
+	  ldpp_dout(dpp, 0) << "Waiting for INGRESS step completion ttl=" << ttl << dendl;
+	  sleep(ttl);
+	}
+
+	ldpp_dout(dpp, 1) << "\n\n==INGRESS step was completed on all shards!==\n" << dendl;
+	if (objects_dedup() != 0) {
+	  derr << __func__ << "::failed objects_dedup()" << dendl;
+	  return;
+	}
       }
       last_scan_time = ceph_clock_now().to_real_time();
       std::unique_lock cond_lock(cond_mutex);
@@ -1102,41 +1210,6 @@ namespace rgw::dedup {
     }
 
     ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;
-  }
-
-  //---------------------------------------------------------------------------
-  std::ostream& operator<<(std::ostream &out, const Background::stats_t &s)
-  {
-    out << "Ingress Objs count      = " << s.ingress_obj << "\n";
-    out << "Egress Slabs count      = " << s.egress_slabs << "\n";
-    out << "Insert Records count    = " << s.records_inserts << "\n";
-    out << "Searched Records count  = " << s.records_searched << "\n\n";
-
-    uint64_t skipped_total = s.skipped_source_record + s.skipped_singleton + s.skipped_shared_manifest;
-    out << "Skipped shared_manifest = " << s.skipped_shared_manifest << "\n";
-    out << "Skipped singleton       = " << s.skipped_singleton << "\n";
-    out << "Skipped source record   = " << s.skipped_source_record << "\n";
-    out << "================================\n";
-    out << "Skipped total           = " << skipped_total << "\n\n";
-    if (skipped_total + s.records_searched != s.records_inserts) {
-      out << "\n\n***ERR:(Skipped total + Searched Records) != Insert Records!!***\n\n\n";
-    }
-    out << "Set Shared-Manifest      = " << s.set_shared_manifest << "\n";
-    out << "Total Objs               = " << s.total_objects << "\n";
-    out << "Deduped Obj (this cycle) = " << s.deduped_objects << "\n";
-    out << "Singleton Obj            = " << s.singleton_count << "\n";
-    out << "Unique Obj               = " << s.unique_count << "\n";
-    out << "Duplicate Obj            = " << s.duplicate_count << "\n";
-
-    if (unlikely(s.skipped_duplicate)) {
-      out << "\n\n***ERR:Skipped duplicate = " << s.skipped_duplicate << "***\n\n\n";
-    }
-
-    if (unlikely(s.skipped_bad_sha256)) {
-      out << "\n\n***ERR:Skipped SHA256 = " << s.skipped_bad_sha256 << "***\n\n\n";
-    }
-
-    return out;
   }
 
 }; //namespace rgw::dedup
