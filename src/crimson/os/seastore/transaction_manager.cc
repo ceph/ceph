@@ -639,6 +639,9 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   assert(extent->is_valid() && !extent->is_initial_pending());
   if (extent->is_dirty()) {
     if (epm->can_inplace_rewrite(t, extent)) {
+      // FIXME: is_dirty() is true for mutation pending extents
+      // which shouldn't do inplace rewrite because a pending transaction
+      // may fail.
       DEBUGT("delta overwriting extent -- {}", t, *extent);
       t.add_inplace_rewrite_extent(extent);
       extent->set_inplace_rewrite_generation();
