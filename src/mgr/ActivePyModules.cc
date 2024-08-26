@@ -180,7 +180,9 @@ PyObject *ActivePyModules::get_metadata_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey{svc_type, svc_id});
+  auto metadata = without_gil([&] {
+    return daemon_state.get(DaemonKey{svc_type, svc_id});
+  });
   if (metadata == nullptr) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
@@ -201,7 +203,9 @@ PyObject *ActivePyModules::get_daemon_status_python(
   const std::string &svc_type,
   const std::string &svc_id)
 {
-  auto metadata = daemon_state.get(DaemonKey{svc_type, svc_id});
+  auto metadata = without_gil([&] {
+    return daemon_state.get(DaemonKey{svc_type, svc_id});
+  });
   if (metadata == nullptr) {
     derr << "Requested missing service " << svc_type << "." << svc_id << dendl;
     Py_RETURN_NONE;
