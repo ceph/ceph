@@ -79,7 +79,7 @@ void MonitorBackupManager::do_cleanup() {
     mon->logger->set(l_mon_backup_cleanup_kept, stats.kept);
     mon->logger->set(l_mon_backup_cleanup_freed, stats.freed);
     mon->logger->set(l_mon_backup_cleanup_deleted, stats.deleted);
-    if(stats.error) {
+    if (stats.error) {
         mon->logger->inc(l_mon_backup_cleanup_failed);
     } else {
         mon->logger->inc(l_mon_backup_cleanup_success);
