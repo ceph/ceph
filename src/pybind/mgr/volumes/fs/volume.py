@@ -12,6 +12,7 @@ import cephfs
 from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
+from .stats_util import get_stats
 
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
@@ -19,7 +20,7 @@ from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
-    create_clone
+    create_clone, open_subvol_in_group
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -27,6 +28,7 @@ from .exception import VolumeException, ClusterError, ClusterTimeout, \
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
+from .stats_util import CloneProgressReporter
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -60,6 +62,8 @@ class VolumeClient(CephfsClient["Module"]):
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay,
                              self.mgr.snapshot_clone_no_wait)
+        self.clone_progress_reporter = CloneProgressReporter(self,
+                                                             self.volspec)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -144,7 +148,9 @@ class VolumeClient(CephfsClient["Module"]):
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
-        volumes = list_volumes(self.mgr)
+        volnames = list_volumes(self.mgr)
+        # since we report in json format, make a dict of volnames.
+        volumes = [{'name': vn} for vn in volnames]
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
 
     def rename_fs_volume(self, volname, newvolname, sure):
@@ -797,6 +803,7 @@ class VolumeClient(CephfsClient["Module"]):
                 else:
                     s_subvolume.attach_snapshot(s_snapname, t_subvolume)
                 self.cloner.queue_job(volname)
+                self.clone_progress_reporter.initiate_reporting()
             except VolumeException as ve:
                 try:
                     t_subvolume.remove()
@@ -844,6 +851,59 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _get_clone_src_path(self, vol_handle, dst_group, dst_subvol):
+        src_subvol_details = dst_subvol._get_clone_source()
+        # We exercise op type checks on subvolume but not on subvolumegroups and we don't allow
+        # internal directories (including "_nogroup" to be opened). To do that we need to pass
+        # None (instead of "_nogroup") as value of "groupname" which is a parameter accepted by
+        # Group.__init__(). We could've allowed opening "_nogroup" but moving forward with
+        # current convention.
+        src_group_name = src_subvol_details.get('group', None)
+        src_subvol_name = src_subvol_details['subvolume']
+        src_snap_name = src_subvol_details['snapshot']
+
+        try:
+            if src_group_name != dst_group.groupname:
+                with open_subvol_in_group(self.mgr, vol_handle, self.volspec,
+                                          src_group_name, src_subvol_name,
+                                          SubvolumeOpType.CLONE_SOURCE) as src_subvol:
+                    src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
+
+            else:
+                with open_subvol(self.mgr, vol_handle, self.volspec, dst_group,
+                                 src_subvol_name, SubvolumeOpType.CLONE_SOURCE) as \
+                                 src_subvol:
+                    src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
+        except VolumeException as e:
+            if e.errno != -errno.ENOENT:
+                raise
+
+            log.debug(f'snapshot "{src_snap_name}" which is/was being cloned to create subvolume '
+                      '"{dst_subvol.subvolname}" has become missing. skipping adding progress '
+                      'report to "clone status" output and, likely, cloning will fail.')
+            src_path = None
+
+        return src_path
+
+    def _get_clone_progress_report(self, vol_handle, dst_group, dst_subvol):
+        dst_path = dst_subvol.base_path.decode('utf-8')
+        src_path = self._get_clone_src_path(vol_handle, dst_group, dst_subvol)
+        if not src_path:
+            return None
+
+        stats = get_stats(src_path, dst_path, vol_handle)
+        stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
+        return stats
+
+    def _get_clone_status(self, vol_handle, group, subvol):
+        status = subvol.status
+        if status['state'] == 'in-progress':
+            stats = self._get_clone_progress_report(vol_handle, group, subvol)
+            if stats:
+                status.update({'progress_report': stats})
+
+        return json.dumps({'status' : status}, indent=2)
+
     def clone_status(self, **kwargs):
         ret       = 0, "", ""
         volname   = kwargs['vol_name']
@@ -854,7 +914,8 @@ class VolumeClient(CephfsClient["Module"]):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, clonename, SubvolumeOpType.CLONE_STATUS) as subvolume:
-                        ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
+                        status = self._get_clone_status(fs_handle, group, subvolume)
+                        ret = 0, status, ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
