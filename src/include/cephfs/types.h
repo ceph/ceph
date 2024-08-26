@@ -383,6 +383,168 @@ enum {
   DAMAGE_FRAGTREE   // fragtree -- repair by searching
 };
 
+enum OPT_METADATA_KIND : uint64_t {
+  INVALID = 0,
+};
+
+template<template<typename> class Allocator>
+class unknown_md_t {
+public:
+  void encode(ceph::buffer::list& bl, uint64_t features) const {
+    encode_nohead(payload, bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_UNKNOWN(payload, p);
+  }
+
+private:
+  bufferlist payload;
+};
+
+template<template<typename> class Allocator>
+struct optmetadata_singleton {
+  using optmetadata_t = std::variant<
+    caseinsensitive_md_t<Allocator>,
+    unknown_md_t<Allocator>
+  >;
+
+  optmetadata_singleton(OPT_METADATA_KIND kind = OPT_METADATA_KIND::INVALID)
+    : kind(kind)
+  {
+    switch (kind) {
+      case OPT_METADATA_KIND::INVALID:
+        optmetadata = unknown_md_t<Allocator>();
+        break;
+      default:
+        ceph_abort("invalid optmetadata kind");
+    }
+  }
+
+  auto get_kind() const {
+    return kind;
+  }
+  template<typename T>
+  auto& get_meta() {
+    return std::get<T>(optmetadata);
+  }
+  template<typename T>
+  auto& get_meta() const {
+    return std::get<T>(optmetadata);
+  }
+
+  void encode(ceph::buffer::list& bl, uint64_t features) const {
+    // no versioning, use optmetadata
+    uint64_t u64kind = (uint64_t) kind;
+    ceph::encode(u64kind, bl);
+    std::visit([&bl, features](auto& o) { o.encode(bl, features); }, optmetadata);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& p) {
+    uint64_t u64kind;
+    ceph::decode(u64kind, p);
+    kind = (decltype(kind))u64kind;
+    *this = optmetadata_singleton(kind);
+    std::visit([&p](auto& o) { o.decode(p); }, optmetadata);
+  }
+
+  bool operator<(const optmetadata_singleton& other) const {
+    return kind < other.kind;
+  }
+
+private:
+  OPT_METADATA_KIND kind = OPT_METADATA_KIND::INVALID;
+  optmetadata_t optmetadata;
+};
+
+template<template<typename> class Allocator>
+struct optmetadata_multiton {
+  static constexpr int STRUCT_V = 1;
+  static constexpr int COMPAT_V = 1;
+
+  using optsin = optmetadata_singleton<Allocator>;
+  using optvec = std::vector<optsin,Allocator<optsin>>;
+
+  void encode(ceph::buffer::list& bl, uint64_t features) const {
+    // no versioning, use payload
+    ENCODE_START(STRUCT_V, COMPAT_V, bl);
+    ceph::encode(opts, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(STRUCT_V, p);
+    ceph::decode(opts, p);
+    DECODE_FINISH(p);
+  }
+
+  bool has_opt(OPT_METADATA_KIND kind) const {
+    auto f = [kind](auto& o) {
+      return o.get_kind() == kind;
+    };
+    auto it = std::find_if(opts.begin(), opts.end(), std::move(f));
+    return it != opts.end();
+  }
+  auto& get_opt(OPT_METADATA_KIND kind) const {
+    auto f = [kind](auto& o) {
+      return o.get_kind() == kind;
+    };
+    auto it = std::find_if(opts.begin(), opts.end(), std::move(f));
+    return *it;
+  }
+  auto& get_opt(OPT_METADATA_KIND kind) {
+    auto f = [kind](auto& o) {
+      return o.get_kind() == kind;
+    };
+    auto it = std::find_if(opts.begin(), opts.end(), std::move(f));
+    return *it;
+  }
+  auto& get_or_create_opt(OPT_METADATA_KIND kind) {
+    auto f = [kind](auto& o) {
+      return o.get_kind() == kind;
+    };
+    auto it = std::find_if(opts.begin(), opts.end(), std::move(f));
+    if (it != opts.end()) {
+      return *it;
+    }
+    return opts.emplace_back(kind);
+  }
+  void del_opt(OPT_METADATA_KIND kind) {
+    auto f = [kind](auto& o) {
+      return o.get_kind() == kind;
+    };
+    auto it = std::remove_if(opts.begin(), opts.end(), std::move(f));
+    opts.erase(it, opts.end());
+  }
+
+private:
+  optvec opts;
+};
+
+template<template<typename> class Allocator>
+static inline void encode(optmetadata_singleton<Allocator> const& o, ::ceph::buffer::list& bl, uint64_t features=0)
+{
+  ENCODE_DUMP_PRE();
+  o.encode(bl, features);
+  ENCODE_DUMP_POST(cl);
+}
+template<template<typename> class Allocator>
+static inline void decode(optmetadata_singleton<Allocator>& o, ::ceph::buffer::list::const_iterator& p)
+{
+  o.decode(p);
+}
+
+template<template<typename> class Allocator>
+static inline void encode(optmetadata_multiton<Allocator> const& o, ::ceph::buffer::list& bl, uint64_t features=0)
+{
+  ENCODE_DUMP_PRE();
+  o.encode(bl, features);
+  ENCODE_DUMP_POST(cl);
+}
+template<template<typename> class Allocator>
+static inline void decode(optmetadata_multiton<Allocator>& o, ::ceph::buffer::list::const_iterator& p)
+{
+  o.decode(p);
+}
+
 template<template<typename> class Allocator = std::allocator>
 struct inode_t {
   /**
@@ -608,6 +770,8 @@ struct inode_t {
   std::vector<uint8_t,Allocator<uint8_t>> fscrypt_file;
   std::vector<uint8_t,Allocator<uint8_t>> fscrypt_last_block;
 
+  optmetadata_multiton<Allocator> optmetadata;
+
 private:
   bool older_is_consistent(const inode_t &other) const;
 };
@@ -616,7 +780,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(19, 6, bl);
+  ENCODE_START(20, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -675,6 +839,8 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(fscrypt_auth, bl);
   encode(fscrypt_file, bl);
   encode(fscrypt_last_block, bl);
+
+  encode(optmetadata, bl, features);
 
   ENCODE_FINISH(bl);
 }
@@ -793,6 +959,11 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
   if (struct_v >= 19) {
     decode(fscrypt_last_block, p);
   }
+
+  if (struct_v >= 20) {
+    decode(optmetadata, p);
+  }
+
   DECODE_FINISH(p);
 }
 
@@ -944,6 +1115,7 @@ void inode_t<Allocator>::generate_test_instances(std::list<inode_t*>& ls)
 template<template<typename> class Allocator>
 int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent) const
 {
+// TODO
   ceph_assert(ino == other.ino);
   *divergent = false;
   if (version == other.version) {
