@@ -5703,12 +5703,11 @@ void Server::handle_client_setlayout(const MDRequestRef& mdr)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
-bool Server::xlock_policylock(const MDRequestRef& mdr, CInode *in, bool want_layout, bool xlock_snaplock)
+bool Server::xlock_policylock(const MDRequestRef& mdr, CInode *in, bool want_layout, bool xlock_snaplock, MutationImpl::LockOpVec lov)
 {
   if (mdr->locking_state & MutationImpl::ALL_LOCKED)
     return true;
 
-  MutationImpl::LockOpVec lov;
   lov.add_xlock(&in->policylock);
   if (xlock_snaplock)
     lov.add_xlock(&in->snaplock);
@@ -6498,6 +6497,98 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     auto pi = cur->project_inode(mdr);
     cur->setxattr_ephemeral_dist(val);
     pip = pi.inode.get();
+  } else if (name == "ceph.dir.casesensitivity"sv) {
+    // FIXME: unit tests for vxattr
+    // inheritance / InodeStat
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    dout(25) << "not root, is dir" << dendl;
+
+    MutationImpl::LockOpVec lov;
+    lov.add_rdlock(&cur->filelock);   // to verify it's empty
+    if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
+      return;
+
+    if (_dir_is_nonempty(mdr, cur)) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+
+    bool val;
+    try {
+      if (is_rmxattr) {
+	if (!cur->get_projected_inode()->has_casesensitivity()) {
+          respond_to_request(mdr, 0);
+          return;
+	}
+        value = "0";
+      } else {
+        val = boost::lexical_cast<bool>(value);
+      }
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    auto pi = cur->project_inode(mdr);
+    pip = pi.inode.get();
+    if (is_rmxattr) {
+      dout(20) << "deleting case sensitivity metadata" << dendl;
+      pip->del_casesensitivity();
+    } else {
+      auto& c = pip->set_casesensitivity();
+      if (val) {
+        c.mark_insensitive();
+        c.set_casefolder(c.get_default_casefolder());
+        dout(20) << "enabling case insensitive: " << c << dendl;
+      } else {
+        c.mark_sensitive();
+        dout(20) << "disabling case insensitive:" << c << dendl;
+      }
+    }
+  } else if (name == "ceph.dir.casesensitivity.casefolder"sv) {
+    if (is_rmxattr) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+
+    // FIXME: unit tests for vxattr
+    MutationImpl::LockOpVec lov;
+    lov.add_rdlock(&cur->filelock);   // to verify it's empty
+    if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
+      return;
+
+    if (_dir_is_nonempty(mdr, cur)) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+      respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+      return;
+    }
+
+    if (!cur->get_projected_inode()->has_casesensitivity()) {
+      respond_to_request(mdr, -CEPHFS_ENODATA);
+      return;
+    }
+
+    auto pi = cur->project_inode(mdr);
+    pip = pi.inode.get();
+    auto& c = pip->get_casesensitivity();
+    if (value.size() > 0) {
+      c.set_casefolder(value);
+    } else {
+      c.set_casefolder(c.get_default_casefolder());
+    }
+    dout(20) << "set case folder: " << c << dendl;
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -CEPHFS_EINVAL);
@@ -7001,6 +7092,19 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
     }
   } else if (xattr_name == "ceph.quiesce.block"sv) {
     *css << cur->get_projected_inode()->get_quiesce_block();
+  } else if (xattr_name == "ceph.dir.casesensitivity"sv) {
+    // FIXME holds policylock?
+    // FIXME check inherited value
+    auto&& pip = cur->get_projected_inode();
+    if (!pip->has_casesensitivity()) {
+      r = -CEPHFS_ENODATA;
+    } else {
+      auto& c = pip->get_casesensitivity();
+      Formatter* f = new JSONFormatter;
+      f->dump_object("casesensitivity", c);
+      f->flush(*css);
+      delete f;
+    }
   } else if (xattr_name.substr(0, 12) == "ceph.dir.pin"sv) {
     if (xattr_name == "ceph.dir.pin"sv) {
       *css << cur->get_projected_inode()->export_pin;
