@@ -52,6 +52,10 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   bufferlist encoded_txn;
   encode(txn, encoded_txn);
 
+  for (auto &le : log_entries) {
+    le.mark_unrollbackable();
+  }
+
   auto sends = std::make_unique<std::vector<seastar::future<>>>();
   for (auto pg_shard : pg_shards) {
     if (pg_shard != whoami) {

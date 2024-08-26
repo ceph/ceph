@@ -3,6 +3,7 @@
 
 #include <fmt/format.h>
 
+#include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/osd/pg.h"
@@ -206,12 +207,14 @@ RecoveryBackend::handle_backfill_remove(
   ObjectStore::Transaction t;
   for ([[maybe_unused]] const auto& [soid, ver] : m.ls) {
     // TODO: the reserved space management. PG::try_reserve_recovery_space().
-    t.remove(pg.get_collection_ref()->get_cid(),
-	      ghobject_t(soid, ghobject_t::NO_GEN, pg.get_pg_whoami().shard));
+    co_await interruptor::async([this, soid=soid, &t] {
+      pg.remove_maybe_snapmapped_object(t, soid);
+    });
   }
   logger().debug("RecoveryBackend::handle_backfill_remove: do_transaction...");
-  return shard_services.get_store().do_transaction(
-    pg.get_collection_ref(), std::move(t)).or_terminate();
+  co_await interruptor::make_interruptible(
+    shard_services.get_store().do_transaction(
+      pg.get_collection_ref(), std::move(t)).or_terminate());
 }
 
 RecoveryBackend::interruptible_future<BackfillInterval>
