@@ -2146,7 +2146,7 @@ void CInode::decode_lock_iflock(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_ipolicy(bufferlist& bl)
 {
-  ENCODE_START(3, 1, bl);
+  ENCODE_START(4, 1, bl);
   if (is_dir()) {
     encode(get_inode()->version, bl);
     encode(get_inode()->ctime, bl);
@@ -2155,8 +2155,10 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
     encode(get_inode()->export_pin, bl);
     encode(get_inode()->flags, bl);
     encode(get_inode()->export_ephemeral_random_pin, bl);
+    encode(get_inode()->optmetadata, bl);
   } else {
     encode(get_inode()->flags, bl);
+    encode(get_inode()->optmetadata, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2165,7 +2167,7 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
 {
   ceph_assert(!is_auth());
   auto _inode = allocate_inode(*get_inode());
-  DECODE_START(3, p);
+  DECODE_START(4, p);
   if (is_dir()) {
     decode(_inode->version, p);
     utime_t tm;
@@ -2179,9 +2181,15 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
       decode(_inode->flags, p);
       decode(_inode->export_ephemeral_random_pin, p);
     }
+    if (struct_v >= 4) {
+      decode(_inode->optmetadata, p);
+    }
   } else {
     if (struct_v >= 3) {
       decode(_inode->flags, p);
+    }
+    if (struct_v >= 4) {
+      decode(_inode->optmetadata, p);
     }
   }
   DECODE_FINISH(p);
