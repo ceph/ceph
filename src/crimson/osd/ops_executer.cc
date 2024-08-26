@@ -871,6 +871,7 @@ OpsExecuter::interruptible_future<> OpsExecuter::snap_map_modify(
   ceph::os::Transaction& txn)
 {
   logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  // TODO: avoid seastar::async https://tracker.ceph.com/issues/67704
   return interruptor::async([soid, snaps, &snap_mapper,
                              _t=osdriver.get_transaction(&txn)]() mutable {
     assert(std::size(snaps) > 0);
