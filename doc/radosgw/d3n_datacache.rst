@@ -82,6 +82,14 @@ is mounted at `/mnt/nvme0` and has `10 GB` of free space available for the cache
 The persistent path directory has to be created before starting the Gateway.
 (``mkdir -p /mnt/nvme0/rgw_datacache/client.rgw.8000/``)
 
+In containerized deployments the cache directory should be mounted as a volume::
+
+    extra_container_args:
+      - "-v"
+      - "/mnt/nvme0/rgw_datacache/client.rgw.8000/:/mnt/nvme0/rgw_datacache/client.rgw.8000/"
+
+(Reference: `Service Management - Mounting Files with Extra Container Arguments`_)
+
 If another Gateway is co-located on the same machine, configure it's persistent path to a discrete directory,
 for example in the case of `[client.rgw.8001]` configure
 ``rgw_d3n_l1_datacache_persistent_path = "/mnt/nvme0/rgw_datacache/client.rgw.8001/"``
@@ -114,3 +122,4 @@ The following D3N related settings can be added to the Ceph configuration file
 .. _Rados Gateway Compression: ../compression/
 .. _Rados Gateway Encryption: ../encryption/
 .. _RGW Data cache and CDN: ../rgw-cache/
+.. _Service Management - Mounting Files with Extra Container Arguments: ../cephadm/services/#mounting-files-with-extra-container-arguments
