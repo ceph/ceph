@@ -4165,11 +4165,15 @@ paths:
                   type: string
                 name:
                   type: string
+                pool_type:
+                  default: replication
+                  type: string
+                profile:
+                  type: string
                 root:
                   type: string
               required:
               - name
-              - root
               - failure_domain
               type: object
       responses:
