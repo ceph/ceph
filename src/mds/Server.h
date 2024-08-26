@@ -216,7 +216,8 @@ public:
   void handle_client_file_readlock(const MDRequestRef& mdr);
 
   bool xlock_policylock(const MDRequestRef& mdr, CInode *in,
-			bool want_layout=false, bool xlock_snaplock=false);
+			bool want_layout=false, bool xlock_snaplock=false,
+                        MutationImpl::LockOpVec lov={});
   CInode* try_get_auth_inode(const MDRequestRef& mdr, inodeno_t ino);
   void handle_client_setattr(const MDRequestRef& mdr);
   void handle_client_setlayout(const MDRequestRef& mdr);
@@ -448,11 +449,15 @@ private:
            xattr_name == "ceph.dir.subvolume" ||
            xattr_name == "ceph.dir.pin" ||
            xattr_name == "ceph.dir.pin.random" ||
-           xattr_name == "ceph.dir.pin.distributed";
+           xattr_name == "ceph.dir.pin.distributed" ||
+           xattr_name == "ceph.dir.charmap"sv ||
+           xattr_name == "ceph.dir.normalization"sv ||
+           xattr_name == "ceph.dir.encoding"sv ||
+           xattr_name == "ceph.dir.casesensitive"sv;
   }
 
   static bool is_ceph_dir_vxattr(std::string_view xattr_name) {
-    return (xattr_name == "ceph.dir.layout" ||
+    return xattr_name == "ceph.dir.layout" ||
 	    xattr_name == "ceph.dir.layout.json" ||
 	    xattr_name == "ceph.dir.layout.object_size" ||
 	    xattr_name == "ceph.dir.layout.stripe_unit" ||
@@ -463,7 +468,11 @@ private:
 	    xattr_name == "ceph.dir.layout.pool_namespace" ||
 	    xattr_name == "ceph.dir.pin" ||
 	    xattr_name == "ceph.dir.pin.random" ||
-	    xattr_name == "ceph.dir.pin.distributed");
+	    xattr_name == "ceph.dir.pin.distributed" ||
+            xattr_name == "ceph.dir.charmap"sv ||
+            xattr_name == "ceph.dir.normalization"sv ||
+            xattr_name == "ceph.dir.encoding"sv ||
+            xattr_name == "ceph.dir.casesensitive"sv;
   }
 
   static bool is_ceph_file_vxattr(std::string_view xattr_name) {
