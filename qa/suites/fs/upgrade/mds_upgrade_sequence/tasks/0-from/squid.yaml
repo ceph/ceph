@@ -11,8 +11,7 @@ tasks:
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:squid
     roleless: true
-    cephadm_branch: squid
-    cephadm_git_url: https://github.com/ceph/ceph
+    compiled_cephadm_branch: squid
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
