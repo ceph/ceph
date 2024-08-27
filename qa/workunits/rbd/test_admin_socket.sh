@@ -5,8 +5,6 @@ TMPDIR=/tmp/rbd_test_admin_socket$$
 mkdir $TMPDIR
 trap "rm -fr $TMPDIR" 0
 
-. $(dirname $0)/../../standalone/ceph-helpers.sh
-
 function expect_false()
 {
     set -x
@@ -40,12 +38,12 @@ function rbd_get_perfcounter()
     local name
 
     name=$(ceph --format xml --admin-daemon $(rbd_watch_asok ${image}) \
-		perf schema | $XMLSTARLET el -d3 |
+		perf schema | xmlstarlet el -d3 |
 		  grep "/librbd-.*-${image}/${counter}\$")
     test -n "${name}" || return 1
 
     ceph --format xml --admin-daemon $(rbd_watch_asok ${image}) perf dump |
-	$XMLSTARLET sel -t -m "${name}" -v .
+	xmlstarlet sel -t -m "${name}" -v .
 }
 
 function rbd_check_perfcounter()

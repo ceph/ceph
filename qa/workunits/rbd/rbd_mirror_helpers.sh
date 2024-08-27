@@ -72,15 +72,6 @@
 #     ../qa/workunits/rbd/rbd_mirror_helpers.sh cleanup
 #
 
-if type xmlstarlet > /dev/null 2>&1; then
-    XMLSTARLET=xmlstarlet
-elif type xml > /dev/null 2>&1; then
-    XMLSTARLET=xml
-else
-    echo "Missing xmlstarlet binary!"
-    exit 1
-fi
-
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-2}
 
 CLUSTER1=cluster1
@@ -894,9 +885,9 @@ test_mirror_pool_status_verbose()
                  --verbose --format xml)
 
     local last_update state
-    last_update=$($XMLSTARLET sel -t -v \
+    last_update=$(xmlstarlet sel -t -v \
         "//images/image[name='${image}']/last_update" <<< "$status")
-    state=$($XMLSTARLET sel -t -v \
+    state=$(xmlstarlet sel -t -v \
         "//images/image[name='${image}']/state" <<< "$status")
 
     echo "${state}" | grep "${state_pattern}" ||
@@ -1337,7 +1328,7 @@ compare_image_snapshots()
 
     for snap_name in $(rbd --cluster ${CLUSTER1} --format xml \
                            snap list ${pool}/${image} | \
-                           $XMLSTARLET sel -t -v "//snapshot/name" | \
+                           xmlstarlet sel -t -v "//snapshot/name" | \
                            grep -E -v "^\.rbd-mirror\."); do
         rm -f ${rmt_export} ${loc_export}
         rbd --cluster ${CLUSTER2} export ${pool}/${image}@${snap_name} ${rmt_export}

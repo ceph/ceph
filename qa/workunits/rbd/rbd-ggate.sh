@@ -7,15 +7,6 @@ SIZE=64
 DATA=
 DEV=
 
-if which xmlstarlet > /dev/null 2>&1; then
-  XMLSTARLET=xmlstarlet
-elif which xml > /dev/null 2>&1; then
-  XMLSTARLET=xml
-else
-  echo "Missing xmlstarlet binary!"
-  exit 1
-fi
-
 if [ `uname -K` -ge 1200078 ] ; then
     RBD_GGATE_RESIZE_SUPPORTED=1
 fi
@@ -148,16 +139,16 @@ _sudo sync
 
 echo  trim test
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -eq "${provisioned}" ]
 _sudo newfs -E ${DEV}
 _sudo sync
 provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/provisioned_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/provisioned_size" -v .`
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
-  $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
+  xmlstarlet sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -lt "${provisioned}" ]
 
 echo  resize test

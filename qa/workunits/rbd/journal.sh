@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-. $(dirname $0)/../../standalone/ceph-helpers.sh
-
 function list_tests()
 {
   echo "AVAILABLE TESTS"
@@ -45,7 +43,7 @@ test_rbd_journal()
     rbd create --image-feature exclusive-lock --image-feature journaling \
 	--size 128 ${image}
     local journal=$(rbd info ${image} --format=xml 2>/dev/null |
-			   $XMLSTARLET sel -t -v "//image/journal")
+			   xmlstarlet sel -t -v "//image/journal")
     test -n "${journal}"
     rbd journal info ${journal}
     rbd journal info --journal ${journal}
@@ -54,14 +52,14 @@ test_rbd_journal()
     rbd feature disable ${image} journaling
 
     rbd info ${image} --format=xml 2>/dev/null |
-	expect_false $XMLSTARLET sel -t -v "//image/journal"
+	expect_false xmlstarlet sel -t -v "//image/journal"
     expect_false rbd journal info ${journal}
     expect_false rbd journal info --image ${image}
 
     rbd feature enable ${image} journaling
 
     local journal1=$(rbd info ${image} --format=xml 2>/dev/null |
-			    $XMLSTARLET sel -t -v "//image/journal")
+			    xmlstarlet sel -t -v "//image/journal")
     test "${journal}" = "${journal1}"
 
     rbd journal info ${journal}
@@ -89,7 +87,7 @@ test_rbd_journal()
     rbd create --image-feature exclusive-lock --image-feature journaling \
 	--size 128 ${image1}
     journal1=$(rbd info ${image1} --format=xml 2>/dev/null |
-		      $XMLSTARLET sel -t -v "//image/journal")
+		      xmlstarlet sel -t -v "//image/journal")
 
     save_commit_position ${journal1}
     rbd journal import --dest ${image1} $TMPDIR/journal.export
@@ -130,7 +128,7 @@ rbd_assert_eq() {
     local expected_val=$4
 
     local val=$(rbd --format xml ${cmd} --image ${image} |
-		       $XMLSTARLET sel -t -v "${param}")
+		       xmlstarlet sel -t -v "${param}")
     test "${val}" = "${expected_val}"
 }
 
