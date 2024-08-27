@@ -283,6 +283,14 @@ void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
   committed_log_seq = log_seq;
   num_pending_commit--;
 
+  {
+    auto last = waiting_for_commit.upper_bound(log_seq);
+    for (auto it = waiting_for_commit.begin(); it != last; it++) {
+      finish_contexts(g_ceph_context, it->second);
+    }
+    waiting_for_commit.erase(waiting_for_commit.begin(), last);
+  }
+
   if (fin)
     fin->complete(r);
 }
