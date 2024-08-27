@@ -14,7 +14,7 @@ from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
 from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
-from .stats_util import get_stats
+from .clone_stats import get_clone_stats
 
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
@@ -30,7 +30,7 @@ from .exception import VolumeException, ClusterError, ClusterTimeout, \
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
-from .stats_util import CloneProgressReporter
+from .clone_stats import CloneProgressReporter
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -959,7 +959,7 @@ class VolumeClient(CephfsClient["Module"]):
         if not src_path:
             return None
 
-        stats = get_stats(src_path, dst_path, vol_handle)
+        stats = get_clone_stats(src_path, dst_path, vol_handle)
         stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
         return stats
 
