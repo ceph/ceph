@@ -50,7 +50,8 @@
       group image remove (... rm)       Remove an image from a group.
       group list (group ls)             List rbd groups.
       group remove (group rm)           Delete a group.
-      group rename                      Rename a group within pool.
+      group rename                      Rename a group within its pool or
+                                        namespace.
       group snap create                 Make a snapshot of a group.
       group snap list (... ls)          List snapshots of a group.
       group snap remove (... rm)        Remove a snapshot from a group.
@@ -130,7 +131,8 @@
       pool init                         Initialize pool for use by RBD.
       pool stats                        Display pool statistics.
       remove (rm)                       Delete an image.
-      rename (mv)                       Rename image within pool.
+      rename (mv)                       Rename an image within its pool or
+                                        namespace.
       resize                            Resize (expand or shrink) image.
       snap create (snap add)            Create a snapshot.
       snap limit clear                  Remove snapshot limit.
@@ -1011,7 +1013,7 @@
                           [--dest-group <dest-group>] 
                           <source-group-spec> <dest-group-spec> 
   
-  Rename a group within pool.
+  Rename a group within its pool or namespace.
   
   Positional arguments
     <source-group-spec>  source group specification
@@ -2218,7 +2220,7 @@
                     [--dest-namespace <dest-namespace>] [--dest <dest>] 
                     <source-image-spec> <dest-image-spec> 
   
-  Rename image within pool.
+  Rename an image within its pool or namespace.
   
   Positional arguments
     <source-image-spec>  source image specification
