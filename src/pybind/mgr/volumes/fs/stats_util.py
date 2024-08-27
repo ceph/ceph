@@ -1,9 +1,17 @@
 '''
-This module contains classes, methods & helpers that are used to get statistics
-(specifically number of files and total size of data present under the source
-and destination directory for the copy operation that is performed for snapshot
-cloning) and pass, print, log and convert them to human readable format
-conveniently.
+This module contains 2 sections -
+
+1. Helper classes and helper functions for fetching, processing nd reporting
+   progress statistics for async jobs. This code doesn't depend on the type of
+   asynchronous job.
+
+   These statistics can be reported in two ways. First, as a Python dictionary
+   which is eventually printed in output of a command (see output of "ceph fs
+   clone status" command when clone jobs are in-progress, for example). And
+   second, as a progress bar which is printed in output of "ceph status" command.
+
+2. Code to fetch, process and report statistics of the progress made by the
+   asynchronous clone threads.
 '''
 import errno
 from os.path import join as os_path_join
@@ -61,9 +69,105 @@ def get_percent_copied(src_path, dst_path, fs_handle):
     return percent
 
 
-def get_stats(src_path, dst_path, fs_handle):
+# TODO: update the guidelines here that shows how to derive and use this class properly
+class AsyncJobProgressReporter:
+    '''
+    This class contains code necessary for initiating and finishing reporting
+    of async jobs. This includes spawning and terminating reporter thread and
+    addition and removal of progress bars to "ceph status" output.
+
+    =======HOW TO USE THIS CLASS=======
+    1. Inherit this class and call its __init___().
+    2. Set self.op_name to operation for which progress is to be reported. For
+       example, for cloning and purging it should be 'clone' and 'purge'
+       respectively.
+    3. Write all code for updating progress bars under the method
+       "_update_progress_bars()" directly or under a method called by this
+       method.
+    4. When the async job is finished, call self.finish().
+    '''
+
+    def __init__(self, volclient, volspec):
+        self.volspec = volspec
+
+        # instance of VolumeClient is needed here so that call to
+        # LibCephFS.getxattr() can be made.
+        self.volclient = volclient
+
+        # Creating an RTimer instance in advance so that we can check if async
+        # job's progress reporting has already been initiated by calling
+        # RTimer.is_alive().
+        self.update_task = RTimer(1, self._update_progress_bars)
+
+        # self.op_name is to be set by derived classes. This is is need to
+        # label progress bars, logging, etc.
+        self.op_name = None
+
+        # progress event ID for ongoing async jobs
+        self.on_pev_id: Optional[str] = f'mgr-vol-ongoing-{self.op_name}'
+        # progress event ID for ongoing+pending async jobs
+        self.onpen_pev_id: Optional[str] = f'mgr-vol-total-{self.op_name}'
+
+    def initiate_reporting(self):
+        assert self.op_name
+        assert isinstance(self.op_name, str)
+
+        if self.update_task.is_alive():
+            log.info('progress reporting thread is already alive, not '
+                     'initiating it again')
+            return
+
+        log.info(f'initiating progress reporting for {self.op_name} '
+                  'threads...')
+        self.update_task = RTimer(1, self._update_progress_bars)
+        self.update_task.start()
+        log.info(f'progress reporting for {self.op_name} threads has been '
+                  'initiated')
+
+    def _update_progress_bar_event(self, ev_id, ev_msg, ev_progress_fraction):
+        log.debug(f'ev_id = {ev_id} ev_progress_fraction = {ev_progress_fraction}')
+        log.debug(f'ev_msg = {ev_msg}')
+        log.debug('calling update() from mgr/update module')
+
+        self.volclient.mgr.remote('progress', 'update', ev_id=ev_id,
+                                  ev_msg=ev_msg,
+                                  ev_progress=ev_progress_fraction,
+                                  refs=['mds', self.op_name], add_to_ceph_s=True)
+
+        log.debug('call to update() from mgr/update module was successful')
+
+    def _finish_progress_events(self):
+        '''
+        Remove progress bars from "ceph status" output.
+        '''
+        log.info('removing progress bars from "ceph status" output')
+
+        assert self.on_pev_id is not None
+        assert self.onpen_pev_id is not None
+
+        self.volclient.mgr.remote('progress', 'complete', self.on_pev_id)
+        self.volclient.mgr.remote('progress', 'complete', self.onpen_pev_id)
+
+        log.info('finished removing progress bars from "ceph status" output')
+
+    def finish(self):
+        '''
+        All cloning jobs have been completed. Terminate this RTimer thread.
+        '''
+        self._finish_progress_events()
+
+        log.info(f'marking this RTimer thread as finished; thread object ID - {self}')
+        self.update_task.finished.set()
+
+
+# Following section contains code for fetching, processing and reporting
+# statistics for the progress made by asynchronous clone threads
+
+def get_clone_stats(src_path, dst_path, fs_handle):
     rentries = 'ceph.dir.rentries'
+    # rentries_t = total rentries
     rentries_t = int(fs_handle.getxattr(src_path, rentries))
+    # rentries_c = rentries copied (so far)
     rentries_c = int(fs_handle.getxattr(dst_path, rentries))
 
     size_t, size_c, percent = get_amount_copied(src_path, dst_path, fs_handle)
@@ -89,39 +193,20 @@ class CloneInfo:
         self.dst_path = None
 
 
-class CloneProgressReporter:
+class CloneProgressReporter(AsyncJobProgressReporter):
+    '''
+    Report progress made by asychronous clone threads.
+    '''
 
-    def __init__(self, volclient, vol_spec):
-        self.vol_spec = vol_spec
-
-        # instance of VolumeClient is needed here so that call to
-        # LibCephFS.getxattr() can be made.
-        self.volclient = volclient
+    def __init__(self, volclient, volspec):
+        super().__init__(volclient, volspec)
 
         # need to figure out how many progress bars should be printed. print 1
         # progress bar if number of ongoing clones is less than this value,
         # else print 2.
         self.max_concurrent_clones = self.volclient.mgr.max_concurrent_clones
 
-        # Creating an RTimer instance in advance so that we can check if clone
-        # reporting has already been initiated by calling RTimer.is_alive().
-        self.update_task = RTimer(1, self._update_progress_bars)
-
-        # progress event ID for ongoing clone jobs
-        self.on_pev_id: Optional[str] = 'mgr-vol-ongoing-clones'
-        # progress event ID for ongoing+pending clone jobs
-        self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clones'
-
-    def initiate_reporting(self):
-        if self.update_task.is_alive():
-            log.info('progress reporting thread is already alive, not '
-                     'initiating it again')
-            return
-
-        log.info('initiating progress reporting for clones...')
-        self.update_task = RTimer(1, self._update_progress_bars)
-        self.update_task.start()
-        log.info('progress reporting for clones has been initiated')
+        self.op_name = 'clone'
 
     def _get_clone_dst_info(self, fs_handle, ci, clone_entry,
                             clone_index_path):
@@ -135,8 +220,8 @@ class CloneProgressReporter:
             decode('utf-8')
 
         ci.dst_group_name, ci.dst_subvol_name = \
-            resolve_group_and_subvolume_name(self.vol_spec, dst_subvol_base_path)
-        with open_subvol_in_vol(self.volclient, self.vol_spec, ci.volname,
+            resolve_group_and_subvolume_name(self.volspec, dst_subvol_base_path)
+        with open_subvol_in_vol(self.volclient, self.volspec, ci.volname,
                                 ci.dst_group_name, ci.dst_subvol_name,
                                 SubvolumeOpType.CLONE_INTERNAL) \
                                 as (_, _, dst_subvol):
@@ -148,7 +233,7 @@ class CloneProgressReporter:
     def _get_clone_src_info(self, fs_handle, ci):
         log.debug('collecting info for cloning source')
 
-        with open_clone_subvol_pair_in_vol(self.volclient, self.vol_spec,
+        with open_clone_subvol_pair_in_vol(self.volclient, self.volspec,
                                            ci.volname, ci.dst_group_name,
                                            ci.dst_subvol_name) as \
                                            (dst_subvol, src_subvol, snap_name):
@@ -166,7 +251,7 @@ class CloneProgressReporter:
         volnames = list_volumes(self.volclient.mgr)
         for volname in volnames:
             with open_volume_lockless(self.volclient, volname) as fs_handle:
-                with open_clone_index(fs_handle, self.vol_spec) as clone_index:
+                with open_clone_index(fs_handle, self.volspec) as clone_index:
                     clone_index_path = clone_index.path
                     # get clone in order in which they were launched, this
                     # should be same as the ctime on clone entry.
@@ -208,18 +293,6 @@ class CloneProgressReporter:
         log.debug('finished collecting info on all clones, found '
                   f'{len(clones)} clones')
         return clones
-
-    def _update_progress_bar_event(self, ev_id, ev_msg, ev_progress_fraction):
-        log.debug(f'ev_id = {ev_id} ev_progress_fraction = {ev_progress_fraction}')
-        log.debug(f'ev_msg = {ev_msg}')
-        log.debug('calling update() from mgr/update module')
-
-        self.volclient.mgr.remote('progress', 'update', ev_id=ev_id,
-                                  ev_msg=ev_msg,
-                                  ev_progress=ev_progress_fraction,
-                                  refs=['mds', 'clone'], add_to_ceph_s=True)
-
-        log.debug('call to update() from mgr/update module was successful')
 
     def _update_progress_bars(self):
         '''
@@ -284,26 +357,3 @@ class CloneProgressReporter:
                                         ev_progress_fraction=avg_progress_fraction)
             log.debug('finished updating progress bar for ongoing+pending '
                       f'clones with following message - {msg}')
-
-    def _finish_progress_events(self):
-        '''
-        Remove progress bars from "ceph status" output.
-        '''
-        log.info('removing progress bars from "ceph status" output')
-
-        assert self.on_pev_id is not None
-        assert self.onpen_pev_id is not None
-
-        self.volclient.mgr.remote('progress', 'complete', self.on_pev_id)
-        self.volclient.mgr.remote('progress', 'complete', self.onpen_pev_id)
-
-        log.info('finished removing progress bars from "ceph status" output')
-
-    def finish(self):
-        '''
-        All cloning jobs have been completed. Terminate this RTimer thread.
-        '''
-        self._finish_progress_events()
-
-        log.info(f'marking this RTimer thread as finished; thread object ID - {self}')
-        self.update_task.finished.set()
