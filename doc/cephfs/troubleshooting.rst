@@ -128,6 +128,11 @@ things to do:
 
   That prevents any clients from establishing new sessions with the MDS.
 
+* **Dont tweak max_mds** Modifying the FS setting variable ``max_mds`` is
+  sometimes perceived as a good step during troubleshooting or recovery effort.
+  Instead, doing so might further destabilize the cluster. If ``max_mds`` must
+  be changed in such circumstances, run the command to change ``max_mds`` with
+  the confirmation flag (``--yes-i-really-mean-it``)
 
 
 Expediting MDS journal trim
