@@ -6006,14 +6006,18 @@ bool MDCache::open_undef_inodes_dirfrags()
   map<CDir*, pair<bool, std::vector<dentry_key_t> > > fetch_queue;
   for (auto& dir : rejoin_undef_dirfrags) {
     ceph_assert(dir->get_version() == 0);
-    fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
+    // No need to fetch if the dir is already complete
+    if (!dir->is_complete())
+      fetch_queue.emplace(std::piecewise_construct, std::make_tuple(dir), std::make_tuple());
   }
 
   if (g_conf().get_val<bool>("mds_dir_prefetch")) {
     for (auto& in : rejoin_undef_inodes) {
       ceph_assert(!in->is_base());
       ceph_assert(in->get_parent_dir());
-      fetch_queue.emplace(std::piecewise_construct, std::make_tuple(in->get_parent_dir()), std::make_tuple());
+      // No need to fetch if the dir is already complete
+      if (!in->get_parent_dir()->is_complete())
+        fetch_queue.emplace(std::piecewise_construct, std::make_tuple(in->get_parent_dir()), std::make_tuple());
     }
   } else {
     for (auto& in : rejoin_undef_inodes) {
