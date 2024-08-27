@@ -462,15 +462,15 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
   return dn;
 }
 
-CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
-                                 mempool::mds_co::string alternate_name,
+CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, inodeno_t referent_ino,
+                                 unsigned char d_type, mempool::mds_co::string alternate_name,
 				 snapid_t first, snapid_t last) 
 {
   // foreign
   ceph_assert(lookup_exact_snap(dname, last) == 0);
 
   // create dentry
-  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), ino, d_type, first, last);
+  CDentry* dn = new CDentry(dname, inode->hash_dentry_name(dname), std::move(alternate_name), ino, referent_ino, d_type, first, last);
   dn->dir = this;
   dn->version = get_projected_version();
   dn->check_corruption(true);
@@ -502,8 +502,6 @@ CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned
   ceph_assert(get_num_any() == items.size());
   return dn;
 }
-
-
 
 void CDir::remove_dentry(CDentry *dn) 
 {
@@ -1909,7 +1907,7 @@ CDentry *CDir::_load_dentry(
       }
     } else {
       // (remote) link
-      dn = add_remote_dentry(dname, ino, d_type, std::move(alternate_name), first, last);
+      dn = add_remote_dentry(dname, ino, 0, d_type, std::move(alternate_name), first, last);
 
       // link to inode?
       CInode *in = mdcache->get_inode(ino);   // we may or may not have it.
@@ -1965,7 +1963,7 @@ CDentry *CDir::_load_dentry(
       }
     } else {
       // (remote) link
-      dn = add_remote_dentry(dname, remote_ino, d_type, std::move(alternate_name), first, last);
+      dn = add_remote_dentry(dname, remote_ino, referent_ino, d_type, std::move(alternate_name), first, last);
 
       // referent inode
       bool ref_in_found = false;

@@ -1418,7 +1418,8 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
     for (const auto& rb : lump.get_dremote()) {
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
       if (!dn) {
-	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
+	//TODO: fix referent inode number after journalling it
+	dn = dir->add_remote_dentry(rb.dn, rb.ino, 0, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
