@@ -81,6 +81,14 @@
   the module commands when coresponding Ceph service is down/degraded.
 
 
+* CephFS: Modifying the FS setting variable "max_mds" when a cluster is
+  unhealthy now requires users to pass the confirmation flag
+  (--yes-i-really-mean-it). This has been added as a precaution to tell the
+  users that modifying "max_mds" may not help with troubleshooting or recovery
+  effort. Instead, it might further destabilize the cluster.
+
+
+
 >=19.0.0
 
 * ceph: a new --daemon-output-file switch is available for `ceph tell` commands
