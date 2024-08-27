@@ -13,6 +13,14 @@
   output is changed from 'STATUS' to 'STATE'. The state of a group snapshot
   that was shown as 'ok' is now shown as 'complete', which is more descriptive.
 
+* CephFS: Modifying the FS setting variable "max_mds" when a cluster is
+  unhealthy now requires users to pass the confirmation flag
+  (--yes-i-really-mean-it). This has been added as a precaution to tell the
+  users that modifying "max_mds" may not help with troubleshooting or recovery
+  effort. Instead, it might further destabilize the cluster.
+
+
+
 >=19.0.0
 
 * cephx: key rotation is now possible using `ceph auth rotate`. Previously,
