@@ -508,9 +508,11 @@ public:
 	    auto ret = get_extent_if_linked<T>(t, pin->duplicate());
 	    if (ret.index() == 1) {
 	      return std::move(std::get<1>(ret));
+	    } else {
+	      // absent
+	      return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	    }
 	  }
-	  return base_iertr::make_ready_future<TCachedExtentRef<T>>();
 	}).si_then([this, &t, &remaps, original_paddr,
 			    original_laddr, original_len,
 			    &extents, FNAME](auto ext) mutable {
