@@ -14,7 +14,6 @@ from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException
 from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
-from .stats_util import get_stats
 
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
@@ -31,7 +30,7 @@ from .exception import VolumeException, ClusterError, ClusterTimeout, \
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
-from .stats_util import CloneProgressReporter
+from .stats_util import get_clone_stats, CloneProgressBar
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -65,8 +64,7 @@ class VolumeClient(CephfsClient["Module"]):
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay,
                              self.mgr.snapshot_clone_no_wait)
-        self.clone_progress_reporter = CloneProgressReporter(self,
-                                                             self.volspec)
+        self.clone_progress_bar = CloneProgressBar(self, self.volspec)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -948,7 +946,7 @@ class VolumeClient(CephfsClient["Module"]):
                 else:
                     s_subvolume.attach_snapshot(s_snapname, t_subvolume)
                 self.cloner.queue_job(volname)
-                self.clone_progress_reporter.initiate_reporting()
+                self.clone_progress_bar.initiate()
             except VolumeException as ve:
                 try:
                     t_subvolume.remove()
@@ -1036,7 +1034,7 @@ class VolumeClient(CephfsClient["Module"]):
         if not src_path:
             return None
 
-        stats = get_stats(src_path, dst_path, vol_handle)
+        stats = get_clone_stats(src_path, dst_path, vol_handle)
         if stats:
             stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
         return stats
