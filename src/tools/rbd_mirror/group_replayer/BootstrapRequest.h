@@ -45,7 +45,7 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
-      bool resync_requested,
+      bool *resync_requested,
       std::string *local_group_id,
       std::string *remote_group_id,
       std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
@@ -72,7 +72,7 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
-      bool resync_requested,
+      bool *resync_requested,
       std::string *local_group_id,
       std::string *remote_group_id,
       std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
@@ -169,7 +169,7 @@ private:
   MirrorStatusUpdater<ImageCtxT> *m_remote_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
   PoolMetaCache *m_pool_meta_cache;
-  bool m_resync_requested = false;
+  bool *m_resync_requested;
   std::string *m_local_group_id;
   std::string *m_remote_group_id;
   std::map<std::string, cls::rbd::GroupSnapshot> *m_local_group_snaps;
