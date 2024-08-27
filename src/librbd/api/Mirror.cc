@@ -3372,6 +3372,7 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
   }
 
   r = cls_client::mirror_group_resync_set(&group_ioctx,
+                                          librbd::util::group_header_name(group_id),
                                           mirror_group.global_group_id,
                                           group_name, group_id);
   if (r < 0) {
