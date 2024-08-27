@@ -82,6 +82,16 @@ void Replayer<I>::schedule_load_group_snapshots() {
 }
 
 template <typename I>
+void Replayer<I>::notify_group_listener_stop() {
+  dout(10) << dendl;
+
+  Context *ctx = new LambdaContext([this](int) {
+      m_local_group_ctx->listener->stop();
+      });
+  m_threads->work_queue->queue(ctx, 0);
+}
+
+template <typename I>
 void Replayer<I>::notify_group_snap_image_complete(
     int64_t local_pool_id,
     const std::string &local_image_id,
@@ -149,6 +159,29 @@ int Replayer<I>::local_group_image_list_by_id(
   return 0;
 }
 
+
+template <typename I>
+bool Replayer<I>::is_resync_requested() {
+  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
+
+  std::string group_id;
+  std::string group_header_oid = librbd::util::group_header_name(
+      m_local_group_id);
+  int r = librbd::cls_client::mirror_group_resync_get(&m_local_io_ctx,
+                                                      group_header_oid,
+                                                      m_global_group_id,
+                                                      m_local_group_ctx->name,
+                                                      &group_id);
+  if (r < 0) {
+    derr << "getting mirror group resync for global_group_id="
+         << m_global_group_id << " failed: " << cpp_strerror(r) << dendl;
+  } else if (r == 0 && group_id == m_local_group_id) {
+    return true;
+  }
+
+  return false;
+}
+
 template <typename I>
 void Replayer<I>::init(Context* on_finish) {
   dout(10) << m_global_group_id << dendl;
@@ -178,6 +211,17 @@ void Replayer<I>::load_local_group_snapshots() {
 
   if (m_state != STATE_COMPLETE) {
     m_state = STATE_REPLAYING;
+  }
+
+  if (m_resync_requested) {
+    return;
+  } else if (is_resync_requested()) {
+    m_resync_requested = true; // do nothing from here, anything is simply
+                               // of no use as the group is going to get
+                               // deleted soon.
+    dout(10) << "local group resync requested" << dendl;
+    // send stop for Group Replayer
+    notify_group_listener_stop();
   }
 
   m_local_group_snaps.clear();
@@ -407,16 +451,14 @@ out:
     return;
   }
 
-  dout(10) << "all remote snapshots synced, idling waiting for new snapshot"
-           << dendl;
-
+  // At this point all group snapshots have been synced, but we keep poll
   ceph_assert(m_state == STATE_REPLAYING);
-  m_state = STATE_IDLE;
+  locker.unlock();
   if (m_remote_demoted) {
     // stop group replayer
-    m_local_group_ctx->listener->stop();
+    notify_group_listener_stop();
   }
-  locker.unlock();
+  schedule_load_group_snapshots();
 }
 
 template <typename I>
@@ -779,6 +821,10 @@ void Replayer<I>::mirror_regular_snapshot(
     cls::rbd::UserGroupSnapshotNamespace{},
       remote_group_snap_name,
       cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
+
+  // needed for generating the order key, the group_snap_set generates one
+  // only when the state is INCOMPLETE
+  librbd::cls_client::group_snap_set(&op, group_snap);
 
   auto itr = std::find_if(
       m_remote_group_snaps.begin(), m_remote_group_snaps.end(),
