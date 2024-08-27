@@ -346,9 +346,10 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
   }
   // purge inodes
-  dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
-  if (purging_inodes.size())
+  if (purging_inodes.size()) {
+    dout(10) << "try_to_expire waiting for purge of " << purging_inodes << dendl;
     set_purged_cb(gather_bld.new_sub());
+  }
   
   if (gather_bld.has_subs()) {
     dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
