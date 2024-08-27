@@ -357,7 +357,20 @@ public:
     shard_services.remove_want_pg_temp(orderer, pgid.pgid);
   }
   void check_recovery_sources(const OSDMapRef& newmap) final {
-    // Not needed yet
+    LOG_PREFIX(PG::check_recovery_sources);
+    recovery_backend->for_each_recovery_waiter(
+      [newmap, FNAME, this](auto &, auto &waiter) {
+        if (waiter->is_pulling() &&
+            newmap->is_down(waiter->pull_info->from.osd)) {
+          SUBDEBUGDPP(
+            osd,
+            " repeating pulling for {}, due to osd {} down",
+            *this,
+            waiter->pull_info->soid,
+            waiter->pull_info->from.osd);
+          waiter->repeat_pull();
+        }
+      });
   }
   void check_blocklisted_watchers() final;
   void clear_primary_state() final {

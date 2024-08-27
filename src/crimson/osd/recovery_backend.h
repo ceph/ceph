@@ -112,6 +112,13 @@ public:
     }
     return on_stop();
   }
+
+  template <typename Func>
+  void for_each_recovery_waiter(Func &&f) {
+    for (auto &[soid, recovery_waiter] : recovering) {
+      std::forward<Func>(f)(soid, recovery_waiter);
+    }
+  }
 protected:
   crimson::osd::PG& pg;
   crimson::osd::ShardServices& shard_services;
@@ -218,6 +225,13 @@ public:
 	pulled->set_value();
 	pulled.reset();
       }
+    }
+    void repeat_pull() {
+      ceph_assert(pulled);
+      pulled->set_exception(crimson::ct_error::eagain::exception_ptr());
+    }
+    bool is_pulling() const {
+      return (bool)pulled;
     }
     void set_push_failed(pg_shard_t shard, std::exception_ptr e) {
       auto it = pushes.find(shard);

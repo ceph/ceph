@@ -113,28 +113,33 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
     // object is not missing, don't pull
     return seastar::make_ready_future<>();
   }
-  return pg.obc_loader.with_obc<RWState::RWREAD>(soid.get_head(),
-    [this, soid, need](auto head, auto) {
-    PullOp pull_op;
-    auto& recovery_waiter = get_recovering(soid);
-    recovery_waiter.pull_info =
-      std::make_optional<RecoveryBackend::pull_info_t>();
-    auto& pull_info = *recovery_waiter.pull_info;
-    prepare_pull(head, pull_op, pull_info, soid, need);
-    auto msg = crimson::make_message<MOSDPGPull>();
-    msg->from = pg.get_pg_whoami();
-    msg->set_priority(pg.get_recovery_op_priority());
-    msg->pgid = pg.get_pgid();
-    msg->map_epoch = pg.get_osdmap_epoch();
-    msg->min_epoch = pg.get_last_peering_reset();
-    msg->set_pulls({std::move(pull_op)});
-    return shard_services.send_to_osd(
-      pull_info.from.osd,
-      std::move(msg),
-      pg.get_osdmap_epoch());
-  }).si_then([this, soid] {
-    auto& recovery_waiter = get_recovering(soid);
-    return recovery_waiter.wait_for_pull();
+  return interruptor::repeat_eagain([this, soid, need] {
+    using prepare_pull_iertr =
+      crimson::osd::ObjectContextLoader::load_obc_iertr::extend<
+        crimson::ct_error::eagain>;
+    return pg.obc_loader.with_obc<RWState::RWREAD>(soid.get_head(),
+      [this, soid, need](auto head, auto) {
+      PullOp pull_op;
+      auto& recovery_waiter = get_recovering(soid);
+      recovery_waiter.pull_info =
+        std::make_optional<RecoveryBackend::pull_info_t>();
+      auto& pull_info = *recovery_waiter.pull_info;
+      prepare_pull(head, pull_op, pull_info, soid, need);
+      auto msg = crimson::make_message<MOSDPGPull>();
+      msg->from = pg.get_pg_whoami();
+      msg->set_priority(pg.get_recovery_op_priority());
+      msg->pgid = pg.get_pgid();
+      msg->map_epoch = pg.get_osdmap_epoch();
+      msg->min_epoch = pg.get_last_peering_reset();
+      msg->set_pulls({std::move(pull_op)});
+      return shard_services.send_to_osd(
+        pull_info.from.osd,
+        std::move(msg),
+        pg.get_osdmap_epoch());
+    }).si_then([this, soid]() -> prepare_pull_iertr::future<> {
+      auto& recovery_waiter = get_recovering(soid);
+      return recovery_waiter.wait_for_pull();
+    });
   }).handle_error_interruptible(
     crimson::ct_error::assert_all("unexpected error")
   );
