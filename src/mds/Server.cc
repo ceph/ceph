@@ -7578,7 +7578,7 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   //dn->push_projected_linkage(targeti->ino(), targeti->d_type());
 
   // referent inode
-  dn->push_projected_linkage(newi, targeti->ino());
+  dn->push_projected_linkage(newi, targeti->ino(), newi->ino());
 
   journal_and_reply(mdr, targeti, dn, le,
 		    new C_MDS_link_local_finish(this, mdr, dn, targeti, newi, dnpv, tipv, adjust_realm));
@@ -7739,7 +7739,7 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
 
     // journal allocated referent inode.
     journal_allocated_inos(mdr, &le->metablob);
-    dn->push_projected_linkage(newi, targeti->ino());
+    dn->push_projected_linkage(newi, targeti->ino(), newi->ino());
   } else {
     if (dnl->is_referent()) {
       ceph_assert(straydn);
@@ -9821,7 +9821,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
         rpi.inode->update_backtrace();
         // rspi = rpi.inode.get(); TODO - update ctime on referent inode ?
       }
-      destdn->push_projected_linkage(srcrefi, srci->ino());
+      destdn->push_projected_linkage(srcrefi, srci->ino(), srcrefi->ino());
       // srci
       if (srci->is_auth()) {
 	auto pi = srci->project_inode(mdr);
@@ -11073,7 +11073,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
     } else {
       if (rollback.orig_src.referent_ino)
 	ceph_assert(referent_in);
-      srcdn->push_projected_linkage(referent_in, rollback.orig_src.remote_ino);
+      srcdn->push_projected_linkage(referent_in, rollback.orig_src.remote_ino, rollback.orig_src.referent_ino);
     }
   }
 
@@ -11139,7 +11139,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
     } else if (rollback.orig_dest.remote_ino) {
       if (rollback.orig_dest.referent_ino)
 	ceph_assert(target_referent_in);
-      destdn->push_projected_linkage(target_referent_in, rollback.orig_dest.remote_ino);
+      destdn->push_projected_linkage(target_referent_in, rollback.orig_dest.remote_ino, rollback.orig_dest.referent_ino);
     } else {
       // the dentry will be trimmed soon, it's ok to have wrong linkage
       if (rollback.orig_dest.ino)

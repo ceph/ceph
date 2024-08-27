@@ -311,16 +311,18 @@ void CDentry::push_projected_linkage()
   }
 }
 
-void CDentry::push_projected_linkage(CInode *referent_inode, inodeno_t remote_ino)
+void CDentry::push_projected_linkage(CInode *referent_inode, inodeno_t remote_ino, inodeno_t referent_ino)
 {
   ceph_assert(remote_ino);
   ceph_assert(referent_inode);
+  ceph_assert(referent_ino);
 
   linkage_t *p = _project_linkage();
   p->referent_inode = referent_inode;
   //flushing dirty_inode in try_to_expire
   referent_inode->push_projected_parent(this);
   referent_inode->set_remote_ino(remote_ino);
+  p->referent_ino = referent_ino;
 
   p->remote_ino = remote_ino;
   p->remote_d_type = referent_inode->d_type();
