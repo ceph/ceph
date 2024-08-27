@@ -213,10 +213,10 @@ private:
    * execute_clone
    *
    * If snapc contains a snap which occurred logically after the last write
-   * seen by this object (see OpsExecutor::should_clone()), we first need
+   * seen by this object (see OpsExecuter::should_clone()), we first need
    * make a clone of the object at its current state.  execute_clone primes
    * txn with that clone operation and returns an
-   * OpsExecutor::CloningContext which will allow us to fill in the corresponding
+   * OpsExecuter::CloningContext which will allow us to fill in the corresponding
    * metadata and log_entries once the operations have been processed.
    *
    * Note that this strategy differs from classic, which instead performs this

@@ -504,7 +504,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
       auto p = ss.clone_snaps.find(clone);
       if (p == ss.clone_snaps.end()) {
 	logger().error(
-	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "OpsExecuter::do_list_snaps: {} has inconsistent "
 	  "clone_snaps, missing clone {}",
 	  os.oi.soid,
 	  clone);
@@ -518,7 +518,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
       auto p = ss.clone_overlap.find(clone);
       if (p == ss.clone_overlap.end()) {
 	logger().error(
-	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "OpsExecuter::do_list_snaps: {} has inconsistent "
 	  "clone_overlap, missing clone {}",
 	  os.oi.soid,
 	  clone);
@@ -532,7 +532,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
       auto p = ss.clone_size.find(clone);
       if (p == ss.clone_size.end()) {
 	logger().error(
-	  "OpsExecutor::do_list_snaps: {} has inconsistent "
+	  "OpsExecuter::do_list_snaps: {} has inconsistent "
 	  "clone_size, missing clone {}",
 	  os.oi.soid,
 	  clone);
@@ -551,7 +551,7 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
   }
   resp.seq = ss.seq;
   logger().error(
-    "OpsExecutor::do_list_snaps: {}, resp.clones.size(): {}",
+    "OpsExecuter::do_list_snaps: {}, resp.clones.size(): {}",
     os.oi.soid,
     resp.clones.size());
   resp.encode(osd_op.outdata);
