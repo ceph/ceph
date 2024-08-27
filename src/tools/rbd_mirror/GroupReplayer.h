@@ -120,10 +120,10 @@ public:
   }
 
   void start(Context *on_finish = nullptr, bool manual = false,
-             bool restart = false, bool resync = false);
+             bool restart = false);
   void stop(Context *on_finish = nullptr, bool manual = false,
             bool restart = false);
-  void restart(Context *on_finish = nullptr, bool resync = false);
+  void restart(Context *on_finish = nullptr);
   void flush();
 
   void print_status(Formatter *f);

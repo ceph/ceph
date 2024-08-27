@@ -7754,37 +7754,6 @@ int mirror_group_resync_set(cls_method_context_t hctx, bufferlist *in,
 
 /**
  * Input:
- * @param global_group_id (std::string)
- * @param global_name (std::string)
- *
- * Output:
- * @returns 0 on success, negative error code on failure
- */
-int mirror_group_resync_remove(cls_method_context_t hctx, bufferlist *in,
-			       bufferlist *out) {
-  std::string global_group_id;
-  std::string group_name;
-  try {
-    auto it = in->cbegin();
-    decode(global_group_id, it);
-    decode(group_name, it);
-  } catch (const ceph::buffer::error &err) {
-    return -EINVAL;
-  }
-
-  std::string key = mirror::group_resync_key(global_group_id, group_name);
-  int r = cls_cxx_map_remove_key(hctx, key);
-  if (r < 0) {
-    CLS_ERR("error removing key %s from mirror group resync object: %s",
-            key.c_str(), cpp_strerror(r).c_str());
-    return r;
-  }
-
-  return 0;
-}
-
-/**
- * Input:
  * @param global_id (std::string)
  *
  * Output:
@@ -9702,7 +9671,6 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_group_list;
   cls_method_handle_t h_mirror_group_resync_get;
   cls_method_handle_t h_mirror_group_resync_set;
-  cls_method_handle_t h_mirror_group_resync_remove;
   cls_method_handle_t h_mirror_group_get_group_id;
   cls_method_handle_t h_mirror_group_get;
   cls_method_handle_t h_mirror_group_set;
@@ -9877,7 +9845,6 @@ CLS_INIT(rbd)
   cls.register_cxx_method(method::mirror_group_list, mirror_group_list, &h_mirror_group_list);
   cls.register_cxx_method(method::mirror_group_resync_get, mirror_group_resync_get, &h_mirror_group_resync_get);
   cls.register_cxx_method(method::mirror_group_resync_set, mirror_group_resync_set, &h_mirror_group_resync_set);
-  cls.register_cxx_method(method::mirror_group_resync_remove, mirror_group_resync_remove, &h_mirror_group_resync_remove);
   cls.register_cxx_method(method::mirror_group_get_group_id, mirror_group_get_group_id, &h_mirror_group_get_group_id);
   cls.register_cxx_method(method::mirror_group_get, mirror_group_get, &h_mirror_group_get);
   cls.register_cxx_method(method::mirror_group_set, mirror_group_set, &h_mirror_group_set);
