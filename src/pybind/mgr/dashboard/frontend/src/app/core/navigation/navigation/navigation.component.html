@@ -103,10 +103,10 @@
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_multiCluster_overview"><span i18n>Overview</span></cds-sidenav-item>
           <cds-sidenav-item route="/multi-cluster/manage-clusters"
-                            title="Manager Cluster"
+                            title="Manage Clusters"
                             i18n-title
                             [useRouter]="true"
-                            class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manager Cluster</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manage Clusters</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Cluster -->
         <cds-sidenav-menu title="Cluster"
@@ -189,7 +189,8 @@
           <cds-sidenav-item route="/block/nvmeof"
                             [useRouter]="true"
                             title="NVMe/TCP"
-                            i18n-title><span i18n>NVMe/TCP</span></cds-sidenav-item>
+                            i18n-title
+                            class="tc_submenuitem tc_submenuitem_block_nvme"><span i18n>NVMe/TCP</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Object Storage -->
         <cds-sidenav-menu title="Object"
@@ -218,7 +219,7 @@
                             title="Multi-site"
                             i18n-title
                             [useRouter]="true"
-                            class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Multi-site</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_rgw_multi-site"><span i18n>Multi-site</span></cds-sidenav-item>
           <cds-sidenav-item route="/rgw/daemon"
                             title="Gateways"
                             i18n-title
