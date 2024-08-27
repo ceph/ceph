@@ -209,7 +209,9 @@ def normalize_hostnames(ctx):
 def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
 
-    if 'cephadm_binary_url' in config:
+    if 'cephadm_from_container' in config:
+        _fetch_cephadm_from_container(ctx, config)
+    elif 'cephadm_binary_url' in config:
         url = config['cephadm_binary_url']
         _download_cephadm(ctx, url)
     elif config.get('cephadm_mode') != 'cephadm-package':
@@ -230,6 +232,36 @@ def download_cephadm(ctx, config, ref):
         _rm_cluster(ctx, cluster_name)
         if config.get('cephadm_mode') == 'root':
             _rm_cephadm(ctx)
+
+
+def _fetch_cephadm_from_container(ctx, config):
+    image = config['image']
+    cengine = 'podman'
+    try:
+        log.info("Testing if podman is available")
+        ctx.cluster.run(args=['sudo', cengine, '--help'])
+    except CommandFailedError:
+        log.info("Failed to find podman. Using docker")
+        cengine = 'docker'
+
+    ctx.cluster.run(args=['sudo', cengine, 'pull', image])
+    ctx.cluster.run(args=[
+        'sudo', cengine, 'run', '--rm', '--entrypoint=cat', image, '/usr/sbin/cephadm',
+        run.Raw('>'),
+        ctx.cephadm,
+    ])
+
+    # sanity-check the resulting file and set executable bit
+    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+    ctx.cluster.run(
+        args=[
+            'test', '-s', ctx.cephadm,
+            run.Raw('&&'),
+            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+            run.Raw('&&'),
+            'chmod', '+x', ctx.cephadm,
+        ],
+    )
 
 
 def _fetch_cephadm_from_rpm(ctx):
