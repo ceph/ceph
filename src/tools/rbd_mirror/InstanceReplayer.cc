@@ -650,25 +650,10 @@ void InstanceReplayer<I>::start_group_replayer(
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   std::string global_group_id = group_replayer->get_global_group_id();
-  std::string group_name = group_replayer->get_name();
-  std::string group_id;
-  bool resync_requested = false;
-  int r = librbd::cls_client::mirror_group_resync_get(&m_local_io_ctx,
-                                                      global_group_id,
-                                                      group_name,
-                                                      &group_id);
-  if (r < 0) {
-    derr << "getting mirror group resync for global_group_id="
-         << global_group_id << " failed: " << cpp_strerror(r) << dendl;
-  } else if (r == 0) {
-    if (group_id == group_replayer->get_local_group_id()) {
-      resync_requested = true;
-    }
-  }
   if (!group_replayer->is_stopped()) {
-    if (group_replayer->needs_restart() || resync_requested) {
-      group_replayer->restart(new C_TrackedOp(m_async_op_tracker, nullptr),
-                              resync_requested);
+    if (group_replayer->needs_restart()) {
+      stop_group_replayer(group_replayer, new C_TrackedOp(m_async_op_tracker,
+                                                          nullptr));
     } else {
       group_replayer->sync_group_names();
     }
@@ -680,28 +665,17 @@ void InstanceReplayer<I>::start_group_replayer(
     return;
   } else if (group_replayer->is_finished()) {
     // TODO temporary until policy integrated
-    if (resync_requested) {
-      resync_requested = false;
-      r = librbd::cls_client::mirror_group_resync_remove(&m_local_io_ctx,
-                                                         global_group_id,
-                                                         group_name);
-      if (r < 0) {
-        derr << "removing mirror group resync for global_group_id="
-             << global_group_id << " failed: " << cpp_strerror(r) << dendl;
-      }
-    } else {
-      dout(5) << "removing group replayer for global_group_id="
-              << global_group_id << dendl;
-      m_group_replayers.erase(group_replayer->get_global_group_id());
-      group_replayer->destroy();
-      return;
-    }
+    dout(5) << "removing group replayer for global_group_id="
+      << global_group_id << dendl;
+    m_group_replayers.erase(group_replayer->get_global_group_id());
+    group_replayer->destroy();
+    return;
   } else if (m_manual_stop) {
     return;
   }
   dout(10) << "global_group_id=" << global_group_id << dendl;
   group_replayer->start(new C_TrackedOp(m_async_op_tracker, nullptr),
-                        false, false, resync_requested);
+                        false, false);
 }
 
 template <typename I>
