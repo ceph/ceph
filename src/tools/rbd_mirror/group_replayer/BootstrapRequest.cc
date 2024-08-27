@@ -78,7 +78,7 @@ BootstrapRequest<I>::BootstrapRequest(
     MirrorStatusUpdater<I> *remote_status_updater,
     journal::CacheManagerHandler *cache_manager_handler,
     PoolMetaCache *pool_meta_cache,
-    bool resync_requested,
+    bool *resync_requested,
     std::string *local_group_id,
     std::string *remote_group_id,
     std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
@@ -112,7 +112,24 @@ BootstrapRequest<I>::BootstrapRequest(
 
 template <typename I>
 void BootstrapRequest<I>::send() {
-  if (m_resync_requested) {
+  *m_resync_requested = false;
+
+  std::string group_id;
+  std::string group_header_oid = librbd::util::group_header_name(
+      *m_local_group_id);
+  int r = librbd::cls_client::mirror_group_resync_get(&m_local_io_ctx,
+                                                      group_header_oid,
+                                                      m_global_group_id,
+                                                      m_local_group_ctx->name,
+                                                      &group_id);
+  if (r < 0) {
+    derr << "getting mirror group resync for global_group_id="
+         << m_global_group_id << " failed: " << cpp_strerror(r) << dendl;
+  } else if (r == 0 && group_id == *m_local_group_id) {
+    *m_resync_requested = true;
+  }
+
+  if (*m_resync_requested) {
     get_local_group_id();
   } else {
     get_remote_group_id();
@@ -730,7 +747,8 @@ void BootstrapRequest<I>::handle_list_local_group_snapshots(int r) {
           state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
         // if local snapshot is primary demoted, check if there is demote snapshot
         // in remote, if not then split brain
-        if (!is_demoted_snap_exists(remote_group_snaps) && !m_resync_requested) {
+        if (!is_demoted_snap_exists(remote_group_snaps)
+            && *m_resync_requested == false) {
           finish(-EEXIST);
           return;
         }
@@ -961,7 +979,7 @@ void BootstrapRequest<I>::move_local_image_to_trash() {
       &BootstrapRequest<I>::handle_move_local_image_to_trash>(this);
 
   auto req = image_deleter::TrashMoveRequest<I>::create(
-      m_image_io_ctx, global_image_id, m_resync_requested,
+      m_image_io_ctx, global_image_id, *m_resync_requested,
       m_threads->work_queue, ctx);
   req->send();
 }
