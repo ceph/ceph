@@ -31,6 +31,7 @@ export interface CephServiceAdditionalSpec {
   monitor_port: number;
   virtual_interface_networks: string[];
   pool: string;
+  group: string;
   rgw_frontend_ssl_certificate: string;
   ssl: boolean;
   ssl_cert: string;
