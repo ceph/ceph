@@ -585,17 +585,6 @@ void MDLog::shutdown()
   }
 }
 
-class C_OFT_Committed : public MDSInternalContext {
-  MDLog *mdlog;
-  uint64_t seq;
-public:
-  C_OFT_Committed(MDLog *l, uint64_t s) :
-    MDSInternalContext(l->mds), mdlog(l), seq(s) {}
-  void finish(int ret) override {
-    mdlog->trim_expired_segments();
-  }
-};
-
 void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
@@ -610,8 +599,7 @@ void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
   if (mds->mdcache->open_file_table.is_any_dirty() ||
       last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
     submit_mutex.unlock();
-    mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
-                                         last_seq, CEPH_MSG_PRIO_HIGH);
+    mds->mdcache->open_file_table.commit(nullptr, last_seq, CEPH_MSG_PRIO_HIGH);
     submit_mutex.lock();
   }
 }
