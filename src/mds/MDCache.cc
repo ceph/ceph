@@ -4327,6 +4327,7 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
                                 dn->first, dn->last,
 				dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 				(dnl->is_remote() || dnl->is_referent())? dnl->get_remote_ino():inodeno_t(0),
+		                dnl->is_referent() ? dnl->get_referent_inode()->ino():inodeno_t(0),
 				(dnl->is_remote() || dnl->is_referent())? dnl->get_remote_d_type():0,
 				dn->get_replica_nonce(),
 				dn->lock.get_state());
@@ -4548,7 +4549,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
       if (ack) 
 	ack->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
                                dn->first, dn->last,
-			       dnl->get_inode()->ino(), inodeno_t(0), 0, 
+			       dnl->get_inode()->ino(), inodeno_t(0), inodeno_t(0), 0,
 			       dnonce, dn->lock.get_replica_state());
 
       // inode
@@ -4799,6 +4800,19 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
         if (!dn) {
 	  if (d.is_remote() || d.is_referent()) {
 	    dn = dir->add_remote_dentry(ss.name, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
+	    if (d.is_referent()) {
+	      CInode *ref_in = get_inode(d.referent_ino, ss.snapid);
+	      if (!ref_in) {
+	        dout(20) << " rejoin:  referent inode not found in memory for dentry " << *dn << " inventing " << dendl;
+		ref_in = rejoin_invent_inode(d.referent_ino, ss.snapid);
+                ref_in->set_remote_ino(d.remote_ino);
+	      }
+              dn->dir->set_referent_inode(dn, ref_in);
+	      dout(20) << " rejoin: referent inode invented/linked " << ref_in << dendl;
+	    } else {
+	      dout(10) << " rejoin: referent inode not found for dentry " << *dn << dendl;
+	    }
+
 	  } else if (d.is_null()) {
 	    dn = dir->add_null_dentry(ss.name, d.first, ss.snapid);
 	  } else {
@@ -6174,6 +6188,7 @@ void MDCache::rejoin_send_acks()
                                            dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   (dnl->is_remote() || dnl->is_referent()) ? dnl->get_remote_ino():inodeno_t(0),
+		                           dnl->is_referent() ? dnl->get_referent_inode()->ino():inodeno_t(0),
 					   (dnl->is_remote() || dnl->is_referent()) ? dnl->get_remote_d_type():0,
 					   ++r.second,
 					   dn->lock.get_replica_state());

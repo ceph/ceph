@@ -108,15 +108,16 @@ public:
     std::string alternate_name;
     inodeno_t ino = 0;
     inodeno_t remote_ino = 0;
+    inodeno_t referent_ino = 0;
     unsigned char remote_d_type = 0;
     uint32_t nonce = 0;
     int32_t lock = 0;
     dn_strong() = default;
-    dn_strong(snapid_t f, std::string_view altn, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int l) :
-      first(f), alternate_name(altn), ino(pi), remote_ino(ri), remote_d_type(rdt), nonce(n), lock(l) {}
+    dn_strong(snapid_t f, std::string_view altn, inodeno_t pi, inodeno_t ri, inodeno_t ref_ino, unsigned char rdt, int n, int l) :
+      first(f), alternate_name(altn), ino(pi), remote_ino(ri), referent_ino(ref_ino),remote_d_type(rdt), nonce(n), lock(l) {}
     bool is_primary() const { return ino > 0; }
     bool is_remote() const { return remote_ino > 0; }
-    bool is_referent() const { return remote_ino > 0; }
+    bool is_referent() const { return remote_ino > 0 && referent_ino > 0; }
     bool is_null() const { return ino == 0 && remote_ino == 0; }
     void encode(ceph::buffer::list &bl) const {
       using ceph::encode;
@@ -127,6 +128,7 @@ public:
       encode(nonce, bl);
       encode(lock, bl);
       encode(alternate_name, bl);
+      encode(referent_ino, bl);
     }
     void decode(ceph::buffer::list::const_iterator &bl) {
       using ceph::decode;
@@ -137,15 +139,17 @@ public:
       decode(nonce, bl);
       decode(lock, bl);
       decode(alternate_name, bl);
+      decode(referent_ino, bl);
     }
     static void generate_test_instances(std::list<dn_strong*>& ls) {
       ls.push_back(new dn_strong);
-      ls.push_back(new dn_strong(1, "alternate_name", 2, 3, 4, 5, 6));
+      ls.push_back(new dn_strong(1, "alternate_name", 2, 3, 4, 5, 6, 7));
     }
     void dump(ceph::Formatter *f) const {
       f->dump_unsigned("first", first);
       f->dump_string("alternate_name", alternate_name);
       f->dump_unsigned("ino", ino);
+      f->dump_unsigned("referent_ino", referent_ino);
       f->dump_unsigned("remote_ino", remote_ino);
       f->dump_unsigned("remote_d_type", remote_d_type);
       f->dump_unsigned("nonce", nonce);
@@ -276,9 +280,9 @@ public:
   void add_weak_primary_dentry(inodeno_t dirino, std::string_view dname, snapid_t first, snapid_t last, inodeno_t ino) {
     weak[dirino][string_snap_t(dname, last)] = dn_weak(first, ino);
   }
-  void add_strong_dentry(dirfrag_t df, std::string_view dname, std::string_view altn, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+  void add_strong_dentry(dirfrag_t df, std::string_view dname, std::string_view altn, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, inodeno_t ref_ino, unsigned char rdt, int n, int ls) {
     auto& m = strong_dentries[df];
-    m.insert_or_assign(string_snap_t(dname, last), dn_strong(first, altn, pi, ri, rdt, n, ls));
+    m.insert_or_assign(string_snap_t(dname, last), dn_strong(first, altn, pi, ri, ref_ino, rdt, n, ls));
   }
   void add_dentry_authpin(dirfrag_t df, std::string_view dname, snapid_t last,
 			  const metareqid_t& ri, __u32 attempt) {
