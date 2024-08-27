@@ -99,7 +99,7 @@ function init_first_zone {
   secret=$7
 
 # initialize realm
-  x $(rgw_admin $cid) realm create --rgw-realm=$realm
+  x $(rgw_admin $cid) realm create --rgw-realm=$realm --default
 
 # create zonegroup, zone
   x $(rgw_admin $cid) zonegroup create --rgw-zonegroup=$zg --master --default
