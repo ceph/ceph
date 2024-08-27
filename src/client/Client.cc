@@ -7957,6 +7957,12 @@ int Client::readlinkat(int dirfd, const char *relpath, char *buf, loff_t size, c
     return r;
   }
 
+  if (!strcmp(relpath, "")) {
+    if (!dirinode.get()->is_symlink())
+      return -CEPHFS_ENOENT;
+    return _readlink(dirinode.get(), buf, size);
+  }
+
   InodeRef in;
   filepath path(relpath);
   r = path_walk(path, &in, perms, false, 0, dirinode);
