@@ -3078,6 +3078,18 @@ TEST(LibCephFS, Readlinkat) {
   ASSERT_EQ(0, memcmp(target, rel_file_path, target_len));
 
   ASSERT_EQ(0, ceph_close(cmount, fd));
+#if defined(__linux__) && defined(O_PATH)
+  // test readlinkat with empty pathname relative to O_PATH|O_NOFOLLOW fd
+  fd = ceph_open(cmount, link_path, O_PATH | O_NOFOLLOW, 0);
+  ASSERT_LE(0, fd);
+  size_t link_target_len = strlen(rel_file_path);
+  char link_target[link_target_len+1];
+  ASSERT_EQ(link_target_len, ceph_readlinkat(cmount, fd, "", link_target, link_target_len));
+  link_target[link_target_len] = '\0';
+  ASSERT_EQ(0, memcmp(link_target, rel_file_path, link_target_len));
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+#endif /* __linux */
+
   ASSERT_EQ(0, ceph_unlink(cmount, link_path));
   ASSERT_EQ(0, ceph_unlink(cmount, file_path));
   ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
