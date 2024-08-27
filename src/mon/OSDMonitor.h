@@ -358,7 +358,7 @@ private:
    * @returns true if the map is passable, false otherwise
    */
   bool validate_crush_against_features(const CrushWrapper *newcrush,
-				       std::stringstream &ss);
+				       std::ostream &ss);
   void check_osdmap_subs();
   void share_map_with_random_osd();
 

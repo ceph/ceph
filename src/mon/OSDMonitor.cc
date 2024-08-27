@@ -7500,6 +7500,11 @@ int OSDMonitor::crush_rule_create_erasure(const string &name,
     erasure_code.reset();
     if (err < 0)
       return err;
+
+    if (!validate_crush_against_features(&newcrush, *ss)) {
+      return -EINVAL;
+    }
+
     *rule = err;
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
@@ -7575,7 +7580,7 @@ int OSDMonitor::check_cluster_features(uint64_t features,
 }
 
 bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
-                                                 stringstream& ss)
+                                                 ostream &ss)
 {
   OSDMap::Incremental new_pending = pending_inc;
   encode(*newcrush, new_pending.crush, mon.get_quorum_con_features());
