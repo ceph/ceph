@@ -12,6 +12,7 @@
  *
  */
 
+#include <array>
 #include <string_view>
 #include <typeinfo>
 #include "common/debug.h"
@@ -4053,95 +4054,106 @@ epoch_t MDSRank::get_osd_epoch() const
 
 const char** MDSRankDispatcher::get_tracked_conf_keys() const
 {
-  static const char* KEYS[] = {
-    "clog_to_graylog",
-    "clog_to_graylog_host",
-    "clog_to_graylog_port",
-    "clog_to_monitors",
-    "clog_to_syslog",
-    "clog_to_syslog_facility",
-    "clog_to_syslog_level",
-    "fsid",
-    "host",
-    "mds_alternate_name_max",
-    "mds_bal_export_pin",
-    "mds_bal_fragment_dirs",
-    "mds_bal_fragment_fast_factor",
-    "mds_bal_fragment_interval",
-    "mds_bal_fragment_size_max",
-    "mds_bal_interval",
-    "mds_bal_max",
-    "mds_bal_max_until",
-    "mds_bal_merge_size",
-    "mds_bal_mode",
-    "mds_bal_replicate_threshold",
-    "mds_bal_sample_interval",
-    "mds_bal_split_bits",
-    "mds_bal_split_rd",
-    "mds_bal_split_size",
-    "mds_bal_split_wr",
-    "mds_bal_unreplicate_threshold",
-    "mds_cache_memory_limit",
-    "mds_cache_mid",
-    "mds_cache_reservation",
-    "mds_cache_quiesce_decay_rate",
-    "mds_cache_quiesce_threshold",
-    "mds_cache_quiesce_sleep",
-    "mds_cache_trim_decay_rate",
-    "mds_cap_acquisition_throttle_retry_request_time",
-    "mds_cap_revoke_eviction_timeout",
-    "mds_debug_subtrees",
-    "mds_dir_max_entries",
-    "mds_dump_cache_threshold_file",
-    "mds_server_dispatch_client_request_delay",
-    "mds_server_dispatch_killpoint_random",
-    "mds_dump_cache_threshold_formatter",
-    "mds_enable_op_tracker",
-    "mds_export_ephemeral_distributed",
-    "mds_export_ephemeral_random",
-    "mds_export_ephemeral_random_max",
-    "mds_extraordinary_events_dump_interval",
-    "mds_forward_all_requests_to_auth",
-    "mds_health_cache_threshold",
-    "mds_heartbeat_grace",
-    "mds_heartbeat_reset_grace",
-    "mds_inject_journal_corrupt_dentry_first",
-    "mds_inject_migrator_session_race",
-    "mds_inject_rename_corrupt_dentry_first",
-    "mds_kill_dirfrag_at",
-    "mds_kill_shutdown_at",
-    "mds_log_event_large_threshold",
-    "mds_log_events_per_segment",
-    "mds_log_major_segment_event_ratio",
-    "mds_log_max_events",
-    "mds_log_max_segments",
-    "mds_log_pause",
-    "mds_log_skip_corrupt_events",
-    "mds_log_skip_unbounded_events",
-    "mds_max_caps_per_client",
-    "mds_max_export_size",
-    "mds_max_purge_files",
-    "mds_max_purge_ops",
-    "mds_max_purge_ops_per_pg",
-    "mds_max_snaps_per_dir",
-    "mds_op_complaint_time",
-    "mds_op_history_duration",
-    "mds_op_history_size",
-    "mds_op_log_threshold",
-    "mds_recall_max_decay_rate",
-    "mds_recall_warning_decay_rate",
-    "mds_request_load_average_decay_rate",
-    "mds_session_cache_liveness_decay_rate",
-    "mds_session_cap_acquisition_decay_rate",
-    "mds_session_cap_acquisition_throttle",
-    "mds_session_max_caps_throttle_ratio",
-    "mds_symlink_recovery",
-    "mds_session_metadata_threshold",
-    "mds_log_trim_threshold",
-    "mds_log_trim_decay_rate",
-    NULL
-  };
-  return KEYS;
+#define KEYS \
+    "clog_to_graylog", \
+    "clog_to_graylog_host", \
+    "clog_to_graylog_port", \
+    "clog_to_monitors", \
+    "clog_to_syslog", \
+    "clog_to_syslog_facility", \
+    "clog_to_syslog_level", \
+    "fsid", \
+    "host", \
+    "mds_alternate_name_max", \
+    "mds_bal_export_pin", \
+    "mds_bal_fragment_dirs", \
+    "mds_bal_fragment_fast_factor", \
+    "mds_bal_fragment_interval", \
+    "mds_bal_fragment_size_max", \
+    "mds_bal_interval", \
+    "mds_bal_max", \
+    "mds_bal_max_until", \
+    "mds_bal_merge_size", \
+    "mds_bal_mode", \
+    "mds_bal_replicate_threshold", \
+    "mds_bal_sample_interval", \
+    "mds_bal_split_bits", \
+    "mds_bal_split_rd", \
+    "mds_bal_split_size", \
+    "mds_bal_split_wr", \
+    "mds_bal_unreplicate_threshold", \
+    "mds_cache_memory_limit", \
+    "mds_cache_mid", \
+    "mds_cache_quiesce_decay_rate", \
+    "mds_cache_quiesce_sleep", \
+    "mds_cache_quiesce_threshold", \
+    "mds_cache_reservation", \
+    "mds_cache_trim_decay_rate", \
+    "mds_cap_acquisition_throttle_retry_request_time", \
+    "mds_cap_revoke_eviction_timeout", \
+    "mds_debug_subtrees", \
+    "mds_dir_max_entries", \
+    "mds_dump_cache_threshold_file", \
+    "mds_dump_cache_threshold_formatter", \
+    "mds_enable_op_tracker", \
+    "mds_export_ephemeral_distributed", \
+    "mds_export_ephemeral_random", \
+    "mds_export_ephemeral_random_max", \
+    "mds_extraordinary_events_dump_interval", \
+    "mds_forward_all_requests_to_auth", \
+    "mds_health_cache_threshold", \
+    "mds_heartbeat_grace", \
+    "mds_heartbeat_reset_grace", \
+    "mds_inject_journal_corrupt_dentry_first", \
+    "mds_inject_migrator_session_race", \
+    "mds_inject_rename_corrupt_dentry_first", \
+    "mds_kill_dirfrag_at", \
+    "mds_kill_shutdown_at", \
+    "mds_log_event_large_threshold", \
+    "mds_log_events_per_segment", \
+    "mds_log_major_segment_event_ratio", \
+    "mds_log_max_events", \
+    "mds_log_max_segments", \
+    "mds_log_pause", \
+    "mds_log_skip_corrupt_events", \
+    "mds_log_skip_unbounded_events", \
+    "mds_log_trim_decay_rate", \
+    "mds_log_trim_threshold", \
+    "mds_max_caps_per_client", \
+    "mds_max_export_size", \
+    "mds_max_purge_files", \
+    "mds_max_purge_ops", \
+    "mds_max_purge_ops_per_pg", \
+    "mds_max_snaps_per_dir", \
+    "mds_op_complaint_time", \
+    "mds_op_history_duration", \
+    "mds_op_history_size", \
+    "mds_op_log_threshold", \
+    "mds_recall_max_decay_rate", \
+    "mds_recall_warning_decay_rate", \
+    "mds_request_load_average_decay_rate", \
+    "mds_server_dispatch_client_request_delay", \
+    "mds_server_dispatch_killpoint_random", \
+    "mds_session_cache_liveness_decay_rate", \
+    "mds_session_cap_acquisition_decay_rate", \
+    "mds_session_cap_acquisition_throttle", \
+    "mds_session_max_caps_throttle_ratio", \
+    "mds_session_metadata_threshold", \
+    "mds_symlink_recovery"
+
+  constexpr bool is_sorted = [] () constexpr {
+    constexpr auto arr = std::to_array<std::string_view>({KEYS});
+    for (unsigned long i = 0; i < arr.size()-1; ++i) {
+      if (arr[i] > arr[i+1]) {
+        return false;
+      }
+    }
+    return true;
+  }();
+  static_assert(is_sorted, "keys are not sorted!");
+
+  static char const* keys[] = {KEYS, nullptr};
+  return keys;
 }
 
 void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed)
