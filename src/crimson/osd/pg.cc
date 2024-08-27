@@ -513,6 +513,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 
 Context *PG::on_clean()
 {
+  recovery_handler->on_pg_clean();
   scrubber.on_primary_active_clean();
   return nullptr;
 }
