@@ -423,6 +423,10 @@ public:
     SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
 	      t, T::TYPE, offset, length);
     auto f = [&t, this](CachedExtent &ext) {
+      // FIXME: assert(ext.is_stable_clean());
+      assert(ext.is_stable());
+      assert(T::TYPE == ext.get_type());
+
       t.add_to_read_set(CachedExtentRef(&ext));
       const auto t_src = t.get_src();
       touch_extent(ext, &t_src);
@@ -762,6 +766,9 @@ private:
     SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
 	      t, type, offset, length, laddr);
     auto f = [&t, this](CachedExtent &ext) {
+      // FIXME: assert(ext.is_stable_clean());
+      assert(ext.is_stable());
+
       t.add_to_read_set(CachedExtentRef(&ext));
       const auto t_src = t.get_src();
       touch_extent(ext, &t_src);
@@ -1791,6 +1798,7 @@ private:
           !is_retired_placeholder_type(iter->get_type())) {
         ++p_counters->hit;
       }
+      assert(iter->is_stable());
       return CachedExtentRef(&*iter);
     } else {
       return CachedExtentRef();

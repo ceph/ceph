@@ -786,7 +786,7 @@ protected:
 
   struct retired_placeholder_t{};
   CachedExtent(retired_placeholder_t, extent_len_t _length)
-    : state(extent_state_t::INVALID),
+    : state(extent_state_t::CLEAN),
       length(_length) {
     assert(length > 0);
   }
