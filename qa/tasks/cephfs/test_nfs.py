@@ -59,8 +59,9 @@ class TestNFS(MgrTestCase):
          ],
          "fsal": {
            "name": "CEPH",
-           "user_id": "nfs.test.1",
+           "user_id": "nfs.test.nfs-cephfs.3746f603",
            "fs_name": self.fs_name,
+           "cmount_path": "/",
          },
          "clients": []
         }
@@ -118,7 +119,7 @@ class TestNFS(MgrTestCase):
                     return
         self.fail(fail_msg)
 
-    def _check_auth_ls(self, export_id=1, check_in=False):
+    def _check_auth_ls(self, fs_name, check_in=False):
         '''
         Tests export user id creation or deletion.
         :param export_id: Denotes export number
@@ -127,9 +128,9 @@ class TestNFS(MgrTestCase):
         output = self._cmd('auth', 'ls')
         client_id = f'client.nfs.{self.cluster_id}'
         if check_in:
-            self.assertIn(f'{client_id}.{export_id}', output)
+            self.assertIn(f'{client_id}.{fs_name}', output)
         else:
-            self.assertNotIn(f'{client_id}.{export_id}', output)
+            self.assertNotIn(f'{client_id}.{fs_name}', output)
 
     def _test_idempotency(self, cmd_func, cmd_args):
         '''
@@ -216,7 +217,7 @@ class TestNFS(MgrTestCase):
         # Runs the nfs export create command
         self._cmd(*export_cmd)
         # Check if user id for export is created
-        self._check_auth_ls(export_id, check_in=True)
+        self._check_auth_ls(self.fs_name, check_in=True)
         res = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'get',
                              f'export-{export_id}', '-'])
         # Check if export object is created
@@ -235,7 +236,7 @@ class TestNFS(MgrTestCase):
         Delete an export.
         '''
         self._nfs_cmd('export', 'rm', self.cluster_id, self.pseudo_path)
-        self._check_auth_ls()
+        self._check_auth_ls(self.fs_name)
 
     def _test_list_export(self):
         '''
@@ -256,19 +257,19 @@ class TestNFS(MgrTestCase):
         self.sample_export['export_id'] = 2
         self.sample_export['pseudo'] = self.pseudo_path + '1'
         self.sample_export['access_type'] = 'RO'
-        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.2'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.{self.fs_name}.3746f603'
         self.assertDictEqual(self.sample_export, nfs_output[1])
         # Export-3 for subvolume with r only
         self.sample_export['export_id'] = 3
         self.sample_export['path'] = sub_vol_path
         self.sample_export['pseudo'] = self.pseudo_path + '2'
-        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.3'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.{self.fs_name}.3746f603'
         self.assertDictEqual(self.sample_export, nfs_output[2])
         # Export-4 for subvolume
         self.sample_export['export_id'] = 4
         self.sample_export['pseudo'] = self.pseudo_path + '3'
         self.sample_export['access_type'] = 'RW'
-        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.4'
+        self.sample_export['fsal']['user_id'] = f'{self.expected_name}.{self.fs_name}.3746f603'
         self.assertDictEqual(self.sample_export, nfs_output[3])
 
     def _get_export(self):
@@ -491,7 +492,7 @@ class TestNFS(MgrTestCase):
         self._test_delete_cluster()
         # Check if rados ganesha conf object is deleted
         self._check_export_obj_deleted(conf_obj=True)
-        self._check_auth_ls()
+        self._check_auth_ls(self.fs_name)
 
     def test_exports_on_mgr_restart(self):
         '''
@@ -920,7 +921,7 @@ class TestNFS(MgrTestCase):
                     "protocols": [4],
                     "fsal": {
                         "name": "CEPH",
-                        "user_id": "nfs.test.1",
+                        "user_id": "nfs.test.nfs-cephfs.3746f603",
                         "fs_name": self.fs_name
                     }
                 },
@@ -933,7 +934,7 @@ class TestNFS(MgrTestCase):
                     "protocols": [4],
                     "fsal": {
                         "name": "CEPH",
-                        "user_id": "nfs.test.2",
+                        "user_id": "nfs.test.nfs-cephfs.3746f603",
                         "fs_name": "invalid_fs_name"  # invalid fs
                     }
                 },
@@ -946,7 +947,7 @@ class TestNFS(MgrTestCase):
                     "protocols": [4],
                     "fsal": {
                         "name": "CEPH",
-                        "user_id": "nfs.test.3",
+                        "user_id": "nfs.test.nfs-cephfs.3746f603",
                         "fs_name": self.fs_name
                     }
                 }
@@ -993,7 +994,7 @@ class TestNFS(MgrTestCase):
                 "protocols": [4],
                 "fsal": {
                     "name": "CEPH",
-                    "user_id": "nfs.test.1",
+                    "user_id": "nfs.test.nfs-cephfs.3746f603",
                     "fs_name": "invalid_fs_name"  # invalid fs
                 }
             }
@@ -1033,7 +1034,7 @@ class TestNFS(MgrTestCase):
                     "protocols": [4],
                     "fsal": {
                         "name": "CEPH",
-                        "user_id": "nfs.test.1",
+                        "user_id": "nfs.test.nfs-cephfs.3746f603",
                         "fs_name": self.fs_name
                     }
                 },
@@ -1046,7 +1047,7 @@ class TestNFS(MgrTestCase):
                     "protocols": [4],
                     "fsal": {
                         "name": "CEPH",
-                        "user_id": "nfs.test.2",
+                        "user_id": "nfs.test.nfs-cephfs.3746f603",
                         "fs_name": self.fs_name
                     }
                 },
@@ -1060,7 +1061,7 @@ class TestNFS(MgrTestCase):
                     "protocols": [4],
                     "fsal": {
                         "name": "CEPH",
-                        "user_id": "nfs.test.3",
+                        "user_id": "nfs.test.nfs-cephfs.3746f603",
                         "fs_name": "invalid_fs_name"
                     }
                 }
