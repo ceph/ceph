@@ -70,7 +70,7 @@ public:
 
   ceph::condition_variable *caller_cond = NULL;   // who to take up
   ceph::condition_variable *dispatch_cond = NULL; // who to kick back
-  std::list<Context*> waitfor_safe;
+  std::vector<Context*> waitfor_safe;
 
   InodeRef target;
   UserPerm perms;

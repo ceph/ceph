@@ -47,7 +47,7 @@ struct MetaSession {
   int mds_state = MDSMap::STATE_NULL;
   bool readonly = false;
 
-  std::list<Context*> waiting_for_open;
+  std::vector<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
   // dirty_list keeps all the dirty inodes before flushing in current session.
