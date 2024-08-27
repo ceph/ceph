@@ -1289,7 +1289,7 @@ void PGBackend::clone(
   const ObjectState& d_os,
   ceph::os::Transaction& txn)
 {
-  // See OpsExecutor::execute_clone documentation
+  // See OpsExecuter::execute_clone documentation
   txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
   {
     ceph::bufferlist bv;
