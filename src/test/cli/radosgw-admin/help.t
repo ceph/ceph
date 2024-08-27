@@ -88,6 +88,7 @@
     realm rename                     rename a realm
     realm set                        set realm info (requires infile)
     realm default                    set realm as default
+    realm default rm                 clear the current default realm
     realm pull                       pull a realm and its current period
     zonegroup add                    add a zone to a zonegroup
     zonegroup create                 create a new zone group info
