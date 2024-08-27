@@ -1,0 +1,4 @@
+src/pybind/rados
+src/pybind/cephfs
+src/pybind/rbd
+src/pybind/rgw
