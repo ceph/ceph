@@ -247,6 +247,10 @@ private:
 
 public:
   seastar::future<> send_beacon();
+  seastar::future<double> run_bench(int64_t count,
+    int64_t bsize,
+    int64_t osize,
+    int64_t onum);
 
 private:
   LogClient log_client;
