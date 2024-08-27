@@ -856,8 +856,6 @@ void MDLog::_trim_expired_segments(auto& locker, MDSContext* ctx)
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
   ceph_assert(locker.owns_lock());
 
-  uint64_t const oft_committed_seq = mds->mdcache->open_file_table.get_committed_log_seq();
-
   // trim expired segments?
   bool trimmed = false;
   uint64_t end = 0;
@@ -903,12 +901,6 @@ void MDLog::_trim_expired_segments(auto& locker, MDSContext* ctx)
       break;
     }
 
-    if (!mds_is_shutting_down && ls->seq >= oft_committed_seq) {
-      dout(10) << __func__ << " defer expire for open file table committedseq " << oft_committed_seq
-	       << " <= " << ls->seq << "/" << ls->offset << dendl;
-      break;
-    }
-    
     end = seq;
     dout(10) << __func__ << ": maybe expiring " << *ls << dendl;
   }
