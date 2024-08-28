@@ -5614,14 +5614,8 @@ int list_remote_buckets(const DoutPrefixProvider *dpp,
   }
 
   for (const auto& list_result: peer_status) {
-    auto entries_iter = list_result.entries.begin();
-    for (; entries_iter != list_result.entries.end(); ++entries_iter) {
-      std::string ns;
-      rgw_obj_key obj;
-
-      if (rgw_obj_key::oid_to_key_in_ns(entries_iter->key.name, &obj, ns)) {
-        return -ENOTEMPTY;
-      }
+    if (!list_result.entries.empty()) {
+      return -ENOTEMPTY;
     }
   }
   return 0;
