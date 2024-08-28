@@ -549,6 +549,11 @@ COMMAND("mon enable_stretch_mode " \
 	"as the tiebreaker and setting <dividing_bucket> locations "
 	"as the units for stretching across",
 	"mon", "rw")
+COMMAND("mon disable_stretch_mode " \
+	"name=crush_rule,type=CephString,req=false, "
+	"name=yes_i_really_mean_it,type=CephBool,req=false, ",
+	"disable stretch mode, reverting to normal peering rules",
+	"mon", "rw")
 COMMAND("mon set_new_tiebreaker " \
 	"name=name,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
