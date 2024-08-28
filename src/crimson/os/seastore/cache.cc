@@ -204,25 +204,25 @@ void Cache::register_metrics()
   /*
    * cache_query: cache_access and cache_hit
    */
-  for (auto& [src, src_label] : labels_by_src) {
-    metrics.add_group(
-      "cache",
-      {
-        sm::make_counter(
-          "cache_access",
-          get_by_src(stats.cache_query_by_src, src).access,
-          sm::description("total number of cache accesses"),
-          {src_label}
-        ),
-        sm::make_counter(
-          "cache_hit",
-          get_by_src(stats.cache_query_by_src, src).hit,
-          sm::description("total number of cache hits"),
-          {src_label}
-        ),
-      }
-    );
-  }
+  metrics.add_group(
+    "cache",
+    {
+      sm::make_counter(
+        "cache_access",
+        [this] {
+          return stats.access.get_cache_access();
+        },
+        sm::description("total number of cache accesses")
+      ),
+      sm::make_counter(
+        "cache_hit",
+        [this] {
+          return stats.access.s.get_cache_hit();
+        },
+        sm::description("total number of cache hits")
+      ),
+    }
+  );
 
   {
     /*

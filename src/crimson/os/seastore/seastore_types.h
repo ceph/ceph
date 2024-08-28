@@ -2868,6 +2868,38 @@ struct dirty_io_stats_printer_t {
 };
 std::ostream& operator<<(std::ostream&, const dirty_io_stats_printer_t&);
 
+/*
+ * Doesn't account:
+ *   replay
+ *   rewrite
+ *   retiring/placeholder
+ *   get_caching_extent() -- test only
+ *   get_caching_extent_by_type() -- test only
+ */
+struct extent_access_stats_t {
+  uint64_t trans_pending = 0;
+  uint64_t trans_dirty = 0;
+  uint64_t trans_lru = 0;
+  uint64_t cache_dirty = 0;
+  uint64_t cache_lru = 0;
+
+  uint64_t load_absent = 0;
+  uint64_t load_present = 0;
+
+  uint64_t get_cache_hit() const {
+    return cache_dirty + cache_lru;
+  }
+};
+
+struct cache_access_stats_t {
+  extent_access_stats_t s;
+  uint64_t cache_absent = 0;
+
+  uint64_t get_cache_access() const {
+    return s.get_cache_hit() + cache_absent;
+  }
+};
+
 struct cache_stats_t {
   cache_size_stats_t lru_sizes;
   cache_io_stats_t lru_io;

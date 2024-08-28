@@ -272,6 +272,11 @@ public:
     return t.root;
   }
 
+  void account_absent_access(Transaction::src_t src) {
+    ++(get_by_src(stats.cache_absent_by_src, src));
+    ++stats.access.cache_absent;
+  }
+
   /**
    * get_extent_if_cached
    *
@@ -287,12 +292,29 @@ public:
     CachedExtentRef ret;
     LOG_PREFIX(Cache::get_extent_if_cached);
     auto result = t.get_extent(offset, &ret);
+    const auto t_src = t.get_src();
+    extent_access_stats_t& access_stats = get_by_ext(
+      get_by_src(stats.access_by_src_ext, t_src),
+      type);
     if (result == Transaction::get_extent_ret::RETIRED) {
       SUBDEBUGT(seastore_cache, "{} {} is retired on t -- {}",
                 t, type, offset, *ret);
       return get_extent_if_cached_iertr::make_ready_future<
         CachedExtentRef>(ret);
     } else if (result == Transaction::get_extent_ret::PRESENT) {
+      if (ret->is_stable()) {
+        if (ret->is_dirty()) {
+          ++access_stats.trans_dirty;
+          ++stats.access.s.trans_dirty;
+        } else {
+          ++access_stats.trans_lru;
+          ++stats.access.s.trans_lru;
+        }
+      } else {
+        ++access_stats.trans_pending;
+        ++stats.access.s.trans_pending;
+      }
+
       if (ret->is_fully_loaded()) {
         SUBTRACET(seastore_cache, "{} {} is present on t -- {}",
                   t, type, offset, *ret);
@@ -313,13 +335,26 @@ public:
     ret = query_cache(offset, &metric_key);
     if (!ret) {
       SUBDEBUGT(seastore_cache, "{} {} is absent", t, type, offset);
+      account_absent_access(t_src);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
     } else if (is_retired_placeholder_type(ret->get_type())) {
       // retired_placeholder is not really cached yet
       SUBDEBUGT(seastore_cache, "{} {} is absent(placeholder)",
                 t, type, offset);
+      account_absent_access(t_src);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
-    } else if (!ret->is_fully_loaded()) {
+    }
+
+    if (ret->is_dirty()) {
+      ++access_stats.cache_dirty;
+      ++stats.access.s.cache_dirty;
+    } else {
+      ++access_stats.cache_lru;
+      ++stats.access.s.cache_lru;
+    }
+
+    if (!ret->is_fully_loaded()) {
+      // ignore non-full extent
       SUBDEBUGT(seastore_cache, "{} {} is present without "
                 "being fully loaded", t, type, offset);
       return get_extent_if_cached_iertr::make_ready_future<CachedExtentRef>();
@@ -329,7 +364,6 @@ public:
     SUBDEBUGT(seastore_cache, "{} {} is present in cache -- {}",
               t, type, offset, *ret);
     t.add_to_read_set(ret);
-    const auto t_src = t.get_src();
     touch_extent(*ret, &t_src);
     return ret->wait_io().then([ret] {
       return get_extent_if_cached_iertr::make_ready_future<
@@ -349,6 +383,8 @@ public:
    *
    * Note, the current implementation leverages parent-child
    * pointers in LBA instead, so it should only be called in tests.
+   *
+   * This path won't be accounted by the cache_access_stats_t.
    */
   using get_extent_iertr = base_iertr;
   template <typename T>
@@ -426,9 +462,14 @@ public:
       // FIXME: assert(ext.is_stable_clean());
       assert(ext.is_stable());
       assert(T::TYPE == ext.get_type());
+      const auto t_src = t.get_src();
+      extent_access_stats_t& access_stats = get_by_ext(
+        get_by_src(stats.access_by_src_ext, t_src),
+        T::TYPE);
+      ++access_stats.load_absent;
+      ++stats.access.s.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
-      const auto t_src = t.get_src();
       touch_extent(ext, &t_src);
     };
     auto metric_key = std::make_pair(t.get_src(), T::TYPE);
@@ -484,6 +525,13 @@ public:
     CachedExtentRef extent)
   {
     assert(extent->is_valid());
+
+    const auto t_src = t.get_src();
+    auto ext_type = extent->get_type();
+    extent_access_stats_t& access_stats = get_by_ext(
+      get_by_src(stats.access_by_src_ext, t_src),
+      ext_type);
+
     CachedExtent* p_extent;
     if (extent->is_stable()) {
       p_extent = extent->get_transactional_view(t);
@@ -491,6 +539,8 @@ public:
         assert(!extent->is_stable_writting());
         assert(p_extent->is_pending_in_trans(t.get_trans_id()));
         assert(!p_extent->is_stable_writting());
+        ++access_stats.trans_pending;
+        ++stats.access.s.trans_pending;
         if (p_extent->is_mutable()) {
           assert(p_extent->is_fully_loaded());
           assert(!p_extent->is_pending_io());
@@ -503,13 +553,29 @@ public:
         // stable from trans-view
         assert(!p_extent->is_pending_in_trans(t.get_trans_id()));
         if (t.maybe_add_to_read_set(p_extent)) {
-          const auto t_src = t.get_src();
+          if (p_extent->is_dirty()) {
+            ++access_stats.cache_dirty;
+            ++stats.access.s.cache_dirty;
+          } else {
+            ++access_stats.cache_lru;
+            ++stats.access.s.cache_lru;
+          }
           touch_extent(*p_extent, &t_src);
+        } else {
+          if (p_extent->is_dirty()) {
+            ++access_stats.trans_dirty;
+            ++stats.access.s.trans_dirty;
+          } else {
+            ++access_stats.trans_lru;
+            ++stats.access.s.trans_lru;
+          }
         }
       }
     } else {
       assert(!extent->is_stable_writting());
       assert(extent->is_pending_in_trans(t.get_trans_id()));
+      ++access_stats.trans_pending;
+      ++stats.access.s.trans_pending;
       if (extent->is_mutable()) {
         assert(extent->is_fully_loaded());
         assert(!extent->is_pending_io());
@@ -524,6 +590,8 @@ public:
     ceph_assert(!is_retired_placeholder_type(p_extent->get_type()));
     if (!p_extent->is_fully_loaded()) {
       assert(!p_extent->is_mutable());
+      ++access_stats.load_present;
+      ++stats.access.s.load_present;
       LOG_PREFIX(Cache::get_extent_viewable_by_trans);
       SUBDEBUG(seastore_cache,
         "{} {}~{} is present without been fully loaded, reading ... -- {}",
@@ -693,6 +761,14 @@ private:
     extent_init_func_t &&on_cache
   );
 
+  /**
+   * get_caching_extent_by_type
+   *
+   * Note, the current implementation leverages parent-child
+   * pointers in LBA instead, so it should only be called in tests.
+   *
+   * This path won't be accounted by the cache_access_stats_t.
+   */
   using get_extent_by_type_iertr = get_extent_iertr;
   using get_extent_by_type_ret = get_extent_by_type_iertr::future<
     CachedExtentRef>;
@@ -768,9 +844,14 @@ private:
     auto f = [&t, this](CachedExtent &ext) {
       // FIXME: assert(ext.is_stable_clean());
       assert(ext.is_stable());
+      const auto t_src = t.get_src();
+      extent_access_stats_t& access_stats = get_by_ext(
+        get_by_src(stats.access_by_src_ext, t_src),
+        ext.get_type());
+      ++access_stats.load_absent;
+      ++stats.access.s.load_absent;
 
       t.add_to_read_set(CachedExtentRef(&ext));
-      const auto t_src = t.get_src();
       touch_extent(ext, &t_src);
     };
     auto src = t.get_src();
@@ -1613,6 +1694,11 @@ private:
     dirty_io_stats_t dirty_io;
     counter_by_src_t<counter_by_extent_t<dirty_io_stats_t> >
       dirty_io_by_src_ext;
+
+    cache_access_stats_t access;
+    counter_by_src_t<uint64_t> cache_absent_by_src;
+    counter_by_src_t<counter_by_extent_t<extent_access_stats_t> >
+      access_by_src_ext;
 
     uint64_t onode_tree_depth = 0;
     int64_t onode_tree_extents_num = 0;
