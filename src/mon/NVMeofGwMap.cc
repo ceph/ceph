@@ -430,6 +430,61 @@ void  NVMeofGwMap::find_failover_candidate(
   }
 }
 
+void  NVMeofGwMap::handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
+     const NvmeGroupKey& group_key, bool &map_modified)
+{
+  for (auto& state_itr: created_gws[group_key][gw_id].sm_state ) {
+    fsm_handle_gw_fast_reboot(gw_id,group_key, state_itr.first, map_modified);
+  }
+}
+
+void NVMeofGwMap::fsm_handle_gw_fast_reboot(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key, NvmeAnaGrpId grpid, bool &map_modified)
+{
+  // GW that appears in the internal map as Available, performed reboot,
+  // need to re-apply this GW: to load proper states for all active ANA groups
+  auto& gw_state = created_gws[group_key][gw_id];
+  map_modified = true;
+  gw_states_per_group_t  state = gw_state.sm_state[grpid];
+  dout(10) << "GW " << gw_id  << " ANA groupId: " << grpid << " state "
+        << state << dendl;
+  switch (state){
+  case gw_states_per_group_t::GW_IDLE_STATE:
+  case gw_states_per_group_t::GW_STANDBY_STATE:
+  case gw_states_per_group_t::GW_ACTIVE_STATE:
+    break;
+
+  case gw_states_per_group_t::GW_WAIT_FAILBACK_PREPARED:
+  {
+    //restart timeout
+    start_timer(gw_id, group_key, grpid, 3);
+  }
+  break;
+
+  case gw_states_per_group_t::GW_OWNER_WAIT_FAILBACK_PREPARED:
+  {
+    // since owner was reseted for this group, wait for the background process
+    // to choose it again
+    gw_state.standby_state(grpid);
+  }
+  break;
+
+  case gw_states_per_group_t::GW_WAIT_BLOCKLIST_CMPL:
+  {
+    //restart timer
+    // The blocklist was started, need to wait for the epoch in the GW
+    start_timer(gw_id, group_key, grpid, 30);
+  }
+  break;
+
+  default:
+  {
+    dout(4) << "Warning: GW " << gw_id  << " Invalid state " << state << dendl;
+  }
+  }
+  validate_gw_map(group_key);
+}
+
 void NVMeofGwMap::fsm_handle_gw_alive(
   const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
   NvmeGwMonState & gw_state, gw_states_per_group_t state,
