@@ -165,7 +165,8 @@ class MonMap {
   std::set<std::string> disallowed_leaders; // can't be leader under CONNECTIVITY/DISALLOW
   bool stretch_mode_enabled = false;
   std::string tiebreaker_mon;
-  std::set<std::string> stretch_marked_down_mons; // can't be leader until fully recovered
+  std::set<std::string> stretch_marked_down_mons; // can't be leader or taken proposal in CONNECTIVITY 
+                                                  // seriously until fully recovered
 
 public:
   void calc_legacy_ranks();
