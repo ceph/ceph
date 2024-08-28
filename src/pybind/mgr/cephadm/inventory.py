@@ -26,11 +26,7 @@ from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
 from .utils import resolve_ip, SpecialHostLabels
-from .migrations import (
-    queue_migrate_nfs_spec,
-    queue_migrate_rgw_spec,
-    queue_migrate_nvmeof_spec,
-)
+from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -289,12 +285,6 @@ class SpecStore():
                         and j['spec'].get('service_type') == 'rgw'
                 ):
                     queue_migrate_rgw_spec(self.mgr, j)
-
-                if (
-                        (self.mgr.migration_current or 0) < 8
-                        and j['spec'].get('service_type') == 'nvmeof'
-                ):
-                    queue_migrate_nvmeof_spec(self.mgr, j)
 
                 spec = ServiceSpec.from_json(j['spec'])
                 created = str_to_datetime(cast(str, j['created']))
