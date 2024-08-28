@@ -52,7 +52,7 @@ void cb(librados::completion_t, void* arg) {
 
 template <typename Op>
 Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, jspan_context* trace_ctx = nullptr) {
-  return [ctx = std::move(ctx), op = std::move(op), trace_ctx] (Aio* aio, AioResult& r) mutable {
+  return [ctx = std::move(ctx), op = std::forward<Op>(op), trace_ctx] (Aio* aio, AioResult& r) mutable {
       constexpr bool read = std::is_same_v<std::decay_t<Op>, librados::ObjectReadOperation>;
       // use placement new to construct the rados state inside of user_data
       auto s = new (&r.user_data) state(aio, ctx, r);
@@ -92,7 +92,7 @@ template <typename Op>
 Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
                          boost::asio::yield_context yield,
                          jspan_context* trace_ctx) {
-  return [ctx = std::move(ctx), op = std::move(op), yield, trace_ctx] (Aio* aio, AioResult& r) mutable {
+  return [ctx = std::move(ctx), op = std::forward<Op>(op), yield, trace_ctx] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       auto ex = yield.get_executor();
