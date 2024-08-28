@@ -133,6 +133,8 @@ public:
   void kick_submitter();
   void shutdown();
 
+  void finish_head_waiters();
+
   void submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
     std::lock_guard l(submit_mutex);
     _submit_entry(e, c);
@@ -320,5 +322,7 @@ private:
   // guarded by mds_lock
   std::condition_variable_any cond;
   std::atomic<bool> upkeep_log_trim_shutdown{false};
+
+  std::map<uint64_t, std::vector<Context*>> waiting_for_expire; // protected by mds_lock
 };
 #endif
