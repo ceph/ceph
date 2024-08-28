@@ -85,6 +85,10 @@ static ceph::spinlock debug_lock;
     return buffer_missed_crc;
   }
 
+  void buffer::throw_end_of_buffer() {
+    throw end_of_buffer();
+  }
+
   /*
    * raw_combined is always placed within a single allocation along
    * with the data buffer.  the data goes at the beginning, and
@@ -619,22 +623,6 @@ static ceph::spinlock debug_lock;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(c_str()+o, 0, l);
   }
-
-  template<class PtrT, bool is_const>
-  buffer::ptr::iterator_impl<PtrT, is_const>&
-  buffer::ptr::iterator_impl<PtrT, is_const>::operator +=(size_t len) {
-    pos += len;
-    if (pos > end_ptr)
-      throw end_of_buffer();
-    return *this;
-  }
-
-  template buffer::ptr::iterator_impl<buffer::ptr_ro, false>&
-  buffer::ptr::iterator_impl<buffer::ptr_ro, false>::operator +=(size_t len);
-  template buffer::ptr::iterator_impl<buffer::ptr, false>&
-  buffer::ptr::iterator_impl<buffer::ptr, false>::operator +=(size_t len);
-  template buffer::ptr::iterator_impl<buffer::ptr, true>&
-  buffer::ptr::iterator_impl<buffer::ptr, true>::operator +=(size_t len);
 
   // -- buffer::list::iterator --
   /*
