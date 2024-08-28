@@ -745,7 +745,7 @@ struct error_code;
       // deprecated, use copy_deep()
       void copy(unsigned len, ptr &dest) __attribute__((deprecated));
       ptr copy_deep(unsigned len);
-      void copy_shallow(unsigned len, ptr &dest);
+      ptr copy_shallow(unsigned len);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       template<typename A>

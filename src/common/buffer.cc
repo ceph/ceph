@@ -749,21 +749,22 @@ static ceph::spinlock debug_lock;
     return dest;
   }
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::copy_shallow(unsigned len,
-							   ptr &dest)
+  buffer::ptr buffer::list::iterator_impl<is_const>::copy_shallow(unsigned len)
   {
     if (!len) {
-      return;
+      return ptr{};
     }
     if (p == ls->end())
       throw end_of_buffer();
     unsigned howmuch = p->length() - p_off;
     if (howmuch < len) {
-      dest = create(len);
+      ptr dest{create(len)};
       copy(len, dest.c_str());
+      return dest;
     } else {
-      dest = ptr(*p, p_off, len);
+      ptr dest(*p, p_off, len);
       *this += len;
+      return dest;
     }
   }
 
