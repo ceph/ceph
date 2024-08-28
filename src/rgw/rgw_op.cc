@@ -6057,6 +6057,7 @@ class RGWCOE_make_filter_pipeline : public rgw::sal::ObjectFilter {
   std::unique_ptr<RGWGetObj_Filter> cb;
   std::map<std::string, ceph::buffer::list> src_attrs;
   std::map<std::string, ceph::buffer::list> enc_attrs;
+  bufferlist requested_sc;
   bool skip_decrypt;
   DoutPrefixProvider *dpp;
   boost::optional<RGWGetObj_Decompress> decompress;
@@ -6225,6 +6226,10 @@ ldpp_dout(dpp, 0) << "TEMP: end_x=" << end_x << " obj_size=" << obj_size << dend
     // we need it to be just the requested settings
     clear_encryption_attrs(attrs);
     merge_attrs(enc_attrs, attrs);	// request & bucket encryption defaults
+    attrs.erase(RGW_ATTR_STORAGE_CLASS);	// do not inherit from source
+    if (requested_sc.length() > 0) {
+      attrs[RGW_ATTR_STORAGE_CLASS] = std::move(requested_sc);
+    }
     attrs.erase(RGW_ATTR_COMPRESSION);	// only true source: zone data
     op_ret = get_encrypt_filter(&encrypt, filter);
     if (op_ret < 0) {
@@ -6258,6 +6263,10 @@ ldpp_dout(dpp, 0) << "TEMP: end_x=" << end_x << " obj_size=" << obj_size << dend
   void set_src_attrs(std::map<std::string, ceph::buffer::list> &_src) override {
     src_attrs = filter_encryption_compression_attrs(_src, true);
     enc_attrs = filter_encryption_compression_attrs(attrs, false);
+    auto iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
+    if (iter != attrs.end()) {
+      requested_sc.append(iter->second);
+    }
   };
   bool need_copy_data() override {
     return rgw_need_copy_data( src_attrs, s );
