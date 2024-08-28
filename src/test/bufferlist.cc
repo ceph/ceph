@@ -1072,9 +1072,8 @@ TEST(BufferListIterator, copy) {
   // void buffer::list::iterator::copy_shallow(unsigned len, ptr &dest)
   //
   {
-    bufferptr ptr;
     bufferlist::iterator i(&bl);
-    i.copy_shallow(2, ptr);
+    bufferptr ptr = i.copy_shallow(2);
     EXPECT_EQ((unsigned)2, ptr.length());
     EXPECT_EQ('A', ptr[0]);
     EXPECT_EQ('B', ptr[1]);
