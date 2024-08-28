@@ -1704,9 +1704,8 @@ inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
     // ceph::buffer::list.  we don't really know how much we'll need here,
     // unfortunately.  hopefully it is already contiguous and we're just
     // bumping the raw ref and initializing the ptr tmp fields.
-    ceph::buffer::ptr tmp;
     auto t = p;
-    t.copy_shallow(remaining, tmp);
+    ceph::buffer::ptr tmp = t.copy_shallow(remaining);
     auto cp = std::cbegin(tmp);
     traits::decode(o, cp);
     p += cp.get_offset();
@@ -1725,9 +1724,8 @@ inline std::enable_if_t<traits::supported && traits::need_contiguous> decode(
   // ceph::buffer::list.  we don't really know how much we'll need here,
   // unfortunately.  hopefully it is already contiguous and we're just
   // bumping the raw ref and initializing the ptr tmp fields.
-  ceph::buffer::ptr tmp;
   auto t = p;
-  t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+  ceph::buffer::ptr tmp = t.copy_shallow(p.get_bl().length() - p.get_off());
   auto cp = std::cbegin(tmp);
   traits::decode(o, cp);
   p += cp.get_offset();
@@ -1763,9 +1761,9 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
       size_t element_size = 0;
       typename T::value_type v;
       denc_traits<typename T::value_type>::bound_encode(v, element_size);
-      t.copy_shallow(num * element_size, tmp);
+      tmp = t.copy_shallow(num * element_size);
     } else {
-      t.copy_shallow(p.get_bl().length() - p.get_off(), tmp);
+      tmp = t.copy_shallow(p.get_bl().length() - p.get_off());
     }
     auto cp = std::cbegin(tmp);
     traits::decode_nohead(num, o, cp);
