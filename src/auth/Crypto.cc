@@ -505,8 +505,7 @@ void CryptoKey::decode(bufferlist::const_iterator& bl)
   decode(created, bl);
   __u16 len;
   decode(len, bl);
-  bufferptr tmp;
-  bl.copy_deep(len, tmp);
+  bufferptr tmp = bl.copy_deep(len);
   if (_set_secret(type, tmp) < 0)
     throw ceph::buffer::malformed_input("malformed secret");
 }

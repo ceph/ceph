@@ -6784,9 +6784,9 @@ int Server::xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_pt
 void Server::xattr_set(InodeStoreBase::xattr_map_ptr xattrs, const std::string &xattr_name,
                        const bufferlist &xattr_value) {
   size_t len = xattr_value.length();
-  bufferptr b = buffer::create(len);
+  bufferptr b;
   if (len) {
-    xattr_value.begin().copy(len, b.c_str());
+    b = xattr_value.begin().copy_deep(len);
   }
   auto em = xattrs->emplace(std::piecewise_construct,
                             std::forward_as_tuple(mempool::mds_co::string(xattr_name)),

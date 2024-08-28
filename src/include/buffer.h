@@ -744,7 +744,7 @@ struct error_code;
       void copy(unsigned len, char *dest);
       // deprecated, use copy_deep()
       void copy(unsigned len, ptr &dest) __attribute__((deprecated));
-      void copy_deep(unsigned len, ptr &dest);
+      ptr copy_deep(unsigned len);
       void copy_shallow(unsigned len, ptr &dest);
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
