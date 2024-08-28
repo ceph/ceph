@@ -943,6 +943,17 @@ void handle_replication_status_header(
 /*
  * GET on CloudTiered objects either it will synced to other zones.
  * In all other cases, it will try to fetch the object from remote cloud endpoint.
+ *
+ * @return:
+ * Note - return status may differ based on whether it is RESTORE op or
+ *        READTHROUGH/GET op.
+ *        for e.g, ERR_INVALID_OBJECT_STATE is sent for non cloud-transitioned
+ *        incase of restore op and ERR_REQUEST_TIMEOUT is applicable only for
+ *        read-through etc.
+ *  `<0` :  failed to process; s->err.message & op_ret set accrodingly
+ *  `0`  :  restore request initiated
+ *  `1`  :  restore is already in progress
+ *  `2`  :  already restored
  */
 int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                          rgw::sal::Attrs& attrs, bool sync_cloudtiered, std::optional<uint64_t> days,
@@ -1051,12 +1062,17 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
         s->err.message = "restore is still in progress";
       }
       return op_ret;
-    } else if ((!restore_op) && (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress)) {
-      op_ret = -ERR_REQUEST_TIMEOUT;
-      ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
-      s->err.message = "restore is still in progress";
-    } else { // CloudRestored..return success
-      return 0;
+    } else if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
+        if (!restore_op) {
+          op_ret = -ERR_REQUEST_TIMEOUT;
+          ldpp_dout(dpp, 5) << "restore is still in progress, please check restore status and retry" << dendl;
+          s->err.message = "restore is still in progress";
+          return op_ret;
+        } else { 
+          return 1; // for restore-op, corresponds to RESTORE_ALREADY_IN_PROGRESS
+        } 
+    } else {
+      return 2; // corresponds to CLOUD_RESTORED
     }
   } catch (const buffer::end_of_buffer&) {
     //empty manifest; it's not cloud-tiered
@@ -5282,33 +5298,14 @@ void RGWRestoreObj::execute(optional_yield y)
   int op_ret = s->object->get_obj_attrs(y, this);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to fetch get_obj_attrs op ret = " << op_ret << dendl;
+    restore_ret = op_ret;
     return;
   }
-  rgw::sal::Attrs attrs = s->object->get_attrs();
-  auto attr_iter = attrs.find(RGW_ATTR_MANIFEST);
-  if (attr_iter != attrs.end()) {
-    RGWObjManifest m;
-    decode(m, attr_iter->second);
-    RGWObjTier tier_config;
-    m.get_tier_config(&tier_config);
-    if (m.get_tier_type() == "cloud-s3") {
-      ldpp_dout(this, 20) << "execute: expiry days" << expiry_days <<dendl;
-      op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, true, y);
-      if (op_ret < 0) {
-        ldpp_dout(this, 4) << "Cannot get cloud tiered object: " << *s->object
-        <<". Failing with " << op_ret << dendl;
-        if (op_ret == -ERR_INVALID_OBJECT_STATE) {
-          s->err.message = "This object was transitioned to cloud-s3";
-        }
-      }
-    } else {
-      ldpp_dout(this, 20) << "not cloud tier object erroring" << dendl;
-      op_ret = -ERR_INVALID_OBJECT_STATE;
-    }
-  } else {
-    ldpp_dout(this, 20) << " manifest not found" << dendl;
-  }
-  ldpp_dout(this, 20) << "completed restore" << dendl;
+  rgw::sal::Attrs attrs;
+  attrs = s->object->get_attrs();
+  op_ret = handle_cloudtier_obj(s, this, driver, attrs, false, expiry_days, true, y);
+  restore_ret = op_ret;
+  ldpp_dout(this, 20) << "Restore completed of object: " << *s->object << "with op ret: " << restore_ret <<dendl;
 
   return;
 } 

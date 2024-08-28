@@ -5247,13 +5247,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 
   ceph::real_time restore_time = real_clock::now();
   {
-    char buf[32];
-    utime_t ut(restore_time);
-    snprintf(buf, sizeof(buf), "%lld.%09lld",
-          (long long)ut.sec(),
-          (long long)ut.nsec());
     bufferlist bl;
-    bl.append(buf, 32);
     encode(restore_time, bl);
     attrs[RGW_ATTR_RESTORE_TIME] = std::move(bl);
   }
@@ -5273,13 +5267,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     delete_at = expiration_date;
 
     {
-      char buf[32];
-      utime_t ut(expiration_date);
-      snprintf(buf, sizeof(buf), "%lld.%09lld",
-            (long long)ut.sec(),
-            (long long)ut.nsec());
       bufferlist bl;
-      bl.append(buf, 32);
       encode(expiration_date, bl);
       attrs[RGW_ATTR_RESTORE_EXPIRY_DATE] = std::move(bl);
     }
