@@ -845,6 +845,20 @@ public:
 			       const std::set<pg_pool_t*>& pools,
 			       const std::string& new_crush_rule);
   /**
+  *
+  * Set all stretch mode values of all pools back to pre-stretch mode values.
+  * Set all stretch mode values of OSDMap back to pre-stretch mode values.
+  * If crush_rule is not empty, set the crush rule to that value, else use
+  * the default replicated crush rule.
+  * @param ss: a stringstream to write errors into
+  * @param errcode: filled with -errno if there's a problem
+  * @param crush_rule: the crush rule that will used after disabling stretch mode
+  */
+  void try_disable_stretch_mode(std::stringstream& ss,
+          bool *okay,
+          int *errcode,
+          const std::string& crush_rule);
+  /**
    * Check the input dead_buckets mapping (buckets->dead monitors) to see
    * if the OSDs are also down. If so, fill in really_down_buckets and
    * really_down_mons and return true; else return false.
