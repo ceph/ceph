@@ -83,6 +83,12 @@ int NVMeofGwMap::cfg_add_gw(
       return -EEXIST ;
     }
   }
+  if (allocated.size() == MAX_SUPPORTED_ANA_GROUPS) {
+    dout(4) << "Warning:  cannot add GW " << gw_id
+         << " since number GWs in the group is "
+         <<  MAX_SUPPORTED_ANA_GROUPS << dendl;
+    return -EINVAL;
+  }
   // Allocate the new group id
   NvmeAnaGrpId i = 0;
   bool was_allocated = false;

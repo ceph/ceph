@@ -52,7 +52,7 @@ void test_NVMeofGwMap() {
   dout(0) << pending_map << dendl;
 
   ceph::buffer::list bl;
-  pending_map.encode(bl);
+  pending_map.encode(bl, CEPH_FEATURES_ALL);
   auto p = bl.cbegin();
   pending_map.decode(p);
   dout(0) << " == Dump map after Decode: == " <<dendl;
@@ -78,7 +78,7 @@ void test_MNVMeofGwMap() {
 
 
   ceph::buffer::list bl;
-  encode(map, bl);
+  encode(map, bl, CEPH_FEATURES_ALL);
   dout(0) << "encode: " << map << dendl;
   decode(map, bl);
   dout(0) << "decode: " << map << dendl;
@@ -172,7 +172,7 @@ void test_NVMeofGwTimers()
     uint64_t  millisecondsSinceEpoch = std::chrono::duration_cast<std::chrono::milliseconds>(end_time.time_since_epoch()).count();
     dout(0) << "Metadata milliseconds " << millisecondsSinceEpoch << " " << (int)pending_map.fsm_timers[group_key][gwid].data[grpid].timer_value << dendl;
     ceph::buffer::list bl;
-    pending_map.encode(bl);
+    pending_map.encode(bl, CEPH_FEATURES_ALL);
     auto p = bl.cbegin();
     pending_map.decode(p);
 
