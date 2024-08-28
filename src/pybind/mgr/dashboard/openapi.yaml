@@ -8182,7 +8182,12 @@ paths:
       - NFS-Ganesha
   /api/nvmeof/gateway:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: gw_group
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8205,7 +8210,12 @@ paths:
       - NVMe-oF Gateway
   /api/nvmeof/subsystem:
     get:
-      parameters: []
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: gw_group
+        schema:
+          type: string
       responses:
         '200':
           content:
@@ -8236,6 +8246,8 @@ paths:
                 enable_ha:
                   description: Enable high availability
                   type: boolean
+                gw_group:
+                  type: string
                 max_namespaces:
                   default: 1024
                   description: Maximum number of namespaces
@@ -8287,6 +8299,11 @@ paths:
         name: force
         schema:
           type: boolean
+      - allowEmptyValue: true
+        in: query
+        name: gw_group
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -8318,6 +8335,11 @@ paths:
         in: path
         name: nqn
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: gw_group
         schema:
           type: string
       responses:

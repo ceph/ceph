@@ -51,11 +51,19 @@ class NvmeofGatewaysConfig(object):
         return cls._load_config_from_store()
 
     @classmethod
-    def add_gateway(cls, name, service_url):
+    def add_gateway(cls, name, service_url, group):
         config = cls.get_gateways_config()
-        if name in config:
-            raise NvmeofGatewayAlreadyExists(name)
-        config['gateways'][name] = {'service_url': service_url}
+
+        if name in config.get('gateways', {}):
+            existing_gateways = config['gateways'][name]
+            if any(gateway['service_url'] == service_url for gateway in existing_gateways):
+                return
+
+        if name in config.get('gateways', {}):
+            config['gateways'][name].append({'service_url': service_url, 'group': group})
+        else:
+            config['gateways'][name] = [{'service_url': service_url, 'group': group}]
+
         cls._save_config(config)
 
     @classmethod
@@ -67,12 +75,23 @@ class NvmeofGatewaysConfig(object):
         cls._save_config(config)
 
     @classmethod
-    def get_service_info(cls):
+    def get_service_info(cls, group=None):
         try:
             config = cls.get_gateways_config()
-            service_name = list(config['gateways'].keys())[0]
-            addr = config['gateways'][service_name]['service_url']
-            return service_name, addr
+            gateways = config.get('gateways', {})
+            if not gateways:
+                return None
+
+            if group:
+                for service_name, entries in gateways.items():
+                    if group in service_name:
+                        entry = next((entry for entry in entries if entry['group'] == group), None)
+                        if entry['group'] == group:  # type: ignore
+                            return service_name, entry['service_url']  # type: ignore
+                return None
+
+            service_name = list(gateways.keys())[0]
+            return service_name, config['gateways'][service_name][0]['service_url']
         except (KeyError, IndexError) as e:
             raise DashboardException(
                 msg=f'NVMe-oF configuration is not set: {e}',
