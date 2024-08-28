@@ -69,7 +69,14 @@ public:
 
     explicit TransactionImpl_(KeyValueDBMemory *db) : db(db) {}
 
-
+    // dummy implementation
+    size_t get_count() const override {
+      return 0;
+    }
+    // dummy implementation
+    size_t get_size_bytes() const override {
+      return 0;
+    }
     struct SetOp : public Context {
       KeyValueDBMemory *db;
       std::pair<std::string,std::string> key;
