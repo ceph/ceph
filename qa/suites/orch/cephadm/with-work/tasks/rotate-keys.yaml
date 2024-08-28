@@ -1,0 +1,16 @@
+tasks:
+- cephadm.shell:
+    mon.a:
+    - |
+      set -ex
+      for f in osd.0 osd.1 osd.2 osd.3 osd.4 osd.5 osd.6 osd.7 mgr.y mgr.x
+      do
+          echo "rotating key for $f"
+          K=$(ceph auth get-key $f)
+          NK="$K"
+          ceph orch daemon rotate-key $f
+          while [ "$K" == "$NK" ]; do
+              sleep 5
+              NK=$(ceph auth get-key $f)
+          done
+      done
