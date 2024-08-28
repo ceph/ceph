@@ -8623,6 +8623,10 @@ next:
         handled = decode_dump<uint64_t>("pg_ver", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_SOURCE_ZONE) {
         handled = decode_dump<uint32_t>("source_zone", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_RESTORE_EXPIRY_DATE) {
+        handled = decode_dump<utime_t>("restore_expiry_date", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_RESTORE_TIME) {
+        handled = decode_dump<utime_t>("restore_time", bl, formatter.get());
       }
 
       if (!handled)
