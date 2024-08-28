@@ -19,13 +19,13 @@ def list_nvmeof_gateways(_):
 
 @CLIWriteCommand('dashboard nvmeof-gateway-add')
 @CLICheckNonemptyFileInput(desc='NVMe-oF gateway configuration')
-def add_nvmeof_gateway(_, inbuf, name: str):
+def add_nvmeof_gateway(_, inbuf, name: str, group: str):
     '''
     Add NVMe-oF gateway configuration. Gateway URL read from -i <file>
     '''
     service_url = inbuf
     try:
-        NvmeofGatewaysConfig.add_gateway(name, service_url)
+        NvmeofGatewaysConfig.add_gateway(name, service_url, group)
         return 0, 'Success', ''
     except NvmeofGatewayAlreadyExists as ex:
         return -errno.EEXIST, '', str(ex)
