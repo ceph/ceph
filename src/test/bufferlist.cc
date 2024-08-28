@@ -1062,9 +1062,8 @@ TEST(BufferListIterator, copy) {
   // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
   //
   {
-    bufferptr ptr;
     bufferlist::iterator i(&bl);
-    i.copy_deep(2, ptr);
+    bufferptr ptr = i.copy_deep(2);
     EXPECT_EQ((unsigned)2, ptr.length());
     EXPECT_EQ('A', ptr[0]);
     EXPECT_EQ('B', ptr[1]);

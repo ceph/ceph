@@ -372,11 +372,8 @@ void BitVector<_b>::decode_data(bufferlist::const_iterator& it,
   while (data_byte_offset < end_offset) {
     uint64_t len = std::min<uint64_t>(BLOCK_SIZE, end_offset - data_byte_offset);
 
-    bufferptr ptr;
-    it.copy_deep(len, ptr);
-
     bufferlist bit;
-    bit.append(ptr);
+    bit.append(it.copy_deep(len));
     if (m_crc_enabled &&
 	m_data_crcs[data_byte_offset / BLOCK_SIZE].val != bit.crc32c(0)) {
       throw buffer::malformed_input("invalid data block CRC");

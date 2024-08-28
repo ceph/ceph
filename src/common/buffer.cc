@@ -733,19 +733,20 @@ static ceph::spinlock debug_lock;
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy(unsigned len, ptr &dest)
   {
-    copy_deep(len, dest);
+    dest = copy_deep(len);
   }
 
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::copy_deep(unsigned len, ptr &dest)
+  buffer::ptr buffer::list::iterator_impl<is_const>::copy_deep(unsigned len)
   {
     if (!len) {
-      return;
+      return ptr{};
     }
     if (p == ls->end())
       throw end_of_buffer();
-    dest = create(len);
+    ptr dest{create(len)};
     copy(len, dest.c_str());
+    return dest;
   }
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy_shallow(unsigned len,
