@@ -18,6 +18,7 @@ namespace crimson::common {
 class Gated {
  public:
   Gated() : sid(seastar::this_shard_id()) {}
+  Gated(const seastar::shard_id sid) : sid(sid) {}
   Gated(const Gated&) = delete;
   Gated& operator=(const Gated&) = delete;
   Gated(Gated&&) = default;
