@@ -823,10 +823,7 @@ void TestMemIoCtxImpl::append_clone(bufferlist& src, bufferlist* dest) {
   // deep-copy the src to ensure our memory-based mock RADOS data cannot
   // be modified by callers
   if (src.length() > 0) {
-    bufferlist::iterator iter = src.begin();
-    buffer::ptr ptr;
-    iter.copy_deep(src.length(), ptr);
-    dest->append(ptr);
+    dest->append(src.begin().copy_deep(src.length()));
   }
 }
 
