@@ -34,6 +34,8 @@
                     [columns]="columns"
                     columnMode="flex"
                     selectionType="single"
+                    [hasDetails]="true"
+                    (setExpandedRow)="setExpandedRow($event)"
                     [maxLimit]="25"
                     (updateSelection)="updateSelection($event)">
             <div class="table-actions">
@@ -44,6 +46,10 @@
                                 [tableActions]="tableActions">
               </cd-table-actions>
             </div>
+            <cd-multi-cluster-details cdTableDetail
+                                      [permissions]="permissions"
+                                      [selection]="expandedRow">
+            </cd-multi-cluster-details>
           </cd-table>
         </ng-template>
       </ng-container>

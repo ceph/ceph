@@ -137,18 +137,6 @@ local g = import 'grafonnet/grafana.libsonnet';
             ],
           },
           {
-            matcher: { id: 'byName', options: 'IOPS' },
-            properties: [
-              { id: 'unit', value: 'ops' },
-            ],
-          },
-          {
-            matcher: { id: 'byName', options: 'Value #E' },
-            properties: [
-              { id: 'unit', value: 'bytes' },
-            ],
-          },
-          {
             matcher: { id: 'byName', options: 'Capacity Used' },
             properties: [
               { id: 'unit', value: 'bytes' },
@@ -157,7 +145,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           {
             matcher: { id: 'byName', options: 'Cluster' },
             properties: [
-              { id: 'links', value: [{ title: '', url: '/d/GQ3MHvnIz/ceph-cluster-new?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}' }] },
+              { id: 'links', value: [{ title: '', url: '/d/edtb0oxdq/ceph-cluster?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}' }] },
             ],
           },
           {
@@ -211,9 +199,7 @@ local g = import 'grafonnet/grafana.libsonnet';
               'Value #A': 1,
               'Value #B': 20,
               'Value #C': 3,
-              'Value #D': 4,
-              'Value #E': 5,
-              'Value #F': 6,
+              'Value #D': 6,
               '__name__ 1': 9,
               '__name__ 2': 14,
               '__name__ 3': 24,
@@ -235,9 +221,7 @@ local g = import 'grafonnet/grafana.libsonnet';
             renameByName: {
               'Value #A': 'Status',
               'Value #C': 'Alerts',
-              'Value #D': 'IOPS',
-              'Value #E': 'Throughput',
-              'Value #F': 'Capacity Used',
+              'Value #D': 'Capacity Used',
               ceph_version: 'Version',
               cluster: 'Cluster',
             },
@@ -268,28 +252,6 @@ local g = import 'grafonnet/grafana.libsonnet';
         ),
         $.addTargetSchema(
           expr='count(ALERTS{alertstate="firing", cluster=~"$cluster"})',
-          datasource={ type: 'prometheus', uid: '$datasource' },
-          format='table',
-          hide=false,
-          exemplar=false,
-          instant=true,
-          interval='',
-          legendFormat='__auto',
-          range=false,
-        ),
-        $.addTargetSchema(
-          expr='sum by (cluster) (irate(ceph_pool_wr[$__interval]))  \n+ sum by (cluster) (irate(ceph_pool_rd[$__interval])) ',
-          datasource={ type: 'prometheus', uid: '$datasource' },
-          format='table',
-          hide=false,
-          exemplar=false,
-          instant=true,
-          interval='',
-          legendFormat='__auto',
-          range=false,
-        ),
-        $.addTargetSchema(
-          expr='sum by (cluster) (irate(ceph_pool_rd_bytes[$__interval]))\n+ sum by (cluster) (irate(ceph_pool_wr_bytes[$__interval])) ',
           datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,

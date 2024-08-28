@@ -250,30 +250,6 @@
                {
                   "matcher": {
                      "id": "byName",
-                     "options": "IOPS"
-                  },
-                  "properties": [
-                     {
-                        "id": "unit",
-                        "value": "ops"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
-                     "options": "Value #E"
-                  },
-                  "properties": [
-                     {
-                        "id": "unit",
-                        "value": "bytes"
-                     }
-                  ]
-               },
-               {
-                  "matcher": {
-                     "id": "byName",
                      "options": "Capacity Used"
                   },
                   "properties": [
@@ -294,7 +270,7 @@
                         "value": [
                            {
                               "title": "",
-                              "url": "/d/GQ3MHvnIz/ceph-cluster-new?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}"
+                              "url": "/d/edtb0oxdq/ceph-cluster?var-cluster=${__data.fields.Cluster}&${DS_PROMETHEUS:queryparam}"
                            }
                         ]
                      }
@@ -403,38 +379,6 @@
                   "uid": "$datasource"
                },
                "exemplar": false,
-               "expr": "sum by (cluster) (irate(ceph_pool_wr[$__interval]))  \n+ sum by (cluster) (irate(ceph_pool_rd[$__interval])) ",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": false,
-               "refId": "D"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "$datasource"
-               },
-               "exemplar": false,
-               "expr": "sum by (cluster) (irate(ceph_pool_rd_bytes[$__interval]))\n+ sum by (cluster) (irate(ceph_pool_wr_bytes[$__interval])) ",
-               "format": "table",
-               "hide": false,
-               "instant": true,
-               "interval": "",
-               "intervalFactor": 1,
-               "legendFormat": "__auto",
-               "range": false,
-               "refId": "E"
-            },
-            {
-               "datasource": {
-                  "type": "prometheus",
-                  "uid": "$datasource"
-               },
-               "exemplar": false,
                "expr": "ceph_cluster_by_class_total_used_bytes",
                "format": "table",
                "hide": false,
@@ -443,7 +387,7 @@
                "intervalFactor": 1,
                "legendFormat": "__auto",
                "range": false,
-               "refId": "F"
+               "refId": "D"
             }
          ],
          "timeFrom": null,
@@ -494,9 +438,7 @@
                      "Value #A": 1,
                      "Value #B": 20,
                      "Value #C": 3,
-                     "Value #D": 4,
-                     "Value #E": 5,
-                     "Value #F": 6,
+                     "Value #D": 6,
                      "__name__ 1": 9,
                      "__name__ 2": 14,
                      "__name__ 3": 24,
@@ -518,9 +460,7 @@
                   "renameByName": {
                      "Value #A": "Status",
                      "Value #C": "Alerts",
-                     "Value #D": "IOPS",
-                     "Value #E": "Throughput",
-                     "Value #F": "Capacity Used",
+                     "Value #D": "Capacity Used",
                      "ceph_version": "Version",
                      "cluster": "Cluster"
                   }
