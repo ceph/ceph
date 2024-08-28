@@ -4065,7 +4065,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     }
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
-    s->formatter->dump_string("ETag", etag);
+    s->formatter->dump_format_unquoted("ETag", "\"%s\"", etag.c_str());
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
