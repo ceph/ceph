@@ -458,9 +458,6 @@ class Migrations:
     def migrate_nvmeof_spec(self, spec: Dict[Any, Any], migration_counter: int) -> Optional[NvmeofServiceSpec]:
         """ Add value for group parameter to nvmeof spec """
         new_spec = spec.copy()
-        # Note: each spec must have a different group name so we append
-        # the value of a counter to the end
-        new_spec['spec']['group'] = f'default{str(migration_counter + 1)}'
         return NvmeofServiceSpec.from_json(new_spec)
 
     def nvmeof_spec_needs_migration(self, spec: Dict[Any, Any]) -> bool:
