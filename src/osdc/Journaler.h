@@ -222,10 +222,10 @@ public:
 private:
   // me
   CephContext *cct;
-  std::mutex lock;
+  mutable ceph::mutex lock;
   const std::string name;
-  typedef std::lock_guard<std::mutex> lock_guard;
-  typedef std::unique_lock<std::mutex> unique_lock;
+  typedef std::lock_guard<ceph::mutex> lock_guard;
+  typedef std::unique_lock<ceph::mutex> unique_lock;
   Finisher *finisher;
   Header last_written;
   inodeno_t ino;
@@ -408,7 +408,7 @@ public:
   Journaler(const std::string &name_, inodeno_t ino_, int64_t pool,
       const char *mag, Objecter *obj, PerfCounters *l, int lkey, Finisher *f) :
     last_committed(mag),
-    cct(obj->cct), name(name_), finisher(f), last_written(mag),
+    cct(obj->cct), lock(ceph::make_mutex("Journaler::" + name_)), name(name_), finisher(f), last_written(mag),
     ino(ino_), pg_pool(pool), readonly(true),
     stream_format(-1), journal_stream(-1),
     magic(mag),
@@ -528,24 +528,67 @@ public:
 
   // Synchronous getters
   // ===================
-  // TODO: need some locks on reads for true safety
   uint64_t get_layout_period() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
     return layout.get_period();
   }
-  file_layout_t& get_layout() { return layout; }
-  bool is_active() { return state == STATE_ACTIVE; }
-  bool is_stopping() { return state == STATE_STOPPING; }
-  int get_error() { return error; }
-  bool is_readonly() { return readonly; }
+  file_layout_t get_layout() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return layout;
+  }
+  bool is_active() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return state == STATE_ACTIVE;
+  }
+  bool is_stopping() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return state == STATE_STOPPING;
+  }
+  int get_error() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return error;
+  }
+  bool is_readonly() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return readonly;
+  }
   bool is_readable();
   bool _is_readable();
   bool try_read_entry(bufferlist& bl);
-  uint64_t get_write_pos() const { return write_pos; }
-  uint64_t get_write_safe_pos() const { return safe_pos; }
-  uint64_t get_read_pos() const { return read_pos; }
-  uint64_t get_expire_pos() const { return expire_pos; }
-  uint64_t get_trimmed_pos() const { return trimmed_pos; }
+  uint64_t get_write_pos() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return write_pos;
+  }
+  uint64_t get_write_safe_pos() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return safe_pos;
+  }
+  uint64_t get_read_pos() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return read_pos;
+  }
+  uint64_t get_expire_pos() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return expire_pos;
+  }
+  uint64_t get_trimmed_pos() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return trimmed_pos;
+  }
   size_t get_journal_envelope_size() const { 
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
     return journal_stream.get_envelope_size(); 
   }
   void check_isreadable();
