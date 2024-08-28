@@ -88,16 +88,16 @@ class ObjectCacher::C_RetryRead : public Context {
   ObjectSet *oset;
   Context *onfinish;
   ZTracer::Trace trace;
-  std::vector<ObjHole> *holes;
+  std::vector<ObjHole> holes;
 public:
   C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c,
 	      const ZTracer::Trace &trace,
-              std::vector<ObjHole> *holes)
-    : oc(_oc), rd(r), oset(os), onfinish(c), trace(trace), holes(holes) {
+              std::vector<ObjHole> h)
+    : oc(_oc), rd(r), oset(os), onfinish(c), trace(trace), holes(h) {
   }
   void finish(int r) override {
     if (r >= 0) {
-      r = oc->_readx(rd, oset, onfinish, false, &trace, holes);
+      r = oc->_readx(rd, oset, onfinish, false, &trace, &holes);
     }
 
     if (r == 0) {
@@ -1479,7 +1479,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid
 			 << " on " << *o << dendl;
 	  o->waitfor_commit[o->last_write_tid].push_back(
-	    new C_RetryRead(this,rd, oset, onfinish, *trace, holes));
+	    new C_RetryRead(this,rd, oset, onfinish, *trace, *holes));
 	  // FIXME: perfcounter!
 	  return 0;
 	}
@@ -1537,7 +1537,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			   << (std::max(rx_bytes, max_size) - max_size)
 			   << " read bytes" << dendl;
 	    waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish,
-						   *trace, holes));
+						   *trace, *holes));
 	  }
 
 	  bh_remove(o, bh_it->second);
@@ -1556,7 +1556,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	ldout(cct, 10) << "readx missed, waiting on " << *last->second
 	  << " off " << last->first << dendl;
 	last->second->waitfor_read[last->first].push_back(
-	  new C_RetryRead(this, rd, oset, onfinish, *trace, holes) );
+	  new C_RetryRead(this, rd, oset, onfinish, *trace, *holes) );
 
       }
 
@@ -1569,7 +1569,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
 			 << " off " << bh_it->first << dendl;
 	  bh_it->second->waitfor_read[bh_it->first].push_back(
-	    new C_RetryRead(this, rd, oset, onfinish, *trace, holes) );
+	    new C_RetryRead(this, rd, oset, onfinish, *trace, *holes) );
 	}
 	bytes_not_in_cache += bh_it->second->length();
 	success = false;
