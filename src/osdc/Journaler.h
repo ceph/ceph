@@ -186,6 +186,16 @@ public:
       f->close_section(); // journal_header
     }
 
+    void print(std::ostream& os) const {
+      os << std::hex
+         << "Journaler::Header"
+            "(t=" << trimmed_pos
+         << " e=" << expire_pos
+         << " w=" << write_pos
+         << ")"
+         << std::dec;
+    }
+
     static void generate_test_instances(std::list<Header*> &ls)
     {
       ls.push_back(new Header());
