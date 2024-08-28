@@ -384,7 +384,6 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
                found_valid_cert = true;
                break;
               }
-              found_valid_cert = true;
             }
             if (! found_valid_cert) {
               ldpp_dout(dpp, 0) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
