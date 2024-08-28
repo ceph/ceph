@@ -80,7 +80,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
   int ret = 0;
   if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure its length is 16" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure it is an alphanumeric key of length 16" << dendl;
     return ret;
   }
   string error;
