@@ -217,10 +217,9 @@ public:
     return stream_format;
   }
 
-  Header last_committed;
-
 private:
   // me
+  Header last_committed;
   CephContext *cct;
   mutable ceph::mutex lock;
   const std::string name;
@@ -528,6 +527,18 @@ public:
 
   // Synchronous getters
   // ===================
+
+  Header get_last_committed() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return last_committed;
+  }
+  Header get_last_written() const {
+    ceph_assert(!ceph_mutex_is_locked_by_me(lock));
+    lock_guard l(lock);
+    return last_written;
+  }
+
   uint64_t get_layout_period() const {
     ceph_assert(!ceph_mutex_is_locked_by_me(lock));
     lock_guard l(lock);
