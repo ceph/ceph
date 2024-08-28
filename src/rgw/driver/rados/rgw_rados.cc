@@ -3369,7 +3369,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(RGW_ATTR_SOURCE_ZONE, bl);
   }
 
-  if (!storage_class.empty()) {
+  if (!storage_class.empty() && storage_class != RGW_STORAGE_CLASS_STANDARD) {
     bufferlist bl;
     bl.append(storage_class);
     op.setxattr(RGW_ATTR_STORAGE_CLASS, bl);
