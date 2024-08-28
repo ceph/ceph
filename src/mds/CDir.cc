@@ -583,10 +583,11 @@ void CDir::set_referent_inode(CDentry *dn, CInode *ref_in)
 {
   // remote ino and dtype is already set, just set the referent inode and parent
   dn->get_linkage()->referent_inode = ref_in;
+  dn->get_linkage()->referent_ino = ref_in->ino();
   link_inode_work(dn, ref_in);
 }
 
-void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsigned char d_type)
+void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, inodeno_t referent_ino, unsigned char d_type)
 {
   dout(12) << __func__ << " " << *dn << " remote " << rino << " referent inode " << *ref_in << dendl;
   ceph_assert(dn->get_linkage()->is_null());
@@ -594,6 +595,7 @@ void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsi
   // If remote is set, remote is written to backend instead of CInode created.
   dn->get_linkage()->set_remote(rino, d_type);
   dn->get_linkage()->referent_inode = ref_in;
+  dn->get_linkage()->referent_ino = referent_ino;
 
   link_inode_work(dn, ref_in);
 
@@ -750,6 +752,7 @@ void CDir::unlink_inode_work(CDentry *dn)
 
       dn->get_linkage()->set_remote(0, 0);
       dn->get_linkage()->referent_inode = 0;
+      dn->get_linkage()->referent_ino = 0;
   } else if (dn->get_linkage()->is_primary()) {
     // primary
     // unpin dentry?

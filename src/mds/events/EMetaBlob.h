@@ -147,18 +147,21 @@ public:
     version_t dnv = 0;
     inodeno_t ino = 0;
     unsigned char d_type = '\0';
+    inodeno_t referent_ino = 0;
+    CInode::inode_const_ptr referent_inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
     bool dirty = false;
 
-    remotebit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
-      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
+    remotebit(std::string_view d, std::string_view an, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, inodeno_t ref_ino, const CInode::inode_const_ptr& ref_inode, bool dr) :
+      dn(d), alternate_name(an), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), referent_ino(ref_ino), referent_inode(ref_inode), dirty(dr) { }
     explicit remotebit(bufferlist::const_iterator &p) { decode(p); }
     remotebit() = default;
 
-    void encode(bufferlist& bl) const;
+    void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void print(std::ostream& out) const {
       out << " remotebit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " ino " << ino
+	  << " referent ino " << referent_ino
 	  << " dirty=" << dirty;
       if (!alternate_name.empty()) {
         out << " altn " << binstrprint(alternate_name, 8);
@@ -168,7 +171,7 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(std::list<remotebit*>& ls);
   };
-  WRITE_CLASS_ENCODER(remotebit)
+  WRITE_CLASS_ENCODER_FEATURES(remotebit)
 
   /*
    * nullbit - a null dentry
@@ -288,7 +291,7 @@ public:
       using ceph::encode;
       if (!dn_decoded) return;
       encode(dfull, dnbl, features);
-      encode(dremote, dnbl);
+      encode(dremote, dnbl, features);
       encode(dnull, dnbl);
     }
     void _decode_bits() const { 
@@ -425,21 +428,28 @@ private:
   }
 
   void add_remote_dentry(CDentry *dn, bool dirty) {
-    add_remote_dentry(add_dir(dn->get_dir(), false), dn, dirty, 0, 0);
+    add_remote_dentry(add_dir(dn->get_dir(), false), dn, dirty, 0, 0, 0, NULL);
   }
-  void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino, int rdt) {
-    add_remote_dentry(add_dir(dn->get_dir(), false), dn, dirty, rino, rdt);
+  void add_remote_dentry(CDentry *dn, bool dirty, inodeno_t rino, int rdt, inodeno_t referent_ino, CInode *ref_in) {
+    add_remote_dentry(add_dir(dn->get_dir(), false), dn, dirty, rino, rdt, referent_ino, ref_in);
   }
   void add_remote_dentry(dirlump& lump, CDentry *dn, bool dirty, 
-			 inodeno_t rino=0, unsigned char rdt=0) {
+			 inodeno_t rino=0, unsigned char rdt=0, inodeno_t referent_ino=0, CInode *ref_in=NULL) {
     dn->check_corruption(false);
     if (!rino) {
       rino = dn->get_projected_linkage()->get_remote_ino();
       rdt = dn->get_projected_linkage()->get_remote_d_type();
+      referent_ino = dn->get_projected_linkage()->get_referent_ino();
     }
+    if (!ref_in)
+      ref_in = dn->get_projected_linkage()->get_referent_inode();
+
+    const auto& ref_pi = ref_in->get_projected_inode();
+    ceph_assert(ref_pi->version > 0);
+
     lump.nremote++;
     lump.add_dremote(dn->get_name(), dn->get_alternate_name(), dn->first, dn->last,
-		     dn->get_projected_version(), rino, rdt, dirty);
+		     dn->get_projected_version(), rino, rdt, referent_ino, ref_pi, dirty);
   }
 
   // return remote pointer to to-be-journaled inode
@@ -607,7 +617,7 @@ private:
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
-WRITE_CLASS_ENCODER(EMetaBlob::remotebit)
+WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::remotebit)
 WRITE_CLASS_ENCODER(EMetaBlob::nullbit)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::dirlump)
 

@@ -367,7 +367,7 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
       linkage.inode->add_remote_parent(this);
     }
   } else if (n.is_referent()){
-    dir->link_referent_inode(this, n.referent_inode, n.remote_ino, n.remote_d_type);
+    dir->link_referent_inode(this, n.referent_inode, n.remote_ino, n.referent_ino, n.remote_d_type);
     if (n.inode) {
       linkage.inode = n.inode;
       linkage.inode->add_remote_parent(this);

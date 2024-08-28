@@ -3352,7 +3352,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   if (in->get_remote_ino()) {
     if (dn->get_linkage()->get_referent_inode() != in) {
       ceph_assert(!dn->get_linkage()->get_referent_inode());
-      dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->d_type());
+      dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->ino(), in->d_type());
     }
   } else if (dn->get_linkage()->get_inode() != in) {
     ceph_assert(!dn->get_linkage()->get_inode());

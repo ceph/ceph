@@ -88,9 +88,9 @@ public:
     // dentry type is primary || remote || null
     // inode ptr is required for primary, optional for remote, undefined for null
     bool is_primary() const { return remote_ino == 0 && inode != 0; }
-    bool is_remote() const { return remote_ino > 0 && referent_inode == 0; }
-    bool is_null() const { return remote_ino == 0 && inode == 0 && referent_inode == 0; }
-    bool is_referent() const {return remote_ino > 0 && referent_inode != 0;}
+    bool is_remote() const { return remote_ino > 0 && referent_inode == 0 && referent_ino == 0; }
+    bool is_null() const { return remote_ino == 0 && inode == 0 && referent_ino == 0 && referent_inode == 0; }
+    bool is_referent() const {return remote_ino > 0 && referent_ino != 0;}
 
     CInode *get_inode() { return inode; }
     const CInode *get_inode() const { return inode; }

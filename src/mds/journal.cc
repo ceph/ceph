@@ -682,9 +682,9 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 
 // EMetaBlob::remotebit
 
-void EMetaBlob::remotebit::encode(bufferlist& bl) const
+void EMetaBlob::remotebit::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   encode(dn, bl);
   encode(dnfirst, bl);
   encode(dnlast, bl);
@@ -693,12 +693,14 @@ void EMetaBlob::remotebit::encode(bufferlist& bl) const
   encode(d_type, bl);
   encode(dirty, bl);
   encode(alternate_name, bl);
+  encode(referent_ino, bl);
+  encode(*referent_inode, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(dn, bl);
   decode(dnfirst, bl);
   decode(dnlast, bl);
@@ -708,6 +710,14 @@ void EMetaBlob::remotebit::decode(bufferlist::const_iterator &bl)
   decode(dirty, bl);
   if (struct_v >= 3)
     decode(alternate_name, bl);
+  if (struct_v >= 4) {
+    decode(referent_ino, bl);
+    {
+      auto _inode = CInode::allocate_inode();
+      decode(*_inode, bl);
+      referent_inode = std::move(_inode);
+    }
+  }
   DECODE_FINISH(bl);
 }
 
@@ -741,14 +751,16 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
   f->dump_string("d_type", type_string);
   f->dump_string("dirty", dirty ? "true" : "false");
   f->dump_string("alternate_name", alternate_name);
+  f->dump_int("referentino", referent_ino);
 }
 
 void EMetaBlob::remotebit::
 generate_test_instances(std::list<EMetaBlob::remotebit*>& ls)
 {
-  remotebit *remote = new remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), false);
+  auto _inode = CInode::allocate_inode();
+  remotebit *remote = new remotebit("/test/dn", "", 0, 10, 15, 1, IFTODT(S_IFREG), 2, _inode, false);
   ls.push_back(remote);
-  remote = new remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), false);
+  remote = new remotebit("/test/dn2", "foo", 0, 10, 15, 1, IFTODT(S_IFREG), 2, _inode, false);
   ls.push_back(remote);
 }
 
@@ -1418,8 +1430,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
     for (const auto& rb : lump.get_dremote()) {
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
       if (!dn) {
-	//TODO: fix referent inode number after journalling it
-	dn = dir->add_remote_dentry(rb.dn, rb.ino, 0, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
+	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.referent_ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *dn << dendl;
