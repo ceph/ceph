@@ -14333,7 +14333,14 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     mono_clock::now() - txc->start,
     cct->_conf->bluestore_log_op_age,
     [&](auto lat) {
-      return ", txc = " + stringify(txc);
+      return ", txc = " + stringify(txc) +
+             ", txc bytes = " + stringify(txc->bytes) +
+             ", txc ios = " + stringify(txc->ios) +
+             ", txc cost = " + stringify(txc->cost) +
+             ", txc onodes = " + stringify(txc->onodes.size()) +
+             ", DB updates = " + stringify(txc->t->get_count()) +
+             ", DB bytes = " + stringify(txc->t->get_size_bytes())
+             ;
     },
     l_bluestore_slow_committed_kv_count
   );
