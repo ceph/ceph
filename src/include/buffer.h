@@ -118,6 +118,8 @@ struct error_code;
   /// enable/disable tracking of cached crcs
   void track_cached_crc(bool b);
 
+  void throw_end_of_buffer();
+
   /*
    * an abstract raw buffer.  with a reference count.
    */
@@ -203,7 +205,12 @@ struct error_code;
 	}
       }
 
-      iterator_impl& operator+=(size_t len);
+      iterator_impl& operator+=(size_t len) {
+	pos += len;
+	if (pos > end_ptr)
+	  throw_end_of_buffer();
+	return *this;
+      }
 
       const char *get_pos() {
 	return pos;
