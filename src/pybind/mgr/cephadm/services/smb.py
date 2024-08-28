@@ -70,6 +70,9 @@ class SMBService(CephService):
             config_blobs['cluster_meta_uri'] = smb_spec.cluster_meta_uri
         if smb_spec.cluster_lock_uri:
             config_blobs['cluster_lock_uri'] = smb_spec.cluster_lock_uri
+        cluster_public_addrs = smb_spec.strict_cluster_ip_specs()
+        if cluster_public_addrs:
+            config_blobs['cluster_public_addrs'] = cluster_public_addrs
         ceph_users = smb_spec.include_ceph_users or []
         config_blobs.update(
             self._ceph_config_and_keyring_for(

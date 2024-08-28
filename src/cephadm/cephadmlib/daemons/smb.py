@@ -5,7 +5,7 @@ import pathlib
 import re
 import socket
 
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Tuple, Optional, Any, NamedTuple
 
 from .. import context_getters
 from .. import daemon_form
@@ -27,6 +27,7 @@ from ..context import CephadmContext
 from ..daemon_identity import DaemonIdentity, DaemonSubIdentity
 from ..deploy import DeploymentType
 from ..exceptions import Error
+from ..host_facts import list_networks
 from ..net_utils import EndPoint
 
 
@@ -50,6 +51,20 @@ class Features(enum.Enum):
             return True
         except ValueError:
             return False
+
+
+class ClusterPublicIP(NamedTuple):
+    address: str
+    destinations: List[str]
+
+    @classmethod
+    def convert(cls, item: Dict[str, Any]) -> 'ClusterPublicIP':
+        assert isinstance(item, dict)
+        address = item['address']
+        assert isinstance(address, str)
+        destinations = item['destinations']
+        assert isinstance(destinations, list)
+        return cls(address, destinations)
 
 
 class Config:
@@ -92,6 +107,7 @@ class Config:
         rank_generation: int = -1,
         cluster_meta_uri: str = '',
         cluster_lock_uri: str = '',
+        cluster_public_addrs: Optional[List[ClusterPublicIP]] = None,
     ) -> None:
         self.identity = identity
         self.instance_id = instance_id
@@ -110,6 +126,7 @@ class Config:
         self.rank_generation = rank_generation
         self.cluster_meta_uri = cluster_meta_uri
         self.cluster_lock_uri = cluster_lock_uri
+        self.cluster_public_addrs = cluster_public_addrs
 
     def __str__(self) -> str:
         return (
@@ -376,6 +393,7 @@ class SMB(ContainerDaemonForm):
         self._cached_layout: Optional[ContainerLayout] = None
         self._rank_info = context_getters.fetch_rank_info(ctx)
         self.smb_port = 445
+        self._network_mapper = _NetworkMapper(ctx)
         logger.debug('Created SMB ContainerDaemonForm instance')
 
     @staticmethod
@@ -415,6 +433,7 @@ class SMB(ContainerDaemonForm):
         vhostname = configs.get('virtual_hostname', '')
         cluster_meta_uri = configs.get('cluster_meta_uri', '')
         cluster_lock_uri = configs.get('cluster_lock_uri', '')
+        cluster_public_addrs = configs.get('cluster_public_addrs', [])
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -432,6 +451,12 @@ class SMB(ContainerDaemonForm):
             # the cluster/instanced id to the system hostname
             hname = socket.getfqdn()
             vhostname = f'{instance_id}-{hname}'
+        _public_addrs = [
+            ClusterPublicIP.convert(v) for v in cluster_public_addrs
+        ]
+        if _public_addrs:
+            # cache the cephadm networks->devices mapping for later
+            self._network_mapper.load()
 
         self._instance_cfg = Config(
             identity=self._identity,
@@ -447,6 +472,7 @@ class SMB(ContainerDaemonForm):
             vhostname=vhostname,
             cluster_meta_uri=cluster_meta_uri,
             cluster_lock_uri=cluster_lock_uri,
+            cluster_public_addrs=_public_addrs,
         )
         if self._rank_info:
             (
@@ -674,7 +700,54 @@ class SMB(ContainerDaemonForm):
                 'recovery_lock': f'!{reclock_cmd}',
                 'cluster_meta_uri': self._cfg.cluster_meta_uri,
                 'nodes_cmd': nodes_cmd,
+                'public_addresses': self._network_mapper.for_sambacc(
+                    self._cfg
+                ),
             },
         }
         with file_utils.write_new(path) as fh:
             json.dump(stub_config, fh)
+
+
+class _NetworkMapper:
+    """Helper class that maps between cephadm-friendly address-networks
+    groupings to ctdb-friendly address-device groupings.
+    """
+
+    def __init__(self, ctx: CephadmContext):
+        self._ctx = ctx
+        self._networks: Dict = {}
+
+    def load(self) -> None:
+        logger.debug('fetching networks')
+        self._networks = list_networks(self._ctx)
+
+    def _convert(self, addr: ClusterPublicIP) -> ClusterPublicIP:
+        devs = []
+        for net in addr.destinations:
+            if net not in self._networks:
+                # ignore mappings that cant exist on this host
+                logger.warning(
+                    'destination network %r not found in %r',
+                    net,
+                    self._networks.keys(),
+                )
+                continue
+            for dev in self._networks[net]:
+                logger.debug(
+                    'adding device %s from network %r for public ip %s',
+                    dev,
+                    net,
+                    addr.address,
+                )
+                devs.append(dev)
+        return ClusterPublicIP(addr.address, devs)
+
+    def for_sambacc(self, cfg: Config) -> List[Dict[str, Any]]:
+        if not cfg.cluster_public_addrs:
+            return []
+        addrs = (self._convert(a) for a in (cfg.cluster_public_addrs or []))
+        return [
+            {'address': a.address, 'interfaces': a.destinations}
+            for a in addrs
+        ]

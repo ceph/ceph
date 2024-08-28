@@ -56,8 +56,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         authorizer = kwargs.pop('authorizer', None)
         uo = kwargs.pop('update_orchestration', None)
         super().__init__(*args, **kwargs)
-        # the update_orchestration property only works post-init
-        update_orchestration = self.update_orchestration if uo is None else uo
         if internal_store is not None:
             self._internal_store = internal_store
             log.info('Using internal_store passed to class: {internal_store}')
@@ -82,7 +80,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             public_store=self._public_store,
             path_resolver=path_resolver,
             authorizer=authorizer,
-            orch=(self if update_orchestration else None),
+            orch=self._orch_backend(enable_orch=uo),
         )
 
     def _backend_store(self, store_conf: str = '') -> ConfigStore:
@@ -110,6 +108,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             log.info('Using specified backend: mgr pool sqlite3 db')
             return sqlite_store.mgr_sqlite3_db(self, opts)
         raise ValueError(f'invalid internal store: {name}')
+
+    def _orch_backend(
+        self, enable_orch: Optional[bool] = None
+    ) -> Optional['Module']:
+        if enable_orch is not None:
+            log.info('smb orchestration argument supplied: %r', enable_orch)
+            return self if enable_orch else None
+        if self.update_orchestration:
+            log.warning('smb orchestration enabled by module')
+            return self
+        log.warning('smb orchestration is disabled')
+        return None
 
     @property
     def update_orchestration(self) -> bool:
