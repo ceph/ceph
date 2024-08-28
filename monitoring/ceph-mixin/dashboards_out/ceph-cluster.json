@@ -32,6 +32,7 @@
   "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
+  "hideControls": false,
   "id": null,
   "iteration": 1525415495309,
   "links": [],
@@ -1428,5 +1429,6 @@
   },
   "timezone": "",
   "title": "Ceph - Cluster",
-  "version": 13
+  "uid": "edtb0oxdq",
+  "version": 0
 }
