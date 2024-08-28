@@ -61,6 +61,8 @@ public:
   void start_timer(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId anagrpid, uint8_t value);
+  void handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
+       const NvmeGroupKey& group_key, bool &map_modified);
 private:
   void add_grp_id(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
@@ -81,7 +83,9 @@ private:
   void fsm_handle_to_expired(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId grpid,  bool &map_modified);
-
+  void fsm_handle_gw_fast_reboot(const NvmeGwId &gw_id,
+      const NvmeGroupKey& group_key, NvmeAnaGrpId grpid,
+      bool &map_modified);
   void find_failover_candidate(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId grpid, bool &propose_pending);
