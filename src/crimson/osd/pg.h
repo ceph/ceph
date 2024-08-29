@@ -264,7 +264,7 @@ public:
     LOG_PREFIX(PG::request_local_background_io_reservation);
     SUBDEBUGDPP(
       osd, "priority {} on_grant {} on_preempt {}",
-      *this, on_grant->get_desc(), on_preempt->get_desc());
+      *this, priority, on_grant->get_desc(), on_preempt->get_desc());
     shard_services.local_request_reservation(
       orderer,
       pgid,
