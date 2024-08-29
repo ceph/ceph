@@ -281,7 +281,7 @@ int BitmapFreelistManager::_read_cfg(
 
 void BitmapFreelistManager::_init_misc()
 {
-  bufferptr z(blocks_per_key >> 3);
+  bufferptr_rw z(blocks_per_key >> 3);
   memset(z.c_str(), 0xff, z.length());
   all_set_bl.clear();
   all_set_bl.append(z);
@@ -518,17 +518,17 @@ void BitmapFreelistManager::_xor(
 	   << " last_key 0x" << last_key << std::dec << dendl;
 
   if (first_key == last_key) {
-    bufferptr p(blocks_per_key >> 3);
-    p.zero();
+    auto p = buffer::ptr_node::create(buffer::create(blocks_per_key >> 3));
+    p->zero();
     unsigned s = (offset & ~key_mask) / bytes_per_block;
     unsigned e = ((offset + length - 1) & ~key_mask) / bytes_per_block;
     for (unsigned i = s; i <= e; ++i) {
-      p[i >> 3] ^= 1ull << (i & 7);
+      (*p)[i >> 3] ^= 1ull << (i & 7);
     }
     string k;
     make_offset_key(first_key, &k);
     bufferlist bl;
-    bl.append(p);
+    bl.push_back(std::move(p));
     dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec << ": ";
     bl.hexdump(*_dout, false);
     *_dout << dendl;
@@ -536,17 +536,17 @@ void BitmapFreelistManager::_xor(
   } else {
     // first key
     {
-      bufferptr p(blocks_per_key >> 3);
-      p.zero();
+      auto p = buffer::ptr_node::create(buffer::create(blocks_per_key >> 3));
+      p->zero();
       unsigned s = (offset & ~key_mask) / bytes_per_block;
       unsigned e = blocks_per_key;
       for (unsigned i = s; i < e; ++i) {
-	p[i >> 3] ^= 1ull << (i & 7);
+	(*p)[i >> 3] ^= 1ull << (i & 7);
       }
       string k;
       make_offset_key(first_key, &k);
       bufferlist bl;
-      bl.append(p);
+      bl.push_back(std::move(p));
       dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec << ": ";
       bl.hexdump(*_dout, false);
       *_dout << dendl;
@@ -566,16 +566,16 @@ void BitmapFreelistManager::_xor(
     }
     ceph_assert(first_key == last_key);
     {
-      bufferptr p(blocks_per_key >> 3);
-      p.zero();
+      auto p = buffer::ptr_node::create(buffer::create(blocks_per_key >> 3));
+      p->zero();
       unsigned e = ((offset + length - 1) & ~key_mask) / bytes_per_block;
       for (unsigned i = 0; i <= e; ++i) {
-	p[i >> 3] ^= 1ull << (i & 7);
+	(*p)[i >> 3] ^= 1ull << (i & 7);
       }
       string k;
       make_offset_key(first_key, &k);
       bufferlist bl;
-      bl.append(p);
+      bl.push_back(std::move(p));
       dout(30) << __func__ << " 0x" << std::hex << first_key << std::dec << ": ";
       bl.hexdump(*_dout, false);
       *_dout << dendl;
