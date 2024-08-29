@@ -1198,9 +1198,7 @@ TEST_F(TestClsRbd, snapid_race)
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
   buffer::list bl;
-  buffer::ptr bp(4096);
-  bp.zero();
-  bl.append(bp);
+  bl.append_zero(4096);
 
   string oid = get_temp_image_name();
   ASSERT_EQ(0, ioctx.write(oid, bl, 4096, 0));

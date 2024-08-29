@@ -96,10 +96,9 @@ void write_image(librbd::Image &image) {
   srand(time(NULL) % (unsigned long) -1);
 
   uint64_t max_io_bytes = MAX_IO_SIZE * 1024;
-  bufferptr bp(max_io_bytes);
-  memset(bp.c_str(), rand() & 0xff, bp.length());
   bufferlist bl;
-  bl.push_back(bp);
+  auto filler = bl.append_hole(max_io_bytes);
+  memset(filler.c_str(), rand() & 0xff, max_io_bytes);
 
   uint64_t size = 0;
   image.size(&size);
