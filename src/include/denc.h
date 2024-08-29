@@ -856,7 +856,7 @@ struct denc_traits<ceph::buffer::list> {
 			    ceph::buffer::ptr::const_iterator& p) {
     v.clear();
     if (len) {
-      v.append(p.get_ptr(len));
+      v.push_back(p.get_ptr(len));
     }
   }
   static void decode_nohead(size_t len, ceph::buffer::list& v,
