@@ -358,6 +358,7 @@ class RadosZone : public Zone {
     virtual bool get_redirect_endpoint(std::string* endpoint) override;
     virtual bool has_zonegroup_api(const std::string& api) const override;
     virtual const std::string& get_current_period_id() override;
+    virtual const std::string_view get_tier_type() override;
 };
 
 class RadosStore : public Store {

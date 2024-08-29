@@ -365,10 +365,10 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Store* store, const DoutPrefixPr
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
     meta.bucket.reset(sync_module->alloc_bucket_meta_handler());
-    meta.bucket_instance.reset(sync_module->alloc_bucket_instance_meta_handler());
+    meta.bucket_instance.reset(sync_module->alloc_bucket_instance_meta_handler(store));
   } else {
     meta.bucket.reset(RGWBucketMetaHandlerAllocator::alloc());
-    meta.bucket_instance.reset(RGWBucketInstanceMetaHandlerAllocator::alloc());
+    meta.bucket_instance.reset(RGWBucketInstanceMetaHandlerAllocator::alloc(store));
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
