@@ -44,9 +44,7 @@ TEST(Striper, EmptyPartialResult)
   bufferlist bl;
   r.add_partial_result(g_ceph_context, bl, ex[1].buffer_extents);
 
-  bufferptr bp(65536);
-  bp.zero();
-  bl.append(bp);
+  bl.append_zero(65536);
 
   r.add_partial_result(g_ceph_context, bl, ex[0].buffer_extents);
 

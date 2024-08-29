@@ -34,9 +34,7 @@ public:
   void finish(int r) override {
     std::this_thread::sleep_for(m_delay);
     if (m_bl) {
-      buffer::ptr bp(r);
-      bp.zero();
-      m_bl->append(bp);
+      m_bl->append_zero(r);
       ldout(m_cct, 20) << "finished read " << m_off << "~" << r << dendl;
     }
     std::lock_guard locker{*m_lock};

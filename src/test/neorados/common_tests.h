@@ -447,10 +447,9 @@ private:
 ///
 /// \return A buffer::list filled with `s` copies of `c`
 inline auto filled_buffer_list(char c, std::size_t s) {
-  ceph::buffer::ptr bp{buffer::create(s)};
-  std::memset(bp.c_str(), c, bp.length());
   ceph::buffer::list bl;
-  bl.push_back(std::move(bp));
+  auto filler = bl.append_hole(s);
+  std::memset(filler.c_str(), c, s);
   return bl;
 };
 
@@ -460,7 +459,7 @@ inline auto filled_buffer_list(char c, std::size_t s) {
 ///
 /// \return A buffer::list containing the bytes in `cs`
 inline auto to_buffer_list(std::initializer_list<unsigned char> cs) {
-  ceph::buffer::ptr bp{buffer::create(cs.size())};
+  ceph::buffer::ptr_rw bp{buffer::create(cs.size())};
   auto ci = cs.begin();
   for (auto i = 0; i < std::ssize(cs); ++i, ++ci) {
     bp[i] = *ci;

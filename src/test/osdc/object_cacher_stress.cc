@@ -75,11 +75,9 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
   vector<std::shared_ptr<op_data> > ops;
   ObjectCacher::ObjectSet object_set(NULL, 0, 0);
   SnapContext snapc;
-  ceph::buffer::ptr bp(max_op_len);
   ceph::bufferlist bl;
+  bl.append_zero(max_op_len);
   uint64_t journal_tid = 0;
-  bp.zero();
-  bl.append(bp);
 
   // schedule ops
   std::cout << "Test configuration:\n\n"
@@ -217,7 +215,7 @@ int correctness_test(uint64_t delay_ns)
 
   // write some 1-valued bits at 256-KB intervals for checking consistency
   std::cerr << "Writing some 0xff values" << std::endl;
-  ceph::buffer::ptr ones(1<<16);
+  ceph::buffer::ptr_rw ones(1<<16);
   memset(ones.c_str(), 0xff, ones.length());
   ceph::bufferlist ones_bl;
   ones_bl.append(ones);
