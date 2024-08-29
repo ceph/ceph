@@ -94,6 +94,27 @@ def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     return entries
 
 
+def listdir_by_ctime_order(fs, path):
+    entry_names = listdir(fs, path, filter_files=False)
+    if not entry_names:
+        return []
+
+    # clone entries with ctime obtained by statig them. basically,
+    # following is a list of tuples where each tuple has 2 memebers.
+    ens_with_ctime = []
+    for en in entry_names:
+        d_path = os.path.join(path, en)
+        stb = fs.lstat(d_path)
+
+        # add ctime next to clone entry
+        ens_with_ctime.append((en, stb.st_ctime))
+
+    ens_with_ctime.sort(key=lambda ctime: en[1])
+
+    # remove ctime and return list of clone entries sorted by ctime.
+    return [i[0] for i in ens_with_ctime]
+
+
 def has_subdir(fs, dirpath, filter_entries=None):
     """
     Check the presence of directory (only dirs) for a given path
