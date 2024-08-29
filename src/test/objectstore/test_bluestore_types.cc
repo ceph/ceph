@@ -395,7 +395,7 @@ TEST(bluestore_blob_t, calc_csum) {
 
 TEST(bluestore_blob_t, csum_bench) {
   bufferlist bl;
-  bufferptr bp(10485760);
+  bufferptr_rw bp(10485760);
   for (char *a = bp.c_str(); a < bp.c_str() + bp.length(); ++a)
     *a = (unsigned long)a & 0xff;
   bl.append(bp);
