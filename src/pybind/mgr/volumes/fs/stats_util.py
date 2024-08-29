@@ -444,6 +444,15 @@ class PurgeProgressBar(VolumesProgressBar):
         self.total_subvols = 0
         # total number of files in trashcan.
         self.total_files = 0
+        # total amount of data in trashcan.
+        self.total_size = 0
+
+        # number of subvols left in trashcan.
+        self.subvols_left = 0
+        # number of files left in trashcan.
+        self.files_left = 0
+        # amount of data left in trashcan.
+        self.size_left = 0
 
         # count how many times rstats were found to be laggy
         self.laggy_count = 0
@@ -460,7 +469,7 @@ class PurgeProgressBar(VolumesProgressBar):
     def initiate(self):
         super().initiate()
 
-        self.total_subvols, self.total_files = \
+        self.total_subvols, self.total_files, self.total_size = \
             self._get_trash_stats_for_all_vols()
         log.debug('fetching rstats for trash dir for the first time, setting '
                   f'initial stats: {self.total_subvols} subvols containing '
@@ -469,38 +478,43 @@ class PurgeProgressBar(VolumesProgressBar):
     def _get_trash_stats_for_all_vols(self):
         subvol_count = 0
         file_count = 0
+        size = 0
 
         volnames = list_volumes(self.volclient.mgr)
         for volname in volnames:
-            s_count, f_count, = get_trashcan_stats(self.volclient, volname)
+            s_count, f_count, size_ = get_trashcan_stats(self.volclient,
+                                                         volname)
             log.debug(f'In trash directory of volume "{volname}", {s_count} '
                       f'subvolumes containing {f_count} files were found')
             subvol_count += s_count
             file_count += f_count
+            size += size_
 
         log.debug(f'In trash directory of {len(volnames)} volumes, '
                   f'{subvol_count} subvolumes containing total {file_count} '
                    'files were found')
-        return subvol_count, file_count
+        return subvol_count, file_count, size
 
     def _update_progress_bars(self):
-        subvols_left, files_left = self._get_trash_stats_for_all_vols()
+        self.subvols_left, self.files_left, self.size_left = \
+            self._get_trash_stats_for_all_vols()
 
-        if subvols_left == files_left == 0:
+        if self.subvols_left == self.files_left == self.size_left == 0:
             self.finish()
             return
 
         # XXX: latest stats are higher than initial stats, it means either the
         # rstats are laggy or more subvols were moved to trash dir. in any case,
         # update init_file_count and init_subvol_count.
-        if self.total_files < files_left:
+        if self.total_files < self.files_left:
             self.laggy_count += 1
 
-            self.total_subvols, self.total_files = subvols_left, files_left
+            self.total_subvols, self.total_files = \
+                self.subvols_left, self.files_left
             log.debug('rstats values for trash dir increased instead of '
                       'decreasing, because they are laggy. updating initial '
                       'stats to latest stats found. latest stats: '
-                      f'{subvols_left} subvols, {files_left} files')
+                      f'{self.subvols_left} subvols, {self.files_left} files')
 
             if self.laggy_count < self.LAGGY_NOTE_LIMIT:
                 return
@@ -522,7 +536,7 @@ class PurgeProgressBar(VolumesProgressBar):
 
         # reset laggy count since rstats aren't laggy anymore.
         self.laggy_count = 0
-        files_purged = self.total_files - files_left
+        files_purged = self.total_files - self.files_left
         # progress fraction that progress module accepts to print the progress bar.
         fraction = round(files_purged / self.total_files, 3)
         percent = round(fraction * 100, 3)
