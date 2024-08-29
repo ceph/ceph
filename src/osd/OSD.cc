@@ -3665,6 +3665,21 @@ float OSD::get_osd_recovery_sleep()
     return cct->_conf->osd_recovery_sleep_hdd;
 }
 
+float OSD::get_osd_recovery_sleep_degraded() {
+  float osd_recovery_sleep_degraded =
+    cct->_conf.get_val<double>("osd_recovery_sleep_degraded");
+  if (osd_recovery_sleep_degraded > 0) {
+    return osd_recovery_sleep_degraded;
+  }
+  if (!store_is_rotational && !journal_is_rotational) {
+    return cct->_conf.get_val<double>("osd_recovery_sleep_degraded_ssd");
+  } else if (store_is_rotational && !journal_is_rotational) {
+    return cct->_conf.get_val<double>("osd_recovery_sleep_degraded_hybrid");
+  } else {
+    return cct->_conf.get_val<double>("osd_recovery_sleep_degraded_hdd");
+  }
+}
+
 float OSD::get_osd_delete_sleep()
 {
   float osd_delete_sleep = cct->_conf.get_val<double>("osd_delete_sleep");
@@ -9541,9 +9556,12 @@ void OSD::do_recovery(
    * ops are scheduled after osd_recovery_sleep amount of time from the previous
    * recovery event's schedule time. This is done by adding a
    * recovery_requeue_callback event, which re-queues the recovery op using
-   * queue_recovery_after_sleep.
+   * queue_recovery_after_sleep. (osd_recovery_sleep_degraded will be
+   * used instead of osd_recovery_sleep when pg is degraded)
    */
-  float recovery_sleep = get_osd_recovery_sleep();
+  float recovery_sleep = pg->is_degraded() 
+                        ? get_osd_recovery_sleep_degraded() 
+                        : get_osd_recovery_sleep();
   {
     std::lock_guard l(service.sleep_lock);
     if (recovery_sleep > 0 && service.recovery_needs_sleep) {
@@ -9852,6 +9870,10 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_recovery_sleep_hdd",
     "osd_recovery_sleep_ssd",
     "osd_recovery_sleep_hybrid",
+    "osd_recovery_sleep_degraded",
+    "osd_recovery_sleep_degraded_hdd",
+    "osd_recovery_sleep_degraded_ssd",
+    "osd_recovery_sleep_degraded_hybrid",
     "osd_delete_sleep",
     "osd_delete_sleep_hdd",
     "osd_delete_sleep_ssd",
@@ -9919,7 +9941,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       changed.count("osd_recovery_sleep") ||
       changed.count("osd_recovery_sleep_hdd") ||
       changed.count("osd_recovery_sleep_ssd") ||
-      changed.count("osd_recovery_sleep_hybrid")) {
+      changed.count("osd_recovery_sleep_hybrid") ||
+      changed.count("osd_recovery_sleep_degraded") ||
+      changed.count("osd_recovery_sleep_degraded_hdd") ||
+      changed.count("osd_recovery_sleep_degraded_ssd") ||
+      changed.count("osd_recovery_sleep_degraded_hybrid")) {
     maybe_override_sleep_options_for_qos();
   }
   if (changed.count("osd_min_recovery_priority")) {
@@ -10250,6 +10276,12 @@ void OSD::maybe_override_sleep_options_for_qos()
     cct->_conf.set_val("osd_recovery_sleep_hdd", std::to_string(0));
     cct->_conf.set_val("osd_recovery_sleep_ssd", std::to_string(0));
     cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
+
+    // Disable recovery sleep for pg degraded
+    cct->_conf.set_val("osd_recovery_sleep_degraded", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_degraded_hdd", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_degraded_ssd", std::to_string(0));
+    cct->_conf.set_val("osd_recovery_sleep_degraded_hybrid", std::to_string(0));
 
     // Disable delete sleep
     cct->_conf.set_val("osd_delete_sleep", std::to_string(0));

@@ -1291,6 +1291,7 @@ protected:
 
 public:
   int pg_stat_adjust(osd_stat_t *new_stat);
+  bool is_degraded() const { return recovery_state.is_degraded(); }
 protected:
   bool delete_needs_sleep = false;
 
@@ -1314,7 +1315,6 @@ protected:
   bool is_backfill_unfound() const { return recovery_state.is_backfill_unfound(); }
   bool is_incomplete() const { return recovery_state.is_incomplete(); }
   bool is_clean() const { return recovery_state.is_clean(); }
-  bool is_degraded() const { return recovery_state.is_degraded(); }
   bool is_undersized() const { return recovery_state.is_undersized(); }
   bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); } // Primary only
   bool is_remapped() const { return recovery_state.is_remapped(); }
