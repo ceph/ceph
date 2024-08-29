@@ -48,7 +48,7 @@ TEST(ErasureCodeClay, DISABLED_encode_decode)
   EXPECT_EQ(0, r);
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  bufferptr_rw in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -146,7 +146,7 @@ TEST(ErasureCodeClay, DISABLED_encode_decode_aloof_nodes)
   EXPECT_EQ(0, r);
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  bufferptr_rw in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -258,7 +258,7 @@ TEST(ErasureCodeClay, DISABLED_encode_decode_shortening_case)
   EXPECT_EQ(4, clay.t);
   EXPECT_EQ(1, clay.nu);
 
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  bufferptr_rw in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -481,7 +481,7 @@ TEST(ErasureCodeClay, encode)
 			     in,
 			     &encoded));
     EXPECT_EQ(4u, encoded.size());
-    char *last_chunk = encoded[1].c_str();
+    const char *last_chunk = encoded[1].c_str();
     int length =encoded[1].length();
     EXPECT_EQ('X', last_chunk[0]);
     EXPECT_EQ('\0', last_chunk[length - trail_length]);

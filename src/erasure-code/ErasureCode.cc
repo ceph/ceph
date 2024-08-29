@@ -184,15 +184,16 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
   }
   if (padded_chunks) {
     unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;
-    bufferptr buf(buffer::create_aligned(blocksize, SIMD_ALIGN));
-
-    raw.begin((k - padded_chunks) * blocksize).copy(remainder, buf.c_str());
-    buf.zero(remainder, blocksize - remainder);
+    auto buf = buffer::ptr_node::create(
+      buffer::create_aligned(blocksize, SIMD_ALIGN));
+    raw.begin((k - padded_chunks) * blocksize).copy(remainder, buf->c_str());
+    buf->zero(remainder, blocksize - remainder);
     encoded[chunk_index(k-padded_chunks)].push_back(std::move(buf));
 
     for (unsigned int i = k - padded_chunks + 1; i < k; i++) {
-      bufferptr buf(buffer::create_aligned(blocksize, SIMD_ALIGN));
-      buf.zero();
+      auto buf = buffer::ptr_node::create(
+        buffer::create_aligned(blocksize, SIMD_ALIGN));
+      buf->zero();
       encoded[chunk_index(i)].push_back(std::move(buf));
     }
   }
