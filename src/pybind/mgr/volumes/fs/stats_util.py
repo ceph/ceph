@@ -89,7 +89,7 @@ class AsyncJobProgressReporter:
 
         # Creating an RTimer instance in advance so that we can check if clone
         # reporting has already been initiated by calling RTimer.is_alive().
-        self.update_task = RTimer(1, self._update_progress_bars)
+        self.update_task = RTimer(1, self._update_progress_bars) # type: ignore
 
         # self.op_name is to be set by derived classes. This is is need to
         # label progress bars, logging, etc.
@@ -110,7 +110,7 @@ class AsyncJobProgressReporter:
         # progress event ID for ongoing+pending clone jobs
         self.onpen_pev_id: Optional[str] = f'mgr-vol-total-{self.op_name}'
 
-        self.update_task = RTimer(1, self._update_progress_bars)
+        self.update_task = RTimer(1, self._update_progress_bars) # type: ignore
         self.update_task.start()
         log.info('progress reporting for clones has been initiated')
 
