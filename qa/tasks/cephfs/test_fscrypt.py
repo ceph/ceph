@@ -83,9 +83,11 @@ class TestFSCryptRecovery(FSCryptTestCase):
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
 
+        # load all inodes into cache (may be cleared by journal reset)
+        self.mount_a.run_shell_payload(f"cd {self.path} && find")
+
         verify_alternate_name()
 
-        self.mount_a.run_shell_payload(f"cd {self.path} && find")
         self.mount_a.run_shell_payload(f"cd {self.path} && stat {file}")
 
 
