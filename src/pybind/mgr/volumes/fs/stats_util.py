@@ -1,5 +1,5 @@
 '''
-This module contains 2 sections -
+This module contains 3 sections -
 
 1. Helper classes and helper functions for fetching, processing and reporting
    progress statistics for async jobs. This code doesn't depend on the type of
@@ -12,6 +12,9 @@ This module contains 2 sections -
 
 2. Code to fetch, process and report statistics of the progress made by the
    asynchronous clone threads.
+
+3. Code to fetch, process and report statistics of the progress made by the
+   asynchronous purge threads.
 '''
 import errno
 from os.path import join as os_path_join
@@ -22,6 +25,7 @@ from .operations.volume import open_volume_lockless, list_volumes
 from .operations.subvolume import open_clone_subvol_pair_in_vol, open_subvol_in_vol
 from .operations.template import SubvolumeOpType
 from .operations.clone_index import open_clone_index, PATH_MAX
+from .operations.trash import get_trashcan_stats
 from .operations.resolver import resolve_group_and_subvolume_name
 from .exception import VolumeException
 from .async_cloner import get_clone_state
@@ -93,17 +97,19 @@ class VolumesProgressBar:
     addition and removal of progress bars to "ceph status" output.
 
     =======HOW TO USE THIS CLASS=======
-    1. Inherit this class and call its __init___().
-    2. Set self.OP_NAME to operation for which progress is to be reported. For
-       example, for cloning and purging it should be 'clone' and 'purge'
-       respectively.
-    3. Write all code for updating progress bars under the method
+    1. Inherit this class, call its __init___() and pass OP_NAME to __init__().
+       It should indicate the operation for which the progress is to be
+       reported. For example, for cloning and purging it should be 'clone' and
+       'purge' respectively.
+    2. Write all code for updating progress bars under the method
        "_update_progress_bars()" directly or under a method called by this
        method.
-    4. When the async job is finished, call self.finish().
+    3. When the async job is finished, call self.finish().
     '''
 
-    def __init__(self, volclient, volspec, RTIMER_SLEEP=1):
+    def __init__(self, volclient, volspec, OP_NAME, RTIMER_SLEEP=1):
+        self.volspec = volspec
+
         # instance of VolumeClient is needed here so that call to
         # LibCephFS.getxattr() can be made.
         self.volclient = volclient
@@ -113,13 +119,13 @@ class VolumesProgressBar:
         # Creating an RTimer instance in advance so that we can check if async
         # job's progress reporting has already been initiated by calling
         # RTimer.is_alive().
-        self.update_task = RTimer(1, self._update_progress_bars)
+        self.update_task = RTimer(1, self._update_progress_bars) # type: ignore
 
         self.RTIMER_SLEEP = RTIMER_SLEEP
 
         # this is to be set by derived classes. This is neeeded for logging
         # and other misc reasons
-        self.OP_NAME = None
+        self.OP_NAME = OP_NAME
 
         # Creating an RTimer instance in advance so that we can check if async
         # job's progress reporting has already been initiated by calling
@@ -229,14 +235,13 @@ class CloneProgressBar(VolumesProgressBar):
     '''
 
     def __init__(self, volclient, volspec):
-        super().__init__(volclient, volspec)
+        super().__init__(volclient, volspec, OP_NAME='clone')
 
         self.ongoing_clones_count = 0
         # progress event ID for ongoing async jobs
         self.on_pev_id: Optional[str] = 'mgr-vol-ongoing-clone'
         # progress event ID for ongoing+pending async jobs
         self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clone'
-
 
     def _get_clone_dst_info(self, fs_handle, ci, clone_entry,
                             clone_index_path):
@@ -419,3 +424,137 @@ class CloneProgressBar(VolumesProgressBar):
         self.volclient.mgr.remote('progress', 'complete', self.onpen_pev_id)
 
         log.info('finished removing progress bars from "ceph status" output')
+
+
+# Following section contains code for fetching, processing and reporting
+# statistics for the progress made by asynchronous purge threads
+
+
+def get_trash_stats_for_all_vols(volclient):
+    subvol_count = 0
+    file_count = 0
+
+    volnames = list_volumes(volclient.mgr)
+    for volname in volnames:
+        s_count, f_count, = get_trashcan_stats(volclient, volname)
+        log.debug(f'In trash directory of volume "{volname}", {s_count} '
+                  f'subvolumes containing {f_count} files were found')
+        subvol_count += s_count
+        file_count += f_count
+
+    log.debug(f'In trash directory of {len(volnames)} volumes, '
+              f'{subvol_count} subvolumes containing total {file_count} '
+               'files were found')
+    return subvol_count, file_count
+
+
+class TrashStats:
+
+    def __init__(self, volclient):
+        self.volclient = volclient
+
+        # total number of subvols in trashcan.
+        self.total_subvols = 0
+        # total number of files in trashcan.
+        self.total_files = 0
+
+    def fetch_initial_stats(self):
+        trash_stats = get_trash_stats_for_all_vols(self.volclient)
+
+        self.total_subvols = trash_stats[0]
+        self.total_files = trash_stats[1]
+
+
+class PurgeProgressBar(VolumesProgressBar):
+    '''
+    Report progress made by asynchronous purge threads.
+    '''
+
+    def __init__(self, volclient, volspec):
+        super().__init__(volclient, volspec, OP_NAME='purge', RTIMER_SLEEP=1)
+
+        self.pev_id = 'mgr-vol-ongoing-purge'
+        self.trash_stats = TrashStats(self.volclient)
+
+        # count how many times rstats were found to be laggy
+        self.laggy_count = 0
+        # after how many laggy counts should a note be shown to the user.
+        self.LAGGY_NOTE_LIMIT = 20
+        # after how many laggy counts progress bar be disabled.
+        self.LAGGY_DISABLE_LIMIT = self.LAGGY_NOTE_LIMIT * 3
+
+        # in case laggy rstats, previous msg and previous progress on progress
+        # bar are printed. therefore they need to be saved.
+        self.prev_msg = None
+        self.prev_fraction = None
+
+    def initiate(self):
+        super().initiate()
+
+        self.trash_stats.fetch_initial_stats()
+        log.debug('fetching rstats for trash dir for the first time, setting '
+                  f'initial stats: {self.trash_stats.total_subvols} subvols '
+                  f'containing {self.trash_stats.total_files} files')
+
+    def _update_progress_bars(self):
+        subvols_left, files_left = self.get_trash_stats_for_all_vols()
+
+        if self.trash_stats.is_trash_empty():
+            self.finish()
+            return
+
+        # XXX: latest stats are higher than initial stats, it means either the
+        # rstats are laggy or more subvols were moved to trash dir. in any case,
+        # update init_file_count and init_subvol_count.
+        if self.trash_stats.are_laggy():
+            self.laggy_count += 1
+
+            self.trash_stats.update_total_data_stats()
+            log.debug('rstats values for trash dir increased instead of '
+                      'decreasing, because they are laggy. updating initial '
+                      'stats to latest stats found. latest stats: '
+                      f'{subvols_left} subvols, {files_left} files')
+
+            if self.laggy_count < self.LAGGY_NOTE_LIMIT:
+                return
+            elif (self.laggy_count < self.LAGGY_DISABLE_LIMIT and
+                  self.laggy_count >= self.LAGGY_NOTE_LIMIT and
+                  self.prev_msg  and self.prev_fraction):
+                # to avoid printing negative progress, print previous progress
+                # and inform user that rstats are laggy
+                self.prev_msg += ' (laggy file system stats)'
+                self._update_progress_bar_event(self.pev_id, self.prev_msg,
+                                                    self.prev_fraction)
+                return
+            elif self.laggy_count >= self.LAGGY_DISABLE_LIMIT:
+                # don't print the progress bar but don't stop this thread.
+                # when rstats stop being laggy, progress bar will be printed
+                # again.
+                self._finish_progress_events()
+                return
+
+        # reset laggy count since rstats aren't laggy anymore.
+        self.laggy_count = 0
+        files_purged = self.trash_stats.total_files - files_left
+        # progress fraction that progress module accepts to print the progress bar.
+        fraction = round(files_purged / self.trash_stats.total_files, 3)
+        percent = round(fraction * 100, 3)
+        msg = (f'Purging {self.trash_stats.total_subvols} subvolumes/'
+               f'{self.trash_stats.total_files} files, average progress = '
+               f'{percent}%')
+
+        # save msg and fraction so that they can be reused in case rstats are
+        # found to be laggy in next round.
+        self.prev_msg = msg
+        self.prev_fraction = fraction
+
+        self._update_progress_bar_event(self.pev_id, msg, fraction)
+        log.debug(f'finished updating purge progress bar with message: {msg}')
+
+    def _finish_progress_events(self):
+        '''
+        Remove progress bars from "ceph status" output.
+        '''
+        assert self.pev_id is not None and 'None' not in self.pev_id
+        self.volclient.mgr.remote('progress', 'complete', self.pev_id)
+        log.debug('finished removing progress bars from "ceph status" output')

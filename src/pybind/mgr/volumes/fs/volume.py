@@ -30,7 +30,7 @@ from .exception import VolumeException, ClusterError, ClusterTimeout, \
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
-from .stats_util import get_clone_stats, CloneProgressBar
+from .stats_util import get_clone_stats, CloneProgressBar, PurgeProgressBar
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -62,10 +62,13 @@ class VolumeClient(CephfsClient["Module"]):
         super().__init__(mgr)
         # volume specification
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
+
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay,
                              self.mgr.snapshot_clone_no_wait)
         self.clone_progress_bar = CloneProgressBar(self, self.volspec)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
+        self.purge_progress_bar = PurgeProgressBar(self, self.volspec)
+
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
         # trash directory does not exist or if there are no purge entries
@@ -306,6 +309,7 @@ class VolumeClient(CephfsClient["Module"]):
                     # TODO: make purge queue as singleton so that trash can kicks
                     # the purge threads on dump.
                     self.purge_queue.queue_job(volname)
+                    self.purge_progress_bar.initiate()
         except VolumeException as ve:
             if ve.errno == -errno.EAGAIN and not force:
                 ve = VolumeException(ve.errno, ve.error_str + " (use --force to override)")
