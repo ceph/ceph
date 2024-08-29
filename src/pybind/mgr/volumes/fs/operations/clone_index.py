@@ -8,7 +8,7 @@ import cephfs
 
 from .index import Index
 from ..exception import IndexException, VolumeException
-from ..fs_util import list_one_entry_at_a_time, listdir
+from ..fs_util import list_one_entry_at_a_time, listdir_by_ctime_order
 
 log = logging.getLogger(__name__)
 
@@ -50,24 +50,7 @@ class CloneIndex(Index):
             raise IndexException(-e.args[0], e.args[1])
 
     def list_entries_by_ctime_order(self):
-        entry_names = listdir(self.fs, self.path, filter_files=False)
-        if not entry_names:
-            return []
-
-        # clone entries with ctime obtained by statig them. basically,
-        # following is a list of tuples where each tuple has 2 memebers.
-        ens_with_ctime = []
-        for en in entry_names:
-            d_path = os.path.join(self.path, en)
-            stb = self.fs.lstat(d_path)
-
-            # add ctime next to clone entry
-            ens_with_ctime.append((en, stb.st_ctime))
-
-        ens_with_ctime.sort(key=lambda ctime: en[1])
-
-        # remove ctime and return list of clone entries sorted by ctime.
-        return [i[0] for i in ens_with_ctime]
+        return listdir_by_ctime_order(self.fs, self.path)
 
     def get_oldest_clone_entry(self, exclude=[]):
         try:
