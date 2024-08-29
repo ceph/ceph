@@ -3,7 +3,6 @@ overrides:
     cluster-conf:
       mon:
         mon op complaint time: 120
-        mon warn on pool no app: false
     # cephadm can take up to 5 minutes to bring up remaining mons
     # This needs to be set before cluster-conf configs are applied.
     conf:
