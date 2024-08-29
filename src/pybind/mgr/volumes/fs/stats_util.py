@@ -1,5 +1,5 @@
 '''
-This module contains 2 sections -
+This module contains 3 sections -
 
 1. Helper classes and helper functions for fetching, processing nd reporting
    progress statistics for async jobs. This code doesn't depend on the type of
@@ -12,6 +12,9 @@ This module contains 2 sections -
 
 2. Code to fetch, process and report statistics of the progress made by the
    asynchronous clone threads.
+
+3. Code to fetch, process and report statistics of the progress made by the
+   asynchronous purge threads.
 '''
 import errno
 from os.path import join as os_path_join
@@ -22,6 +25,7 @@ from .operations.volume import open_volume_lockless, list_volumes
 from .operations.subvolume import open_clone_subvol_pair_in_vol, open_subvol_in_vol
 from .operations.template import SubvolumeOpType
 from .operations.clone_index import open_clone_index, PATH_MAX
+from .operations.trash import Trash
 from .operations.resolver import resolve_group_and_subvolume_name
 from .exception import VolumeException
 from .async_cloner import get_clone_state
@@ -94,17 +98,19 @@ class VolumesProgressBar:
     addition and removal of progress bars to "ceph status" output.
 
     =======HOW TO USE THIS CLASS=======
-    1. Inherit this class and call its __init___().
-    2. Set self.op_name to operation for which progress is to be reported. For
-       example, for cloning and purging it should be 'clone' and 'purge'
-       respectively.
-    3. Write all code for updating progress bars under the method
+    1. Inherit this class, call its __init___() and pass OP_NAME to __init__().
+       It should indicate the operation for which the progress is to be
+       reported. For example, for cloning and purging it should be 'clone' and
+       'purge' respectively.
+    2. Write all code for updating progress bars under the method
        "_update_progress_bars()" directly or under a method called by this
        method.
-    4. When the async job is finished, call self.finish().
+    3. When the async job is finished, call self.finish().
     '''
 
-    def __init__(self, volclient, volspec, RTIMER_SLEEP=1):
+    def __init__(self, volclient, volspec, OP_NAME, RTIMER_SLEEP=1):
+        self.volspec = volspec
+
         # instance of VolumeClient is needed here so that call to
         # LibCephFS.getxattr() can be made.
         self.volclient = volclient
@@ -114,13 +120,13 @@ class VolumesProgressBar:
         # Creating an RTimer instance in advance so that we can check if async
         # job's progress reporting has already been initiated by calling
         # RTimer.is_alive().
-        self.update_task = RTimer(1, self._update_progress_bars)
+        self.update_task = RTimer(1, self._update_progress_bars) # type: ignore
 
         self.RTIMER_SLEEP = RTIMER_SLEEP
 
-        # self.op_name is to be set by derived classes. This is is need to
+        # self.OP_NAME is to be set by derived classes. This is is need to
         # label progress bars, logging, etc.
-        self.op_name = None
+        self.OP_NAME = OP_NAME
 
         # Creating an RTimer instance in advance so that we can check if async
         # job's progress reporting has already been initiated by calling
@@ -129,20 +135,21 @@ class VolumesProgressBar:
                                   self._update_progress_bars) # type: ignore
 
     def initiate(self):
-        assert self.op_name
-        assert isinstance(self.op_name, str)
+        assert self.OP_NAME
+        assert isinstance(self.OP_NAME, str)
+        assert 'None' not in self.OP_NAME
 
         if self.update_task.is_alive():
             log.info('progress reporting thread is already alive, not '
                      'initiating it again')
             return
 
-        log.info(f'initiating progress reporting for {self.op_name} '
+        log.info(f'initiating progress reporting for {self.OP_NAME} '
                   'threads...')
         self.update_task = RTimer(self.RTIMER_SLEEP,
                                   self._update_progress_bars) # type: ignore
         self.update_task.start()
-        log.info(f'progress reporting for {self.op_name} threads has been '
+        log.info(f'progress reporting for {self.OP_NAME} threads has been '
                   'initiated')
 
     def _update_progress_bar_event(self, ev_id, ev_msg, ev_progress_fraction):
@@ -153,7 +160,7 @@ class VolumesProgressBar:
         self.volclient.mgr.remote('progress', 'update', ev_id=ev_id,
                                   ev_msg=ev_msg,
                                   ev_progress=ev_progress_fraction,
-                                  refs=['mds', self.op_name], add_to_ceph_s=True)
+                                  refs=['mds', self.OP_NAME], add_to_ceph_s=True)
 
         log.debug('call to update() from mgr/update module was successful')
 
@@ -230,14 +237,13 @@ class CloneProgressBar(VolumesProgressBar):
     '''
 
     def __init__(self, volclient, volspec):
-        super().__init__(volclient, volspec)
+        super().__init__(volclient, volspec, OP_NAME='clone')
 
         self.ongoing_clones_count = 0
         # progress event ID for ongoing async jobs
         self.on_pev_id: Optional[str] = 'mgr-vol-ongoing-clone'
         # progress event ID for ongoing+pending async jobs
         self.onpen_pev_id: Optional[str] = 'mgr-vol-total-clone'
-
 
     def _get_clone_dst_info(self, fs_handle, ci, clone_entry,
                             clone_index_path):
@@ -418,5 +424,89 @@ class CloneProgressBar(VolumesProgressBar):
 
         self.volclient.mgr.remote('progress', 'complete', self.on_pev_id)
         self.volclient.mgr.remote('progress', 'complete', self.onpen_pev_id)
+
+        log.info('finished removing progress bars from "ceph status" output')
+
+# Following section contains code for fetching, processing and reporting
+# statistics for the progress made by asynchronous purge threads
+
+
+class PurgeProgressBar(VolumesProgressBar):
+    '''
+    Report progress made by asynchronous purge threads.
+    '''
+
+    def __init__(self, volclient, volspec):
+        super().__init__(volclient, volspec, OP_NAME='purge', RTIMER_SLEEP=0.1)
+
+        self.pev_id = 'mgr-vol-ongoing-purge'
+
+    def initiate(self):
+        super().initiate()
+
+        # init_subvol_count = initial num of trash entries
+        self.init_subvol_count = 0
+        # init_file_count = initial num of files
+        self.init_file_count = 0
+
+        self.init_subvol_count, self.init_file_count = self._get_trash_stats()
+        log.debug('fetching rstats for trash dir for the first time, setting '
+                  f'initial stats: {self.init_subvol_count} subvols containing '
+                  f'{self.init_file_count} files')
+
+
+    def _get_trash_stats(self):
+        file_count = 0
+        subvol_count = 0
+        TRASH_PATH = os_path_join(self.volspec.DEFAULT_SUBVOL_PREFIX,
+                                  Trash.GROUP_NAME).encode('utf-8')
+
+
+        for volname in list_volumes(self.volclient.mgr):
+            with open_volume_lockless(self.volclient, volname) as fs_handle:
+                file_count += int(fs_handle.getxattr(TRASH_PATH,
+                                                     'ceph.dir.rfiles'))
+                subvol_count += int(fs_handle.getxattr(TRASH_PATH,
+                                                       'ceph.dir.subdirs'))
+
+            log.debug(f'{file_count} files found in {subvol_count} subvolumes')
+        return subvol_count, file_count
+
+    def _update_progress_bars(self):
+        latest_subvol_count, latest_file_count = self._get_trash_stats()
+        log.debug(f'Latest stats: {latest_subvol_count} subvols, '
+                  f'{latest_file_count} files')
+
+        if latest_file_count == 0:
+            self.finish()
+            return
+
+        if self.init_file_count < latest_file_count:
+            self.init_subvol_count, self.init_file_count = latest_subvol_count, latest_file_count
+            log.debug(f'rstats for trash dir increased instead of decreasing, '
+                       'updating initial stats to latest stats found: '
+                      f'{latest_subvol_count} subvols, {latest_file_count} '
+                       'files')
+            return
+
+        files_purged = self.init_file_count - latest_file_count
+        # progress fraction that progress module accepts to print the progress bar.
+        fraction = round(files_purged / self.init_file_count, 3)
+        percent = round(fraction * 100, 3)
+        msg = (f'Purging {self.init_subvol_count} '
+               f'subvolumes/{self.init_file_count} files, average progress = '
+               f'{percent}%')
+        self._update_progress_bar_event(self.pev_id, msg, fraction)
+        log.debug(f'finished updating purge progress bar with message: {msg}')
+
+    def _finish_progress_events(self):
+        '''
+        Remove progress bars from "ceph status" output.
+        '''
+        log.info('removing progress bars from "ceph status" output')
+
+        assert self.pev_id is not None and 'None' not in self.pev_id
+
+        self.volclient.mgr.remote('progress', 'complete', self.pev_id)
 
         log.info('finished removing progress bars from "ceph status" output')
