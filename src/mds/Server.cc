@@ -4147,6 +4147,7 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
       auto em = dn->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
       if (em.second) {
 	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
+        mdr->mark_event("creating lookup batch head");
       } else {
 	dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);
@@ -4159,6 +4160,7 @@ void Server::handle_client_getattr(const MDRequestRef& mdr, bool is_lookup)
       auto em = in->batch_ops.emplace(std::piecewise_construct, std::forward_as_tuple(mask), std::forward_as_tuple());
       if (em.second) {
 	em.first->second = std::make_unique<Batch_Getattr_Lookup>(this, mdr);
+        mdr->mark_event("creating getattr batch head");
       } else {
 	dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);
