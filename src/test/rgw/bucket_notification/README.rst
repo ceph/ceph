@@ -133,6 +133,10 @@ Then you need to run the following command::
 
         sudo chkconfig rabbitmq-server on
 
+Update rabbitmq-server configuration to allow access to the guest user from anywhere on the network. Uncomment or add line to rabbirmq configuration, usually `/etc/rabbitmq/rabbirmq.comf`::
+
+        loopback_user.guest = false
+
 Finally, to start the RabbitMQ server you need to run the following command::
 
         sudo /sbin/service rabbitmq-server start
@@ -140,6 +144,18 @@ Finally, to start the RabbitMQ server you need to run the following command::
 To confirm that the RabbitMQ server is running you can run the following command to check the status of the server::
 
         sudo /sbin/service rabbitmq-server status
+
+Add [boto3 extension](https://github.com/ceph/ceph/tree/main/examples/rgw/boto3#introduction) as it's required for bucket notification tests. You can use the default folder or create a custom one, more information [here](https://github.com/boto/botocore/blob/develop/botocore/loaders.py#L33).
+Default folder::
+
+        mkdir -p ~/.aws/models/s3/2006-03-01/
+        cp /path/to/ceph/examples/rgw/boto3/service-2.sdk-extras.json ~/.aws/models/s3/2006-03-01/
+
+Custom folder::
+
+        mkdir -p /path/to/custom/folder/models/s3/2006-03-01/
+        cp /path/to/ceph/examples/rgw/boto3/service-2.sdk-extras.json /path/to/custom/folder/models/s3/2006-03-01/
+        export AWS_DATA_PATH=/path/to/custom/folder/
 
 After running `vstart.sh` and RabbitMQ server you're ready to run the AMQP tests::
 
@@ -156,4 +172,3 @@ To run the RabbitMQ SSL security tests use the following::
 During these tests, the test script will restart the RabbitMQ server with the correct security configuration (``sudo`` privileges will be needed).
 For that reason it is not recommended to run the `amqp_ssl_test` tests, that assumes a manually configured rabbirmq server, in the same run as `amqp_test` tests, 
 that assume the rabbitmq daemon running on the host as a service.
-
