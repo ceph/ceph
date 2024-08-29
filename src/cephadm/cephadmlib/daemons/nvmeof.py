@@ -111,6 +111,7 @@ class CephNvmeof(ContainerDaemonForm):
             )
         else:
             mounts.update(self._get_container_mounts(data_dir, log_dir))
+        mounts.update(self._get_tls_cert_key_mounts(data_dir, self.files))
 
     def customize_container_binds(
         self, ctx: CephadmContext, binds: List[List[str]]
