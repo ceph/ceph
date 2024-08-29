@@ -133,7 +133,7 @@ protected:
   // Open state
   ceph_msg_connect connect_msg;
   ceph_msg_connect_reply connect_reply;
-  ceph::buffer::ptr authorizer_buf;  // auth(orizer) payload read off the wire
+  ceph::buffer::ptr_rw authorizer_buf;  // auth(orizer) payload read off the wire
   ceph::buffer::list authorizer_more;  // connect-side auth retry (we added challenge)
 
   utime_t backoff;  // backoff time
@@ -141,7 +141,7 @@ protected:
   utime_t throttle_stamp;
   uint64_t cur_msg_size;
   ceph_msg_header current_header;
-  ceph::buffer::ptr front, middle, data;
+  ceph::buffer::ptr_rw front, middle, data;
 
   bool replacing;  // when replacing process happened, we will reply connect
                    // side with RETRY tag and accept side will clear replaced
