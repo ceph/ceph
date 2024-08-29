@@ -20,9 +20,10 @@ from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
-    get_pending_subvol_deletions_count, get_all_pending_clones_count
+    get_pending_subvol_deletions_count, get_all_pending_clones_count, \
+    open_trashcan_in_vol
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
-    create_clone, open_subvol_in_group
+    create_clone, open_subvol_in_group, get_subvol_stats
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -70,6 +71,9 @@ class VolumeClient(CephfsClient["Module"]):
                                                              self.volspec)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         self.purge_progress_reporter = PurgeProgressReporter(self, self.volspec)
+        # to maintain number of files and subvols in trash for a volume
+        # {'volname': {'total_files': x, 'total_subvols': y}}
+        self.purge_stats = {}
 
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -287,6 +291,29 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _update_purge_stats(self, volname, fs_handle, group, subvolname):
+        '''
+        Count total number of files and subvolumes in trash directpry, this
+        statistic is useful in reporting the progress made by purge threads.
+        '''
+        num_of_trash_files = get_subvol_stats(self.mgr, fs_handle, self.volspec, group,
+                                              subvolname)
+
+        if not self.purge_stats.get(volname, None):
+            self.purge_stats[volname] = {'total_files': num_of_trash_files,
+                                         'total_subvols': 1}
+            return
+
+        try:
+            self.purge_stats[volname]['total_files'] += num_of_trash_files
+        except KeyError:
+            self.purge_stats[volname]['total_files'] = num_of_trash_files
+
+        try:
+            self.purge_stats[volname]['total_subvols'] += 1
+        except KeyError:
+            self.purge_stats[volname]['total_subvols'] = 1
+
     def remove_subvolume(self, **kwargs):
         ret         = 0, "", ""
         volname     = kwargs['vol_name']
@@ -298,6 +325,7 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
+                    self._update_purge_stats(volname, fs_handle, group, subvolname)
                     remove_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, force, retainsnaps)
                     # kick the purge threads for async removal -- note that this
                     # assumes that the subvolume is moved to trash can.
@@ -1003,6 +1031,58 @@ class VolumeClient(CephfsClient["Module"]):
             self.cloner.cancel_job(volname, (clonename, groupname))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def purge_status(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+
+        try:
+            with open_trashcan_in_vol(self, volname, self.volspec) as (_, trashcan):
+                # TODO: report number of unlink() + rmdir() calls executed per
+                # second
+                total_files = self.purge_stats[volname]['total_files']
+                total_subvols = self.purge_stats[volname]['total_subvols']
+
+                stats = trashcan.get_stats()
+                if stats:
+                    files_left = stats['files_left']
+                    subvols_left = stats['subvols_left']
+                    total_files = self.purge_stats[volname]['total_files']
+                    total_subvols = self.purge_stats[volname]['total_subvols']
+
+                    stats['files_left'] = f'{files_left}/{total_files}'
+                    stats['subvols_left'] = f'{subvols_left}/{total_subvols}'
+
+                    files_purged = total_files - files_left
+                    files_purged_percent = files_purged/total_files * 100
+                    files_purged_percent = round(files_purged_percent, 3)
+
+                    subvols_purged = total_subvols - subvols_left
+                    subvols_purged_percent = subvols_purged/total_subvols * 100
+                    subvols_purged_percent = round(subvols_purged_percent, 3)
+
+                    status = {'status':
+                                {'state': 'ongoing',
+                                 'progress_report':
+                                     {'percentage_purged': {},
+                                      'amount_left': {}}}}
+                    percent_purged = status['status']['progress_report']['percentage_purged'] # type: ignore
+                    amount_left = status['status']['progress_report']['amount_left'] # type: ignore
+                    percent_purged['files'] = f'{files_purged_percent}%'
+                    percent_purged['subvols'] = f'{subvols_purged_percent}%'
+                    amount_left['files'] = stats['files_left']
+                    amount_left['subvols'] = stats['subvols_left']
+                else:
+                    status = {'status': {'state': 'complete'}}
+                    self.purge_stats[volname]['total_files'] = 0
+                    self.purge_stats[volname]['total_subvols'] = 0
+                ret = 0, json.dumps(status, indent=2), ''
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT and '/volumes/_deleting' in ve.error_str:
+                ret = (0, '', 'no trash yet, got nothing to purge')
+            else:
+                ret = self.volume_exception_to_retval(ve)
         return ret
 
     ### group operations

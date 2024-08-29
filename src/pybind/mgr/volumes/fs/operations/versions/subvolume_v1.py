@@ -715,6 +715,22 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         if flush:
             self.metadata_mgr.flush()
 
+    def _get_stats(self, path, num_of_files):
+        with self.fs.opendir(path) as dir_handle:
+            d = self.fs.readdir(dir_handle)
+            while d:
+                if d.d_name not in (b'.', b'..'):
+                    if d.is_dir():
+                        d_full = os.path.join(path, d.d_name)
+                        self._get_stats(d_full, num_of_files)
+
+                num_of_files += 1
+                d = self.fs.readdir(dir_handle)
+        return num_of_files
+
+    def get_stats(self):
+        return self._get_stats(self.path, 0)
+
     def remove(self, retainsnaps=False):
         if retainsnaps:
             raise VolumeException(-errno.EINVAL, "subvolume '{0}' does not support snapshot retention on delete".format(self.subvolname))
