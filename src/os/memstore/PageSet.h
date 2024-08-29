@@ -53,7 +53,7 @@ struct Page {
   };
   void encode(ceph::buffer::list &bl, size_t page_size) const {
     using ceph::encode;
-    bl.append(ceph::buffer::copy(data, page_size));
+    bl.push_back(ceph::buffer::copy(data, page_size));
     encode(offset, bl);
   }
   void decode(ceph::buffer::list::const_iterator &p, size_t page_size) {

@@ -1667,7 +1667,7 @@ int MemStore::PageSetObject::read(uint64_t offset, uint64_t len, ceph::buffer::l
   data.get_range(offset, len, tls_pages);
 
   // allocate a buffer for the data
-  ceph::buffer::ptr buf(len);
+  ceph::buffer::ptr_rw buf(len);
 
   auto p = tls_pages.begin();
   while (remaining) {
