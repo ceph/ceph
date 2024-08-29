@@ -724,7 +724,7 @@ bool CDentry::check_corruption(bool load)
       dout(1) << "loaded already corrupt dentry: " << *this << dendl;
       corrupt_first_loaded = true;
     } else {
-      derr << "newly corrupt dentry to be committed: " << *this << dendl;
+      derr << "newly corrupt dentry to be committed: " << *this << " with next_snap: " << next_snap << dendl;
     }
     if (g_conf().get_val<bool>("mds_go_bad_corrupt_dentry")) {
       dir->go_bad_dentry(last, get_name());
