@@ -11,6 +11,8 @@ import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
 import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
+import { Permissions } from '~/app/shared/models/permissions';
 
 @Component({
   selector: 'cd-rgw-user-details',
@@ -34,6 +36,8 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   keys: any = [];
   keysColumns: CdTableColumn[] = [];
   keysSelection: CdTableSelection = new CdTableSelection();
+  tableAction: CdTableAction[] = [];
+  permissions: Permissions;
 
   icons = Icons;
 
@@ -59,6 +63,15 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   }
 
   ngOnChanges() {
+    this.tableAction = [
+      {
+        name: $localize`Show`,
+        permission: 'read',
+        click: () => this.showKeyModal(),
+        icon: Icons.show
+      }
+    ];
+
     if (this.selection) {
       this.user = this.selection;
 

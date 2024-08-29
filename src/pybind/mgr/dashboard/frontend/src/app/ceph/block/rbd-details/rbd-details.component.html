@@ -11,44 +11,47 @@
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
-        <table class="table table-striped table-bordered">
+        <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+               data-testid="rbd-details-table">
           <tbody>
-            <tr>
+            <tr cdstablerow>
               <td i18n
-                  class="bold w-25">Name</td>
+                  class="bold w-25"
+                  cdstabledata>Name</td>
               <td class="w-75">{{ selection.name }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
-                  class="bold">Pool</td>
+                  class="bold"
+                  cdstabledata>Pool</td>
               <td>{{ selection.pool_name }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Data Pool</td>
               <td>{{ selection.data_pool | empty }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Created</td>
               <td>{{ selection.timestamp | cdDate }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Size</td>
               <td>{{ selection.size | dimlessBinary }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Objects</td>
               <td>{{ selection.num_objs | dimless }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Object size</td>
               <td>{{ selection.obj_size | dimlessBinary }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Features</td>
               <td>
@@ -57,7 +60,7 @@
                 </span>
               </td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Provisioned</td>
               <td>
@@ -72,7 +75,7 @@
                 </span>
               </td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Total provisioned</td>
               <td>
@@ -87,17 +90,17 @@
                 </span>
               </td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Striping unit</td>
               <td>{{ selection.stripe_unit | dimlessBinary }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Striping count</td>
               <td>{{ selection.stripe_count }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Parent</td>
               <td>
@@ -106,17 +109,17 @@
                 <span *ngIf="!selection.parent">-</span>
               </td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Block name prefix</td>
               <td>{{ selection.block_name_prefix }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Order</td>
               <td>{{ selection.order }}</td>
             </tr>
-            <tr>
+            <tr cdstablerow>
               <td i18n
                   class="bold">Format Version</td>
               <td>{{ selection.image_format }}</td>

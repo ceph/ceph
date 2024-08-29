@@ -1,6 +1,5 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -13,6 +12,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 @Component({
   selector: 'cd-rgw-config-modal',
@@ -35,11 +35,11 @@ export class RgwConfigModalComponent implements OnInit {
   allEncryptionConfigValues: any = [];
   editing = false;
   action: string;
+  table: TableComponent;
 
   constructor(
     private formBuilder: CdFormBuilder,
     public activeModal: NgbActiveModal,
-    private router: Router,
     public actionLabels: ActionLabelsI18n,
     private rgwBucketService: RgwBucketService,
     private notificationService: NotificationService
@@ -180,9 +180,7 @@ export class RgwConfigModalComponent implements OnInit {
         },
         complete: () => {
           this.activeModal.close();
-          this.router.routeReuseStrategy.shouldReuseRoute = () => false;
-          this.router.onSameUrlNavigation = 'reload';
-          this.router.navigate([this.router.url]);
+          this.table?.refreshBtn();
         }
       });
   }

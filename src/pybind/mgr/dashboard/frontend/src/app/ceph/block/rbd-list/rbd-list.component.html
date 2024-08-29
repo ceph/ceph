@@ -37,14 +37,14 @@
 <ng-template #mirroringTpl
              let-value="data.value"
              let-row="data.row">
-  <span *ngIf="value.length === 3; else probb"
+  <span *ngIf="value?.length === 3; else probb"
         class="badge badge-info">{{ value[0] }}</span>&nbsp;
-  <span *ngIf="value.length === 3"
+  <span *ngIf="value?.length === 3"
         class="badge badge-info">{{ value[1] }}</span>&nbsp;
-  <span *ngIf="row.primary === true"
+  <span *ngIf="row?.primary === true"
         class="badge badge-info"
         i18n>primary</span>
-  <span *ngIf="row.primary === false"
+  <span *ngIf="row?.primary === false"
         class="badge badge-info"
         i18n>secondary</span>
   <ng-template #probb>

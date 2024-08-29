@@ -8,6 +8,7 @@
       <cd-table #table
                 [data]="encryptionConfigValues"
                 [columns]="columns"
+                (fetchData)="fetchData()"
                 identifier="unique_id"
                 [forceIdentifier]="true"
                 [hasDetails]="true"

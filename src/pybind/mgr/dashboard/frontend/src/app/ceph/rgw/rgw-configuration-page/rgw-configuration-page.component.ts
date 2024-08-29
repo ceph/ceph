@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output, ViewChild } from '@angular/core';
 
 import { NgbActiveModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -17,6 +17,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
 @Component({
   selector: 'cd-rgw-configuration-page',
@@ -25,6 +26,8 @@ import { rgwBucketEncryptionModel } from '../models/rgw-bucket-encryption';
 })
 export class RgwConfigurationPageComponent extends ListWithDetails implements OnInit {
   readonly vaultAddress = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{4}$/;
+  @ViewChild(TableComponent)
+  table: TableComponent;
 
   kmsProviders: string[];
 
@@ -91,20 +94,6 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
       }
     ];
 
-    this.rgwBucketService.getEncryptionConfig().subscribe((data: any) => {
-      this.allEncryptionValues = data;
-      const allowedBackends = rgwBucketEncryptionModel.kmsProviders;
-
-      const kmsBackends = this.getBackend(data, 'SSE_KMS');
-      const s3Backends = this.getBackend(data, 'SSE_S3');
-
-      const allKmsBackendsPresent = this.areAllAllowedBackendsPresent(allowedBackends, kmsBackends);
-      const allS3BackendsPresent = this.areAllAllowedBackendsPresent(allowedBackends, s3Backends);
-
-      this.disableCreate = allKmsBackendsPresent && allS3BackendsPresent;
-      this.encryptionConfigValues = Object.values(data).flat();
-    });
-
     this.excludeProps = this.columns.map((column) => column.prop);
     this.excludeProps.push('unique_id');
   }
@@ -122,7 +111,8 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
       const initialState = {
         action: 'edit',
         editing: true,
-        selectedEncryptionConfigValues: this.selection.first()
+        selectedEncryptionConfigValues: this.selection.first(),
+        table: this.table
       };
       this.bsModalRef = this.modalService.show(RgwConfigModalComponent, initialState, {
         size: 'lg'
@@ -144,5 +134,21 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
 
   setExpandedRow(expandedRow: any) {
     super.setExpandedRow(expandedRow);
+  }
+
+  fetchData() {
+    this.rgwBucketService.getEncryptionConfig().subscribe((data: any) => {
+      this.allEncryptionValues = data;
+      const allowedBackends = rgwBucketEncryptionModel.kmsProviders;
+
+      const kmsBackends = this.getBackend(data, 'SSE_KMS');
+      const s3Backends = this.getBackend(data, 'SSE_S3');
+
+      const allKmsBackendsPresent = this.areAllAllowedBackendsPresent(allowedBackends, kmsBackends);
+      const allS3BackendsPresent = this.areAllAllowedBackendsPresent(allowedBackends, s3Backends);
+
+      this.disableCreate = allKmsBackendsPresent && allS3BackendsPresent;
+      this.encryptionConfigValues = Object.values(data).flat();
+    });
   }
 }

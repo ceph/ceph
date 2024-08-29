@@ -195,7 +195,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
-      group: [null, Validators.required],
+      group: [
+        null,
+        CdValidators.requiredIf({
+          service_type: 'nvmeof'
+        })
+      ],
       // RGW
       rgw_frontend_port: [null, [CdValidators.number(false)]],
       realm_name: [null],

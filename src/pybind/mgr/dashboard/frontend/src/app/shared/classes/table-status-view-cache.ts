@@ -7,18 +7,18 @@ export class TableStatusViewCache extends TableStatus {
 
     switch (status) {
       case ViewCacheStatus.ValueOk:
-        this.type = 'light';
+        this.type = 'ghost';
         this.msg = '';
         break;
       case ViewCacheStatus.ValueNone:
-        this.type = 'info';
+        this.type = 'primary';
         this.msg =
           (statusFor ? $localize`Retrieving data for ${statusFor}.` : $localize`Retrieving data.`) +
           ' ' +
           $localize`Please wait...`;
         break;
       case ViewCacheStatus.ValueStale:
-        this.type = 'warning';
+        this.type = 'secondary';
         this.msg = statusFor
           ? $localize`Displaying previously cached data for ${statusFor}.`
           : $localize`Displaying previously cached data.`;

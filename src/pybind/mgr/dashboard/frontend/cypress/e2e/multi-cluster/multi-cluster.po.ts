@@ -10,6 +10,11 @@ const WAIT_TIMER = 1000;
 export class MultiClusterPageHelper extends PageHelper {
   pages = pages;
 
+  columnIndex = {
+    alias: 2,
+    connection: 3
+  };
+
   auth(url: string, alias: string, username: string, password: string) {
     cy.contains('button', 'Connect').click();
     cy.get('cd-multi-cluster-form').should('exist');
@@ -48,5 +53,21 @@ export class MultiClusterPageHelper extends PageHelper {
       cy.get('cd-submit-button').click();
     });
     cy.wait(WAIT_TIMER);
+  }
+
+  checkConnectionStatus(alias: string, expectedStatus = 'CONNECTED', shouldReload = true) {
+    let aliasIndex = this.columnIndex.alias;
+    let statusIndex = this.columnIndex.connection;
+    if (shouldReload) {
+      cy.reload(true, { log: true, timeout: 5 * 1000 });
+    }
+
+    this.getTableCell(aliasIndex, alias)
+      .parent()
+      .find(`[cdstabledata]:nth-child(${statusIndex}) .badge`)
+      .should(($ele) => {
+        const status = $ele.toArray().map((v) => v.innerText);
+        expect(status).to.include(expectedStatus);
+      });
   }
 }
