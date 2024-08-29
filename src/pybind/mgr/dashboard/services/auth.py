@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import abc
 import base64
 import hashlib
 import hmac
@@ -9,7 +10,7 @@ import os
 import threading
 import time
 import uuid
-from typing import Optional
+from typing import Optional, Type
 
 import cherrypy
 
@@ -224,21 +225,34 @@ class AuthManager(object):
         return cls.AUTH_PROVIDER.authorize(username, scope, permissions)  # type: ignore
 
 
-class AuthManagerTool(cherrypy.Tool):
-    def __init__(self):
-        super(AuthManagerTool, self).__init__(
-            'before_handler', self._check_authentication, priority=20)
-        self.logger = logging.getLogger('auth')
+class BaseAuth(abc.ABC):
+    @abc.abstractmethod
+    def __init__(self, logger: logging.Logger) -> None:
+        pass
 
-    def _check_authentication(self):
+    @abc.abstractmethod
+    def authenticate(self) -> Optional[str]:
+        pass
+
+    @abc.abstractmethod
+    def authorize(self, username: str, scope, permissions):
+        pass
+
+
+class Local(BaseAuth):
+    def __init__(self, logger: logging.Logger) -> None:
+        self.logger = logger
+
+    def authenticate(self) -> Optional[str]:
         JwtManager.reset_user()
         token = JwtManager.get_token_from_header()
         if token:
             user = JwtManager.get_user(token)
             if user:
-                self._check_authorization(user.username)
-                return
+                return user.username
+        return None
 
+        """"
         resp_head = cherrypy.response.headers
         req_head = cherrypy.request.headers
         req_header_cross_origin_url = req_head.get('Access-Control-Allow-Origin')
@@ -252,28 +266,62 @@ class AuthManagerTool(cherrypy.Tool):
                           cherrypy.url(relative='server'))
         raise cherrypy.HTTPError(401, 'You are not authorized to access '
                                       'that resource')
+        """
 
-    def _check_authorization(self, username):
-        self.logger.debug("checking authorization...")
+    def authorize(self, username, scope, perms) -> Optional[bool]:
+        JwtManager.set_user(username)
+        return AuthManager.authorize(username, scope, perms)
+
+
+class AuthManagerTool(cherrypy.Tool):
+    def __init__(self, backend: str):
+        self.logger = logging.getLogger('auth')
+        backend_cls = self.get_auth_backend(backend.lower())
+        self.logger.debug("Using auth backend: '%s'", backend_cls.__name__.lower())
+        self.auth = backend_cls(logger=self.logger)
+        super().__init__('before_handler', self.authenticate, priority=20)
+
+    @staticmethod
+    def get_auth_backend(backend_name: str) -> Type[BaseAuth]:
+        for subclass in BaseAuth.__subclasses__():
+            if subclass.__name__.lower() == backend_name:
+                return subclass
+        else:
+            raise ValueError(f"Unknown auth backend: '{backend_name}'")
+
+    def authenticate(self):
+        self.logger.debug("checking authentication for request '%s'...", cherrypy.request.unique_id)
+        username = self.auth.authenticate()
+        self.logger.debug("request authenticated from user '%s'", username)
+        if username:
+            cherrypy.request.username = username
+            self.authorize(username)
+        else:
+            self.logger.debug("Invalid authentication credentials")
+            raise cherrypy.HTTPError(401, "Invalid authentication credentials")
+
+    def authorize(self, username):
+        method = cherrypy.request.method
+        url = cherrypy.request.path_info
+        self.logger.debug("checking authorization for %s '%s' by '%s'...", method, url, username)
+
         handler = cherrypy.request.handler.callable
         controller = handler.__self__
-        sec_scope = getattr(controller, '_security_scope', None)
-        sec_perms = getattr(handler, '_security_permissions', None)
-        JwtManager.set_user(username)
-
-        if not sec_scope:
-            # controller does not define any authorization restrictions
+        scope = getattr(controller, '._security_scope', None)
+        if scope is None:
+            # Unrestricted access
             return
 
-        self.logger.debug("checking '%s' access to '%s' scope", sec_perms,
-                          sec_scope)
+        try:
+            perms = handler._security_permissions
+        except AttributeError:
+            self.logger.debug("Fail to check permission on: %s:%s", controller, handler)
+            raise cherrypy.HTTPError(403, "You are not allowed to access this resource")
 
-        if not sec_perms:
-            self.logger.debug("Fail to check permission on: %s:%s", controller,
-                              handler)
-            raise cherrypy.HTTPError(403, "You don't have permissions to "
-                                          "access that resource")
-
-        if not AuthManager.authorize(username, sec_scope, sec_perms):
-            raise cherrypy.HTTPError(403, "You don't have permissions to "
-                                          "access that resource")
+        self.logger.debug("checking '%s' access to '%s' scope", perms, scope)
+        if self.auth.authorize(username=username, scope=scope, perms=perms):
+            self.logger.debug("user '%s' authorized to %s '%s'", username, method, url)
+            return
+        else:
+            self.logger.debug("User '%s' cannot %s '%s'", username, method, url)
+            raise cherrypy.HTTPError(403, "You are not allowed to access this resource")

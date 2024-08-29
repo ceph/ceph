@@ -191,7 +191,7 @@ class BaseController:
         if scope is None:
             raise Exception("Cannot verify permissions without scope security"
                             " defined")
-        username = JwtManager.LOCAL_USER.username
+        username = cherrypy.request.username
         return AuthManager.authorize(username, scope, permissions)
 
     @classmethod
