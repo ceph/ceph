@@ -84,9 +84,7 @@ class MessengerClient {
         msgr(m), concurrent(c), conn(con), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
         dispatcher(think_time_us, this), inflight(0) {
       m->add_dispatcher_head(&dispatcher);
-      bufferptr ptr(msg_len);
-      memset(ptr.c_str(), 0, msg_len);
-      data.append(ptr);
+      data.append_zero(msg_len);
     }
     void *entry() override {
       std::unique_lock locker{lock};

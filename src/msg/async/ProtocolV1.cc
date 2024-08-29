@@ -40,7 +40,7 @@ const int ASYNC_COALESCE_THRESHOLD = 256;
 
 using namespace std;
 
-static ceph::bufferptr alloc_aligned_buffer(unsigned len, unsigned off) {
+static ceph::bufferptr_rw alloc_aligned_buffer(unsigned len, unsigned off) {
   // create a buffer to read into that matches the data alignment
   unsigned alloc_len = 0;
   unsigned left = len;
@@ -52,7 +52,7 @@ static ceph::bufferptr alloc_aligned_buffer(unsigned len, unsigned off) {
     left -= head;
   }
   alloc_len += left;
-  ceph::bufferptr ptr(ceph::buffer::create_small_page_aligned(alloc_len));
+  ceph::bufferptr_rw ptr(ceph::buffer::create_small_page_aligned(alloc_len));
   if (head)
     ptr.set_offset(CEPH_PAGE_SIZE - head);
   return ptr;
@@ -90,7 +90,7 @@ void ProtocolV1::connect() {
   this->state = START_CONNECT;
 
   // reset connect state variables
-  authorizer_buf = ceph::bufferptr{};
+  authorizer_buf = ceph::bufferptr_rw{};
   connect_msg = {};
   connect_reply = {};
 
@@ -666,9 +666,9 @@ CtPtr ProtocolV1::handle_message_header(char *buffer, int r) {
   }
 
   // Reset state
-  front = ceph::buffer::ptr{};
-  middle = ceph::buffer::ptr{};
-  data = ceph::buffer::ptr{};
+  front = ceph::buffer::ptr_rw{};
+  middle = ceph::buffer::ptr_rw{};
+  data = ceph::buffer::ptr_rw{};
 
   state = THROTTLE_MESSAGE;
   return CONTINUE(throttle_message);
@@ -864,7 +864,7 @@ CtPtr ProtocolV1::read_message_footer() {
   return READ(len, handle_message_footer);
 }
 
-static ceph::bufferlist to_bl(ceph::bufferptr&& ptr) {
+static ceph::bufferlist to_bl(ceph::bufferptr_rw&& ptr) {
   ceph::bufferlist bl;
   bl.push_back(std::move(ptr));
   return bl;
@@ -1038,9 +1038,9 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
  out:
   // clean up local buffer references
-  front = ceph::buffer::ptr{};
-  middle = ceph::buffer::ptr{};
-  data = ceph::buffer::ptr{};
+  front = ceph::buffer::ptr_rw{};
+  middle = ceph::buffer::ptr_rw{};
+  data = ceph::buffer::ptr_rw{};
 
   if (need_dispatch_writer && connection->is_connected()) {
     connection->center->dispatch_event_external(connection->write_handler);
@@ -2023,7 +2023,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
                                       authorizer_reply);
   }
 
-  ceph::bufferptr auth_bp_copy = authorizer_buf;
+  ceph::bufferptr_rw auth_bp_copy = authorizer_buf;
   auto am = auth_meta;
   am->auth_method = connect_msg.authorizer_protocol;
   if (!HAVE_FEATURE((uint64_t)connect_msg.features, CEPHX_V2)) {

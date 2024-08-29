@@ -1954,14 +1954,14 @@ class SyntheticWorkload {
       bufferlist bl;
       boost::uniform_int<> u(32, max_message_len);
       uint64_t value_len = u(rng);
-      bufferptr bp(value_len);
-      bp.zero();
+      auto bp = buffer::ptr_node::create(buffer::create(value_len));
+      bp->zero();
       for (uint64_t j = 0; j < value_len-sizeof(i); ) {
-        memcpy(bp.c_str()+j, &i, sizeof(i));
+        memcpy(bp->c_str()+j, &i, sizeof(i));
         j += 4096;
       }
 
-      bl.append(bp);
+      bl.push_back(std::move(bp));
       rand_data.push_back(bl);
     }
   }
