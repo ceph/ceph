@@ -331,8 +331,7 @@ public:
     }
 
     // get_extent_ret::ABSENT from transaction
-    auto metric_key = std::make_pair(t.get_src(), type);
-    ret = query_cache(offset, &metric_key);
+    ret = query_cache(offset);
     if (!ret) {
       SUBDEBUGT(seastore_cache, "{} {} is absent", t, type, offset);
       account_absent_access(t_src);
@@ -425,11 +424,9 @@ public:
         const auto t_src = t.get_src();
         touch_extent(ext, &t_src);
       };
-      auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
         do_get_caching_extent<T>(
-          offset, length, &metric_key,
-          [](T &){}, std::move(f))
+          offset, length, [](T &){}, std::move(f))
       );
     }
   }
@@ -472,11 +469,9 @@ public:
       t.add_to_read_set(CachedExtentRef(&ext));
       touch_extent(ext, &t_src);
     };
-    auto metric_key = std::make_pair(t.get_src(), T::TYPE);
     return trans_intr::make_interruptible(
       do_get_caching_extent<T>(
-	offset, length, &metric_key,
-	std::forward<Func>(extent_init_func), std::move(f))
+	offset, length, std::forward<Func>(extent_init_func), std::move(f))
     );
   }
 
@@ -629,7 +624,7 @@ public:
 // Interfaces only for tests.
 public:
   CachedExtentRef test_query_cache(paddr_t offset) {
-    return query_cache(offset, nullptr);
+    return query_cache(offset);
   }
 
 private:
@@ -645,12 +640,11 @@ private:
   read_extent_ret<T> do_get_caching_extent(
     paddr_t offset,                ///< [in] starting addr
     extent_len_t length,           ///< [in] length
-    const src_ext_t* p_src_ext,    ///< [in] cache query metric key
     Func &&extent_init_func,       ///< [in] init func for extent
     OnCache &&on_cache
   ) {
     LOG_PREFIX(Cache::do_get_caching_extent);
-    auto cached = query_cache(offset, p_src_ext);
+    auto cached = query_cache(offset);
     if (!cached) {
       auto ret = CachedExtent::make_cached_extent_ref<T>(
         alloc_cache_buf(length));
@@ -756,7 +750,6 @@ private:
     paddr_t offset,
     laddr_t laddr,
     extent_len_t length,
-    const Transaction::src_t* p_src,
     extent_init_func_t &&extent_init_func,
     extent_init_func_t &&on_cache
   );
@@ -811,10 +804,9 @@ private:
 	const auto t_src = t.get_src();
 	touch_extent(ext, &t_src);
       };
-      auto src = t.get_src();
       return trans_intr::make_interruptible(
 	do_get_caching_extent_by_type(
-	  type, offset, laddr, length, &src,
+	  type, offset, laddr, length,
 	  std::move(extent_init_func), std::move(f))
       );
     }
@@ -854,10 +846,9 @@ private:
       t.add_to_read_set(CachedExtentRef(&ext));
       touch_extent(ext, &t_src);
     };
-    auto src = t.get_src();
     return trans_intr::make_interruptible(
       do_get_caching_extent_by_type(
-	type, offset, laddr, length, &src,
+	type, offset, laddr, length,
 	std::move(extent_init_func), std::move(f))
     );
   }
@@ -1686,7 +1677,6 @@ private:
     counter_by_src_t<uint64_t> trans_created_by_src;
     counter_by_src_t<commit_trans_efforts_t> committed_efforts_by_src;
     counter_by_src_t<invalid_trans_efforts_t> invalidated_efforts_by_src;
-    counter_by_src_t<query_counters_t> cache_query_by_src;
     success_read_trans_efforts_t success_read_efforts;
 
     uint64_t dirty_bytes = 0;
@@ -1869,21 +1859,9 @@ private:
   }
 
   // Extents in cache may contain placeholders
-  CachedExtentRef query_cache(
-      paddr_t offset,
-      const src_ext_t* p_metric_key) {
-    query_counters_t* p_counters = nullptr;
-    if (p_metric_key) {
-      p_counters = &get_by_src(stats.cache_query_by_src, p_metric_key->first);
-      ++p_counters->access;
-    }
+  CachedExtentRef query_cache(paddr_t offset) {
     if (auto iter = extents_index.find_offset(offset);
         iter != extents_index.end()) {
-      if (p_metric_key &&
-          // retired_placeholder is not really cached yet
-          !is_retired_placeholder_type(iter->get_type())) {
-        ++p_counters->hit;
-      }
       assert(iter->is_stable());
       return CachedExtentRef(&*iter);
     } else {
