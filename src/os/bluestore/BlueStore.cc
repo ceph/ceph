@@ -6669,9 +6669,7 @@ int BlueStore::_write_bdev_label(
   uint32_t crc = bl.crc32c(-1);
   encode(crc, bl);
   ceph_assert(bl.length() <= BDEV_LABEL_BLOCK_SIZE);
-  bufferptr z(BDEV_LABEL_BLOCK_SIZE - bl.length());
-  z.zero();
-  bl.append(std::move(z));
+  bl.append_zero(BDEV_LABEL_BLOCK_SIZE - bl.length());
 
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
@@ -16201,19 +16199,20 @@ void BlueStore::_pad_zeros(
   size_t pad_count = 0;
   if (front_pad) {
     size_t front_copy = std::min<uint64_t>(chunk_size - front_pad, length);
-    bufferptr z = ceph::buffer::create_small_page_aligned(chunk_size);
-    z.zero(0, front_pad, false);
+    auto z = ceph::buffer::ptr_node::create(
+      ceph::buffer::create_small_page_aligned(chunk_size));
+    z->zero(0, front_pad, false);
     pad_count += front_pad;
-    bl->begin().copy(front_copy, z.c_str() + front_pad);
+    bl->begin().copy(front_copy, z->c_str() + front_pad);
     if (front_copy + front_pad < chunk_size) {
       back_pad = chunk_size - (length + front_pad);
-      z.zero(front_pad + length, back_pad, false);
+      z->zero(front_pad + length, back_pad, false);
       pad_count += back_pad;
     }
     bufferlist old, t;
     old.swap(*bl);
     t.substr_of(old, front_copy, length - front_copy);
-    bl->append(z);
+    bl->push_back(std::move(z));
     bl->claim_append(t);
     *offset -= front_pad;
     length += pad_count;
@@ -16226,13 +16225,13 @@ void BlueStore::_pad_zeros(
     ceph_assert(back_pad == 0);
     back_pad = chunk_size - back_copy;
     ceph_assert(back_copy <= length);
-    bufferptr tail(chunk_size);
-    bl->begin(length - back_copy).copy(back_copy, tail.c_str());
-    tail.zero(back_copy, back_pad, false);
+    auto tail = buffer::ptr_node::create(buffer::create(chunk_size));
+    bl->begin(length - back_copy).copy(back_copy, tail->c_str());
+    tail->zero(back_copy, back_pad, false);
     bufferlist old;
     old.swap(*bl);
     bl->substr_of(old, 0, length - back_copy);
-    bl->append(tail);
+    bl->push_back(std::move(tail));
     length += back_pad;
     pad_count += back_pad;
   }
