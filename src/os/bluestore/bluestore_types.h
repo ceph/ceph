@@ -507,7 +507,7 @@ public:
   uint8_t csum_type = Checksummer::CSUM_NONE;      ///< CSUM_*
   uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
 
-  ceph::buffer::ptr csum_data;                ///< opaque std::vector of csum data
+  ceph::buffer::ptr_rw csum_data;                ///< opaque std::vector of csum data
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
@@ -572,7 +572,10 @@ public:
       denc(csum_chunk_order, p);
       int len;
       denc_varint(len, p);
-      csum_data = p.get_ptr(len);
+      // deep copy the csum_data. Previously this has been performed via
+      // p::get_ptr() with the assumption every caller uses the deep iterator.
+      //ceph_assert(p.is_deep());
+      csum_data = buffer::copy(p.get_pos_add(len), len);
       csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
     }
     if (has_unused()) {
@@ -968,6 +971,7 @@ public:
     csum_chunk_order = order;
     csum_data = ceph::buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
     csum_data.zero();
+    // TODO: create_zero
     csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
   }
 
@@ -993,9 +997,9 @@ public:
     logical_length -= p.length;
     extents.pop_back();
     if (has_csum()) {
-      ceph::buffer::ptr t;
+      ceph::buffer::ptr_rw t;
       t.swap(csum_data);
-      csum_data = ceph::buffer::ptr(t.c_str(),
+      csum_data = ceph::buffer::ptr_rw(t.c_str(),
 			    get_logical_length() / get_csum_chunk_size() *
 			    get_csum_value_size());
       csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
@@ -1014,7 +1018,7 @@ public:
     }
     logical_length = new_len;
     if (has_csum()) {
-      ceph::buffer::ptr t;
+      ceph::buffer::ptr_rw t;
       t.swap(csum_data);
       csum_data = ceph::buffer::create(
 	get_csum_value_size() * logical_length / get_csum_chunk_size());
