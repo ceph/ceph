@@ -77,7 +77,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   images: any;
   columns: CdTableColumn[];
   retries: number;
-  tableStatus = new TableStatus('light');
+  tableStatus = new TableStatus('ghost');
   selection = new CdTableSelection();
   icons = Icons;
   count = 0;

@@ -10,7 +10,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 const BASE_URL = 'block/nvmeof/subsystems';
@@ -37,7 +37,7 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnChanges {
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
     private nvmeofService: NvmeofService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private router: Router,
     private taskWrapper: TaskWrapperService
   ) {

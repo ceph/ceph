@@ -14,8 +14,43 @@
          cdsIcon="add"
          size="16"></svg>
   </button>
+  <ng-container *ngIf="primaryDropDown">
+    <button class="primary-dropdown-btn"
+            [attr.aria-label]="dropDownOnly"
+            [offset]="{ x: -210, y: 65 }"
+            [cdsOverflowMenu]="overflowMenuTpl"
+            data-testid="table-action-btn">
+      <svg class="cds--btn__icon"
+           cdsIcon="caret--down"
+           size="16"></svg>
+    </button>
+    <ng-template #overflowMenuTpl>
+      <ng-container *ngFor="let action of dropDownActions">
+        <cds-overflow-menu-option *ngIf="currentAction !== action"
+                                  class="{{ toClassName(action) }}"
+                                  title="{{ useDisableDesc(action) }}"
+                                  (click)="useClickAction(action)"
+                                  [routerLink]="useRouterLink(action)"
+                                  [preserveFragment]="action.preserveFragment ? '' : null"
+                                  [disabled]="disableSelectionAction(action)"
+                                  [attr.aria-label]="action.name"
+                                  data-testid="table-action-option-btn"
+                                  i18n>
+        {{ action.name }}
+        </cds-overflow-menu-option>
+      </ng-container>
+    </ng-template>
+  </ng-container>
 </ng-container>
 
+<ng-template #caret>
+  <button [cdsButton]="currentAction.buttonKind"
+          class="caret-btn">
+    <svg class="cds--btn__icon"
+         cdsIcon="caret--down"
+         size="16"></svg>
+  </button>
+</ng-template>
 
 <ng-template #dropDownOnlyTpl>
   <cds-overflow-menu [customTrigger]="customTrigger"
