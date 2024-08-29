@@ -25,6 +25,7 @@ we would need the following configuration file::
 				access_key = 1234567890
 				secret_key = pencil
 
+Add boto3 extension to the standard client: https://github.com/ceph/ceph/tree/main/examples/rgw/boto3#introduction.
 
 ===========
 Kafka Tests
@@ -125,7 +126,7 @@ To run the Kafka security test, you also need to provide the test with the locat
 RabbitMQ Tests
 ==============
 
-You need to install RabbitMQ in the following way::
+You need to install RabbitMQ, check supported platforms: https://www.rabbitmq.com/docs/platforms. For example, for Fedora::
 
         sudo dnf install rabbitmq-server
 
@@ -139,23 +140,11 @@ Update rabbitmq-server configuration to allow access to the guest user from anyw
 
 Finally, to start the RabbitMQ server you need to run the following command::
 
-        sudo /sbin/service rabbitmq-server start
+        sudo systemctl start rabbitmq-server
 
 To confirm that the RabbitMQ server is running you can run the following command to check the status of the server::
 
-        sudo /sbin/service rabbitmq-server status
-
-Add [boto3 extension](https://github.com/ceph/ceph/tree/main/examples/rgw/boto3#introduction) as it's required for bucket notification tests. You can use the default folder or create a custom one, more information [here](https://github.com/boto/botocore/blob/develop/botocore/loaders.py#L33).
-Default folder::
-
-        mkdir -p ~/.aws/models/s3/2006-03-01/
-        cp /path/to/ceph/examples/rgw/boto3/service-2.sdk-extras.json ~/.aws/models/s3/2006-03-01/
-
-Custom folder::
-
-        mkdir -p /path/to/custom/folder/models/s3/2006-03-01/
-        cp /path/to/ceph/examples/rgw/boto3/service-2.sdk-extras.json /path/to/custom/folder/models/s3/2006-03-01/
-        export AWS_DATA_PATH=/path/to/custom/folder/
+        sudo systemctl status rabbitmq-server
 
 After running `vstart.sh` and RabbitMQ server you're ready to run the AMQP tests::
 
@@ -163,7 +152,7 @@ After running `vstart.sh` and RabbitMQ server you're ready to run the AMQP tests
 
 After running the tests you need to stop the vstart cluster (``/path/to/ceph/src/stop.sh``) and the RabbitMQ server by running the following command::
 
-        sudo /sbin/service rabbitmq-server stop
+        sudo systemctl stop rabbitmq-server
 
 To run the RabbitMQ SSL security tests use the following::
 
