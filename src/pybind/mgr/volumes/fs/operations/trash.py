@@ -109,6 +109,7 @@ class Trash(GroupTemplate):
     def get_stats(self):
         subvol_count = 0
         file_count = 0
+        trash_size = 0
 
         dir_found = False
         symlink_count = 0
@@ -122,7 +123,8 @@ class Trash(GroupTemplate):
         # file hierarchy under trash dir.
         if subvol_count == num_of_entries:
             file_count = int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
-            return subvol_count, file_count
+            size = int(self.fs.getxattr(self.path, 'ceph.dir.rbytes'))
+            return subvol_count, file_count, size
 
         with self.fs.opendir(self.path) as dir_handle:
             de = self.fs.readdir(dir_handle)
@@ -156,6 +158,7 @@ class Trash(GroupTemplate):
                         de_path = os.path.join(self.path, de.d_name)
                         sv_path = self.fs.readlink(de_path, PATH_MAX)
                         file_count += int(self.fs.getxattr(sv_path, 'ceph.dir.rfiles'))
+                        trash_size += int(self.fs.getxattr(sv_path, 'ceph.dir.rbytes'))
                     else:
                         log.debug('Trash entry was neither directory nor '
                                   'symlink, this was unexpected. Details: '
@@ -178,7 +181,9 @@ class Trash(GroupTemplate):
             # the subvol dir and subvol_count was incremented to account for it.
             file_count -= symlink_count
 
-        return subvol_count, file_count
+            trash_size += int(self.fs.getxattr(self.path, 'ceph.dir.rbytes'))
+
+        return subvol_count, file_count, trash_size
 
 
 def create_trashcan(fs, vol_spec):
@@ -212,6 +217,10 @@ def open_trashcan(fs, vol_spec):
     yield trashcan
 
 
+def get_trash_path(volspec):
+    return os.path.join(volspec.base_dir, Trash.GROUP_NAME).encode('utf-8')
+
+
 def get_trashcan_stats(volclient, volname):
     with open_volume_lockless(volclient, volname) as fs_handle:
         with open_trashcan(fs_handle, volclient.volspec) as trashcan:
@@ -222,7 +231,7 @@ def get_pending_subvol_deletions_count(fs, volspec):
     """
     Get the number of pending subvolumes deletions.
     """
-    trashdir = os.path.join(volspec.base_dir, Trash.GROUP_NAME)
+    trashdir = get_trash_path(volspec)
     try:
         num_pending_subvol_del = len(listdir(fs, trashdir, filter_entries=None,
                                              filter_files=False))

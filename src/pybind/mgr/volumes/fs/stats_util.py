@@ -433,19 +433,21 @@ class CloneProgressBar(VolumesProgressBar):
 def get_trash_stats_for_all_vols(volclient):
     subvol_count = 0
     file_count = 0
+    size = 0
 
     volnames = list_volumes(volclient.mgr)
     for volname in volnames:
-        s_count, f_count, = get_trashcan_stats(volclient, volname)
+        s_count, f_count, size_ = get_trashcan_stats(volclient, volname)
         log.debug(f'In trash directory of volume "{volname}", {s_count} '
                   f'subvolumes containing {f_count} files were found')
         subvol_count += s_count
         file_count += f_count
+        size += size_
 
     log.debug(f'In trash directory of {len(volnames)} volumes, '
               f'{subvol_count} subvolumes containing total {file_count} '
                'files were found')
-    return subvol_count, file_count
+    return subvol_count, file_count, size
 
 
 class TrashStats:
@@ -457,6 +459,15 @@ class TrashStats:
         self.total_subvols = 0
         # total number of files in trashcan.
         self.total_files = 0
+        # total amount of data in trashcan.
+        self.total_size = 0
+
+        # number of subvols left in trashcan.
+        self.subvols_left = 0
+        # number of files left in trashcan.
+        self.files_left = 0
+        # amount of data left in trashcan.
+        self.size_left = 0
 
         # number of subvols left in trashcan.
         self.subvols_left = 0
@@ -474,13 +485,15 @@ class TrashStats:
 
         self.subvols_left = trash_stats[0]
         self.files_left = trash_stats[1]
+        self.size_left = trash_stats[2]
 
     def update_total_data_stats(self):
         self.total_subvols = self.subvols_left
         self.total_files = self.files_left
+        self.total_size = self.size_left
 
     def is_trash_empty(self):
-        return self.subvols_left == self.files_left == 0
+        return self.subvols_left == self.files_left == self.size_left == 0
 
     def are_laggy(self):
         return self.total_files < self.files_left or \
