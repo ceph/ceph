@@ -207,7 +207,7 @@ static void aes_loop_cephx() {
 
   CryptoRandom random;
 
-  bufferptr secret(16);
+  bufferptr_rw secret(16);
   random.get_bytes(secret.c_str(), secret.length());
   std::string error;
   std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler(secret, error));
@@ -248,14 +248,14 @@ TEST(AES, LoopCephxV2) {
 static void aes_loop(const std::size_t text_size) {
   CryptoRandom random;
 
-  bufferptr secret(16);
+  bufferptr_rw secret(16);
   random.get_bytes(secret.c_str(), secret.length());
 
-  bufferptr orig_plaintext(text_size);
-  random.get_bytes(orig_plaintext.c_str(), orig_plaintext.length());
-
   bufferlist plaintext;
-  plaintext.append(orig_plaintext.c_str(), orig_plaintext.length());
+  auto filler = plaintext.append_hole(text_size);
+  random.get_bytes(filler.c_str(), text_size);
+
+  bufferlist orig_plaintext = plaintext;
 
   for (int i=0; i<10000; i++) {
     bufferlist cipher;
@@ -284,9 +284,7 @@ static void aes_loop(const std::size_t text_size) {
     }
   }
 
-  bufferlist orig;
-  orig.append(orig_plaintext);
-  ASSERT_EQ(orig, plaintext);
+  ASSERT_EQ(orig_plaintext, plaintext);
 }
 
 TEST(AES, Loop) {
@@ -305,14 +303,13 @@ TEST(AES, Loop_32) {
 
 void aes_loopkey(const std::size_t text_size) {
   CryptoRandom random;
-  bufferptr k(16);
+  bufferptr_rw k(16);
   random.get_bytes(k.c_str(), k.length());
   CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(), k);
 
   bufferlist data;
-  bufferptr r(text_size);
-  random.get_bytes(r.c_str(), r.length());
-  data.append(r);
+  auto filler = data.append_hole(text_size);
+  random.get_bytes(filler.c_str(), text_size);
 
   utime_t start = ceph_clock_now();
   int n = 100000;
