@@ -82,7 +82,7 @@ class AsyncJobProgressReporter:
         # Creating an RTimer instance in advance so that we can check if async
         # job's progress reporting has already been initiated by calling
         # RTimer.is_alive().
-        self.update_task = RTimer(1, self._update_progress_bars)
+        self.update_task = RTimer(1, self._update_progress_bars) # type: ignore
 
         # self.op_name is to be set by derived classes. This is is need to
         # label progress bars, logging, etc.
@@ -104,7 +104,7 @@ class AsyncJobProgressReporter:
 
         log.info(f'initiating progress reporting for {self.op_name} '
                   'threads...')
-        self.update_task = RTimer(1, self._update_progress_bars)
+        self.update_task = RTimer(1, self._update_progress_bars) # type: ignore
         self.update_task.start()
         log.info(f'progress reporting for {self.op_name} threads has been '
                   'initiated')
