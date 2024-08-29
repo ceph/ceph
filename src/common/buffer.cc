@@ -319,82 +319,95 @@ static ceph::spinlock debug_lock;
   }
 
 
-  buffer::ptr_ro::ptr_ro(ceph::unique_leakable_ptr<raw> r)
+  buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
     : _raw(r.release()),
       _off(0),
       _len(_raw->get_len())
   {
     _raw->nref.store(1, std::memory_order_release);
-    bdout << "ptr_ro " << this << " get " << _raw << bendl;
+    bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr_ro::ptr_ro(unsigned l) : _off(0), _len(l)
+  buffer::ptr::ptr(unsigned l) : _off(0), _len(l)
   {
     _raw = buffer::create(l).release();
     _raw->nref.store(1, std::memory_order_release);
-    bdout << "ptr_ro " << this << " get " << _raw << bendl;
+    bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr_ro::ptr_ro(const char *d, unsigned l) : _off(0), _len(l)    // ditto.
+  buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l)    // ditto.
   {
     _raw = buffer::copy(d, l).release();
     _raw->nref.store(1, std::memory_order_release);
-    bdout << "ptr_ro " << this << " get " << _raw << bendl;
+    bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr_ro::ptr_ro(const ptr_ro& p) : _raw(p._raw), _off(p._off), _len(p._len)
+  buffer::ptr::ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len)
   {
     if (_raw) {
       _raw->nref++;
-      bdout << "ptr_ro " << this << " get " << _raw << bendl;
+      bdout << "ptr " << this << " get " << _raw << bendl;
     }
   }
-  buffer::ptr_ro::ptr_ro(ptr_ro&& p) noexcept : _raw(p._raw), _off(p._off), _len(p._len)
+  buffer::ptr::ptr(ptr&& p) noexcept : _raw(p._raw), _off(p._off), _len(p._len)
   {
     p._raw = nullptr;
     p._off = p._len = 0;
   }
-  buffer::ptr_ro::ptr_ro(const ptr_ro& p, unsigned o, unsigned l)
+  buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l)
     : _raw(p._raw), _off(p._off + o), _len(l)
   {
     ceph_assert(o+l <= p._len);
     ceph_assert(_raw);
     _raw->nref++;
-    bdout << "ptr_ro " << this << " get " << _raw << bendl;
+    bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr_ro::ptr_ro(const ptr_ro& p, ceph::unique_leakable_ptr<raw> r)
+  buffer::ptr::ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r)
     : _raw(r.release()),
       _off(p._off),
       _len(p._len)
   {
     _raw->nref.store(1, std::memory_order_release);
-    bdout << "ptr_ro " << this << " get " << _raw << bendl;
+    bdout << "ptr " << this << " get " << _raw << bendl;
   }
 
 
-  buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
-    : ptr_ro(std::move(r))
+  buffer::ptr_rw::ptr_rw(ceph::unique_leakable_ptr<raw> r)
+    : ptr(std::move(r))
   {
   }
-  buffer::ptr::ptr(unsigned l)
-    : ptr_ro(l)
+  buffer::ptr_rw::ptr_rw(unsigned l)
+    : ptr(l)
   {
   }
-  buffer::ptr::ptr(const char *d, unsigned l)
-    : ptr_ro(d, l)
+  buffer::ptr_rw::ptr_rw(const char *d, unsigned l)
+    : ptr(d, l)
   {
   }
-  buffer::ptr::ptr(const ptr& p)
-    : ptr_ro(static_cast<const ptr_ro&>(p))
+  buffer::ptr_rw::ptr_rw(const ptr_rw& p)
+    : ptr(static_cast<const ptr&>(p))
   {
   }
-  buffer::ptr::ptr(ptr&& p) noexcept
-    : ptr_ro(std::forward<ptr_ro&&>(p))
+  buffer::ptr_rw::ptr_rw(ptr_rw&& p) noexcept
+    : ptr(std::forward<ptr&&>(p))
   {
   }
-  buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l)
-    : ptr_ro(static_cast<const ptr_ro&>(p), o, l)
+  buffer::ptr_rw::ptr_rw(const ptr_rw& p, unsigned o, unsigned l)
+    : ptr(static_cast<const ptr&>(p), o, l)
   {
   }
-  buffer::ptr::ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r)
-    : ptr_ro(static_cast<const ptr_ro&>(p), std::move(r))
+  // private only -- it's dengerous!
+  buffer::ptr_rw::ptr_rw(const ptr& p, unsigned o, unsigned l)
+    : ptr(static_cast<const ptr&>(p), o, l)
+  {
+  }
+  buffer::ptr_rw::ptr_rw(const ptr& p)
+    : ptr(static_cast<const ptr&>(p))
+  {
+  }
+  buffer::ptr_rw::ptr_rw(ptr&& p) noexcept
+    : ptr(std::forward<ptr&&>(p))
+  {
+  }
+  buffer::ptr_rw::ptr_rw(const ptr_rw& p, ceph::unique_leakable_ptr<raw> r)
+    : ptr(static_cast<const ptr&>(p), std::move(r))
   {
   }
   buffer::ptr& buffer::ptr::operator= (const ptr& p)
@@ -404,6 +417,23 @@ static ceph::spinlock debug_lock;
       bdout << "ptr " << this << " get " << _raw << bendl;
     }
     buffer::raw *raw = p._raw; 
+    release();
+    if (raw) {
+      _raw = raw;
+      _off = p._off;
+      _len = p._len;
+    } else {
+      _off = _len = 0;
+    }
+    return *this;
+  }
+  buffer::ptr_rw& buffer::ptr_rw::operator= (const ptr_rw& p)
+  {
+    if (p._raw) {
+      p._raw->nref++;
+      bdout << "ptr " << this << " get " << _raw << bendl;
+    }
+    buffer::raw *raw = p._raw;
     release();
     if (raw) {
       _raw = raw;
@@ -429,8 +459,23 @@ static ceph::spinlock debug_lock;
     }
     return *this;
   }
+  buffer::ptr_rw& buffer::ptr_rw::operator= (ptr_rw&& p) noexcept
+  {
+    release();
+    buffer::raw *raw = p._raw;
+    if (raw) {
+      _raw = raw;
+      _off = p._off;
+      _len = p._len;
+      p._raw = nullptr;
+      p._off = p._len = 0;
+    } else {
+      _off = _len = 0;
+    }
+    return *this;
+  }
 
-  void buffer::ptr_ro::swap(ptr_ro& other) noexcept
+  void buffer::ptr::swap(ptr& other) noexcept
   {
     raw *r = _raw;
     unsigned o = _off;
@@ -442,12 +487,12 @@ static ceph::spinlock debug_lock;
     other._off = o;
     other._len = l;
   }
-  void buffer::ptr::swap(ptr& other) noexcept
+  void buffer::ptr_rw::swap(ptr_rw& other) noexcept
   {
-    ptr_ro::swap(static_cast<ptr_ro&>(other));
+    ptr::swap(static_cast<ptr&>(other));
   }
 
-  void buffer::ptr_ro::release()
+  void buffer::ptr::release()
   {
     // BE CAREFUL: this is called also for hypercombined ptr_node. After
     // freeing underlying raw, `*this` can become inaccessible as well!
@@ -456,7 +501,7 @@ static ceph::spinlock debug_lock;
     // checks.
     if (auto* const cached_raw = std::exchange(_raw, nullptr);
 	cached_raw) {
-      bdout << "ptr_ro " << this << " release " << cached_raw << bendl;
+      bdout << "ptr " << this << " release " << cached_raw << bendl;
       // optimize the common case where a particular `buffer::raw` has
       // only a single reference. Altogether with initializing `nref` of
       // freshly fabricated one with `1` through the std::atomic's ctor
@@ -476,63 +521,63 @@ static ceph::spinlock debug_lock;
     }
   }
 
-  int buffer::ptr_ro::get_mempool() const {
+  int buffer::ptr::get_mempool() const {
     if (_raw) {
       return _raw->mempool;
     }
     return mempool::mempool_buffer_anon;
   }
 
-  void buffer::ptr_ro::reassign_to_mempool(int pool) {
+  void buffer::ptr::reassign_to_mempool(int pool) {
     if (_raw) {
       _raw->reassign_to_mempool(pool);
     }
   }
-  void buffer::ptr_ro::try_assign_to_mempool(int pool) {
+  void buffer::ptr::try_assign_to_mempool(int pool) {
     if (_raw) {
       _raw->try_assign_to_mempool(pool);
     }
   }
 
-  const char *buffer::ptr_ro::c_str() const {
+  const char *buffer::ptr::c_str() const {
     ceph_assert(_raw);
     return _raw->get_data() + _off;
   }
-  char *buffer::ptr::c_str() {
+  char *buffer::ptr_rw::c_str() {
     ceph_assert(_raw);
     return _raw->get_data() + _off;
   }
-  const char *buffer::ptr_ro::end_c_str() const {
+  const char *buffer::ptr::end_c_str() const {
     ceph_assert(_raw);
     return _raw->get_data() + _off + _len;
   }
-  char *buffer::ptr::end_c_str() {
+  char *buffer::ptr_rw::end_c_str() {
     ceph_assert(_raw);
     return _raw->get_data() + _off + _len;
   }
 
-  unsigned buffer::ptr_ro::unused_tail_length() const
+  unsigned buffer::ptr::unused_tail_length() const
   {
     return _raw ? _raw->get_len() - (_off + _len) : 0;
   }
-  const char& buffer::ptr_ro::operator[](unsigned n) const
+  const char& buffer::ptr::operator[](unsigned n) const
   {
     ceph_assert(_raw);
     ceph_assert(n < _len);
     return _raw->get_data()[_off + n];
   }
-  char& buffer::ptr::operator[](unsigned n)
+  char& buffer::ptr_rw::operator[](unsigned n)
   {
     ceph_assert(_raw);
     ceph_assert(n < _len);
     return _raw->get_data()[_off + n];
   }
 
-  const char *buffer::ptr_ro::raw_c_str() const { ceph_assert(_raw); return _raw->get_data(); }
-  unsigned buffer::ptr_ro::raw_length() const { ceph_assert(_raw); return _raw->get_len(); }
-  int buffer::ptr_ro::raw_nref() const { ceph_assert(_raw); return _raw->nref; }
+  const char *buffer::ptr::raw_c_str() const { ceph_assert(_raw); return _raw->get_data(); }
+  unsigned buffer::ptr::raw_length() const { ceph_assert(_raw); return _raw->get_len(); }
+  int buffer::ptr::raw_nref() const { ceph_assert(_raw); return _raw->nref; }
 
-  void buffer::ptr_ro::copy_out(unsigned o, unsigned l, char *dest) const {
+  void buffer::ptr::copy_out(unsigned o, unsigned l, char *dest) const {
     ceph_assert(_raw);
     if (o+l > _len)
         throw end_of_buffer();
@@ -540,12 +585,12 @@ static ceph::spinlock debug_lock;
     maybe_inline_memcpy(dest, src, l, 8);
   }
 
-  unsigned buffer::ptr_ro::wasted() const
+  unsigned buffer::ptr::wasted() const
   {
     return _raw->get_len() - _len;
   }
 
-  int buffer::ptr_ro::cmp(const ptr& o) const
+  int buffer::ptr::cmp(const ptr& o) const
   {
     int l = _len < o._len ? _len : o._len;
     if (l) {
@@ -560,12 +605,12 @@ static ceph::spinlock debug_lock;
     return 0;
   }
 
-  bool buffer::ptr_ro::is_zero() const
+  bool buffer::ptr::is_zero() const
   {
     return mem_is_zero(c_str(), _len);
   }
 
-  unsigned buffer::ptr::append(char c)
+  unsigned buffer::ptr_rw::append(char c)
   {
     ceph_assert(_raw);
     ceph_assert(1 <= unused_tail_length());
@@ -575,7 +620,7 @@ static ceph::spinlock debug_lock;
     return _len + _off;
   }
 
-  unsigned buffer::ptr::append(const char *p, unsigned l)
+  unsigned buffer::ptr_rw::append(const char *p, unsigned l)
   {
     ceph_assert(_raw);
     ceph_assert(l <= unused_tail_length());
@@ -585,7 +630,7 @@ static ceph::spinlock debug_lock;
     return _len + _off;
   }
 
-  unsigned buffer::ptr::append_zeros(unsigned l)
+  unsigned buffer::ptr_rw::append_zeros(unsigned l)
   {
     ceph_assert(_raw);
     ceph_assert(l <= unused_tail_length());
@@ -596,7 +641,7 @@ static ceph::spinlock debug_lock;
     return _len + _off;
   }
 
-  void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src, bool crc_reset)
+  void buffer::ptr_rw::copy_in(unsigned o, unsigned l, const char *src, bool crc_reset)
   {
     ceph_assert(_raw);
     ceph_assert(o <= _len);
@@ -607,7 +652,7 @@ static ceph::spinlock debug_lock;
     maybe_inline_memcpy(dest, src, l, 64);
   }
 
-  void buffer::ptr::zero(bool crc_reset)
+  void buffer::ptr_rw::zero(bool crc_reset)
   {
     if (crc_reset)
         _raw->invalidate_crc();
@@ -615,7 +660,7 @@ static ceph::spinlock debug_lock;
     memset(c_str(), 0, _len);
   }
 
-  void buffer::ptr::zero(unsigned o, unsigned l, bool crc_reset)
+  void buffer::ptr_rw::zero(unsigned o, unsigned l, bool crc_reset)
   {
     ceph_assert(o+l <= _len);
     if (crc_reset)
@@ -703,7 +748,7 @@ static ceph::spinlock debug_lock;
 
   template<bool is_const>
   bool buffer::list::iterator_impl<is_const>::is_pointing_same_raw(
-    const ptr_ro& other) const
+    const ptr& other) const
   {
     if (p == ls->end())
       throw end_of_buffer();
@@ -744,7 +789,7 @@ static ceph::spinlock debug_lock;
     }
     if (p == ls->end())
       throw end_of_buffer();
-    ptr dest{create(len)};
+    ptr_rw dest{create(len)};
     copy(len, dest.c_str());
     return dest;
   }
@@ -758,7 +803,7 @@ static ceph::spinlock debug_lock;
       throw end_of_buffer();
     unsigned howmuch = p->length() - p_off;
     if (howmuch < len) {
-      ptr dest{create(len)};
+      ptr_rw dest{create(len)};
       copy(len, dest.c_str());
       return dest;
     } else {
@@ -1669,24 +1714,24 @@ static ceph::spinlock debug_lock;
   
 void buffer::list::encode_base64(buffer::list& o)
 {
-  bufferptr bp(length() * 4 / 3 + 3);
-  int l = ceph_armor(bp.c_str(), bp.c_str() + bp.length(), c_str(), c_str() + length());
-  bp.set_length(l);
+  auto bp = ptr_node::create(buffer::create(length() * 4 / 3 + 3));
+  int l = ceph_armor(bp->c_str(), bp->c_str() + bp->length(), c_str(), c_str() + length());
+  bp->set_length(l);
   o.push_back(std::move(bp));
 }
 
 void buffer::list::decode_base64(buffer::list& e)
 {
-  bufferptr bp(4 + ((e.length() * 3) / 4));
-  int l = ceph_unarmor(bp.c_str(), bp.c_str() + bp.length(), e.c_str(), e.c_str() + e.length());
+  auto bp = ptr_node::create(buffer::create(4 + ((e.length() * 3) / 4)));
+  int l = ceph_unarmor(bp->c_str(), bp->c_str() + bp->length(), e.c_str(), e.c_str() + e.length());
   if (l < 0) {
     std::ostringstream oss;
     oss << "decode_base64: decoding failed:\n";
     hexdump(oss);
     throw buffer::malformed_input(oss.str().c_str());
   }
-  ceph_assert(l <= (int)bp.length());
-  bp.set_length(l);
+  ceph_assert(l <= (int)bp->length());
+  bp->set_length(l);
   push_back(std::move(bp));
 }
 

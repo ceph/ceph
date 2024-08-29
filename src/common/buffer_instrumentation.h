@@ -29,4 +29,15 @@ struct instrumented_bptr : public ceph::buffer::ptr {
   }
 };
 
+struct instrumented_bptr_rw : public ceph::buffer::ptr_rw {
+  const ceph::buffer::raw* get_raw() const {
+    return _raw;
+  }
+
+  template <class MarkerT>
+  bool is_raw_marked() const {
+    return dynamic_cast<const instrumented_raw<MarkerT>*>(get_raw()) != nullptr;
+  }
+};
+
 } // namespace ceph::buffer_instrumentation
