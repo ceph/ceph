@@ -4042,10 +4042,11 @@ def deploy_daemon(ctx: CephadmContext, fsid: str, daemon_type: str,
     update_firewalld(ctx, daemon_type)
 
     # Open ports explicitly required for the daemon
-    if endpoints:
-        fw = Firewalld(ctx)
-        fw.open_ports([e.port for e in endpoints] + fw.external_ports.get(daemon_type, []))
-        fw.apply_rules()
+    if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
+        if endpoints:
+            fw = Firewalld(ctx)
+            fw.open_ports([e.port for e in endpoints] + fw.external_ports.get(daemon_type, []))
+            fw.apply_rules()
 
     # If this was a reconfig and the daemon is not a Ceph daemon, restart it
     # so it can pick up potential changes to its configuration files
