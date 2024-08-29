@@ -3,7 +3,7 @@ This directory contains examples on how to use AWS CLI/boto3 to exercise the Rad
 This is an extension to the [AWS SDK](https://github.com/boto/botocore/blob/develop/botocore/data/s3/2006-03-01/service-2.json).
 
 # Users
-For the standard client to support these extensions, the: ``service-2.sdk-extras.json`` file should be placed under: ``~/.aws/models/s3/2006-03-01/`` directory.
+For the standard client to support these extensions, the ``service-2.sdk-extras.json`` file should be added. You can place it under the default folder ``~/.aws/models/s3/2006-03-01/`` or create a custom one ``/path/to/custom/folder/models/s3/2006-03-01/`` and add it to ``AWS_DATA_PATH`` environment variable.
 For more information see [here](https://github.com/boto/botocore/blob/develop/botocore/loaders.py#L33).
 ## Python
 The [boto3 client](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) could be used with the extensions, code samples exists in this directory.
