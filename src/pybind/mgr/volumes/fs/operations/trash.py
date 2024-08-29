@@ -7,6 +7,7 @@ import cephfs
 
 from .template import GroupTemplate
 from ..exception import VolumeException
+from ..fs_util import listdir_by_ctime_order
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +51,14 @@ class Trash(GroupTemplate):
         :return: trash entry
         """
         return self._get_single_dir_entry(exclude_list)
+
+    def get_trash_entries_by_ctime_order(self):
+        """
+        get all trash entries.
+
+        :return: list containing trash entries
+        """
+        return listdir_by_ctime_order(self.fs, self.path)
 
     def purge(self, trashpath, should_cancel):
         """
