@@ -540,8 +540,6 @@ static int build_token(const string& swift_user,
   encode(nonce, bl);
   encode(expiration, bl);
 
-  bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-
   char buf[bl.length() * 2 + 1];
   buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
   dout(20) << "build_token token=" << buf << dendl;
@@ -554,10 +552,14 @@ static int build_token(const string& swift_user,
   for (int i = 0; i < (int)key.length(); i++, s++) {
     k[i % CEPH_CRYPTO_HMACSHA1_DIGESTSIZE] |= *s;
   }
-  calc_hmac_sha1(k, sizeof(k), bl.c_str(), bl.length(), p.c_str());
+  auto filler = bl.append_hole(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+  calc_hmac_sha1(
+    k,
+    sizeof(k),
+    bl.c_str(),
+    bl.length() - CEPH_CRYPTO_HMACSHA1_DIGESTSIZE,
+    filler.c_str());
   ::ceph::crypto::zeroize_for_security(k, sizeof(k));
-
-  bl.append(p);
 
   return 0;
 
@@ -604,14 +606,12 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     throw -EINVAL;
   }
 
-  ceph::bufferptr p(etoken_len/2);
-  int ret = hex_to_buf(etoken.c_str(), p.c_str(), etoken_len);
+  ceph::bufferlist tok_bl;
+  auto filler = tok_bl.append_hole(etoken_len/2);
+  int ret = hex_to_buf(etoken.c_str(), filler.c_str(), etoken_len);
   if (ret < 0) {
     throw ret;
   }
-
-  ceph::bufferlist tok_bl;
-  tok_bl.append(p);
 
   uint64_t nonce;
   utime_t expiration;

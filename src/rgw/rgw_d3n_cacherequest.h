@@ -63,9 +63,8 @@ struct D3nL1CacheRequest {
       if (g_conf()->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL)
         posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
 
-      bufferptr bp(read_len);
-      aio_cb->aio_buf = bp.c_str();
-      result.append(std::move(bp));
+      auto filler = result.append_hole(read_len);
+      aio_cb->aio_buf = filler.c_str();
 
       aio_cb->aio_nbytes = read_len;
       aio_cb->aio_offset = read_ofs;

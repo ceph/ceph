@@ -1780,13 +1780,13 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
                         << max_to_read
                         << ", dst.c_str()=" << reinterpret_cast<intptr_t>(dst.c_str()) << dendl;
 
-      bufferptr bp(max_to_read);
-      const auto read_len = recv_body(s, bp.c_str(), max_to_read);
-      dst.append(bp, 0, read_len);
-      //const auto read_len = recv_body(s, dst.c_str(), max_to_read);
+      auto bp = buffer::ptr_node::create(buffer::create(max_to_read));
+      const auto read_len = recv_body(s, bp->c_str(), max_to_read);
       if (read_len < 0) {
         return read_len;
       }
+      bp->set_length(read_len);
+      dst.push_back(std::move(bp));
 
       curpos += read_len;
       return curpos > s->cct->_conf->rgw_max_put_size ? -ERR_TOO_LARGE
