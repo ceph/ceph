@@ -3249,7 +3249,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_notify)(
   object_t oid(o);
   bufferlist bl;
   if (buf) {
-    bufferptr p = buffer::create(buf_len);
+    bufferptr_rw p = buffer::create(buf_len);
     memcpy(p.c_str(), buf, buf_len);
     bl.push_back(p);
   }
@@ -3271,7 +3271,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_notify2)(
   object_t oid(o);
   bufferlist bl;
   if (buf) {
-    bufferptr p = buffer::create(buf_len);
+    bufferptr_rw p = buffer::create(buf_len);
     memcpy(p.c_str(), buf, buf_len);
     bl.push_back(p);
   }
@@ -3388,7 +3388,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_notify_ack)(
   object_t oid(o);
   bufferlist bl;
   if (buf) {
-    bufferptr p = buffer::create(buf_len);
+    bufferptr_rw p = buffer::create(buf_len);
     memcpy(p.c_str(), buf, buf_len);
     bl.push_back(p);
   }
