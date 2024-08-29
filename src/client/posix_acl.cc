@@ -114,7 +114,7 @@ int posix_acl_equiv_mode(const void *xattr, size_t size, mode_t *mode_p)
   return not_equiv;
 }
 
-int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
+int posix_acl_inherit_mode(bufferptr_rw& acl, mode_t *mode_p)
 {
   if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
     return -EIO;
@@ -176,7 +176,7 @@ int posix_acl_inherit_mode(bufferptr& acl, mode_t *mode_p)
   return not_equiv;
 }
 
-int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
+int posix_acl_access_chmod(bufferptr_rw& acl, mode_t mode)
 {
   if (posix_acl_check(acl.c_str(), acl.length()) <= 0)
     return -EIO;
