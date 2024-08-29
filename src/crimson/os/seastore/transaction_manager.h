@@ -625,6 +625,21 @@ public:
     );
   }
 
+  using clone_extents_iertr = LBAManager::alloc_extent_iertr;
+  using clone_extents_ret = LBAManager::alloc_extents_ret;
+  clone_extents_ret clone_pins(
+    Transaction &t,
+    laddr_t hint,
+    lba_pin_list_t &pins,
+    bool inc_ref)
+  {
+    return lba_manager->clone_mappings(
+      t,
+      hint,
+      pins,
+      inc_ref);
+  }
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
