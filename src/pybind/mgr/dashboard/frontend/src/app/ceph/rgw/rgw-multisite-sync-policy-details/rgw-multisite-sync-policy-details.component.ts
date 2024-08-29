@@ -6,7 +6,6 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
@@ -51,7 +50,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
 
   constructor(
     private actionLabels: ActionLabelsI18n,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private rgwMultisiteService: RgwMultisiteService,
     private taskWrapper: TaskWrapperService,
     private cdsModalService: ModalCdsService
@@ -223,9 +222,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       action: action
     };
 
-    this.modalRef = this.modalService.show(RgwMultisiteSyncFlowModalComponent, initialState, {
-      size: 'lg'
-    });
+    this.modalRef = this.modalService.show(RgwMultisiteSyncFlowModalComponent, initialState);
 
     try {
       const res = await this.modalRef.result;
@@ -291,9 +288,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       action: action
     };
 
-    this.modalRef = this.modalService.show(RgwMultisiteSyncPipeModalComponent, initialState, {
-      size: 'lg'
-    });
+    this.modalRef = this.modalService.show(RgwMultisiteSyncPipeModalComponent, initialState);
 
     try {
       const res = await this.modalRef.result;

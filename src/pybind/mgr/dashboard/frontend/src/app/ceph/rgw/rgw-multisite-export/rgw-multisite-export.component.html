@@ -1,16 +1,21 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Export Multi-site Realm Token</ng-container>
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+      Export Multi-site Realm Token
+    </h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <div cdsModalContent>
     <form name="exportTokenForm"
           #frm="ngForm"
           [formGroup]="exportTokenForm">
-    <span *ngIf="loading"
-          class="d-flex justify-content-center">
-    <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i></span>
-    <div class="modal-body"
-         *ngIf="!loading">
+
+
+    <ng-container *ngIf="!loading; else loadingTpl">
       <cd-alert-panel *ngIf="!tokenValid"
                       type="warning"
                       class="mx-3"
@@ -20,46 +25,62 @@
         {{realminfo.token}}
       </div>
       </cd-alert-panel>
+
       <div *ngFor="let realminfo of realms">
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="realmName"
-                 i18n>Realm Name
-          </label>
-          <div class="cd-col-form-input">
-            <input id="realmName"
+        <div class="form-item">
+          <cds-text-label label="Realm Name"
+                          for="realmName"
+                          i18n>Realm Name
+            <input cdsText
+                   id="realmName"
                    name="realmName"
                    type="text"
                    value="{{ realminfo.realm }}"
                    readonly>
-          </div>
+          </cds-text-label>
         </div>
-        <div class="form-group row">
+
+        <div class="form-item">
+          <cds-textarea-label label="Token"
+                             for="token"
+                             i18n>Token
+            <textarea cdsTextarea
+                      id="realmToken"
+                      name="realmToken"
+                      type="text"
+                      value="{{ realminfo.token }}"
+                      cols="200"
+                      rows="5"
+                      modal-primary-focus>
+                      readonly>
+            </textarea>
+          </cds-textarea-label>
+        </div>
+        <div class="form-item">
+          <cd-copy-2-clipboard-button
+                    source="{{ realminfo.token }}"
+                    [byId]="false"
+                    modal-primary-focus>
+          </cd-copy-2-clipboard-button>
           <label class="cd-col-form-label"
                  for="token"
                  i18n>Token
           </label>
-          <div class="cd-col-form-input">
-            <input id="realmToken"
-                   name="realmToken"
-                   type="text"
-                   value="{{ realminfo.token }}"
-                   class="me-2 mb-4"
-                   readonly>
-            <cd-copy-2-clipboard-button
-                      source="{{ realminfo.token }}"
-                      [byId]="false">
-            </cd-copy-2-clipboard-button>
-          </div>
-          <hr *ngIf="realms.length > 1">
         </div>
+        <hr *ngIf="realms.length > 1">
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-back-button class="m-2 float-end"
-                      aria-label="Close"
-                      (backAction)="activeModal.close()"></cd-back-button>
-    </div>
-    </form>
-  </ng-container>
-</cd-modal>
+    </ng-container>
+  </form>
+</div>
+  <cd-form-button-panel aria-label="Close"
+                        (backAction)="activeModal.close()"
+                        [showSubmit]="false"
+                        cancelText="Close"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>
+
+<ng-template #loadingTpl>
+  <cds-loading [isActive]="loading"
+               size="sm"
+               *ngIf="loading"></cds-loading>
+</ng-template>

@@ -1,6 +1,5 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -12,21 +11,19 @@ import _ from 'lodash';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { HostService } from '~/app/shared/api/host.service';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
-import { SelectOption } from '~/app/shared/components/select/select-option.model';
-import { Observable, Subject, merge } from 'rxjs';
-import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
+import { Observable, Subject, forkJoin } from 'rxjs';
+import { map } from 'rxjs/operators';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-import',
   templateUrl: './rgw-multisite-import.component.html',
   styleUrls: ['./rgw-multisite-import.component.scss']
 })
-export class RgwMultisiteImportComponent implements OnInit {
+export class RgwMultisiteImportComponent extends BaseModal implements OnInit {
   readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,4}$/;
   readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
   readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
-  @ViewChild(NgbTypeahead, { static: false })
-  typeahead: NgbTypeahead;
 
   importTokenForm: CdFormGroup;
   multisiteInfo: object[] = [];
@@ -36,15 +33,19 @@ export class RgwMultisiteImportComponent implements OnInit {
   labels: string[];
   labelClick = new Subject<string>();
   labelFocus = new Subject<string>();
+  hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
+
+  selectedLabels: string[] = [];
+  selectedHosts: string[] = [];
 
   constructor(
-    public activeModal: NgbActiveModal,
     public hostService: HostService,
 
     public rgwRealmService: RgwRealmService,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService
   ) {
+    super();
     this.hosts = {
       options: [],
       messages: new SelectMessages({
@@ -63,19 +64,15 @@ export class RgwMultisiteImportComponent implements OnInit {
       return zone['name'];
     });
     const hostContext = new CdTableFetchDataContext(() => undefined);
-    this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: object[]) => {
-      const options: SelectOption[] = [];
-      _.forEach(resp, (host: object) => {
-        if (_.get(host, 'sources.orchestrator', false)) {
-          const option = new SelectOption(false, _.get(host, 'hostname'), '');
-          options.push(option);
-        }
-      });
-      this.hosts.options = [...options];
-    });
-    this.hostService.getLabels().subscribe((resp: string[]) => {
-      this.labels = resp;
-    });
+    this.hostsAndLabels$ = forkJoin({
+      hosts: this.hostService.list(hostContext.toParams(), 'false'),
+      labels: this.hostService.getLabels()
+    }).pipe(
+      map(({ hosts, labels }) => ({
+        hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+        labels: labels.map((label: string) => ({ content: label }))
+      }))
+    );
   }
 
   createForm() {
@@ -107,6 +104,11 @@ export class RgwMultisiteImportComponent implements OnInit {
     });
   }
 
+  multiSelector(event: any, field: 'label' | 'hosts') {
+    if (field === 'label') this.selectedLabels = event.map((label: any) => label.content);
+    else this.selectedHosts = event.map((host: any) => host.content);
+  }
+
   onSubmit() {
     const values = this.importTokenForm.value;
     const placementSpec: object = {
@@ -116,11 +118,11 @@ export class RgwMultisiteImportComponent implements OnInit {
       switch (values['placement']) {
         case 'hosts':
           if (values['hosts'].length > 0) {
-            placementSpec['placement']['hosts'] = values['hosts'];
+            placementSpec['placement']['hosts'] = this.selectedHosts;
           }
           break;
         case 'label':
-          placementSpec['placement']['label'] = values['label'];
+          placementSpec['placement']['label'] = this.selectedLabels;
           break;
       }
       if (_.isNumber(values['count']) && values['count'] > 0) {
@@ -140,25 +142,11 @@ export class RgwMultisiteImportComponent implements OnInit {
             NotificationType.success,
             $localize`Realm token import successfull`
           );
-          this.activeModal.close();
+          this.closeModal();
         },
         () => {
           this.importTokenForm.setErrors({ cdSubmitButton: true });
         }
       );
   }
-
-  searchLabels = (text$: Observable<string>) => {
-    return merge(
-      text$.pipe(debounceTime(200), distinctUntilChanged()),
-      this.labelFocus,
-      this.labelClick.pipe(filter(() => !this.typeahead.isPopupOpen()))
-    ).pipe(
-      map((value) =>
-        this.labels
-          .filter((label: string) => label.toLowerCase().indexOf(value.toLowerCase()) > -1)
-          .slice(0, 10)
-      )
-    );
-  };
 }

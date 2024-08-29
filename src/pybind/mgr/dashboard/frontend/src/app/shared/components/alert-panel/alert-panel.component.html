@@ -11,7 +11,7 @@
   <button cdsActionableButton
           cdsButton="ghost"
           size="md"
-          title="Close"
+          [title]="actionName"
           (click)="onAction()"
           *ngIf="actionName"
           i18n>{{ actionName }}

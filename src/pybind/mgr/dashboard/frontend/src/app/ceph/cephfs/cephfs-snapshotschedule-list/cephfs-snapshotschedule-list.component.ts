@@ -19,7 +19,6 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permissions } from '~/app/shared/models/permissions';
 import { SnapshotSchedule } from '~/app/shared/models/snapshot-schedule';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -31,6 +30,7 @@ import { CephfsSnapshotscheduleFormComponent } from '../cephfs-snapshotschedule-
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-cephfs-snapshotschedule-list',
@@ -95,7 +95,7 @@ export class CephfsSnapshotscheduleListComponent
   constructor(
     private snapshotScheduleService: CephfsSnapshotScheduleService,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private mgrModuleService: MgrModuleService,
     private notificationService: NotificationService,
     private actionLabels: ActionLabelsI18n,
@@ -184,20 +184,16 @@ export class CephfsSnapshotscheduleListComponent
   }
 
   openModal(edit = false) {
-    this.modalService.show(
-      CephfsSnapshotscheduleFormComponent,
-      {
-        fsName: this.fsName,
-        id: this.id,
-        path: this.selection?.first()?.path,
-        schedule: this.selection?.first()?.schedule,
-        retention: this.selection?.first()?.retention,
-        start: this.selection?.first()?.start,
-        status: this.selection?.first()?.status,
-        isEdit: edit
-      },
-      { size: 'lg' }
-    );
+    this.modalService.show(CephfsSnapshotscheduleFormComponent, {
+      fsName: this.fsName,
+      id: this.id,
+      path: this.selection?.first()?.path,
+      schedule: this.selection?.first()?.schedule,
+      retention: this.selection?.first()?.retention,
+      start: this.selection?.first()?.start,
+      status: this.selection?.first()?.status,
+      isEdit: edit
+    });
   }
 
   enableSnapshotSchedule() {

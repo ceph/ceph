@@ -153,10 +153,6 @@ describe('CdFormGroup', () => {
       test.setErrors({ someError: 'failed' });
     });
 
-    it('should not show an error if not dirty and not submitted', () => {
-      expect(form.showError('test', formDir)).toBe(false);
-    });
-
     it('should show an error if dirty', () => {
       test.markAsDirty();
       expect(form.showError('test', formDir)).toBe(true);

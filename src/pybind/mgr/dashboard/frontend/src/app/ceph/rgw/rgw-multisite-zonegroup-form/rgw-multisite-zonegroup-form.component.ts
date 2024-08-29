@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import {
   UntypedFormArray,
   UntypedFormBuilder,
@@ -6,7 +6,6 @@ import {
   NgForm,
   Validators
 } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -16,27 +15,21 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { SelectOption } from '~/app/shared/components/select/select-option.model';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-zonegroup-form',
   templateUrl: './rgw-multisite-zonegroup-form.component.html',
   styleUrls: ['./rgw-multisite-zonegroup-form.component.scss']
 })
-export class RgwMultisiteZonegroupFormComponent implements OnInit {
+export class RgwMultisiteZonegroupFormComponent extends BaseModal implements OnInit {
   readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,4}$/;
   readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
   readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
-  action: string;
   icons = Icons;
   multisiteZonegroupForm: CdFormGroup;
-  editing = false;
-  resource: string;
   realm: RgwRealm;
   zonegroup: RgwZonegroup;
-  info: any;
-  defaultsInfo: string[] = [];
-  multisiteInfo: object[] = [];
   realmList: RgwRealm[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zonegroupNames: string[];
@@ -44,7 +37,6 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   placementTargets: UntypedFormArray;
   newZonegroupName: string;
   zonegroupZoneNames: string[];
-  labelsOption: Array<SelectOption> = [];
   zoneList: RgwZone[] = [];
   allZoneNames: string[];
   zgZoneNames: string[];
@@ -56,15 +48,22 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   disableMaster = false;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public rgwZonegroupService: RgwZonegroupService,
     public notificationService: NotificationService,
-    private formBuilder: UntypedFormBuilder
+    private formBuilder: UntypedFormBuilder,
+
+    @Optional() @Inject('action') public action: string,
+    @Optional() @Inject('resource') public resource: string,
+    @Optional() @Inject('info') public info: any,
+    @Optional() @Inject('multisiteInfo') public multisiteInfo: object[],
+    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[],
+    @Optional() @Inject('editing') public editing: boolean
   ) {
+    super();
     this.action = this.editing
-      ? this.actionLabels.EDIT + this.resource
-      : this.actionLabels.CREATE + this.resource;
+      ? this.actionLabels.EDIT
+      : this.actionLabels.CREATE;
     this.createForm();
   }
 
@@ -76,7 +75,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
           Validators.required,
           CdValidators.custom('uniqueName', (zonegroupName: string) => {
             return (
-              this.action === 'create' &&
+              this.action === this.actionLabels.CREATE &&
               this.zonegroupNames &&
               this.zonegroupNames.indexOf(zonegroupName) !== -1
             );
@@ -108,7 +107,8 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
         }),
         Validators.required
       ]),
-      placementTargets: this.formBuilder.array([])
+      placementTargets: this.formBuilder.array([]),
+      zones: new UntypedFormControl([]),
     });
   }
 
@@ -157,7 +157,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       return zone['name'];
     });
     this.allZoneNames = _.difference(this.allZoneNames, allZonegroupZonesNames);
-    if (this.action === 'create' && this.defaultsInfo['defaultRealmName'] !== null) {
+    if (this.action === this.actionLabels.CREATE && this.defaultsInfo['defaultRealmName'] !== null) {
       this.multisiteZonegroupForm
         .get('selectedRealm')
         .setValue(this.defaultsInfo['defaultRealmName']);
@@ -165,7 +165,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
         this.multisiteZonegroupForm.get('master_zonegroup').disable();
       }
     }
-    if (this.action === 'edit') {
+    if (this.action === this.actionLabels.EDIT) {
       this.multisiteZonegroupForm.get('zonegroupName').setValue(this.info.data.name);
       this.multisiteZonegroupForm.get('selectedRealm').setValue(this.info.data.parent);
       this.multisiteZonegroupForm.get('default_zonegroup').setValue(this.info.data.is_default);
@@ -188,17 +188,13 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       }
 
       this.zonegroupZoneNames = this.info.data.zones.map((zone: { [x: string]: any }) => {
-        return zone['name'];
+        return { content: zone['name'], selected: true };
       });
       this.zgZoneNames = this.info.data.zones.map((zone: { [x: string]: any }) => {
         return zone['name'];
       });
       this.zgZoneIds = this.info.data.zones.map((zone: { [x: string]: any }) => {
         return zone['id'];
-      });
-      const uniqueZones = new Set(this.allZoneNames);
-      this.labelsOption = Array.from(uniqueZones).map((zone) => {
-        return { enabled: true, name: zone, selected: false, description: null };
       });
 
       this.info.data.placement_targets.forEach((target: object) => {
@@ -218,7 +214,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
 
   submit() {
     const values = this.multisiteZonegroupForm.getRawValue();
-    if (this.action === 'create') {
+    if (this.action === this.actionLabels.CREATE) {
       this.realm = new RgwRealm();
       this.realm.name = values['selectedRealm'];
       this.zonegroup = new RgwZonegroup();
@@ -232,23 +228,25 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zonegroup: '${values['zonegroupName']}' created successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZonegroupForm.setErrors({ cdSubmitButton: true });
           }
         );
-    } else if (this.action === 'edit') {
-      this.removedZones = _.difference(this.zgZoneNames, this.zonegroupZoneNames);
+    } else if (this.action === this.actionLabels.EDIT) {
       const masterZoneName = this.info.data.zones.filter(
         (zone: any) => zone.id === this.info.data.master_zone
       );
+      if (!this.removedZones)
+        this.removedZones = _.difference(this.zgZoneNames, this.zonegroupZoneNames);
       this.isRemoveMasterZone = this.removedZones.includes(masterZoneName[0].name);
       if (this.isRemoveMasterZone) {
         this.multisiteZonegroupForm.setErrors({ cdSubmitButton: true });
         return;
       }
-      this.addedZones = _.difference(this.zonegroupZoneNames, this.zgZoneNames);
+      if (!this.addedZones)
+        this.addedZones = _.difference(this.zonegroupZoneNames, this.zgZoneNames);
       this.realm = new RgwRealm();
       this.realm.name = values['selectedRealm'];
       this.zonegroup = new RgwZonegroup();
@@ -272,13 +270,18 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
               NotificationType.success,
               $localize`Zonegroup: '${values['zonegroupName']}' updated successfully`
             );
-            this.activeModal.close();
+            this.closeModal();
           },
           () => {
             this.multisiteZonegroupForm.setErrors({ cdSubmitButton: true });
           }
         );
     }
+  }
+
+  zoneSelectionChangeHandler(event: any) {
+    this.addedZones = event.map((zone: any) => zone.content);
+    this.removedZones = _.difference(this.zgZoneNames, this.addedZones);
   }
 
   addPlacementTarget() {

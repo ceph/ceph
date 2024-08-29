@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
 import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -48,7 +49,8 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
     private fb: CdFormBuilder,
     private rgwMultisiteService: RgwMultisiteService,
     private notificationService: NotificationService,
-    private rgwBucketService: RgwBucketService
+    private rgwBucketService: RgwBucketService,
+    private location: Location
   ) {
     super();
     this.editing = this.router.url.includes('(modal:edit');
@@ -60,6 +62,7 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
   }
 
   ngOnInit(): void {
+    this.open = this.route.outlet === 'modal';
     if (this.editing) {
       this.route.paramMap.subscribe((params: any) => {
         const groupName = params.get('groupName');
@@ -170,5 +173,9 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
     } else {
       return of([]);
     }
+  }
+
+  closeModal(): void {
+    this.location.back();
   }
 }

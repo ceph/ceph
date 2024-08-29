@@ -1,154 +1,178 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Migrate Single Site to Multi-site
-    <cd-helper>
-      <span>Migrate from a single-site deployment with a default zone group and zone to a multi-site system</span>
-    </cd-helper>
-  </ng-container>
+<cds-modal size="lg"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+      Migrate Single Site to Multi-site
+      <cd-help-text>
+        <span>Migrate from a single-site deployment with a default zone group and zone to a multi-site system</span>
+      </cd-help-text>
+    </h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content">
+  <div cdsModalContent>
     <form name="multisiteMigrateForm"
           #formDir="ngForm"
           [formGroup]="multisiteMigrateForm"
           novalidate>
-    <div class="modal-body">
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="realmName"
-               i18n>Realm Name</label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="Realm name..."
+
+      <div class="form-item">
+        <cds-text-label label="Realm Name"
+                        for="realmName"
+                        [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.realmName.touched || multisiteMigrateForm.controls.realmName.dirty)"
+                        [invalidText]="realmNameError"
+                        cdRequiredField="Realm Name">Realm Name
+          <input cdsText
                  id="realmName"
                  name="realmName"
-                 formControlName="realmName">
+                 formControlName="realmName"
+                 [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.realmName.touched || multisiteMigrateForm.controls.realmName.dirty)">
+        </cds-text-label>
+        <ng-template #realmNameError>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('realmName', formDir, 'required')"
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('realmName', formDir, 'uniqueName')"
                 i18n>The chosen realm name is already in use.</span>
-        </div>
+        </ng-template>
       </div>
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="zonegroupName"
-               i18n>Rename default zone group</label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="Zone group name..."
+
+      <div class="form-item">
+        <cds-text-label label="Realm default zone group"
+                        for="zonegroupName"
+                        [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.realmDefaultZoneGroup.touched || multisiteMigrateForm.controls.realmDefaultZoneGroup.dirty)"
+                        [invalidText]="realmDefaultZoneGroupError"
+                        cdRequiredField="Realm default zone group">Realm default zone group
+          <input cdsText
                  id="zonegroupName"
                  name="zonegroupName"
-                 formControlName="zonegroupName">
+                 formControlName="zonegroupName"
+                 [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.realmDefaultZoneGroup.touched || multisiteMigrateForm.controls.realmDefaultZoneGroup.dirty)">
+        </cds-text-label>
+        <ng-template #realmDefaultZoneGroupError>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'required')"
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'uniqueName')"
                 i18n>The chosen zone group name is already in use.</span>
-        </div>
+        </ng-template>
       </div>
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="zonegroup_endpoints"
-               i18n>Zone group Endpoints
-        </label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="e.g, http://ceph-node-00.com:80"
+
+      <div class="form-item">
+        <cds-text-label label="Zone group endpoints"
+                        for="zonegroup_endpoints"
+                        [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.zonegroup_endpoints.touched || multisiteMigrateForm.controls.zonegroup_endpoints.dirty)"
+                        [invalidText]="zonegroupEndpointsError"
+                        cdRequiredField="Zone group endpoints">Zone group endpoints
+          <input cdsText
                  id="zonegroup_endpoints"
                  name="zonegroup_endpoints"
-                 formControlName="zonegroup_endpoints">
+                 placeholder="e.g, http://ceph-node-00.com:80"
+                 formControlName="zonegroup_endpoints"
+                 [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.zonegroup_endpoints.touched || multisiteMigrateForm.controls.zonegroup_endpoints.dirty)">
+        </cds-text-label>
+        <ng-template #zonegroupEndpointsError>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'required')"
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'endpoint')"
                 i18n>Please enter a valid IP address.</span>
-        </div>
+        </ng-template>
       </div>
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="zoneName"
-               i18n>Rename default zone</label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="Zone name..."
+
+      <div class="form-item">
+        <cds-text-label label="Rename default zone"
+                        for="zoneName"
+                        [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.zoneName.touched || multisiteMigrateForm.controls.zoneName.dirty)"
+                        [invalidText]="zoneNameError"
+                        cdRequiredField="Rename default zone">Rename default zone
+          <input cdsText
                  id="zoneName"
                  name="zoneName"
-                 formControlName="zoneName">
+                 formControlName="zoneName"
+                 [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.zoneName.touched || multisiteMigrateForm.controls.zoneName.dirty)">
+        </cds-text-label>
+        <ng-template #zoneNameError>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zoneName', formDir, 'required')"
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zoneName', formDir, 'uniqueName')"
                 i18n>The chosen zone name is already in use.</span>
-        </div>
+        </ng-template>
       </div>
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="zone_endpoints"
-               i18n>Zone Endpoints
-        </label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="e.g, http://ceph-node-00.com:80"
+
+      <div class="form-item">
+        <cds-text-label label="Zone endpoints"
+                        for="zone_endpoints"
+                        [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.zone_endpoints.touched || multisiteMigrateForm.controls.zone_endpoints.dirty)"
+                        [invalidText]="zoneEndpointsError"
+                        cdRequiredField="Zone endpoints">Zone endpoints
+          <input cdsText
                  id="zone_endpoints"
                  name="zone_endpoints"
-                 formControlName="zone_endpoints">
+                 placeholder="e.g, http://ceph-node-00.com:80"
+                 formControlName="zone_endpoints"
+                 [invalid]="multisiteMigrateForm.controls.invalid && (multisiteMigrateForm.controls.zone_endpoints.touched || multisiteMigrateForm.controls.zone_endpoints.dirty)">
+        </cds-text-label>
+        <ng-template #zoneEndpointsError>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zone_endpoints', formDir, 'required')"
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zone_endpoints', formDir, 'endpoint')"
                 i18n>Please enter a valid IP address.</span>
-        </div>
+        </ng-template>
       </div>
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="access_key"
-               i18n>S3 access key
-          <cd-helper>
-            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the access key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
-          </cd-helper>
-        </label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="e.g."
+
+      <div class="form-item">
+        <cds-password-label for="access_key"
+                            label="S3 access key"
+                            cdRequiredField="S3 access key"
+                            [helperText]="accessKeyHelper"
+                            i18n>
+          <input cdsPassword
+                 type="password"
+                 placeholder="DiPt4V7WWvy2njL1z6aC"
                  id="access_key"
                  name="access_key"
                  formControlName="access_key">
-        </div>
+        </cds-password-label>
+        <ng-template #accessKeyHelper>
+          <span>
+            To copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the access key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.
+          </span>
+        </ng-template>
       </div>
-      <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="access_key"
-               i18n>S3 secret key
-          <cd-helper>
-            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the secret key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
-          </cd-helper>
-        </label>
-        <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="e.g."
-                 id="secret_key"
-                 name="secret_key"
-                 formControlName="secret_key">
-        </div>
+
+      <div class="form-item">
+        <cds-password-label for="secret_key"
+                            label="S3 secret key"
+                            cdRequiredField="S3 secret key"
+                            [helperText]="secretKeyHelper"
+                            i18n>
+          <input cdsPassword
+                  type="password"
+                  placeholder="xSZUdYky0bTctAdCEEW8ikhfBVKsBV5LFYL82vvh"
+                  id="secret_key"
+                  name="secret_key"
+                  formControlName="secret_key">
+        </cds-password-label>
+        <ng-template #secretKeyHelper>
+          <span>
+            To copy your S3 secret key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the secret key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.
+          </span>
+        </ng-template>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [submitText]="actionLabels.MIGRATE + ' ' + 'to Multi-site'"
-                            [form]="multisiteMigrateForm"></cd-form-button-panel>
-    </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </div>
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [submitText]="actionLabels.MIGRATE + ' ' + 'to Multi-site'"
+                          [form]="multisiteMigrateForm"
+                          [modalForm]="true"></cd-form-button-panel>
+</cds-modal>

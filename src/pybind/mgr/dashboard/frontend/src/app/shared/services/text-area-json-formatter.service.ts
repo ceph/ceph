@@ -11,11 +11,10 @@ export class TextAreaJsonFormatterService {
     try {
       const formatted = JSON.stringify(JSON.parse(value), null, 2);
       textArea.nativeElement.value = formatted;
-      textArea.nativeElement.style.height = 'auto';
       const lineNumber = formatted.split('\n').length;
-      const pixelPerLine = 20;
-      const pixels = lineNumber * pixelPerLine;
-      textArea.nativeElement.style.height = pixels + 'px';
+      const pixelPerLine = 5;
+      const pixels = lineNumber + pixelPerLine;
+      textArea.nativeElement.rows = pixels;
     } catch (e) {}
   }
 }

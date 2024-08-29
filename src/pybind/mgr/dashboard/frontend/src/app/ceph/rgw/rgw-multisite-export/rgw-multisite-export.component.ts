@@ -6,13 +6,14 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm } from '../models/rgw-multisite';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-export',
   templateUrl: './rgw-multisite-export.component.html',
   styleUrls: ['./rgw-multisite-export.component.scss']
 })
-export class RgwMultisiteExportComponent implements OnInit, AfterViewChecked {
+export class RgwMultisiteExportComponent extends BaseModal implements OnInit, AfterViewChecked {
   exportTokenForm: CdFormGroup;
   realms: any;
   realmList: RgwRealm[];
@@ -28,6 +29,7 @@ export class RgwMultisiteExportComponent implements OnInit, AfterViewChecked {
     public notificationService: NotificationService,
     private readonly changeDetectorRef: ChangeDetectorRef
   ) {
+    super();
     this.createForm();
   }
 

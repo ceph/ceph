@@ -1,45 +1,56 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ groupType | upperFirst }} Flow</ng-container>
+<cds-modal size="md"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>
+      {{ action | titlecase }} {{ groupType | upperFirst }} Flow
+    </h3>
+  </cds-modal-header>
 
-    <ng-container class="modal-content">
+    <div cdsModalContent>
       <form name="flowForm"
             #frm="ngForm"
             [formGroup]="currentFormGroupContext"
             novalidate>
-        <div class="modal-body">
-          <div class="form-group row">
-            <label class="cd-col-form-label required"
-                   for="flow_id"
-                   i18n>Name</label>
-            <div class="cd-col-form-input">
-              <input class="form-control"
-                     type="text"
-                     placeholder="Flow Name..."
-                     id="flow_id"
-                     name="flow_id"
-                     formControlName="flow_id"/>
-            </div>
-          </div>
-          <div class="form-group row">
-            <label class="cd-col-form-label"
-                   for="bucket"
-                   i18n>Bucket Name</label>
-            <div class="cd-col-form-input">
-              <input id="bucket"
-                     name="bucket"
-                     class="form-control"
-                     type="text"
-                     i18n-placeholder
-                     placeholder="Bucket Name..."
-                     formControlName="bucket_name"/>
+          <div class="form-item">
+            <cds-text-label label="Name"
+                            for="flow_id"
+                            [invalid]="currentFormGroupContext.controls.flow_id.invalid && (currentFormGroupContext.controls.flow_id.dirty || currentFormGroupContext.controls.flow_id.touched)"
+                            [invalidText]="nameError"
+                            cdRequiredField="Name"
+                            modal-primary-focus>Name
+              <input cdsText
+                      type="text"
+                      placeholder="Flow Name..."
+                      id="flow_id"
+                      name="flow_id"
+                      formControlName="flow_id"
+                      [invalid]="currentFormGroupContext.controls.flow_id.invalid && (currentFormGroupContext.controls.flow_id.dirty || currentFormGroupContext.controls.flow_id.touched)"/>
+            </cds-text-label>
+            <ng-template #nameError>
               <span class="invalid-feedback"
-                    *ngIf="currentFormGroupContext.showError('bucket_name', frm, 'bucketNameNotAllowed')"
-                    i18n>The bucket with chosen name does not exist.</span>
-            </div>
+                    *ngIf="currentFormGroupContext.showError('flow_id', frm, 'required')"
+                    i18n>Name is required</span>
+            </ng-template>
           </div>
+
+          <div class="form-item">
+            <cds-text-label label="Bucket name"
+                            for="bucket"
+                            i18n>Bucket Name
+              <input cdsText
+                      type="text"
+                      placeholder="Bucket Name..."
+                      id="bucket"
+                      name="bucket"
+                      formControlName="bucket_name"/>
+            </cds-text-label>
+          </div>
+
           <ng-container *ngIf="groupType == flowType.symmetrical; else directionalFlow">
-            <div class="form-group row">
+            <div class="form-item">
               <label class="cd-col-form-label required"
                      for="zones">
                 <ng-container i18n>Zones</ng-container>
@@ -53,7 +64,7 @@
             </div>
           </ng-container>
           <ng-template #directionalFlow>
-            <div class="form-group row">
+            <div class="form-item">
               <label class="cd-col-form-label required"
                      for="source_zone"
                      i18n>Source Zone
@@ -62,7 +73,7 @@
                 <ng-container *ngTemplateOutlet="zoneMultiSelect;context: { name: 'source_zone', zone: sourceZones }"></ng-container>
               </div>
             </div>
-            <div class="form-group row">
+            <div class="form-item">
               <label class="cd-col-form-label required"
                      for="destination_zone"
                      i18n>Destination Zone</label>
@@ -71,15 +82,14 @@
               </div>
             </div>
           </ng-template>
-        </div>
+      </form>
+    </div>
         <div class="modal-footer">
           <cd-form-button-panel (submitActionEvent)="submit()"
                                 [form]="currentFormGroupContext"
                                 [submitText]="(action | titlecase) + ' ' + (groupType | upperFirst) + ' ' + 'Flow'"></cd-form-button-panel>
         </div>
-      </form>
-    </ng-container>
-  </cd-modal>
+  </cds-modal>
 
 <ng-template #zoneMultiSelect
              let-name="name"

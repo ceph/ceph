@@ -21,7 +21,7 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TimerService } from '~/app/shared/services/timer.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
@@ -108,7 +108,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   activeId: string;
 
   constructor(
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private timerService: TimerService,
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
@@ -126,51 +126,40 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
 
   openModal(entity: any, edit = false) {
     const entityName = edit ? entity.data.type : entity;
-    const action = edit ? 'edit' : 'create';
+    const action = edit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     const initialState = {
       resource: entityName,
       action: action,
       info: entity,
+      editing: edit,
       defaultsInfo: this.defaultsInfo,
       multisiteInfo: this.multisiteInfo
     };
     if (entityName === 'realm') {
-      this.bsModalRef = this.modalService.show(RgwMultisiteRealmFormComponent, initialState, {
-        size: 'lg'
-      });
+      this.bsModalRef = this.modalService.show(RgwMultisiteRealmFormComponent, initialState);
     } else if (entityName === 'zonegroup') {
-      this.bsModalRef = this.modalService.show(RgwMultisiteZonegroupFormComponent, initialState, {
-        size: 'lg'
-      });
+      this.bsModalRef = this.modalService.show(RgwMultisiteZonegroupFormComponent, initialState);
     } else {
-      this.bsModalRef = this.modalService.show(RgwMultisiteZoneFormComponent, initialState, {
-        size: 'lg'
-      });
+      this.bsModalRef = this.modalService.show(RgwMultisiteZoneFormComponent, initialState);
     }
   }
 
   openMultisiteSetupWizard() {
-    this.bsModalRef = this.modalService.show(RgwMultisiteWizardComponent, {
-      size: 'lg'
-    });
+    this.bsModalRef = this.modalService.show(RgwMultisiteWizardComponent);
   }
 
   openMigrateModal() {
     const initialState = {
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteMigrateComponent, initialState, {
-      size: 'lg'
-    });
+    this.bsModalRef = this.modalService.show(RgwMultisiteMigrateComponent, initialState);
   }
 
   openImportModal() {
     const initialState = {
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteImportComponent, initialState, {
-      size: 'lg'
-    });
+    this.bsModalRef = this.modalService.show(RgwMultisiteImportComponent, initialState);
   }
 
   openExportModal() {
@@ -178,9 +167,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       defaultsInfo: this.defaultsInfo,
       multisiteInfo: this.multisiteInfo
     };
-    this.bsModalRef = this.modalService.show(RgwMultisiteExportComponent, initialState, {
-      size: 'lg'
-    });
+    this.bsModalRef = this.modalService.show(RgwMultisiteExportComponent, initialState);
   }
 
   getDisableExport() {

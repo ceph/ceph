@@ -8,6 +8,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { CheckboxModule, InputModule, ModalModule, SelectModule } from 'carbon-components-angular';
 
 describe('CephfsSubvolumegroupFormComponent', () => {
   let component: CephfsSubvolumegroupFormComponent;
@@ -21,7 +22,11 @@ describe('CephfsSubvolumegroupFormComponent', () => {
       ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
-      RouterTestingModule
+      RouterTestingModule,
+      ModalModule,
+      InputModule,
+      SelectModule,
+      CheckboxModule
     ]
   });
 

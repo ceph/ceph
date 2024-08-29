@@ -16,7 +16,8 @@ import {
   DialogModule,
   SelectModule,
   TagModule,
-  LayerModule
+  LayerModule,
+  GridModule
 } from 'carbon-components-angular';
 import AddIcon from '@carbon/icons/es/add/16';
 import FilterIcon from '@carbon/icons/es/filter/16';
@@ -100,7 +101,8 @@ import { TableDetailDirective } from './directives/table-detail.directive';
     ThemeModule,
     SelectModule,
     TagModule,
-    LayerModule
+    LayerModule,
+    GridModule
   ],
   declarations: [
     TableComponent,

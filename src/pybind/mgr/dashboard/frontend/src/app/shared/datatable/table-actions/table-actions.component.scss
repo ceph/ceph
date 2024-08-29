@@ -21,3 +21,14 @@ button.dropdown-item:hover {
 ::ng-deep .cds--toolbar-content .cds--overflow-menu {
   inline-size: auto !important;
 }
+
+.primary-dropdown-btn {
+  align-items: center;
+  background-color: vv.$primary;
+  border: none;
+  fill: vv.$white;
+  display: flex;
+  justify-content: center;
+  height: 3rem;
+  width: 3rem;
+}

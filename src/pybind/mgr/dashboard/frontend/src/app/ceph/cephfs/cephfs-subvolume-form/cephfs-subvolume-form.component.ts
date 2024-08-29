@@ -1,6 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -24,12 +23,6 @@ import { Observable } from 'rxjs';
   styleUrls: ['./cephfs-subvolume-form.component.scss']
 })
 export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
-  fsName: string;
-  subVolumeName: string;
-  subVolumeGroupName: string;
-  pools: Pool[];
-  isEdit = false;
-
   subvolumeForm: CdFormGroup;
 
   action: string;
@@ -49,14 +42,19 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
   scopes: string[] = ['owner', 'group', 'others'];
 
   constructor(
-    public activeModal: NgbActiveModal,
     private actionLabels: ActionLabelsI18n,
     private taskWrapper: TaskWrapperService,
     private cephFsSubvolumeService: CephfsSubvolumeService,
     private cephFsSubvolumeGroupService: CephfsSubvolumeGroupService,
     private formatter: FormatterService,
     private dimlessBinary: DimlessBinaryPipe,
-    private octalToHumanReadable: OctalToHumanReadablePipe
+    private octalToHumanReadable: OctalToHumanReadablePipe,
+
+    @Optional() @Inject('fsName') public fsName: string,
+    @Optional() @Inject('subVolumeName') public subVolumeName: string,
+    @Optional() @Inject('subVolumeGroupName') public subVolumeGroupName: string,
+    @Optional() @Inject('pools') public pools: Pool[],
+    @Optional() @Inject('isEdit') public isEdit = false
   ) {
     super();
     this.resource = $localize`Subvolume`;
@@ -155,6 +153,10 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
   }
 
   submit() {
+    if (this.subvolumeForm.invalid) {
+      this.subvolumeForm.markAsDirty();
+      return;
+    }
     const subVolumeName = this.subvolumeForm.getValue('subvolumeName');
     const subVolumeGroupName = this.subvolumeForm.getValue('subvolumeGroupName');
     const pool = this.subvolumeForm.getValue('pool');
@@ -183,7 +185,7 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
             this.subvolumeForm.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.activeModal.close();
+            this.closeModal();
           }
         });
     } else {
@@ -209,7 +211,7 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
             this.subvolumeForm.setErrors({ cdSubmitButton: true });
           },
           complete: () => {
-            this.activeModal.close();
+            this.closeModal();
           }
         });
     }

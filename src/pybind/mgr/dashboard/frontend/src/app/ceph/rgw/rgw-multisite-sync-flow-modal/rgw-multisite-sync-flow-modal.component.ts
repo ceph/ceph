@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
@@ -16,18 +16,15 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ZoneData } from '../models/rgw-multisite-zone-selector';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-sync-flow-modal',
   templateUrl: './rgw-multisite-sync-flow-modal.component.html',
   styleUrls: ['./rgw-multisite-sync-flow-modal.component.scss']
 })
-export class RgwMultisiteSyncFlowModalComponent implements OnInit {
-  action: string;
+export class RgwMultisiteSyncFlowModalComponent extends BaseModal implements OnInit {
   editing: boolean = false;
-  groupType: FlowType;
-  groupExpandedRow: any;
-  flowSelectedRow: any;
   syncPolicyDirectionalFlowForm: CdFormGroup;
   syncPolicySymmetricalFlowForm: CdFormGroup;
   syncPolicyPipeForm: CdFormGroup;
@@ -44,8 +41,15 @@ export class RgwMultisiteSyncFlowModalComponent implements OnInit {
     public notificationService: NotificationService,
     private rgwDaemonService: RgwDaemonService,
     private rgwZonegroupService: RgwZonegroupService,
-    private rgwMultisiteService: RgwMultisiteService
-  ) {}
+    private rgwMultisiteService: RgwMultisiteService,
+
+    @Optional() @Inject('groupType') public groupType: FlowType,
+    @Optional() @Inject('groupExpandedRow') public groupExpandedRow: any,
+    @Optional() @Inject('flowSelectedRow') public flowSelectedRow: any,
+    @Optional() @Inject('action') public action: string
+  ) {
+    super();
+  }
 
   ngOnInit(): void {
     if (this.action === 'edit') {

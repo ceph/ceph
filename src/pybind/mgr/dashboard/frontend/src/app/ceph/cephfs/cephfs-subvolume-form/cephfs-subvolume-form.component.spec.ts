@@ -9,6 +9,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { CheckboxModule, InputModule, ModalModule, SelectModule } from 'carbon-components-angular';
 
 describe('CephfsSubvolumeFormComponent', () => {
   let component: CephfsSubvolumeFormComponent;
@@ -25,7 +26,11 @@ describe('CephfsSubvolumeFormComponent', () => {
       ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
-      RouterTestingModule
+      RouterTestingModule,
+      ModalModule,
+      InputModule,
+      SelectModule,
+      CheckboxModule
     ]
   });
 
@@ -47,7 +52,7 @@ describe('CephfsSubvolumeFormComponent', () => {
 
   it('should have a form open in modal', () => {
     const nativeEl = fixture.debugElement.nativeElement;
-    expect(nativeEl.querySelector('cd-modal')).not.toBe(null);
+    expect(nativeEl.querySelector('cds-modal')).not.toBe(null);
   });
 
   it('should have the volume name prefilled', () => {
