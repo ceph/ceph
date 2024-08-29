@@ -72,13 +72,13 @@ public:
     virtual ContDesc get_cont() const = 0;
     virtual uint64_t get_pos() const = 0;
     virtual bufferlist gen_bl_advance(uint64_t s) {
-      bufferptr ret = buffer::create(s);
+      auto _ret = buffer::ptr_node::create(buffer::create(s));
       for (uint64_t i = 0; i < s; ++i, ++(*this)) {
-	ret[i] = **this;
+	(*_ret)[i] = **this;
       }
-      bufferlist _ret;
-      _ret.push_back(ret);
-      return _ret;
+      bufferlist ret;
+      ret.push_back(std::move(_ret));
+      return ret;
     }
     /// walk through given @c bl
     ///
