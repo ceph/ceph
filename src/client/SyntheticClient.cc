@@ -1414,9 +1414,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       if (ll_files.count(f)) {
 	if (!metadata_only) {
 	  bufferlist bl;
-	  bufferptr bp(size);
-	  bl.push_back(bp);
-	  bp.zero();
+	  bl.append_zero(size);
 	  client->ll_write(ll_files[f], off, size, bl.c_str());
 	} else {
 	  client->ll_write(ll_files[f], off+size, 0, NULL);
@@ -2242,10 +2240,8 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
 	  << " .. doing [" << start << "," << end << ") inc " << inc
 	  << dendl;
   
-  bufferptr bp(osize);
-  bp.zero();
   bufferlist bl;
-  bl.push_back(bp);
+  bl.append_zero(osize);
 
   ceph::mutex lock = ceph::make_mutex("create_objects lock");
   ceph::condition_variable cond;
@@ -2310,10 +2306,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 	  << ", wskew = " << wskew
 	  << dendl;
 
-  bufferptr bp(osize);
-  bp.zero();
   bufferlist bl;
-  bl.push_back(bp);
+  bl.append_zero(osize);
 
   // start with odd number > nobj
   rjhash<uint32_t> h;
