@@ -2521,9 +2521,7 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
   {
     bufferlist bl;
     bl.append("hi there");
-    bufferptr bp(4000000);  // make it big!
-    bp.zero();
-    bl.append(bp);
+    bl.append_zero(4000000);  // make it big!
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
@@ -8196,9 +8194,7 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
   {
     bufferlist bl;
     bl.append("hi there");
-    bufferptr bp(4000000);  // make it big!
-    bp.zero();
-    bl.append(bp);
+    bl.append_zero(4000000);  // make it big!
     ObjectWriteOperation op;
     op.write_full(bl);
     ASSERT_EQ(0, ioctx.operate("foo", &op));

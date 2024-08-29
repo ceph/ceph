@@ -759,7 +759,7 @@ TYPED_TEST(LibRadosChecksum, Subset) {
     content_sub_bl.substr_of(this->content_bl, i * chunk_size, chunk_size);
 
     typename TestFixture::value_t expected_value;
-    bufferptr expected_value_bp = buffer::create_static(
+    bufferptr_rw expected_value_bp = buffer::create_static(
       sizeof(expected_value), reinterpret_cast<char*>(&expected_value));
     Checksummer::template calculate<typename TestFixture::alg_t>(
       init_value, chunk_size, 0, chunk_size, content_sub_bl,
@@ -792,7 +792,7 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
   ASSERT_EQ(csum_count, count);
 
   std::vector<typename TestFixture::value_t> expected_values(csum_count);
-  bufferptr expected_values_bp = buffer::create_static(
+  bufferptr_rw expected_values_bp = buffer::create_static(
     csum_count * sizeof(typename TestFixture::value_t),
     reinterpret_cast<char*>(&expected_values[0]));
 
