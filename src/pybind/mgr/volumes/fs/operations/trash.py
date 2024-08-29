@@ -1,4 +1,5 @@
 import os
+import errno
 import uuid
 import logging
 from contextlib import contextmanager
@@ -121,6 +122,57 @@ class Trash(GroupTemplate):
             self.fs.unlink(pth)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
+
+    def _get_stats(self, path, num_of_files, num_of_subvols, iter_level):
+        with self.fs.opendir(path) as dir_handle:
+            d = self.fs.readdir(dir_handle)
+            while d:
+                if d.d_name not in (b'.', b'..'):
+                    if d.is_dir():
+                        d_full = os.path.join(path, d.d_name)
+                        iter_level += 1
+                        num_of_files, num_of_subvols = self._get_stats(d_full,
+                            num_of_files, num_of_subvols, iter_level)
+                        iter_level -= 1
+
+                    num_of_files += 1
+                    if iter_level == 0:
+                        num_of_subvols += 1
+
+                try:
+                    d = self.fs.readdir(dir_handle)
+                # this try-except is inside the loop so that looping can
+                # "continue" in ObjectNotFound that is cephfs.Error where errno
+                # is ENOENT.
+                except cephfs.Error as e:
+                    if e.args[0] == errno.ENOENT:
+                        log.debug(f'Exception "{e}" occurred, perhaps the file '
+                                  'purged by purge threads that are running '
+                                  'simultaneously')
+                        continue
+                    else:
+                        raise
+
+        return num_of_files, num_of_subvols
+
+    def get_stats(self):
+        try:
+            num_of_files, num_of_subvols = self._get_stats(self.path, 0, 0, 0)
+        # this try-except ensure separate handling when trash dir goes
+        # missing
+        except cephfs.Error as e:
+            if e.args[0] == errno.ENOENT:
+                log.debug(f'Exception "{e}" ocurred.')
+                return
+            else:
+                raise
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        if num_of_files:
+            return {'subvols_left': num_of_subvols, 'files_left': num_of_files}
+        else:
+            return {}
 
 def create_trashcan(fs, vol_spec):
     """
