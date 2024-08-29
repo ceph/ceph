@@ -278,6 +278,7 @@ class SubvolumeV2(SubvolumeV1):
             return {
                 SubvolumeOpType.REMOVE,
                 SubvolumeOpType.REMOVE_FORCE,
+                SubvolumeOpType.PURGE_STATS,
                 SubvolumeOpType.LIST,
                 SubvolumeOpType.INFO,
                 SubvolumeOpType.SNAP_REMOVE,
@@ -290,6 +291,7 @@ class SubvolumeV2(SubvolumeV1):
             }
 
         return {SubvolumeOpType.REMOVE_FORCE,
+                SubvolumeOpType.PURGE_STATS,
                 SubvolumeOpType.CLONE_CREATE,
                 SubvolumeOpType.CLONE_STATUS,
                 SubvolumeOpType.CLONE_CANCEL,
