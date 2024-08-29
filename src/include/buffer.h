@@ -164,7 +164,7 @@ struct error_code;
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */
-  class CEPH_BUFFER_API ptr_ro {
+  class CEPH_BUFFER_API ptr {
     friend class list;
 
   protected:
@@ -185,8 +185,8 @@ struct error_code;
 	  deep(d)
       {}
 
-      friend class ptr_ro;
       friend class ptr;
+      friend class ptr_rw;
 
     public:
       using pointer = typename std::conditional<is_const, const char*, char *>::type;
@@ -234,25 +234,28 @@ struct error_code;
     void release();
 
   public:
-    using const_iterator = iterator_impl<ptr_ro, true>;
+    using const_iterator = iterator_impl<ptr, true>;
 
-    ptr_ro() : _raw(nullptr), _off(0), _len(0) {}
-    ptr_ro(ceph::unique_leakable_ptr<raw> r);
+    ptr() : _raw(nullptr), _off(0), _len(0) {}
+    ptr(ceph::unique_leakable_ptr<raw> r);
     // cppcheck-suppress noExplicitConstructor
-    ptr_ro(unsigned l);
-    ptr_ro(const char *d, unsigned l);
-    ptr_ro(const ptr_ro& p);
-    ptr_ro(ptr_ro&& p) noexcept;
-    ptr_ro(const ptr_ro& p, unsigned o, unsigned l);
-    ptr_ro(const ptr_ro& p, ceph::unique_leakable_ptr<raw> r);
-    ~ptr_ro() {
+    ptr(unsigned l);
+    ptr(const char *d, unsigned l);
+    ptr(const ptr& p);
+    ptr(ptr&& p) noexcept;
+    ptr(const ptr& p, unsigned o, unsigned l);
+    ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r);
+    ~ptr() {
       // BE CAREFUL: this destructor is called also for hypercombined ptr_node.
       // After freeing underlying raw, `*this` can become inaccessible as well!
       release();
     }
 
+    ptr& operator= (const ptr& p);
+    ptr& operator= (ptr&& p) noexcept;
+
     bool have_raw() const { return _raw ? true:false; }
-    void swap(ptr_ro& other) noexcept;
+    void swap(ptr& other) noexcept;
 
     const_iterator begin(size_t offset=0) const {
       return const_iterator(this, offset, false);
@@ -303,66 +306,7 @@ struct error_code;
     int cmp(const ptr& o) const;
     bool is_zero() const;
 
-
-#ifdef HAVE_SEASTAR
-    /// create a temporary_buffer, copying the ptr as its deleter
-    operator seastar::temporary_buffer<char>() &;
-    /// convert to temporary_buffer, stealing the ptr as its deleter
-    operator seastar::temporary_buffer<char>() &&;
-#endif // HAVE_SEASTAR
-  };
-
-  class CEPH_BUFFER_API ptr : public ptr_ro {
-    friend class list;
-  private:
-
-
-
-  public:
-    using const_iterator = iterator_impl<ptr, true>;
-    using iterator = iterator_impl<ptr, false>;
-
-    ptr() : ptr_ro() {}
-    ptr(ceph::unique_leakable_ptr<raw> r);
-    // cppcheck-suppress noExplicitConstructor
-    ptr(unsigned l);
-    ptr(const char *d, unsigned l);
-    ptr(const ptr& p);
-    ptr(ptr&& p) noexcept;
-    ptr(const ptr& p, unsigned o, unsigned l);
-    ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r);
-    ptr& operator= (const ptr& p);
-    ptr& operator= (ptr&& p) noexcept;
-
-    void swap(ptr& other) noexcept;
-
-    const_iterator begin(size_t offset=0) const {
-      return const_iterator(this, offset, false);
-    }
-    iterator begin(size_t offset=0) {
-      return iterator(this, offset, false);
-    }
-    const_iterator cbegin() const {
-      return begin();
-    }
-    const_iterator begin_deep(size_t offset=0) const {
-      return const_iterator(this, offset, true);
-    }
-    // accessors
-    const char *c_str() const {
-      return ptr_ro::c_str();
-    }
-    const char *end_c_str() const {
-      return ptr_ro::end_c_str();
-    }
-    const char& operator[](unsigned n) const {
-      return ptr_ro::operator[](n);
-    }
-
     // modifiers
-    char& operator[](unsigned n);
-    char *c_str();
-    char *end_c_str();
     void set_offset(unsigned o) {
 #ifdef __CEPH__
       ceph_assert(raw_length() >= o);
@@ -379,6 +323,68 @@ struct error_code;
 #endif
       _len = l;
     }
+
+#ifdef HAVE_SEASTAR
+    /// create a temporary_buffer, copying the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &;
+    /// convert to temporary_buffer, stealing the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &&;
+#endif // HAVE_SEASTAR
+  };
+
+  class CEPH_BUFFER_API ptr_rw : public ptr {
+    friend class list;
+    friend class ptr_node; // for ptr(bp, off, len)
+  private:
+    ptr_rw(const ptr& p, unsigned o, unsigned l);
+    ptr_rw(const ptr& p);
+    ptr_rw(ptr&& p) noexcept;
+
+  public:
+    using const_iterator = iterator_impl<ptr_rw, true>;
+    using iterator = iterator_impl<ptr_rw, false>;
+
+    ptr_rw() : ptr() {}
+    ptr_rw(ceph::unique_leakable_ptr<raw> r);
+    // cppcheck-suppress noExplicitConstructor
+    ptr_rw(unsigned l);
+    ptr_rw(const char *d, unsigned l);
+    ptr_rw(const ptr_rw& p);
+    ptr_rw(ptr_rw&& p) noexcept;
+    ptr_rw(const ptr_rw& p, unsigned o, unsigned l);
+    ptr_rw(const ptr_rw& p, ceph::unique_leakable_ptr<raw> r);
+    ptr_rw& operator= (const ptr_rw& p);
+    ptr_rw& operator= (ptr_rw&& p) noexcept;
+
+    void swap(ptr_rw& other) noexcept;
+
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset, false);
+    }
+    iterator begin(size_t offset=0) {
+      return iterator(this, offset, false);
+    }
+    const_iterator cbegin() const {
+      return begin();
+    }
+    const_iterator begin_deep(size_t offset=0) const {
+      return const_iterator(this, offset, true);
+    }
+    // accessors
+    const char *c_str() const {
+      return ptr::c_str();
+    }
+    const char *end_c_str() const {
+      return ptr::end_c_str();
+    }
+    const char& operator[](unsigned n) const {
+      return ptr::operator[](n);
+    }
+
+    // modifiers
+    char& operator[](unsigned n);
+    char *c_str();
+    char *end_c_str();
 
     unsigned append(char c);
     unsigned append(const char *p, unsigned l);
@@ -404,7 +410,7 @@ struct error_code;
     }
   };
 
-  class ptr_node : public ptr_hook, public ptr {
+  class ptr_node : public ptr_hook, public ptr_rw {
   public:
     struct cloner {
       ptr_node* operator()(const ptr_node& clone_this);
@@ -440,12 +446,14 @@ struct error_code;
     friend list;
 
     template <class... Args>
-    ptr_node(Args&&... args) : ptr(std::forward<Args>(args)...) {
+    ptr_node(Args&&... args) : ptr_rw(std::forward<Args>(args)...) {
     }
     ptr_node(const ptr_node&) = default;
 
     ptr& operator= (const ptr& p) = delete;
     ptr& operator= (ptr&& p) noexcept = delete;
+    ptr_rw& operator= (const ptr_rw& p) = delete;
+    ptr_rw& operator= (ptr_rw&& p) noexcept = delete;
     ptr_node& operator= (const ptr_node& p) = delete;
     ptr_node& operator= (ptr_node&& p) noexcept = delete;
     void swap(ptr& other) noexcept = delete;
@@ -1033,8 +1041,8 @@ struct error_code;
 
     uint64_t get_wasted_space() const;
     unsigned get_num_buffers() const { return _num; }
-    const ptr_node& front() const { return _buffers.front(); }
-    const ptr_node& back() const { return _buffers.back(); }
+    const ptr& front() const { return _buffers.front(); }
+    const ptr& back() const { return _buffers.back(); }
 
     int get_mempool() const;
     void reassign_to_mempool(int pool);
