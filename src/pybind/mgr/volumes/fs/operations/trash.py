@@ -228,6 +228,10 @@ def open_trashcan(fs, vol_spec):
     yield trashcan
 
 
+def get_trash_path(volspec):
+    return os.path.join(volspec.base_dir, Trash.GROUP_NAME).encode('utf-8')
+
+
 def get_trashcan_stats(volclient, volname):
     with open_volume_lockless(volclient, volname) as fs_handle:
         with open_trashcan(fs_handle, volclient.volspec) as trashcan:
@@ -238,7 +242,7 @@ def get_pending_subvol_deletions_count(fs, volspec):
     """
     Get the number of pending subvolumes deletions.
     """
-    trashdir = os.path.join(volspec.base_dir, Trash.GROUP_NAME)
+    trashdir = get_trash_path(volspec)
     try:
         num_pending_subvol_del = len(listdir(fs, trashdir, filter_entries=None,
                                              filter_files=False))
