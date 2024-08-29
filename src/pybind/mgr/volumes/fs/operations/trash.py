@@ -1,4 +1,5 @@
 import os
+import errno
 import uuid
 import logging
 from contextlib import contextmanager
@@ -112,6 +113,22 @@ class Trash(GroupTemplate):
             self.fs.unlink(pth)
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
+
+    def get_stats(self):
+        try:
+            file_count = int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
+            subvol_count = int(self.fs.getxattr(self.path, 'ceph.dir.rsubdirs'))
+        except cephfs.Error as e:
+            if e.args[0] == errno.ENOENT:
+                log.debug(f'Exception "{e}" ocurred.')
+                return
+            else:
+                raise VolumeException(-e.args[0], e.args[1])
+
+        if file_count:
+            return {'subvols_left': subvol_count, 'files_left': file_count}
+        else:
+            return {}
 
 def create_trashcan(fs, vol_spec):
     """
