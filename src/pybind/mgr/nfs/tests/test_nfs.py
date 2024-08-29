@@ -1119,6 +1119,9 @@ NFS_CORE_PARAM {
     
     def test_create_export_cephfs_with_cmount_path(self):
         self._do_mock_test(self._do_test_create_export_cephfs_with_cmount_path)
+    
+    def test_create_export_cephfs_with_invalid_cmount_path(self):
+        self._do_mock_test(self._do_test_create_export_cephfs_with_invalid_cmount_path)
 
     def _do_test_create_export_cephfs(self):
         nfs_mod = Module('nfs', '', '')
@@ -1193,6 +1196,25 @@ NFS_CORE_PARAM {
         assert export.fsal.cephx_key == "thekeyforclientabc"
         assert export.fsal.cmount_path == "/"
         assert export.cluster_id == self.cluster_id
+    
+    def _do_test_create_export_cephfs_with_invalid_cmount_path(self):
+        import object_format
+
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+
+        with pytest.raises(object_format.ErrorResponse) as e:
+            conf.create_export(
+                fsal_type='cephfs',
+                cluster_id=self.cluster_id,
+                fs_name='myfs',
+                path='/',
+                pseudo_path='/cephfs4',
+                read_only=False,
+                squash='root',
+                cmount_path='/invalid',
+                )
+        assert "Invalid cmount_path: '/invalid'" in str(e.value)
 
     def _do_test_cluster_ls(self):
         nfs_mod = Module('nfs', '', '')
