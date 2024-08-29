@@ -311,19 +311,21 @@ public:
     // To exemplify:
     //   16 + p2align(10, 16) -> 16
     //   16 + p2align(16, 16) -> 32 including 16 bytes for padding.
-    ceph::bufferptr out_tmp{static_cast<unsigned>(
-      AES_BLOCK_LEN + p2align<std::size_t>(in.length(), AES_BLOCK_LEN))};
-
-    // let's pad the data
-    std::uint8_t pad_len = out_tmp.length() - in.length();
-    ceph::bufferptr pad_buf{pad_len};
-    // FIPS zeroization audit 20191115: this memset is not intended to
-    // wipe out a secret after use.
-    memset(pad_buf.c_str(), pad_len, pad_len);
+    auto out_ptr = ceph::buffer::ptr_node::create(
+      ceph::buffer::create(static_cast<unsigned>(
+        AES_BLOCK_LEN + p2align<std::size_t>(in.length(), AES_BLOCK_LEN))));
 
     // form contiguous buffer for block cipher. The ctor copies shallowly.
     ceph::bufferlist incopy(in);
-    incopy.append(std::move(pad_buf));
+    // let's pad the data
+    std::uint8_t pad_len = out_ptr->length() - in.length();
+    ceph::bufferptr_rw pad_buf{pad_len};
+    memset(pad_buf.c_str(), pad_len, pad_len);
+    incopy.push_back(std::move(pad_buf));
+    // OPTIMIZEME: if the out_ptr had been created with `pad_len` of
+    // extra space, the bl rebuilding cold have been avoided. that is,
+    // there would be a single buffer, and therefore, `.c_str()` would
+    // be really cheap.
     const auto in_buf = reinterpret_cast<const unsigned char*>(incopy.c_str());
 
     // reinitialize IV each time. It might be unnecessary depending on
@@ -337,10 +339,10 @@ public:
     // shows the cost is quite high. Endianness might be an issue.
     // However, as they would affect Cephx, any fallout should pop up
     // rather early, hopefully.
-    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_tmp.c_str()),
-		    out_tmp.length(), &enc_key, iv, AES_ENCRYPT);
+    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_ptr->c_str()),
+		    out_ptr->length(), &enc_key, iv, AES_ENCRYPT);
 
-    out.append(out_tmp);
+    out.push_back(std::move(out_ptr));
     return 0;
   }
 
@@ -361,17 +363,18 @@ public:
     unsigned char iv[AES_BLOCK_LEN];
     memcpy(iv, CEPH_AES_IV, AES_BLOCK_LEN);
 
-    ceph::bufferptr out_tmp{in.length()};
-    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_tmp.c_str()),
+    auto out_node = \
+      ceph::buffer::ptr_node::create(ceph::buffer::create(in.length()));
+    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_node->c_str()),
 		    in.length(), &dec_key, iv, AES_DECRYPT);
 
     // BE CAREFUL: we cannot expose any single bit of information about
     // the cause of failure. Otherwise we'll face padding oracle attack.
     // See: https://en.wikipedia.org/wiki/Padding_oracle_attack.
     const auto pad_len = \
-      std::min<std::uint8_t>(out_tmp[in.length() - 1], AES_BLOCK_LEN);
-    out_tmp.set_length(in.length() - pad_len);
-    out.append(std::move(out_tmp));
+      std::min<std::uint8_t>((*out_node)[in.length() - 1], AES_BLOCK_LEN);
+    out_node->set_length(in.length() - pad_len);
+    out.push_back(std::move(out_node));
 
     return 0;
   }
@@ -451,7 +454,7 @@ public:
 
 int CryptoAES::create(CryptoRandom *random, bufferptr& secret)
 {
-  bufferptr buf(AES_KEY_LEN);
+  bufferptr_rw buf(AES_KEY_LEN);
   random->get_bytes(buf.c_str(), buf.length());
   secret = std::move(buf);
   return 0;
