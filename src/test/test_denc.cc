@@ -510,7 +510,9 @@ TEST(denc, bufferptr_shallow_and_deep) {
     denc(i, p);
     ASSERT_EQ(3u, op.length());
     ASSERT_EQ('f', op[0]);
-    memset(bl.c_str(), 0, bl.length());
+    // `memset(bl.c_str(), 0, bl.length())`  wouldn't compile.
+    // The way to operate bufferlist memory directly is `data()`.
+    memset(bl.data(), 0, bl.length());
     ASSERT_EQ(0, op[0]);
   }
 
@@ -525,7 +527,7 @@ TEST(denc, bufferptr_shallow_and_deep) {
     denc(op, p);
     denc(i, p);
     ASSERT_EQ('f', op[0]);
-    memset(bl2.c_str(), 1, bl2.length());
+    memset(bl2.data(), 1, bl2.length());
     ASSERT_EQ('f', op[0]);
   }
 }
