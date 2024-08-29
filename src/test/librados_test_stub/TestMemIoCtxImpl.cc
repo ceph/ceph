@@ -838,9 +838,7 @@ size_t TestMemIoCtxImpl::clip_io(size_t off, size_t len, size_t bl_len) {
 
 void TestMemIoCtxImpl::ensure_minimum_length(size_t len, bufferlist *bl) {
   if (len > bl->length()) {
-    bufferptr ptr(buffer::create(len - bl->length()));
-    ptr.zero();
-    bl->append(ptr);
+    bl->append_zero(len - bl->length());
   }
 }
 
