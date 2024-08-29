@@ -241,9 +241,9 @@
                         formControlName="storageClass"
                         (change)="getStorageClassData($event.target.value)"
                         name="storageClass">
-                  <option *ngFor="let str of storageClassList"
-                          [value]="str.value">
-                  {{ str.value }}
+                  <option *ngFor="let storageClass of storageClassList"
+                          [value]="storageClass.key">
+                  {{ storageClass.key }}
                   </option>
                 </select>
               </div>
