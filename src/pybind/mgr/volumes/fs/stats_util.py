@@ -433,19 +433,21 @@ class CloneProgressBar(VolumesProgressBar):
 def get_trash_stats_for_all_vols(volclient):
     subvol_count = 0
     file_count = 0
+    size = 0
 
     volnames = list_volumes(volclient.mgr)
     for volname in volnames:
-        s_count, f_count, = get_trashcan_stats(volclient, volname)
+        s_count, f_count, size_ = get_trashcan_stats(volclient, volname)
         log.debug(f'In trash directory of volume "{volname}", {s_count} '
                   f'subvolumes containing {f_count} files were found')
         subvol_count += s_count
         file_count += f_count
+        size += size_
 
     log.debug(f'In trash directory of {len(volnames)} volumes, '
               f'{subvol_count} subvolumes containing total {file_count} '
                'files were found')
-    return subvol_count, file_count
+    return subvol_count, file_count, size
 
 
 class TrashStats:
@@ -457,12 +459,47 @@ class TrashStats:
         self.total_subvols = 0
         # total number of files in trashcan.
         self.total_files = 0
+        # total amount of data in trashcan.
+        self.total_size = 0
+
+        # number of subvols left in trashcan.
+        self.subvols_left = 0
+        # number of files left in trashcan.
+        self.files_left = 0
+        # amount of data left in trashcan.
+        self.size_left = 0
 
     def fetch_initial_stats(self):
         trash_stats = get_trash_stats_for_all_vols(self.volclient)
 
         self.total_subvols = trash_stats[0]
         self.total_files = trash_stats[1]
+        self.total_size = trash_stats[2]
+
+    def fetch_leftover_data_stats(self):
+        trash_stats = get_trash_stats_for_all_vols(self.volclient)
+
+        self.subvols_left = trash_stats[0]
+        self.files_left = trash_stats[1]
+        self.size_left = trash_stats[2]
+
+    def update_total_data_stats(self):
+        self.total_subvols = self.subvols_left
+        self.total_files = self.files_left
+        self.total_size = self.size_left
+
+    def is_trash_empty(self):
+        return self.subvols_left == self.files_left == self.size_left == 0
+
+    def are_laggy(self):
+        return self.total_files < self.files_left
+
+    def get_fraction_and_percent(self):
+        files_purged = self.total_files - self.files_left
+        # progress fraction that progress module accepts to print the progress bar.
+        fraction = round(files_purged / self.total_files, 3)
+        percent = round(fraction * 100, 3)
+        return fraction, percent
 
 
 class PurgeProgressBar(VolumesProgressBar):
@@ -497,7 +534,7 @@ class PurgeProgressBar(VolumesProgressBar):
                   f'containing {self.trash_stats.total_files} files')
 
     def _update_progress_bars(self):
-        subvols_left, files_left = self.get_trash_stats_for_all_vols()
+        self.trash_stats.fetch_leftover_data_stats()
 
         if self.trash_stats.is_trash_empty():
             self.finish()
@@ -513,7 +550,8 @@ class PurgeProgressBar(VolumesProgressBar):
             log.debug('rstats values for trash dir increased instead of '
                       'decreasing, because they are laggy. updating initial '
                       'stats to latest stats found. latest stats: '
-                      f'{subvols_left} subvols, {files_left} files')
+                      f'{self.trash_stats.subvols_left} subvols, '
+                      f'{self.trash_stats.files_left} files')
 
             if self.laggy_count < self.LAGGY_NOTE_LIMIT:
                 return
@@ -535,10 +573,7 @@ class PurgeProgressBar(VolumesProgressBar):
 
         # reset laggy count since rstats aren't laggy anymore.
         self.laggy_count = 0
-        files_purged = self.trash_stats.total_files - files_left
-        # progress fraction that progress module accepts to print the progress bar.
-        fraction = round(files_purged / self.trash_stats.total_files, 3)
-        percent = round(fraction * 100, 3)
+        fraction, percent = self.trash_stats.get_fraction_and_percent()
         msg = (f'Purging {self.trash_stats.total_subvols} subvolumes/'
                f'{self.trash_stats.total_files} files, average progress = '
                f'{percent}%')

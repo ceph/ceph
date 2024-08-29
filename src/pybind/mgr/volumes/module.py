@@ -593,6 +593,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Get snapdir visibility for subvolume",
             'perm': 'rw'
         },
+        {
+            'cmd': 'fs purge status '
+                   'name=vol_name,type=CephString ',
+            'desc': "Get status of a purging of volume trashcan",
+            'perm': 'r'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -1098,6 +1104,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_purge_status(self, inbuf, cmd):
+        return self.vc.purge_status(vol_name=cmd['vol_name'])
 
     # remote method
     def subvolume_getpath(self, vol_name, subvol, group_name):
