@@ -156,6 +156,7 @@ public:
     explicit remotebit(bufferlist::const_iterator &p) { decode(p); }
     remotebit() = default;
 
+    void update_referent_inode(MDSRank *mds, CInode *in);
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void print(std::ostream& out) const {
@@ -240,6 +241,7 @@ public:
     const std::list<fullbit>		&get_dfull() const { return dfull; }
     std::list<fullbit>			&_get_dfull() { return dfull; }
     const std::vector<remotebit>	&get_dremote() const { return dremote; }
+    std::vector<remotebit>	        &get_dremote() { return dremote; }
     const std::vector<nullbit>		&get_dnull() const { return dnull; }
 
     template< class... Args>

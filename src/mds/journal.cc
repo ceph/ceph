@@ -681,6 +681,30 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 }
 
 // EMetaBlob::remotebit
+//
+void EMetaBlob::remotebit::update_referent_inode(MDSRank *mds, CInode *in)
+{
+  in->reset_inode(std::move(referent_inode));
+
+  /*
+   * In case there was anything malformed in the journal that we are
+   * replaying, do sanity checks on the inodes we're replaying and
+   * go damaged instead of letting any trash into a live cache
+   */
+  if (in->is_file()) {
+    // Files must have valid layouts with a pool set
+    if (in->get_inode()->layout.pool_id == -1 ||
+	!in->get_inode()->layout.is_valid()) {
+      dout(0) << "EMetaBlob.replay invalid layout on ino " << *in
+              << ": " << in->get_inode()->layout << dendl;
+      CachedStackStringStream css;
+      *css << "Invalid layout for inode " << in->ino() << " in journal";
+      mds->clog->error() << css->strv();
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
+    }
+  }
+}
 
 void EMetaBlob::remotebit::encode(bufferlist& bl, uint64_t features) const
 {
@@ -1427,7 +1451,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
     }
 
     // remote dentries
-    for (const auto& rb : lump.get_dremote()) {
+    for (auto& rb : lump.get_dremote()) {
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
       if (!dn) {
 	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.referent_ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
@@ -1447,13 +1471,36 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
 	  dir->unlink_inode(dn, false);
 	}
         dn->set_alternate_name(mempool::mds_co::string(rb.alternate_name));
-	dir->link_remote_inode(dn, rb.ino, rb.d_type);
+	if (!rb.referent_ino)
+	  dir->link_remote_inode(dn, rb.ino, rb.d_type);
 	dn->set_version(rb.dnv);
 	if (rb.dirty) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay for [" << rb.dnfirst << "," << rb.dnlast << "] had " << *dn << dendl;
 	dn->first = rb.dnfirst;
 	ceph_assert(dn->last == rb.dnlast);
       }
+
+      CInode *ref_in = mds->mdcache->get_inode(rb.referent_ino, rb.dnlast);
+      if (!ref_in) {
+	ref_in = new CInode(mds->mdcache, dn->is_auth(), rb.dnfirst, rb.dnlast);
+        rb.update_referent_inode(mds, ref_in);
+	ceph_assert(ref_in->_get_inode()->remote_ino == rb.ino);
+	ceph_assert(ref_in->_get_inode()->ino == rb.referent_ino);
+	mds->mdcache->add_inode(ref_in);
+        dout(10) << "HRK EMetaBlob.replay referent inode created for dn " << *dn << " inode " << *ref_in << "ref ino " << rb.referent_ino << dendl;
+      } else {
+	ref_in->first = rb.dnfirst;
+        ref_in->set_remote_ino(rb.ino);
+	// TODO: Cleanup up the referent inode if the referent linkage is incorrect
+      }
+
+      dout(10) << "HRK EMetaBlob.replay remote dentry found, link/set referent inode " << *dn << dendl;
+      dir->set_referent_inode(dn, ref_in);
+
+      //TODO: dirty referent inode parent in->mark_dirty_parent(logseg, fb.is_dirty_pool());
+      // for now mark dirty always
+      ref_in->mark_dirty_parent(logseg, true);
+
       if (lump.is_importing())
 	dn->mark_auth();
 
