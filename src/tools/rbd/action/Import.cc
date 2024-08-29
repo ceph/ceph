@@ -259,7 +259,7 @@ static int do_image_io(ImportDiffContext *idiffctx, bool write_zeroes,
   decode(buffer_length, p);
 
   if (!write_zeroes) {
-    bufferptr bp = buffer::create(buffer_length);
+    bufferptr_rw bp = buffer::create(buffer_length);
     r = safe_read_exact(idiffctx->fd, bp.c_str(), buffer_length);
     if (r < 0) {
       std::cerr << "rbd: failed to decode write data" << std::endl;

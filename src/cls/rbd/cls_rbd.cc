@@ -4323,7 +4323,7 @@ int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
     return rc;
 
   header = (struct rbd_obj_header_ondisk *)bl.c_str();
-  bufferptr p(header->snap_names_len);
+  bufferptr_rw p(header->snap_names_len);
   char *buf = (char *)header;
   char *name = buf + sizeof(*header) + header->snap_count * sizeof(struct rbd_obj_snap_ondisk);
   char *end = name + header->snap_names_len;
@@ -4353,7 +4353,7 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist bl;
   struct rbd_obj_header_ondisk *header;
   bufferlist newbl;
-  bufferptr header_bp(sizeof(*header));
+  bufferptr_rw header_bp(sizeof(*header));
   struct rbd_obj_snap_ondisk *new_snaps;
 
   int rc = snap_read_header(hctx, bl);
@@ -4403,7 +4403,7 @@ int old_snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   int snap_name_len = strlen(snap_name);
 
-  bufferptr new_names_bp(header->snap_names_len + snap_name_len + 1);
+  bufferptr_rw new_names_bp(header->snap_names_len + snap_name_len + 1);
   bufferptr new_snaps_bp(sizeof(*new_snaps) * (header->snap_count + 1));
 
   /* copy snap names and append to new snap name */
@@ -4440,7 +4440,7 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   bufferlist bl;
   struct rbd_obj_header_ondisk *header;
   bufferlist newbl;
-  bufferptr header_bp(sizeof(*header));
+  bufferptr_rw header_bp(sizeof(*header));
 
   int rc = snap_read_header(hctx, bl);
   if (rc < 0)
@@ -4483,8 +4483,8 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   header->snap_names_len  = header->snap_names_len - (s.length() + 1);
   header->snap_count = header->snap_count - 1;
 
-  bufferptr new_names_bp(header->snap_names_len);
-  bufferptr new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
+  bufferptr_rw new_names_bp(header->snap_names_len);
+  bufferptr_rw new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
 
   memcpy(header_bp.c_str(), header, sizeof(*header));
   newbl.push_back(header_bp);
@@ -4533,7 +4533,7 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   bufferlist bl;
   struct rbd_obj_header_ondisk *header;
   bufferlist newbl;
-  bufferptr header_bp(sizeof(*header));
+  bufferptr_rw header_bp(sizeof(*header));
   snapid_t src_snap_id;
   const char *dst_snap_name;
   string dst;
@@ -4584,8 +4584,8 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   CLS_LOG(20, "rename snap with snap id %llu to dest name %s", (unsigned long long)src_snap_id.val, dst_snap_name);
   header->snap_names_len  = header->snap_names_len - strlen(snap_names) + dst.length();
 
-  bufferptr new_names_bp(header->snap_names_len);
-  bufferptr new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
+  bufferptr_rw new_names_bp(header->snap_names_len);
+  bufferptr_rw new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
 
   if (header->snap_count) {
     int names_len = 0;
@@ -8232,8 +8232,7 @@ int sparsify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       CLS_LOG(20, "write%s %" PRIu64 "~%" PRIu64, (replace ? "(replace)" : ""),
               write_offset, write_length);
       bufferlist write_bl;
-      write_bl.push_back(ceph::buffer::ptr_node::create(ptr, write_offset,
-							write_length));
+      write_bl.append(ptr, write_offset, write_length);
       if (replace) {
 	r = cls_cxx_replace(hctx, write_offset, write_length, &write_bl);
         replace = false;
