@@ -33,10 +33,11 @@ class ZstdCompressor : public Compressor {
     size_t left = src.length();
 
     size_t const out_max = ZSTD_compressBound(left);
-    ceph::buffer::ptr outptr = ceph::buffer::create_small_page_aligned(out_max);
+    auto outptr = ceph::buffer::ptr_node::create(
+      ceph::buffer::create_small_page_aligned(out_max));
     ZSTD_outBuffer_s outbuf;
-    outbuf.dst = outptr.c_str();
-    outbuf.size = outptr.length();
+    outbuf.dst = outptr->c_str();
+    outbuf.size = outptr->length();
     outbuf.pos = 0;
 
     while (left) {
@@ -57,7 +58,8 @@ class ZstdCompressor : public Compressor {
 
     // prefix with decompressed length
     ceph::encode((uint32_t)src.length(), dst);
-    dst.append(outptr, 0, outbuf.pos);
+    outptr->set_length(outbuf.pos);
+    dst.push_back(std::move(outptr));
     return 0;
   }
 
@@ -77,10 +79,11 @@ class ZstdCompressor : public Compressor {
     uint32_t dst_len;
     ceph::decode(dst_len, p);
 
-    ceph::buffer::ptr dstptr(dst_len);
+    auto dstptr = ceph::buffer::ptr_node::create(
+      ceph::buffer::create(dst_len));
     ZSTD_outBuffer_s outbuf;
-    outbuf.dst = dstptr.c_str();
-    outbuf.size = dstptr.length();
+    outbuf.dst = dstptr->c_str();
+    outbuf.size = dstptr->length();
     outbuf.pos = 0;
     ZSTD_DStream *s = ZSTD_createDStream();
     ZSTD_initDStream(s);
@@ -97,7 +100,8 @@ class ZstdCompressor : public Compressor {
     }
     ZSTD_freeDStream(s);
 
-    dst.append(dstptr, 0, outbuf.pos);
+    dstptr->set_length(outbuf.pos);
+    dst.push_back(std::move(dstptr));
     return 0;
   }
  private:

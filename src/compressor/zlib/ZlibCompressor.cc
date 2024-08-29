@@ -115,12 +115,13 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, std::op
 
     strm.next_in = c_in;
     do {
-      bufferptr ptr = ceph::buffer::create_page_aligned(MAX_LEN);
-      strm.next_out = (unsigned char*)ptr.c_str() + begin;
+      auto ptr = ceph::buffer::ptr_node::create(
+        ceph::buffer::create_page_aligned(MAX_LEN));
+      strm.next_out = (unsigned char*)ptr->c_str() + begin;
       strm.avail_out = MAX_LEN - begin;
       if (begin) {
         // put a compressor variation mark in front of compressed stream, not used at the moment
-        ptr.c_str()[0] = 0;
+        ptr->c_str()[0] = 0;
         begin = 0;
       }
       ret = deflate(&strm, flush);    /* no bad return value */
@@ -131,7 +132,8 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, std::op
          return -1;
       }
       have = MAX_LEN - strm.avail_out;
-      out.append(ptr, 0, have);
+      ptr->set_length(have);
+      out.push_back(std::move(ptr));
     } while (strm.avail_out == 0);
     if (strm.avail_in != 0) {
       dout(10) << "Compression error: unused input" << dendl;
