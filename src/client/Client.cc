@@ -5960,6 +5960,10 @@ int Client::may_open(Inode *in, int flags, const UserPerm& perms)
   int r = 0;
   switch (in->mode & S_IFMT) {
     case S_IFLNK:
+#if defined(__linux__) && defined(O_PATH)
+      if (flags & O_PATH)
+        break;
+#endif
       r = -CEPHFS_ELOOP;
       goto out;
     case S_IFDIR:
