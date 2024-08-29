@@ -1244,8 +1244,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 				     &write_length,
 				     &offset)) {
 	  bufferlist *write_bl = new bufferlist();
-	  write_bl->push_back(
-	    buffer::ptr_node::create(m_ptr, write_offset, write_length));
+	  write_bl->append(m_ptr, write_offset, write_length);
 	  Context *ctx = new C_CopyWrite(write_bl, gather_ctx->new_sub());
 	  auto comp = io::AioCompletion::create(ctx);
 
