@@ -976,6 +976,13 @@ TEST(LibCephFS, Symlinks) {
   fd = ceph_open(cmount, test_symlink, O_NOFOLLOW, 0);
   ASSERT_EQ(fd, -CEPHFS_ELOOP);
 
+#if defined(__linux__) && defined(O_PATH)
+  // test the O_NOFOLLOW with O_PATH case
+  fd = ceph_open(cmount, test_symlink, O_PATH|O_NOFOLLOW, 0);
+  ASSERT_GT(fd, 0);
+  ceph_close(cmount, fd);
+#endif /* __linux */
+
   // stat the original file
   struct ceph_statx stx_orig;
   ASSERT_EQ(ceph_statx(cmount, test_file, &stx_orig, CEPH_STATX_ALL_STATS, 0), 0);
