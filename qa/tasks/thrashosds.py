@@ -63,6 +63,9 @@ def task(ctx, config):
        - kills that osd
        - revives all other osds
        - verifies that the osds fully recover
+    
+    test_min_size_duration: (1800) the number of seconds for
+        test_pool_min_size to last.
 
     timeout: (360) the number of seconds to wait for the cluster
        to become clean after each cluster change. If this doesn't
