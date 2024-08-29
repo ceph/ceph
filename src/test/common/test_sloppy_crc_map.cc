@@ -68,10 +68,8 @@ TEST(SloppyCRCMap, zero) {
   ASSERT_EQ(1, scm.read(4, 4, a, &cout));
   ASSERT_EQ(1, scm.read(4, 4, b, &cout));
 
-  bufferptr bp(4);
-  bp.zero();
   bufferlist c;
-  c.append(bp);
+  c.append_zero(4);
   ASSERT_EQ(0, scm.read(0, 4, a, &cout));
   ASSERT_EQ(0, scm.read(4, 4, c, &cout));
   scm.zero(0, 15);

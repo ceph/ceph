@@ -667,9 +667,7 @@ static void rados_req_read_complete(rados_completion_t c, void *arg)
       data->m_bl->zero(rc, existingDataToZero);
     }
     if (lenOfZeros > existingDataToZero) {
-      ceph::bufferptr zeros(ceph::buffer::create(lenOfZeros-existingDataToZero));
-      zeros.zero();
-      data->m_bl->push_back(zeros);
+      data->m_bl->append_zero(lenOfZeros-existingDataToZero);
     }
     nread = data->m_expectedBytes;
   }
