@@ -41,22 +41,42 @@ inline std::ostream& operator<<(std::ostream& out, const io_stat_t& stat) {
   return out << stat.num << "(" << stat.bytes << "B)";
 }
 
-struct version_stat_t {
-  uint64_t num = 0;
-  uint64_t version = 0;
+struct rewrite_stats_t {
+  uint64_t num_n_dirty = 0;
+  uint64_t num_dirty = 0;
+  uint64_t dirty_version = 0;
 
   bool is_clear() const {
-    return (num == 0 && version == 0);
+    return (num_n_dirty == 0 && num_dirty == 0);
   }
 
-  void increment(extent_version_t v) {
-    ++num;
-    version += v;
+  uint64_t get_num_rewrites() const {
+    return num_n_dirty + num_dirty;
   }
 
-  void increment_stat(const version_stat_t& stat) {
-    num += stat.num;
-    version += stat.version;
+  double get_avg_version() const {
+    return static_cast<double>(dirty_version)/num_dirty;
+  }
+
+  void account_n_dirty() {
+    ++num_n_dirty;
+  }
+
+  void account_dirty(extent_version_t v) {
+    ++num_dirty;
+    dirty_version += v;
+  }
+
+  void add(const rewrite_stats_t& o) {
+    num_n_dirty += o.num_n_dirty;
+    num_dirty += o.num_dirty;
+    dirty_version += o.dirty_version;
+  }
+
+  void minus(const rewrite_stats_t& o) {
+    num_n_dirty -= o.num_n_dirty;
+    num_dirty -= o.num_dirty;
+    dirty_version -= o.dirty_version;
   }
 };
 
@@ -433,7 +453,7 @@ public:
     lba_tree_stats = {};
     backref_tree_stats = {};
     ool_write_stats = {};
-    rewrite_version_stats = {};
+    rewrite_stats = {};
     conflicted = false;
     if (!has_reset) {
       has_reset = true;
@@ -492,8 +512,8 @@ public:
   ool_write_stats_t& get_ool_write_stats() {
     return ool_write_stats;
   }
-  version_stat_t& get_rewrite_version_stats() {
-    return rewrite_version_stats;
+  rewrite_stats_t& get_rewrite_stats() {
+    return rewrite_stats;
   }
 
   struct existing_block_stats_t {
@@ -617,7 +637,7 @@ private:
   tree_stats_t lba_tree_stats;
   tree_stats_t backref_tree_stats;
   ool_write_stats_t ool_write_stats;
-  version_stat_t rewrite_version_stats;
+  rewrite_stats_t rewrite_stats;
 
   bool conflicted = false;
 

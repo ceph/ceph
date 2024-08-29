@@ -1169,7 +1169,7 @@ public:
         ).si_then([this, FNAME, &t, e](bool is_alive) {
           if (!is_alive) {
             SUBDEBUGT(seastore_cache, "extent is not alive, remove extent -- {}", t, *e);
-            remove_extent(e);
+            remove_extent(e, nullptr);
 	    e->set_invalid(t);
           } else {
             SUBDEBUGT(seastore_cache, "extent is alive -- {}", t, *e);
@@ -1436,7 +1436,6 @@ private:
 
     counter_by_extent_t<cache_size_stats_t> sizes_by_ext;
     cache_io_stats_t overall_io;
-    cache_io_stats_t trans_io;
     counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
       trans_io_by_src_ext;
 
@@ -1459,12 +1458,12 @@ private:
       lru.erase(lru.s_iterator_to(extent));
       current_size -= extent_length;
       get_by_ext(sizes_by_ext, extent.get_type()).account_out(extent_length);
-      overall_io.account_out(extent_length);
+      overall_io.out_sizes.account_in(extent_length);
       if (p_src) {
-        trans_io.account_out(extent_length);
         get_by_ext(
           get_by_src(trans_io_by_src_ext, *p_src),
-          extent.get_type()).account_out(extent_length);
+          extent.get_type()
+        ).out_sizes.account_in(extent_length);
       }
       intrusive_ptr_release(&extent);
     }
@@ -1513,12 +1512,12 @@ private:
         // absent, add to top (back)
         current_size += extent_length;
         get_by_ext(sizes_by_ext, extent.get_type()).account_in(extent_length);
-        overall_io.account_in(extent_length);
+        overall_io.in_sizes.account_in(extent_length);
         if (p_src) {
-          trans_io.account_in(extent_length);
           get_by_ext(
             get_by_src(trans_io_by_src_ext, *p_src),
-            extent.get_type()).account_in(extent_length);
+            extent.get_type()
+          ).in_sizes.account_in(extent_length);
         }
         intrusive_ptr_add_ref(&extent);
         lru.push_back(extent);
@@ -1602,7 +1601,12 @@ private:
     counter_by_src_t<invalid_trans_efforts_t> invalidated_efforts_by_src;
     counter_by_src_t<query_counters_t> cache_query_by_src;
     success_read_trans_efforts_t success_read_efforts;
+
     uint64_t dirty_bytes = 0;
+    counter_by_extent_t<cache_size_stats_t> dirty_sizes_by_ext;
+    dirty_io_stats_t dirty_io;
+    counter_by_src_t<counter_by_extent_t<dirty_io_stats_t> >
+      dirty_io_by_src_ext;
 
     uint64_t onode_tree_depth = 0;
     int64_t onode_tree_extents_num = 0;
@@ -1627,9 +1631,15 @@ private:
     std::array<uint64_t, NUM_SRC_COMB> trans_conflicts_by_srcs;
     counter_by_src_t<uint64_t> trans_conflicts_by_unknown;
 
-    version_stat_t committed_dirty_version;
-    version_stat_t committed_reclaim_version;
+    rewrite_stats_t trim_rewrites;
+    rewrite_stats_t reclaim_rewrites;
   } stats;
+
+  mutable dirty_io_stats_t last_dirty_io;
+  mutable counter_by_src_t<counter_by_extent_t<dirty_io_stats_t> >
+    last_dirty_io_by_src_ext;
+  mutable rewrite_stats_t last_trim_rewrites;
+  mutable rewrite_stats_t last_reclaim_rewrites;
 
   void account_conflict(Transaction::src_t src1, Transaction::src_t src2) {
     assert(src1 < Transaction::src_t::MAX);
@@ -1685,13 +1695,27 @@ private:
   void mark_dirty(CachedExtentRef ref);
 
   /// Add dirty extent to dirty list
-  void add_to_dirty(CachedExtentRef ref);
+  void add_to_dirty(
+      CachedExtentRef ref,
+      const Transaction::src_t* p_src);
+
+  /// Replace the prev dirty extent by next
+  void replace_dirty(
+      CachedExtentRef next,
+      CachedExtentRef prev,
+      const Transaction::src_t& src);
 
   /// Remove from dirty list
-  void remove_from_dirty(CachedExtentRef ref);
+  void remove_from_dirty(
+      CachedExtentRef ref,
+      const Transaction::src_t* p_src);
+
+  void clear_dirty();
 
   /// Remove extent from extents handling dirty and refcounting
-  void remove_extent(CachedExtentRef ref);
+  void remove_extent(
+      CachedExtentRef ref,
+      const Transaction::src_t* p_src);
 
   /// Retire extent
   void commit_retire_extent(Transaction& t, CachedExtentRef ref);
