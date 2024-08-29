@@ -167,17 +167,16 @@ struct rbd_bencher {
       io_size(io_size)
   {
     if (io_type == IO_TYPE_WRITE || io_type == IO_TYPE_RW) {
-      bufferptr bp(io_size);
+      auto filler = write_bl.append_hole(io_size);
       if (pattern_byte == PATTERN_BYTE_RAND) {
-        memset(bp.c_str(), rand() & 0xff, io_size);
+        memset(filler.c_str(), rand() & 0xff, io_size);
       } else if (pattern_byte == PATTERN_BYTE_RAND_STR) {
         for (uint64_t i = 0; i < io_size; i++) {
-          bp.c_str()[i] = rand() & 0xff;
+          filler.c_str()[i] = rand() & 0xff;
         }
       } else {
-        memset(bp.c_str(), pattern_byte, io_size);
+        memset(filler.c_str(), pattern_byte, io_size);
       }
-      write_bl.push_back(bp);
     }
   }
 
