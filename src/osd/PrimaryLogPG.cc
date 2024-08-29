@@ -3026,9 +3026,15 @@ struct C_ProxyChunkRead : public Context {
 	} else {
 	  copy_offset = 0;
 	}
-	prdop->ops[op_index].outdata.begin(copy_offset).copy_in(
-          obj_op->ops[0].outdata.length(),
-          obj_op->ops[0].outdata.c_str());
+	ceph::bufferlist bl, first, second;
+	first.substr_of(prdop->ops[op_index].outdata, 0, copy_offset);
+	second.substr_of(prdop->ops[op_index].outdata,
+			 copy_offset,
+			 prdop->ops[op_index].outdata.length() - copy_offset);
+	bl.append(std::move(first));
+	bl.append(obj_op->ops[0].outdata);
+	bl.append(std::move(second));
+	prdop->ops[op_index].outdata = std::move(bl);
       }
 
       pg->finish_proxy_read(oid, tid, r);
@@ -5662,7 +5668,7 @@ int PrimaryLogPG::finish_checksum(OSDOp& osd_op,
 			   read_bl.length() / csum_chunk_size : 0);
 
   bufferlist csum;
-  bufferptr csum_data;
+  bufferptr_rw csum_data;
   if (csum_count > 0) {
     size_t csum_value_size = Checksummer::get_csum_value_size(csum_type);
     csum_data = ceph::buffer::create(csum_value_size * csum_count);

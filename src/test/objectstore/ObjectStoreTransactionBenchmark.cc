@@ -164,11 +164,11 @@ class PerfCase {
     uint64_t per_frag = len / frag;
     bufferlist bl;
     for (int i = 0; i < frag; i++ ) {
-      bufferptr bp(per_frag);
+      auto bp = buffer::ptr_node::create(buffer::create(per_frag));
       for (unsigned int j = 0; j < len; j++) {
-        bp[j] = alphanum[rand() % (sizeof(alphanum) - 1)];
+        (*bp)[j] = alphanum[rand() % (sizeof(alphanum) - 1)];
       }
-      bl.append(bp);
+      bl.push_back(std::move(bp));
     }
     return bl;
   }

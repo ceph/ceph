@@ -4288,8 +4288,8 @@ struct OSDOp {
 	  op.op.xattr.name_len &&
 	  op.indata.length() >= op.op.xattr.name_len) {
 	ceph::buffer::list bl;
-	bl.push_back(ceph::buffer::ptr_node::create(op.op.xattr.name_len));
-	bl.begin().copy_in(op.op.xattr.name_len, op.indata);
+	bl.substr_of(op.indata, 0, op.op.xattr.name_len);
+	bl.rebuild(); // ensure a potentially huge buffer isn't referenced anymore
 	op.indata = std::move(bl);
       } else if (ceph_osd_op_type_exec(op.op.op) &&
 		 op.op.cls.class_len &&
@@ -4297,8 +4297,8 @@ struct OSDOp {
 	         (op.op.cls.class_len + op.op.cls.method_len)) {
 	__u8 len = op.op.cls.class_len + op.op.cls.method_len;
 	ceph::buffer::list bl;
-	bl.push_back(ceph::buffer::ptr_node::create(len));
-	bl.begin().copy_in(len, op.indata);
+	bl.substr_of(op.indata, 0, len);
+	bl.rebuild();
 	op.indata = std::move(bl);
       } else {
 	op.indata.clear();

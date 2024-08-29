@@ -3489,8 +3489,8 @@ int OSD::run_osd_bench_test(
 
   if (osize && onum) {
     bufferlist bl;
-    bufferptr bp(osize);
-    memset(bp.c_str(), 'a', bp.length());
+    auto bp = buffer::ptr_node::create(buffer::create(osize));
+    memset(bp->c_str(), 'a', bp->length());
     bl.push_back(std::move(bp));
     bl.rebuild_page_aligned();
     for (int i=0; i<onum; ++i) {
@@ -3517,8 +3517,8 @@ int OSD::run_osd_bench_test(
   for (int64_t pos = 0; pos < count; pos += bsize) {
     char nm[34];
     unsigned offset = 0;
-    bufferptr bp(bsize);
-    memset(bp.c_str(), rand() & 0xff, bp.length());
+    auto bp = buffer::ptr_node::create(buffer::create(bsize));
+    memset(bp->c_str(), rand() & 0xff, bp->length());
     bl.push_back(std::move(bp));
     bl.rebuild_page_aligned();
     if (onum && osize) {
