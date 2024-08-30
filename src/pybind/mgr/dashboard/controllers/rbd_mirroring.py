@@ -570,8 +570,19 @@ class RbdMirroringPoolPeer(RESTController):
     def list(self, pool_name):
         ioctx = mgr.rados.open_ioctx(pool_name)
         peer_list = rbd.RBD().mirror_peer_list(ioctx)
-        return [x['uuid'] for x in peer_list]
-
+        result = {}
+        if peer_list:      
+            for peer in peer_list:
+                    result = {
+                        'pool_name': pool_name,
+                        'info' : [{
+                            'peer_uuid': peer['uuid'],
+                            'cluster_name':peer['cluster_name'],
+                            'client_name':peer['client_name'],
+                        }]
+                    } 
+        return result
+    
     @handle_rbd_mirror_error()
     def create(self, pool_name, cluster_name, client_id, mon_host=None,
                key=None):
