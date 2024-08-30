@@ -66,9 +66,9 @@ struct transaction_manager_test_t :
     : TMTestState(num_main_devices, num_cold_devices), gen(rd()) {
   }
 
-  laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
-    return block_size *
-      std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
+  laddr_t get_random_laddr(size_t block_size, size_t limit) {
+    return laddr_t::from_byte_offset(block_size *
+      std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen));
   }
 
   char get_random_contents() {
@@ -254,8 +254,8 @@ struct transaction_manager_test_t :
 	  EXPECT_EQ(addr, last);
 	  break;
 	}
-	EXPECT_FALSE(iter->first - last > len);
-	last = iter->first + iter->second.desc.len;
+	EXPECT_FALSE(iter->first.get_byte_distance<extent_len_t>(last) > len);
+	last = (iter->first + iter->second.desc.len).checked_to_laddr();
 	++iter;
       }
     }
@@ -719,7 +719,7 @@ struct transaction_manager_test_t :
       [this, &overlay](auto &t) {
 	return lba_manager->scan_mappings(
 	  t,
-	  0,
+	  L_ADDR_MIN,
 	  L_ADDR_MAX,
 	  [iter=overlay.begin(), &overlay](auto l, auto p, auto len) mutable {
 	    EXPECT_NE(iter, overlay.end());
@@ -830,9 +830,9 @@ struct transaction_manager_test_t :
 	auto t = create_transaction();
 	auto extent = alloc_extent(
 	  t,
-	  i * BSIZE,
+	  laddr_t::from_byte_offset(i * BSIZE),
 	  BSIZE);
-	ASSERT_EQ(i * BSIZE, extent->get_laddr());
+	ASSERT_EQ(laddr_t::from_byte_offset(i * BSIZE), extent->get_laddr());
 	submit_transaction(std::move(t));
       }
 
@@ -844,7 +844,7 @@ struct transaction_manager_test_t :
 	    boost::make_counting_iterator(0lu),
 	    boost::make_counting_iterator(BLOCKS),
 	    [this, &t](auto i) {
-	    return tm->read_extent<TestBlock>(t, i * BSIZE, BSIZE
+	    return tm->read_extent<TestBlock>(t, laddr_t::from_byte_offset(i * BSIZE), BSIZE
 	    ).si_then([](auto) {
 	      return seastar::now();
 	    });
@@ -870,9 +870,9 @@ struct transaction_manager_test_t :
               auto t = create_transaction();
               auto extent = alloc_extent(
                 t,
-                i * BSIZE,
+                laddr_t::from_byte_offset(i * BSIZE),
                 BSIZE);
-              ASSERT_EQ(i * BSIZE, extent->get_laddr());
+              ASSERT_EQ(laddr_t::from_byte_offset(i * BSIZE), extent->get_laddr());
               if (try_submit_transaction(std::move(t)))
                 break;
             }
@@ -1180,7 +1180,7 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
         ).si_then([this, ret = std::move(ret), new_len,
                    new_offset, o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1188,7 +1188,7 @@ struct transaction_manager_test_t :
           ceph_assert(ret.size() == 2);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
-          auto r_laddr = o_laddr + new_offset + new_len;
+          auto r_laddr = (o_laddr + new_offset + new_len).checked_to_laddr();
           // old pins expired after alloc new extent, need to get it.
           return tm->get_pin(t, o_laddr
           ).si_then([this, &t, ext = std::move(ext), r_laddr](auto lpin) mutable {
@@ -1216,7 +1216,7 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
         ).si_then([this, ret = std::move(ret), new_offset, new_len,
                    o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1224,7 +1224,7 @@ struct transaction_manager_test_t :
           ceph_assert(ret.size() == 1);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
-          auto r_laddr = o_laddr + new_offset + new_len;
+          auto r_laddr = (o_laddr + new_offset + new_len).checked_to_laddr();
           return tm->get_pin(t, r_laddr
           ).si_then([ext = std::move(ext)](auto rpin) mutable {
             return _overwrite_pin_iertr::make_ready_future<
@@ -1247,7 +1247,7 @@ struct transaction_manager_test_t :
             new_offset)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, (o_laddr + new_offset).checked_to_laddr(), new_len
         ).si_then([this, ret = std::move(ret), new_len, o_laddr, &t, &bl]
           (auto extents) mutable {
 	  assert(extents.size() == 1);
@@ -1346,10 +1346,10 @@ struct transaction_manager_test_t :
   void test_remap_pin() {
     run_async([this] {
       disable_max_extent_size();
-      constexpr size_t l_offset = 32 << 10;
-      constexpr size_t l_len = 32 << 10;
-      constexpr size_t r_offset = 64 << 10;
-      constexpr size_t r_len = 32 << 10;
+      laddr_t l_offset = laddr_t::from_byte_offset(32 << 10);
+      size_t l_len = 32 << 10;
+      laddr_t r_offset = laddr_t::from_byte_offset(64 << 10);
+      size_t r_len = 32 << 10;
       {
 	auto t = create_transaction();
 	auto lext = alloc_extent(t, l_offset, l_len);
@@ -1400,12 +1400,12 @@ struct transaction_manager_test_t :
   void test_clone_and_remap_pin() {
     run_async([this] {
       disable_max_extent_size();
-      constexpr size_t l_offset = 32 << 10;
-      constexpr size_t l_len = 32 << 10;
-      constexpr size_t r_offset = 64 << 10;
-      constexpr size_t r_len = 32 << 10;
-      constexpr size_t l_clone_offset = 96 << 10;
-      constexpr size_t r_clone_offset = 128 << 10;
+      laddr_t l_offset = laddr_t::from_byte_offset(32 << 10);
+      size_t l_len = 32 << 10;
+      laddr_t r_offset = laddr_t::from_byte_offset(64 << 10);
+      size_t r_len = 32 << 10;
+      laddr_t l_clone_offset = laddr_t::from_byte_offset(96 << 10);
+      laddr_t r_clone_offset = laddr_t::from_byte_offset(128 << 10);
       {
 	auto t = create_transaction();
 	auto lext = alloc_extent(t, l_offset, l_len);
@@ -1455,12 +1455,12 @@ struct transaction_manager_test_t :
   void test_overwrite_pin() {
     run_async([this] {
       disable_max_extent_size();
-      constexpr size_t m_offset = 8 << 10;
-      constexpr size_t m_len = 56 << 10;
-      constexpr size_t l_offset = 64 << 10;
-      constexpr size_t l_len = 64 << 10;
-      constexpr size_t r_offset = 128 << 10;
-      constexpr size_t r_len = 64 << 10;
+      laddr_t m_offset = laddr_t::from_byte_offset(8 << 10);
+      size_t m_len = 56 << 10;
+      laddr_t l_offset = laddr_t::from_byte_offset(64 << 10);
+      size_t l_len = 64 << 10;
+      laddr_t r_offset = laddr_t::from_byte_offset(128 << 10);
+      size_t r_len = 64 << 10;
       {
 	auto t = create_transaction();
 	auto m_ext = alloc_extent(t, m_offset, m_len);
@@ -1538,7 +1538,7 @@ struct transaction_manager_test_t :
     run_async([this] {
       disable_max_extent_size();
       constexpr unsigned REMAP_NUM = 32;
-      constexpr size_t offset = 0;
+      constexpr laddr_t offset = L_ADDR_MIN;
       constexpr size_t length = 256 << 10;
       {
 	auto t = create_transaction();
@@ -1575,7 +1575,8 @@ struct transaction_manager_test_t :
 	      if (off == 0 || off >= 255) {
 		continue;
 	      }
-              auto new_off = (off << 10) - last_pin->get_key();
+              auto new_off = laddr_t::from_byte_offset(off << 10)
+		  .get_byte_distance<extent_len_t>(last_pin->get_key());
               auto new_len = last_pin->get_length() - new_off;
               //always remap right extent at new split_point
 	      auto pin = remap_pin(t, std::move(last_pin), new_off, new_len);
@@ -1620,7 +1621,7 @@ struct transaction_manager_test_t :
     run_async([this] {
       disable_max_extent_size();
       constexpr unsigned REMAP_NUM = 32;
-      constexpr size_t offset = 0;
+      constexpr laddr_t offset = L_ADDR_MIN;
       constexpr size_t length = 256 << 10;
       {
 	auto t = create_transaction();
@@ -1665,7 +1666,7 @@ struct transaction_manager_test_t :
               auto end_off = split_points.front();
               split_points.pop_front();
               ASSERT_TRUE(start_off <= end_off);
-              if (((end_off << 10) == pin0->get_key() + pin0->get_length())
+              if ((laddr_t::from_byte_offset(end_off << 10) == pin0->get_key() + pin0->get_length())
                 || (start_off == end_off)) {
                 if (split_points.empty() && empty_transaction) {
                   early_exit++;
@@ -1674,7 +1675,8 @@ struct transaction_manager_test_t :
                 continue;
               }
               empty_transaction = false;
-              auto new_off = (start_off << 10) - last_rpin->get_key();
+              auto new_off = laddr_t::from_byte_offset(start_off << 10)
+		  .get_byte_distance<extent_len_t>(last_rpin->get_key());
               auto new_len = (end_off - start_off) << 10;
               bufferlist bl;
               bl.append(ceph::bufferptr(ceph::buffer::create(new_len, 0)));
@@ -1766,13 +1768,13 @@ struct tm_random_block_device_test_t :
 TEST_P(tm_random_block_device_test_t, scatter_allocation)
 {
   run_async([this] {
-    constexpr laddr_t ADDR = 0xFF * 4096;
+    laddr_t ADDR = laddr_t::from_byte_offset(0xFF * 4096);
     epm->prefill_fragmented_devices();
     auto t = create_transaction();
     for (int i = 0; i < 1991; i++) {
-      auto extents = alloc_extents(t, ADDR + i * 16384, 16384, 'a');
+      auto extents = alloc_extents(t, (ADDR + i * 16384).checked_to_laddr(), 16384, 'a');
     }
-    alloc_extents_deemed_fail(t, ADDR + 1991 * 16384, 16384, 'a');
+    alloc_extents_deemed_fail(t, (ADDR + 1991 * 16384).checked_to_laddr(), 16384, 'a');
     check_mappings(t);
     check();
     submit_transaction(std::move(t));
@@ -1782,9 +1784,9 @@ TEST_P(tm_random_block_device_test_t, scatter_allocation)
 
 TEST_P(tm_single_device_test_t, basic)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
-    constexpr laddr_t ADDR = 0xFF * SIZE;
+    laddr_t ADDR = laddr_t::from_byte_offset(0xFF * SIZE);
     {
       auto t = create_transaction();
       auto extent = alloc_extent(
@@ -1803,9 +1805,9 @@ TEST_P(tm_single_device_test_t, basic)
 
 TEST_P(tm_single_device_test_t, mutate)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
-    constexpr laddr_t ADDR = 0xFF * SIZE;
+    laddr_t ADDR = laddr_t::from_byte_offset(0xFF * SIZE);
     {
       auto t = create_transaction();
       auto extent = alloc_extent(
@@ -1841,10 +1843,10 @@ TEST_P(tm_single_device_test_t, mutate)
 
 TEST_P(tm_single_device_test_t, allocate_lba_conflict)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
-    constexpr laddr_t ADDR = 0xFF * SIZE;
-    constexpr laddr_t ADDR2 = 0xFE * SIZE;
+    laddr_t ADDR = laddr_t::from_byte_offset(0xFF * SIZE);
+    laddr_t ADDR2 = laddr_t::from_byte_offset(0xFE * SIZE);
     auto t = create_transaction();
     auto t2 = create_transaction();
 
@@ -1874,14 +1876,14 @@ TEST_P(tm_single_device_test_t, allocate_lba_conflict)
 
 TEST_P(tm_single_device_test_t, mutate_lba_conflict)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 300; ++i) {
 	auto extent = alloc_extent(
 	  t,
-	  laddr_t(i * SIZE),
+	  laddr_t::from_byte_offset(i * SIZE),
 	  SIZE);
       }
       check_mappings(t);
@@ -1889,7 +1891,7 @@ TEST_P(tm_single_device_test_t, mutate_lba_conflict)
       check();
     }
 
-    constexpr laddr_t ADDR = 150 * SIZE;
+    laddr_t ADDR = laddr_t::from_byte_offset(150 * SIZE);
     {
       auto t = create_transaction();
       auto t2 = create_transaction();
@@ -1913,17 +1915,17 @@ TEST_P(tm_single_device_test_t, mutate_lba_conflict)
 
 TEST_P(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   constexpr size_t NUM = 500;
-  constexpr laddr_t addr = 0;
-  constexpr laddr_t addr2 = SIZE * (NUM - 1);
-  run_async([this] {
+  laddr_t addr = L_ADDR_MIN;
+  laddr_t addr2 = laddr_t::from_byte_offset(SIZE * (NUM - 1));
+  run_async([this, addr, addr2] {
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < NUM; ++i) {
 	auto extent = alloc_extent(
 	  t,
-	  laddr_t(i * SIZE),
+	  laddr_t::from_byte_offset(i * SIZE),
 	  SIZE);
       }
       submit_transaction(std::move(t));
@@ -1945,9 +1947,9 @@ TEST_P(tm_single_device_test_t, concurrent_mutate_lba_no_conflict)
 
 TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
-    constexpr laddr_t ADDR = 0xFF * SIZE;
+    laddr_t ADDR = laddr_t::from_byte_offset(0xFF * SIZE);
     {
       auto t = create_transaction();
       auto extent = alloc_extent(
@@ -1976,14 +1978,14 @@ TEST_P(tm_single_device_test_t, create_remove_same_transaction)
 
 TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 300; ++i) {
 	auto extent = alloc_extent(
 	  t,
-	  laddr_t(i * SIZE),
+	  laddr_t::from_byte_offset(i * SIZE),
 	  SIZE);
       }
       check_mappings(t);
@@ -1995,7 +1997,7 @@ TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
       for (unsigned i = 0; i < 240; ++i) {
 	dec_ref(
 	  t,
-	  laddr_t(i * SIZE));
+	  laddr_t::from_byte_offset(i * SIZE));
       }
       check_mappings(t);
       submit_transaction(std::move(t));
@@ -2006,9 +2008,9 @@ TEST_P(tm_single_device_test_t, split_merge_read_same_transaction)
 
 TEST_P(tm_single_device_test_t, inc_dec_ref)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
-    constexpr laddr_t ADDR = 0xFF * SIZE;
+    laddr_t ADDR = laddr_t::from_byte_offset(0xFF * SIZE);
     {
       auto t = create_transaction();
       auto extent = alloc_extent(
@@ -2053,16 +2055,16 @@ TEST_P(tm_single_device_test_t, inc_dec_ref)
 
 TEST_P(tm_single_device_test_t, cause_lba_split)
 {
-  constexpr laddr_t SIZE = 4096;
+  constexpr size_t SIZE = 4096;
   run_async([this] {
     for (unsigned i = 0; i < 200; ++i) {
       auto t = create_transaction();
       auto extent = alloc_extent(
 	t,
-	i * SIZE,
+	laddr_t::from_byte_offset(i * SIZE),
 	SIZE,
 	(char)(i & 0xFF));
-      ASSERT_EQ(i * SIZE, extent->get_laddr());
+      ASSERT_EQ(laddr_t::from_byte_offset(i * SIZE), extent->get_laddr());
       submit_transaction(std::move(t));
     }
     check();
@@ -2080,9 +2082,9 @@ TEST_P(tm_single_device_test_t, random_writes)
       auto t = create_transaction();
       auto extent = alloc_extent(
 	t,
-	i * BSIZE,
+	laddr_t::from_byte_offset(i * BSIZE),
 	BSIZE);
-      ASSERT_EQ(i * BSIZE, extent->get_laddr());
+      ASSERT_EQ(laddr_t::from_byte_offset(i * BSIZE), extent->get_laddr());
       submit_transaction(std::move(t));
     }
 
@@ -2098,7 +2100,7 @@ TEST_P(tm_single_device_test_t, random_writes)
 	  // pad out transaction
 	  auto paddings = alloc_extents(
 	    t,
-	    TOTAL + (k * PADDING_SIZE),
+	    laddr_t::from_byte_offset(TOTAL + (k * PADDING_SIZE)),
 	    PADDING_SIZE);
 	  for (auto &padding : paddings) {
 	    dec_ref(t, padding->get_laddr());
@@ -2131,7 +2133,7 @@ TEST_P(tm_single_device_test_t, find_hole_assert_trigger)
 
 TEST_P(tm_single_device_intergrity_check_test_t, remap_lazy_read)
 {
-  constexpr laddr_t offset = 0;
+  constexpr laddr_t offset = L_ADDR_MIN;
   constexpr size_t length = 256 << 10;
    run_async([this, offset] {
     disable_max_extent_size();
@@ -2184,7 +2186,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       for (int i = 0; i < LEAF_NODE_CAPACITY; i++) {
 	auto extent = alloc_extent(
 	  t,
-	  i * 4096,
+	  laddr_t::from_byte_offset(i * 4096),
 	  4096,
 	  'a');
       }
@@ -2193,12 +2195,12 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
 
     {
       auto t = create_transaction();
-      auto pin = get_pin(t, (LEAF_NODE_CAPACITY - 1) * 4096);
+      auto pin = get_pin(t, laddr_t::from_byte_offset((LEAF_NODE_CAPACITY - 1) * 4096));
       assert(pin->is_parent_viewable());
-      auto extent = alloc_extent(t, LEAF_NODE_CAPACITY * 4096, 4096, 'a');
+      auto extent = alloc_extent(t, laddr_t::from_byte_offset(LEAF_NODE_CAPACITY * 4096), 4096, 'a');
       assert(!pin->is_parent_viewable());
-      pin = get_pin(t, LEAF_NODE_CAPACITY * 4096);
-      std::ignore = alloc_extent(t, (LEAF_NODE_CAPACITY + 1) * 4096, 4096, 'a');
+      pin = get_pin(t, laddr_t::from_byte_offset(LEAF_NODE_CAPACITY * 4096));
+      std::ignore = alloc_extent(t, laddr_t::from_byte_offset((LEAF_NODE_CAPACITY + 1) * 4096), 4096, 'a');
       assert(pin->is_parent_viewable());
       assert(pin->parent_modified());
       pin->maybe_fix_pos();

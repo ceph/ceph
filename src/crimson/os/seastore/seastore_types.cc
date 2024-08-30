@@ -92,6 +92,15 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
+  return out << 'L' << std::hex << laddr.value << std::dec;
+}
+
+std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {
+  return out << laddr_offset.get_aligned_laddr()
+	     << "+" << std::hex << laddr_offset.get_offset() << std::dec;
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
   if (pladdr.is_laddr()) {

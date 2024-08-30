@@ -82,8 +82,9 @@ public:
     assert(default_metadata_offset);
     assert(default_metadata_range);
     uint64_t range_blocks = default_metadata_range / block_size;
-    return get_hint() + default_metadata_offset +
-      (((uint32_t)std::rand() % range_blocks) * block_size);
+    auto random_offset = default_metadata_offset +
+        (((uint32_t)std::rand() % range_blocks) * block_size);
+    return (get_hint() + random_offset).checked_to_laddr();
   }
   laddr_t get_data_hint() const {
     return get_hint();

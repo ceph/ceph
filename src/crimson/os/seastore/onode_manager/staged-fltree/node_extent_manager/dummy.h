@@ -28,7 +28,7 @@ class DummySuper final: public Super {
   laddr_t get_root_laddr() const override { return *p_root_laddr; }
   void write_root_laddr(context_t c, laddr_t addr) override {
     LOG_PREFIX(OTree::Dummy);
-    SUBDEBUGT(seastore_onode, "update root {:#x} ...", c.t, addr);
+    SUBDEBUGT(seastore_onode, "update root {} ...", c.t, addr);
     *p_root_laddr = addr;
   }
  private:
@@ -77,7 +77,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 
   read_iertr::future<NodeExtentRef> read_extent(
       Transaction& t, laddr_t addr) override {
-    SUBTRACET(seastore_onode, "reading at {:#x} ...", t, addr);
+    SUBTRACET(seastore_onode, "reading at {} ...", t, addr);
     if constexpr (SYNC) {
       return read_extent_sync(t, addr);
     } else {
@@ -90,7 +90,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
 
   alloc_iertr::future<NodeExtentRef> alloc_extent(
       Transaction& t, laddr_t hint, extent_len_t len) override {
-    SUBTRACET(seastore_onode, "allocating {}B with hint {:#x} ...", t, len, hint);
+    SUBTRACET(seastore_onode, "allocating {}B with hint {} ...", t, len, hint);
     if constexpr (SYNC) {
       return alloc_extent_sync(t, len);
     } else {
@@ -104,7 +104,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
   retire_iertr::future<> retire_extent(
       Transaction& t, NodeExtentRef extent) override {
     SUBTRACET(seastore_onode,
-        "retiring {}B at {:#x} -- {} ...",
+        "retiring {}B at {} -- {} ...",
         t, extent->get_length(), extent->get_laddr(), *extent);
     if constexpr (SYNC) {
       return retire_extent_sync(t, extent);
@@ -140,7 +140,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     assert(iter != allocate_map.end());
     auto extent = iter->second;
     SUBTRACET(seastore_onode,
-        "read {}B at {:#x} -- {}",
+        "read {}B at {} -- {}",
         t, extent->get_length(), extent->get_laddr(), *extent);
     assert(extent->get_laddr() == addr);
     return read_iertr::make_ready_future<NodeExtentRef>(extent);
@@ -150,14 +150,15 @@ class DummyNodeExtentManager final: public NodeExtentManager {
       Transaction& t, extent_len_t len) {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
-    auto addr = reinterpret_cast<laddr_t>(r->get_data());
+    auto addr = laddr_t::from_byte_offset(
+      reinterpret_cast<laddr_t::Unsigned>(r->get_data()));
     auto bp = ceph::bufferptr(std::move(r));
     auto extent = Ref<DummyNodeExtent>(new DummyNodeExtent(std::move(bp)));
     extent->set_laddr(addr);
     assert(allocate_map.find(extent->get_laddr()) == allocate_map.end());
     allocate_map.insert({extent->get_laddr(), extent});
     SUBDEBUGT(seastore_onode,
-        "allocated {}B at {:#x} -- {}",
+        "allocated {}B at {} -- {}",
         t, extent->get_length(), extent->get_laddr(), *extent);
     assert(extent->get_length() == len);
     return alloc_iertr::make_ready_future<NodeExtentRef>(extent);
@@ -172,13 +173,13 @@ class DummyNodeExtentManager final: public NodeExtentManager {
     auto iter = allocate_map.find(addr);
     assert(iter != allocate_map.end());
     allocate_map.erase(iter);
-    SUBDEBUGT(seastore_onode, "retired {}B at {:#x}", t, len, addr);
+    SUBDEBUGT(seastore_onode, "retired {}B at {}", t, len, addr);
     return retire_iertr::now();
   }
 
   getsuper_iertr::future<Super::URef> get_super_sync(
       Transaction& t, RootNodeTracker& tracker) {
-    SUBTRACET(seastore_onode, "got root {:#x}", t, root_laddr);
+    SUBTRACET(seastore_onode, "got root {}", t, root_laddr);
     return getsuper_iertr::make_ready_future<Super::URef>(
         Super::URef(new DummySuper(t, tracker, &root_laddr)));
   }
