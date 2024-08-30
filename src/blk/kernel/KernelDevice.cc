@@ -591,6 +591,7 @@ void KernelDevice::discard_drain()
   dout(10) << __func__ << dendl;
   std::unique_lock l(discard_lock);
   while (!discard_queued.empty() || (discard_running > 0)) {
+    need_notify = true;
     discard_cond.wait(l);
   }
 }
@@ -756,7 +757,10 @@ void KernelDevice::_discard_thread(uint64_t tid)
       if (thr->stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
-      discard_cond.notify_all(); // for the thread trying to drain...
+      if (need_notify) {
+        discard_cond.notify_all(); // for the thread trying to drain...
+        need_notify = false;
+      }
       discard_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
