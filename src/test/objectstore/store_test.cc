@@ -10410,6 +10410,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "rocksdb_original");
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
 
   g_conf().apply_changes(nullptr);
 
@@ -10452,6 +10453,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "use_some_extra");
   SetVal(g_conf(), "bluestore_volume_selection_reserved", "1"); // just use non-zero to enable
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
 
   g_conf().apply_changes(nullptr);
 
@@ -10482,6 +10484,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
   SetVal(g_conf(), "bluestore_block_db_size", stringify(3200ull*1024*1024).c_str());
   SetVal(g_conf(), "bluestore_volume_selection_policy", "use_some_extra");
   SetVal(g_conf(), "bluestore_volume_selection_reserved", stringify(2900ull*1024*1024).c_str());
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
 
   g_conf().apply_changes(nullptr);
 
@@ -10509,6 +10512,7 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "fit_to_fast");
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
 
   g_conf().apply_changes(nullptr);
 
