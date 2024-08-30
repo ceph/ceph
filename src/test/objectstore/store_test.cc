@@ -11454,6 +11454,8 @@ TEST_P(StoreTestSpecificAUSize, SpilloverLegacyTest) {
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "rocksdb_original");
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
+
   // original RocksDB settings used before https://github.com/ceph/ceph/pull/47221/
   // which enable BlueFS spillover.
   SetVal(g_conf(), "bluestore_rocksdb_options",
@@ -11485,6 +11487,8 @@ TEST_P(StoreTestSpecificAUSize, SpilloverLegacyFixedByFitToFastTest) {
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "fit_to_fast");
+  SetVal(g_conf(), "bluestore_async_db_compaction", "false");
+
   // original RocksDB settings used before https://github.com/ceph/ceph/pull/47221/
   // which enable BlueFS spillover.
   SetVal(g_conf(), "bluestore_rocksdb_options",
