@@ -1,0 +1,12 @@
+.daemon {
+  display: flex;
+  padding-top: 15px;
+
+  .dataContainer {
+    .daemonElem {
+      cursor: pointer;
+      margin-left: 2px;
+      margin-right: 2px;
+    }
+  }
+}
