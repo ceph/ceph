@@ -46,6 +46,7 @@ private:
   interval_set<uint64_t> debug_inflight;
 
   std::atomic<bool> io_since_flush = {false};
+  std::atomic<bool> need_notify = {false};
   ceph::mutex flush_mutex = ceph::make_mutex("KernelDevice::flush_mutex");
 
   std::unique_ptr<io_queue_t> io_queue;
