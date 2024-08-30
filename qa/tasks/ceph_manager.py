@@ -2103,6 +2103,10 @@ class CephManager:
         when creating an erasure coded pool.
         """
         with self.lock:
+            # msr rules require at least squid
+            if 'crush-osds-per-failure-domain' in profile:
+                self.raw_cluster_cmd(
+                    'osd', 'set-require-min-compat-client', 'squid')
             args = cmd_erasure_code_profile(profile_name, profile)
             self.raw_cluster_cmd(*args)
 
