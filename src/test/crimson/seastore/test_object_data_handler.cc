@@ -218,14 +218,14 @@ struct object_data_handler_test_t:
     objaddr_t offset,
     extent_len_t length) {
     auto ret = with_trans_intr(t, [&](auto &t) {
-      return tm->get_pins(t, offset, length);
+      return tm->get_pins(t, laddr_t::from_byte_offset(offset), length);
     }).unsafe_get();
     return ret;
   }
   std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
-      return tm->get_pins(t, offset, length);
+      return tm->get_pins(t, laddr_t::from_byte_offset(offset), length);
     }).unsafe_get();
     return ret;
   }
@@ -297,7 +297,7 @@ struct object_data_handler_test_t:
       "seastore_max_data_allocation_size", "8192").get();
   }
 
-  laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
+  objaddr_t get_random_write_offset(size_t block_size, objaddr_t limit) {
     return block_size *
       std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
   }
@@ -632,7 +632,7 @@ TEST_P(object_data_handler_test_t, remap_left) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     read(0, 128<<10);
@@ -666,7 +666,7 @@ TEST_P(object_data_handler_test_t, remap_right) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     read(0, 128<<10);
@@ -699,7 +699,7 @@ TEST_P(object_data_handler_test_t, remap_right_left) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     enable_max_extent_size();
@@ -730,7 +730,7 @@ TEST_P(object_data_handler_test_t, multiple_remap) {
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
+      EXPECT_EQ(pin->get_key().get_byte_distance<size_t>(base), res[i]);
       i++;
     }
     read(0, 128<<10);
@@ -769,7 +769,7 @@ TEST_P(object_data_handler_test_t, random_overwrite) {
       for (unsigned j = 0; j < 100; ++j) {
 	auto t = create_mutate_transaction();
 	for (unsigned k = 0; k < 2; ++k) {
-	  write(*t, get_random_laddr(BSIZE, TOTAL), wsize,
+	  write(*t, get_random_write_offset(BSIZE, TOTAL), wsize,
 	    (char)((j*k) % std::numeric_limits<char>::max()));
 	}
 	submit_transaction(std::move(t));
@@ -798,7 +798,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
       auto pins = get_mappings(*t, base, len);
       assert(pins.size() == 1);
       auto pin1 = remap_pin(*t, std::move(pins.front()), 4096, 8192);
-      auto ext = get_extent(*t, base + 4096, 4096 * 2);
+      auto ext = get_extent(*t, laddr_t::from_byte_offset(base + 4096), 4096 * 2);
       ASSERT_TRUE(ext->is_exist_clean());
       write(*t, base + 4096, 4096, 'y');
       ASSERT_TRUE(ext->is_exist_mutation_pending());

@@ -226,12 +226,18 @@ public:
       assert(!is_end());
       auto val = get_val();
       auto key = get_key();
+      node_key_t end{};
+      if constexpr (std::is_same_v<node_key_t, laddr_t>) {
+        end = (key + val.len).checked_to_laddr();
+      } else {
+        end = key + val.len;
+      }
       return std::make_unique<pin_t>(
         ctx,
 	leaf.node,
         leaf.pos,
 	val,
-	fixed_kv_node_meta_t<node_key_t>{ key, key + val.len, 0 });
+	fixed_kv_node_meta_t<node_key_t>{ key, end, 0 });
     }
 
     typename leaf_node_t::Ref get_leaf_node() {

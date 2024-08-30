@@ -192,7 +192,7 @@ private:
 std::ostream &operator<<(std::ostream &out, const segment_id_t&);
 
 // ondisk type of segment_id_t
-struct __attribute((packed)) segment_id_le_t {
+struct __attribute__((packed)) segment_id_le_t {
   ceph_le32 segment = ceph_le32(segment_id_t().segment);
 
   segment_id_le_t(const segment_id_t id) :
@@ -853,7 +853,7 @@ inline paddr_t paddr_t::block_relative_to(paddr_t rhs) const {
   return as_res_paddr().block_relative_to(rhs.as_res_paddr());
 }
 
-struct __attribute((packed)) paddr_le_t {
+struct __attribute__((packed)) paddr_le_t {
   ceph_le64 internal_paddr =
     ceph_le64(P_ADDR_NULL.internal_paddr);
 
@@ -1006,33 +1006,249 @@ constexpr journal_seq_t JOURNAL_SEQ_MAX{
 // JOURNAL_SEQ_NULL == JOURNAL_SEQ_MAX == journal_seq_t{}
 constexpr journal_seq_t JOURNAL_SEQ_NULL = JOURNAL_SEQ_MAX;
 
-// logical addr, see LBAManager, TransactionManager
-using laddr_t = uint64_t;
-constexpr laddr_t L_ADDR_MIN = std::numeric_limits<laddr_t>::min();
-constexpr laddr_t L_ADDR_MAX = std::numeric_limits<laddr_t>::max();
-constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
-constexpr laddr_t L_ADDR_ROOT = L_ADDR_MAX - 1;
-constexpr laddr_t L_ADDR_LBAT = L_ADDR_MAX - 2;
+// logical offset between two laddr_t
+using loffset_t = uint64_t;
 
-struct __attribute((packed)) laddr_le_t {
-  ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
+// logical offset within an extent
+using extent_len_t = uint32_t;
+constexpr extent_len_t EXTENT_LEN_MAX =
+  std::numeric_limits<extent_len_t>::max();
+
+using extent_len_le_t = ceph_le32;
+inline extent_len_le_t init_extent_len_le(extent_len_t len) {
+  return ceph_le32(len);
+}
+
+// logical addr, see LBAManager, TransactionManager
+class laddr_t {
+public:
+  // the type of underlying integer
+  using Unsigned = uint64_t;
+  static constexpr Unsigned RAW_VALUE_MAX =
+      std::numeric_limits<Unsigned>::max();
+
+  constexpr laddr_t() : laddr_t(RAW_VALUE_MAX) {}
+
+  // laddr_t is block aligned, one logical address represents one 4KiB block in disk
+  static constexpr unsigned UNIT_SHIFT = 12;
+  static constexpr unsigned UNIT_SIZE = 1 << UNIT_SHIFT; // 4096
+  static constexpr unsigned UNIT_MASK = UNIT_SIZE - 1;
+
+  static laddr_t from_byte_offset(Unsigned value) {
+    assert((value & UNIT_MASK) == 0);
+    return laddr_t(value >> UNIT_SHIFT);
+  }
+
+  static constexpr laddr_t from_raw_uint(Unsigned v) {
+    return laddr_t(v);
+  }
+
+  /// laddr_t works like primitive integer type, encode/decode it manually
+  void encode(::ceph::buffer::list::contiguous_appender& p) const {
+    p.append(reinterpret_cast<const char *>(&value), sizeof(Unsigned));
+  }
+  void bound_encode(size_t& p) const {
+    p += sizeof(Unsigned);
+  }
+  void decode(::ceph::buffer::ptr::const_iterator& p) {
+    assert(static_cast<std::size_t>(p.get_end() - p.get_pos()) >= sizeof(Unsigned));
+    memcpy((char *)&value, p.get_pos_add(sizeof(Unsigned)), sizeof(Unsigned));
+  }
+
+  // laddr_offset_t contains one base laddr and one block not aligned
+  // offset(< laddr_t::UNIT_SIZE). It is the return type of plus/minus
+  // overloads for laddr_t and loffset_t.
+  struct laddr_offset_t {
+    explicit laddr_offset_t(laddr_t base)
+	: base(base.value), offset(0) {}
+    laddr_offset_t(laddr_t base, extent_len_t offset)
+	: base(base.value), offset(offset) {
+      assert(offset < laddr_t::UNIT_SIZE);
+    }
+
+    laddr_t get_roundup_laddr() const {
+      if (offset == 0) {
+	return laddr_t(base);
+      } else {
+	assert(offset < laddr_t::UNIT_SIZE);
+	return laddr_t(base + 1);
+      }
+    }
+    laddr_t get_aligned_laddr() const { return laddr_t(base); }
+    extent_len_t get_offset() const {
+      assert(offset < laddr_t::UNIT_SIZE);
+      return offset;
+    }
+    laddr_t checked_to_laddr() const {
+      assert(offset == 0);
+      return laddr_t(base);
+    }
+
+    template<std::unsigned_integral U>
+    U get_byte_distance(const laddr_t &l) const {
+      assert(offset < UNIT_SIZE);
+      if (base >= l.value) {
+	Unsigned udiff = base - l.value;
+	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	return (static_cast<U>(udiff) << UNIT_SHIFT) + offset;
+      } else { // base < l.value
+	Unsigned udiff = l.value - base;
+	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	return (static_cast<U>(udiff) << UNIT_SHIFT) - offset;
+      }
+    }
+
+    template<std::unsigned_integral U>
+    U get_byte_distance(const laddr_offset_t &l) const {
+      assert(offset < UNIT_SIZE);
+      if (*this >= l) {
+	Unsigned udiff = base - l.base;
+	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	return ((static_cast<U>(udiff) << UNIT_SHIFT) + offset) - l.offset;
+      } else { // *this < l
+	Unsigned udiff = l.base - base;
+	assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+	return ((static_cast<U>(udiff) << UNIT_SHIFT) + l.offset) - offset;
+      }
+    }
+
+    friend bool operator==(const laddr_offset_t&, const laddr_offset_t&) = default;
+    friend auto operator<=>(const laddr_offset_t&, const laddr_offset_t&) = default;
+    friend std::ostream &operator<<(std::ostream&, const laddr_offset_t&);
+    friend laddr_offset_t operator+(const laddr_offset_t &laddr_offset,
+				    const loffset_t &offset) {
+      // laddr_offset_t could access (laddr_t + loffset_t) overload.
+      return laddr_offset.get_aligned_laddr()
+	  + (laddr_offset.get_offset() + offset);
+    }
+    friend laddr_offset_t operator+(const loffset_t &offset,
+				    const laddr_offset_t &loffset) {
+      return loffset + offset;
+    }
+
+    friend laddr_offset_t operator-(const laddr_offset_t &laddr_offset,
+				    const loffset_t &offset) {
+      if (laddr_offset.get_offset() >= offset) {
+	return laddr_offset_t(
+	  laddr_offset.get_aligned_laddr(),
+	  laddr_offset.get_offset() - offset);
+      } else {
+	// laddr_offset_t could access (laddr_t - loffset_t) overload.
+	return laddr_offset.get_aligned_laddr()
+	    - (offset - laddr_offset.get_offset());
+      }
+    }
+
+    friend class laddr_t;
+  private:
+    // use Unsigned here to avoid incomplete type of laddr_t
+    Unsigned base;
+    extent_len_t offset;
+  };
+
+  template<std::unsigned_integral U>
+  U get_byte_distance(const laddr_offset_t &l) const {
+    if (value <= l.base) {
+      Unsigned udiff = l.base - value;
+      assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+      return (static_cast<U>(udiff) << UNIT_SHIFT) + l.offset;
+    } else { // value > l.base
+      Unsigned udiff = value - l.base;
+      assert(udiff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+      return (static_cast<U>(udiff) << UNIT_SHIFT) - l.offset;
+    }
+  }
+
+  template<std::unsigned_integral U>
+  U get_byte_distance(const laddr_t &l) const {
+    Unsigned diff = value > l.value
+	? value - l.value
+	: l.value - value;
+    assert(diff <= (std::numeric_limits<U>::max() >> UNIT_SHIFT));
+    return static_cast<U>(diff) << UNIT_SHIFT;
+  }
+
+  friend std::ostream &operator<<(std::ostream &, const laddr_t &);
+  friend bool operator==(const laddr_t&, const laddr_t&) = default;
+  friend bool operator==(const laddr_t &laddr,
+			 const laddr_offset_t &laddr_offset) {
+    return laddr == laddr_offset.get_aligned_laddr()
+	&& 0 == laddr_offset.get_offset();
+  }
+  friend bool operator==(const laddr_offset_t &laddr_offset,
+			 const laddr_t &laddr) {
+    return laddr_offset.get_aligned_laddr() == laddr
+	&& laddr_offset.get_offset() == 0;
+  }
+  friend auto operator<=>(const laddr_t&, const laddr_t&) = default;
+  friend auto operator<=>(const laddr_t &laddr,
+			  const laddr_offset_t &laddr_offset) {
+    return laddr_offset_t(laddr, 0) <=> laddr_offset;
+  }
+  friend auto operator<=>(const laddr_offset_t &laddr_offset,
+			  const laddr_t &laddr) {
+    return laddr_offset <=> laddr_offset_t(laddr, 0);
+  }
+
+  friend laddr_offset_t operator+(const laddr_t &laddr,
+				  const loffset_t &offset) {
+    auto base = laddr;
+    base.value += offset >> laddr_t::UNIT_SHIFT;
+    assert(base.value >= laddr.value);
+    return laddr_offset_t(base, offset & laddr_t::UNIT_MASK);
+  }
+  friend laddr_offset_t operator+(const loffset_t &offset,
+				  const laddr_t &laddr) {
+    return laddr + offset;
+  }
+
+  friend laddr_offset_t operator-(const laddr_t &laddr, loffset_t offset) {
+    auto base = laddr;
+    auto diff = (offset + laddr_t::UNIT_SIZE - 1) >> laddr_t::UNIT_SHIFT;
+    base.value -= diff;
+    assert(base.value <= laddr.value);
+    offset = (diff << laddr_t::UNIT_SHIFT) - offset;
+    return laddr_offset_t(base, offset);
+  }
+
+  friend struct laddr_le_t;
+  friend struct pladdr_le_t;
+
+private:
+  // Prevent direct construction of laddr_t with an integer,
+  // always use laddr_t::from_raw_uint instead.
+  constexpr explicit laddr_t(Unsigned value) : value(value) {}
+  Unsigned value;
+};
+using laddr_offset_t = laddr_t::laddr_offset_t;
+
+constexpr laddr_t L_ADDR_MAX = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX);
+constexpr laddr_t L_ADDR_MIN = laddr_t::from_raw_uint(0);
+constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
+constexpr laddr_t L_ADDR_ROOT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 1);
+constexpr laddr_t L_ADDR_LBAT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 2);
+
+struct __attribute__((packed)) laddr_le_t {
+  ceph_le64 laddr;
 
   using orig_type = laddr_t;
 
-  laddr_le_t() = default;
+  laddr_le_t() : laddr_le_t(L_ADDR_NULL) {}
   laddr_le_t(const laddr_le_t &) = default;
   explicit laddr_le_t(const laddr_t &addr)
-    : laddr(ceph_le64(addr)) {}
+    : laddr(addr.value) {}
 
   operator laddr_t() const {
     return laddr_t(laddr);
   }
   laddr_le_t& operator=(laddr_t addr) {
     ceph_le64 val;
-    val = addr;
+    val = addr.value;
     laddr = val;
     return *this;
   }
+
+  bool operator==(const laddr_le_t&) const = default;
 };
 
 constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
@@ -1087,7 +1303,7 @@ enum class addr_type_t : uint8_t {
   MAX=2	// or NONE
 };
 
-struct __attribute((packed)) pladdr_le_t {
+struct __attribute__((packed)) pladdr_le_t {
   ceph_le64 pladdr = ceph_le64(PL_ADDR_NULL);
   addr_type_t addr_type = addr_type_t::MAX;
 
@@ -1097,7 +1313,7 @@ struct __attribute((packed)) pladdr_le_t {
     : pladdr(
 	ceph_le64(
 	  addr.is_laddr() ?
-	    std::get<0>(addr.pladdr) :
+	    std::get<0>(addr.pladdr).value :
 	    std::get<1>(addr.pladdr).internal_paddr)),
       addr_type(
 	addr.is_laddr() ?
@@ -1131,16 +1347,6 @@ struct min_max_t<paddr_t> {
   static constexpr paddr_t min = P_ADDR_MIN;
   static constexpr paddr_t null = P_ADDR_NULL;
 };
-
-// logical offset, see LBAManager, TransactionManager
-using extent_len_t = uint32_t;
-constexpr extent_len_t EXTENT_LEN_MAX =
-  std::numeric_limits<extent_len_t>::max();
-
-using extent_len_le_t = ceph_le32;
-inline extent_len_le_t init_extent_len_le(extent_len_t len) {
-  return ceph_le32(len);
-}
 
 using extent_ref_count_t = uint32_t;
 constexpr extent_ref_count_t EXTENT_DEFAULT_REF_COUNT = 1;
@@ -2680,6 +2886,7 @@ struct cache_stats_t {
 
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::seastore_meta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_id_t)
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::laddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::paddr_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::journal_seq_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::delta_info_t)
@@ -2703,6 +2910,8 @@ template <> struct fmt::formatter<crimson::os::seastore::dirty_io_stats_printer_
 template <> struct fmt::formatter<crimson::os::seastore::extent_types_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_seq_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::journal_tail_delta_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::laddr_offset_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};

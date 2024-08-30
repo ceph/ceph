@@ -977,10 +977,9 @@ public:
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
       // shallow copy the buffer from original extent
-      auto nbp = ceph::bufferptr(
-        *original_bptr,
-        remap_laddr - original_laddr,
-        remap_length);
+      auto remap_offset = remap_laddr.get_byte_distance<
+	extent_len_t>(original_laddr);
+      auto nbp = ceph::bufferptr(*original_bptr, remap_offset, remap_length);
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));

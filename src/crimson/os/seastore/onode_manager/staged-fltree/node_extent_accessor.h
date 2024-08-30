@@ -173,7 +173,7 @@ class DeltaRecorderT final: public DeltaRecorder {
         auto p_addr = reinterpret_cast<laddr_packed_t*>(
             mut.get_write() + update_offset);
         SUBDEBUG(seastore_onode,
-            "apply {:#x} to offset {:#x} ...",
+            "apply {} to offset {:#x} ...",
             new_addr, update_offset);
         layout_t::update_child_addr(mut, new_addr, p_addr);
         break;
@@ -526,12 +526,12 @@ class NodeExtentAccessorT {
       crimson::ct_error::input_output_error::assert_failure(
           [FNAME, c, alloc_size, l_to_discard = extent->get_laddr()] {
         SUBERRORT(seastore_onode,
-            "EIO during allocate -- node_size={}, to_discard={:x}",
+            "EIO during allocate -- node_size={}, to_discard={}",
             c.t, alloc_size, l_to_discard);
       })
     ).si_then([this, c, FNAME] (auto fresh_extent) {
       SUBDEBUGT(seastore_onode,
-          "update addr from {:#x} to {:#x} ...",
+          "update addr from {} to {} ...",
           c.t, extent->get_laddr(), fresh_extent->get_laddr());
       assert(fresh_extent);
       assert(fresh_extent->is_initial_pending());
@@ -555,14 +555,14 @@ class NodeExtentAccessorT {
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
-              "EIO during retire -- to_disgard={:x}, fresh={:x}",
+              "EIO during retire -- to_disgard={}, fresh={}",
               c.t, l_to_discard, l_fresh);
         }),
         crimson::ct_error::enoent::assert_failure(
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
-              "ENOENT during retire -- to_disgard={:x}, fresh={:x}",
+              "ENOENT during retire -- to_disgard={}, fresh={}",
               c.t, l_to_discard, l_fresh);
         })
       );
@@ -582,11 +582,11 @@ class NodeExtentAccessorT {
       eagain_iertr::pass_further{},
       crimson::ct_error::input_output_error::assert_failure(
           [FNAME, c, addr] {
-        SUBERRORT(seastore_onode, "EIO -- addr={:x}", c.t, addr);
+        SUBERRORT(seastore_onode, "EIO -- addr={}", c.t, addr);
       }),
       crimson::ct_error::enoent::assert_failure(
           [FNAME, c, addr] {
-        SUBERRORT(seastore_onode, "ENOENT -- addr={:x}", c.t, addr);
+        SUBERRORT(seastore_onode, "ENOENT -- addr={}", c.t, addr);
       })
 #ifndef NDEBUG
     ).si_then([c] {

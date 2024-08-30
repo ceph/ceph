@@ -585,7 +585,7 @@ TransactionManager::rewrite_logical_extent(
         if (first_extent) {
           fut = lba_manager->update_mapping(
             t,
-            lextent->get_laddr() + off,
+            (lextent->get_laddr() + off).checked_to_laddr(),
             lextent->get_length(),
             lextent->get_paddr(),
             nlextent->get_length(),
@@ -599,7 +599,7 @@ TransactionManager::rewrite_logical_extent(
 	  ceph_assert(refcount != 0);
           fut = lba_manager->alloc_extent(
             t,
-            lextent->get_laddr() + off,
+            (lextent->get_laddr() + off).checked_to_laddr(),
             *nlextent,
 	    refcount
           ).si_then([lextent, nlextent, off](auto mapping) {
