@@ -3432,7 +3432,7 @@ options:
   long_desc: This caps the maximum permitted value for listing-like operations in
     RGW S3. Affects ListObjects(max-keys), ListObjectsVersions(max-keys),
     ListMultipartUploads(max-uploads), ListParts(max-parts)
-  default: 1000
+  default: 5000
   services:
   - rgw
   - rgw
