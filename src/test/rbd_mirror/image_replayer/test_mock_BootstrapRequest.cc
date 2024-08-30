@@ -364,7 +364,7 @@ public:
 
   void expect_is_linked(MockStateBuilder& mock_state_builder, bool is_linked) {
     EXPECT_CALL(mock_state_builder, is_linked())
-      .WillOnce(Return(is_linked));
+      .WillRepeatedly(Return(is_linked));
   }
 
   void expect_is_disconnected(MockStateBuilder& mock_state_builder,
