@@ -7277,6 +7277,7 @@ void BlueStore::_post_init_alloc()
 void BlueStore::_close_alloc()
 {
   ceph_assert(bdev);
+  bdev->set_discard_thread_notify();
   bdev->discard_drain();
 
   ceph_assert(alloc);
@@ -8111,6 +8112,7 @@ void BlueStore::_close_db()
     // When we reach here it is either a graceful shutdown (so can drain the full discards-queue)
     //   or it was a fast shutdown, but we already moved the main discards-queue to the allocator
     //   and only need to wait for the threads local discard_processing queues to drain
+    bdev->set_discard_thread_notify();
     bdev->discard_drain();
     int ret = store_allocator(alloc);
     if (unlikely(ret != 0)) {
