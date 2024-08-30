@@ -6727,6 +6727,14 @@ try_sum_part_cksums(const DoutPrefixProvider *dpp,
     ++parts_ix;
     auto& part_cksum = part.second->get_cksum();
 
+    if (! part_cksum) {
+      ldpp_dout_fmt(dpp, 0,
+		    "ERROR: multipart part checksum not present (ix=={})",
+		    parts_ix);
+      op_ret = -ERR_INVALID_REQUEST;
+      return op_ret;
+    }
+
     ldpp_dout_fmt(dpp, 16,
 		  "INFO: {} iterate part: {} {} {}",
 		  __func__, parts_ix, part_cksum->type_string(),
