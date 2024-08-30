@@ -31,11 +31,29 @@
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 
+#include <format>
+
 namespace rgw::d4n {
   class PolicyDriver;
 }
 
 namespace rgw { namespace sal {
+
+inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version, bool is_dirty)
+{
+  if (is_dirty) {
+    //return "D_" + object->get_bucket()->get_bucket_id() + "_" + version + "_" + object->get_name();
+    return std::format("{}{}{}{}{}{}", "D_", object->get_bucket()->get_bucket_id(), "_", version, "_", object->get_name());
+  } else {
+    //return object->get_bucket()->get_bucket_id() + "_" + version + "_" + object->get_name();
+    return std::format("{}{}{}{}{}", object->get_bucket()->get_bucket_id(), "_", version, "_", object->get_name());
+  }
+}
+
+inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
+{
+  return std::format("{}{}{}{}{}", prefix, "_", offset, "_", len);
+}
 
 using boost::redis::connection;
 
@@ -236,7 +254,6 @@ class D4NFilterObject : public FilterObject {
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
-    //virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh = true) override;
 
     void set_object_version(const std::string& version) { this->version = version; }
     const std::string get_object_version() { return this->version; }
