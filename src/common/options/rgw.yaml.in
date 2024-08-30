@@ -3428,10 +3428,10 @@ options:
 - name: rgw_max_listing_results
   type: uint
   level: advanced
-  desc: Upper bound on results in listing operations, ListBucket max-keys
+  desc: Upper bound on results in listing operations, ListObjects max-keys
   long_desc: This caps the maximum permitted value for listing-like operations in
-    RGW S3. Affects ListBucket(max-keys), ListBucketVersions(max-keys), ListBucketMultipartUploads(max-uploads),
-    ListMultipartUploadParts(max-parts)
+    RGW S3. Affects ListObjects(max-keys), ListObjectsVersions(max-keys),
+    ListMultipartUploads(max-uploads), ListParts(max-parts)
   default: 1000
   services:
   - rgw
