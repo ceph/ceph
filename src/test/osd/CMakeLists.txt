@@ -19,6 +19,20 @@ install(TARGETS
   ceph_test_rados
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(ceph_test_rados_io_sequence
+  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_test_rados_io_sequence.cc
+  ${PROJECT_SOURCE_DIR}/src/common/io_exercising/Model.h
+  ${PROJECT_SOURCE_DIR}/src/common/io_exercising/Model.cc
+  ${PROJECT_SOURCE_DIR}/src/common/io_exercising/DataGenerator.h
+  ${PROJECT_SOURCE_DIR}/src/common/io_exercising/DataGenerator.cc
+  ${PROJECT_SOURCE_DIR}/src/common/io_exercising/IoOp.h
+  ${PROJECT_SOURCE_DIR}/src/common/io_exercising/IoSequence.h)
+target_link_libraries(ceph_test_rados_io_sequence
+  librados global)
+install(TARGETS
+  ceph_test_rados_io_sequence
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # test_stale_read
 add_executable(ceph_test_osd_stale_read
   ceph_test_osd_stale_read.cc
