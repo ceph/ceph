@@ -235,7 +235,6 @@ class D4NFilterObject : public FilterObject {
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
-    //virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh = true) override;
 
     void set_object_version(const std::string& version) { this->version = version; }
     const std::string get_object_version() { return this->version; }
