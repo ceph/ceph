@@ -97,13 +97,14 @@
                                         mirroring.
       mirror image snapshot             Create RBD mirroring image snapshot.
       mirror image status               Show RBD mirroring status for an image.
-      mirror pool demote                Demote all primary images in the pool.
-      mirror pool disable               Disable RBD mirroring by default within a
-                                        pool.
-      mirror pool enable                Enable RBD mirroring by default within a
-                                        pool.
-      mirror pool info                  Show information about the pool mirroring
-                                        configuration.
+      mirror pool demote                Demote all primary images in a pool or
+                                        namespace.
+      mirror pool disable               Disable RBD mirroring in a pool or
+                                        namespace.
+      mirror pool enable                Enable RBD mirroring in a pool or
+                                        namespace.
+      mirror pool info                  Show mirroring configuration for a pool
+                                        or namespace.
       mirror pool peer add              Add a mirroring peer to a pool.
       mirror pool peer bootstrap create Create a peer bootstrap token to import
                                         in a remote cluster
@@ -111,10 +112,10 @@
                                         from a remote cluster
       mirror pool peer remove           Remove a mirroring peer from a pool.
       mirror pool peer set              Update mirroring peer settings.
-      mirror pool promote               Promote all non-primary images in the
-                                        pool.
-      mirror pool status                Show status for all mirrored images in
-                                        the pool.
+      mirror pool promote               Promote all non-primary images in a pool
+                                        or namespace.
+      mirror pool status                Show status for all mirrored images in a
+                                        pool or namespace.
       mirror snapshot schedule add      Add mirror snapshot schedule.
       mirror snapshot schedule list (... ls)
                                         List mirror snapshot schedule.
@@ -1804,7 +1805,7 @@
   usage: rbd mirror pool demote [--pool <pool>] [--namespace <namespace>] 
                                 <pool-spec> 
   
-  Demote all primary images in the pool.
+  Demote all primary images in a pool or namespace.
   
   Positional arguments
     <pool-spec>          pool specification
@@ -1818,7 +1819,7 @@
   usage: rbd mirror pool disable [--pool <pool>] [--namespace <namespace>] 
                                  <pool-spec> 
   
-  Disable RBD mirroring by default within a pool.
+  Disable RBD mirroring in a pool or namespace.
   
   Positional arguments
     <pool-spec>          pool specification
@@ -1833,7 +1834,7 @@
                                 [--site-name <site-name>] 
                                 <pool-spec> <mode> 
   
-  Enable RBD mirroring by default within a pool.
+  Enable RBD mirroring in a pool or namespace.
   
   Positional arguments
     <pool-spec>          pool specification
@@ -1850,7 +1851,7 @@
                               [--format <format>] [--pretty-format] [--all] 
                               <pool-spec> 
   
-  Show information about the pool mirroring configuration.
+  Show mirroring configuration for a pool or namespace.
   
   Positional arguments
     <pool-spec>          pool specification
@@ -1958,7 +1959,7 @@
                                  [--namespace <namespace>] 
                                  <pool-spec> 
   
-  Promote all non-primary images in the pool.
+  Promote all non-primary images in a pool or namespace.
   
   Positional arguments
     <pool-spec>          pool specification
@@ -1974,7 +1975,7 @@
                                 [--format <format>] [--pretty-format] [--verbose] 
                                 <pool-spec> 
   
-  Show status for all mirrored images in the pool.
+  Show status for all mirrored images in a pool or namespace.
   
   Positional arguments
     <pool-spec>          pool specification
