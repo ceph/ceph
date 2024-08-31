@@ -155,6 +155,21 @@ int clip_request(I* image_ctx, Extents* image_extents, ImageArea area) {
   return 0;
 }
 
+void prune_extents(Extents& extents, uint64_t size) {
+  // drop extents completely beyond size
+  while (!extents.empty() && extents.back().first >= size) {
+    extents.pop_back();
+  }
+
+  if (!extents.empty()) {
+    // trim final overlapping extent
+    auto& last_extent = extents.back();
+    if (last_extent.first + last_extent.second > size) {
+      last_extent.second = size - last_extent.first;
+    }
+  }
+}
+
 void unsparsify(CephContext* cct, ceph::bufferlist* bl,
                 const Extents& extent_map, uint64_t bl_off,
                 uint64_t out_bl_len) {
