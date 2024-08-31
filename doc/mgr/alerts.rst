@@ -23,7 +23,8 @@ The *alerts* module is enabled with::
 Configuration
 -------------
 
-To configure SMTP, all of the following config options must be set::
+To configure SMTP, all of the following config options must be set
+(When setting ``mgr/alerts/smtp_destination``, you can use commas to separate multiple)::
 
   ceph config set mgr mgr/alerts/smtp_host *<smtp-server>*
   ceph config set mgr mgr/alerts/smtp_destination *<email-address-to-send-to>*
