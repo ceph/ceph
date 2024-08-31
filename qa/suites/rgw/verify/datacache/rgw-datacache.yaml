@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw d3n l1 local datacache enabled: true
+        rgw enable ops log: true
+        rgw d3n l1 datacache persistent path: /tmp/rgw_datacache/
+        rgw d3n l1 datacache size: 10737418240
+  rgw:
+    datacache: true
+    datacache_path: /tmp/rgw_datacache
+tasks:
+- workunit:
+    clients:
+      client.0:
+      - rgw/run-datacache.sh
+    env:
+      RGW_DATACACHE_PATH: /tmp/rgw_datacache
