@@ -35,6 +35,7 @@
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/QosImageDispatch.h"
 #include "librbd/io/IoOperations.h"
+#include "librbd/io/Utils.h"
 #include "librbd/journal/StandardPolicy.h"
 #include "librbd/operation/ResizeRequest.h"
 
@@ -692,13 +693,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   uint64_t ImageCtx::prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 					  uint64_t overlap)
   {
-    // drop extents completely beyond the overlap
-    while (!objectx.empty() && objectx.back().first >= overlap)
-      objectx.pop_back();
-
-    // trim final overlapping extent
-    if (!objectx.empty() && objectx.back().first + objectx.back().second > overlap)
-      objectx.back().second = overlap - objectx.back().first;
+    io::util::prune_extents(objectx, overlap);
 
     uint64_t len = 0;
     for (vector<pair<uint64_t,uint64_t> >::iterator p = objectx.begin();
