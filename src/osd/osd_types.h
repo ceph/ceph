@@ -4268,6 +4268,7 @@ struct OSDOp {
   }
 };
 std::ostream& operator<<(std::ostream& out, const OSDOp& op);
+template <> struct fmt::formatter<OSDOp> : fmt::ostream_formatter {};
 
 struct pg_log_op_return_item_t {
   int32_t rval;
