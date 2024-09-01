@@ -18,6 +18,7 @@ omap_file_lock_retry_sleep_interval = {{ spec.omap_file_lock_retry_sleep_interva
 omap_file_update_reloads = {{ spec.omap_file_update_reloads }}
 allowed_consecutive_spdk_ping_failures = {{ spec.allowed_consecutive_spdk_ping_failures }}
 spdk_ping_interval_in_seconds = {{ spec.spdk_ping_interval_in_seconds }}
+ping_spdk_under_lock = {{ spec.ping_spdk_under_lock }}
 enable_monitor_client = {{ spec.enable_monitor_client }}
 
 [gateway-logs]
@@ -48,11 +49,11 @@ root_ca_cert = /root.ca.cert
 
 [spdk]
 tgt_path = {{ spec.tgt_path }}
-rpc_socket = {{ spec.rpc_socket }}
+rpc_socket_dir = {{ spec.rpc_socket_dir }}
+rpc_socket_name = {{ spec.rpc_socket_name }}
 timeout = {{ spec.spdk_timeout }}
 bdevs_per_cluster = {{ spec.bdevs_per_cluster }}
-log_level={{ spec.spdk_log_level }}
-protocol_log_level = {{ spec.spdk_protocol_log_level }}
+log_level = {{ spec.spdk_log_level }}
 conn_retries = {{ spec.conn_retries }}
 transports = {{ spec.transports }}
 {% if transport_tcp_options %}
