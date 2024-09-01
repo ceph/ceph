@@ -6,7 +6,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/io/ImageDispatchSpec.h"
