@@ -65,7 +65,6 @@ using namespace ::cls::cmpxattr;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 static constexpr uint64_t cost = 1; // 1 throttle unit per request
 static constexpr uint64_t id = 0; // ids unused
-
 namespace rgw::dedup {
   //---------------------------------------------------------------------------
   void Background::init_rados_access_handles()
@@ -94,7 +93,7 @@ namespace rgw::dedup {
     dp(_cct, dout_subsys, "dedup background: "),
     dpp(&dp),
     cct(_cct),
-    d_table(128*1024*1024, dpp), // 128M entries per-shard
+    d_table(16*1024*1024, dpp), // 128M entries per-shard
     d_cluster(dpp)
   {
     for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
@@ -695,7 +694,8 @@ namespace rgw::dedup {
       return 0;
     }
 
-    check_and_update_md5_heartbeat(md5_shard);
+    check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
+				   p_stats->processed_objects);
     // This records is a dedup target with source record on source_block_id
     disk_record_t src_rec;
     ret = load_record(p_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
@@ -770,7 +770,6 @@ namespace rgw::dedup {
 		       << ", md5_shard=" << (uint32_t)md5_shard << dendl;
     while (has_more) {
       bufferlist bl;
-      check_and_update_md5_heartbeat(md5_shard);
       int ret = load_slab(p_dedup_cluster_ioctx, bl, md5_shard, worker_id, seq_number, dpp);
       if (unlikely(ret < 0)) {
 	derr << __func__ << "::ERROR::Failed loading object!! md5_shard="
@@ -810,7 +809,10 @@ namespace rgw::dedup {
 	    // We deserialize the record inside the CTOR
 	    disk_record_t rec(p + offset);
 	    if (step == STEP_BUILD_TABLE) {
+	      check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
+					     p_stats->processed_objects);
 	      add_record_to_dedup_table(&rec, disk_block_id, rec_id);
+	      p_stats->loaded_objects ++;
 	      slab_rec_count++;
 	    }
 	    else if (step == STEP_REMOVE_DUPLICATES) {
@@ -895,42 +897,47 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::check_and_update_heartbeat(unsigned shard, bool worker_shard)
+  bool Background::need_to_update_heartbeat()
   {
     static unsigned s_count = 0;
-    int ret = 0;
+
     utime_t now = ceph_clock_now();
     utime_t time_elapsed = now - d_heart_beat_last_update;
-    if (time_elapsed.tv.tv_sec < d_heart_beat_max_elapsed_sec) {
+    if (likely(time_elapsed.tv.tv_sec < d_heart_beat_max_elapsed_sec)) {
       s_count++;
+      return false;
     }
     else {
       ldpp_dout(dpp, 10) << __func__ << "::s_count=" << s_count
 			 << "::max_elapsed_sec=" << d_heart_beat_max_elapsed_sec
 			 << dendl;
       s_count = 0;
-      if (worker_shard) {
-	ret = d_cluster.update_work_shard_token_heartbeat(p_dedup_cluster_ioctx, shard);
-      }
-      else {
-	ret = d_cluster.update_md5_shard_token_heartbeat(p_dedup_cluster_ioctx, shard);
-      }
       d_heart_beat_last_update = now;
+      return true;
     }
-
-    return ret;
   }
 
   //---------------------------------------------------------------------------
-  int Background::check_and_update_worker_heartbeat(work_shard_t worker_id)
+  int Background::check_and_update_worker_heartbeat(work_shard_t worker_id,
+						    int64_t ingress_obj_count)
   {
-    return check_and_update_heartbeat(worker_id, true);
+    if (unlikely(need_to_update_heartbeat())) {
+      return d_cluster.update_work_shard_token_heartbeat(p_dedup_cluster_ioctx,
+							 worker_id, ingress_obj_count);
+    }
+    return 0;
   }
 
   //---------------------------------------------------------------------------
-  int Background::check_and_update_md5_heartbeat(md5_shard_t md5_id)
+  int Background::check_and_update_md5_heartbeat(md5_shard_t md5_id,
+						 uint64_t load_count,
+						 uint64_t dedup_count)
   {
-    return check_and_update_heartbeat(md5_id, false);
+    if (unlikely(need_to_update_heartbeat())) {
+      return d_cluster.update_md5_shard_token_heartbeat(p_dedup_cluster_ioctx,
+							md5_id, load_count, dedup_count);
+    }
+    return 0;
   }
 
   //---------------------------------------------------------------------------
@@ -962,7 +969,7 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_operate() ret=" << ret << dendl;
 	return ret;
       }
-      check_and_update_worker_heartbeat(worker_id);
+      check_and_update_worker_heartbeat(worker_id, p_worker_stats->ingress_obj);
 
       obj_count += result.dir.m.size();
       for (auto& entry : result.dir.m) {
@@ -1105,12 +1112,12 @@ namespace rgw::dedup {
       work_shard_t worker_id = d_cluster.get_next_work_shard_token(p_dedup_cluster_ioctx);
       if (worker_id != NULL_WORK_SHARD) {
 	worker_stats_t worker_stats;
+	ceph_assert(worker_stats.ingress_obj == 0);
 	utime_t start_time = ceph_clock_now();
 	objects_ingress_single_shard(worker_id, &worker_stats);
 	worker_stats.duration = ceph_clock_now() - start_time;
 	d_cluster.mark_work_shard_token_completed(p_dedup_cluster_ioctx, worker_id, &worker_stats);
-	ldpp_dout(dpp, 1) << "stat counters[" << (int)worker_id << "]\n"
-			  << worker_stats << dendl;
+	ldpp_dout(dpp, 0) << "stat counters [worker]:\n" << worker_stats << dendl;
       }
       else {
 	break;
@@ -1131,8 +1138,7 @@ namespace rgw::dedup {
 	objects_dedup_single_shard(md5_shard, &md5_stats);
 	md5_stats.duration = ceph_clock_now() - start_time;
 	d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
-	ldpp_dout(dpp, 1) << "stat counters[" << (int)md5_shard << "]\n"
-			  << md5_stats << dendl;
+	ldpp_dout(dpp, 0) << "stat counters [md5]:\n" << md5_stats << dendl;
 	d_table.reset();
       }
       else {
@@ -1195,12 +1201,14 @@ namespace rgw::dedup {
 	// TBD:
 	// Wait for other worker to finish ingress step
 	uint32_t ttl = 0;
-	while (d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx, &ttl) == false) {
+	uint64_t total_ingressed = 0;
+	while (d_cluster.all_work_shard_tokens_completed(p_dedup_cluster_ioctx, &ttl, &total_ingressed) == false) {
 	  ldpp_dout(dpp, 0) << "Waiting for INGRESS step completion ttl=" << ttl << dendl;
 	  sleep(ttl);
 	}
 
-	ldpp_dout(dpp, 1) << "\n\n==INGRESS step was completed on all shards!==\n" << dendl;
+	ldpp_dout(dpp, 1) << "\n\n==INGRESS step was completed on all shards! ("
+			  << total_ingressed << ")==\n" << dendl;
 	if (objects_dedup() != 0) {
 	  derr << __func__ << "::failed objects_dedup()" << dendl;
 	  return;

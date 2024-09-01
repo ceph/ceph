@@ -36,6 +36,15 @@ extern "C" {
 #include "include/utime.h"
 #include "include/str_list.h"
 
+#include "tools/rbd/ArgumentTypes.h"
+#include "tools/rbd/Shell.h"
+#include "tools/rbd/Utils.h"
+#include "include/types.h"
+#include "include/stringify.h"
+#include "common/errno.h"
+#include "common/Formatter.h"
+#include "common/TextTable.h"
+
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
@@ -8544,14 +8553,12 @@ next:
   }
 
   if (opt_cmd == OPT::DEDUP_STATS) {
-    RGWRados *rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
-    rgw::dedup::worker_stats_t wrk_stats;
-    rgw::dedup::cluster::collect_all_work_shard_stats(rados, dpp(), &wrk_stats);
-    cout << "Aggreagted work-shard stats counters:\n" << wrk_stats << std::endl;
-
-    rgw::dedup::md5_stats_t md5_stats;
-    rgw::dedup::cluster::collect_all_md5_shard_stats(rados, dpp(), &md5_stats);
-    cout << "Aggreagted md5-shard stats counters:\n" << md5_stats << std::endl;
+    rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: command only works with RADOS back-ends" << std::endl;
+      ceph_abort("Bad Rados driver");
+    }
+    rgw::dedup::cluster::collect_all_shard_stats(store, dpp());
   }
 
   if (opt_cmd == OPT::GC_LIST) {

@@ -8,7 +8,7 @@
 namespace rgw::dedup {
   using work_shard_t   = uint8_t;
   using md5_shard_t    = uint8_t;
-  const work_shard_t MAX_WORK_SHARD = 8;
+  const work_shard_t MAX_WORK_SHARD = 12;
   const md5_shard_t  MAX_MD5_SHARD  = 8;
 
   struct __attribute__ ((packed)) dedup_flags_t {
@@ -140,7 +140,7 @@ namespace rgw::dedup {
       this->skipped_bad_sha256      = 0;
 
       this->set_shared_manifest     = 0;
-
+      this->loaded_objects          = 0;
       this->processed_objects       = 0;
       this->singleton_count         = 0;
       this->duplicate_count         = 0;
@@ -162,6 +162,7 @@ namespace rgw::dedup {
 
       this->set_shared_manifest     += other.set_shared_manifest;
       this->skip_sha256_cmp         += other.skip_sha256_cmp;
+      this->loaded_objects          += other.loaded_objects;
       this->processed_objects       += other.processed_objects;
       this->singleton_count         += other.singleton_count;
       this->duplicate_count         += other.duplicate_count;
@@ -178,6 +179,7 @@ namespace rgw::dedup {
     uint64_t set_shared_manifest = 0;
     uint64_t skip_sha256_cmp = 0;
 
+    uint64_t loaded_objects = 0;
     uint64_t processed_objects = 0;
     uint64_t singleton_count = 0;
     uint64_t duplicate_count = 0;
@@ -198,6 +200,7 @@ namespace rgw::dedup {
     encode(m.set_shared_manifest, bl);
     encode(m.skip_sha256_cmp, bl);
 
+    encode(m.loaded_objects, bl);
     encode(m.processed_objects, bl);
     encode(m.singleton_count, bl);
     encode(m.duplicate_count, bl);
@@ -217,7 +220,8 @@ namespace rgw::dedup {
     decode(m.skipped_bad_sha256, bl);
     decode(m.set_shared_manifest, bl);
     decode(m.skip_sha256_cmp, bl);
-    
+
+    decode(m.loaded_objects, bl);
     decode(m.processed_objects, bl);
     decode(m.singleton_count, bl);
     decode(m.duplicate_count, bl);

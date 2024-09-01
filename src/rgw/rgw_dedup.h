@@ -38,9 +38,11 @@ namespace rgw::dedup {
     void run();
     int  setup();
     int  read_buckets();
-    int  check_and_update_heartbeat(unsigned shard, bool worker_shard);
-    int  check_and_update_worker_heartbeat(work_shard_t worker_id);
-    int  check_and_update_md5_heartbeat(md5_shard_t md5_id);
+    bool need_to_update_heartbeat();
+    inline int  check_and_update_worker_heartbeat(work_shard_t worker_id, int64_t obj_count);
+    inline int  check_and_update_md5_heartbeat(md5_shard_t md5_id,
+					       uint64_t load_count,
+					       uint64_t dedup_count);
     int  ingress_single_object(rgw::sal::Bucket           *bucket,
 			       const rgw_bucket_dir_entry &entry,
 			       work_shard_t                worker_id,

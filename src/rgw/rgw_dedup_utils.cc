@@ -144,7 +144,10 @@ namespace rgw::dedup {
     out << "Egress  Slabs count            = " << s.egress_slabs << "\n";
 
     out << "Valid   SHA256 count           = " << s.valid_sha256 << "\n";
-    out << "Invalid SHA256 count           = " << s.invalid_sha256 << "\n";
+    if(s.invalid_sha256) {
+      out << "Invalid SHA256 count           = "
+	  << s.invalid_sha256 << "\n";
+    }
 
     if(s.ingress_failed_get_object) {
       out << "Ingress failed get_object()    = "
@@ -175,6 +178,7 @@ namespace rgw::dedup {
   std::ostream& operator<<(std::ostream &out, const md5_stats_t &s)
   {
     out << "Total processed objects  = " << s.processed_objects << "\n";
+    out << "Loaded objects           = " << s.loaded_objects << "\n";
 
     out << "Skipped shared_manifest  = " << s.skipped_shared_manifest << "\n";
     out << "Skipped singleton        = " << s.skipped_singleton << "\n";

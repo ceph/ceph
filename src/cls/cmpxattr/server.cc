@@ -170,7 +170,7 @@ static int lock_update(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   {
     ceph::bufferlist bl;
     int ret = cls_cxx_getxattr(hctx, op.key_name.c_str(), &bl);
-    CLS_LOG(10, "%s::caller info: key=%s, owner=%s max_timeout={%d, %d}",
+    CLS_LOG(20, "%s::caller info: key=%s, owner=%s max_timeout={%d, %d}",
 	    __func__, op.key_name.c_str(), op.owner.c_str(),
 	    op.max_lock_duration.tv.tv_sec, op.max_lock_duration.tv.tv_nsec);
 
@@ -185,7 +185,7 @@ static int lock_update(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 	return -EINVAL;
       }
       utime_t duration = ceph_clock_now() - curr_lock.lock_time;
-      CLS_LOG(10, "%s::lock info: owner=%s duration={%d, %d} max_duration={%d, %d}",
+      CLS_LOG(20, "%s::lock info: owner=%s duration={%d, %d} max_duration={%d, %d}",
 	      __func__,
 	      curr_lock.owner.c_str(), duration.tv.tv_sec, duration.tv.tv_nsec,
 	      curr_lock.max_lock_duration.tv.tv_sec,
@@ -214,15 +214,36 @@ static int lock_update(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
     }
   }
 
+  if (op.op_flags.is_mark_completed()) {
+    ceph_assert(op.in_bl.length());
+    int ret = cls_cxx_setxattr(hctx, "completion_stats", &op.in_bl);
+    if (ret != 0) {
+      CLS_LOG(4, "%s::failed to set xattr completion_time ret=%d (%s)",
+	      __func__, ret, cpp_strerror(ret).c_str());
+      return ret;
+    }
+    CLS_LOG(20, "%s::successfully set completion_stats", __func__);
+  }
+
   if (op.op_flags.is_set_lock()) {
+    utime_t now = ceph_clock_now();
     curr_lock.owner = op.owner;
+    curr_lock.progress_a = op.progress_a;
+    curr_lock.progress_b = op.progress_b;
     curr_lock.max_lock_duration = op.max_lock_duration;
-    curr_lock.lock_time = ceph_clock_now();
+    curr_lock.lock_time = now;
+    if (!lock_exists) {
+      curr_lock.creation_time = now;
+    }
+    if (op.op_flags.is_mark_completed()) {
+      curr_lock.completion_time = now;
+    }
     bufferlist bl;
     encode(curr_lock, bl);
     int ret = cls_cxx_setxattr(hctx, op.key_name.c_str(), &bl);
     if (ret == 0) {
-      CLS_LOG(20, "%s::successfully set xattr key=%s", __func__, op.key_name.c_str());
+      CLS_LOG(20, "%s::successfully set xattr key=%s [0x%lX, 0x%lX]",
+	      __func__, op.key_name.c_str(), op.progress_a, op.progress_b);
     }
     else {
       CLS_LOG(4, "%s::failed to set xattr key=%s ret=%d (%s)",
@@ -243,17 +264,6 @@ static int lock_update(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
     }
     CLS_LOG(20, "%s::successfully set epoch xattr - {%d:%d}",
 	    __func__, epoch.tv.tv_sec, epoch.tv.tv_nsec);
-  }
-
-  if (op.op_flags.is_mark_completed()) {
-    ceph_assert(op.in_bl.length());
-    int ret = cls_cxx_setxattr(hctx, "completion_stats", &op.in_bl);
-    if (ret != 0) {
-      CLS_LOG(4, "%s::failed to set xattr completion_time ret=%d (%s)",
-	      __func__, ret, cpp_strerror(ret).c_str());
-      return ret;
-    }
-    CLS_LOG(20, "%s::successfully set completion_stats", __func__);
   }
 
   return 0;

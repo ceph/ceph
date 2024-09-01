@@ -2793,6 +2793,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       utime_t duration = ceph_clock_now() - ntl.lock_time;
       cout << ntl.owner << "::duration = " << duration
 	   << "::max_lock_duration = " << ntl.max_lock_duration << std::endl;
+      if (ntl.progress_b == ULLONG_MAX) {
+	cout << "Token is marked completed! obj_count=" << ntl.progress_a << std::endl;
+      }
+      else if (ntl.progress_a == 0 && ntl.progress_b == 0) {
+	cout << "Token was not started yet!" << std::endl;
+      }
+      else if (ntl.progress_b == 0) {
+	cout << "Token is incomplete: progress = " << ntl.progress_a <<  std::endl;
+      }
+      else {
+	cout << "Token is incomplete: progress = [" << ntl.progress_a
+	     << ", " << ntl.progress_b << "]" <<  std::endl;
+      }
     }
     else {
       string s(bl.c_str(), bl.length());

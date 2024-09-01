@@ -95,6 +95,8 @@ namespace cls::cmpxattr {
 
   struct lock_update_op {
     utime_t           max_lock_duration; // max duration for holding a lock
+    uint64_t          progress_a;
+    uint64_t          progress_b;
     std::string       owner;
     std::string       key_name;
     operation_flags_t op_flags;
@@ -105,6 +107,8 @@ namespace cls::cmpxattr {
   {
     ENCODE_START(1, 1, bl);
     encode(o.max_lock_duration, bl);
+    encode(o.progress_a, bl);
+    encode(o.progress_b, bl);
     encode(o.owner, bl);
     encode(o.key_name, bl);
     encode(o.op_flags, bl);
@@ -116,6 +120,8 @@ namespace cls::cmpxattr {
   {
     DECODE_START(1, bl);
     decode(o.max_lock_duration, bl);
+    decode(o.progress_a, bl);
+    decode(o.progress_b, bl);
     decode(o.owner, bl);
     decode(o.key_name, bl);
     decode(o.op_flags, bl);
