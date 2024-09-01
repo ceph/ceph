@@ -74,6 +74,9 @@ inline std::ostream& operator<<(
   case gw_availability_t::GW_UNAVAILABLE:
     os << "UNAVAILABLE";
     break;
+  case gw_availability_t::GW_DELETING:
+    os << "DELETING"; break;
+
   default:
     os << "Invalid " << (int)value << " ";
   }
