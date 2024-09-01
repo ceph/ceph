@@ -249,6 +249,9 @@ function standard_scrub_cluster() {
             --osd_pool_default_pg_autoscale_mode=off \
             --osd_pg_stat_report_interval_max_seconds=1 \
             --osd_pg_stat_report_interval_max_epochs=1 \
+            --osd_scrub_retry_after_noscrub=5 \
+            --osd_scrub_retry_pg_state=5 \
+            --osd_scrub_retry_delay=3 \
             $extra_pars"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
