@@ -105,6 +105,7 @@ void NVMeofGwMon::tick()
   const auto cutoff = now - nvmegw_beacon_grace;
 
   // Pass over all the stored beacons
+  NvmeGroupKey old_group_key;
   for (auto &itr : last_beacon) {
     auto& lb = itr.first;
     auto last_beacon_time = itr.second;
@@ -114,6 +115,14 @@ void NVMeofGwMon::tick()
       _propose_pending |= propose;
       last_beacon.erase(lb);
     } else {
+      BeaconSubsystems  *subsystems =
+         &pending_map.created_gws[lb.group_key][lb.gw_id].subsystems;
+      if (subsystems && subsystems->size() && old_group_key != lb.group_key) {
+        // to call track_deleting_gws once per each group-key
+        pending_map.track_deleting_gws(lb.group_key, *subsystems, propose);
+        old_group_key = lb.group_key;
+        _propose_pending |= propose;
+      }
       dout(20) << "beacon live for GW key: " << lb.gw_id << dendl;
     }
   }
@@ -299,29 +308,58 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     auto group_key = std::make_pair(pool, group);
     dout(10) << "nvme-gw show  pool " << pool << " group " << group << dendl;
 
-    if (map.created_gws[group_key].size()) {
-      f->open_object_section("common");
-      f->dump_unsigned("epoch", map.epoch);
-      f->dump_string("pool", pool);
-      f->dump_string("group", group);
-      f->dump_unsigned("num gws", map.created_gws[group_key].size());
+    f->open_object_section("common");
+    f->dump_unsigned("epoch", map.epoch);
+    f->dump_string("pool", pool);
+    f->dump_string("group", group);
+    if (HAVE_FEATURE(mon.get_quorum_con_features(), NVMEOFHA)) {
+      f->dump_string("features", "LB");
+    }
+    f->dump_unsigned("num gws", map.created_gws[group_key].size());
+    if (map.created_gws[group_key].size() == 0) {
+      f->close_section();
+      f->flush(rdata);
+      sstrm.str("");
+    } else {
       sstrm << "[ ";
       NvmeGwId gw_id;
+      BeaconSubsystems   *subsystems = NULL;
       for (auto& gw_created_pair: map.created_gws[group_key]) {
-	gw_id = gw_created_pair.first;
-	auto& st = gw_created_pair.second;
-	sstrm << st.ana_grp_id+1 << " ";
+        gw_id = gw_created_pair.first;
+        auto& st = gw_created_pair.second;
+        if (st.availability != gw_availability_t::GW_DELETING) {
+          // not show ana group of deleting gw in the list -
+          // it is information for the GW used in rebalancing process
+          sstrm << st.ana_grp_id+1 << " ";
+        }
+        if (st.availability == gw_availability_t::GW_AVAILABLE) {
+          subsystems = &st.subsystems;
+        }
       }
       sstrm << "]";
       f->dump_string("Anagrp list", sstrm.str());
-      f->close_section();
-
+      std::map<NvmeAnaGrpId, uint16_t> num_ns;
+      uint16_t total_ns = 0;
+      if (subsystems && subsystems->size()) {
+        for (auto & subs_it:*subsystems) {
+          for (auto & ns :subs_it.namespaces) {
+            if (num_ns.find(ns.anagrpid) == num_ns.end()) num_ns[ns.anagrpid] = 0;
+              num_ns[ns.anagrpid] +=1;
+              total_ns += 1;
+          }
+        }
+      }
+      f->dump_unsigned("num-namespaces", total_ns);
+      f->open_array_section("Created Gateways:");
+      uint32_t i = 0;
       for (auto& gw_created_pair: map.created_gws[group_key]) {
 	auto& gw_id = gw_created_pair.first;
 	auto& state = gw_created_pair.second;
+	i = 0;
 	f->open_object_section("stat");
 	f->dump_string("gw-id", gw_id);
 	f->dump_unsigned("anagrp-id",state.ana_grp_id+1);
+	f->dump_unsigned("num-namespaces", num_ns[state.ana_grp_id+1]);
 	f->dump_unsigned("performed-full-startup", state.performed_full_startup);
 	std::stringstream  sstrm1;
 	sstrm1 << state.availability;
@@ -329,16 +367,17 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
 	sstrm1.str("");
 	for (auto &state_itr: map.created_gws[group_key][gw_id].sm_state) {
 	  sstrm1 << " " << state_itr.first + 1 << ": "
-		 << state.sm_state[state_itr.first] << ",";
+		 << state.sm_state[state_itr.first];
+		 if (++i < map.created_gws[group_key][gw_id].sm_state.size())
+		  sstrm1<<  ", ";
 	}
 	f->dump_string("ana states", sstrm1.str());
 	f->close_section();
       }
+      f->close_section();
+      f->close_section();
       f->flush(rdata);
       sstrm.str("");
-    }
-    else {
-      sstrm << "num_gws  0";
     }
     getline(sstrm, rs);
     mon.reply_command(op, err, rs, rdata, get_last_committed());
@@ -388,18 +427,17 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 		 << " " << pool << " " << group << "  rc " << rc << dendl;
 	sstrm.str("");
       }
-    }
-    else{
+    } else {
       rc = pending_map.cfg_delete_gw(id, group_key);
-      if (rc == -EINVAL) {
+      if (rc == 0) {
+        bool propose = false;
+        // Simulate  immediate Failover of this GW
+        process_gw_down(id, group_key, propose);
+      } else if (rc == -EINVAL) {
 	dout (4) << "Error: GW not found in the database " << id << " "
 		 << pool << " " << group << "  rc " << rc << dendl;
 	err = 0;
 	sstrm.str("");
-      }
-      if (rc == 0) {
-        LastBeacon lb = {id, group_key};
-        last_beacon.erase(lb);
       }
     }
     // propose pending would be generated by the PaxosService
@@ -423,6 +461,16 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
   return response;
 }
 
+void NVMeofGwMon::process_gw_down(const NvmeGwId &gw_id,
+   const NvmeGroupKey& group_key, bool &propose_pending)
+{
+  LastBeacon lb = {gw_id, group_key};
+  auto it = last_beacon.find(lb);
+  if (it != last_beacon.end()) {
+    last_beacon.erase(it);
+    pending_map.process_gw_map_gw_down(gw_id, group_key, propose_pending);
+  }
+}
 
 bool NVMeofGwMon::preprocess_beacon(MonOpRequestRef op)
 {
@@ -527,7 +575,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
 	       << pending_map.created_gws[group_key][gw_id].nonce_map  << dendl;
       nonce_propose = true;
     }
-  } else  {
+  } else {
     dout(10) << "Warning: received empty nonce map in the beacon of GW "
 	     << gw_id << " " << dendl;
   }
@@ -560,13 +608,7 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op)
     pending_map.process_gw_map_ka(gw_id, group_key, last_osd_epoch, propose);
   // state set by GW client application
   } else if (avail == gw_availability_t::GW_UNAVAILABLE) {
-    LastBeacon lb = {gw_id, group_key};
-
-    auto it = last_beacon.find(lb);
-    if (it != last_beacon.end()) {
-      last_beacon.erase(lb);
-      pending_map.process_gw_map_gw_down(gw_id, group_key, propose);
-    }
+      process_gw_down(gw_id, group_key, propose);
   }
   // Periodic: check active FSM timers
   pending_map.update_active_timers(timer_propose);

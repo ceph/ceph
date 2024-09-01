@@ -42,6 +42,7 @@ enum class gw_availability_t {
   GW_CREATED = 0,
   GW_AVAILABLE,
   GW_UNAVAILABLE,
+  GW_DELETING,
   GW_DELETED
 };
 
@@ -134,9 +135,12 @@ struct NvmeGwMonState {
     : ana_grp_id(id), availability(gw_availability_t::GW_CREATED),
       last_gw_map_epoch_valid(false), performed_full_startup(false) {}
   void set_unavailable_state() {
-    availability = gw_availability_t::GW_UNAVAILABLE;
-    // after setting this state the next time monitor sees GW,
-    // it expects it performed the full startup
+    if (availability != gw_availability_t::GW_DELETING) {
+      //for not to override Deleting
+      availability = gw_availability_t::GW_UNAVAILABLE;
+    }
+     // after setting this state, the next time monitor sees GW,
+     // it expects it performed the full startup
     performed_full_startup = false;
   }
   void standby_state(NvmeAnaGrpId grpid) {
