@@ -12,6 +12,7 @@ using sched_conf_t = Scrub::sched_conf_t;
 using scrub_schedule_t = Scrub::scrub_schedule_t;
 using ScrubJob = Scrub::ScrubJob;
 using delay_ready_t = Scrub::delay_ready_t;
+using namespace std::chrono;
 
 namespace {
 utime_t add_double(utime_t t, double d)
@@ -300,16 +301,35 @@ void ScrubJob::adjust_deep_schedule(
 
 SchedTarget& ScrubJob::delay_on_failure(
     scrub_level_t level,
-    std::chrono::seconds delay,
     Scrub::delay_cause_t delay_cause,
     utime_t scrub_clock_now)
 {
+  seconds delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_delay"));
+  switch (delay_cause) {
+    case delay_cause_t::flags:
+      delay =
+	  seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_after_noscrub"));
+      break;
+    case delay_cause_t::pg_state:
+      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_pg_state"));
+      break;
+    case delay_cause_t::local_resources:
+    default:
+      // for all other possible delay causes: use the default delay
+      break;
+  }
+
   auto& delayed_target =
       (level == scrub_level_t::deep) ? deep_target : shallow_target;
   delayed_target.sched_info.schedule.not_before =
       std::max(scrub_clock_now, delayed_target.sched_info.schedule.not_before) +
       utime_t{delay};
   delayed_target.sched_info.last_issue = delay_cause;
+  dout(20) << fmt::format(
+		  "delayed {}scrub due to {} for {}s. Updated: {}",
+		  (level == scrub_level_t::deep ? "deep " : ""), delay_cause,
+		  delay.count(), delayed_target)
+	   << dendl;
   return delayed_target;
 }
 
