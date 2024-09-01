@@ -95,7 +95,7 @@ void dump_bucket(req_state *s, const RGWBucketEnt& ent)
 {
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_string("Name", ent.bucket.name);
-  dump_time(s, "CreationDate", ent.creation_time);
+  dump_time_iso8601(s, "CreationDate", ent.creation_time);
   s->formatter->close_section();
 }
 
@@ -2756,16 +2756,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       }
       end_header(s, this, to_mime_type(s->format));
       dump_start(s);
-      struct tm tmp;
-      utime_t ut(mtime);
-      time_t secs = (time_t)ut.sec();
-      gmtime_r(&secs, &tmp);
-      char buf[TIME_BUF_SIZE];
-      s->formatter->open_object_section_in_ns("CopyPartResult",
-          "http://s3.amazonaws.com/doc/2006-03-01/");
-      if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
-        s->formatter->dump_string("LastModified", buf);
-      }
+      dump_time(s, "LastModified", mtime);
       s->formatter->dump_string("ETag", etag);
       s->formatter->close_section();
       rgw_flush_formatter_and_reset(s, s->formatter);
@@ -4236,7 +4227,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       dump_owner(s, owner.id, owner.display_name, "Initiator");
       dump_owner(s, owner.id, owner.display_name); // Owner
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_time(s, "Initiated", upload->get_mtime());
+      dump_time_iso8601(s, "Initiated", upload->get_mtime());
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {
