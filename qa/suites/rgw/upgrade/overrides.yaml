@@ -1,0 +1,19 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
+      - \(OSD_DOWN\)
+      - \(PG_AVAILABILITY\)
+      - \(PG_DEGRADED\)
+      - slow request
+      - failed to encode map
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false
+      osd:
+        osd min pg log entries: 1
+        osd max pg log entries: 2
+  ragweed:
+    rgw_server: client.0
