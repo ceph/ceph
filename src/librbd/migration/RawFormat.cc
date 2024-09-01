@@ -5,7 +5,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
