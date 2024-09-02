@@ -2178,9 +2178,6 @@ class TestFsAuthorizeUpdate(CephFSTestCase):
                 caps mon = "allow r fsname=a"
                 caps osd = "allow rw tag cephfs data=a"
         """
-        self.skipTest('this test is broken ATM, see '
-                      'https://tracker.ceph.com/issues/65808')
-
         PERM, PATH = 'rw', 'dir1'
         self.mount_a.run_shell(f'mkdir {PATH}')
         self.captester = CapTester(self.mount_a, PATH)
