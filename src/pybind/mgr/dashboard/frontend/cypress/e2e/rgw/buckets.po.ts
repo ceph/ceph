@@ -76,7 +76,7 @@ export class BucketsPageHelper extends PageHelper {
       this.getExpandCollapseElement(name).click();
 
       // check its details table for edited owner field
-      cy.get('.table.table-striped.table-bordered').first().as('bucketDataTable');
+      cy.get('[data-testid="rgw-bucket-details"]').first().as('bucketDataTable');
 
       // Check versioning enabled:
       cy.get('@bucketDataTable').find('tr').its(0).find('td').last().as('versioningValueCell');
@@ -102,7 +102,7 @@ export class BucketsPageHelper extends PageHelper {
     this.getExpandCollapseElement(name).click();
 
     // Check versioning enabled:
-    cy.get('.table.table-striped.table-bordered').first().as('bucketDataTable');
+    cy.get('[data-testid="rgw-bucket-details"]').first().as('bucketDataTable');
     cy.get('@bucketDataTable').find('tr').its(0).find('td').last().as('versioningValueCell');
 
     cy.get('@versioningValueCell').should('have.text', this.versioningStateEnabled);

@@ -62,10 +62,11 @@
       </ng-container>
       <!-- end column filters -->
       <!-- refresh button -->
-      <button cdsButton="ghost"
+      <cds-icon-button
+              [kind]="status.type"
               [disabled]="!fetchData?.observers?.length"
               (click)="refreshBtn()"
-              title="Refresh"
+              [title]="status.msg"
               [description]="status.msg"
               i18n-title
               i18n-description
@@ -74,7 +75,7 @@
         <svg cdsIcon="renew"
              size="16"
              [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></svg>
-      </button>
+      </cds-icon-button>
       <!-- end refresh button -->
       <!-- show hide columns -->
       <button cdsButton="ghost"
@@ -146,18 +147,18 @@
              (deselectRow)="onDeselect($event)"
              (deselectAll)="onDeselectAll($event)">
     <tbody>
-      <tr cdstablerow>
-        <td *ngIf="!rows?.length && !loadingIndicator"
-            class="no-data"
+      <tr cdstablerow
+          *ngIf="!rows?.length && !loadingIndicator">
+        <td class="no-data"
             cdstabledata
-            [attr.colspan]="visibleColumns.length + 1">
+            [attr.colspan]="selectionType === 'single' ? visibleColumns.length + 1 : visibleColumns.length + 2">
           <span class="d-flex justify-content-center align-items-center"
                 i18n>No data to display</span>
         </td>
       </tr>
-      <tr cdstablerow>
-        <td *ngIf="loadingIndicator"
-            class="no-data"
+      <tr cdstablerow
+          *ngIf="loadingIndicator">
+        <td class="no-data"
             cdstabledata
             [attr.colspan]="visibleColumns.length + 1">
           <span class="d-flex justify-content-center align-items-center"

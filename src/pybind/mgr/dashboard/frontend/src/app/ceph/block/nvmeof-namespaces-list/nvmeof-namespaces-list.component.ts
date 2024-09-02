@@ -13,7 +13,7 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { IopsPipe } from '~/app/shared/pipes/iops.pipe';
 import { MbpersecondPipe } from '~/app/shared/pipes/mbpersecond.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 const BASE_URL = 'block/nvmeof/subsystems';
@@ -36,7 +36,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnChanges {
   constructor(
     public actionLabels: ActionLabelsI18n,
     private router: Router,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
     private nvmeofService: NvmeofService,

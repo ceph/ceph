@@ -75,7 +75,7 @@ export class ConfigurationPageHelper extends PageHelper {
     values.forEach((value) => {
       // iterates through list of values and
       // checks if the value appears in details with the correct number attatched
-      cy.contains('.table.table-striped.table-bordered', `${value[0]}\: ${value[1]}`);
+      cy.contains('[data-testid=config-details-table]', `${value[0]}\: ${value[1]}`);
     });
   }
 }

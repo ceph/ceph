@@ -27,6 +27,8 @@ export class TableActionsComponent implements OnChanges, OnInit {
   // This disables the main action button.
   @Input()
   dropDownOnly?: string;
+  @Input()
+  primaryDropDown = false;
 
   currentAction?: CdTableAction;
   // Array with all visible actions

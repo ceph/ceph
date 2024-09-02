@@ -38,7 +38,7 @@ export class ImagesPageHelper extends PageHelper {
     cy.get('[data-cy=submitBtn]').click();
 
     this.getExpandCollapseElement(newName).click();
-    cy.get('.table.table-striped.table-bordered').contains('td', newSize);
+    cy.get('[data-testid=rbd-details-table]').contains('td', newSize);
   }
 
   // Selects RBD image and moves it to the trash,

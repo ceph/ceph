@@ -21,7 +21,8 @@
     <cd-table-actions class="btn-group mb-4 me-2"
                       [permission]="permission"
                       [selection]="selection"
-                      [tableActions]="createTableActions">
+                      [tableActions]="createTableActions"
+                      [primaryDropDown]="true">
     </cd-table-actions>
   </span>
   <ng-template #migrateAndReplicationActionTpl>
@@ -114,8 +115,7 @@
          *ngIf="metadata">
       <legend>{{ metadataTitle }}</legend>
       <div>
-        <cd-table-key-value *cdTableDetail
-                            [data]="metadata">
+        <cd-table-key-value [data]="metadata">
         </cd-table-key-value>
       </div>
     </div>
