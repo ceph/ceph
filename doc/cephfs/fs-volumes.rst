@@ -951,6 +951,13 @@ Configure the maximum number of concurrent clone operations. The default is 4:
 
    ceph config set mgr mgr/volumes/max_concurrent_clones <value>
 
+Pause the threads that asynchronously purge trashed subvolumes. This option is
+useful during cluster recovery scenarios:
+
+.. prompt:: bash #
+
+    ceph config set mgr/volumes/pause_purging
+
 Configure the ``snapshot_clone_no_wait`` option:
 
 The ``snapshot_clone_no_wait`` config option is used to reject clone-creation
