@@ -581,7 +581,16 @@ struct GroupImageSpec {
 
   std::string image_key();
 
-  bool operator==(const GroupImageSpec&) const = default;
+  inline bool operator==(const GroupImageSpec& rhs) const {
+    return (pool_id == rhs.pool_id &&
+            image_id == rhs.image_id);
+  }
+  inline bool operator<(const GroupImageSpec& rhs) const {
+    if (pool_id != rhs.pool_id) {
+      return pool_id < rhs.pool_id;
+    }
+    return image_id < rhs.image_id;
+  }
 };
 WRITE_CLASS_ENCODER(GroupImageSpec);
 

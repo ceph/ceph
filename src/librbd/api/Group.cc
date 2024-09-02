@@ -1134,7 +1134,7 @@ int Group<I>::snap_rollback(librados::IoCtx& group_ioctx,
 
   cls::rbd::GroupSnapshot *group_snap = nullptr;
   for (auto &snap : snaps) {
-    if (is_user_snapshot(snap) && snap.name == string(snap_name)) {
+    if (snap.name == string(snap_name)) {
       group_snap = &snap;
       break;
     }

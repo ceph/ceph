@@ -2934,6 +2934,118 @@ int Mirror<I>::group_promote(IoCtx& group_ioctx, const char *group_name,
     lderr(cct) << "group " << group_name
                << " is still primary within a remote cluster" << dendl;
     return -EBUSY;
+  } else if (force) {
+    std::vector<cls::rbd::GroupImageStatus> images;
+    r = Group<I>::group_image_list_by_id(group_ioctx, group_id, &images);
+    if (r < 0) {
+      lderr(cct) << "failed listing images in the group: " << group_name
+                 << " :" << cpp_strerror(r) << dendl;
+      return r;
+    }
+    std::vector<cls::rbd::GroupImageSpec> current_images;
+    for (const auto& image : images) {
+      if (image.state == cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED) {
+        current_images.push_back(image.spec);
+      }
+    }
+    // rollback to last good group snapshot
+    std::vector<cls::rbd::GroupSnapshot> snaps;
+    C_SaferCond cond;
+    auto req = group::ListSnapshotsRequest<>::create(group_ioctx, group_id,
+                                                     true, true, &snaps, &cond);
+    req->send();
+    int r = cond.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to list snapshots in the group " << group_name
+                 << " :" << cpp_strerror(r) << dendl;
+      return r;
+    }
+    auto snap =  snaps.rbegin();
+    for (; snap != snaps.rend(); ++snap) {
+      if (snap->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+        continue;
+      }
+      break;
+    }
+    if (snap != snaps.rend()) {
+      // Check for group membership match
+      std::vector<cls::rbd::GroupImageSpec> rollback_images;
+      for (auto& it : snap->snaps) {
+        rollback_images.emplace_back(it.image_id, it.pool);
+      }
+
+      if (rollback_images != current_images) {
+        lderr(cct) << "group snapshot membership does not match group membership"
+                   << dendl;
+        // Fix the group membership
+        std::vector<cls::rbd::GroupImageSpec> delta_images;
+        std::set_difference(current_images.begin(), current_images.end(),
+                            rollback_images.begin(), rollback_images.end(),
+                            std::back_inserter(delta_images));
+
+        std::vector<cls::rbd::GroupImageSpec> removed_images; // from current membership
+        std::vector<cls::rbd::GroupImageSpec> inserted_images; // to current membership
+        if (!delta_images.empty()) {
+          for (auto &s : delta_images) {
+            if (std::find(rollback_images.begin(), rollback_images.end(), s)
+                != rollback_images.end()) {
+              removed_images.push_back(s);
+            } else {
+              inserted_images.push_back(s);
+            }
+          }
+        }
+        if (!removed_images.empty()) {
+          // insert back to membership
+          for (auto &s : removed_images) {
+            IoCtx image_ioctx;
+            r = librbd::util::create_ioctx(group_ioctx, "image", s.pool_id, {},
+                                           &image_ioctx);
+            if (r < 0) {
+              return r;
+            }
+
+            r = Group<I>::image_add(group_ioctx, group_name,
+                                    image_ioctx, s.image_id.c_str(), 0);
+            if (r < 0) {
+              lderr(cct) << "error inserting image to group: " << group_name
+                         << " :" << cpp_strerror(r) << dendl;
+              return r;
+            }
+          }
+        }
+
+        if(!inserted_images.empty()) {
+          // remove from the membershiip
+          for (auto &s : inserted_images) {
+            IoCtx image_ioctx;
+            r = librbd::util::create_ioctx(group_ioctx, "image", s.pool_id, {},
+                                           &image_ioctx);
+            if (r < 0) {
+              return r;
+            }
+            r = Group<I>::image_remove(group_ioctx, group_name,
+                                       image_ioctx, s.image_id.c_str(), 0);
+            if (r < 0 && r != -ENOENT) {
+              lderr(cct) << "error removing image from a group: " << group_name
+                         << " :" << cpp_strerror(r) << dendl;
+              return r;
+            }
+          }
+        }
+      } // Fixing membership done.
+
+      librbd::NoOpProgressContext prog_ctx;
+      r = Group<I>::snap_rollback(group_ioctx,
+                                  group_name, snap->name.c_str(), prog_ctx);
+      if (r < 0) {
+        lderr(cct) << "failed to rollback to group snapshot: " << snap->name
+                   << " :" << cpp_strerror(r) << dendl;
+        return r;
+      }
+      ldout(cct, 5) << "successfully rollbacked to group snapshot: "
+                    << snap->name << dendl;
+    } // Rollback to last good snapshot done
   }
 
   std::string group_snap_id = librbd::util::generate_image_id(group_ioctx);
