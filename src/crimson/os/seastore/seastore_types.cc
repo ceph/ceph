@@ -1038,4 +1038,78 @@ std::ostream& operator<<(std::ostream& out, const dirty_io_stats_printer_t& p)
   return out;
 }
 
+std::ostream& operator<<(std::ostream& out, const extent_access_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  double est_total_access = static_cast<double>(p.stats.get_estimated_total_access());
+  out << "(~";
+  if (est_total_access > 1000000) {
+    out << fmt::format(dfmt, est_total_access/1000000)
+        << "M, ";
+  } else {
+    out << fmt::format(dfmt, est_total_access/1000)
+        << "K, ";
+  }
+  double trans_hit = static_cast<double>(p.stats.get_trans_hit());
+  double cache_hit = static_cast<double>(p.stats.get_cache_hit());
+  double est_cache_access = static_cast<double>(p.stats.get_estimated_cache_access());
+  double load_absent = static_cast<double>(p.stats.load_absent);
+  out << "trans-hit=~"
+      << fmt::format(dfmt, trans_hit/est_total_access*100)
+      << "%(p"
+      << fmt::format(dfmt, p.stats.trans_pending/trans_hit)
+      << ",d"
+      << fmt::format(dfmt, p.stats.trans_dirty/trans_hit)
+      << ",l"
+      << fmt::format(dfmt, p.stats.trans_lru/trans_hit)
+      << "), cache-hit=~"
+      << fmt::format(dfmt, cache_hit/est_cache_access*100)
+      << "%(d"
+      << fmt::format(dfmt, p.stats.cache_dirty/cache_hit)
+      << ",l"
+      << fmt::format(dfmt, p.stats.cache_lru/cache_hit)
+      <<"), load-present/absent="
+      << fmt::format(dfmt, p.stats.load_present/load_absent)
+      << ")";
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const cache_access_stats_printer_t& p)
+{
+  constexpr const char* dfmt = "{:.2f}";
+  double total_access = static_cast<double>(p.stats.get_total_access());
+  out << "(";
+  if (total_access > 1000000) {
+    out << fmt::format(dfmt, total_access/1000000)
+        << "M, ";
+  } else {
+    out << fmt::format(dfmt, total_access/1000)
+        << "K, ";
+  }
+  double trans_hit = static_cast<double>(p.stats.s.get_trans_hit());
+  double cache_hit = static_cast<double>(p.stats.s.get_cache_hit());
+  double cache_access = static_cast<double>(p.stats.get_cache_access());
+  double load_absent = static_cast<double>(p.stats.s.load_absent);
+  out << "trans-hit="
+      << fmt::format(dfmt, trans_hit/total_access*100)
+      << "%(p"
+      << fmt::format(dfmt, p.stats.s.trans_pending/trans_hit)
+      << ",d"
+      << fmt::format(dfmt, p.stats.s.trans_dirty/trans_hit)
+      << ",l"
+      << fmt::format(dfmt, p.stats.s.trans_lru/trans_hit)
+      << "), cache-hit="
+      << fmt::format(dfmt, cache_hit/cache_access*100)
+      << "%(d"
+      << fmt::format(dfmt, p.stats.s.cache_dirty/cache_hit)
+      << ",l"
+      << fmt::format(dfmt, p.stats.s.cache_lru/cache_hit)
+      <<"), load/absent="
+      << fmt::format(dfmt, load_absent/p.stats.cache_absent*100)
+      << "%, load-present/absent="
+      << fmt::format(dfmt, p.stats.s.load_present/load_absent)
+      << ")";
+  return out;
+}
+
 } // namespace crimson::os::seastore

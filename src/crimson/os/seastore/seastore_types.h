@@ -2886,10 +2886,51 @@ struct extent_access_stats_t {
   uint64_t load_absent = 0;
   uint64_t load_present = 0;
 
+  uint64_t get_trans_hit() const {
+    return trans_pending + trans_dirty + trans_lru;
+  }
+
   uint64_t get_cache_hit() const {
     return cache_dirty + cache_lru;
   }
+
+  uint64_t get_estimated_cache_access() const {
+    return get_cache_hit() + load_absent;
+  }
+
+  uint64_t get_estimated_total_access() const {
+    return get_trans_hit() + get_cache_hit() + load_absent;
+  }
+
+  bool is_empty() const {
+    return get_estimated_total_access() == 0;
+  }
+
+  void add(const extent_access_stats_t& o) {
+    trans_pending += o.trans_pending;
+    trans_dirty += o.trans_dirty;
+    trans_lru += o.trans_lru;
+    cache_dirty += o.cache_dirty;
+    cache_lru += o.cache_lru;
+    load_absent += o.load_absent;
+    load_present += o.load_present;
+  }
+
+  void minus(const extent_access_stats_t& o) {
+    trans_pending -= o.trans_pending;
+    trans_dirty -= o.trans_dirty;
+    trans_lru -= o.trans_lru;
+    cache_dirty -= o.cache_dirty;
+    cache_lru -= o.cache_lru;
+    load_absent -= o.load_absent;
+    load_present -= o.load_present;
+  }
 };
+struct extent_access_stats_printer_t {
+  double seconds;
+  const extent_access_stats_t& stats;
+};
+std::ostream& operator<<(std::ostream&, const extent_access_stats_printer_t&);
 
 struct cache_access_stats_t {
   extent_access_stats_t s;
@@ -2898,19 +2939,44 @@ struct cache_access_stats_t {
   uint64_t get_cache_access() const {
     return s.get_cache_hit() + cache_absent;
   }
+
+  uint64_t get_total_access() const {
+    return s.get_trans_hit() + get_cache_access();
+  }
+
+  bool is_empty() const {
+    return get_total_access() == 0;
+  }
+
+  void add(const cache_access_stats_t& o) {
+    s.add(o.s);
+    cache_absent += o.cache_absent;
+  }
+
+  void minus(const cache_access_stats_t& o) {
+    s.minus(o.s);
+    cache_absent -= o.cache_absent;
+  }
 };
+struct cache_access_stats_printer_t {
+  double seconds;
+  const cache_access_stats_t& stats;
+};
+std::ostream& operator<<(std::ostream&, const cache_access_stats_printer_t&);
 
 struct cache_stats_t {
   cache_size_stats_t lru_sizes;
   cache_io_stats_t lru_io;
   cache_size_stats_t dirty_sizes;
   dirty_io_stats_t dirty_io;
+  cache_access_stats_t access;
 
   void add(const cache_stats_t& o) {
     lru_sizes.add(o.lru_sizes);
     lru_io.add(o.lru_io);
     dirty_sizes.add(o.dirty_sizes);
     dirty_io.add(o.dirty_io);
+    access.add(o.access);
   }
 };
 
@@ -2932,6 +2998,7 @@ WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::alloc_delta_t)
 WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::segment_tail_t)
 
 #if FMT_VERSION >= 90000
+template <> struct fmt::formatter<crimson::os::seastore::cache_access_stats_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::cache_io_stats_printer_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::cache_size_stats_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::cache_size_stats_printer_t> : fmt::ostream_formatter {};

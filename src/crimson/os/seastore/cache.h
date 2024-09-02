@@ -1722,6 +1722,10 @@ private:
     last_dirty_io_by_src_ext;
   mutable rewrite_stats_t last_trim_rewrites;
   mutable rewrite_stats_t last_reclaim_rewrites;
+  mutable cache_access_stats_t last_access;
+  mutable counter_by_src_t<uint64_t> last_cache_absent_by_src;
+  mutable counter_by_src_t<counter_by_extent_t<extent_access_stats_t> >
+    last_access_by_src_ext;
 
   void account_conflict(Transaction::src_t src1, Transaction::src_t src2) {
     assert(src1 < Transaction::src_t::MAX);

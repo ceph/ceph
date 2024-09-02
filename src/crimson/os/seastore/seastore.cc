@@ -740,6 +740,19 @@ seastar::future<> SeaStore::report_stats()
          dirty_sizes_ps,
          dirty_io_stats_printer_t{seconds, dirty_io_ps});
 
+    cache_access_stats_t access_ps = cache_total.access;
+    access_ps.cache_absent /= seastar::smp::count;
+    access_ps.s.trans_pending /= seastar::smp::count;
+    access_ps.s.trans_dirty /= seastar::smp::count;
+    access_ps.s.trans_lru /= seastar::smp::count;
+    access_ps.s.cache_dirty /= seastar::smp::count;
+    access_ps.s.cache_lru /= seastar::smp::count;
+    access_ps.s.load_absent /= seastar::smp::count;
+    access_ps.s.load_present /= seastar::smp::count;
+    INFO("cache_access: total{}; per-shard{}",
+         cache_access_stats_printer_t{seconds, cache_total.access},
+         cache_access_stats_printer_t{seconds, access_ps});
+
     return seastar::now();
   });
 }

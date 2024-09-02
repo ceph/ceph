@@ -150,6 +150,9 @@ void Cache::register_metrics()
   last_dirty_io_by_src_ext = {};
   last_trim_rewrites = {};
   last_reclaim_rewrites = {};
+  last_access = {};
+  last_cache_absent_by_src = {};
+  last_access_by_src_ext = {};
 
   namespace sm = seastar::metrics;
   using src_t = Transaction::src_t;
@@ -2257,12 +2260,17 @@ cache_stats_t Cache::get_stats(
   lru.get_stats(ret, report_detail, seconds);
 
   /*
-   * get dirty stats
+   * dirty stats
+   * rewrite stats
+   * index stats
+   * access stats
    */
 
   ret.dirty_sizes = cache_size_stats_t{stats.dirty_bytes, dirty.size()};
   ret.dirty_io = stats.dirty_io;
   ret.dirty_io.minus(last_dirty_io);
+  ret.access = stats.access;
+  ret.access.minus(last_access);
 
   if (report_detail && seconds != 0) {
     counter_by_src_t<counter_by_extent_t<dirty_io_stats_t> >
@@ -2357,14 +2365,68 @@ cache_stats_t Cache::get_stats(
     oss << "\ncache total"
         << cache_size_stats_t{extents_index.get_bytes(), extents_index.size()};
 
+    counter_by_src_t<counter_by_extent_t<extent_access_stats_t> >
+      _access_by_src_ext = stats.access_by_src_ext;
+    counter_by_src_t<cache_access_stats_t> access_by_src;
+    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
+      auto src = static_cast<transaction_type_t>(_src);
+      cache_access_stats_t& trans_access = get_by_src(access_by_src, src);
+      trans_access.cache_absent = get_by_src(stats.cache_absent_by_src, src);
+      trans_access.cache_absent -= get_by_src(last_cache_absent_by_src, src);
+      auto& access_by_ext = get_by_src(_access_by_src_ext, src);
+      const auto& last_access_by_ext = get_by_src(last_access_by_src_ext, src);
+      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+        auto ext = static_cast<extent_types_t>(_ext);
+        extent_access_stats_t& extent_access = get_by_ext(access_by_ext, ext);
+        const auto& last_extent_access = get_by_ext(last_access_by_ext, ext);
+        extent_access.minus(last_extent_access);
+        trans_access.s.add(extent_access);
+      }
+    }
+    oss << "\naccess: total"
+        << cache_access_stats_printer_t{seconds, ret.access};
+    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
+      auto src = static_cast<transaction_type_t>(_src);
+      const auto& trans_access = get_by_src(access_by_src, src);
+      if (trans_access.is_empty()) {
+        continue;
+      }
+      extent_access_stats_t data_access;
+      extent_access_stats_t mdat_access;
+      extent_access_stats_t phys_access;
+      const auto& access_by_ext = get_by_src(_access_by_src_ext, src);
+      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
+        auto ext = static_cast<extent_types_t>(_ext);
+        const auto& extent_access = get_by_ext(access_by_ext, ext);
+        if (is_data_type(ext)) {
+          data_access.add(extent_access);
+        } else if (is_logical_metadata_type(ext)) {
+          mdat_access.add(extent_access);
+        } else if (is_physical_type(ext)) {
+          phys_access.add(extent_access);
+        }
+      }
+      oss << "\n  " << src << ": "
+          << cache_access_stats_printer_t{seconds, trans_access}
+          << "\n    data"
+          << extent_access_stats_printer_t{seconds, data_access}
+          << "\n    mdat"
+          << extent_access_stats_printer_t{seconds, mdat_access}
+          << "\n    phys"
+          << extent_access_stats_printer_t{seconds, phys_access};
+    }
+
     INFO("{}", oss.str());
 
     last_dirty_io_by_src_ext = stats.dirty_io_by_src_ext;
     last_trim_rewrites = stats.trim_rewrites;
     last_reclaim_rewrites = stats.reclaim_rewrites;
+    last_cache_absent_by_src = stats.cache_absent_by_src;
+    last_access_by_src_ext = stats.access_by_src_ext;
   }
 
   last_dirty_io = stats.dirty_io;
+  last_access = stats.access;
 
   return ret;
 }
