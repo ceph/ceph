@@ -276,6 +276,8 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   as well as pending clones. Both progress are accompanied by messages that
   show number of clone jobs in the respective categories and the amount of
   progress made by each of them.
+* RGW: in bucket notifications, the `principalId` inside `ownerIdentity` now contains
+  complete user id, prefixed with tenant id
 
 >=18.0.0
 
