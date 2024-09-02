@@ -2800,6 +2800,11 @@ struct cache_size_stats_t {
     size -= o.size;
     num_extents -= o.num_extents;
   }
+
+  void divide_by(unsigned d) {
+    size /= d;
+    num_extents /= d;
+  }
 };
 std::ostream& operator<<(std::ostream&, const cache_size_stats_t&);
 struct cache_size_stats_printer_t {
@@ -2824,6 +2829,11 @@ struct cache_io_stats_t {
   void minus(const cache_io_stats_t& o) {
     in_sizes.minus(o.in_sizes);
     out_sizes.minus(o.out_sizes);
+  }
+
+  void divide_by(unsigned d) {
+    in_sizes.divide_by(d);
+    out_sizes.divide_by(d);
   }
 };
 struct cache_io_stats_printer_t {
@@ -2860,6 +2870,13 @@ struct dirty_io_stats_t {
     num_replace -= o.num_replace;
     out_sizes.minus(o.out_sizes);
     out_versions -= o.out_versions;
+  }
+
+  void divide_by(unsigned d) {
+    in_sizes.divide_by(d);
+    num_replace /= d;
+    out_sizes.divide_by(d);
+    out_versions /= d;
   }
 };
 struct dirty_io_stats_printer_t {
@@ -2925,6 +2942,16 @@ struct extent_access_stats_t {
     load_absent -= o.load_absent;
     load_present -= o.load_present;
   }
+
+  void divide_by(unsigned d) {
+    trans_pending /= d;
+    trans_dirty /= d;
+    trans_lru /= d;
+    cache_dirty /= d;
+    cache_lru /= d;
+    load_absent /= d;
+    load_present /= d;
+  }
 };
 struct extent_access_stats_printer_t {
   double seconds;
@@ -2956,6 +2983,11 @@ struct cache_access_stats_t {
   void minus(const cache_access_stats_t& o) {
     s.minus(o.s);
     cache_absent -= o.cache_absent;
+  }
+
+  void divide_by(unsigned d) {
+    s.divide_by(d);
+    cache_absent /= d;
   }
 };
 struct cache_access_stats_printer_t {
