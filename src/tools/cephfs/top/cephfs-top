@@ -45,6 +45,7 @@ FS_TOP_SUPPORTED_VER = 2
 ITEMS_PAD_LEN = 3
 ITEMS_PAD = " " * ITEMS_PAD_LEN
 DEFAULT_REFRESH_INTERVAL = 1
+DEFAULT_PAD_WIDTH = 300  # for medium size windows
 
 # metadata provided by mgr/stats
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "client_id"
@@ -290,7 +291,7 @@ class FSTop(FSTopBase):
         self.conffile = args.conffile
         self.refresh_interval_secs = args.delay
         self.PAD_HEIGHT = 10000  # height of the fstop_pad
-        self.PAD_WIDTH = 300  # width of the fstop_pad
+        self.PAD_WIDTH = DEFAULT_PAD_WIDTH  # width of the fstop_pad
         self.exit_ev = threading.Event()
 
     def handle_signal(self, signum, _):
@@ -358,6 +359,12 @@ class FSTop(FSTopBase):
             # If the terminal do not support the visibility
             # requested it will raise an exception
             pass
+
+        # Check the window size before creating the pad. For large windows,
+        # PAD_WIDTH = window width.
+        h, w = self.stdscr.getmaxyx()
+        if (w > DEFAULT_PAD_WIDTH):
+            self.PAD_WIDTH = w
         self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
         self.run_all_display()
 
@@ -1030,7 +1037,10 @@ class FSTop(FSTopBase):
             elif cmd == curses.KEY_END:
                 hscrollOffset = self.PAD_WIDTH - self.viewportWidth - 1
             elif cmd == curses.KEY_RESIZE:
-                # terminal resize event. Update the viewport dimensions
+                # terminal resize event.
+                # Update the pad dimensions
+                self.PAD_WIDTH = DEFAULT_PAD_WIDTH
+                # Update the viewport dimensions
                 windowsize = self.stdscr.getmaxyx()
                 self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
@@ -1163,7 +1173,10 @@ class FSTop(FSTopBase):
             elif cmd == curses.KEY_END:
                 hscrollOffset = self.PAD_WIDTH - self.viewportWidth - 1
             elif cmd == curses.KEY_RESIZE:
-                # terminal resize event. Update the viewport dimensions
+                # terminal resize event.
+                # Update the pad dimensions
+                self.PAD_WIDTH = DEFAULT_PAD_WIDTH
+                # Update the viewport dimensions
                 windowsize = self.stdscr.getmaxyx()
                 self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
             if cmd:
