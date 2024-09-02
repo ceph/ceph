@@ -263,6 +263,12 @@ void NBDStream<I>::close(Context* on_finish) {
   ldout(m_cct, 20) << dendl;
 
   if (m_nbd != nullptr) {
+    // send a graceful shutdown to the server
+    // ignore errors -- we are read-only, also from the client's
+    // POV there is no disadvantage to abruptly closing the socket
+    // in nbd_close()
+    nbd_shutdown(m_nbd, 0);
+
     nbd_close(m_nbd);
     m_nbd = nullptr;
   }
