@@ -94,8 +94,6 @@
           <label for="device_class"
                  class="cd-col-form-label">
             <ng-container i18n>Device class</ng-container>
-            <cd-helper [html]="tooltips.device_class">
-            </cd-helper>
           </label>
           <div class="cd-col-form-input">
             <select class="form-select"
@@ -103,12 +101,15 @@
                     name="device_class"
                     formControlName="device_class">
               <option ngValue=""
-                      i18n>Let Ceph decide</option>
+                      i18n>All devices</option>
               <option *ngFor="let deviceClass of devices"
                       [ngValue]="deviceClass">
                 {{ deviceClass }}
               </option>
             </select>
+            <cd-help-text>
+              <span i18n>{{tooltips.device_class}}</span>
+            </cd-help-text>
           </div>
         </div>
       </div>
