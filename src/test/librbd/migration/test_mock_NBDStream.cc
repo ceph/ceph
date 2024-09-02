@@ -35,23 +35,37 @@ public:
     TestMockFixture::SetUp();
 
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
-    json_object["url"] = "localhost";
-    json_object["port"] = "10809";
+    m_json_object["uri"] = "nbd://foo.example";
   }
 
   librbd::ImageCtx *m_image_ctx;
-  json_spirit::mObject json_object;
+  json_spirit::mObject m_json_object;
 };
 
-TEST_F(TestMockMigrationNBDStream, OpenClose) {
+TEST_F(TestMockMigrationNBDStream, OpenInvalidURI) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
-  MockNBDStream mock_nbd_stream(&mock_image_ctx, json_object);
+  m_json_object["uri"] = 123;
+  MockNBDStream mock_nbd_stream(&mock_image_ctx, m_json_object);
 
   C_SaferCond ctx1;
   mock_nbd_stream.open(&ctx1);
-  // Since we don't have an nbd server running, we actually expect a failure.
-  ASSERT_EQ(-22, ctx1.wait());
+  ASSERT_EQ(-EINVAL, ctx1.wait());
+
+  C_SaferCond ctx2;
+  mock_nbd_stream.close(&ctx2);
+  ASSERT_EQ(0, ctx2.wait());
+}
+
+TEST_F(TestMockMigrationNBDStream, OpenMissingURI) {
+  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+
+  m_json_object.clear();
+  MockNBDStream mock_nbd_stream(&mock_image_ctx, m_json_object);
+
+  C_SaferCond ctx1;
+  mock_nbd_stream.open(&ctx1);
+  ASSERT_EQ(-EINVAL, ctx1.wait());
 
   C_SaferCond ctx2;
   mock_nbd_stream.close(&ctx2);

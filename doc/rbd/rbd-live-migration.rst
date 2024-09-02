@@ -313,10 +313,24 @@ The ``nbd`` stream can be used to import from a remote NBD export. Its
             <format unique parameters>
             "stream": {
                 "type": "nbd",
-                "server": "<server>",
-                "port": "<port>"
+                "uri": "<nbd-uri>",
             }
         }
+
+For example, to import a raw-format image from an NBD export located at
+``nbd://nbd.ceph.com`` with export name ``image.raw``, its ``source-spec``
+JSON is encoded as follows::
+
+        {
+            "type": "raw",
+            "stream": {
+                "type": "nbd",
+                "uri": "nbd://nbd.ceph.com/image.raw",
+            }
+        }
+
+``nbd-uri`` parameter should follow the `NBD URI specification`_. The
+default NBD port is ``10809``.
 
 
 Execute Migration
@@ -383,3 +397,4 @@ to the original source image being restored::
 
 
 .. _layered images: ../rbd-snapshot/#layering
+.. _NBD URI specification: https://github.com/NetworkBlockDevice/nbd/blob/master/doc/uri.md

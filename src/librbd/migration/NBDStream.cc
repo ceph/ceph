@@ -14,8 +14,7 @@ namespace migration {
 
 namespace {
 
-const std::string SERVER_KEY {"server"};
-const std::string PORT_KEY {"port"};
+const std::string URI_KEY{"uri"};
 
 int from_nbd_errno(int rc) {
   // nbd_get_errno() needs a default/fallback error:
@@ -209,24 +208,25 @@ NBDStream<I>::~NBDStream() {
 
 template <typename I>
 void NBDStream<I>::open(Context* on_finish) {
+  std::string uri;
   int rc;
 
-  auto& server_value = m_json_object[SERVER_KEY];
-  if (server_value.type() != json_spirit::str_type) {
-    lderr(m_cct) << "failed to locate '" << SERVER_KEY << "' key" << dendl;
+  if (auto it = m_json_object.find(URI_KEY);
+      it != m_json_object.end()) {
+    if (it->second.type() == json_spirit::str_type) {
+      uri = it->second.get_str();
+    } else {
+      lderr(m_cct) << "invalid URI" << dendl;
+      on_finish->complete(-EINVAL);
+      return;
+    }
+  } else {
+    lderr(m_cct) << "missing URI" << dendl;
     on_finish->complete(-EINVAL);
     return;
   }
 
-  auto& port_value = m_json_object[PORT_KEY];
-  if (port_value.type() != json_spirit::str_type) {
-    lderr(m_cct) << "failed to locate '" << PORT_KEY << "' key" << dendl;
-    on_finish->complete(-EINVAL);
-    return;
-  }
-
-  const char *m_server = &(server_value.get_str())[0];
-  const char *m_port = &(port_value.get_str())[0];
+  ldout(m_cct, 10) << "uri=" << uri << dendl;
 
   m_nbd = nbd_create();
   if (m_nbd == nullptr) {
@@ -246,17 +246,14 @@ void NBDStream<I>::open(Context* on_finish) {
     return;
   }
 
-  rc = nbd_connect_tcp(m_nbd, m_server, m_port);
+  rc = nbd_connect_uri(m_nbd, uri.c_str());
   if (rc == -1) {
     rc = nbd_get_errno();
-    lderr(m_cct) << "connect_tcp: " << nbd_get_error()
+    lderr(m_cct) << "connect_uri: " << nbd_get_error()
                  << " (errno = " << rc << ")" << dendl;
     on_finish->complete(from_nbd_errno(rc));
     return;
   }
-
-  ldout(m_cct, 20) << "server=" << m_server << ", "
-                   << "port=" << m_port << dendl;
 
   on_finish->complete(0);
 }

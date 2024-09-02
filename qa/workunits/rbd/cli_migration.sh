@@ -400,7 +400,7 @@ EOF
     remove_image "${dest_image}"
 }
 
-test_import_nbd_stream() {
+test_import_nbd_stream_qcow2() {
     local base_image=$1
     local dest_image=$2
 
@@ -412,8 +412,7 @@ test_import_nbd_stream() {
   "type": "raw",
   "stream": {
     "type": "nbd",
-    "server": "localhost",
-    "port": "10809"
+    "uri": "nbd://localhost"
   }
 }
 EOF
@@ -433,6 +432,142 @@ EOF
     compare_images ${base_image} ${dest_image}
     remove_image "${dest_image}"
 
+    # shortest possible URI
+    rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "nbd://"}}' \
+        ${dest_image}
+    rbd migration abort ${dest_image}
+
+    # non-existing export name
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "nbd:///myexport"}}' \
+        ${dest_image}
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "nbd://localhost/myexport"}}' \
+        ${dest_image}
+
+    kill_nbd_server
+    qemu-nbd --export-name myexport -f qcow2 --read-only --shared 10 --persistent --fork \
+        ${TEMPDIR}/${base_image}.qcow2
+
+    rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "nbd:///myexport"}}' \
+        ${dest_image}
+    rbd migration abort ${dest_image}
+
+    rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "nbd://localhost/myexport"}}' \
+        ${dest_image}
+    rbd migration abort ${dest_image}
+
+    kill_nbd_server
+
+    # server not running
+    expect_false rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "nbd://"}}' \
+        ${dest_image}
+
+    # no URI
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd"}}' \
+        ${dest_image}
+
+    # invalid URI
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": 123456}}' \
+        ${dest_image}
+
+    # libnbd - nbd_get_errno() returns an error
+    # nbd_connect_uri: unknown URI scheme: NULL: Invalid argument (errno = 22)
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": ""}}' \
+        ${dest_image}
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "foo.example.com"}}' \
+        ${dest_image}
+
+    # libnbd - nbd_get_errno() returns 0, EIO fallback
+    # nbd_connect_uri: getaddrinfo: foo.example.com:10809: Name or service not known (errno = 0)
+    expect_false rbd migration prepare --import-only \
+        --source-spec '{"type": "raw", "stream": {"type": "nbd", "uri": "nbd://foo.example.com"}}' \
+        ${dest_image}
+}
+
+test_import_nbd_stream_raw() {
+    local base_image=$1
+    local dest_image=$2
+
+    qemu-nbd -f raw --read-only --shared 10 --persistent --fork \
+        --socket ${TEMPDIR}/qemu-nbd-${base_image} ${TEMPDIR}/${base_image}
+    qemu-nbd -f raw --read-only --shared 10 --persistent --fork \
+        --socket ${TEMPDIR}/qemu-nbd-${base_image}@1 ${TEMPDIR}/${base_image}@1
+    qemu-nbd -f raw --read-only --shared 10 --persistent --fork \
+        --socket ${TEMPDIR}/qemu-nbd-${base_image}@2 ${TEMPDIR}/${base_image}@2
+
+    cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "raw",
+  "stream": {
+    "type": "nbd",
+    "uri": "nbd+unix:///?socket=${TEMPDIR}/qemu-nbd-${base_image}"
+  },
+  "snapshots": [{
+    "type": "raw",
+    "name": "snap1",
+    "stream": {
+      "type": "nbd",
+      "uri": "nbd+unix:///?socket=${TEMPDIR}/qemu-nbd-${base_image}@1"
+     }
+  }, {
+    "type": "raw",
+    "name": "snap2",
+    "stream": {
+      "type": "nbd",
+      "uri": "nbd+unix:///?socket=${TEMPDIR}/qemu-nbd-${base_image}@2"
+     }
+  }]
+}
+EOF
+    cat ${TEMPDIR}/spec.json
+
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+
+    rbd snap create ${dest_image}@head
+    rbd bench --io-type write --io-pattern rand --io-size 32K --io-total 4M ${dest_image}
+
+    compare_images "${base_image}@1" "${dest_image}@snap1"
+    compare_images "${base_image}@2" "${dest_image}@snap2"
+    compare_images "${base_image}" "${dest_image}@head"
+
+    rbd migration abort ${dest_image}
+
+    cat ${TEMPDIR}/spec.json | rbd migration prepare --import-only \
+        --source-spec-path - ${dest_image}
+
+    rbd snap create ${dest_image}@head
+    rbd bench --io-type write --io-pattern rand --io-size 64K --io-total 8M ${dest_image}
+
+    compare_images "${base_image}@1" "${dest_image}@snap1"
+    compare_images "${base_image}@2" "${dest_image}@snap2"
+    compare_images "${base_image}" "${dest_image}@head"
+
+    rbd migration execute ${dest_image}
+
+    compare_images "${base_image}@1" "${dest_image}@snap1"
+    compare_images "${base_image}@2" "${dest_image}@snap2"
+    compare_images "${base_image}" "${dest_image}@head"
+
+    rbd migration commit ${dest_image}
+
+    compare_images "${base_image}@1" "${dest_image}@snap1"
+    compare_images "${base_image}@2" "${dest_image}@snap2"
+    compare_images "${base_image}" "${dest_image}@head"
+
+    remove_image "${dest_image}"
+
     kill_nbd_server
 }
 
@@ -449,8 +584,9 @@ test_import_native_format ${IMAGE1} ${IMAGE2}
 test_import_qcow_format ${IMAGE1} ${IMAGE2}
 
 test_import_qcow2_format ${IMAGE2} ${IMAGE3}
-test_import_nbd_stream ${IMAGE2} ${IMAGE3}
+test_import_nbd_stream_qcow2 ${IMAGE2} ${IMAGE3}
 
 test_import_raw_format ${IMAGE1} ${IMAGE2}
+test_import_nbd_stream_raw ${IMAGE1} ${IMAGE2}
 
 echo OK
