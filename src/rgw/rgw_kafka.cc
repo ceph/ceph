@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_kafka.h"
@@ -21,7 +21,7 @@
 
 // comparison operator between topic pointer and name
 bool operator==(const rd_kafka_topic_t* rkt, const std::string& name) {
-    return name == std::string_view(rd_kafka_topic_name(rkt));
+    return name == std::string_view(rd_kafka_topic_name(rkt)); 
 }
 
 // this is the inverse of rd_kafka_errno2err
@@ -43,7 +43,7 @@ inline int rd_kafka_err2errno(rd_kafka_resp_err_t err) {
   case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
     return EMSGSIZE;
   case RD_KAFKA_RESP_ERR__QUEUE_FULL:
-    return ENOBUFS;
+    return ENOBUFS;                                                                                                                                                                                                                           
   default:
     return EIO;
   }
@@ -131,9 +131,9 @@ inline int status_to_errno(int s) {
 struct reply_callback_with_tag_t {
   uint64_t tag;
   reply_callback_t cb;
-
+  
   reply_callback_with_tag_t(uint64_t _tag, reply_callback_t _cb) : tag(_tag), cb(_cb) {}
-
+  
   bool operator==(uint64_t rhs) {
     return tag == rhs;
   }
@@ -186,10 +186,10 @@ struct connection_t {
   }
 
   // ctor for setting immutable values
-  connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl,
+  connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl, 
           const boost::optional<const std::string&>& _ca_location,
           const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism) :
-      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism) {}
+      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism) {}                                                                                                                                                        
 
   // dtor also destroys the internals
   ~connection_t() {
@@ -204,7 +204,7 @@ void message_callback(rd_kafka_t* rk, const rd_kafka_message_t* rkmessage, void*
   const auto result = rkmessage->err;
 
   if (rkmessage->err == 0) {
-      ldout(conn->cct, 20) << "Kafka run: ack received with result=" <<
+      ldout(conn->cct, 20) << "Kafka run: ack received with result=" << 
         rd_kafka_err2str(result) << dendl;
   } else {
     ldout(conn->cct, 1) << "Kafka run: nack received with result="
@@ -214,7 +214,7 @@ void message_callback(rd_kafka_t* rk, const rd_kafka_message_t* rkmessage, void*
 
   if (!rkmessage->_private) {
     ldout(conn->cct, 20) << "Kafka run: n/ack received without a callback" << dendl;
-    return;
+    return;  
   }
 
   const auto tag = reinterpret_cast<uint64_t*>(rkmessage->_private);
@@ -222,13 +222,13 @@ void message_callback(rd_kafka_t* rk, const rd_kafka_message_t* rkmessage, void*
   const auto& callbacks_begin = conn->callbacks.begin();
   const auto tag_it = std::find(callbacks_begin, callbacks_end, *tag);
   if (tag_it != callbacks_end) {
-      ldout(conn->cct, 20) << "Kafka run: n/ack received, invoking callback with tag=" <<
+      ldout(conn->cct, 20) << "Kafka run: n/ack received, invoking callback with tag=" << 
           *tag << dendl;
       tag_it->cb(-rd_kafka_err2errno(result));
       conn->callbacks.erase(tag_it);
   } else {
     // TODO add counter for acks with no callback
-    ldout(conn->cct, 10) << "Kafka run: unsolicited n/ack received with tag=" <<
+    ldout(conn->cct, 10) << "Kafka run: unsolicited n/ack received with tag=" << 
         *tag << dendl;
   }
   delete tag;
@@ -237,7 +237,7 @@ void message_callback(rd_kafka_t* rk, const rd_kafka_message_t* rkmessage, void*
 
 void log_callback(const rd_kafka_t* rk, int level, const char *fac, const char *buf) {
   ceph_assert(rd_kafka_opaque(rk));
-
+  
   const auto conn = reinterpret_cast<connection_t*>(rd_kafka_opaque(rk));
   if (level <= 3)
     ldout(conn->cct, 1) << "RDKAFKA-" << level << "-" << fac << ": " << rd_kafka_name(rk) << ": " << buf << dendl;
@@ -278,7 +278,7 @@ bool new_producer(connection_t* conn) {
   // however, testing with librdkafka v1.6.1 did not expire the message in that case. hence, a value of zero is changed to 1ms
   constexpr std::uint64_t min_message_timeout = 1;
   const auto message_timeout = std::max(min_message_timeout, conn->cct->_conf->rgw_kafka_message_timeout);
-  if (rd_kafka_conf_set(conf.get(), "message.timeout.ms",
+  if (rd_kafka_conf_set(conf.get(), "message.timeout.ms", 
         std::to_string(message_timeout).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
   // get list of brokers based on the bootstrap broker
@@ -417,7 +417,7 @@ private:
     }
     auto& conn = conn_it->second;
 
-    conn->timestamp = ceph_clock_now();
+    conn->timestamp = ceph_clock_now(); 
 
     ceph_assert(conn->producer);
     if (conn->status != 0) {
@@ -437,7 +437,7 @@ private:
       topic = rd_kafka_topic_new(conn->producer, message->topic.c_str(), nullptr);
       if (!topic) {
         const auto err = rd_kafka_last_error();
-        ldout(conn->cct, 1) << "Kafka publish: failed to create topic: " << message->topic << " error: "
+        ldout(conn->cct, 1) << "Kafka publish: failed to create topic: " << message->topic << " error: " 
           << rd_kafka_err2str(err) << "(" << err << ")" << dendl;
         if (message->cb) {
           message->cb(-rd_kafka_err2errno(err));
@@ -463,7 +463,7 @@ private:
             message->message.data(),
             message->message.length(),
             // optional key and its length
-            nullptr,
+            nullptr, 
             0,
             // opaque data: tag, used in the global callback
             // in order to invoke the real callback
@@ -481,7 +481,7 @@ private:
       delete tag;
       return;
     }
-
+   
     if (tag) {
       auto const q_len = conn->callbacks.size();
       if (q_len < max_inflight) {
@@ -521,12 +521,12 @@ private:
       const auto read_timeout = cct->_conf->rgw_kafka_sleep_timeout;
       // loop over all connections to read acks
       for (;conn_it != end_it;) {
-
+        
         auto& conn = conn_it->second;
 
         // Checking the connection idleness
         if(conn->timestamp.sec() + conn->cct->_conf->rgw_kafka_connection_idle < ceph_clock_now()) {
-          ldout(conn->cct, 20) << "kafka run: deleting a connection that was idle for: " <<
+          ldout(conn->cct, 20) << "kafka run: deleting a connection that was idle for: " << 
             conn->cct->_conf->rgw_kafka_connection_idle << " seconds. last activity was at: " << conn->timestamp << dendl;
           std::lock_guard lock(connections_lock);
           conn->status = STATUS_CONNECTION_IDLE;
@@ -556,8 +556,8 @@ private:
 public:
   Manager(size_t _max_connections,
       size_t _max_inflight,
-      size_t _max_queue,
-      CephContext* _cct) :
+      size_t _max_queue, 
+      CephContext* _cct) : 
     max_connections(_max_connections),
     max_inflight(_max_inflight),
     max_queue(_max_queue),
@@ -569,9 +569,9 @@ public:
     dequeued(0),
     cct(_cct),
     runner(&Manager::run, this) {
-      // The hashmap has "max connections" as the initial number of buckets,
+      // The hashmap has "max connections" as the initial number of buckets, 
       // and allows for 10 collisions per bucket before rehash.
-      // This is to prevent rehashing so that iterators are not invalidated
+      // This is to prevent rehashing so that iterators are not invalidated 
       // when a new connection is added.
       connections.max_load_factor(10.0);
       // give the runner thread a name for easier debugging
@@ -724,7 +724,7 @@ public:
   size_t get_connection_count() const {
     return connection_count;
   }
-
+  
   // get the number of in-flight messages
   size_t get_inflight() const {
     size_t sum = 0;
@@ -752,7 +752,7 @@ static Manager* s_manager = nullptr;
 static std::shared_mutex s_manager_mutex;
 
 static const size_t MAX_CONNECTIONS_DEFAULT = 256;
-static const size_t MAX_INFLIGHT_DEFAULT = 8192;
+static const size_t MAX_INFLIGHT_DEFAULT = 8192; 
 static const size_t MAX_QUEUE_DEFAULT = 8192;
 
 bool init(CephContext* cct) {
@@ -808,7 +808,7 @@ size_t get_connection_count() {
   if (!s_manager) return 0;
   return s_manager->get_connection_count();
 }
-
+  
 size_t get_inflight() {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return 0;
@@ -846,3 +846,4 @@ size_t get_max_queue() {
 }
 
 } // namespace kafka
+

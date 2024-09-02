@@ -70,7 +70,7 @@ added when the notification is committed to persistent storage.
    You can control its retry with time_to_live/max_retries to have a time/retry limit and
    control the retry frequency with retry_sleep_duration
 
-.. tip:: To minimize the latency added by asynchronous notification, we
+.. tip:: To minimize the latency added by asynchronous notification, we 
    recommended placing the "log" pool on fast media.
 
 
@@ -92,7 +92,7 @@ Fetch the configuration of a specific topic by running the following command:
    radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
-Remove a topic by running the following command:
+Remove a topic by running the following command: 
 
 .. prompt:: bash #
 
@@ -125,7 +125,7 @@ Topics
     In all topic actions, the parameters are URL-encoded and sent in the
     message body using this content type:
     ``application/x-www-form-urlencoded``.
-
+   
 
 .. _Create a Topic:
 
@@ -230,7 +230,7 @@ Request parameters:
    the client. (This is "true" by default.)
  - If ``ca-location`` is provided and a secure connection is used, the
    specified CA will be used to authenticate the broker. The default CA will
-   not be used.
+   not be used.  
  - amqp-exchange: The exchanges must exist and must be able to route messages
    based on topics. This parameter is mandatory.
  - amqp-ack-level: No end2end acking is required. Messages may persist in the
@@ -251,7 +251,7 @@ Request parameters:
    connect to the broker. (This is "false" by default.)
  - ``ca-location``: If this is provided and a secure connection is used, the
    specified CA will be used instead of the default CA to authenticate the
-   broker.
+   broker. 
  - user/password: This should be provided over HTTPS. If not, the config parameter `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topics.
  - user/password: This should be provided together with ``use-ssl``. If not, the broker credentials will be sent over insecure transport.
  - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
@@ -330,23 +330,23 @@ The response has the following format:
                 <entry>
                     <key>User</key>
                     <value></value>
-                </entry>
+                </entry> 
                 <entry>
                     <key>Name</key>
                     <value></value>
-                </entry>
+                </entry> 
                 <entry>
                     <key>EndPoint</key>
                     <value></value>
-                </entry>
+                </entry> 
                 <entry>
                     <key>TopicArn</key>
                     <value></value>
-                </entry>
+                </entry> 
                 <entry>
                     <key>OpaqueData</key>
                     <value></value>
-                </entry>
+                </entry> 
             </Attributes>
         </GetTopicAttributesResult>
         <ResponseMetadata>
@@ -361,7 +361,7 @@ The response has the following format:
    - EndpointArgs: The push-endpoint args.
    - EndpointTopic: The topic name to be sent to the endpoint (can be different
      than the above topic name).
-   - HasStoredSecret: This is "true" if the endpoint URL contains user/password
+   - HasStoredSecret: This is "true" if the endpoint URL contains user/password 
      information. In this case, the request must be made over HTTPS. The "topic
      get" request will otherwise be rejected.
    - Persistent: This is "true" if the topic is persistent.
@@ -539,17 +539,17 @@ Valid AttributeName that can be passed:
   - ``use-ssl``: If this is set to "true", a secure connection is used to
     connect to the broker. This is "false" by default.
   - cloudevents: This indicates whether the HTTP header should contain
-    attributes according to the `S3 CloudEvents Spec`_.
+    attributes according to the `S3 CloudEvents Spec`_. 
   - amqp-exchange: The exchanges must exist and must be able to route messages
     based on topics.
   - amqp-ack-level: No end2end acknowledgement is required. Messages may persist in the
-    broker before being delivered to their final destinations.
+    broker before being delivered to their final destinations. 
   - ``ca-location``: If this is provided and a secure connection is used, the
     specified CA will be used instead of the default CA to authenticate the
-    broker.
+    broker. 
   - mechanism: may be provided together with user/password (default: ``PLAIN``).
   - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
-    broker before being delivered to their final destinations.
+    broker before being delivered to their final destinations. 
   - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
 
 Notifications
