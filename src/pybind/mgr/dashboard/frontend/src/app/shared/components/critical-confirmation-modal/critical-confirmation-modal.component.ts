@@ -21,8 +21,8 @@ export class CriticalConfirmationModalComponent extends BaseModal implements OnI
   childFormGroupTemplate: TemplateRef<any>;
 
   constructor(
-    @Optional() @Inject('itemNames') public itemNames: string[],
     @Optional() @Inject('itemDescription') public itemDescription: 'entry',
+    @Optional() @Inject('itemNames') public itemNames: string[],
     @Optional() @Inject('actionDescription') public actionDescription = 'delete',
     @Optional() @Inject('submitAction') public submitAction?: Function,
     @Optional() @Inject('backAction') public backAction?: Function,

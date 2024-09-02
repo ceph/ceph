@@ -17,7 +17,6 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -53,7 +52,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
     private router: Router,
     private urlBuilder: URLBuilderService,
     private configurationService: ConfigurationService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
     public notificationService: NotificationService,
     private healthService: HealthService,
@@ -199,13 +198,9 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
 
   authorizeModal() {
     const selectedFileSystem = this.selection?.selected?.[0];
-    this.modalService.show(
-      CephfsAuthModalComponent,
-      {
-        fsName: selectedFileSystem.mdsmap['fs_name'],
-        id: selectedFileSystem.id
-      },
-      { size: 'lg' }
-    );
+    this.modalService.show(CephfsAuthModalComponent, {
+      fsName: selectedFileSystem.mdsmap['fs_name'],
+      id: selectedFileSystem.id
+    });
   }
 }

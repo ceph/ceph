@@ -8,7 +8,7 @@ html {
 html,
 body {
   // WARNING: This was clashing with Carbon's font-size
-  // font-size: 12px;
+  font-size: 16px;
   height: 100%;
   width: 100%;
 }
@@ -110,4 +110,11 @@ mark {
 
 a.nav-link {
   color: vv.$primary;
+}
+
+// Should be removed once bootstrap is completely removed from the code
+// for more info: https://github.com/ceph/ceph/pull/58478#pullrequestreview-2254120764
+ol,
+ul {
+  padding-left: 0;
 }

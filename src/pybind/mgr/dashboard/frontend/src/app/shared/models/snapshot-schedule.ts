@@ -1,4 +1,4 @@
-import { NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
+import { NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 
 export interface SnapshotSchedule {
   fs?: string;
@@ -20,7 +20,7 @@ export interface SnapshotSchedule {
 
 export interface SnapshotScheduleFormValue {
   directory: string;
-  startDate: NgbDateStruct;
+  startDate: string;
   startTime: NgbTimeStruct;
   repeatInterval: number;
   repeatFrequency: string;

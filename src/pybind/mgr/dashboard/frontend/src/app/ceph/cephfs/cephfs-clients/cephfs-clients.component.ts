@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { TableStatusViewCache } from '~/app/shared/classes/table-status-view-cache';
@@ -13,7 +14,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
@@ -21,7 +22,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './cephfs-clients.component.html',
   styleUrls: ['./cephfs-clients.component.scss']
 })
-export class CephfsClientsComponent implements OnInit {
+export class CephfsClientsComponent extends BaseModal implements OnInit {
   @Input()
   id: number;
 
@@ -44,11 +45,12 @@ export class CephfsClientsComponent implements OnInit {
 
   constructor(
     private cephfsService: CephfsService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
     private actionLabels: ActionLabelsI18n
   ) {
+    super();
     this.permission = this.authStorageService.getPermissions().cephfs;
     const evictAction: CdTableAction = {
       permission: 'update',
@@ -78,7 +80,7 @@ export class CephfsClientsComponent implements OnInit {
     this.cephfsService.evictClient(this.id, clientId).subscribe(
       () => {
         this.triggerApiUpdate.emit();
-        this.modalRef.close();
+        this.closeModal();
         this.notificationService.show(
           NotificationType.success,
           $localize`Evicted client '${clientId}'`

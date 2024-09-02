@@ -1,6 +1,6 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, Inject, OnInit, Optional } from '@angular/core';
 import { AbstractControl, FormArray, FormControl, FormGroup, Validators } from '@angular/forms';
-import { NgbActiveModal, NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
+import { NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 import { padStart, uniq } from 'lodash';
 import { Observable, OperatorFunction, of, timer } from 'rxjs';
 import {
@@ -42,16 +42,8 @@ const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
   styleUrls: ['./cephfs-snapshotschedule-form.component.scss']
 })
 export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnInit {
-  fsName!: string;
-  path!: string;
-  schedule!: string;
-  retention!: string;
-  start!: string;
-  status!: string;
   subvol!: string;
   group!: string;
-  id!: number;
-  isEdit = false;
   icons = Icons;
   repeatFrequencies = Object.entries(RepeatFrequency);
   retentionFrequencies = Object.entries(RetentionFrequency);
@@ -61,8 +53,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
   subvolume!: string;
   isSubvolume = false;
 
-  currentTime!: NgbTimeStruct;
-  minDate!: NgbDateStruct;
+  minDate!: string;
 
   snapScheduleForm!: CdFormGroup;
 
@@ -72,28 +63,29 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
   columns!: CdTableColumn[];
 
   constructor(
-    public activeModal: NgbActiveModal,
     private actionLabels: ActionLabelsI18n,
     private snapScheduleService: CephfsSnapshotScheduleService,
     private taskWrapper: TaskWrapperService,
     private cd: ChangeDetectorRef,
     public directoryStore: DirectoryStoreService,
-    private subvolumeService: CephfsSubvolumeService
+    private subvolumeService: CephfsSubvolumeService,
+
+    @Optional() @Inject('fsName') public fsName: string,
+    @Optional() @Inject('id') public id: number,
+    @Optional() @Inject('path') public path: string,
+    @Optional() @Inject('schedule') public schedule: string,
+    @Optional() @Inject('retention') public retention: string,
+    @Optional() @Inject('start') public start: string,
+    @Optional() @Inject('status') public status: string,
+    @Optional() @Inject('isEdit') public isEdit = false
   ) {
     super();
     this.resource = $localize`Snapshot schedule`;
 
     const currentDatetime = new Date();
-    this.minDate = {
-      year: currentDatetime.getUTCFullYear(),
-      month: currentDatetime.getUTCMonth() + 1,
-      day: currentDatetime.getUTCDate()
-    };
-    this.currentTime = {
-      hour: currentDatetime.getUTCHours(),
-      minute: currentDatetime.getUTCMinutes(),
-      second: currentDatetime.getUTCSeconds()
-    };
+    this.minDate = `${currentDatetime.getUTCFullYear()}-${
+      currentDatetime.getUTCMonth() + 1
+    }-${currentDatetime.getUTCDate()}`;
   }
 
   ngOnInit(): void {
@@ -177,17 +169,17 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
         this.snapScheduleForm.get('directory').disable();
         this.snapScheduleForm.get('directory').setValue(first.path);
         this.snapScheduleForm.get('startDate').disable();
-        this.snapScheduleForm.get('startDate').setValue({
-          year: new Date(first.start).getUTCFullYear(),
-          month: new Date(first.start).getUTCMonth() + 1,
-          day: new Date(first.start).getUTCDate()
-        });
-        this.snapScheduleForm.get('startTime').disable();
-        this.snapScheduleForm.get('startTime').setValue({
-          hour: new Date(first.start).getUTCHours(),
-          minute: new Date(first.start).getUTCMinutes(),
-          second: new Date(first.start).getUTCSeconds()
-        });
+        this.snapScheduleForm
+          .get('startDate')
+          .setValue(
+            `${new Date(first.start).getUTCFullYear()}-${
+              new Date(first.start).getUTCMonth() + 1
+            }-${new Date(first.start).getUTCDate()} ${new Date(
+              first.start
+            ).getUTCHours()}:${new Date(first.start).getUTCMinutes()}:${new Date(
+              first.start
+            ).getUTCSeconds()}`
+          );
         this.snapScheduleForm.get('repeatInterval').disable();
         this.snapScheduleForm.get('repeatInterval').setValue(first.schedule.split('')?.[0]);
         this.snapScheduleForm.get('repeatFrequency').disable();
@@ -221,9 +213,6 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
           validators: [Validators.required]
         }),
         startDate: new FormControl(this.minDate, {
-          validators: [Validators.required]
-        }),
-        startTime: new FormControl(this.currentTime, {
           validators: [Validators.required]
         }),
         repeatInterval: new FormControl(1, {
@@ -329,7 +318,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
                 this.snapScheduleForm.setErrors({ cdSubmitButton: true });
               },
               complete: () => {
-                this.activeModal.close();
+                this.closeModal();
               }
             });
         } else {
@@ -337,7 +326,9 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
             fs: this.fsName,
             path: values.directory,
             snap_schedule: this.parseSchedule(values?.repeatInterval, values?.repeatFrequency),
-            start: this.parseDatetime(values?.startDate, values?.startTime)
+            start: new Date(values?.startDate.replace(/\//g, '-').replace(' ', 'T'))
+              .toISOString()
+              .slice(0, 19)
           };
 
           const retentionPoliciesValues = this.parseRetentionPolicies(values?.retentionPolicies);
@@ -353,7 +344,6 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
           if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
             snapScheduleObj['group'] = this.subvolumeGroup;
           }
-
           this.taskWrapper
             .wrapTaskAroundCall({
               task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.CREATE, {
@@ -366,7 +356,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
                 this.snapScheduleForm.setErrors({ cdSubmitButton: true });
               },
               complete: () => {
-                this.activeModal.close();
+                this.closeModal();
               }
             });
         }

@@ -23,7 +23,7 @@
 
       <div class="form-item">
         <cds-text-label for="clusterName"
-                        [invalid]="editPeerForm.controls['clusterName'].invalid && (editPeerForm.controls['clusterName'].dirty || editPeerForm.controls['clusterName'].touched)"
+                        [invalid]="editPeerForm.controls['clusterName'].invalid && (editPeerForm.controls['clusterName'].dirty)"
                         [invalidText]="clusterNameError"
                         cdRequiredField="Cluster Name"
                         i18n>Cluster Name
@@ -34,7 +34,7 @@
                  id="clusterName"
                  name="clusterName"
                  formControlName="clusterName"
-                 [invalid]="editPeerForm.controls['clusterName'].invalid && (editPeerForm.controls['clusterName'].dirty || editPeerForm.controls['clusterName'].touched)"
+                 [invalid]="editPeerForm.controls['clusterName'].invalid && (editPeerForm.controls['clusterName'].dirty)"
                  autofocus>
         </cds-text-label>
         <ng-template #clusterNameError>
@@ -49,7 +49,7 @@
 
       <div class="form-item">
         <cds-text-label for="clientID"
-                        [invalid]="editPeerForm.controls['clientID'].invalid && (editPeerForm.controls['clientID'].dirty || editPeerForm.controls['clientID'].touched)"
+                        [invalid]="editPeerForm.controls['clientID'].invalid && (editPeerForm.controls['clientID'].dirty)"
                         [invalidText]="clientIDError"
                         cdRequiredField="CephX ID"
                         i18n>CephX ID
@@ -60,7 +60,7 @@
                  id="clientID"
                  name="clientID"
                  formControlName="clientID"
-                 [invalid]="editPeerForm.controls['clientID'].invalid && (editPeerForm.controls['clientID'].dirty || editPeerForm.controls['clientID'].touched)">
+                 [invalid]="editPeerForm.controls['clientID'].invalid && (editPeerForm.controls['clientID'].dirty)">
         </cds-text-label>
         <ng-template #clientIDError>
           <span class="invalid-feedback"
@@ -74,7 +74,7 @@
 
       <div class="form-item">
         <cds-text-label for="monAddr"
-                        [invalid]="editPeerForm.controls['monAddr'].invalid && (editPeerForm.controls['monAddr'].dirty || editPeerForm.controls['monAddr'].touched)"
+                        [invalid]="editPeerForm.controls['monAddr'].invalid && (editPeerForm.controls['monAddr'].dirty)"
                         [invalidText]="monAddrError"
                         i18n>Monitor Addresses
           <input cdsText
@@ -84,7 +84,7 @@
                  id="monAddr"
                  name="monAddr"
                  formControlName="monAddr"
-                 [invalid]="editPeerForm.controls['monAddr'].invalid && (editPeerForm.controls['monAddr'].dirty || editPeerForm.controls['monAddr'].touched)">
+                 [invalid]="editPeerForm.controls['monAddr'].invalid && (editPeerForm.controls['monAddr'].dirty)">
         </cds-text-label>
         <ng-template #monAddrError>
           <span class="invalid-feedback"
@@ -95,7 +95,7 @@
 
       <div class="form-item">
         <cds-text-label for="key"
-                        [invalid]="editPeerForm.controls['key'].invalid && (editPeerForm.controls['key'].dirty || editPeerForm.controls['key'].touched)"
+                        [invalid]="editPeerForm.controls['key'].invalid && (editPeerForm.controls['key'].dirty)"
                         [invalidText]="keyError"
                         i18n>CephX Key
           <input cdsText
@@ -105,7 +105,7 @@
                  id="key"
                  name="key"
                  formControlName="key"
-                 [invalid]="editPeerForm.controls['key'].invalid && (editPeerForm.controls['key'].dirty || editPeerForm.controls['key'].touched)">
+                 [invalid]="editPeerForm.controls['key'].invalid && (editPeerForm.controls['key'].dirty)">
         </cds-text-label>
         <ng-template #keyError>
           <span class="invalid-feedback"

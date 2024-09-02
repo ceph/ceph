@@ -4,14 +4,12 @@ import { ActivatedRoute, Router } from '@angular/router';
 import _ from 'lodash';
 
 import { NgbNav, NgbTooltip, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
-import { merge, Observable, Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
+import { forkJoin, Observable, Subject } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
-import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -48,14 +46,18 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
   editing: boolean;
   icons = Icons;
   hosts: any;
-  labels: string[];
+  labels: any;
   hasOrchestrator: boolean;
   currentVolumeName: string;
   fsId: number;
   disableRename: boolean = true;
+  hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
 
   fsFailCmd: string;
   fsSetCmd: string;
+
+  selectedLabels: string[] = [];
+  selectedHosts: string[] = [];
 
   constructor(
     private router: Router,
@@ -71,20 +73,10 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     this.editing = this.router.url.startsWith(`/cephfs/fs/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`File System`;
-    this.hosts = {
-      options: [],
-      messages: new SelectMessages({
-        empty: $localize`There are no hosts.`,
-        filter: $localize`Filter hosts`
-      })
-    };
     this.createForm();
   }
 
   private createForm() {
-    this.orchService.status().subscribe((status) => {
-      this.hasOrchestrator = status.available;
-    });
     this.form = this.formBuilder.group({
       name: new FormControl('', {
         validators: [
@@ -92,7 +84,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
           Validators.required
         ]
       }),
-      placement: ['hosts'],
+      placement: [''],
       hosts: [[]],
       label: [
         null,
@@ -104,6 +96,10 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
         ]
       ],
       unmanaged: [false]
+    });
+    this.orchService.status().subscribe((status) => {
+      this.hasOrchestrator = status.available;
+      this.form.get('placement').setValue(this.hasOrchestrator ? 'hosts' : '');
     });
   }
 
@@ -128,36 +124,24 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
       });
     } else {
       const hostContext = new CdTableFetchDataContext(() => undefined);
-      this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: object[]) => {
-        const options: SelectOption[] = [];
-        _.forEach(resp, (host: object) => {
-          if (_.get(host, 'sources.orchestrator', false)) {
-            const option = new SelectOption(false, _.get(host, 'hostname'), '');
-            options.push(option);
-          }
-        });
-        this.hosts.options = [...options];
-      });
-      this.hostService.getLabels().subscribe((resp: string[]) => {
-        this.labels = resp;
-      });
+      this.hostsAndLabels$ = forkJoin({
+        hosts: this.hostService.list(hostContext.toParams(), 'false'),
+        labels: this.hostService.getLabels()
+      }).pipe(
+        map(({ hosts, labels }) => ({
+          hosts: hosts.map((host: any) => ({ content: host['hostname'] })),
+          labels: labels.map((label: string) => ({ content: label }))
+        }))
+      );
     }
     this.orchStatus$ = this.orchService.status();
+    this.loadingReady();
   }
 
-  searchLabels = (text$: Observable<string>) => {
-    return merge(
-      text$.pipe(debounceTime(200), distinctUntilChanged()),
-      this.labelFocus,
-      this.labelClick.pipe(filter(() => !this.typeahead.isPopupOpen()))
-    ).pipe(
-      map((value) =>
-        this.labels
-          .filter((label: string) => label.toLowerCase().indexOf(value.toLowerCase()) > -1)
-          .slice(0, 10)
-      )
-    );
-  };
+  multiSelector(event: any, field: 'label' | 'hosts') {
+    if (field === 'label') this.selectedLabels = event.map((label: any) => label.content);
+    else this.selectedHosts = event.map((host: any) => host.content);
+  }
 
   submit() {
     const volumeName = this.form.get('name').value;
@@ -188,11 +172,11 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
       switch (values['placement']) {
         case 'hosts':
           if (values['hosts'].length > 0) {
-            serviceSpec['placement']['hosts'] = values['hosts'];
+            serviceSpec['placement']['hosts'] = this.selectedHosts;
           }
           break;
         case 'label':
-          serviceSpec['placement']['label'] = values['label'];
+          serviceSpec['placement']['label'] = this.selectedLabels;
           break;
       }
 

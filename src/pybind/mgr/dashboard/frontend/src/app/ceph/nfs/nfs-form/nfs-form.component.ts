@@ -469,6 +469,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
     this.setPathValidation();
   }
 
+  onExportTypeChange() {
+    this.nfsForm.getValue('rgw_export_type') === RgwExportType.BUCKET
+      ? this.setBucket()
+      : this.setUsers();
+  }
+
   accessTypeChangeHandler() {
     const name = this.nfsForm.getValue('name');
     const accessType = this.nfsForm.getValue('access_type');
