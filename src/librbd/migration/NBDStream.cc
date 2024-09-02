@@ -17,6 +17,14 @@ namespace {
 const std::string SERVER_KEY {"server"};
 const std::string PORT_KEY {"port"};
 
+int from_nbd_errno(int rc) {
+  // nbd_get_errno() needs a default/fallback error:
+  // "Even when a call returns an error, nbd_get_errno() might return 0.
+  // This does not mean there was no error. It means no additional errno
+  // information is available for this error."
+  return rc > 0 ? -rc : -EIO;
+}
+
 int extent_cb(void* data, const char* metacontext, uint64_t offset,
               uint32_t* entries, size_t nr_entries, int* error) {
   auto sparse_extents = reinterpret_cast<io::SparseExtents*>(data);
@@ -86,7 +94,7 @@ struct NBDStream<I>::ReadRequest {
       lderr(cct) << "pread " << byte_offset << "~" << byte_length << ": "
                  << nbd_get_error() << " (errno = " << rc << ")"
                  << dendl;
-      finish(rc);
+      finish(from_nbd_errno(rc));
       return;
     }
 
@@ -222,24 +230,28 @@ void NBDStream<I>::open(Context* on_finish) {
 
   m_nbd = nbd_create();
   if (m_nbd == nullptr) {
-    lderr(m_cct) << "failed to create nbd object '" << dendl;
-    on_finish->complete(-EINVAL);
+    rc = nbd_get_errno();
+    lderr(m_cct) << "create: " << nbd_get_error()
+                 << " (errno = " << rc << ")" << dendl;
+    on_finish->complete(from_nbd_errno(rc));
     return;
   }
 
   rc = nbd_add_meta_context(m_nbd, LIBNBD_CONTEXT_BASE_ALLOCATION);
   if (rc == -1) {
-    lderr(m_cct) << "failed to add nbd meta context '" << dendl;
-    on_finish->complete(-EINVAL);
+    rc = nbd_get_errno();
+    lderr(m_cct) << "add_meta_context: " << nbd_get_error()
+                 << " (errno = " << rc << ")" << dendl;
+    on_finish->complete(from_nbd_errno(rc));
     return;
   }
 
   rc = nbd_connect_tcp(m_nbd, m_server, m_port);
   if (rc == -1) {
     rc = nbd_get_errno();
-    lderr(m_cct) << "failed to connect to nbd server: " << nbd_get_error()
-                 << " (errno=" << rc << ")" << dendl;
-    on_finish->complete(rc);
+    lderr(m_cct) << "connect_tcp: " << nbd_get_error()
+                 << " (errno = " << rc << ")" << dendl;
+    on_finish->complete(from_nbd_errno(rc));
     return;
   }
 
