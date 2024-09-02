@@ -241,10 +241,7 @@ class RGWDataChangesLog {
   std::unique_ptr<DataLogBackends> bes;
 
   const int num_shards;
-  std::string get_prefix() {
-    auto prefix = cct->_conf->rgw_data_log_obj_prefix;
-    return prefix.empty() ? prefix : "data_log";
-  }
+  std::string get_prefix() { return "data_log"; }
   std::string metadata_log_oid() {
     return get_prefix() + "generations_metadata";
   }

@@ -149,7 +149,6 @@ file under each ``[client.radosgw.{instance-name}]`` instance.
 .. confval:: rgw_run_sync_thread
 .. confval:: rgw_data_log_window
 .. confval:: rgw_data_log_changes_size
-.. confval:: rgw_data_log_obj_prefix
 .. confval:: rgw_data_log_num_shards
 .. confval:: rgw_md_log_max_shards
 .. confval:: rgw_data_sync_poll_interval
