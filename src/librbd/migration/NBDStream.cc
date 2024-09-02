@@ -277,7 +277,16 @@ template <typename I>
 void NBDStream<I>::get_size(uint64_t* size, Context* on_finish) {
   ldout(m_cct, 20) << dendl;
 
-  *size = nbd_get_size(m_nbd);
+  int64_t rc = nbd_get_size(m_nbd);
+  if (rc == -1) {
+    rc = nbd_get_errno();
+    lderr(m_cct) << "get_size: " << nbd_get_error()
+                 << " (errno = " << rc << ")" << dendl;
+    on_finish->complete(from_nbd_errno(rc));
+    return;
+  }
+
+  *size = rc;
   on_finish->complete(0);
 }
 
