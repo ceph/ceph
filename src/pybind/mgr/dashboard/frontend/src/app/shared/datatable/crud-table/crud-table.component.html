@@ -31,7 +31,7 @@
     </div>
     <ng-container *ngIf="expandedRow && meta.detail_columns.length > 0">
       <table *cdTableDetail
-             class="table table-striped table-bordered">
+             class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
         <tbody>
           <tr *ngFor="let column of meta.detail_columns">
             <td i18n

@@ -21,9 +21,11 @@ describe('Muti-cluster management page', () => {
   it('should authenticate the second cluster', () => {
     multiCluster.auth(url, alias, username, password);
     multiCluster.existTableCell(alias);
+    multiCluster.checkConnectionStatus(alias, 'CONNECTED');
   });
 
   it('should switch to the second cluster and back to hub', () => {
+    multiCluster.checkConnectionStatus(alias, 'CONNECTED');
     dashboard.navigateTo();
     cy.get('[data-testid="selected-cluster"]').click();
     cy.get('[data-testid="select-a-cluster"]').contains(alias).click();
@@ -38,16 +40,19 @@ describe('Muti-cluster management page', () => {
   });
 
   it('should reconnect the second cluster', () => {
+    multiCluster.checkConnectionStatus(alias, 'CONNECTED');
     multiCluster.reconnect(alias, password);
     multiCluster.existTableCell(alias);
   });
 
   it('should edit the second cluster', () => {
+    multiCluster.checkConnectionStatus(alias, 'CONNECTED');
     multiCluster.edit(alias, editedAlias);
     multiCluster.existTableCell(editedAlias);
   });
 
   it('should disconnect the second cluster', () => {
+    multiCluster.checkConnectionStatus(editedAlias, 'CONNECTED');
     multiCluster.disconnect(editedAlias);
     multiCluster.existTableCell(editedAlias, false);
   });

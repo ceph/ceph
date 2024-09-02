@@ -251,7 +251,9 @@ export abstract class PageHelper {
    * Grabs striped tables
    */
   getStatusTables() {
-    return cy.get('.table.table-striped');
+    return cy.get(
+      '.cds--data-table--sort.cds--data-table--no-border.cds--data-table.cds--data-table--md'
+    );
   }
 
   filterTable(name: string, option: string) {

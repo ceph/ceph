@@ -19,7 +19,7 @@ export class ListWithDetails {
       this.staleTimeout = window.setTimeout(() => {
         this.ngZone.run(() => {
           this.tableStatus = new TableStatus(
-            'warning',
+            'secondary',
             $localize`The user list data might be stale. If needed, you can manually reload it.`
           );
         });

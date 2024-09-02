@@ -35,7 +35,7 @@ describe('RgwUserDetailsComponent', () => {
     fixture.detectChanges();
 
     const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
-      '.table.table-striped.table-bordered tr td'
+      '.cds--data-table--sort.cds--data-table--no-border tr td'
     );
     expect(detailsTab[10].textContent).toEqual('System user');
     expect(detailsTab[11].textContent).toEqual('Yes');
@@ -61,7 +61,7 @@ describe('RgwUserDetailsComponent', () => {
     fixture.detectChanges();
 
     const detailsTab = fixture.debugElement.nativeElement.querySelectorAll(
-      '.table.table-striped.table-bordered tr td'
+      '.cds--data-table--sort.cds--data-table--no-border tr td'
     );
     expect(detailsTab[14].textContent).toEqual('MFAs(Id)');
     expect(detailsTab[15].textContent).toEqual('testMFA1, testMFA2');
