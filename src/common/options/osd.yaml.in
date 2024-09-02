@@ -560,6 +560,17 @@ options:
   see_also:
   - osd_scrub_retry_delay
   with_legacy: false
+- name: osd_scrub_retry_trimming
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying to scrub a previously snap-trimming PG
+  long_desc: Minimum delay after a failed attempt to scrub a PG that was performing
+    snap trimming and not available for scrubbing.
+  default: 10
+  min: 1
+  see_also:
+  - osd_scrub_retry_delay
+  with_legacy: false
 - name: osd_scrub_disable_reservation_queuing
   type: bool
   level: advanced

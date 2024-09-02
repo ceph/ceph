@@ -2332,7 +2332,8 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     // i.e. some time before setting 'snaptrim'.
     dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
     requeue_penalized(
-	s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state, clock_now);
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::snap_trimming,
+	clock_now);
     return schedule_result_t::target_specific_failure;
   }
 

@@ -313,6 +313,9 @@ SchedTarget& ScrubJob::delay_on_failure(
     case delay_cause_t::pg_state:
       delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_pg_state"));
       break;
+    case delay_cause_t::snap_trimming:
+      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_trimming"));
+      break;
     case delay_cause_t::local_resources:
     default:
       // for all other possible delay causes: use the default delay
