@@ -30,13 +30,15 @@ namespace rgw::dedup {
     void resume(rgw::sal::Driver* _driver) override;
 
   private:
+    void run();
+    int  setup();
+    void handle_pause_request();
+
     enum dedup_step_t {
       STEP_NONE,
       STEP_BUILD_TABLE,
       STEP_REMOVE_DUPLICATES
     };
-    void run();
-    int  setup();
     int  read_buckets();
     bool need_to_update_heartbeat();
     inline int  check_and_update_worker_heartbeat(work_shard_t worker_id, int64_t obj_count);
@@ -96,15 +98,11 @@ namespace rgw::dedup {
 
     void init_rados_access_handles();
 
+    // private data members
     rgw::sal::Driver* driver = nullptr;
     rgw::sal::RadosStore* store = nullptr;
     RGWRados* rados = nullptr;
     librados::Rados* rados_handle = nullptr;
-    bool stopped = false;
-    bool started = false;
-    bool paused = false;
-    bool pause_req = false;
-    int execute_interval;
     const DoutPrefix dp;
     const DoutPrefixProvider* const dpp;
     CephContext* const cct;
@@ -114,10 +112,18 @@ namespace rgw::dedup {
     librados::IoCtx    *p_dedup_cluster_ioctx = nullptr;
     utime_t  d_heart_beat_last_update;
     unsigned d_heart_beat_max_elapsed_sec;
-    std::thread runner;
-    std::mutex cond_mutex;
-    std::mutex pause_mutex;
-    std::condition_variable cond;
+
+    // allow to start/pasue/resume/stop execution
+    bool d_stopped   = false;
+    bool d_started   = false;
+    bool d_paused    = false;
+    bool d_pause_req = false;
+    int  d_execute_interval;
+
+    std::thread d_runner;
+    std::mutex  d_cond_mutex;
+    std::mutex  d_pause_mutex;
+    std::condition_variable d_cond;
   };
 
 } //namespace rgw::dedup

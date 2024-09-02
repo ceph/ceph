@@ -89,12 +89,12 @@ namespace rgw::dedup {
 			 CephContext* _cct,
 			 int _execute_interval) :
     driver(_driver),
-    execute_interval(_execute_interval),
     dp(_cct, dout_subsys, "dedup background: "),
     dpp(&dp),
     cct(_cct),
-    d_table(16*1024*1024, dpp), // 128M entries per-shard
-    d_cluster(dpp)
+    d_table(16*1024*1024, dpp), // 16M entries per-shard
+    d_cluster(dpp),
+    d_execute_interval(_execute_interval)
   {
     for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
       // TBD: check allocation success
@@ -110,84 +110,14 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   Background::~Background()
   {
+    // TBD:
+    // Do we need to stop the runner thread first ???
     for (unsigned md5_shard = 0; md5_shard < MAX_MD5_SHARD; md5_shard++) {
       if (p_disk_arr[md5_shard]) {
 	delete p_disk_arr[md5_shard];
       }
     }
-  }
-
-  //---------------------------------------------------------------------------
-  void Background::start()
-  {
-    const DoutPrefixProvider* const dpp = &dp;
-    ldpp_dout(dpp, 1) <<  __FILE__ << "::" <<__func__ << dendl;
-    {
-      std::unique_lock pause_lock(pause_mutex);
-      if (started) {
-	// start the thread only once
-	return;
-      }
-      started = true;
-    }
-    runner = std::thread(&Background::run, this);
-    const auto rc = ceph_pthread_setname(runner.native_handle(), "dedup_bg");
-    ldpp_dout(dpp, 1) <<  __FILE__ << "::" <<__func__ << "::setname rc=" << rc << dendl;
-  }
-
-  //------------------------- --------------------------------------------------
-  void Background::shutdown()
-  {
-    stopped = true;
-    cond.notify_all();
-    if (runner.joinable()) {
-      runner.join();
-    }
-    {
-      std::unique_lock pause_lock(pause_mutex);
-      started = false;
-      stopped = false;
-      pause_req = false;
-      paused = false;
-    }
-  }
-
-  //---------------------------------------------------------------------------
-  void Background::pause()
-  {
-    {
-      std::unique_lock pause_lock(pause_mutex);
-      if (paused) {
-	derr <<  __FILE__ << "::" <<__func__
-	     << "::background is already paused!!!" << dendl;
-	pause_req = true;
-      }
-      std::unique_lock cond_lock(cond_mutex);
-      cond.wait(cond_lock, [this]{return paused || stopped;});
-    }
-  }
-
-  //---------------------------------------------------------------------------
-  void Background::resume(rgw::sal::Driver* _driver)
-  {
-    {
-      std::unique_lock pause_lock(pause_mutex);
-      if (!paused) {
-	derr <<  __FILE__ << "::" <<__func__
-	     << "::background is not paused!!!" << dendl;
-	if (_driver != driver) {
-	  derr <<  __FILE__ << "::" <<__func__
-	       << "::attempt to change driver on a live task failed!!!" << dendl;
-	}
-	return;
-      }
-      pause_req = false;
-      paused    = false;
-      driver    = _driver;
-      init_rados_access_handles();
-    }
-    // wake up threads blocked after seeing pause state
-    cond.notify_all();
+    delete p_dedup_cluster_ioctx;
   }
 
   //---------------------------------------------------------------------------
@@ -642,6 +572,9 @@ namespace rgw::dedup {
   // if the record's key doesn’t exist in table -> skip it (it is a singleton and it was purged)
   // If the record block-index matches the hashtable entry -> skip it (it is the SRC object)
   // All other entries are Dedicated-Manifest-Objects with a valid SRC object
+
+  // we can withstand most errors moving to the next object
+  // only report an error if we recived a stop scan request!
   //
   int Background::try_deduping_record(const disk_record_t *p_tgt_rec,
 				      disk_block_id_t      block_id,
@@ -694,8 +627,6 @@ namespace rgw::dedup {
       return 0;
     }
 
-    check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
-				   p_stats->processed_objects);
     // This records is a dedup target with source record on source_block_id
     disk_record_t src_rec;
     ret = load_record(p_dedup_cluster_ioctx, &src_rec, src_block_id, src_rec_id, md5_shard, &key, dpp);
@@ -751,7 +682,9 @@ namespace rgw::dedup {
 	}
       }
     }
-    return ret;
+    // we can withstand most errors moving to the next object
+    // only report an error if we recived a stop scan request!
+    return 0;
   }
 
   //---------------------------------------------------------------------------
@@ -761,6 +694,7 @@ namespace rgw::dedup {
 				 md5_stats_t *p_stats /* IN-OUT */)
   {
     const int MAX_OBJ_LOAD_FAILURE = 3;
+    const int MAX_BAD_BLOCKS = 3;
     bool      has_more = true;
     uint32_t  seq_number = 0;
     int       failure_count = 0;
@@ -784,6 +718,7 @@ namespace rgw::dedup {
 	  return -1;
 	}
       }
+      failure_count = 0;
       unsigned slab_rec_count = 0;
       auto bl_itr = bl.cbegin();
       for (uint32_t block_num = 0; block_num < DISK_BLOCK_COUNT; block_num++, seq_number++) {
@@ -795,8 +730,19 @@ namespace rgw::dedup {
 	  disk_block_header_t *p_header = p_disk_block->get_header();
 	  p_header->deserialize();
 	  if (p_header->verify(disk_block_id, dpp) != 0) {
-	    return -1;
+	    // move to next block until reaching a valid block
+	    if (failure_count++ < MAX_BAD_BLOCKS) {
+	      continue;
+	    }
+	    else {
+	      derr << __func__ << "::Skipping slab with too many bad blocks::"
+		   << (int)md5_shard << ", worker_id=" << (int)worker_id
+		   << ", seq_number=" << seq_number << dendl;
+	      failure_count = 0;
+	      break;
+	    }
 	  }
+
 	  if (p_header->rec_count == 0) {
 	    ldpp_dout(dpp, 20) << __func__ << "::Block #" << block_num
 			       << " has an empty header, no more blocks" << dendl;
@@ -809,8 +755,6 @@ namespace rgw::dedup {
 	    // We deserialize the record inside the CTOR
 	    disk_record_t rec(p + offset);
 	    if (step == STEP_BUILD_TABLE) {
-	      check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
-					     p_stats->processed_objects);
 	      add_record_to_dedup_table(&rec, disk_block_id, rec_id);
 	      p_stats->loaded_objects ++;
 	      slab_rec_count++;
@@ -822,6 +766,12 @@ namespace rgw::dedup {
 	    else {
 	      ceph_abort("unexpected step");
 	    }
+	  }
+
+	  ret = check_and_update_md5_heartbeat(md5_shard, p_stats->loaded_objects,
+					       p_stats->processed_objects);
+	  if (unlikely(ret != 0)) {
+	    return ret;
 	  }
 
 	  has_more = (p_header->offset == BLOCK_MAGIC);
@@ -921,6 +871,12 @@ namespace rgw::dedup {
   int Background::check_and_update_worker_heartbeat(work_shard_t worker_id,
 						    int64_t ingress_obj_count)
   {
+    if (unlikely(d_stopped || d_pause_req)) {
+      ldpp_dout(dpp, 1) << __func__ << "::" << (d_stopped ? "STOPPED::" : "")
+			<< (d_pause_req ? "PAUSE_REQ" : "") << dendl;
+      return -1;
+    }
+
     if (unlikely(need_to_update_heartbeat())) {
       return d_cluster.update_work_shard_token_heartbeat(p_dedup_cluster_ioctx,
 							 worker_id, ingress_obj_count);
@@ -933,6 +889,12 @@ namespace rgw::dedup {
 						 uint64_t load_count,
 						 uint64_t dedup_count)
   {
+    if (unlikely(d_stopped || d_pause_req)) {
+      ldpp_dout(dpp, 1) << __func__ << "::" << (d_stopped ? "STOPPED::" : "")
+			<< (d_pause_req ? "PAUSE_REQ" : "") << dendl;
+      return -1;
+    }
+
     if (unlikely(need_to_update_heartbeat())) {
       return d_cluster.update_md5_shard_token_heartbeat(p_dedup_cluster_ioctx,
 							md5_id, load_count, dedup_count);
@@ -965,12 +927,15 @@ namespace rgw::dedup {
       cls_rgw_bucket_list_op(op, marker, null_prefix, null_delimiter,
 			     max_entries, list_versions, &result);
       int ret = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, null_yield);
-      if (ret < 0) {
+      if (unlikely(ret < 0)) {
+	// TBD: should we retry/skip or simply abort everything ???
 	ldpp_dout(dpp, 1) << __func__ << "::failed rgw_rados_operate() ret=" << ret << dendl;
 	return ret;
       }
-      check_and_update_worker_heartbeat(worker_id, p_worker_stats->ingress_obj);
-
+      ret = check_and_update_worker_heartbeat(worker_id, p_worker_stats->ingress_obj);
+      if (unlikely(ret < 0)) {
+	return ret;
+      }
       obj_count += result.dir.m.size();
       for (auto& entry : result.dir.m) {
 	const rgw_bucket_dir_entry& dirent = entry.second;
@@ -1048,6 +1013,10 @@ namespace rgw::dedup {
   {
     for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
       run_dedup_step(STEP_BUILD_TABLE, md5_shard, worker_id, p_stats);
+      if (unlikely(d_stopped)) {
+	ldpp_dout(dpp, 1) << __func__ << "::STEP_BUILD_TABLE::STOPPED\n" << dendl;
+	return -1;
+      }
     }
 
     d_table.count_duplicates(&(p_stats->singleton_count), &(p_stats->unique_count),
@@ -1060,6 +1029,10 @@ namespace rgw::dedup {
     d_table.remove_singletons_and_redistribute_keys();
     for (work_shard_t worker_id = 0; worker_id < MAX_WORK_SHARD; worker_id++) {
       run_dedup_step(STEP_REMOVE_DUPLICATES, md5_shard, worker_id, p_stats);
+      if (unlikely(d_stopped)) {
+	ldpp_dout(dpp, 1) << __func__ << "::STEP_REMOVE_DUPLICATES::STOPPED\n" << dendl;
+	return -1;
+      }
     }
 
     return 0;
@@ -1087,7 +1060,10 @@ namespace rgw::dedup {
 	ldpp_dout(dpp, 20) <<__func__ << "::listing buckets:: worker_id=" << (uint32_t)worker_id << dendl;
 	for (auto& bucket_name : buckets) {
 	  //ldpp_dout(dpp, 20) <<__func__ << "::ingress_bucket_objects_single_shard:: bucket_name=" << bucket_name << dendl;
-	  ingress_bucket_objects_single_shard(bucket_name, worker_id, p_worker_stats);
+	  ret = ingress_bucket_objects_single_shard(bucket_name, worker_id, p_worker_stats);
+	  if (unlikely(ret != 0)) {
+	    return ret;
+	  }
 	}
 	driver->meta_list_keys_complete(handle);
       }
@@ -1114,10 +1090,15 @@ namespace rgw::dedup {
 	worker_stats_t worker_stats;
 	ceph_assert(worker_stats.ingress_obj == 0);
 	utime_t start_time = ceph_clock_now();
-	objects_ingress_single_shard(worker_id, &worker_stats);
-	worker_stats.duration = ceph_clock_now() - start_time;
-	d_cluster.mark_work_shard_token_completed(p_dedup_cluster_ioctx, worker_id, &worker_stats);
-	ldpp_dout(dpp, 0) << "stat counters [worker]:\n" << worker_stats << dendl;
+	int ret = objects_ingress_single_shard(worker_id, &worker_stats);
+	if (likely(ret == 0)) {
+	  worker_stats.duration = ceph_clock_now() - start_time;
+	  d_cluster.mark_work_shard_token_completed(p_dedup_cluster_ioctx, worker_id, &worker_stats);
+	  ldpp_dout(dpp, 0) << "stat counters [worker]:\n" << worker_stats << dendl;
+	}
+	else {
+	  return ret;
+	}
       }
       else {
 	break;
@@ -1135,7 +1116,10 @@ namespace rgw::dedup {
       if (md5_shard != NULL_MD5_SHARD) {
 	md5_stats_t md5_stats;
 	utime_t start_time = ceph_clock_now();
-	objects_dedup_single_shard(md5_shard, &md5_stats);
+	int ret = objects_dedup_single_shard(md5_shard, &md5_stats);
+	if (unlikely(ret != 0)) {
+	  return ret;
+	}
 	md5_stats.duration = ceph_clock_now() - start_time;
 	d_cluster.mark_md5_shard_token_completed(p_dedup_cluster_ioctx, md5_shard, &md5_stats);
 	ldpp_dout(dpp, 0) << "stat counters [md5]:\n" << md5_stats << dendl;
@@ -1164,6 +1148,101 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  void Background::start()
+  {
+    const DoutPrefixProvider* const dpp = &dp;
+    ldpp_dout(dpp, 1) <<  __FILE__ << "::" <<__func__ << dendl;
+    {
+      std::unique_lock pause_lock(d_pause_mutex);
+      if (d_started) {
+	// start the thread only once
+	return;
+      }
+      d_started = true;
+    }
+    d_runner = std::thread(&Background::run, this);
+    const auto rc = ceph_pthread_setname(d_runner.native_handle(), "dedup_bg");
+    ldpp_dout(dpp, 1) <<  __FILE__ << "::" <<__func__ << "::setname rc=" << rc << dendl;
+  }
+
+  //------------------------- --------------------------------------------------
+  void Background::shutdown()
+  {
+    d_stopped = true;
+    d_cond.notify_all();
+    if (d_runner.joinable()) {
+      d_runner.join();
+    }
+    {
+      std::unique_lock pause_lock(d_pause_mutex);
+      d_started   = false;
+      d_stopped   = false;
+      d_pause_req = false;
+      d_paused    = false;
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  void Background::pause()
+  {
+    {
+      std::unique_lock pause_lock(d_pause_mutex);
+      if (d_paused) {
+	derr <<  __FILE__ << "::" <<__func__
+	     << "::background is already paused!!!" << dendl;
+	d_pause_req = true;
+      }
+      std::unique_lock cond_lock(d_cond_mutex);
+      d_cond.wait(cond_lock, [this]{return d_paused || d_stopped;});
+    }
+  }
+
+  //---------------------------------------------------------------------------
+  void Background::resume(rgw::sal::Driver* _driver)
+  {
+    {
+      std::unique_lock pause_lock(d_pause_mutex);
+      if (!d_paused) {
+	derr <<  __FILE__ << "::" <<__func__
+	     << "::background is not paused!!!" << dendl;
+	if (_driver != driver) {
+	  derr <<  __FILE__ << "::" <<__func__
+	       << "::attempt to change driver on a live task failed!!!" << dendl;
+	}
+	return;
+      }
+      d_pause_req = false;
+      d_paused    = false;
+      driver = _driver;
+      init_rados_access_handles();
+    }
+    // wake up threads blocked after seeing pause state
+    d_cond.notify_all();
+  }
+
+  //---------------------------------------------------------------------------
+  void Background::handle_pause_request()
+  {
+    if (d_pause_req) {
+      d_paused = true;
+      d_cond.notify_all();
+      ldpp_dout(dpp, 10) << "Dedup background thread paused" << dendl;
+      std::unique_lock cond_lock(d_cond_mutex);
+      d_cond.wait(cond_lock, [this]{return !d_paused || d_stopped;});
+      if (!d_stopped) {
+	ldpp_dout(dpp, 10) << "Dedup background thread resumed" << dendl;
+      }
+#if 0
+      if (d_stopped) {
+	ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;
+	return;
+      }
+#endif
+
+    }
+  }
+
+  //---------------------------------------------------------------------------
   void Background::run()
   {
     bool first_time = true;
@@ -1174,18 +1253,13 @@ namespace rgw::dedup {
 
     ceph::real_time last_scan_time;
     ldpp_dout(dpp, 1) <<  __FILE__ << "::" <<__func__ << "::dedup::main loop" << dendl;
-    while (!stopped) {
-      if (pause_req) {
-	paused = true;
-	cond.notify_all();
-	ldpp_dout(dpp, 10) << "Dedup background thread paused" << dendl;
-	std::unique_lock cond_lock(cond_mutex);
-	cond.wait(cond_lock, [this]{return !paused || stopped;});
-	if (stopped) {
+    while (!d_stopped) {
+      if (unlikely(d_pause_req)) {
+	handle_pause_request();
+	if (d_stopped) {
 	  ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;
 	  return;
 	}
-	ldpp_dout(dpp, 10) << "Dedup background thread resumed" << dendl;
       }
 
       // -->
@@ -1193,7 +1267,7 @@ namespace rgw::dedup {
       // -->
       if (first_time) {
 	first_time = false;
-	if (objects_ingress() != 0) {
+	if (unlikely(objects_ingress() != 0)) {
 	  derr << __func__ << "::failed objects_ingress()" << dendl;
 	  return;
 	}
@@ -1215,8 +1289,8 @@ namespace rgw::dedup {
 	}
       }
       last_scan_time = ceph_clock_now().to_real_time();
-      std::unique_lock cond_lock(cond_mutex);
-      cond.wait_for(cond_lock, std::chrono::seconds(execute_interval), [this]{return stopped;});
+      std::unique_lock cond_lock(d_cond_mutex);
+      d_cond.wait_for(cond_lock, std::chrono::seconds(d_execute_interval), [this]{return d_stopped;});
     }
 
     ldpp_dout(dpp, 10) << "Dedup background thread stopped" << dendl;

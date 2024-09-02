@@ -615,7 +615,8 @@ namespace rgw::dedup {
       named_time_lock_t ntl_arr[MAX_WORK_SHARD];
       int cnt = collect_shard_stats(p_ioctx, dpp, MAX_WORK_SHARD, WORKER_SHARD_PREFIX, bl_arr, ntl_arr);
       if (cnt != MAX_WORK_SHARD) {
-	std::cerr << "Partial stats recived " << cnt << " / " << (int)MAX_WORK_SHARD << std::endl;
+	std::cerr << "Partial work shard stats recived " << cnt << " / "
+		  << (int)MAX_WORK_SHARD << std::endl;
       }
 
       for (unsigned shard = 0; shard < MAX_WORK_SHARD; shard++) {
@@ -661,7 +662,8 @@ namespace rgw::dedup {
       named_time_lock_t ntl_arr[MAX_WORK_SHARD];
       int cnt = collect_shard_stats(p_ioctx, dpp, MAX_MD5_SHARD, MD5_SHARD_PREFIX, bl_arr, ntl_arr);
       if (cnt != MAX_MD5_SHARD) {
-	std::cerr << "Partial stats recived " << cnt << " / " << (int)MAX_MD5_SHARD << std::endl;
+	std::cerr << "Partial MD5_SHARD stats recived " << cnt << " / "
+		  << (int)MAX_MD5_SHARD << std::endl;
       }
 
       utime_t start_time;
