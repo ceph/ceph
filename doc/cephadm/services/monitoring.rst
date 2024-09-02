@@ -345,7 +345,7 @@ definition and management of the embedded Prometheus service. The endpoint liste
 ``https://<mgr-ip>:8765/sd/`` (the port is
 configurable through the variable ``service_discovery_port``) and returns scrape target
 information in `http_sd_config format
-<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config/>`_
+<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config>`_
 
 Customers with external monitoring stack can use `ceph-mgr` service discovery endpoint
 to get scraping configuration. Root certificate of the server can be obtained by the
