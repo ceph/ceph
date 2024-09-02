@@ -129,6 +129,31 @@ things to do:
   That prevents any clients from establishing new sessions with the MDS.
 
 
+* **Turn off async purge threads** The volumes plugin spawns threads for
+  asynchronously purging trashed/deleted subvolumes. To help troubleshooting or
+  recovery effort, these purge threads can be disabled using:
+
+.. code:: bash
+
+    ceph config set mgr mgr/volumes/pause_purging true
+
+  To resume purging run::
+
+    ceph config set mgr mgr/volumes/pause_purging false
+
+* **Turn off async cloner threads** The volumes plugin spawns threads for
+  asynchronously cloning subvolume snapshots. To help troubleshooting or
+  recovery effort, these cloner threads can be disabled using:
+
+.. code:: bash
+
+    ceph config set mgr mgr/volumes/pause_cloning true
+
+  To resume cloning run::
+
+    ceph config set mgr mgr/volumes/pause_cloning false
+
+
 
 Expediting MDS journal trim
 ===========================
