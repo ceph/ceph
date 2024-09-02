@@ -2317,7 +2317,7 @@ cache_stats_t Cache::get_stats(
       const auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
       for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
         auto ext = static_cast<extent_types_t>(_ext);
-        const auto extent_io = get_by_ext(io_by_ext, ext);
+        const auto& extent_io = get_by_ext(io_by_ext, ext);
         if (is_data_type(ext)) {
           data_io.add(extent_io);
         } else if (is_logical_metadata_type(ext)) {
