@@ -20,6 +20,15 @@ export class DateTimePickerComponent implements OnInit {
   @Input()
   hasTime = true;
 
+  @Input()
+  name = '';
+
+  @Input()
+  helperText = '';
+
+  @Input()
+  disabled = false;
+
   format: string;
   minDate: NgbDateStruct;
   datetime: {
@@ -54,7 +63,7 @@ export class DateTimePickerComponent implements OnInit {
     this.date.push(mom.format('YYYY-MM-DD'));
     const time = mom.format('HH:mm:ss');
     this.time = mom.format('hh:mm');
-    this.ampm = mom.hour() > 12 ? 'PM' : 'AM';
+    this.ampm = mom.hour() >= 12 ? 'PM' : 'AM';
 
     this.datetime = {
       date: this.date[0],

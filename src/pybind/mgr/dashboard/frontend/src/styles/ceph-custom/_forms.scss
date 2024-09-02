@@ -101,6 +101,12 @@ Form Controls
   @extend .cds--form-item;
   display: block;
   margin-bottom: 32px;
+  margin-top: 32px;
+}
+
+.form-item-append {
+  display: flex;
+  flex-direction: row;
 }
 
 .cds-input-group {

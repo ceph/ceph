@@ -24,7 +24,7 @@
         <cds-text-label for="siteName"
                         i18n
                         cdRequiredField="Site Name"
-                        [invalid]="!importBootstrapForm.controls['siteName'].valid && (importBootstrapForm.controls['siteName'].dirty || importBootstrapForm.controls['siteName'].touched)"
+                        [invalid]="!importBootstrapForm.controls['siteName'].valid && importBootstrapForm.controls['siteName'].dirty"
                         [invalidText]="siteNameError"
                         i18n-invalidText>Site Name
           <input cdsText
@@ -33,7 +33,7 @@
                  id="siteName"
                  name="siteName"
                  formControlName="siteName"
-                 [invalid]="importBootstrapForm.showError('siteName', formDir, 'required')"
+                 [invalid]="!importBootstrapForm.controls['siteName'].valid && importBootstrapForm.controls['siteName'].dirty"
                  autofocus>
         </cds-text-label>
         <ng-template #siteNameError>
@@ -76,7 +76,7 @@
 
       <div class="form-item">
         <cds-textarea-label for="token"
-                            [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty || importBootstrapForm.controls['token'].touched)"
+                            [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty)"
                             [invalidText]="tokenError"
                             cdRequiredField="Token"
                             i18n>Token
@@ -87,7 +87,7 @@
                     formControlName="token"
                     cols="200"
                     rows="5"
-                    [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty || importBootstrapForm.controls['token'].touched)">
+                    [invalid]="importBootstrapForm.controls['token'].invalid && (importBootstrapForm.controls['token'].dirty)">
           </textarea>
         </cds-textarea-label>
         <ng-template #tokenError>

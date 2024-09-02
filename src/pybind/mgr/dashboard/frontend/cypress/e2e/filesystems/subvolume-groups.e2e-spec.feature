@@ -17,7 +17,7 @@ Feature: CephFS Subvolume Group management
         When I expand the row "test_cephfs"
         And I go to the "Subvolume groups" tab
         And I click on "Create" button from the expanded row
-        And enter "subvolumegroupName" "test_subvolume_group" in the modal
+        And enter "subvolumegroupName" "test_subvolume_group" in the carbon modal
         And I click on "Create Subvolume group" button
         Then I should see a row with "test_subvolume_group" in the expanded row
 
@@ -27,7 +27,7 @@ Feature: CephFS Subvolume Group management
         And I go to the "Subvolume groups" tab
         When I select a row "test_subvolume_group" in the expanded row
         And I click on "Edit" button from the table actions in the expanded row
-        And enter "size" "1" in the modal
+        And enter "size" "1" in the carbon modal
         And I click on "Edit Subvolume group" button
         Then I should see row "test_subvolume_group" of the expanded row to have a usage bar
 

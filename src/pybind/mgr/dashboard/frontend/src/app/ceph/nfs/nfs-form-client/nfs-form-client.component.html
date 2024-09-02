@@ -1,9 +1,8 @@
-<div class="form-group row">
-  <label class="cd-col-form-label"
-         i18n>Clients</label>
+<div class="form-item">
+  <legend class="cds--label"
+          i18n>Clients</legend>
 
-  <div class="cd-col-form-input"
-       [formGroup]="form"
+  <div [formGroup]="form"
        #formDir="ngForm">
     <span *ngIf="form.get('clients').value.length === 0"
           class="no-border text-muted">
@@ -13,29 +12,39 @@
 
     <ng-container formArrayName="clients">
       <div *ngFor="let item of clientsFormArray.controls; let index = index; trackBy: trackByFn">
-        <div class="card"
-             [formGroup]="item">
-          <div class="card-header">
-            {{ (index + 1) | ordinal }}
-            <span class="float-end clickable"
-                  name="remove_client"
-                  (click)="removeClient(index)"
-                  ngbTooltip="Remove">&times;</span>
-          </div>
+        <div [formGroup]="item">
+          <h6>
+            Client {{ (index + 1) }}
+            <cds-icon-button kind="ghost"
+                             size="md"
+                             class="float-end"
+                             (click)="removeClient(index)"
+                             data-testid="remove_client"
+                             data-toggle="button"
+                             title="Remove Client">
+              <svg cdsIcon="close"
+                   size="32"
+                   class="cds--btn__icon"></svg>
+            </cds-icon-button>
+          </h6>
 
-          <div class="card-body">
+          <div>
             <!-- Addresses -->
-            <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label required"
-                     for="addresses">Addresses</label>
-              <div class="cd-col-form-input">
-                <input type="text"
-                       class="form-control"
+            <div class="form-item">
+              <cds-text-label for="addresses"
+                              i18n
+                              cdRequiredField="Addresses"
+                              [invalid]="!item.controls['addresses'].valid && (item.controls['addresses'].dirty)"
+                              [invalidText]="addressesError"
+                              i18n-invalidText>Addresses
+                <input cdsText
                        name="addresses"
                        id="addresses"
                        formControlName="addresses"
-                       placeholder="192.168.0.10, 192.168.1.0/8">
+                       placeholder="192.168.0.10, 192.168.1.0/8"
+                       [invalid]="!item.controls['addresses'].valid && (item.controls['addresses'].dirty)">
+              </cds-text-label>
+              <ng-template #addressesError>
                 <span class="invalid-feedback">
                   <span *ngIf="showError(index, 'addresses', formDir, 'required')"
                         i18n>This field is required.</span>
@@ -46,63 +55,59 @@
                     <ng-container i18n>For example:</ng-container> 192.168.0.10, 192.168.1.0/8
                   </span>
                 </span>
-              </div>
+              </ng-template>
             </div>
 
             <!-- Access Type-->
-            <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="access_type">Access Type</label>
-              <div class="cd-col-form-input">
-                <select class="form-select"
-                        name="access_type"
-                        id="access_type"
-                        formControlName="access_type">
-                  <option value="">{{ getNoAccessTypeDescr() }}</option>
-                  <option *ngFor="let item of nfsAccessType"
-                          [value]="item.value">{{ item.value }}</option>
-                </select>
-                <span class="form-text text-muted"
-                      *ngIf="getValue(index, 'access_type')">
+            <div class="form-item">
+              <cds-select label="Access Type"
+                          for="access_type"
+                          formControlName="access_type"
+                          name="access_type"
+                          id="access_type"
+                          [helperText]="accessTypeHelper"
+                          i18n>Access Type
+                <option value="">No Access Type</option>
+                <option *ngFor="let item of nfsAccessType"
+                        [value]="item.value">{{ item.value }}</option>
+              </cds-select>
+              <ng-template #accessTypeHelper>
+                <span *ngIf="getValue(index, 'access_type')">
                   {{ getAccessTypeHelp(index) }}
                 </span>
-              </div>
+              </ng-template>
             </div>
 
             <!-- Squash -->
             <div class="form-group row">
-              <label class="cd-col-form-label"
-                     for="squash">
-                <span i18n>Squash</span>
-                <ng-container *ngTemplateOutlet="squashHelperTpl"></ng-container>
-              </label>
-              <div class="cd-col-form-input">
-                <select class="form-select"
-                        name="squash"
-                        id="squash"
-                        formControlName="squash">
-                  <option value="">{{ getNoSquashDescr() }}</option>
-                  <option *ngFor="let squash of nfsSquash"
-                          [value]="squash">{{ squash }}</option>
-                </select>
-              </div>
+              <cds-select label="Squash"
+                          for="squash"
+                          formControlName="squash"
+                          name="squash"
+                          id="squash"
+                          [helperText]="squashHelperTpl"
+                          i18n>Squash
+                <option value="">{{ getNoSquashDescr() }}</option>
+                <option *ngFor="let squash of nfsSquash"
+                        [value]="squash">{{ squash }}</option>
+              </cds-select>
             </div>
           </div>
         </div>
       </div>
     </ng-container>
 
-    <div class="row my-2">
-      <div class="col-12">
-        <div class="float-end">
-          <button class="btn btn-light "
-                  (click)="addClient()"
-                  name="add_client">
-            <i [ngClass]="[icons.add]"></i>
-            <ng-container i18n>Add clients</ng-container>
-          </button>
-        </div>
+    <div cdsRow>
+      <div cdsCol>
+        <button cdsButton="tertiary"
+                type="button"
+                (click)="addClient()"
+                name="add_client">
+          <ng-container i18n>Add clients</ng-container>
+          <svg cdsIcon="add"
+               size="32"
+               class="cds--btn__icon"></svg>
+        </button>
       </div>
     </div>
   </div>

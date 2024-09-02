@@ -1,6 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
 import { Observable } from 'rxjs';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
@@ -18,12 +17,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   styleUrls: ['./cephfs-subvolume-snapshots-form.component.scss']
 })
 export class CephfsSubvolumeSnapshotsFormComponent extends CdForm implements OnInit {
-  fsName: string;
-  subVolumeName: string;
-  subVolumeGroupName: string;
   subVolumeGroups: string[];
-
-  isEdit = false;
 
   snapshotForm: CdFormGroup;
 
@@ -33,10 +27,14 @@ export class CephfsSubvolumeSnapshotsFormComponent extends CdForm implements OnI
   subVolumes$: Observable<CephfsSubvolume[]>;
 
   constructor(
-    public activeModal: NgbActiveModal,
     private actionLabels: ActionLabelsI18n,
     private taskWrapper: TaskWrapperService,
-    private cephFsSubvolumeService: CephfsSubvolumeService
+    private cephFsSubvolumeService: CephfsSubvolumeService,
+
+    @Optional() @Inject('fsName') public fsName: string,
+    @Optional() @Inject('subVolumeName') public subVolumeName: string,
+    @Optional() @Inject('subVolumeGroupName') public subVolumeGroupName: string,
+    @Optional() @Inject('isEdit') public isEdit = false
   ) {
     super();
     this.resource = $localize`snapshot`;
@@ -121,7 +119,7 @@ export class CephfsSubvolumeSnapshotsFormComponent extends CdForm implements OnI
       })
       .subscribe({
         error: () => this.snapshotForm.setErrors({ cdSubmitButton: true }),
-        complete: () => this.activeModal.close()
+        complete: () => this.closeModal()
       });
   }
 }

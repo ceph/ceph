@@ -1,26 +1,36 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+<cds-modal size="lg"
+           [open]="open"
+           [hasScrollingContent]="true"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+  </cds-modal-header>
 
-  <ng-container class="modal-content"
-                *cdFormLoading="loading">
-    <form name="subvolumegroupForm"
-          #formDir="ngForm"
-          [formGroup]="subvolumegroupForm"
-          novalidate>
-      <div class="modal-body">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="subvolumegroupName"
-                 i18n>Name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
+  <ng-container *cdFormLoading="loading">
+    <div cdsModalContent>
+      <form name="subvolumegroupForm"
+            #formDir="ngForm"
+            [formGroup]="subvolumegroupForm"
+            novalidate>
+        <div class="form-item">
+          <cds-text-label label="Name"
+                          for="subvolumegroupName"
+                          [invalid]="subvolumegroupForm.controls.subvolumegroupName.invalid && (subvolumegroupForm.controls.subvolumegroupName.dirty)"
+                          [invalidText]="subvolumegroupNameError"
+                          cdRequiredField="Name"
+                          i18n>Name
+            <input cdsText
                    type="text"
-                   placeholder="subvolumegroup name..."
+                   placeholder="Subvolume group name..."
+                   i18n-placeholder
                    id="subvolumegroupName"
                    name="subvolumegroupName"
+                   [invalid]="subvolumegroupForm.controls.subvolumegroupName.invalid && (subvolumegroupForm.controls.subvolumegroupName.dirty)"
                    formControlName="subvolumegroupName"
-                   autofocus>
+                   modal-primary-focus>
+          </cds-text-label>
+          <ng-template #subvolumegroupNameError>
             <span class="invalid-feedback"
                   *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'required')"
                   i18n>This field is required.</span>
@@ -30,32 +40,33 @@
             <span *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'pattern')"
                   class="invalid-feedback"
                   i18n>Subvolume name can only contain letters, numbers, '.', '-' or '_'</span>
-          </div>
+          </ng-template>
         </div>
 
         <!-- Volume name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="volumeName"
-                 i18n>Volume name</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
+        <div class="form-item">
+          <cds-text-label label="Volume name"
+                          for="volumeName"
+                          i18n>Volume name
+            <input cdsText
+                   type="text"
                    id="volumeName"
                    name="volumeName"
                    formControlName="volumeName">
-          </div>
+          </cds-text-label>
         </div>
 
         <!-- Size -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="size"
-                 i18n>Size
-            <cd-helper>The size of the subvolume group is specified by setting a quota on it.
-            If left blank or put 0, then quota will be infinite</cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
+        <div class="form-item">
+          <cds-text-label label="Size"
+                          for="size"
+                          helperText="The size of the subvolume is specified by setting a quota on it.
+                          If left blank or put 0, then quota will be infinite"
+                          i18n-helperText
+                          [invalid]="subvolumegroupForm.controls.size.invalid && (subvolumegroupForm.controls.size.dirty)"
+                          [invalidText]="sizeError"
+                          i18n>Size
+            <input cdsText
                    type="text"
                    id="size"
                    name="size"
@@ -63,85 +74,82 @@
                    i18n-placeholder
                    placeholder="e.g., 10GiB"
                    defaultUnit="GiB"
+                   [invalid]="subvolumegroupForm.controls.size.invalid && (subvolumegroupForm.controls.size.dirty)"
                    cdDimlessBinary>
+          </cds-text-label>
+          <ng-template #sizeError>
             <span *ngIf="subvolumegroupForm.showError('size', formDir, 'pattern')"
                   class="invalid-feedback"
                   i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
-          </div>
+          </ng-template>
         </div>
 
         <!-- CephFS Pools -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="pool"
-                 i18n>Pool
-            <cd-helper>By default, the data_pool_layout of the parent directory is selected.</cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="pool"
-                    name="pool"
-                    formControlName="pool">
-              <option *ngFor="let pool of dataPools"
-                      [value]="pool.pool">{{ pool.pool }}</option>
-            </select>
-          </div>
+        <div class="form-item">
+          <cds-select label="CephFS Pools"
+                      for="pool"
+                      formControlName="pool"
+                      name="pool"
+                      id="pool"
+                      helperText="By default, the data_pool_layout of the parent directory is selected."
+                      i18n-helperText>
+            <option *ngFor="let pool of dataPools"
+                    [value]="pool.pool">{{ pool.pool }}</option>
+          </cds-select>
         </div>
 
         <!-- UID -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="uid"
-                 i18n>UID</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
+        <div class="form-item">
+          <cds-text-label label="UID"
+                          for="uid"
+                          i18n>UID
+            <input cdsText
                    type="number"
-                   placeholder="subvolumegroup UID..."
+                   placeholder="Subvolume UID..."
                    id="uid"
                    name="uid"
                    formControlName="uid">
-          </div>
+          </cds-text-label>
         </div>
 
         <!-- GID -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
-                 for="gid"
-                 i18n>GID</label>
-          <div class="cd-col-form-input">
-            <input class="form-control"
+        <div class="form-item">
+          <cds-text-label label="GID"
+                          for="gid"
+                          i18n>GID
+            <input cdsText
                    type="number"
-                   placeholder="subvolumegroup GID..."
+                   placeholder="Subvolume group GID..."
                    id="gid"
                    name="gid"
                    formControlName="gid">
-          </div>
+          </cds-text-label>
         </div>
 
         <!-- Mode -->
-        <div class="form-group row">
-          <label class="cd-col-form-label"
+        <div class="form-item">
+          <label class="cds--label"
                  for="mode"
                  i18n>Mode
-            <cd-helper>Permissions for the directory. Default mode is 755 which is rwxr-xr-x</cd-helper>
           </label>
-          <div class="cd-col-form-input">
-            <cd-checked-table-form [data]="scopePermissions"
-                                   [columns]="columns"
-                                   [form]="subvolumegroupForm"
-                                   inputField="mode"
-                                   [isTableForOctalMode]="true"
-                                   [initialValue]="initialMode"
-                                   [scopes]="scopes"></cd-checked-table-form>
-          </div>
-        </div>
-      </div>
+          <cd-help-text>Permissions for the directory. Default mode is 755 which is rwxr-xr-x</cd-help-text>
 
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submit()"
-                              [form]="subvolumegroupForm"
-                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-      </div>
-    </form>
+          <cd-checked-table-form [data]="scopePermissions"
+                                 [columns]="columns"
+                                 [form]="subvolumegroupForm"
+                                 inputField="mode"
+                                 [isTableForOctalMode]="true"
+                                 [initialValue]="initialMode"
+                                 [scopes]="scopes"
+                                 [isDisabled]="isEdit"></cd-checked-table-form>
+        </div>
+      </form>
+    </div>
+
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="subvolumegroupForm"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [modalForm]="true"></cd-form-button-panel>
+
   </ng-container>
-</cd-modal>
+</cds-modal>

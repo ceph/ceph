@@ -6,9 +6,7 @@ import { And, Then } from 'cypress-cucumber-preprocessor/steps';
  * @param value Value that should be filled in the field.
  */
 And('enter {string} {string}', (field: string, value: string) => {
-  cy.get('.cd-col-form').within(() => {
-    cy.get(`input[id=${field}]`).clear().type(value);
-  });
+  cy.get(`input[id=${field}]`).clear().type(value);
 });
 
 /**
@@ -18,6 +16,17 @@ And('enter {string} {string}', (field: string, value: string) => {
  */
 And('enter {string} {string} in the modal', (field: string, value: string) => {
   cy.get('cd-modal').within(() => {
+    cy.get(`input[id=${field}]`).clear().type(value);
+  });
+});
+
+/**
+ * Fills in the given field using the value provided in carbon modal
+ * @param field ID of the field that needs to be filled out.
+ * @param value Value that should be filled in the field.
+ */
+And('enter {string} {string} in the carbon modal', (field: string, value: string) => {
+  cy.get('cds-modal').within(() => {
     cy.get(`input[id=${field}]`).clear().type(value);
   });
 });
