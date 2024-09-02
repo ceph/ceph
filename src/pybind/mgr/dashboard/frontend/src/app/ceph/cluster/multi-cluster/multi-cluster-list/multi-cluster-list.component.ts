@@ -18,10 +18,11 @@ import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
-import { Observable, Subscription } from 'rxjs';
+import { Observable, Subscription, zip } from 'rxjs';
 import { SettingsService } from '~/app/shared/api/settings.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
+import { filter } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-multi-cluster-list',
@@ -98,27 +99,6 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   }
 
   ngOnInit(): void {
-    this.subs.add(
-      this.multiClusterService.subscribe((resp: object) => {
-        if (resp && resp['config']) {
-          this.hubUrl = resp['hub_url'];
-          this.currentUrl = resp['current_url'];
-          const clusterDetailsArray = Object.values(resp['config']).flat();
-          this.data = clusterDetailsArray;
-          this.checkClusterConnectionStatus();
-          this.data.forEach((cluster: any) => {
-            cluster['remainingTimeWithoutSeconds'] = 0;
-            if (cluster['ttl'] && cluster['ttl'] > 0) {
-              cluster['ttl'] = cluster['ttl'] * 1000;
-              cluster['remainingTimeWithoutSeconds'] = this.getRemainingTimeWithoutSeconds(
-                cluster['ttl']
-              );
-              cluster['remainingDays'] = this.getRemainingDays(cluster['ttl']);
-            }
-          });
-        }
-      })
-    );
 
     this.columns = [
       {
@@ -162,15 +142,38 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
         cellTemplate: this.durationTpl
       }
     ];
-
-    this.subs.add(
-      this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
-        this.clusterTokenStatus = resp;
-        this.checkClusterConnectionStatus();
-      })
-    );
-
     this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
+  }
+
+  fetchData() {
+    this.subs.add(
+      zip(
+        this.multiClusterService.msData$.pipe(filter((value) => !!value)),
+        this.multiClusterService.tokenStatusSource$.pipe(filter((value) => !!value))
+      ).subscribe(
+        ([configResp, tokenStatusResp]: [any, any]) => {
+          this.clusterTokenStatus = tokenStatusResp;
+
+          if (configResp && configResp['config']) {
+            this.hubUrl = configResp['hub_url'];
+            this.currentUrl = configResp['current_url'];
+            const clusterDetailsArray = Object.values(configResp['config']).flat();
+            this.data = clusterDetailsArray;
+            this.checkClusterConnectionStatus();
+            this.data.forEach((cluster: any) => {
+              cluster['remainingTimeWithoutSeconds'] = 0;
+              if (cluster['ttl'] && cluster['ttl'] > 0) {
+                cluster['ttl'] = cluster['ttl'] * 1000;
+                cluster['remainingTimeWithoutSeconds'] = this.getRemainingTimeWithoutSeconds(
+                  cluster['ttl']
+                );
+                cluster['remainingDays'] = this.getRemainingDays(cluster['ttl']);
+              }
+            });
+          }
+        }
+      )
+    );
   }
 
   ngOnDestroy(): void {
