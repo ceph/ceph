@@ -479,11 +479,9 @@ enum class BIIndexType : uint8_t {
 struct rgw_bucket_category_stats;
 
 struct rgw_cls_bi_entry {
-  BIIndexType type;
+  BIIndexType type = BIIndexType::Invalid;
   std::string idx;
   ceph::buffer::list data;
-
-  rgw_cls_bi_entry() : type(BIIndexType::Invalid) {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
