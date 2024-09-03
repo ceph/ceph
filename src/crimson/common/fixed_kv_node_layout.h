@@ -58,6 +58,18 @@ class FixedKVNodeLayout {
   static constexpr L layout{1, 1, 1, CAPACITY, CAPACITY};
 
 public:
+  static constexpr bool check_capacity(size_t node_size) {
+    auto kv_size = sizeof(KINT) + sizeof(VINT);
+    // layout_size should be consistent with the definition of layout
+    auto layout_size =
+	sizeof(ceph_le32)     // checksum
+	+ sizeof(ceph_le32)   // size
+	+ sizeof(MetaInt)     // meta
+	+ kv_size * CAPACITY;  // keys and values
+    return layout_size <= node_size &&
+	(layout_size + kv_size) > node_size;
+  }
+
   template <bool is_const>
   struct iter_t {
     friend class FixedKVNodeLayout;

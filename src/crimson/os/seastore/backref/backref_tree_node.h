@@ -11,7 +11,7 @@ using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
 using backref_node_meta_le_t = fixed_kv_node_meta_le_t<paddr_le_t>;
 
 constexpr size_t INTERNAL_NODE_CAPACITY = 254;
-constexpr size_t LEAF_NODE_CAPACITY = 169;
+constexpr size_t LEAF_NODE_CAPACITY = 193;
 
 using BackrefNode = FixedKVNode<paddr_t>;
 
@@ -57,6 +57,9 @@ class BackrefInternalNode
       paddr_t, paddr_le_t,
       BACKREF_NODE_SIZE,
       BackrefInternalNode> {
+  static_assert(
+    check_capacity(BACKREF_NODE_SIZE),
+    "INTERNAL_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
   template <typename... T>
   BackrefInternalNode(T&&... t) :
@@ -78,6 +81,9 @@ class BackrefLeafNode
       BACKREF_NODE_SIZE,
       BackrefLeafNode,
       false> {
+  static_assert(
+    check_capacity(BACKREF_NODE_SIZE),
+    "LEAF_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
   template <typename... T>
   BackrefLeafNode(T&&... t) :

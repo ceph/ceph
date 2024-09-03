@@ -82,6 +82,9 @@ struct LBAInternalNode
       laddr_t, laddr_le_t,
       LBA_BLOCK_SIZE,
       LBAInternalNode> {
+  static_assert(
+    check_capacity(LBA_BLOCK_SIZE),
+    "INTERNAL_NODE_CAPACITY doesn't fit in LBA_BLOCK_SIZE");
   using Ref = TCachedExtentRef<LBAInternalNode>;
   using internal_iterator_t = const_iterator;
   template <typename... T>
@@ -147,6 +150,9 @@ struct LBALeafNode
       LBA_BLOCK_SIZE,
       LBALeafNode,
       true> {
+  static_assert(
+    check_capacity(LBA_BLOCK_SIZE),
+    "LEAF_NODE_CAPACITY doesn't fit in LBA_BLOCK_SIZE");
   using Ref = TCachedExtentRef<LBALeafNode>;
   using parent_type_t = FixedKVLeafNode<
 			  LEAF_NODE_CAPACITY,
