@@ -1490,11 +1490,11 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
   ldout(cct(), 20) << "AWSv4ComplMulti::recv_body() buf_max: " << buf_max << dendl;
 
   uint32_t cnt = 0;
-  while (total < buf_max && !eof) {
+  do {
     ReceiveChunkResult rcr =
       recv_chunk(buf + total, buf_max - total, cnt++, eof);
     total += rcr.received;
-  }
+  } while (total < buf_max && !eof);
 
   dout(20) << "AWSv4ComplMulti: received=" << total << dendl;
   return total;
