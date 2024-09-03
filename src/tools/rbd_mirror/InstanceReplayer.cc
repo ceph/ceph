@@ -654,8 +654,6 @@ void InstanceReplayer<I>::start_group_replayer(
     if (group_replayer->needs_restart()) {
       stop_group_replayer(group_replayer, new C_TrackedOp(m_async_op_tracker,
                                                           nullptr));
-    } else {
-      group_replayer->sync_group_names();
     }
     return;
   } else if (group_replayer->is_blocklisted()) {
