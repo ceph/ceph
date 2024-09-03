@@ -251,6 +251,7 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
   logger().debug("{}: check={}", __func__, check);
   const auto& primary_bi = backfill_state().backfill_info;
   result_t result { {}, primary_bi.begin };
+  std::map<hobject_t, std::pair<eversion_t, std::vector<pg_shard_t>>> backfills;
 
   for (const auto& bt : peering_state().get_backfill_targets()) {
     const auto& peer_bi = backfill_state().peer_backfill_info.at(bt);
@@ -258,9 +259,13 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
     // Find all check peers that have the wrong version
     if (const eversion_t& obj_v = primary_bi.objects.begin()->second;
         check == primary_bi.begin && check == peer_bi.begin) {
-      if(peer_bi.objects.begin()->second != obj_v &&
-          backfill_state().progress_tracker->enqueue_push(primary_bi.begin)) {
-        backfill_listener().enqueue_push(primary_bi.begin, obj_v);
+      if (peer_bi.objects.begin()->second != obj_v) {
+	std::ignore = backfill_state().progress_tracker->enqueue_push(
+	  primary_bi.begin);
+	auto &[v, peers] = backfills[primary_bi.begin];
+	assert(v == obj_v || v == eversion_t());
+	v = obj_v;
+	peers.push_back(bt);
       } else {
         // it's fine, keep it! OR already recovering
       }
@@ -269,11 +274,21 @@ BackfillState::Enqueuing::update_on_peers(const hobject_t& check)
       // Only include peers that we've caught up to their backfill line
       // otherwise, they only appear to be missing this object
       // because their peer_bi.begin > backfill_info.begin.
-      if (primary_bi.begin > peering_state().get_peer_last_backfill(bt) &&
-          backfill_state().progress_tracker->enqueue_push(primary_bi.begin)) {
-        backfill_listener().enqueue_push(primary_bi.begin, obj_v);
+      if (primary_bi.begin > peering_state().get_peer_last_backfill(bt)) {
+	std::ignore = backfill_state().progress_tracker->enqueue_push(
+	  primary_bi.begin);
+	auto &[v, peers] = backfills[primary_bi.begin];
+	assert(v == obj_v || v == eversion_t());
+	v = obj_v;
+	peers.push_back(bt);
       }
     }
+  }
+  for (auto &backfill : backfills) {
+    auto &soid = backfill.first;
+    auto &obj_v = backfill.second.first;
+    auto &peers = backfill.second.second;
+    backfill_listener().enqueue_push(soid, obj_v, peers);
   }
   return result;
 }

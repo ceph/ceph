@@ -315,7 +315,8 @@ struct BackfillState::BackfillListener {
 
   virtual void enqueue_push(
     const hobject_t& obj,
-    const eversion_t& v) = 0;
+    const eversion_t& v,
+    const std::vector<pg_shard_t> &peers) = 0;
 
   virtual void enqueue_drop(
     const pg_shard_t& target,
@@ -354,6 +355,10 @@ struct BackfillState::PeeringFacade {
   virtual void update_complete_backfill_object_stats(const hobject_t &hoid,
                                              const pg_stat_t &stats) = 0;
   virtual bool is_backfilling() const = 0;
+  virtual void prepare_backfill_for_missing(
+    const hobject_t &soid,
+    const eversion_t &v,
+    const std::vector<pg_shard_t> &peers) = 0;
   virtual ~PeeringFacade() {}
 };
 

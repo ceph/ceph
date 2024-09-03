@@ -128,7 +128,8 @@ class BackfillFixture : public crimson::osd::BackfillState::BackfillListener {
 
   void enqueue_push(
     const hobject_t& obj,
-    const eversion_t& v) override;
+    const eversion_t& v,
+    const std::vector<pg_shard_t> &peers) override;
 
   void enqueue_drop(
     const pg_shard_t& target,
@@ -222,6 +223,10 @@ struct BackfillFixture::PeeringFacade
   void update_complete_backfill_object_stats(const hobject_t &hoid,
                                              const pg_stat_t &stats) override {
   }
+  void prepare_backfill_for_missing(
+    const hobject_t &soid,
+    const eversion_t &v,
+    const std::vector<pg_shard_t> &peers) override {}
   bool is_backfilling() const override {
     return true;
   }
@@ -282,7 +287,8 @@ void BackfillFixture::request_primary_scan(
 
 void BackfillFixture::enqueue_push(
   const hobject_t& obj,
-  const eversion_t& v)
+  const eversion_t& v,
+  const std::vector<pg_shard_t> &)
 {
   for (auto& [ _, bt ] : backfill_targets) {
     bt.store.push(obj, v);

@@ -106,7 +106,8 @@ private:
     const hobject_t& begin) final;
   void enqueue_push(
     const hobject_t& obj,
-    const eversion_t& v) final;
+    const eversion_t& v,
+    const std::vector<pg_shard_t> &peers) final;
   void enqueue_drop(
     const pg_shard_t& target,
     const hobject_t& obj,
