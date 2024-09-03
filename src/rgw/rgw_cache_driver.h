@@ -3,13 +3,31 @@
 #include "rgw_common.h"
 #include "rgw_aio.h"
 
+constexpr char RGW_CACHE_ATTR_MTIME[] = "user.rgw.mtime";
+constexpr char RGW_CACHE_ATTR_EPOCH[] = "user.rgw.epoch";
+constexpr char RGW_CACHE_ATTR_OBJECT_SIZE[] = "user.rgw.object_size";
+constexpr char RGW_CACHE_ATTR_ACCOUNTED_SIZE[] = "user.rgw.accounted_size";
+constexpr char RGW_CACHE_ATTR_MULTIPART[] = "user.rgw.multipart";
+constexpr char RGW_CACHE_ATTR_OBJECT_NS[] = "user.rgw.object_ns";
+constexpr char RGW_CACHE_ATTR_BUCKET_NAME[] = "user.rgw.bucket_name";
+constexpr char RGW_CACHE_ATTR_VERSION_ID[] = "user.rgw.version_id";
+constexpr char RGW_CACHE_ATTR_SOURC_ZONE[] = "user.rgw.source_zone";
+constexpr char RGW_CACHE_ATTR_LOCAL_WEIGHT[] = "user.rgw.localWeight";
+
 namespace rgw { namespace cache {
 
+typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool dirty, uint64_t size,
+			    time_t creationTime, const rgw_user user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id,
+			    const rgw_obj_key& obj_key, optional_yield y)> ObjectDataCallback;
+
+typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, uint64_t offset, uint64_t len, const std::string& version,
+        bool dirty, optional_yield y, std::string& restore_val)> BlockDataCallback;
+
 struct Partition {
-    std::string name;
-    std::string type;
-    std::string location;
-    uint64_t size;
+  std::string name;
+  std::string type;
+  std::string location;
+  uint64_t size;
 };
 
 class CacheDriver {
@@ -36,6 +54,9 @@ class CacheDriver {
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) = 0;
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) = 0;
+
+    /* Data Recovery from Cache */
+    virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) = 0;
 };
 
 } } // namespace rgw::cache
