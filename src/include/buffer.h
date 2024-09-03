@@ -787,6 +787,8 @@ struct error_code;
     typedef iterator_impl<true> const_iterator;
 
     class CEPH_BUFFER_API iterator : public iterator_impl<false> {
+      void copy_in(unsigned len, const ptr& otherp);
+
     public:
       iterator() = default;
       iterator(bl_t *l, unsigned o=0);
