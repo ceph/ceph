@@ -120,7 +120,7 @@ constexpr size_t LEAF_NODE_CAPACITY = 140;
  *
  * On disk layout for lba_map_val_t.
  */
-struct lba_map_val_le_t {
+struct __attribute__((packed)) lba_map_val_le_t {
   extent_len_le_t len = init_extent_len_le(0);
   pladdr_le_t pladdr;
   extent_ref_count_le_t refcount{0};

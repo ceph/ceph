@@ -80,7 +80,7 @@ inline std::ostream &operator<<(
  * On disk layout for fixed_kv_node_meta_t
  */
 template <typename bound_le_t>
-struct fixed_kv_node_meta_le_t {
+struct __attribute__((packed)) fixed_kv_node_meta_le_t {
   bound_le_t begin = bound_le_t(0);
   bound_le_t end = bound_le_t(0);
   depth_le_t depth = init_depth_le(0);

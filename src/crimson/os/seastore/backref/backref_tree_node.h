@@ -34,7 +34,7 @@ struct backref_map_val_t {
 
 std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
 
-struct backref_map_val_le_t {
+struct __attribute__((packed)) backref_map_val_le_t {
   extent_len_le_t len = init_extent_len_le(0);
   laddr_le_t laddr = laddr_le_t(L_ADDR_MIN);
   extent_types_le_t type = 0;
