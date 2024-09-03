@@ -51,18 +51,28 @@ class NvmeofGatewaysConfig(object):
         return cls._load_config_from_store()
 
     @classmethod
-    def add_gateway(cls, name, service_url, group):
+    def add_gateway(cls, name, service_url, group, daemon_name):
         config = cls.get_gateways_config()
 
         if name in config.get('gateways', {}):
             existing_gateways = config['gateways'][name]
-            if any(gateway['service_url'] == service_url for gateway in existing_gateways):
-                return
+            for gateway in existing_gateways:
+                if 'daemon_name' not in gateway:
+                    gateway['daemon_name'] = daemon_name
+                    break
+                if gateway['service_url'] == service_url:
+                    return
+
+        new_gateway = {
+            'service_url': service_url,
+            'group': group,
+            'daemon_name': daemon_name
+        }
 
         if name in config.get('gateways', {}):
-            config['gateways'][name].append({'service_url': service_url, 'group': group})
+            config['gateways'][name].append(new_gateway)
         else:
-            config['gateways'][name] = [{'service_url': service_url, 'group': group}]
+            config['gateways'][name] = [new_gateway]
 
         cls._save_config(config)
 
@@ -83,15 +93,10 @@ class NvmeofGatewaysConfig(object):
                 return None
 
             if group:
-                for service_name, entries in gateways.items():
-                    if group in service_name:
-                        entry = next((entry for entry in entries if entry['group'] == group), None)
-                        if entry['group'] == group:  # type: ignore
-                            return service_name, entry['service_url']  # type: ignore
-                return None
+                return cls._get_name_url_for_group(gateways, group)
 
-            service_name = list(gateways.keys())[0]
-            return service_name, config['gateways'][service_name][0]['service_url']
+            return cls._get_default_service(gateways)
+
         except (KeyError, IndexError) as e:
             raise DashboardException(
                 msg=f'NVMe-oF configuration is not set: {e}',
@@ -131,3 +136,45 @@ class NvmeofGatewaysConfig(object):
             # just return None if any orchestrator error is raised
             # otherwise nvmeof api will raise this error and doesn't proceed.
             return None
+
+    @classmethod
+    def _get_name_url_for_group(cls, gateways, group):
+        try:
+            orch = OrchClient.instance()
+            for service_name, svc_config in gateways.items():
+                # get the group name of the service and match it against the
+                # group name provided
+                group_name_from_svc = orch.services.get(service_name)[0].spec.group
+                if group == group_name_from_svc:
+                    running_daemons = cls._get_running_daemons(orch, service_name)
+                    config = cls._get_running_daemon_svc_config(svc_config, running_daemons)
+
+                    if config:
+                        return service_name, config['service_url']
+            return None
+
+        except OrchestratorError:
+            return cls._get_default_service(gateways)
+
+    @classmethod
+    def _get_running_daemons(cls, orch, service_name):
+        # get the running nvmeof daemons
+        daemons = [d.to_dict()
+                   for d in orch.services.list_daemons(service_name=service_name)]
+        return [d['daemon_name'] for d in daemons
+                if d['status_desc'] == 'running']
+
+    @classmethod
+    def _get_running_daemon_svc_config(cls, svc_config, running_daemons):
+        try:
+            return next(config for config in svc_config
+                        if config['daemon_name'] in running_daemons)
+        except StopIteration:
+            return None
+
+    @classmethod
+    def _get_default_service(cls, gateways):
+        if gateways:
+            service_name = list(gateways.keys())[0]
+            return service_name, gateways[service_name][0]['service_url']
+        return None

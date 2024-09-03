@@ -106,7 +106,8 @@ class NvmeofService(CephService):
                         'prefix': 'dashboard nvmeof-gateway-add',
                         'inbuf': service_url,
                         'name': service_name,
-                        'group': spec.group
+                        'group': spec.group,
+                        'daemon_name': dd.name()
                     })
             return cmd_dicts
 
