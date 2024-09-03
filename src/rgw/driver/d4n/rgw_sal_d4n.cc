@@ -206,11 +206,11 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   //ATTRSMOD_NONE - the attributes of the source object will be copied without modifications, attrs parameter is ignored
   if (attrs_mod == rgw::sal::ATTRSMOD_NONE) {
     baseAttrs = this->get_attrs();
-    baseAttrs.erase("user.rgw.version_id"); //delete source version id
+    baseAttrs.erase(RGW_CACHE_ATTR_VERSION_ID); //delete source version id
     if (version_id) {
       bufferlist bl_val;
       bl_val.append(*version_id);
-      baseAttrs["user.rgw.version_id"] = std::move(bl_val); //populate destination version id
+      baseAttrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val); //populate destination version id
     }
   }
 
@@ -283,7 +283,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   }
   bufferlist bl_val;
   bl_val.append(std::to_string(this->is_multipart()));
-  baseAttrs["user.rgw.multipart"] = std::move(bl_val);
+  baseAttrs[RGW_CACHE_ATTR_MULTIPART] = std::move(bl_val);
   bl_val.append(*etag);
   baseAttrs[RGW_ATTR_ETAG] = std::move(bl_val);
   baseAttrs[RGW_ATTR_ACL] = std::move(attrs[RGW_ATTR_ACL]);
@@ -301,11 +301,13 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
   auto ret = driver->get_policy_driver()->get_cache_policy()->eviction(dpp, baseAttrs.size(), y);
   if (ret == 0) {
     ret = driver->get_cache_driver()->put(dpp, head_oid_in_cache, bl_data, 0, baseAttrs, y);
-    baseAttrs.erase("user.rgw.mtime");
-    baseAttrs.erase("user.rgw.object_size");
-    baseAttrs.erase("user.rgw.accounted_size");
-    baseAttrs.erase("user.rgw.epoch");
-    baseAttrs.erase("user.rgw.multipart");
+    baseAttrs.erase(RGW_CACHE_ATTR_MTIME);
+    baseAttrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
+    baseAttrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
+    baseAttrs.erase(RGW_CACHE_ATTR_EPOCH);
+    baseAttrs.erase(RGW_CACHE_ATTR_MULTIPART);
+    baseAttrs.erase(RGW_CACHE_ATTR_OBJECT_NS);
+    baseAttrs.erase(RGW_CACHE_ATTR_BUCKET_NAME);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << " version stored in update method is: " << dest_version << dendl;
       bufferlist bl;
@@ -396,29 +398,29 @@ int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, opt
     std::string instance;
     for (auto& attr : attrs) {
       if (attr.second.length() > 0) {
-        if (attr.first == "user.rgw.mtime") {
+        if (attr.first == RGW_CACHE_ATTR_MTIME) {
           ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): setting mtime." << dendl;
           auto mtime = ceph::real_clock::from_double(std::stod(attr.second.to_str()));
           this->set_mtime(mtime);
-        } else if (attr.first == "user.rgw.object_size") {
+        } else if (attr.first == RGW_CACHE_ATTR_OBJECT_SIZE) {
           auto size = std::stoull(attr.second.to_str());
           ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): setting object_size to: " << size << dendl;
           this->set_obj_size(size);
-        } else if (attr.first == "user.rgw.accounted_size") {
+        } else if (attr.first == RGW_CACHE_ATTR_ACCOUNTED_SIZE) {
           auto accounted_size = std::stoull(attr.second.to_str());
           this->set_accounted_size(accounted_size);
-        } else if (attr.first == "user.rgw.epoch") {
+        } else if (attr.first == RGW_CACHE_ATTR_EPOCH) {
           ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): setting epoch." << dendl;
           auto epoch = std::stoull(attr.second.to_str());
           this->set_epoch(epoch);
-        } else if (attr.first == "user.rgw.version_id") {
+        } else if (attr.first == RGW_CACHE_ATTR_VERSION_ID) {
           instance = attr.second.to_str();
           ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): setting version_id to: " << instance << dendl;
-        } else if (attr.first == "user.rgw.source_zone") {
+        } else if (attr.first == RGW_CACHE_ATTR_SOURC_ZONE) {
           ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): setting source zone id." << dendl;
           auto short_zone_id = static_cast<uint32_t>(std::stoul(attr.second.to_str()));
           this->set_short_zone_id(short_zone_id);
-        } else if (attr.first == "user.rgw.multipart") {
+        } else if (attr.first == RGW_CACHE_ATTR_MULTIPART) {
           std::string multipart = attr.second.to_str();
           this->multipart = (multipart == "1") ? true : false;
           ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): is_multipart: " << this->multipart << " multipart: " << multipart << dendl;
@@ -428,11 +430,13 @@ int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, opt
       }//end-if
     }//end-for
     this->set_instance(instance); //set this only after setting object state else it won't take effect
-    attrs.erase("user.rgw.mtime");
-    attrs.erase("user.rgw.object_size");
-    attrs.erase("user.rgw.accounted_size");
-    attrs.erase("user.rgw.epoch");
-    attrs.erase("user.rgw.multipart");
+    attrs.erase(RGW_CACHE_ATTR_MTIME);
+    attrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
+    attrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
+    attrs.erase(RGW_CACHE_ATTR_EPOCH);
+    attrs.erase(RGW_CACHE_ATTR_MULTIPART);
+    attrs.erase(RGW_CACHE_ATTR_OBJECT_NS);
+    attrs.erase(RGW_CACHE_ATTR_BUCKET_NAME);
     /* Set attributes locally */
     auto ret = this->set_attrs(attrs);
     if (ret < 0) {
@@ -474,24 +478,30 @@ void D4NFilterObject::set_attrs_from_obj_state(const DoutPrefixProvider* dpp, op
 {
   bufferlist bl_val;
   bl_val.append(std::to_string(this->get_size()));
-  attrs["user.rgw.object_size"] = std::move(bl_val);
+  attrs[RGW_CACHE_ATTR_OBJECT_SIZE] = std::move(bl_val);
 
   bl_val.append(std::to_string(this->get_epoch()));
-  attrs["user.rgw.epoch"] = std::move(bl_val);
+  attrs[RGW_CACHE_ATTR_EPOCH] = std::move(bl_val);
 
   bl_val.append(std::to_string(ceph::real_clock::to_double(this->get_mtime())));
-  attrs["user.rgw.mtime"] = std::move(bl_val);
+  attrs[RGW_CACHE_ATTR_MTIME] = std::move(bl_val);
 
   if(this->have_instance()) {
     bl_val.append(this->get_instance());
-    attrs["user.rgw.version_id"] = std::move(bl_val);
+    attrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val);
   }
 
   bl_val.append(std::to_string(this->get_short_zone_id()));
-  attrs["user.rgw.source_zone"] = std::move(bl_val);
+  attrs[RGW_CACHE_ATTR_SOURC_ZONE] = std::move(bl_val);
 
   bl_val.append(std::to_string(this->get_accounted_size()));
-  attrs["user.rgw.accounted_size"] = std::move(bl_val); // will this get updated?
+  attrs[RGW_CACHE_ATTR_ACCOUNTED_SIZE] = std::move(bl_val); // will this get updated?
+
+  bl_val.append(this->get_key().ns);
+  attrs[RGW_CACHE_ATTR_OBJECT_NS] = std::move(bl_val);
+
+  bl_val.append(this->get_bucket()->get_name());
+  attrs[RGW_CACHE_ATTR_BUCKET_NAME] = std::move(bl_val);
 
   return;
 }
@@ -739,6 +749,12 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
       found_in_cache = false;
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): CacheDriver get_attrs method failed." << dendl;
     }
+    std::string key = head_oid_in_cache;
+    if (block.cacheObj.dirty) {
+      // Remove dirty prefix
+      key = key.erase(0, 2);
+    }
+    this->driver->get_policy_driver()->get_cache_policy()->update(dpp, key, 0, 0, version, block.cacheObj.dirty, y);
   } else if (ret == -ENOENT) { //if blockDir->get
     found_in_cache = false;
   } else {
@@ -1920,8 +1936,8 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
       }
       
       std::string size;
-      if (attrs.find("user.rgw.object_size") != attrs.end()) {
-	size = attrs.find("user.rgw.object_size")->second.to_str();
+      if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
+	size = attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE)->second.to_str();
       } else {
 	ldpp_dout(dpp, 0) << "Failed to retrieve size for for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
         return -EINVAL;
@@ -2012,7 +2028,6 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
 int D4NFilterWriter::prepare(optional_yield y) 
 {
-  startTime = time(NULL);
   d4n_writecache = g_conf()->d4n_writecache_enabled;
 
   if (!d4n_writecache) {
@@ -2102,7 +2117,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 {
   bool dirty = false;
   std::unordered_set<std::string> hostsList = {};
-  auto creationTime = startTime;
   std::string objEtag = etag;
   auto size = object->get_size();
   std::string instance;
@@ -2175,6 +2189,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     ceph::real_time m_time;
     dirty = true;
     if (mtime) {
+      if (real_clock::is_zero(*mtime)) {
+        *mtime = real_clock::now();
+      }
       m_time = *mtime;
     } else {
       m_time = real_clock::now();
@@ -2220,11 +2237,13 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   ret = driver->get_policy_driver()->get_cache_policy()->eviction(dpp, attrs.size(), y);
   if (ret == 0) {
     ret = driver->get_cache_driver()->put(dpp, head_oid_in_cache, bl, 0, attrs, y);
-    attrs.erase("user.rgw.mtime");
-    attrs.erase("user.rgw.object_size");
-    attrs.erase("user.rgw.accounted_size");
-    attrs.erase("user.rgw.epoch");
-    attrs.erase("user.rgw.multipart");
+    attrs.erase(RGW_CACHE_ATTR_MTIME);
+    attrs.erase(RGW_CACHE_ATTR_OBJECT_SIZE);
+    attrs.erase(RGW_CACHE_ATTR_ACCOUNTED_SIZE);
+    attrs.erase(RGW_CACHE_ATTR_EPOCH);
+    attrs.erase(RGW_CACHE_ATTR_MULTIPART);
+    attrs.erase(RGW_CACHE_ATTR_OBJECT_NS);
+    attrs.erase(RGW_CACHE_ATTR_BUCKET_NAME);
     object->set_object_version(version);
     if (ret == 0) {
       ldpp_dout(dpp, 20) << "D4NFilterWriter::" << __func__ << "(): version stored in update method is: " << version << dendl;
@@ -2237,6 +2256,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
       if (dirty) {
         //using object oid here so that version is automatically picked for versioned buckets, and for non-versioned buckets the old version is replaced by the latest version
         std::string object_key = obj->get_bucket()->get_bucket_id() + "_" + obj->get_oid();
+        auto creationTime = ceph::real_clock::to_time_t(object->get_mtime());
         ldpp_dout(dpp, 16) << "D4NFilterWriter::" << __func__ << "(): object_key=" << object_key << dendl;
         driver->get_policy_driver()->get_cache_policy()->update_dirty_object(dpp, object_key, version, dirty, accounted_size, creationTime, std::get<rgw_user>(obj->get_bucket()->get_owner()), objEtag, obj->get_bucket()->get_name(), obj->get_bucket()->get_bucket_id(), obj->get_key(), y);
       }
@@ -2278,7 +2298,7 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
   bufferlist bl_val;
   bool is_multipart = true;
   bl_val.append(std::to_string(is_multipart));
-  attrs["user.rgw.multipart"] = std::move(bl_val);
+  attrs[RGW_CACHE_ATTR_MULTIPART] = std::move(bl_val);
 
   std::string version;
   d4n_target_obj->calculate_version(dpp, y, version, attrs);

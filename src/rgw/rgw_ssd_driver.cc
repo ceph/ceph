@@ -13,8 +13,6 @@ namespace efs = std::filesystem;
 
 namespace rgw { namespace cache {
 
-constexpr std::string_view ATTR_PREFIX = "user.rgw.";
-
 int SSDDriver::initialize(const DoutPrefixProvider* dpp)
 {
     if(partition_info.location.back() != '/') {
@@ -88,6 +86,161 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
     efs::space_info space = efs::space(partition_info.location);
     //currently partition_info.size is unused
     this->free_space = space.available;
+
+    return 0;
+}
+
+int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func)
+{
+    if (dpp->get_cct()->_conf->rgw_d4n_l1_evict_cache_on_start) {
+        return 0; //don't do anything as the cache directory must have been evicted during start-up
+    }
+    for (auto const& dir_entry : std::filesystem::directory_iterator{partition_info.location}) {
+        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): dir_entry.path: " << dir_entry.path() << dendl;
+        std::string file_name = dir_entry.path().filename();
+        std::vector<std::string> parts;
+        std::string part;
+        bool parsed = false;
+        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): filename: " << file_name << dendl;
+        try {
+            std::stringstream ss(file_name);
+            while (std::getline(ss, part, '_')) {
+                parts.push_back(part);
+            }
+            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): parts.size(): " << parts.size() << dendl;
+            //non-dirty or clean blocks - bucket_id, version, object_name in head block and offset, len in data blocks
+            if (parts.size() == 3 || parts.size() == 5) {
+                std::string key = file_name;
+                ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): file_name: " << file_name << dendl;
+
+                std::string version = parts[1];
+                ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): version: " << version << dendl;
+
+                uint64_t offset = 0, len = 0;
+                if (parts.size() == 5) {
+                    offset = std::stoull(parts[3]);
+                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): offset: " << offset << dendl;
+
+                    len = std::stoull(parts[4]);
+                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): len: " << len << dendl;
+                }
+                std::string localWeightStr;
+                auto ret = get_attr(dpp, file_name, RGW_CACHE_ATTR_LOCAL_WEIGHT, localWeightStr, null_yield);
+                if (ret < 0) {
+                    ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << RGW_CACHE_ATTR_LOCAL_WEIGHT << dendl;
+                } else {
+                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
+                }
+                block_func(dpp, key, offset, len, version, false, null_yield, localWeightStr);
+                parsed = true;
+            }
+            //dirty blocks - "D", bucket_id, version, object_name in head block and offset, len in data blocks
+            if ((parts.size() == 4 || parts.size() == 6) && parts[0] == "D") {
+                std::string prefix = "D_";
+                if (file_name.starts_with(prefix)) {
+                    std::string key = file_name.substr(prefix.length());
+                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key: " << key << dendl;
+
+                    bool dirty = true;
+
+                    std::string bucket_id = parts[1];
+                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): bucket_id: " << bucket_id << dendl;
+
+                    std::string version = parts[2];
+                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): version: " << version << dendl;
+
+                    std::string obj_name = parts[3];
+                    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): obj_name: " << obj_name << dendl;
+
+                    uint64_t len = 0, offset = 0;
+                    std::string localWeightStr;
+                    if (parts.size() == 4) {
+                        rgw::sal::Attrs attrs;
+                        get_attrs(dpp, file_name, attrs, null_yield);
+                        std::string etag, bucket_name;
+                        uint64_t size = 0;
+                        time_t creationTime = time_t(nullptr);
+                        rgw_user user;
+                        rgw_obj_key obj_key;
+                        if (attrs.find(RGW_ATTR_ETAG) != attrs.end()) {
+                            etag = attrs[RGW_ATTR_ETAG].to_str();
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): etag: " << etag << dendl;
+                        }
+                        if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
+                            size = std::stoull(attrs[RGW_CACHE_ATTR_OBJECT_SIZE].to_str());
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): size: " << size << dendl;
+                        }
+                        if (attrs.find(RGW_CACHE_ATTR_MTIME) != attrs.end()) {
+                            creationTime = ceph::real_clock::to_time_t(ceph::real_clock::from_double(std::stod(attrs[RGW_CACHE_ATTR_MTIME].to_str())));
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): creationTime: " << creationTime << dendl;
+                        }
+                        if (attrs.find(RGW_ATTR_ACL) != attrs.end()) {
+                            bufferlist bl_acl = attrs[RGW_ATTR_ACL];
+                            RGWAccessControlPolicy policy;
+                            auto iter = bl_acl.cbegin();
+                            try {
+                                policy.decode(iter);
+                            } catch (buffer::error& err) {
+                                ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+                                continue;
+                            }
+                            user = std::get<rgw_user>(policy.get_owner().id);
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_user: " << user.to_str() << dendl;
+                        }
+                        obj_key.name = obj_name;
+                        if (attrs.find(RGW_CACHE_ATTR_VERSION_ID) != attrs.end()) {
+                            std::string instance = attrs[RGW_CACHE_ATTR_VERSION_ID].to_str();
+                            if (instance != "null") {
+                                obj_key.instance = instance;
+                            }
+                        }
+                        if (attrs.find(RGW_CACHE_ATTR_OBJECT_NS) != attrs.end()) {
+                            obj_key.ns = attrs[RGW_CACHE_ATTR_OBJECT_NS].to_str();
+                        }
+                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): rgw_obj_key: " << obj_key.get_oid() << dendl;
+                        if (attrs.find(RGW_CACHE_ATTR_BUCKET_NAME) != attrs.end()) {
+                            bucket_name = attrs[RGW_CACHE_ATTR_BUCKET_NAME].to_str();
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): bucket_name: " << bucket_name << dendl;
+                        }
+
+                        if (attrs.find(RGW_CACHE_ATTR_LOCAL_WEIGHT) != attrs.end()) {
+                            localWeightStr = attrs[RGW_CACHE_ATTR_LOCAL_WEIGHT].to_str();
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
+                        }
+
+                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): calling func for: " << key << dendl;
+                        obj_func(dpp, key, version, dirty, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, null_yield);
+                        block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
+                        parsed = true;
+                    } //end-if part.size() == 4
+                    if (parts.size() == 6) {
+                        offset = std::stoull(parts[4]);
+                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): offset: " << offset << dendl;
+
+                        len = std::stoull(parts[5]);
+                        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): len: " << len << dendl;
+                        std::string localWeightStr;
+                        auto ret = get_attr(dpp, file_name, RGW_CACHE_ATTR_LOCAL_WEIGHT, localWeightStr, null_yield);
+                        if (ret < 0) {
+                            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): Failed to get attr: " << RGW_CACHE_ATTR_LOCAL_WEIGHT << dendl;
+                        } else {
+                            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): localWeightStr: " << localWeightStr << dendl;
+                        }
+                        block_func(dpp, key, offset, len, version, dirty, null_yield, localWeightStr);
+                        parsed = true;
+                    }
+                } //end-if file_name.starts_with
+            } //end-if parts.size() == 4 || parts.size() == 6
+            if (!parsed) {
+                ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Unable to parse file_name: " << file_name << dendl;
+                continue;
+            }
+        }//end-try
+        catch(...) {
+            ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Execption while parsing file_name: " << file_name << dendl;
+            continue;
+        }
+    }
 
     return 0;
 }
@@ -526,7 +679,7 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
 
         keylen = strlen(keyptr) + 1;
         std::string attr_name(keyptr);
-        std::string::size_type prefixloc = attr_name.find(ATTR_PREFIX);
+        std::string::size_type prefixloc = attr_name.find(RGW_ATTR_PREFIX);
         buflen -= keylen;
         keyptr += keylen;
         if (prefixloc == std::string::npos) {
