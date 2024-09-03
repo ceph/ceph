@@ -35,7 +35,7 @@ namespace crimson::osd {
 
 void usage(const char* prog)
 {
-  std::cout << "usage: " << prog << std::endl;
+  std::cout << "crimson osd usage: " << prog << " -i <ID> [flags...]" << std::endl;
   generic_server_usage();
 }
 
@@ -97,11 +97,6 @@ _get_early_config(int argc, const char *argv[])
     CEPH_ENTITY_TYPE_OSD,
     &ret.cluster_name,
     &ret.conf_file_list);
-
-  if (ceph_argparse_need_usage(early_args)) {
-    usage(argv[0]);
-    exit(0);
-  }
 
   seastar::app_template::config app_cfg;
   app_cfg.name = "Crimson-startup";
@@ -221,6 +216,15 @@ _get_early_config(int argc, const char *argv[])
 tl::expected<early_config_t, int>
 get_early_config(int argc, const char *argv[])
 {
+  auto args = argv_to_vec(argc, argv);
+  if (args.empty()) {
+    std::cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage(argv[0]);
+    exit(0);
+  }
   int pipes[2];
   int r = pipe2(pipes, 0);
   if (r < 0) {
@@ -262,12 +266,20 @@ get_early_config(int argc, const char *argv[])
 
     bufferlist bl;
     early_config_t ret;
-    while ((r = bl.read_fd(pipes[0], 1024)) > 0);
+    bool have_data = false;
+    while ((r = bl.read_fd(pipes[0], 1024)) > 0) {
+      have_data = true;
+    }
     close(pipes[0]);
 
-    // ignore error, we'll propogate error based on read and decode
-    waitpid(worker, nullptr, 0);
+    int status;
+    waitpid(worker, &status, 0);
 
+    // One of the parameters was taged as exit(0) in the child process
+    // so we need to check if we should exit here
+    if (!have_data && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+      exit(0);
+    }
     if (r < 0) {
       std::cerr << "get_early_config: parent failed to read from pipe: "
 		<< r << std::endl;
