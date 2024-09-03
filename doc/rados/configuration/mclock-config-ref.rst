@@ -164,6 +164,60 @@ parameters. This profile should be used with caution and is meant for advanced
 users, who understand mclock and Ceph related configuration options.
 
 
+.. index:: mclock; shard config for HDD clusters
+
+.. _mclock-hdd-cfg:
+
+OSD Shard Configuration For HDD Based Clusters With mClock
+==========================================================
+Each OSD is configured with one or more shards to perform tasks. Each shard
+comprises a unique queue to handle various types of OSD specific operations
+like client I/O, recovery, scrub and so on. The scheduling of these operations
+in the queue is performed by a scheduler - in this case the mClock scheduler.
+
+For HDD based OSDs, the number of shards is controlled by configuration
+:confval:`osd_op_num_shards_hdd`. Items are queued and dequeued by one or
+more worker threads and this is controlled by configuration
+:confval:`osd_op_num_threads_per_shard_hdd`.
+
+As described in :ref:`dmclock-qos-caveats`, the number of OSD shards employed
+determines the impact of mClock queue. In general, a lower number of shards
+increases the impact of mClock queues with respect to scheduling accuracy.
+This is providing there are enough number of worker threads per shard
+to help process the items in the mClock queue.
+
+Based on tests performed at scale with small objects in the range
+[1 KiB - 256 KiB] on a HDD based cluster (192 OSDs, 8 nodes,
+150 Million objects), it was found that scheduling with mClock was not optimal
+with multiple OSD shards. For example, in this cluster with multiple OSD node
+failures, the client throughput was found to be inconsistent across test runs
+coupled with multiple reported slow requests. For more details
+see https://tracker.ceph.com/issues/66289. With multiple shards, the situation
+was exacerbated when MAX limit was allocated to both client and background
+recovery class of operations. During the OSD failure phase, since both client
+and recovery ops were in direct competition to utilize the full bandwidth of
+OSDs, there was no predictability with respect to the throughput of either
+class of services.
+
+However, the same test with a single OSD shard and with multiple worker threads
+yielded significantly better results in terms of consistency of client and
+recovery throughput across multiple test runs. Please refer to the tracker
+above for more details. For sanity, the same test executed using this shard
+configuration with large objects in the range [1 MiB - 256 MiB] yielded similar
+results.
+
+Therefore, as an interim measure until the issue with multiple OSD shards
+(or multiple mClock queues per OSD) is investigated and fixed, the following
+change to the default HDD OSD shard configuration is made:
+
++---------------------------------------------+------------------+----------------+
+|  Config Option                              | Old Default      | New Default    |
++=============================================+==================+================+
+| :confval:`osd_op_num_shards_hdd`            | 5                | 1              |
++---------------------------------------------+------------------+----------------+
+| :confval:`osd_op_num_threads_per_shard_hdd` | 1                | 5              |
++---------------------------------------------+------------------+----------------+
+
 .. index:: mclock; built-in profiles
 
 mClock Built-in Profiles -  Locked Config Options
