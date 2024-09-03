@@ -26,12 +26,12 @@ private:
   ll_read_ierrorator::future<ceph::bufferlist>
   _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;
   rep_op_fut_t
-  _submit_transaction(std::set<pg_shard_t>&& pg_shards,
-		      const hobject_t& hoid,
-		      ceph::os::Transaction&& txn,
-		      osd_op_params_t&& req,
-		      epoch_t min_epoch, epoch_t max_epoch,
-		      std::vector<pg_log_entry_t>&& log_entries) final;
+  submit_transaction(const std::set<pg_shard_t> &pg_shards,
+		     const hobject_t& hoid,
+		     ceph::os::Transaction&& txn,
+		     osd_op_params_t&& req,
+		     epoch_t min_epoch, epoch_t max_epoch,
+		     std::vector<pg_log_entry_t>&& log_entries) final;
   CollectionRef coll;
   seastar::future<> request_committed(const osd_reqid_t& reqid,
 				       const eversion_t& version) final {
