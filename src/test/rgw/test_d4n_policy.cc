@@ -179,7 +179,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 
     boost::system::error_code ec;
     request req;
-    req.push("HGET", "RedisCache/testBucket_testName_0_0", "user.rgw.localWeight");
+    req.push("HGET", "RedisCache/testBucket_testName_0_0", RGW_CACHE_ATTR_LOCAL_WEIGHT);
     req.push("FLUSHALL");
 
     response<std::string, boost::redis::ignore_t> resp;
