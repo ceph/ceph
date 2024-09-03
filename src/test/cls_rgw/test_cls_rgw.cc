@@ -1354,10 +1354,11 @@ TEST_F(cls_rgw, index_racing_removes)
 }
 
 void set_reshard_status(librados::IoCtx& ioctx, const std::string& oid,
-                const cls_rgw_bucket_instance_entry& entry)
+                        cls_rgw_reshard_status status)
 {
   map<int, string> bucket_objs;
   bucket_objs[0] = oid;
+  const auto entry = cls_rgw_bucket_instance_entry{.reshard_status = status};
   int r = CLSRGWIssueSetBucketResharding(ioctx, bucket_objs, entry, 1)();
   ASSERT_EQ(0, r);
 }
@@ -1395,9 +1396,7 @@ TEST_F(cls_rgw, reshardlog_list)
   ASSERT_EQ(0u, entries.size());
 
   // set reshard status to IN_LOGRECORD
-  cls_rgw_bucket_instance_entry entry;
-  entry.reshard_status = cls_rgw_reshard_status::IN_LOGRECORD;
-  set_reshard_status(ioctx, bucket_oid, entry);
+  set_reshard_status(ioctx, bucket_oid, cls_rgw_reshard_status::IN_LOGRECORD);
 
   // record a log in prepare
   cls_rgw_obj_key obj2 = str_int("obj2", 0);
@@ -1465,9 +1464,7 @@ TEST_F(cls_rgw, reshardlog_num)
   reshardlog_entries(ioctx, bucket_oid, 0u);
 
   // set reshard status to IN_LOGRECORD
-  cls_rgw_bucket_instance_entry entry;
-  entry.reshard_status = cls_rgw_reshard_status::IN_LOGRECORD;
-  set_reshard_status(ioctx, bucket_oid, entry);
+  set_reshard_status(ioctx, bucket_oid, cls_rgw_reshard_status::IN_LOGRECORD);
 
   // record a log in prepare not add reshardlog_entry
   cls_rgw_obj_key obj2 = str_int("obj2", 0);
