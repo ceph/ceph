@@ -528,10 +528,12 @@ void PGRecovery::request_primary_scan(
 
 void PGRecovery::enqueue_push(
   const hobject_t& obj,
-  const eversion_t& v)
+  const eversion_t& v,
+  const std::vector<pg_shard_t> &peers)
 {
-  logger().info("{}: obj={} v={}",
-                 __func__, obj, v);
+  logger().info("{}: obj={} v={} peers={}", __func__, obj, v, peers);
+  auto &peering_state = pg->get_peering_state();
+  peering_state.prepare_backfill_for_missing(obj, v, peers);
   auto [recovering, added] = pg->get_recovery_backend()->add_recovering(obj);
   if (!added)
     return;
