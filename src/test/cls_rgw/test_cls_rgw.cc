@@ -52,7 +52,7 @@ string str_int(string s, int i)
   return s;
 }
 
-void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, uint64_t num_entries, uint64_t total_size)
+void test_stats(librados::IoCtx& ioctx, const string& oid, RGWObjCategory category, uint64_t num_entries, uint64_t total_size)
 {
   map<int, struct rgw_cls_list_ret> results;
   map<int, string> oids;
@@ -70,8 +70,8 @@ void test_stats(librados::IoCtx& ioctx, string& oid, RGWObjCategory category, ui
   ASSERT_EQ(num_entries, entries);
 }
 
-void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
-                   string& tag, const cls_rgw_obj_key& key, string& loc,
+void index_prepare(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
+                   const string& tag, const cls_rgw_obj_key& key, const string& loc,
                    uint16_t bi_flags = 0, bool log_op = true)
 {
   ObjectWriteOperation op;
@@ -80,8 +80,8 @@ void index_prepare(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
-void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
-                    string& tag, int epoch, const cls_rgw_obj_key& key,
+void index_complete(librados::IoCtx& ioctx, const string& oid, RGWModifyOp index_op,
+                    const string& tag, int epoch, const cls_rgw_obj_key& key,
                     rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0,
                     bool log_op = true)
 {
