@@ -262,7 +262,6 @@ class D4NFilterWriter : public FilterWriter {
     bool atomic;
     optional_yield y;
     bool d4n_writecache;
-    time_t startTime;
     std::string version;
 
   public:
