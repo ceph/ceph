@@ -623,36 +623,31 @@ void PGRecovery::backfill_cancelled()
   using BackfillState = crimson::osd::BackfillState;
   backfill_state->process_event(
     BackfillState::CancelBackfill{}.intrusive_from_this());
-  backfill_state.reset();
 }
 
 void PGRecovery::dispatch_backfill_event(
   boost::intrusive_ptr<const boost::statechart::event_base> evt)
 {
   logger().debug("{}", __func__);
-  if (backfill_state) {
-    backfill_state->process_event(evt);
-  } else {
-    // TODO: Do we need to worry about cases in which the pg has
-    // 	     been through both backfill cancellations and backfill
-    // 	     restarts between the sendings and replies of
-    // 	     ReplicaScan/ObjectPush requests? Seems classic OSDs
-    // 	     doesn't handle these cases.
-    logger().debug("{}, backfill cancelled, dropping evt");
-  }
+  assert(backfill_state);
+  backfill_state->process_event(evt);
+  // TODO: Do we need to worry about cases in which the pg has
+  //       been through both backfill cancellations and backfill
+  //       restarts between the sendings and replies of
+  //       ReplicaScan/ObjectPush requests? Seems classic OSDs
+  //       doesn't handle these cases.
+}
+
+void PGRecovery::on_activate_complete()
+{
+  logger().debug("{} backfill_state={}",
+                 __func__, fmt::ptr(backfill_state.get()));
+  backfill_state.reset();
 }
 
 void PGRecovery::on_backfill_reserved()
 {
   logger().debug("{}", __func__);
-  // PIMP and depedency injection for the sake unittestability.
-  // I'm not afraid about the performance here.
-  using BackfillState = crimson::osd::BackfillState;
-  backfill_state = std::make_unique<BackfillState>(
-    *this,
-    std::make_unique<crimson::osd::PeeringFacade>(pg->get_peering_state()),
-    std::make_unique<crimson::osd::PGFacade>(
-      *static_cast<crimson::osd::PG*>(pg)));
   // yes, it's **not** backfilling yet. The PG_STATE_BACKFILLING
   // will be set after on_backfill_reserved() returns.
   // Backfill needs to take this into consideration when scheduling
@@ -660,5 +655,19 @@ void PGRecovery::on_backfill_reserved()
   // instances. Otherwise the execution might begin without having
   // the state updated.
   ceph_assert(!pg->get_peering_state().is_backfilling());
+  // let's be lazy with creating the backfill stuff
+  using BackfillState = crimson::osd::BackfillState;
+  if (!backfill_state) {
+    // PIMP and depedency injection for the sake of unittestability.
+    // I'm not afraid about the performance here.
+    backfill_state = std::make_unique<BackfillState>(
+      *this,
+      std::make_unique<crimson::osd::PeeringFacade>(pg->get_peering_state()),
+      std::make_unique<crimson::osd::PGFacade>(
+        *static_cast<crimson::osd::PG*>(pg)));
+  }
+  // it may be we either start a completely new backfill (first
+  // event since last on_activate_complete()) or to resume already
+  // (but stopped one).
   start_backfill_recovery(BackfillState::Triggered{});
 }
