@@ -1720,9 +1720,10 @@ TEST(BufferList, page_aligned_appender) {
     cout << bl << std::endl;
     ASSERT_EQ(2u, bl.get_num_buffers());
 
+    const auto& initial_back = bl.back();
     a.append_zero(42);
-    // ensure append_zero didn't introduce a fragmentation
-    ASSERT_EQ(2u, bl.get_num_buffers());
+    // the extra ptr is expected due to `append_zero()` deduplicates zeros.
+    ASSERT_EQ(3u, bl.get_num_buffers());
     // verify the end is actually zeroed
     {
       bufferlist t;
@@ -1733,20 +1734,19 @@ TEST(BufferList, page_aligned_appender) {
     // let's check whether appending a bufferlist directly to `bl`
     // doesn't fragment further C string appends via appender.
     {
-      const auto& initial_back = bl.back();
       {
         bufferlist src;
         src.append("abc", 3);
         bl.claim_append(src);
         // surely the extra `ptr_node` taken from `src` must get
         // reflected in the `bl` instance
-        ASSERT_EQ(3u, bl.get_num_buffers());
+        ASSERT_EQ(4u, bl.get_num_buffers());
       }
 
       // moreover, the next C string-taking `append()` had to
       // create anoter `ptr_node` instance but...
       a.append("xyz", 3);
-      ASSERT_EQ(4u, bl.get_num_buffers());
+      ASSERT_EQ(5u, bl.get_num_buffers());
 
       // ... it should point to the same `buffer::raw` instance
       // (to the same same block of memory).
@@ -1762,17 +1762,16 @@ TEST(BufferList, page_aligned_appender) {
 
   {
     cout << bl << std::endl;
-    ASSERT_EQ(6u, bl.get_num_buffers());
+    ASSERT_EQ(7u, bl.get_num_buffers());
   }
 
   // Verify that `page_aligned_appender` does respect the carrying
-  // `_carriage` over multiple allocations. Although `append_zero()`
-  // is used here, this affects other members of the append family.
+  // `_carriage` over multiple allocations.
   // This part would be crucial for e.g. `encode()`.
   {
-    bl.append_zero(42);
+    bl.append("foo", strlen("foo"));
     cout << bl << std::endl;
-    ASSERT_EQ(6u, bl.get_num_buffers());
+    ASSERT_EQ(7u, bl.get_num_buffers());
   }
 }
 
@@ -2269,7 +2268,6 @@ TEST(BufferList, append_zero) {
   EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)1, bl.length());
   bl.append_zero(1);
-  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)2, bl.length());
   EXPECT_EQ('\0', bl[1]);
 }
