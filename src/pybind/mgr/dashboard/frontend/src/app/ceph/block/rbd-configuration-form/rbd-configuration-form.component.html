@@ -1,0 +1,81 @@
+<fieldset #cfgFormGroup
+          [formGroup]="form.get('configuration')">
+  <legend i18n>RBD Configuration</legend>
+
+  <div *ngFor="let section of rbdConfigurationService.sections">
+    <h5 class="cd-header">
+      <legend (click)="toggleSectionVisibility(section.class)"
+              class="collapsible">
+        {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
+                                 aria-hidden="true"></i>
+      </legend>
+    </h5>
+    <div class="{{ section.class }}"
+         [hidden]="!sectionVisibility[section.class]">
+      <div class="form-item"
+           *ngFor="let option of section.options">
+        <cds-text-label [helperText]="option.description"
+                        [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty)"
+                        [invalidText]="formError">
+          {{ option.displayName }}
+
+          <div class="cds-input-group">
+            <ng-container [ngSwitch]="option.type">
+              <ng-container *ngSwitchCase="configurationType.milliseconds">
+                <input [id]="option.name"
+                       [name]="option.name"
+                       [formControlName]="option.name"
+                       type="text"
+                       cdsText
+                       [ngDataReady]="ngDataReady"
+                       [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty)"
+                       cdMilliseconds>
+              </ng-container>
+              <ng-container *ngSwitchCase="configurationType.bps">
+                <input [id]="option.name"
+                       [name]="option.name"
+                       [formControlName]="option.name"
+                       type="text"
+                       cdsText
+                       defaultUnit="b"
+                       [ngDataReady]="ngDataReady"
+                       [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty)"
+                       cdDimlessBinaryPerSecond>
+              </ng-container>
+              <ng-container *ngSwitchCase="configurationType.iops">
+                <input [id]="option.name"
+                       [name]="option.name"
+                       [formControlName]="option.name"
+                       type="text"
+                       cdsText
+                       [ngDataReady]="ngDataReady"
+                       [invalid]="form.get('configuration').controls[option.name].invalid && (form.get('configuration').controls[option.name].dirty)"
+                       cdIops>
+              </ng-container>
+            </ng-container>
+            <cds-icon-button kind="ghost"
+                             size="md"
+                             (click)="reset(option.name)"
+                             data-toggle="button">
+              <svg cdsIcon="close"
+                   size="32"
+                   class="cds--btn__icon"
+                   *ngIf="!form.get('configuration').get(option.name).disabled; else resetIcon"></svg>
+              <ng-template #resetIcon>
+                <svg cdsIcon="reset"
+                     size="32"
+                     class="cds--btn__icon"
+                     *ngIf="form.get('configuration').get(option.name).disabled"></svg>
+              </ng-template>
+            </cds-icon-button>
+            <ng-template #formError>
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('configuration.' + option.name, cfgFormGroup, 'min')"
+                    i18n>The minimum value is 0.</span>
+            </ng-template>
+          </div>
+        </cds-text-label>
+      </div>
+    </div>
+  </div>
+</fieldset>
