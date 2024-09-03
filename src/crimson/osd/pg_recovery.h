@@ -33,6 +33,7 @@ public:
   interruptible_future<bool> start_recovery_ops(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     size_t max_to_start);
+  void on_activate_complete();
   void on_backfill_reserved();
   void dispatch_backfill_event(
     boost::intrusive_ptr<const boost::statechart::event_base> evt);
