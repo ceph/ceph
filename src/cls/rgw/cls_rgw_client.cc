@@ -186,7 +186,6 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   return true;
 }
 
-// note: currently only called by testing code
 void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
 {
   bufferlist in;
@@ -200,8 +199,14 @@ static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
   bufferlist in;
   librados::ObjectWriteOperation op;
   op.create(true);
-  op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX, in);
+  cls_rgw_bucket_init_index(op);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
+}
+
+void cls_rgw_bucket_init_index2(ObjectWriteOperation& o)
+{
+  bufferlist in;
+  o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
 }
 
 static bool issue_bucket_index_init_op2(librados::IoCtx& io_ctx,
@@ -211,7 +216,7 @@ static bool issue_bucket_index_init_op2(librados::IoCtx& io_ctx,
   bufferlist in;
   librados::ObjectWriteOperation op;
   op.create(true);
-  op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
+  cls_rgw_bucket_init_index2(op);
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
