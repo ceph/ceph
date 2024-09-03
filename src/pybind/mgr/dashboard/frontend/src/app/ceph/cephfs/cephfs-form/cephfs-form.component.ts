@@ -19,7 +19,6 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 
 @Component({
   selector: 'cd-cephfs-form',
@@ -123,9 +122,8 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
         }
       });
     } else {
-      const hostContext = new CdTableFetchDataContext(() => undefined);
       this.hostsAndLabels$ = forkJoin({
-        hosts: this.hostService.list(hostContext.toParams(), 'false'),
+        hosts: this.hostService.getAllHosts(),
         labels: this.hostService.getLabels()
       }).pipe(
         map(({ hosts, labels }) => ({

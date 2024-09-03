@@ -13,7 +13,10 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { HostService } from '~/app/shared/api/host.service';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
+import { DaemonService } from '~/app/shared/api/daemon.service';
+import { map } from 'rxjs/operators';
+import { forkJoin } from 'rxjs';
+
 @Component({
   selector: 'cd-nvmeof-listeners-form',
   templateUrl: './nvmeof-listeners-form.component.html',
@@ -39,7 +42,8 @@ export class NvmeofListenersFormComponent implements OnInit {
     private route: ActivatedRoute,
     public activeModal: NgbActiveModal,
     public formatterService: FormatterService,
-    public dimlessBinaryPipe: DimlessBinaryPipe
+    public dimlessBinaryPipe: DimlessBinaryPipe,
+    private daemonService: DaemonService
   ) {
     this.permission = this.authStorageService.getPermissions().nvmeof;
     this.hostPermission = this.authStorageService.getPermissions().hosts;
@@ -48,13 +52,19 @@ export class NvmeofListenersFormComponent implements OnInit {
   }
 
   setHosts() {
-    const hostContext = new CdTableFetchDataContext(() => undefined);
-    this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: any[]) => {
-      const nvmeofHosts = resp.filter((r) =>
-        r.service_instances.some((si: any) => si.type === 'nvmeof')
-      );
-      this.hosts = nvmeofHosts.map((h) => ({ hostname: h.hostname, addr: h.addr }));
-    });
+    forkJoin({
+      daemons: this.daemonService.list(['nvmeof']),
+      hosts: this.hostService.getAllHosts()
+    })
+      .pipe(
+        map(({ daemons, hosts }) => {
+          const hostNamesFromDaemon = daemons.map((daemon: any) => daemon.hostname);
+          return hosts.filter((host: any) => hostNamesFromDaemon.includes(host.hostname));
+        })
+      )
+      .subscribe((nvmeofHosts: any[]) => {
+        this.hosts = nvmeofHosts.map((h) => ({ hostname: h.hostname, addr: h.addr }));
+      });
   }
 
   ngOnInit() {
