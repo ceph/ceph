@@ -282,8 +282,9 @@ void GroupReplayer<I>::sync_group_names() {
     }
 
     m_local_group_name = remote_group_name;
-    reregister_admin_socket_hook();
   }
+
+  reregister_admin_socket_hook();
 }
 
 template <typename I>
@@ -570,7 +571,7 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
     }
   }
 
-  reregister_admin_socket_hook();
+  sync_group_names();
 
   if (finish_start_if_interrupted()) {
     return;
