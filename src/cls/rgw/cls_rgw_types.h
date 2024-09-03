@@ -197,20 +197,17 @@ inline std::ostream& operator<<(std::ostream& out, RGWObjCategory c) {
 }
 
 struct rgw_bucket_dir_entry_meta {
-  RGWObjCategory category;
-  uint64_t size;
+  RGWObjCategory category = RGWObjCategory::None;
+  uint64_t size = 0;
   ceph::real_time mtime;
   std::string etag;
   std::string owner;
   std::string owner_display_name;
   std::string content_type;
-  uint64_t accounted_size;
+  uint64_t accounted_size = 0;
   std::string user_data;
   std::string storage_class;
-  bool appendable;
-
-  rgw_bucket_dir_entry_meta() :
-    category(RGWObjCategory::None), size(0), accounted_size(0), appendable(false) { }
+  bool appendable = false;
 
   void encode(ceph::buffer::list &bl) const {
     ENCODE_START(7, 3, bl);
