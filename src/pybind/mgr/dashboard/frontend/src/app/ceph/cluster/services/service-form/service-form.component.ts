@@ -28,7 +28,6 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
-import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -400,8 +399,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
       this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
-    const hostContext = new CdTableFetchDataContext(() => undefined);
-    this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: object[]) => {
+    this.hostService.getAllHosts().subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {
