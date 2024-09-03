@@ -5,6 +5,8 @@ import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
 
+export const MAX_NAMESPACE = 1024;
+
 export interface ListenerRequest {
   host_name: string;
   traddr: string;

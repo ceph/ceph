@@ -7785,7 +7785,7 @@ paths:
                   description: Enable high availability
                   type: boolean
                 max_namespaces:
-                  default: 256
+                  default: 1024
                   description: Maximum number of namespaces
                   type: integer
                 nqn:
