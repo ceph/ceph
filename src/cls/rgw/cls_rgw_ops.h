@@ -777,6 +777,35 @@ struct rgw_cls_bi_put_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_put_op)
 
+struct rgw_cls_bi_put_entries_op {
+  std::vector<rgw_cls_bi_entry> entries;
+  bool check_existing = false;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entries, bl);
+    encode(check_existing, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entries, bl);
+    decode(check_existing, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+
+  static void generate_test_instances(std::list<rgw_cls_bi_put_entries_op*>& o) {
+    o.push_back(new rgw_cls_bi_put_entries_op);
+    o.push_back(new rgw_cls_bi_put_entries_op);
+    o.back()->entries.push_back({.idx = "entry"});
+    o.back()->check_existing = true;
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_put_entries_op)
+
 struct rgw_cls_bi_list_op {
   uint32_t max;
   std::string name_filter; // limit result to one object and its instances
