@@ -535,6 +535,8 @@ options:
   see_also:
   - osd_scrub_retry_pg_state
   - osd_scrub_retry_after_noscrub
+  - osd_scrub_retry_new_interval
+  - osd_scrub_retry_trimming
   with_legacy: false
 - name: osd_scrub_retry_after_noscrub
   type: int
@@ -566,6 +568,17 @@ options:
   desc: Period (in seconds) before retrying to scrub a previously snap-trimming PG
   long_desc: Minimum delay after a failed attempt to scrub a PG that was performing
     snap trimming and not available for scrubbing.
+  default: 10
+  min: 1
+  see_also:
+  - osd_scrub_retry_delay
+  with_legacy: false
+- name: osd_scrub_retry_new_interval
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying a scrub aborted on a new interval
+  long_desc: Minimum delay before retrying, after a scrub was aborted as the
+    PG interval changed.
   default: 10
   min: 1
   see_also:

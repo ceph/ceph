@@ -301,7 +301,7 @@ void ScrubJob::adjust_deep_schedule(
 
 SchedTarget& ScrubJob::delay_on_failure(
     scrub_level_t level,
-    Scrub::delay_cause_t delay_cause,
+    delay_cause_t delay_cause,
     utime_t scrub_clock_now)
 {
   seconds delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_delay"));
@@ -316,7 +316,11 @@ SchedTarget& ScrubJob::delay_on_failure(
     case delay_cause_t::snap_trimming:
       delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_trimming"));
       break;
+    case delay_cause_t::interval:
+      delay = seconds(cct->_conf.get_val<int64_t>("osd_scrub_retry_new_interval"));
+      break;
     case delay_cause_t::local_resources:
+    case delay_cause_t::aborted:
     default:
       // for all other possible delay causes: use the default delay
       break;
