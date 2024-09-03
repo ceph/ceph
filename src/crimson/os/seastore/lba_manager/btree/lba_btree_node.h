@@ -64,13 +64,13 @@ using lba_node_meta_le_t = fixed_kv_node_meta_le_t<laddr_le_t>;
  * Abstracts operations on and layout of internal nodes for the
  * LBA Tree.
  *
- * Layout (4k):
- *   checksum   :                            4b
- *   size       : uint32_t[1]                4b
- *   meta       : lba_node_meta_le_t[3]      (1*24)b
- *   keys       : laddr_t[255]               (254*8)b
- *   values     : paddr_t[255]               (254*8)b
- *                                           = 4096
+ * Layout (4KiB):
+ *   checksum   : ceph_le32[1]               4B
+ *   size       : ceph_le32[1]               4B
+ *   meta       : lba_node_meta_le_t[1]      20B
+ *   keys       : laddr_le_t[CAPACITY]       (254*8)B
+ *   values     : paddr_le_t[CAPACITY]       (254*8)B
+ *                                           = 4092B
 
  * TODO: make the above capacity calculation part of FixedKVNodeLayout
  * TODO: the above alignment probably isn't portable without further work
@@ -105,13 +105,13 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  * Abstracts operations on and layout of leaf nodes for the
  * LBA Tree.
  *
- * Layout (4k):
- *   checksum   :                            4b
- *   size       : uint32_t[1]                4b
- *   meta       : lba_node_meta_le_t[3]      (1*24)b
- *   keys       : laddr_t[170]               (140*8)b
- *   values     : lba_map_val_t[170]         (140*21)b
- *                                           = 4092
+ * Layout (4KiB):
+ *   checksum   : ceph_le32[1]                4B
+ *   size       : ceph_le32[1]                4B
+ *   meta       : lba_node_meta_le_t[1]       20B
+ *   keys       : laddr_le_t[CAPACITY]        (140*8)B
+ *   values     : lba_map_val_le_t[CAPACITY]  (140*21)B
+ *                                            = 4088B
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
