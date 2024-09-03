@@ -2880,6 +2880,103 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   return 0;
 }
 
+static int rgw_bi_put_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  rgw_cls_bi_put_entries_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const ceph::buffer::error&) {
+    CLS_LOG(0, "ERROR: %s: failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  const size_t limit = cls_get_config(hctx)->osd_max_omap_entries_per_request;
+  if (op.entries.size() > limit) {
+    int r = -E2BIG;
+    CLS_LOG(0, "ERROR: %s: got too many entries (%zu > %zu), returning %d",
+            __func__, op.entries.size(), limit, r);
+    return r;
+  }
+
+  rgw_bucket_dir_header header;
+  int r = read_bucket_header(hctx, &header);
+  if (r < 0) {
+    CLS_LOG(1, "ERROR: %s: failed to read header", __func__);
+    return r;
+  }
+
+  if (op.check_existing) {
+    // fetch any existing keys and decrement their stats before overwriting
+    std::set<std::string> keys;
+    for (const auto& entry : op.entries) {
+      keys.insert(entry.idx);
+    }
+
+    std::map<std::string, ceph::buffer::list> vals;
+    r = cls_cxx_map_get_vals_by_keys(hctx, keys, &vals);
+    if (r < 0) {
+      CLS_LOG(0, "ERROR: %s: cls_cxx_map_get_vals_by_keys() returned r=%d",
+              __func__, r);
+      return r;
+    }
+
+    for (auto& [idx, data] : vals) {
+      rgw_cls_bi_entry entry;
+      entry.type = bi_type(idx);
+      entry.idx = std::move(idx);
+      entry.data = std::move(data);
+
+      cls_rgw_obj_key key;
+      RGWObjCategory category;
+      rgw_bucket_category_stats stats;
+      const bool account = entry.get_info(&key, &category, &stats);
+      if (account) {
+        auto& dest = header.stats[category];
+        dest.total_size -= stats.total_size;
+        dest.total_size_rounded -= stats.total_size_rounded;
+        dest.num_entries -= stats.num_entries;
+        dest.actual_size -= stats.actual_size;
+      }
+    } // foreach vals
+  } // if op.check_existing
+
+  std::map<std::string, ceph::buffer::list> new_vals;
+
+  for (auto& entry : op.entries) {
+    if (entry.type == BIIndexType::ReshardDeleted) {
+      r = cls_cxx_map_remove_key(hctx, entry.idx);
+      if (r < 0) {
+        CLS_LOG(0, "WARNING: %s: cls_cxx_map_remove_key(%s) returned r=%d",
+                __func__, entry.idx.c_str(), r);
+      } // not fatal
+      continue;
+    }
+
+    cls_rgw_obj_key key;
+    RGWObjCategory category;
+    rgw_bucket_category_stats stats;
+    const bool account = entry.get_info(&key, &category, &stats);
+    if (account) {
+      auto& dest = header.stats[category];
+      dest.total_size += stats.total_size;
+      dest.total_size_rounded += stats.total_size_rounded;
+      dest.num_entries += stats.num_entries;
+      dest.actual_size += stats.actual_size;
+    }
+
+    new_vals.emplace(std::move(entry.idx), std::move(entry.data));
+  }
+
+  r = cls_cxx_map_set_vals(hctx, &new_vals);
+  if (r < 0) {
+    CLS_LOG(0, "ERROR: %s: cls_cxx_map_set_vals() returned r=%d", __func__, r);
+    return r;
+  }
+
+  return write_bucket_header(hctx, &header);
+}
+
 /* The plain entries in the bucket index are divided into two regions
  * divided by the special entries that begin with 0x80. Those below
  * ("Low") are ascii entries. Those above ("High") bring in unicode
@@ -4985,6 +5082,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bi_get_op;
   cls_method_handle_t h_rgw_bi_get_vals_op;
   cls_method_handle_t h_rgw_bi_put_op;
+  cls_method_handle_t h_rgw_bi_put_entries_op;
   cls_method_handle_t h_rgw_bi_list_op;
   cls_method_handle_t h_rgw_reshard_log_trim_op;
   cls_method_handle_t h_rgw_bi_log_list_op;
@@ -5043,6 +5141,7 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_BI_GET, CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
   cls_register_cxx_method(h_class, RGW_BI_GET_VALS, CLS_METHOD_RD, rgw_bi_get_vals_op, &h_rgw_bi_get_vals_op);
   cls_register_cxx_method(h_class, RGW_BI_PUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
+  cls_register_cxx_method(h_class, RGW_BI_PUT_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_entries, &h_rgw_bi_put_entries_op);
   cls_register_cxx_method(h_class, RGW_BI_LIST, CLS_METHOD_RD, rgw_bi_list_op, &h_rgw_bi_list_op);
   cls_register_cxx_method(h_class, RGW_RESHARD_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_log_trim_op, &h_rgw_reshard_log_trim_op);
 

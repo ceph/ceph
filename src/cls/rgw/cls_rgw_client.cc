@@ -523,6 +523,21 @@ void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi
   op.exec(RGW_CLASS, RGW_BI_PUT, in);
 }
 
+void cls_rgw_bi_put_entries(librados::ObjectWriteOperation& op,
+                            std::vector<rgw_cls_bi_entry> entries,
+                            bool check_existing)
+{
+  const auto call = rgw_cls_bi_put_entries_op{
+    .entries = std::move(entries),
+    .check_existing = check_existing
+  };
+
+  bufferlist in;
+  encode(call, in);
+
+  op.exec(RGW_CLASS, RGW_BI_PUT_ENTRIES, in);
+}
+
 /* nb: any entries passed in are replaced with the results of the cls
  * call, so caller does not need to clear entries between calls
  */
