@@ -1,0 +1,57 @@
+tasks:
+- print: "**** install version -2 (quincy) ****"
+- install:
+    branch: quincy
+    exclude_packages:
+      - ceph-volume
+- print: "**** done install task..."
+
+- print: "**** start installing quincy cephadm ..."
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:quincy
+    compiled_cephadm_branch: quincy
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing quincy cephadm ..."
+
+- print: "**** done start cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+
+- print: "**** start dencoder quincy... ****"
+- workunit:
+    clients:
+      client.0:
+        - dencoder/test-dencoder.sh
+- print: "**** done end dencoder quincy... ****"
+
+- print: "**** installing N-1 version (reef) ****"
+- install:
+    branch: reef
+    exclude_packages:
+      - ceph-volume
+- print: "**** done end installing task..."
+
+- print: "**** start dencoder reef... ****"
+- workunit:
+    clients:
+      client.0:
+        - dencoder/test-dencoder.sh
+- print: "**** done end dencoder reef... ****"
+- print: "**** installing N version (squid) ****"
+- install:
+    branch: squid
+    exclude_packages:
+      - ceph-volume
+- print: "**** done end installing task..."
+- print: "**** start dencoder squid... ****"
+- workunit:
+    clients:
+      client.0:
+        - dencoder/test-dencoder.sh
+- print: "**** done end dencoder squid... ****"
