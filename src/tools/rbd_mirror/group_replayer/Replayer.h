@@ -107,6 +107,7 @@ private:
 
   bool m_remote_demoted = false;
   bool m_resync_requested = false;
+  bool m_rename_requested = false;
 
   // map of <group_snap_id, pair<GroupSnapshot, on_finish>>
   std::map<std::string, std::pair<cls::rbd::GroupSnapshot, Context *>> m_create_snap_requests;
@@ -120,6 +121,7 @@ private:
   void schedule_load_group_snapshots();
   void notify_group_listener_stop();
   bool is_resync_requested();
+  bool is_rename_requested();
 
   void load_local_group_snapshots();
   void handle_load_local_group_snapshots(int r);
