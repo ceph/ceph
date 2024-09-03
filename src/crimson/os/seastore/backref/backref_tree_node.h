@@ -8,7 +8,7 @@
 namespace crimson::os::seastore::backref {
 
 using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
-using backref_node_meta_le_t = fixed_kv_node_meta_le_t<paddr_t>;
+using backref_node_meta_le_t = fixed_kv_node_meta_le_t<paddr_le_t>;
 
 constexpr size_t INTERNAL_NODE_CAPACITY = 254;
 constexpr size_t LEAF_NODE_CAPACITY = 169;
