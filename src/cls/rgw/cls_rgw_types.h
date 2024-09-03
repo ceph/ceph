@@ -505,7 +505,7 @@ struct rgw_cls_bi_entry {
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
   static void generate_test_instances(std::list<rgw_cls_bi_entry*>& o);
   bool get_info(cls_rgw_obj_key *key, RGWObjCategory *category,
-		rgw_bucket_category_stats *accounted_stats);
+		rgw_bucket_category_stats *accounted_stats) const;
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
