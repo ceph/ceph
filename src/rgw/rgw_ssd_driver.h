@@ -34,6 +34,8 @@ public:
 
   virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) override;
 
+  virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) override;
+
 private:
   Partition partition_info;
   uint64_t free_space;
