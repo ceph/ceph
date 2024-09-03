@@ -132,6 +132,7 @@ struct error_code;
   class raw_claimed_char;
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
+  class raw_zeros;
   class raw_claim_buffer;
 
 
@@ -988,6 +989,8 @@ struct error_code;
     ptr& get_append_buffer() {
       return *_carriage;
     }
+
+    static ptr always_zeroed_bptr;
 
   public:
     // cons/des
