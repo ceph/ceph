@@ -255,7 +255,7 @@ SnapTrimObjSubEvent::adjust_snaps(
   obc->obs.oi.prior_version = obc->obs.oi.version;
   obc->obs.oi.version = osd_op_p.at_version;
   ceph::bufferlist bl;
-  encode(obc->obs.oi,
+  obc->obs.oi.encode_no_oid(
     bl,
     pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
   txn.setattr(

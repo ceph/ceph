@@ -152,54 +152,6 @@ PGBackend::load_metadata(const hobject_t& oid)
       }));
 }
 
-PGBackend::rep_op_fut_t
-PGBackend::mutate_object(
-  std::set<pg_shard_t> pg_shards,
-  crimson::osd::ObjectContextRef &&obc,
-  ceph::os::Transaction&& txn,
-  osd_op_params_t&& osd_op_p,
-  epoch_t min_epoch,
-  epoch_t map_epoch,
-  std::vector<pg_log_entry_t>&& log_entries)
-{
-  logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
-  if (obc->obs.exists) {
-    obc->obs.oi.prior_version = obc->obs.oi.version;
-    obc->obs.oi.version = osd_op_p.at_version;
-    if (osd_op_p.user_modify)
-      obc->obs.oi.user_version = osd_op_p.at_version.version;
-    obc->obs.oi.last_reqid = osd_op_p.req_id;
-    obc->obs.oi.mtime = osd_op_p.mtime;
-    obc->obs.oi.local_mtime = ceph_clock_now();
-
-    // object_info_t
-    {
-      ceph::bufferlist osv;
-      obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
-      // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
-    }
-
-    // snapset
-    if (obc->obs.oi.soid.snap == CEPH_NOSNAP) {
-      logger().debug("final snapset {} in {}",
-        obc->ssc->snapset, obc->obs.oi.soid);
-      ceph::bufferlist bss;
-      encode(obc->ssc->snapset, bss);
-      txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, SS_ATTR, bss);
-      obc->ssc->exists = true;
-    } else {
-      logger().debug("no snapset (this is a clone)");
-    }
-  } else {
-    // reset cached ObjectState without enforcing eviction
-    obc->obs.oi = object_info_t(obc->obs.oi.soid);
-  }
-  return _submit_transaction(
-    std::move(pg_shards), obc->obs.oi.soid, std::move(txn),
-    std::move(osd_op_p), min_epoch, map_epoch, std::move(log_entries));
-}
-
 static inline bool _read_verify_data(
   const object_info_t& oi,
   const ceph::bufferlist& data)
