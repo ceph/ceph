@@ -13,7 +13,7 @@ overrides:
 
 tasks:
 - nvmeof.thrash:
-    checker_host: 'client.3'
+    checker_host: 'client.0'
     switch_thrashers: True
 
 - mon_thrash:
