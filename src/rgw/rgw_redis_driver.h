@@ -47,7 +47,8 @@ class RedisDriver : public CacheDriver {
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) override;
     virtual int get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_val, optional_yield y) override;
     void shutdown();
-     
+
+    virtual int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) override { return 0; }
   private:
     std::shared_ptr<connection> conn;
     Partition partition_info;
