@@ -183,6 +183,28 @@ bool Replayer<I>::is_resync_requested() {
 }
 
 template <typename I>
+bool Replayer<I>::is_rename_requested() {
+  dout(10) << "m_local_group_id=" << m_local_group_id << dendl;
+
+  std::string remote_group_name;
+  int r = librbd::cls_client::dir_get_name(&m_remote_io_ctx,
+                                           RBD_GROUP_DIRECTORY,
+                                           m_remote_group_id,
+                                           &remote_group_name);
+  if (r < 0) {
+    derr << "failed to retrieve remote group name: "
+         << cpp_strerror(r) << dendl;
+    return false;
+  }
+
+  if (m_local_group_ctx->name != remote_group_name) {
+    return true;
+  }
+
+  return false;
+}
+
+template <typename I>
 void Replayer<I>::init(Context* on_finish) {
   dout(10) << m_global_group_id << dendl;
 
@@ -213,13 +235,18 @@ void Replayer<I>::load_local_group_snapshots() {
     m_state = STATE_REPLAYING;
   }
 
-  if (m_resync_requested) {
+  if (m_resync_requested || m_rename_requested) {
     return;
   } else if (is_resync_requested()) {
     m_resync_requested = true; // do nothing from here, anything is simply
                                // of no use as the group is going to get
                                // deleted soon.
     dout(10) << "local group resync requested" << dendl;
+    // send stop for Group Replayer
+    notify_group_listener_stop();
+  } else if (is_rename_requested()) {
+    m_rename_requested = true;
+    dout(10) << "remote group rename requested" << dendl;
     // send stop for Group Replayer
     notify_group_listener_stop();
   }
