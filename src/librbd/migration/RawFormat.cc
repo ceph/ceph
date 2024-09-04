@@ -5,10 +5,10 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 #include "librbd/migration/SnapshotInterface.h"
 #include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/migration/Utils.h"
@@ -209,7 +209,9 @@ void RawFormat<I>::list_snaps(io::Extents&& image_extents,
                                &previous_size, &sparse_extents);
 
     // build set of data/zeroed extents for the current snapshot
-    snapshot->list_snap(io::Extents{image_extents}, list_snaps_flags,
+    auto snapshot_extents = image_extents;
+    io::util::prune_extents(snapshot_extents, snap_info.size);
+    snapshot->list_snap(std::move(snapshot_extents), list_snaps_flags,
                         &sparse_extents, parent_trace, gather_ctx->new_sub());
   }
 
