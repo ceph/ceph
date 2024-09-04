@@ -55,8 +55,7 @@ the MDS server. Even if a single MDS daemon is unable to fully utilize the
 hardware, it may be desirable later on to start more active MDS daemons on the
 same node to fully utilize the available cores and memory. Additionally, it may
 become clear with workloads on the cluster that performance improves with
-multiple active MDS on the same node rather than over-provisioning a single
-MDS.
+multiple active MDS on the same node rather than a single overloaded MDS.
 
 Finally, be aware that CephFS is a highly-available file system by supporting
 standby MDS (see also :ref:`mds-standby`) for rapid failover. To get a real
