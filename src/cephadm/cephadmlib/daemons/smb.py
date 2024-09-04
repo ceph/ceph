@@ -126,7 +126,10 @@ class ContainerCommon:
         return {}
 
     def envs_list(self) -> List[str]:
-        return []
+        """Wrapper for .envs() that returns a list of `key=value` strings
+        for all env vars.
+        """
+        return [f'{k}={v}' for (k, v) in self.envs().items()]
 
     def args(self) -> List[str]:
         return []
@@ -162,9 +165,6 @@ class SambaContainerCommon(ContainerCommon):
             # samba container specific variant
             environ['NODE_NUMBER'] = environ['RANK']
         return environ
-
-    def envs_list(self) -> List[str]:
-        return [f'{k}={v}' for (k, v) in self.envs().items()]
 
     def args(self) -> List[str]:
         args = []
