@@ -731,23 +731,6 @@ struct rgw_cls_bi_get_ret {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
 
-struct rgw_cls_bi_get_vals_op {
-  std::set<std::string> log_entries_wanted;
-
-  void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(log_entries_wanted, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(log_entries_wanted, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_cls_bi_get_vals_op)
-
 struct rgw_cls_bi_put_op {
   rgw_cls_bi_entry entry;
 
