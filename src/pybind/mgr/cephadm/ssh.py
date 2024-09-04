@@ -96,7 +96,9 @@ class SSHManager:
             with self.redirect_log(host, addr):
                 try:
                     ssh_options = asyncssh.SSHClientConnectionOptions(
-                        keepalive_interval=7, keepalive_count_max=3)
+                        keepalive_interval=self.mgr.ssh_keepalive_interval,
+                        keepalive_count_max=self.mgr.ssh_keepalive_count_max
+                    )
                     conn = await asyncssh.connect(addr, username=self.mgr.ssh_user, client_keys=[self.mgr.tkey.name],
                                                   known_hosts=None, config=[self.mgr.ssh_config_fname],
                                                   preferred_auth=['publickey'], options=ssh_options)
