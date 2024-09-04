@@ -5464,6 +5464,11 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
+  if (s->cct->_conf->rgw_s3_auth_disable_signature_url) {
+    ldpp_dout(s, 10) << "Presigned URLs are disabled by admin" << dendl;
+    throw -ERR_PRESIGNED_URL_DISABLED;
+  }
+  
   if (version == AwsVersion::V2) {
     return get_auth_data_v2(s);
   } else if (version == AwsVersion::V4) {
@@ -5472,6 +5477,7 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
     /* FIXME(rzarzynski): handle anon user. */
     throw -EINVAL;
   }
+
 }
 
 boost::optional<std::string>
