@@ -9,7 +9,6 @@
 #include "include/ceph_assert.h"
 #include "include/Context.h"
 #include "common/snap_types.h"
-#include "common/zipkin_trace.h"
 #include "common/RefCountedObj.h"
 
 #include <atomic>
@@ -248,12 +247,9 @@ bool calc_sparse_extent(const bufferptr &bp,
                         size_t *offset);
 
 template <typename I>
-inline ZTracer::Trace create_trace(const I &image_ctx, const char *trace_name,
-				   const ZTracer::Trace &parent_trace) {
-  if (parent_trace.valid()) {
-    return ZTracer::Trace(trace_name, &image_ctx.trace_endpoint, &parent_trace);
-  }
-  return ZTracer::Trace();
+inline auto create_trace(I &image_ctx, const char *trace_name,
+			 const jspan_context &parent_trace) {
+  return image_ctx.tracer.add_span(trace_name, parent_trace);
 }
 
 bool is_metadata_config_override(const std::string& metadata_key,

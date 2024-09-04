@@ -108,7 +108,7 @@ void ObjectCopyRequest<I>::send_list_snaps() {
   auto req = io::ImageDispatchSpec::create_list_snaps(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_NONE, aio_comp,
     io::Extents{m_image_extents}, m_image_area, std::move(snap_ids),
-    list_snaps_flags, &m_snapshot_delta, {});
+    list_snaps_flags, &m_snapshot_delta, {false, false});
   req->send();
 }
 
@@ -176,7 +176,7 @@ void ObjectCopyRequest<I>::send_read() {
   auto req = io::ImageDispatchSpec::create_read(
     *m_src_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, aio_comp,
     std::move(image_extents), m_image_area, std::move(read_result),
-    io_context, op_flags, read_flags, {});
+    io_context, op_flags, read_flags, {false, false});
   req->send();
 }
 
@@ -251,7 +251,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   auto dst_image_ctx = m_dst_image_ctx;
   bool sent = dst_image_ctx->object_map->template aio_update<
     Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
-                                 {}, {}, false, ctx);
+                                 {}, {false, false}, false, ctx);
 
   // NOTE: state machine might complete before we reach here
   dst_image_ctx->image_lock.unlock_shared();
@@ -422,7 +422,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     });
   librados::AioCompletion *comp = create_rados_callback(ctx);
   r = m_dst_io_ctx.aio_operate(m_dst_oid, comp, &op, dst_snap_seq, dst_snap_ids,
-                               nullptr);
+                               {false, false});
   ceph_assert(r == 0);
   comp->release();
 }

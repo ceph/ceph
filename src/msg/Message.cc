@@ -222,9 +222,7 @@
 #include "messages/MNVMeofGwBeacon.h"
 #include "messages/MNVMeofGwMap.h"
 
-#ifdef WITH_BLKIN
-#include "Messenger.h"
-#endif
+#include "msg/Messenger.h"
 
 #define DEBUGLVL  10    // debug level of output
 
@@ -1016,41 +1014,39 @@ Message *decode_message(CephContext *cct,
   return m.detach();
 }
 
-void Message::encode_trace(ceph::bufferlist &bl, uint64_t features) const
+struct fake_blkin_trace_info {
+    int64_t trace_id;
+    int64_t span_id;
+    int64_t parent_span_id;
+};
+
+static inline void encode(const fake_blkin_trace_info& b, ceph::buffer::list& bl)
 {
   using ceph::encode;
-  auto p = trace.get_info();
-  static const blkin_trace_info empty = { 0, 0, 0 };
-  if (!p) {
-    p = &empty;
-  }
-  encode(*p, bl);
+  encode(b.trace_id, bl);
+  encode(b.span_id, bl);
+  encode(b.parent_span_id, bl);
+}
+
+static inline void decode(fake_blkin_trace_info& b, ceph::buffer::list::const_iterator& p)
+{
+  using ceph::decode;
+  decode(b.trace_id, p);
+  decode(b.span_id, p);
+  decode(b.parent_span_id, p);
+}
+
+void Message::encode_trace(ceph::bufferlist &bl, uint64_t features)
+{
+  using ceph::encode;
+  static const fake_blkin_trace_info empty = { 0, 0, 0 };
+  encode(empty, bl);
 }
 
 void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 {
-  blkin_trace_info info = {};
+  fake_blkin_trace_info info = {};
   decode(info, p);
-
-#ifdef WITH_BLKIN
-  if (!connection)
-    return;
-
-  const auto msgr = connection->get_messenger();
-  const auto endpoint = msgr->get_trace_endpoint();
-  if (info.trace_id) {
-    trace.init(get_type_name().data(), endpoint, &info, true);
-    trace.event("decoded trace");
-  } else if (create || (msgr->get_myname().is_osd() &&
-                        msgr->cct->_conf->osd_blkin_trace_all)) {
-    // create a trace even if we didn't get one on the wire
-    trace.init(get_type_name().data(), endpoint);
-    trace.event("created trace");
-  }
-  trace.keyval("tid", get_tid());
-  trace.keyval("entity type", get_source().type_str());
-  trace.keyval("entity num", get_source().num());
-#endif
 }
 
 void Message::encode_otel_trace(ceph::bufferlist &bl, uint64_t features) const

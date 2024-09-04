@@ -67,7 +67,7 @@ void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
 template <typename I>
 bool ParentCacheObjectDispatch<I>::read(
     uint64_t object_no, io::ReadExtents* extents, IOContext io_context,
-    int op_flags, int read_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, int read_flags, const jspan_context &parent_trace,
     uint64_t* version, int* object_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -111,7 +111,7 @@ bool ParentCacheObjectDispatch<I>::read(
 template <typename I>
 void ParentCacheObjectDispatch<I>::handle_read_cache(
      ObjectCacheRequest* ack, uint64_t object_no, io::ReadExtents* extents,
-     IOContext io_context, int read_flags, const ZTracer::Trace &parent_trace,
+     IOContext io_context, int read_flags, const jspan_context &parent_trace,
      io::DispatchResult* dispatch_result, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;

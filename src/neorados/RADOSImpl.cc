@@ -25,10 +25,12 @@ namespace neorados {
 namespace detail {
 
 RADOS::RADOS(boost::asio::io_context& ioctx,
-	     boost::intrusive_ptr<CephContext> cct)
+	     boost::intrusive_ptr<CephContext> cct,
+	     std::string_view tracer_name)
   : Dispatcher(cct.get()),
     ioctx(ioctx),
     cct(cct),
+    tracer(cct.get(), {tracer_name.data(), tracer_name.size()}),
     monclient(cct.get(), ioctx),
     mgrclient(cct.get(), nullptr, &monclient.monmap) {
   auto err = monclient.build_initial_monmap();

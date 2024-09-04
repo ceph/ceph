@@ -79,7 +79,7 @@ public:
       m_image_ctx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
       aio_comp, {{m_image_offset, m_image_length}}, io::ImageArea::DATA,
       {m_diff_context.from_snap_id, m_diff_context.end_snap_id},
-      list_snaps_flags, &m_snapshot_delta, {});
+      list_snaps_flags, &m_snapshot_delta, {false, false});
     req->send();
   }
 
@@ -222,7 +222,7 @@ int DiffIterate<I>::diff_iterate(I *ictx,
                                                         io::AIO_TYPE_FLUSH);
     auto req = io::ImageDispatchSpec::create_flush(
       *ictx, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
-      aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+      aio_comp, io::FLUSH_SOURCE_INTERNAL, {false, false});
     req->send();
   }
   int r = flush_ctx.wait();

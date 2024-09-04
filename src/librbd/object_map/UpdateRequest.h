@@ -7,9 +7,10 @@
 #include "include/int_types.h"
 #include "librbd/object_map/Request.h"
 #include "common/bit_vector.hpp"
-#include "common/zipkin_trace.h"
 #include "librbd/Utils.h"
 #include <boost/optional.hpp>
+
+#include "librbd/ImageCtx.h"
 
 class Context;
 
@@ -28,7 +29,7 @@ public:
                                uint64_t snap_id, uint64_t start_object_no,
                                uint64_t end_object_no, uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
-                               const ZTracer::Trace &parent_trace,
+                               const jspan_context &parent_trace,
                                bool ignore_enoent, Context *on_finish) {
     return new UpdateRequest(image_ctx, object_map_lock, object_map, snap_id,
                              start_object_no, end_object_no, new_state,
@@ -41,7 +42,7 @@ public:
                 uint64_t start_object_no, uint64_t end_object_no,
                 uint8_t new_state,
                 const boost::optional<uint8_t> &current_state,
-      	        const ZTracer::Trace &parent_trace, bool ignore_enoent,
+      	        const jspan_context &parent_trace, bool ignore_enoent,
                 Context *on_finish)
     : Request(image_ctx, snap_id, on_finish),
       m_object_map_lock(object_map_lock), m_object_map(*object_map),
@@ -51,10 +52,11 @@ public:
       m_trace(util::create_trace(image_ctx, "update object map", parent_trace)),
       m_ignore_enoent(ignore_enoent)
   {
-    m_trace.event("start");
+    m_trace->AddEvent("start");
   }
   virtual ~UpdateRequest() {
-    m_trace.event("finish");
+    m_trace->AddEvent("finish");
+    m_trace->End();
   }
 
   void send() override;
@@ -86,7 +88,7 @@ private:
   uint64_t m_update_end_object_no = 0;
   uint8_t m_new_state;
   boost::optional<uint8_t> m_current_state;
-  ZTracer::Trace m_trace;
+  jspan_ptr m_trace;
   bool m_ignore_enoent;
 
   int m_ret_val = 0;

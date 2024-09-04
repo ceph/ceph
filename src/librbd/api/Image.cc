@@ -690,7 +690,7 @@ int Image<I>::deep_copy(I *src, I *dest, bool flatten,
                                                         io::AIO_TYPE_FLUSH);
     auto req = io::ImageDispatchSpec::create_flush(
       *src, io::IMAGE_DISPATCH_LAYER_INTERNAL_START,
-      aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+      aio_comp, io::FLUSH_SOURCE_INTERNAL, {false, false});
     req->send();
   }
   int r = flush_ctx.wait();

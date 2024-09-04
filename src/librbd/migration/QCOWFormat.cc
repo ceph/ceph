@@ -1440,7 +1440,7 @@ template <typename I>
 void QCOWFormat<I>::read(
     io::AioCompletion* aio_comp, uint64_t snap_id, io::Extents&& image_extents,
     io::ReadResult&& read_result, int op_flags, int read_flags,
-    const ZTracer::Trace &parent_trace) {
+    const jspan_context &parent_trace) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "snap_id=" << snap_id << ", "
                  << "image_extents=" << image_extents << dendl;
@@ -1471,7 +1471,7 @@ template <typename I>
 void QCOWFormat<I>::list_snaps(io::Extents&& image_extents,
                               io::SnapIds&& snap_ids, int list_snaps_flags,
                               io::SnapshotDelta* snapshot_delta,
-                              const ZTracer::Trace &parent_trace,
+                              const jspan_context &parent_trace,
                               Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;

@@ -329,7 +329,7 @@ template <typename I>
 void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                               uint64_t end_object_no, uint8_t new_state,
                               const boost::optional<uint8_t> &current_state,
-                              const ZTracer::Trace &parent_trace,
+                              const jspan_context &parent_trace,
                               bool ignore_enoent, Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);

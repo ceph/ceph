@@ -28,6 +28,8 @@
 #include "include/ceph_assert.h"
 #include "include/compat.h"
 
+#include "common/tracer.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rados
 
@@ -438,7 +440,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectReadOperation *op, int flags,
-                       bufferlist *pbl, const blkin_trace_info *trace_info) {
+                       bufferlist *pbl, const jspan_context& otel_trace) {
   return aio_operate(oid, c, op, flags, pbl);
 }
 
@@ -452,7 +454,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps, int flags,
-                       const blkin_trace_info *trace_info) {
+                       const jspan_context& otel_trace) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
 
@@ -468,14 +470,14 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps) {
-  return aio_operate(oid, c, op, seq, snaps, 0, nullptr);
+  return aio_operate(oid, c, op, seq, snaps, 0, jspan_context{false, false});
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps,
-		       const blkin_trace_info *trace_info) {
-  return aio_operate(oid, c, op, seq, snaps, 0, trace_info);
+		       const jspan_context& otel_trace) {
+  return aio_operate(oid, c, op, seq, snaps, 0, otel_trace);
 }
 
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {

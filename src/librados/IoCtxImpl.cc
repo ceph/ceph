@@ -34,8 +34,6 @@ using std::unique_lock;
 using std::vector;
 
 namespace bs = boost::system;
-namespace ca = ceph::async;
-namespace cb = ceph::buffer;
 
 namespace librados {
 namespace {
@@ -637,17 +635,25 @@ int librados::IoCtxImpl::writesame(const object_t& oid, bufferlist& bl,
 }
 
 int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
-				 ceph::real_time *pmtime, int flags, const jspan_context* otel_trace)
+				 ceph::real_time *pmtime, int flags,
+				 const jspan_context& otel_ctx)
 {
+  auto trace = client->tracer().add_span("IoCtx::operate", otel_ctx);
+  trace->AddEvent("Beginning rados operation");
+
   ceph::real_time ut = (pmtime ? *pmtime :
     ceph::real_clock::now());
 
   /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
+  if (snap_seq != CEPH_NOSNAP) {
+    trace->AddEvent("Returning -ENOFS");
     return -EROFS;
+  }
 
-  if (!o->size())
+  if (!o->size()) {
+    trace->AddEvent("Zero size operation, returning success");
     return 0;
+  }
 
   ceph::mutex mylock = ceph::make_mutex("IoCtxImpl::operate::mylock");
   ceph::condition_variable cond;
@@ -660,11 +666,12 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid
 			 << " nspace=" << oloc.nspace << dendl;
+  trace->AddEvent("Submitting to objecter");
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(
     oid, oloc,
     *o, snapc, ut,
     flags | extra_op_flags,
-    oncommit, &ver, osd_reqid_t(), nullptr, otel_trace);
+    oncommit, &ver, osd_reqid_t(), trace->GetContext());
   objecter->op_submit(objecter_op);
 
   {
@@ -675,6 +682,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 	<< ceph_osd_op_name(op) << " r=" << r << dendl;
 
   set_sync_op_version(ver);
+  trace->AddEvent("Returning");
 
   return r;
 }
@@ -721,7 +729,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  AioCompletionImpl *c,
 					  int flags,
 					  bufferlist *pbl,
-                                          const blkin_trace_info *trace_info)
+                                          const jspan_context& otel_ctx)
 {
   FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
@@ -732,19 +740,16 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   c->is_read = true;
   c->io = this;
 
-  ZTracer::Trace trace;
-  if (trace_info) {
-    ZTracer::Trace parent_trace("", nullptr, trace_info);
-    trace.init("rados operate read", &objecter->trace_endpoint, &parent_trace);
-  }
+  auto trace = client->tracer().add_span("IoCtx::aio_operate_read", otel_ctx);
+  trace->AddEvent("Submitting read operation");
 
-  trace.event("init root span");
   Objecter::Op *objecter_op = objecter->prepare_read_op(
     oid, oloc,
     *o, snap_seq, pbl, flags | extra_op_flags,
-    oncomplete, &c->objver, nullptr, 0, &trace);
+    oncomplete, &c->objver, nullptr, 0, trace->GetContext());
   objecter->op_submit(objecter_op, &c->tid);
-  trace.event("rados operate read submitted");
+  trace->SetAttribute("tid", c->tid);
+  trace->AddEvent("Submitted read operation");
 
   return 0;
 }
@@ -753,7 +758,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
 				     const SnapContext& snap_context,
 				     const ceph::real_time *pmtime, int flags,
-                                     const blkin_trace_info *trace_info, const jspan_context *otel_trace)
+                                     const jspan_context& otel_ctx)
 {
   FUNCTRACE(client->cct);
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
@@ -767,28 +772,24 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
 
+  auto trace = client->tracer().add_span("librados::aio_operate", otel_ctx);
+  trace->AddEvent("Submitting write operation");
+
   c->io = this;
   queue_aio_write(c);
 
-  ZTracer::Trace trace;
-  if (trace_info) {
-    ZTracer::Trace parent_trace("", nullptr, trace_info);
-    trace.init("rados operate", &objecter->trace_endpoint, &parent_trace);
-  }
-
-  trace.event("init root span");
   Objecter::Op *op = objecter->prepare_mutate_op(
     oid, oloc, *o, snap_context, ut, flags | extra_op_flags,
-    oncomplete, &c->objver, osd_reqid_t(), &trace, otel_trace);
+    oncomplete, &c->objver, osd_reqid_t(), trace->GetContext());
   objecter->op_submit(op, &c->tid);
-  trace.event("rados operate op submitted");
+  trace->AddEvent("Submitted write operation", {{"tid", c->tid}});
 
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off,
-				  uint64_t snapid, const blkin_trace_info *info)
+				  uint64_t snapid, const jspan_context& otel_ctx)
 {
   FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
@@ -804,21 +805,21 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->io = this;
   c->blp = pbl;
 
-  ZTracer::Trace trace;
-  if (info)
-    trace.init("rados read", &objecter->trace_endpoint, info);
+  auto trace = client->tracer().add_span("librados::aio_read", otel_ctx);
+  trace->AddEvent("Submitting rados read");
 
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
     off, len, snapid, pbl, extra_op_flags,
-    oncomplete, &c->objver, nullptr, 0, &trace);
+    oncomplete, &c->objver, nullptr, 0, trace->GetContext());
   objecter->op_submit(o, &c->tid);
+  trace->AddEvent("Submitted rados read", {{"tid", c->tid}});
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off,
-				  uint64_t snapid, const blkin_trace_info *info)
+				  uint64_t snapid, const jspan_context& otel_ctx)
 {
   FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
@@ -837,15 +838,15 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->blp = &c->bl;
   c->out_buf = buf;
 
-  ZTracer::Trace trace;
-  if (info)
-    trace.init("rados read", &objecter->trace_endpoint, info);
+  auto trace = client->tracer().add_span("librados::aio_read", otel_ctx);
+  trace->AddEvent("Submitting rados read");
 
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
     off, len, snapid, &c->bl, extra_op_flags,
-    oncomplete, &c->objver, nullptr, 0, &trace);
+    oncomplete, &c->objver, nullptr, 0, trace->GetContext());
   objecter->op_submit(o, &c->tid);
+  trace->AddEvent("Submitted rados read", {{"tid", c->tid}});
   return 0;
 }
 
@@ -939,7 +940,7 @@ int librados::IoCtxImpl::aio_cmpext(const object_t& oid,
 
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
-				   uint64_t off, const blkin_trace_info *info)
+				   uint64_t off, const jspan_context& otel_ctx)
 {
   FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
@@ -957,9 +958,9 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 #if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
-  ZTracer::Trace trace;
-  if (info)
-    trace.init("rados write", &objecter->trace_endpoint, info);
+
+  auto trace = client->tracer().add_span("librados::aio_write", otel_ctx);
+  trace->AddEvent("Submitting rados write");
 
   c->io = this;
   queue_aio_write(c);
@@ -967,9 +968,9 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   Objecter::Op *o = objecter->prepare_write_op(
     oid, oloc,
     off, len, snapc, bl, ut, extra_op_flags,
-    oncomplete, &c->objver, nullptr, 0, &trace);
+    oncomplete, &c->objver, nullptr, 0, trace->GetContext());
   objecter->op_submit(o, &c->tid);
-
+  trace->AddEvent("Submitted rados write", {{"tid", c->tid}});
   return 0;
 }
 

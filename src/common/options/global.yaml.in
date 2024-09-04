@@ -3857,18 +3857,6 @@ options:
   level: advanced
   default: 30
   with_legacy: true
-# create a blkin trace for all osd requests
-- name: osd_blkin_trace_all
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-# create a blkin trace for all objecter requests
-- name: osdc_blkin_trace_all
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
 - name: osd_discard_disconnected_ops
   type: bool
   level: advanced

@@ -84,7 +84,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateInMemory) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, 0, object_map.size(),
-    OBJECT_NONEXISTENT, OBJECT_EXISTS, {}, false, &cond_ctx);
+    OBJECT_NONEXISTENT, OBJECT_EXISTS, {false, false}, false, &cond_ctx);
   {
     std::shared_lock image_locker{ictx->image_lock};
     std::unique_lock object_map_locker{object_map_lock};
@@ -118,7 +118,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateHeadOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, 0, object_map.size(),
-    OBJECT_NONEXISTENT, OBJECT_EXISTS, {}, false, &cond_ctx);
+    OBJECT_NONEXISTENT, OBJECT_EXISTS, {false, false}, false, &cond_ctx);
   {
     std::shared_lock image_locker{ictx->image_lock};
     std::unique_lock object_map_locker{object_map_lock};
@@ -150,7 +150,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateSnapOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map_lock, &object_map, snap_id, 0, object_map.size(),
-    OBJECT_NONEXISTENT, OBJECT_EXISTS, {}, false, &cond_ctx);
+    OBJECT_NONEXISTENT, OBJECT_EXISTS, {false, false}, false, &cond_ctx);
   {
     std::shared_lock image_locker{ictx->image_lock};
     std::unique_lock object_map_locker{object_map_lock};
@@ -179,7 +179,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateOnDiskError) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, 0, object_map.size(),
-    OBJECT_NONEXISTENT, OBJECT_EXISTS, {}, false, &cond_ctx);
+    OBJECT_NONEXISTENT, OBJECT_EXISTS, {false, false}, false, &cond_ctx);
   {
     std::shared_lock image_locker{ictx->image_lock};
     std::unique_lock object_map_locker{object_map_lock};
@@ -211,7 +211,7 @@ TEST_F(TestMockObjectMapUpdateRequest, RebuildSnapOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map_lock, &object_map, snap_id, 0, object_map.size(),
-    OBJECT_EXISTS_CLEAN, boost::optional<uint8_t>(), {}, false, &cond_ctx);
+    OBJECT_EXISTS_CLEAN, boost::optional<uint8_t>(), {false, false}, false, &cond_ctx);
   {
     std::shared_lock image_locker{ictx->image_lock};
     std::unique_lock object_map_locker{object_map_lock};
@@ -250,7 +250,7 @@ TEST_F(TestMockObjectMapUpdateRequest, BatchUpdate) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, 0, object_map.size(),
-    OBJECT_NONEXISTENT, OBJECT_EXISTS, {}, false, &cond_ctx);
+    OBJECT_NONEXISTENT, OBJECT_EXISTS, {false, false}, false, &cond_ctx);
   {
     std::shared_lock image_locker{ictx->image_lock};
     std::unique_lock object_map_locker{object_map_lock};
@@ -276,7 +276,7 @@ TEST_F(TestMockObjectMapUpdateRequest, IgnoreMissingObjectMap) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, 0, object_map.size(),
-    OBJECT_NONEXISTENT, OBJECT_EXISTS, {}, true, &cond_ctx);
+    OBJECT_NONEXISTENT, OBJECT_EXISTS, {false, false}, true, &cond_ctx);
   {
     std::shared_lock image_locker{ictx->image_lock};
     std::unique_lock object_map_locker{object_map_lock};

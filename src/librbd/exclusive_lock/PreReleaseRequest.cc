@@ -236,7 +236,7 @@ void PreReleaseRequest<I>::send_flush_io() {
     ctx, util::get_image_ctx(&m_image_ctx), librbd::io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec::create_flush(
     m_image_ctx, io::IMAGE_DISPATCH_LAYER_EXCLUSIVE_LOCK, aio_comp,
-    io::FLUSH_SOURCE_EXCLUSIVE_LOCK_SKIP_REFRESH, {});
+    io::FLUSH_SOURCE_EXCLUSIVE_LOCK_SKIP_REFRESH, {false, false});
   req->send();
 }
 

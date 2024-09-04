@@ -197,7 +197,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.get_split_bits(_pool.info.get_pg_num()),
     _pool.id,
     p.shard),
-  trace_endpoint("0.0.0.0", 0, "PG"),
   info_struct_v(0),
   pgmeta_oid(p.make_pgmeta_oid()),
   stat_queue_item(this),
@@ -219,11 +218,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
-#endif
-#ifdef WITH_BLKIN
-  std::stringstream ss;
-  ss << "PG " << info.pgid;
-  trace_endpoint.copy_name(ss.str());
 #endif
 }
 

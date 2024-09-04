@@ -229,7 +229,7 @@ struct ECCommon {
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace,
+    const jspan_ptr &otel_trace,
     ECListener& eclistener
     ) = 0;
 
@@ -332,11 +332,12 @@ struct ECCommon {
     bool for_recovery;
     std::unique_ptr<ReadCompleter> on_complete;
 
-    ZTracer::Trace trace;
 
     std::map<hobject_t, std::set<int>> want_to_read;
     std::map<hobject_t, read_request_t> to_read;
     std::map<hobject_t, read_result_t> complete;
+
+    jspan_ptr otel_trace;
 
     std::map<hobject_t, std::set<pg_shard_t>> obj_to_source;
     std::map<pg_shard_t, std::set<hobject_t> > source_to_obj;
@@ -361,7 +362,8 @@ struct ECCommon {
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
         want_to_read(std::move(_want_to_read)),
-	to_read(std::move(_to_read)) {
+	to_read(std::move(_to_read)),
+	otel_trace(tracing::osd::tracer.add_span("EC ReadOp", op->osd_trace)) {
       for (auto &&hpair: to_read) {
 	auto &returned = complete[hpair.first].returned;
 	for (auto &&extent: hpair.second.to_read) {
@@ -520,7 +522,6 @@ struct ECCommon {
       std::vector<pg_log_entry_t> log_entries;
       ceph_tid_t tid;
       osd_reqid_t reqid;
-      ZTracer::Trace trace;
 
       eversion_t roll_forward_to; /// Soon to be generated internally
 
@@ -561,6 +562,7 @@ struct ECCommon {
 
       /// optional, may be null, for tracking purposes
       OpRequestRef client_op;
+      jspan_ptr otel_trace = tracing::Tracer::noop_span;
 
       /// pin for cache
       ExtentCache::write_pin pin;
@@ -670,9 +672,9 @@ struct ECCommon {
       pg_shard_t from,
       OpRequestRef msg,
       ECSubWrite &op,
-      const ZTracer::Trace &trace
+      const jspan_ptr &otel_trace
     ) {
-      ec_backend.handle_sub_write(from, std::move(msg), op, trace, *get_parent());
+      ec_backend.handle_sub_write(from, std::move(msg), op, otel_trace, *get_parent());
     }
     // end of iface
 

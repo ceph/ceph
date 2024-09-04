@@ -303,10 +303,6 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
-if (WITH_BLKIN)
-  add_subdirectory(blkin/blkin-lib)
-endif(WITH_BLKIN)
-
 if(WITH_JAEGER)
   find_package(thrift 0.13.0 REQUIRED)
 
@@ -501,7 +497,6 @@ set(ceph_common_deps
   ${FMT_LIB}
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
-  ${BLKIN_LIBRARIES}
   ${CRYPTO_LIBS}
   ${GSSAPI_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT}

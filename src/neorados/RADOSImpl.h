@@ -16,13 +16,14 @@
 
 #include <functional>
 #include <memory>
-#include <string>
+#include <string_view>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/intrusive_ptr.hpp>
 
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
+#include "common/tracer.h"
 
 #include "librados/RadosClient.h"
 
@@ -47,6 +48,7 @@ class RADOS : public Dispatcher
 
   boost::asio::io_context& ioctx;
   boost::intrusive_ptr<CephContext> cct;
+  tracing::Tracer tracer;
 
   ceph::mutex lock = ceph::make_mutex("RADOS_unleashed::_::RADOSImpl");
   int instance_id = -1;
@@ -60,7 +62,8 @@ class RADOS : public Dispatcher
 
 public:
 
-  RADOS(boost::asio::io_context& ioctx, boost::intrusive_ptr<CephContext> cct);
+  RADOS(boost::asio::io_context& ioctx, boost::intrusive_ptr<CephContext> cct,
+	std::string_view tracer_name);
   ~RADOS();
   bool ms_dispatch(Message *m) override;
   void ms_handle_connect(Connection *con) override;
@@ -76,8 +79,10 @@ class Client {
 public:
   Client(boost::asio::io_context& ioctx,
          boost::intrusive_ptr<CephContext> cct,
-         MonClient& monclient, Objecter* objecter)
-    : ioctx(ioctx), cct(cct), monclient(monclient), objecter(objecter) {
+         MonClient& monclient, Objecter* objecter,
+	 tracing::Tracer& tracer)
+    : ioctx(ioctx), cct(cct), monclient(monclient), objecter(objecter),
+      tracer(tracer) {
   }
   virtual ~Client() {}
 
@@ -89,6 +94,7 @@ public:
   boost::intrusive_ptr<CephContext> cct;
   MonClient& monclient;
   Objecter* objecter;
+  tracing::Tracer& tracer;
 
   mon_feature_t get_required_monitor_features() const {
     return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
@@ -101,7 +107,7 @@ class NeoClient : public Client {
 public:
   NeoClient(std::unique_ptr<RADOS>&& rados)
     : Client(rados->ioctx, rados->cct, rados->monclient,
-             rados->objecter.get()),
+             rados->objecter.get(), rados->tracer),
       rados(std::move(rados)) {
   }
 
@@ -117,7 +123,8 @@ class RadosClient : public Client {
 public:
   RadosClient(librados::RadosClient* rados_client)
     : Client(rados_client->poolctx, {rados_client->cct},
-             rados_client->monclient, rados_client->objecter),
+             rados_client->monclient, rados_client->objecter,
+	     rados_client->tracer()),
       rados_client(rados_client) {
   }
 

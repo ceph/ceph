@@ -67,7 +67,7 @@ class C_OrderedWrite : public Context {
 public:
   C_OrderedWrite(CephContext *cct,
                  ObjectCacherWriteback::write_result_d *result,
-                 const ZTracer::Trace &trace, ObjectCacherWriteback *wb)
+                 const jspan_ptr &trace, ObjectCacherWriteback *wb)
     : m_cct(cct), m_result(result), m_trace(trace), m_wb_handler(wb) {}
   ~C_OrderedWrite() override {}
   void finish(int r) override {
@@ -80,12 +80,13 @@ public:
       m_wb_handler->complete_writes(m_result->oid);
     }
     ldout(m_cct, 20) << "C_OrderedWrite finished " << m_result << dendl;
-    m_trace.event("finish");
+    m_trace->AddEvent("finish");
+    m_trace->End();
   }
 private:
   CephContext *m_cct;
   ObjectCacherWriteback::write_result_d *m_result;
-  ZTracer::Trace m_trace;
+  jspan_ptr m_trace;
   ObjectCacherWriteback *m_wb_handler;
 };
 
@@ -118,15 +119,12 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
                                  uint64_t off, uint64_t len, snapid_t snapid,
                                  bufferlist *pbl, uint64_t trunc_size,
                                  __u32 trunc_seq, int op_flags,
-                                 const ZTracer::Trace &parent_trace,
+                                 const jspan_context &parent_trace,
                                  Context *onfinish)
 {
-  ZTracer::Trace trace;
-  if (parent_trace.valid()) {
-    trace.init("", &m_ictx->trace_endpoint, &parent_trace);
-    trace.copy_name("cache read " + oid.name);
-    trace.event("start");
-  }
+  auto name = fmt::format("cache read {}", oid.name);
+  auto trace = m_ictx->tracer.add_span(name, parent_trace);
+  trace->AddEvent("start");
 
   // on completion, take the mutex and then call onfinish.
   onfinish = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
@@ -151,7 +149,7 @@ void ObjectCacherWriteback::read(const object_t& oid, uint64_t object_no,
 
   auto req = io::ObjectDispatchSpec::create_read(
     m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, &req_comp->extents,
-    io_context, op_flags, read_flags, trace, nullptr, req_comp);
+    io_context, op_flags, read_flags, trace->GetContext(), nullptr, req_comp);
   req->send();
 }
 
@@ -185,15 +183,12 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
                                         ceph::real_time mtime,
                                         uint64_t trunc_size,
                                         __u32 trunc_seq, ceph_tid_t journal_tid,
-                                        const ZTracer::Trace &parent_trace,
+                                        const jspan_context &parent_trace,
                                         Context *oncommit)
 {
-  ZTracer::Trace trace;
-  if (parent_trace.valid()) {
-    trace.init("", &m_ictx->trace_endpoint, &parent_trace);
-    trace.copy_name("writeback " + oid.name);
-    trace.event("start");
-  }
+  auto name = fmt::format("writeback {}", oid.name);
+  auto trace = m_ictx->tracer.add_span(name, parent_trace);
+  trace->AddEvent("start");
 
   uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
@@ -214,7 +209,7 @@ ceph_tid_t ObjectCacherWriteback::write(const object_t& oid,
 
   auto req = io::ObjectDispatchSpec::create_write(
     m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, object_no, off, std::move(bl_copy),
-    io_context, 0, 0, std::nullopt, journal_tid, trace, ctx);
+    io_context, 0, 0, std::nullopt, journal_tid, trace->GetContext(), ctx);
   req->object_dispatch_flags = (
     io::OBJECT_DISPATCH_FLAG_FLUSH |
     io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR);

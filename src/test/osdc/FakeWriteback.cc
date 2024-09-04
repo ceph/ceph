@@ -62,7 +62,7 @@ void FakeWriteback::read(const object_t& oid, uint64_t object_no,
 			 uint64_t off, uint64_t len, snapid_t snapid,
 			 bufferlist *pbl, uint64_t trunc_size,
 			 __u32 trunc_seq, int op_flags,
-                         const ZTracer::Trace &parent_trace,
+                         const jspan_context &otel_trace,
                          Context *onfinish)
 {
   C_Delay *wrapper = new C_Delay(m_cct, onfinish, m_lock, off, pbl,
@@ -77,7 +77,7 @@ ceph_tid_t FakeWriteback::write(const object_t& oid,
 				const bufferlist &bl, ceph::real_time mtime,
 				uint64_t trunc_size, __u32 trunc_seq,
 				ceph_tid_t journal_tid,
-                                const ZTracer::Trace &parent_trace,
+                                const jspan_context &otel_trace,
                                 Context *oncommit)
 {
   C_Delay *wrapper = new C_Delay(m_cct, oncommit, m_lock, off, NULL,

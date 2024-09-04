@@ -122,8 +122,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       op_work_queue(asio_engine->get_work_queue()),
       plugin_registry(new PluginRegistry<ImageCtx>(this)),
       event_socket_completions(32),
-      asok_hook(nullptr),
-      trace_endpoint("librbd")
+      asok_hook(nullptr)
   {
     ldout(cct, 10) << this << " " << __func__ << ": "
                    << "image_name=" << image_name << ", "
@@ -200,7 +199,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
       pname += snap_name;
     }
 
-    trace_endpoint.copy_name(pname);
+    tracer.init(cct, pname);
     perf_start(pname);
 
     ceph_assert(image_watcher == NULL);
@@ -841,7 +840,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     ASSIGN_OPTION(atime_update_interval, uint64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(discard_granularity_bytes, uint64_t);
-    ASSIGN_OPTION(blkin_trace_all, bool);
+    ASSIGN_OPTION(otel_trace_all, bool);
 
     auto cache_policy = config.get_val<std::string>("rbd_cache_policy");
     if (cache_policy == "writethrough" || cache_policy == "writeback") {

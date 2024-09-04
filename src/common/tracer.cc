@@ -21,6 +21,11 @@ const jspan_ptr Tracer::noop_span = noop_tracer->StartSpan("noop");
 
 using bufferlist = ceph::buffer::list;
 
+Tracer::Tracer(CephContext* _cct,
+	       opentelemetry::nostd::string_view service_name) {
+  init(_cct, service_name);
+}
+
 void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_name) {
   ceph_assert(_cct);
   cct = _cct;
@@ -70,7 +75,7 @@ jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const js
 }
 
 jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
-  if (parent_ctx.IsValid()) {
+  if (is_enabled() && parent_ctx.IsValid()) {
     ceph_assert(tracer);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_ctx;
@@ -86,5 +91,8 @@ bool Tracer::is_enabled() const {
 
 } // namespace tracing
 
-#endif // HAVE_JAEGER
-
+#else // !HAVE_JAEGER
+namespace tracing {
+const jspan_ptr Tracer::noop_span{};
+}
+#endif // !HAVE_JAEGER

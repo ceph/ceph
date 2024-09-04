@@ -20,8 +20,8 @@
 
 class MOSDECSubOpWriteReply : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
-  static constexpr int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   spg_t pgid;
@@ -53,6 +53,9 @@ public:
     decode(op, p);
     if (header.version >= 2) {
       decode(min_epoch, p);
+      decode_otel_trace(p);
+    } else if (header.version >= 2) {
+      decode(min_epoch, p);
       decode_trace(p);
     } else {
       min_epoch = map_epoch;
@@ -65,7 +68,7 @@ public:
     encode(map_epoch, payload);
     encode(op, payload);
     encode(min_epoch, payload);
-    encode_trace(payload, features);
+    encode_otel_trace(payload, features);
   }
 
   std::string_view get_type_name() const override { return "MOSDECSubOpWriteReply"; }

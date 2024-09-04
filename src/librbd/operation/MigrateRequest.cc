@@ -119,7 +119,7 @@ private:
       bufferlist bl;
       auto req = new io::ObjectWriteRequest<I>(&image_ctx, m_object_no, 0,
                                                std::move(bl), m_io_context, 0,
-                                               0, std::nullopt, {}, ctx);
+                                               0, std::nullopt, {false, false}, ctx);
 
       ldout(cct, 20) << "copyup object req " << req << ", object_no "
                      << m_object_no << dendl;

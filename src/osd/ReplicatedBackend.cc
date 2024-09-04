@@ -562,7 +562,9 @@ void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
     op->op->mark_event("op_commit");
-    op->op->pg_trace.event("op commit");
+    auto commit_span = tracing::osd::tracer.add_span("op_commit",
+						     op->op->pg_trace);
+    commit_span->AddEvent("op_commit");
   }
 
   op->waiting_for_commit.erase(get_parent()->whoami_shard());
@@ -611,7 +613,9 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ip_op.waiting_for_commit.erase(from);
       if (ip_op.op) {
 	ip_op.op->mark_event("sub_op_commit_rec");
-	ip_op.op->pg_trace.event("sub_op_commit_rec");
+	auto commit_span = tracing::osd::tracer.add_span("sub_op_commit_rec",
+							 ip_op.op->pg_trace);
+	commit_span->AddEvent("sub_op_commit_rec");
       }
     } else {
       // legacy peer; ignore
@@ -1020,7 +1024,8 @@ void ReplicatedBackend::issue_op(
 {
   if (parent->get_acting_recovery_backfill_shards().size() > 1) {
     if (op->op) {
-      op->op->pg_trace.event("issue replication ops");
+      auto issue_span = tracing::osd::tracer.add_span("issue op", op->op->pg_trace);
+      issue_span->AddEvent("issue replication ops");
       ostringstream ss;
       set<pg_shard_t> replicas = parent->get_acting_recovery_backfill_shards();
       replicas.erase(parent->whoami_shard());
@@ -1051,8 +1056,6 @@ void ReplicatedBackend::issue_op(
 	  op_t,
 	  shard,
 	  pinfo);
-      if (op->op && op->op->pg_trace)
-	wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
       get_parent()->send_message_osd_cluster(
 	  shard.osd, wr, get_osdmap_epoch());
     }
@@ -1165,8 +1168,10 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 void ReplicatedBackend::repop_commit(RepModifyRef rm)
 {
   rm->op->mark_commit_sent();
-  rm->op->pg_trace.event("sup_op_commit");
   rm->committed = true;
+
+  auto commit_span = tracing::osd::tracer.add_span(__func__, rm->op->pg_trace);
+  commit_span->AddEvent("sup_op_commit");
 
   // send commit.
   auto m = rm->op->get_req<MOSDRepOp>();
@@ -1184,7 +1189,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
     0, get_osdmap_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
-  reply->trace = rm->op->pg_trace;
+  reply->otel_trace = rm->op->pg_trace;
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, reply, get_osdmap_epoch());
 

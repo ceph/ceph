@@ -337,7 +337,7 @@ TEST_F(TestMockMigrationRawFormat, Read) {
   bufferlist bl;
   io::ReadResult read_result{&bl};
   mock_raw_format.read(aio_comp, CEPH_NOSNAP, {{123, 123}},
-                       std::move(read_result), 0, 0, {});
+                       std::move(read_result), 0, 0, {false, false});
   ASSERT_EQ(123, ctx2.wait());
   ASSERT_EQ(expect_bl, bl);
 
@@ -376,7 +376,7 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
 
   C_SaferCond ctx2;
   io::SnapshotDelta snapshot_delta;
-  mock_raw_format.list_snaps({{0, 123}}, {CEPH_NOSNAP}, 0, &snapshot_delta, {},
+  mock_raw_format.list_snaps({{0, 123}}, {CEPH_NOSNAP}, 0, &snapshot_delta, {false, false},
                              &ctx2);
   ASSERT_EQ(0, ctx2.wait());
 
@@ -420,7 +420,7 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsError) {
 
   C_SaferCond ctx2;
   io::SnapshotDelta snapshot_delta;
-  mock_raw_format.list_snaps({{0, 123}}, {CEPH_NOSNAP}, 0, &snapshot_delta, {},
+  mock_raw_format.list_snaps({{0, 123}}, {CEPH_NOSNAP}, 0, &snapshot_delta, {false, false},
                              &ctx2);
   ASSERT_EQ(-EINVAL, ctx2.wait());
 
@@ -494,7 +494,7 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsMerge) {
   C_SaferCond ctx2;
   io::SnapshotDelta snapshot_delta;
   mock_raw_format.list_snaps({{0, 123}}, {1, CEPH_NOSNAP}, 0, &snapshot_delta,
-                             {}, &ctx2);
+                             {false, false}, &ctx2);
   ASSERT_EQ(0, ctx2.wait());
 
   io::SnapshotDelta expected_snapshot_delta;

@@ -47,12 +47,8 @@
 
 #include "messages/MWatchNotify.h"
 
-
-#include "common/Cond.h"
-#include "common/config.h"
 #include "common/perf_counters.h"
 #include "common/scrub_types.h"
-#include "include/str_list.h"
 #include "common/errno.h"
 #include "common/EventTrace.h"
 #include "common/async/waiter.h"
@@ -64,14 +60,12 @@ using std::make_pair;
 using std::map;
 using std::ostream;
 using std::ostringstream;
-using std::pair;
 using std::set;
 using std::string;
 using std::stringstream;
 using std::vector;
 
 using ceph::decode;
-using ceph::encode;
 using ceph::Formatter;
 
 using std::defer_lock;
@@ -82,7 +76,6 @@ using std::unique_lock;
 using ceph::real_time;
 using ceph::real_clock;
 
-using ceph::mono_clock;
 using ceph::mono_time;
 
 using ceph::timespan;
@@ -1995,7 +1988,7 @@ void Objecter::wait_for_osd_map(epoch_t e)
 				    w.ref()),
 				  bs::error_code{});
   l.unlock();
-  w.wait();
+  [[maybe_unused]] auto x = w.wait();
 }
 
 void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest,
@@ -2279,7 +2272,6 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   ceph_tid_t tid = 0;
   if (!ptid)
     ptid = &tid;
-  op->trace.event("op submit");
   _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
@@ -2390,6 +2382,7 @@ void Objecter::_send_op_account(Op *op)
 
 void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid)
 {
+  op->trace->AddEvent("submitting");
   // rwlock is locked
 
   ldout(cct, 10) << __func__ << " op " << op << dendl;
@@ -2460,8 +2453,10 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   }
 
   unique_lock sl(s->lock);
-  if (op->tid == 0)
+  if (op->tid == 0) {
     op->tid = ++last_tid;
+    op->trace->SetAttribute("tid", op->tid);
+  }
 
   ldout(cct, 10) << "_op_submit oid " << op->target.base_oid
 		 << " '" << op->target.base_oloc << "' '"
@@ -2472,6 +2467,7 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   _session_op_assign(s, op);
 
   if (need_send) {
+    op->trace->AddEvent("sending");
     _send_op(op);
   }
 
@@ -3226,10 +3222,6 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
 
-  if (!op->trace.valid() && cct->_conf->osdc_blkin_trace_all) {
-    op->trace.init("op", &trace_endpoint);
-  }
-
   if (op->priority)
     m->set_priority(op->priority);
   else
@@ -3239,8 +3231,9 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
-  if (op->otel_trace && op->otel_trace->IsValid()) {
-     m->otel_trace = jspan_context(*op->otel_trace);
+  if (op->trace->GetContext().IsValid()) {
+    m->otel_trace = op->trace->GetContext();
+    m->trace = op->session->con->get_messenger()->tracer.add_span("io.ceph.MOSDOp", m->otel_trace);
   }
 
   logger->inc(l_osdc_op_send);
@@ -3320,9 +3313,6 @@ void Objecter::_send_op(Op *op)
 
   op->incarnation = op->session->incarnation;
 
-  if (op->trace.valid()) {
-    m->trace.init("op msg", nullptr, &op->trace);
-  }
   op->session->con->send_message(m);
 }
 
@@ -3420,7 +3410,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		<< " attempt " << m->get_retry_attempt()
 		<< dendl;
   Op *op = iter->second;
-  op->trace.event("osd op reply");
+  op->trace->AddEvent("handling OSD op reply");
 
   if (retry_writes_after_first_reply && op->attempts == 1 &&
       (op->target.flags & CEPH_OSD_FLAG_WRITE)) {
