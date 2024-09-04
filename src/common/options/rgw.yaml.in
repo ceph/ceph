@@ -63,7 +63,7 @@ options:
   type: size
   level: advanced
   desc: the Maximum parquet buffer size, a limit to memory consumption for parquet reading operations.
-  default: 1_G
+  default: 16_M
   services:
   - rgw
   with_legacy: true
