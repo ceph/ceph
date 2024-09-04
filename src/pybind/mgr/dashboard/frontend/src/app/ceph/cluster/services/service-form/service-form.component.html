@@ -105,6 +105,30 @@
           </div>
         </div>
 
+        <!-- Group Name -->
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'nvmeof'">
+          <label class="cd-col-form-label required"
+                 for="group">
+            <span i18n>Group Name</span>
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input id="group"
+                     class="form-control"
+                     type="text"
+                     formControlName="group"
+                     (change)="onNvmeofGroupChange($event.target.value)">
+            </div>
+            <cd-help-text i18n>
+              The name of the gateway group.
+            </cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('service_id', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
         <!-- Service id -->
         <div class="form-group row"
              *ngIf="serviceForm.controls.service_type.value !== 'snmp-gateway'">

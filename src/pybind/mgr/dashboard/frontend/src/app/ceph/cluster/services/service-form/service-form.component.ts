@@ -195,6 +195,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
+      group: [
+        null,
+        CdValidators.requiredIf({
+          service_type: 'nvmeof'
+        })
+      ],
       // RGW
       rgw_frontend_port: [null, [CdValidators.number(false)]],
       realm_name: [null],
@@ -522,6 +528,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               break;
             case 'nvmeof':
               this.serviceForm.get('pool').setValue(response[0].spec.pool);
+              this.serviceForm.get('group').setValue(response[0].spec.group);
               break;
             case 'rgw':
               this.serviceForm
@@ -778,8 +785,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ?.pool_name;
     if (defaultRbdPool) {
       this.serviceForm.get('pool').setValue(defaultRbdPool);
-      this.serviceForm.get('service_id').setValue(defaultRbdPool);
     }
+  }
+
+  onNvmeofGroupChange(groupName: string) {
+    this.serviceForm.get('service_id').setValue(groupName);
   }
 
   requiresServiceId(serviceType: string) {
@@ -837,6 +847,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         break;
       case 'nvmeof':
         this.serviceForm.get('pool').disable();
+        this.serviceForm.get('group').disable();
         break;
     }
   }
@@ -920,6 +931,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         break;
 
       case 'nvmeof':
+        serviceSpec['pool'] = values['pool'];
+        serviceSpec['group'] = values['group'];
+        break;
       case 'iscsi':
         serviceSpec['pool'] = values['pool'];
         break;
