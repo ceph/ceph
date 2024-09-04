@@ -1166,10 +1166,10 @@ seastar::future<std::optional<eversion_t>> PG::submit_error_log(
     log_entries, t, peering_state.get_pg_trim_to(),
     peering_state.get_min_last_complete_ondisk());
 
-  return seastar::do_with(log_entries, t, set<pg_shard_t>{},
-    [this, rep_tid](auto& log_entries, auto& t,auto& waiting_on) mutable {
+  return seastar::do_with(log_entries, set<pg_shard_t>{},
+    [this, t=std::move(t), rep_tid](auto& log_entries, auto& waiting_on) mutable {
     return seastar::do_for_each(get_acting_recovery_backfill(),
-      [this, log_entries, t=std::move(t), waiting_on, rep_tid]
+      [this, log_entries, waiting_on, rep_tid]
       (auto& i) mutable {
       pg_shard_t peer(i);
       if (peer == pg_whoami) {
