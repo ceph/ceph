@@ -327,11 +327,11 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     }
 
     //If there is leftover data from previous iteration, append new data to leftover data
-    uint64_t entry_start_offset = start_offset - bl.length();
+    uint64_t entry_start_offset = start_offset - bl.length(); //NOLINT(bugprone-use-after-move)
     CLS_LOG(20, "INFO: queue_list_entries(): Entry start offset accounting for leftover data is %lu", entry_start_offset);
     bl.claim_append(bl_chunk);
     bl_chunk = std::move(bl);
-
+    bl.clear(); //NOLINT(bugprone-use-after-move)
     CLS_LOG(20, "INFO: queue_list_entries(): size of chunk %u", bl_chunk.length());
 
     //Process the chunk of data read
