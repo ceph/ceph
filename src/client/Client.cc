@@ -10079,7 +10079,7 @@ int Client::open(const char *relpath, int flags, const UserPerm& perms,
 		 int object_size, const char *data_pool, std::string alternate_name)
 {
   return openat(CEPHFS_AT_FDCWD, relpath, flags, perms, mode, stripe_unit,
-                stripe_count, object_size, data_pool, alternate_name);
+                stripe_count, object_size, data_pool, std::move(alternate_name));
 }
 
 int Client::openat(int dirfd, const char *relpath, int flags, const UserPerm& perms,
@@ -10098,7 +10098,7 @@ int Client::openat(int dirfd, const char *relpath, int flags, const UserPerm& pe
 
   std::scoped_lock locker(client_lock);
   int r =  create_and_open(dirfd, relpath, flags, perms, mode, stripe_unit, stripe_count,
-                           object_size, data_pool, alternate_name);
+                           object_size, data_pool, std::move(alternate_name));
 
   tout(cct) << r << std::endl;
   ldout(cct, 3) << "openat exit(" << relpath << ")" << dendl;
