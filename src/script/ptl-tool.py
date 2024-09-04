@@ -178,9 +178,9 @@ except FileNotFoundError:
     pass
 GITHUB_TOKEN = os.getenv("PTL_TOOL_GITHUB_TOKEN", GITHUB_TOKEN)
 INDICATIONS = [
-    re.compile("(Reviewed-by: .+ <[\w@.-]+>)", re.IGNORECASE),
-    re.compile("(Acked-by: .+ <[\w@.-]+>)", re.IGNORECASE),
-    re.compile("(Tested-by: .+ <[\w@.-]+>)", re.IGNORECASE),
+    re.compile(r"(Reviewed-by: .+ <[\w@.-]+>)", re.IGNORECASE),
+    re.compile(r"(Acked-by: .+ <[\w@.-]+>)", re.IGNORECASE),
+    re.compile(r"(Tested-by: .+ <[\w@.-]+>)", re.IGNORECASE),
 ]
 REDMINE_CUSTOM_FIELD_ID_SHAMAN_BUILD = 26
 REDMINE_CUSTOM_FIELD_ID_QA_RUNS = 27
@@ -218,8 +218,8 @@ while not os.path.exists(git_dir + '/.git'):
 CONTRIBUTORS = {}
 NEW_CONTRIBUTORS = {}
 with codecs.open(git_dir + "/.githubmap", encoding='utf-8') as f:
-    comment = re.compile("\s*#")
-    patt = re.compile("([\w-]+)\s+(.*)")
+    comment = re.compile(r"\s*#")
+    patt = re.compile(r"([\w-]+)\s+(.*)")
     for line in f:
         if comment.match(line):
             continue
