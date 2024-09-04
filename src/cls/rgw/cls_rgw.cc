@@ -48,7 +48,7 @@ CLS_NAME(rgw)
 // of a special bucket-index entry for the first byte. Note: although
 // it has no impact, the 2nd, 3rd, or 4th byte of a UTF-8 character
 // may be 0x80.
-#define BI_PREFIX_CHAR 0x80
+constexpr unsigned char BI_PREFIX_CHAR = 0x80;
 
 #define BI_BUCKET_OBJS_INDEX          0
 #define BI_BUCKET_LOG_INDEX           1
@@ -67,11 +67,11 @@ static std::string bucket_index_prefixes[] = { "", /* special handling for the o
 
 // this string is greater than all ascii plain entries and less than
 // all special entries
-static const std::string BI_PREFIX_BEGIN = string(1, BI_PREFIX_CHAR);
+static const std::string BI_PREFIX_BEGIN = string(1, static_cast<char>(BI_PREFIX_CHAR));
 
 // this string is greater than all special entries and less than all
 // non-ascii plain entries
-static const std::string BI_PREFIX_END = string(1, BI_PREFIX_CHAR) +
+static const std::string BI_PREFIX_END = string(1, static_cast<char>(BI_PREFIX_CHAR)) +
     bucket_index_prefixes[BI_BUCKET_LAST_INDEX];
 
 /* Returns whether parameter is not a key for a special entry. Empty
@@ -80,7 +80,7 @@ static const std::string BI_PREFIX_END = string(1, BI_PREFIX_CHAR) +
  * using appropriately.
  */
 static bool bi_is_plain_entry(const std::string& s) {
-  return (s.empty() || (unsigned char)s[0] != BI_PREFIX_CHAR);
+  return (s.empty() || static_cast<unsigned char>(s[0]) != BI_PREFIX_CHAR);
 }
 
 static int bi_entry_type(const string& s)
@@ -209,7 +209,7 @@ static int get_obj_vals(cls_method_context_t hctx,
   }
 
   auto last_element = pkeys->crbegin();
-  if ((unsigned char)last_element->first[0] < BI_PREFIX_CHAR) {
+  if (static_cast<unsigned char>(last_element->first[0]) < BI_PREFIX_CHAR) {
     /* if the first character of the last entry is less than the
      * prefix then all entries must preceed the "ugly namespace" and
      * we're done
@@ -218,7 +218,7 @@ static int get_obj_vals(cls_method_context_t hctx,
   }
 
   auto first_element = pkeys->cbegin();
-  if ((unsigned char)first_element->first[0] > BI_PREFIX_CHAR) {
+  if (static_cast<unsigned char>(first_element->first[0]) > BI_PREFIX_CHAR) {
     /* if the first character of the first entry is after the "ugly
      * namespace" then all entries must follow the "ugly namespace"
      * then all entries do and we're done
