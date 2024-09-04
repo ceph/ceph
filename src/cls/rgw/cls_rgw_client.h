@@ -675,8 +675,16 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const std::string& oid, std::s
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw_reshard_entry& entry);
 #endif
 
-/* resharding attribute on bucket index shard headers */
+// If writes to the bucket index should be blocked during resharding, fail with
+// the given error code. RGWRados::guard_reshard() calls this in a loop to retry
+// the write until the reshard completes.
+//
+// As of the T release, all index write ops in cls_rgw perform this check
+// themselves. RGW can stop issuing this call in the T+2 (V) release once it
+// knows that OSDs are running T at least. The call can be safely removed from
+// cls_rgw in the T+4 (X) release.
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err);
+
 // these overloads which call io_ctx.operate() should not be called in the rgw.
 // rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
 #ifndef CLS_CLIENT_HIDE_IOCTX

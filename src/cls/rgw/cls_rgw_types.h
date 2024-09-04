@@ -18,6 +18,8 @@
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
 #define CEPH_RGW_DIR_SUGGEST_OP_MASK 0x7f
 
+#define CLS_RGW_ERR_BUSY_RESHARDING 2300 // also in rgw_common.h, don't change!
+
 constexpr uint64_t CEPH_RGW_DEFAULT_TAG_TIMEOUT = 120; // in seconds
 
 class JSONObj;
