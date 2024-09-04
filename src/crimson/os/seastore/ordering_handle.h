@@ -122,6 +122,11 @@ struct OrderingHandle {
   std::unique_ptr<OperationProxy> op;
   seastar::shared_mutex *collection_ordering_lock = nullptr;
 
+  using write_ertr = crimson::errorator<
+      crimson::ct_error::input_output_error>;
+  // the pending writes that should complete at DeviceSubmission phase
+  write_ertr::future<> write_future = write_ertr::now();
+
   // in the future we might add further constructors / template to type
   // erasure while extracting the location of tracking events.
   OrderingHandle(std::unique_ptr<OperationProxy> op) : op(std::move(op)) {}
@@ -144,6 +149,20 @@ struct OrderingHandle {
     }
   }
 
+  void add_write_future(write_ertr::future<>&& fut) {
+    auto appended = std::move(write_future
+    ).safe_then([fut=std::move(fut)]() mutable {
+      return std::move(fut);
+    });
+    write_future = std::move(appended);
+  }
+
+  write_ertr::future<> take_write_future() {
+    auto ret = std::move(write_future);
+    write_future = write_ertr::now();
+    return ret;
+  }
+
   template <typename T>
   seastar::future<> enter(T &t) {
     return op->enter(t);
@@ -151,6 +170,10 @@ struct OrderingHandle {
 
   void exit() {
     op->exit();
+
+    auto ignore_writes = std::move(write_future);
+    std::ignore = ignore_writes;
+    write_future = write_ertr::now();
   }
 
   seastar::future<> complete() {
@@ -159,6 +182,9 @@ struct OrderingHandle {
 
   ~OrderingHandle() {
     maybe_release_collection_lock();
+
+    assert(write_future.available());
+    assert(!write_future.failed());
   }
 };
 

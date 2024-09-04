@@ -115,7 +115,7 @@ private:
     Transaction& t,
     std::list<CachedExtentRef> &extent);
 
-  alloc_write_ertr::future<> write_record(
+  void write_record(
     Transaction& t,
     record_t&& record,
     std::list<LogicalCachedExtentRef> &&extents,
@@ -195,7 +195,7 @@ private:
     ceph::bufferptr bp;
     RandomBlockManager* rbm;
   };
-  alloc_write_iertr::future<> do_write(
+  void do_write(
     Transaction& t,
     std::list<CachedExtentRef> &extent);
 
