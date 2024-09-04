@@ -2785,72 +2785,6 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   return 0;
 }
 
-/* gain bi_entry based on reshard log */
-static int rgw_bi_get_vals_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  // decode request
-  rgw_cls_bi_get_vals_op op;
-  auto bl_iter = in->cbegin();
-  try {
-    decode(op, bl_iter);
-  } catch (ceph::buffer::error& err) {
-    CLS_LOG(0, "ERROR: %s: failed to decode request", __func__);
-    return -EINVAL;
-  }
-
-  map<string, bufferlist> keys;
-  int ret = cls_cxx_map_get_vals_by_keys(hctx, op.log_entries_wanted, &keys);
-  if (ret < 0) {
-    return ret;
-  }
-
-  rgw_cls_bi_list_ret op_ret;
-  std::map<string, bufferlist>::iterator iter;
-  for (iter = keys.begin(); iter != keys.end(); ++iter) {
-
-    rgw_cls_bi_entry entry;
-    entry.idx = iter->first;
-    entry.type = bi_type(iter->first);
-    entry.data = iter->second;
-
-    auto biter = entry.data.cbegin();
-
-    switch (entry.type) {
-      case BIIndexType::Plain:
-      case BIIndexType::Instance: {
-        rgw_bucket_dir_entry e;
-        try {
-          decode(e, biter);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(0, "ERROR: %s: failed to decode buffer", __func__);
-          return -EIO;
-        }
-        break;
-      }
-      case BIIndexType::OLH: {
-        rgw_bucket_olh_entry e;
-        try {
-          decode(e, biter);
-        } catch (ceph::buffer::error& err) {
-          CLS_LOG(0, "ERROR: %s: failed to decode buffer (size=%d)", __func__, entry.data.length());
-          return -EIO;
-        }
-        break;
-      }
-      default:
-        CLS_LOG(0, "%s: invalid entry type: %d", __func__, int(entry.type));
-        return -EINVAL;
-    }
-    CLS_LOG(20, "%s: entry.idx=%s", __func__, escape_str(entry.idx).c_str());
-
-    op_ret.entries.push_back(entry);
-  }
-
-  encode(op_ret, *out);
-
-  return 0;
-}
-
 static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(10, "entered %s", __func__);
@@ -5080,7 +5014,6 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_obj_check_attrs_prefix;
   cls_method_handle_t h_rgw_obj_check_mtime;
   cls_method_handle_t h_rgw_bi_get_op;
-  cls_method_handle_t h_rgw_bi_get_vals_op;
   cls_method_handle_t h_rgw_bi_put_op;
   cls_method_handle_t h_rgw_bi_put_entries_op;
   cls_method_handle_t h_rgw_bi_list_op;
@@ -5139,7 +5072,6 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_OBJ_CHECK_MTIME, CLS_METHOD_RD, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 
   cls_register_cxx_method(h_class, RGW_BI_GET, CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
-  cls_register_cxx_method(h_class, RGW_BI_GET_VALS, CLS_METHOD_RD, rgw_bi_get_vals_op, &h_rgw_bi_get_vals_op);
   cls_register_cxx_method(h_class, RGW_BI_PUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
   cls_register_cxx_method(h_class, RGW_BI_PUT_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_entries, &h_rgw_bi_put_entries_op);
   cls_register_cxx_method(h_class, RGW_BI_LIST, CLS_METHOD_RD, rgw_bi_list_op, &h_rgw_bi_list_op);
