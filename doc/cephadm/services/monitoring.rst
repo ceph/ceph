@@ -239,7 +239,7 @@ used by ``cephadm``.
       DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:9.4.12'
       DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
       DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
-      DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.2.1'
+      DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.3'
       DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
       DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
       DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
