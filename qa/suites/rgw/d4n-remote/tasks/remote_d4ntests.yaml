@@ -44,7 +44,7 @@ tasks:
     c2.client.0:
       - sudo chmod 0777 /var/lib/ceph
       - sudo chmod 0777 /var/lib/ceph/radosgw
-- d4ntests:
+- d4ntestsremote:
     c1.client.0:
     c2.client.0:
 - workunit:
