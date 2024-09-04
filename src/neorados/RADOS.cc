@@ -829,10 +829,12 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
     std::ostringstream ss;
     auto r = cct->_conf.parse_config_files(conf_files ? conf_files->data() : nullptr,
 					   &ss, flags);
-    if (r < 0)
+    if (r < 0) {
       asio::post(ioctx.get_executor(),
 		 asio::append(std::move(c), ceph::to_error_code(r),
 			      RADOS{nullptr}));
+      return;
+    }
   }
 
   cct->_conf.parse_env(cct->get_module_type());
@@ -840,20 +842,24 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   for (const auto& [n, v] : configs) {
     std::stringstream ss;
     auto r = cct->_conf.set_val(n, v, &ss);
-    if (r < 0)
+    if (r < 0) {
       asio::post(ioctx.get_executor(),
 		 asio::append(std::move(c), ceph::to_error_code(-EINVAL),
 			      RADOS{nullptr}));
+      return;
+    }
   }
 
   if (!no_mon_conf) {
     MonClient mc_bootstrap(cct, ioctx);
     // TODO This function should return an error code.
     auto err = mc_bootstrap.get_monmap_and_config();
-    if (err < 0)
+    if (err < 0) {
       asio::post(ioctx.get_executor(),
 		 asio::append(std::move(c), ceph::to_error_code(err),
 			      RADOS{nullptr}));
+      return;
+    }
   }
   if (!cct->_log->is_started()) {
     cct->_log->start();
