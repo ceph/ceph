@@ -27,7 +27,8 @@ class Activate(object):
         )
         parser.add_argument(
             '--osd-uuid',
-            help='OSD UUID to activate'
+            help='OSD UUID to activate',
+            dest='osd_fsid'
         )
         parser.add_argument(
             '--no-systemd',
@@ -44,11 +45,8 @@ class Activate(object):
 
         # first try raw
         try:
-            raw_activate = RAWActivate([])
-            raw_activate.activate(None,
-                                  self.args.osd_id,
-                                  self.args.osd_uuid,
-                                  not self.args.no_tmpfs)
+            raw_activate = RAWActivate(self.args)
+            raw_activate.activate()
             return
         except Exception as e:
             terminal.info(f'Failed to activate via raw: {e}')
@@ -58,10 +56,10 @@ class Activate(object):
             lvm_activate = LVMActivate(argparse.Namespace(
                 no_tmpfs=self.args.no_tmpfs,
                 no_systemd=self.args.no_systemd,
-                osd_fsid=self.args.osd_uuid))
+                osd_fsid=self.args.osd_fsid))
             lvm_activate.activate(None,
                                   self.args.osd_id,
-                                  self.args.osd_uuid)
+                                  self.args.osd_fsid)
             return
         except Exception as e:
             terminal.info(f'Failed to activate via LVM: {e}')
@@ -71,7 +69,7 @@ class Activate(object):
             SimpleActivate([]).activate(
                 argparse.Namespace(
                     osd_id=self.args.osd_id,
-                    osd_fsid=self.args.osd_uuid,
+                    osd_fsid=self.args.osd_fsid,
                     no_systemd=self.args.no_systemd,
                 )
             )
