@@ -6,7 +6,7 @@ tasks:
     ec_pool: true
     write_append_excl: false
     erasure_code_profile:
-      name: jerasure21profile
+      name: jerasure42profile
       plugin: jerasure
       k: 4
       m: 2
