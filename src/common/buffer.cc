@@ -141,6 +141,19 @@ static ceph::spinlock debug_lock;
     raw_zeros(char *dataptr, unsigned l, int mempool)
       : raw_combined(dataptr, l, mempool) {
       memset(dataptr, 0, l);
+#ifndef _WIN32
+      if (mprotect(dataptr, l, PROT_READ) != 0) {
+        ceph_abort_msg("mprotect on raw_zeros failed");
+      }
+#endif
+    }
+
+    ~raw_zeros() {
+#ifndef _WIN32
+      if (mprotect(data, len, PROT_WRITE | PROT_READ) != 0) {
+        ceph_abort_msg("mprotect on destroing raw_zeros failed");
+      }
+#endif
     }
 
     static constexpr unsigned ZERO_AREA_NUM_PAGES = 4;
