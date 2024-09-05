@@ -204,6 +204,17 @@ static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
+static bool issue_bucket_index_init_op2(librados::IoCtx& io_ctx,
+				       const int shard_id,
+				       const string& oid,
+				       BucketIndexAioManager *manager) {
+  bufferlist in;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
+  return manager->aio_operate(io_ctx, shard_id, oid, &op);
+}
+
 static bool issue_bucket_index_clean_op(librados::IoCtx& io_ctx,
 					const int shard_id,
 					const string& oid,
@@ -233,7 +244,20 @@ int CLSRGWIssueBucketIndexInit::issue_op(const int shard_id, const string& oid)
   return issue_bucket_index_init_op(io_ctx, shard_id, oid, &manager);
 }
 
+int CLSRGWIssueBucketIndexInit2::issue_op(const int shard_id, const string& oid)
+{
+  return issue_bucket_index_init_op2(io_ctx, shard_id, oid, &manager);
+}
+
 void CLSRGWIssueBucketIndexInit::cleanup()
+{
+  // Do best effort removal
+  for (auto citer = objs_container.begin(); citer != iter; ++citer) {
+    io_ctx.remove(citer->second);
+  }
+}
+
+void CLSRGWIssueBucketIndexInit2::cleanup()
 {
   // Do best effort removal
   for (auto citer = objs_container.begin(); citer != iter; ++citer) {
@@ -253,11 +277,14 @@ int CLSRGWIssueSetTagTimeout::issue_op(const int shard_id, const string& oid)
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
 				 bool absolute,
-                                 const map<RGWObjCategory, rgw_bucket_category_stats>& stats)
+                                 const map<RGWObjCategory, rgw_bucket_category_stats>& stats,
+                                 const map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats)
 {
   rgw_cls_bucket_update_stats_op call;
   call.absolute = absolute;
   call.stats = stats;
+  if (dec_stats != NULL)
+    call.dec_stats = *dec_stats;
   bufferlist in;
   encode(call, in);
   o.exec(RGW_CLASS, RGW_BUCKET_UPDATE_STATS, in);
@@ -443,6 +470,32 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
+int cls_rgw_bi_get_vals(librados::IoCtx& io_ctx, const std::string oid,
+                        std::set<std::string>& log_entries_wanted,
+                        std::list<rgw_cls_bi_entry> *entries)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_get_vals_op call;
+  call.log_entries_wanted = std::move(log_entries_wanted);
+  encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_GET_VALS, in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_bi_list_ret op_ret;
+  auto iter = out.cbegin();
+  try {
+    decode(op_ret, iter);
+  } catch (ceph::buffer::error& err) {
+    return -EIO;
+  }
+
+  if (entries)
+    entries->swap(op_ret.entries);
+
+  return 0;
+}
+
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
 {
   bufferlist in, out;
@@ -470,13 +523,14 @@ void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi
  */
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
 		    const std::string& name_filter, const std::string& marker, uint32_t max,
-		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog)
 {
   bufferlist in, out;
   rgw_cls_bi_list_op call;
   call.name_filter = name_filter;
   call.marker = marker;
   call.max = max;
+  call.reshardlog = reshardlog;
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_LIST, in, out);
   if (r < 0)
@@ -677,6 +731,19 @@ static bool issue_bi_log_trim(librados::IoCtx& io_ctx, const string& oid, const 
 int CLSRGWIssueBILogTrim::issue_op(const int shard_id, const string& oid)
 {
   return issue_bi_log_trim(io_ctx, oid, shard_id, start_marker_mgr, end_marker_mgr, &manager);
+}
+
+static bool issue_reshard_log_trim(librados::IoCtx& io_ctx, const string& oid, int shard_id,
+                                   BucketIndexAioManager *manager) {
+  bufferlist in;
+  ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_RESHARD_LOG_TRIM, in);
+  return manager->aio_operate(io_ctx, shard_id, oid, &op);
+}
+
+int CLSRGWIssueReshardLogTrim::issue_op(int shard_id, const string& oid)
+{
+  return issue_reshard_log_trim(io_ctx, oid, shard_id, &manager);
 }
 
 static bool issue_bucket_check_index_op(IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager,
@@ -1223,3 +1290,4 @@ int CLSRGWIssueSetBucketResharding::issue_op(const int shard_id, const string& o
 {
   return issue_set_bucket_resharding(io_ctx, shard_id, oid, entry, &manager);
 }
+
