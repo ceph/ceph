@@ -194,6 +194,7 @@ private:
     paddr_t offset;
     ceph::bufferptr bp;
     RandomBlockManager* rbm;
+    std::list<ceph::bufferptr> mergeable_bps;
   };
   alloc_write_iertr::future<> do_write(
     Transaction& t,
