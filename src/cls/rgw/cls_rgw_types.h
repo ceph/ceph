@@ -469,10 +469,11 @@ struct rgw_bucket_dir_entry {
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
 enum class BIIndexType : uint8_t {
-  Invalid    = 0,
-  Plain      = 1,
-  Instance   = 2,
-  OLH        = 3,
+  Invalid        = 0,
+  Plain          = 1,
+  Instance       = 2,
+  OLH            = 3,
+  ReshardDeleted = 4,
 };
 
 struct rgw_bucket_category_stats;
@@ -591,6 +592,25 @@ struct rgw_bucket_olh_entry {
   static void generate_test_instances(std::list<rgw_bucket_olh_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
+
+struct rgw_bucket_deleted_entry {
+  cls_rgw_obj_key key;
+  rgw_bucket_deleted_entry() {}
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(key, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_bucket_deleted_entry*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_deleted_entry)
 
 struct rgw_bi_log_entry {
   std::string id;
@@ -717,7 +737,8 @@ inline bool operator!=(const rgw_bucket_category_stats& lhs,
 enum class cls_rgw_reshard_status : uint8_t {
   NOT_RESHARDING  = 0,
   IN_PROGRESS     = 1,
-  DONE            = 2
+  DONE            = 2,
+  IN_LOGRECORD    = 3
 };
 std::ostream& operator<<(std::ostream&, cls_rgw_reshard_status);
 
@@ -726,6 +747,8 @@ inline std::string to_string(const cls_rgw_reshard_status status)
   switch (status) {
   case cls_rgw_reshard_status::NOT_RESHARDING:
     return "not-resharding";
+  case cls_rgw_reshard_status::IN_LOGRECORD:
+    return "in-logrecord";
   case cls_rgw_reshard_status::IN_PROGRESS:
     return "in-progress";
   case cls_rgw_reshard_status::DONE:
@@ -780,6 +803,10 @@ struct cls_rgw_bucket_instance_entry {
     return reshard_status != RESHARD_STATUS::NOT_RESHARDING;
   }
 
+  bool resharding_in_logrecord() const {
+    return reshard_status == RESHARD_STATUS::IN_LOGRECORD;
+  }
+
   bool resharding_in_progress() const {
     return reshard_status == RESHARD_STATUS::IN_PROGRESS;
   }
@@ -801,11 +828,13 @@ struct rgw_bucket_dir_header {
   std::string max_marker;
   cls_rgw_bucket_instance_entry new_instance;
   bool syncstopped;
+  uint32_t reshardlog_entries;
 
-  rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false) {}
+  rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false),
+                            reshardlog_entries(0) {}
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 2, bl);
+    ENCODE_START(8, 2, bl);
     encode(stats, bl);
     encode(tag_timeout, bl);
     encode(ver, bl);
@@ -813,10 +842,11 @@ struct rgw_bucket_dir_header {
     encode(max_marker, bl);
     encode(new_instance, bl);
     encode(syncstopped,bl);
+    encode(reshardlog_entries, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
     decode(stats, bl);
     if (struct_v > 2) {
       decode(tag_timeout, bl);
@@ -840,6 +870,11 @@ struct rgw_bucket_dir_header {
     if (struct_v >= 7) {
       decode(syncstopped,bl);
     }
+    if (struct_v >= 8) {
+      decode(reshardlog_entries, bl);
+    } else {
+      reshardlog_entries = 0;
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -848,9 +883,15 @@ struct rgw_bucket_dir_header {
   bool resharding() const {
     return new_instance.resharding();
   }
+
+  bool resharding_in_logrecord() const {
+    return new_instance.resharding_in_logrecord();
+  }
+
   bool resharding_in_progress() const {
     return new_instance.resharding_in_progress();
   }
+
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 

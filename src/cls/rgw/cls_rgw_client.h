@@ -316,6 +316,20 @@ public:
 };
 
 
+class CLSRGWIssueBucketIndexInit2 : public CLSRGWConcurrentIO {
+protected:
+  int issue_op(int shard_id, const std::string& oid) override;
+  int valid_ret_code() override { return -EEXIST; }
+  void cleanup() override;
+public:
+  CLSRGWIssueBucketIndexInit2(librados::IoCtx& ioc,
+			     std::map<int, std::string>& _bucket_objs,
+			     uint32_t _max_aio) :
+    CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
+  virtual ~CLSRGWIssueBucketIndexInit2() override {}
+};
+
+
 class CLSRGWIssueBucketIndexClean : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const std::string& oid) override;
@@ -346,7 +360,8 @@ public:
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  bool absolute,
-                                 const std::map<RGWObjCategory, rgw_bucket_category_stats>& stats);
+                                 const std::map<RGWObjCategory, rgw_bucket_category_stats>& stats,
+                                 const std::map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats = nullptr);
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
                                const cls_rgw_obj_key& key, const std::string& locator, bool log_op,
@@ -368,12 +383,14 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry);
+int cls_rgw_bi_get_vals(librados::IoCtx& io_ctx, const std::string oid,
+                        std::set<std::string>& log_entries_wanted,
+                        std::list<rgw_cls_bi_entry> *entries);
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string oid, const rgw_cls_bi_entry& entry);
 void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, const rgw_cls_bi_entry& entry);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
                    const std::string& name, const std::string& marker, uint32_t max,
-                   std::list<rgw_cls_bi_entry> *entries, bool *is_truncated);
-
+                   std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog = false);
 
 void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
                             const cls_rgw_obj_key& key, const ceph::buffer::list& olh_tag,
@@ -503,6 +520,23 @@ public:
     CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio),
     start_marker_mgr(_start_marker_mgr), end_marker_mgr(_end_marker_mgr) {}
   virtual ~CLSRGWIssueBILogTrim() override {}
+};
+
+class CLSRGWIssueReshardLogTrim : public CLSRGWConcurrentIO {
+protected:
+  int issue_op(int shard_id, const std::string& oid) override;
+  // Trim until -ENODATA is returned.
+  int valid_ret_code() override { return -ENODATA; }
+  bool need_multiple_rounds() override { return true; }
+  void add_object(int shard, const std::string& oid) override { objs_container[shard] = oid; }
+  void reset_container(std::map<int, std::string>& objs) override {
+    objs_container.swap(objs);
+    iter = objs_container.begin();
+    objs.clear();
+  }
+public:
+  CLSRGWIssueReshardLogTrim(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
+      CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
 };
 
 /**

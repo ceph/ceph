@@ -2701,6 +2701,36 @@ options:
   with_legacy: true
   services:
   - rgw
+- name: rgw_reshard_progress_judge_interval
+  type: uint
+  level: dev
+  desc: interval (in seconds) of judging if bucket reshard failed in block state
+  default: 120
+  services:
+  - rgw
+- name: rgw_reshard_progress_judge_ratio
+  type: float
+  level: dev
+  desc: ratio of reshard progress judge interval to randomly vary
+  long_desc: Add a random delay to rgw_reshard_progress_judge_interval for deciding when
+    to judge the reshard process. The default setting spreads judge time window of
+    [1, 1.5] * rgw_reshard_progress_judge_interval.
+  default: 0.5
+  services:
+  - rgw
+  see_also:
+  - rgw_reshard_progress_judge_interval
+- name: rgw_reshardlog_threshold
+  type: uint
+  level: dev
+  desc: threshold for a shard to record log before blocking writes
+  default: 30000
+  with_legacy: true
+  services:
+  - rgw
+  - osd
+  see_also:
+  - rgw_reshard_progress_judge_interval
 - name: rgw_debug_inject_set_olh_err
   type: uint
   level: dev

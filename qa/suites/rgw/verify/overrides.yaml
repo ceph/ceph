@@ -14,6 +14,7 @@ overrides:
         rgw bucket counters cache: true
         rgw sts key: abcdefghijklmnop
         rgw s3 auth use sts: true
+        rgw reshard progress judge interval: 10
   rgw:
     compression type: random
     storage classes: LUKEWARM, FROZEN
