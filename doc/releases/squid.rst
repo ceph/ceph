@@ -137,6 +137,7 @@ MGR
   'max_requests' option.  Without this feature, and in the absence of manual
   deletion of old requests, the accumulation of requests in the array can lead
   to Out Of Memory (OOM) issues, resulting in the Manager crashing.
+* MGR: An OpTracker to help debug mgr module issues is now available.
 
 Monitoring
 ~~~~~~~~~~
@@ -188,7 +189,6 @@ RADOS
   performance and "fast device" space usage.
 * RADOS: A new CRUSH rule type, MSR (Multi-Step Retry), allows for more flexible EC
   configurations.
-* RADOS: An OpTracker to help debug mgr module issues is now available.
 * RADOS: Scrub scheduling behavior has been improved.
 
 RBD
