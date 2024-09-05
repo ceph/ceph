@@ -47,6 +47,61 @@ int extent_cb(void* data, const char* metacontext, uint64_t offset,
 
 } // anonymous namespace
 
+template <typename>
+class NBDClient {
+public:
+  static NBDClient* create() {
+    return new NBDClient();
+  }
+
+  const char* get_error() {
+    return nbd_get_error();
+  }
+
+  int get_errno() {
+    return nbd_get_errno();
+  }
+
+  int init() {
+    m_handle.reset(nbd_create());
+    return m_handle != nullptr ? 0 : -1;
+  }
+
+  int add_meta_context(const char* name) {
+    return nbd_add_meta_context(m_handle.get(), name);
+  }
+
+  int connect_uri(const char* uri) {
+    return nbd_connect_uri(m_handle.get(), uri);
+  }
+
+  int64_t get_size() {
+    return nbd_get_size(m_handle.get());
+  }
+
+  int pread(void* buf, size_t count, uint64_t offset, uint32_t flags) {
+    return nbd_pread(m_handle.get(), buf, count, offset, flags);
+  }
+
+  int block_status(uint64_t count, uint64_t offset,
+                   nbd_extent_callback extent_callback, uint32_t flags) {
+    return nbd_block_status(m_handle.get(), count, offset, extent_callback,
+                            flags);
+  }
+
+  int shutdown(uint32_t flags) {
+    return nbd_shutdown(m_handle.get(), flags);
+  }
+
+private:
+  struct nbd_handle_deleter {
+    void operator()(nbd_handle* h) {
+      nbd_close(h);
+    }
+  };
+  std::unique_ptr<nbd_handle, nbd_handle_deleter> m_handle;
+};
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::migration::NBDStream::ReadRequest: " \
@@ -84,14 +139,14 @@ struct NBDStream<I>::ReadRequest {
     ldout(cct, 20) << "byte_offset=" << byte_offset << " byte_length="
                    << byte_length << dendl;
 
+    auto& nbd_client = nbd_stream->m_nbd_client;
     auto ptr = buffer::ptr_node::create(buffer::create_small_page_aligned(
       byte_length));
-    int rc = nbd_pread(nbd_stream->m_nbd, ptr->c_str(), byte_length,
-                       byte_offset, 0);
+    int rc = nbd_client->pread(ptr->c_str(), byte_length, byte_offset, 0);
     if (rc == -1) {
-      rc = nbd_get_errno();
+      rc = nbd_client->get_errno();
       lderr(cct) << "pread " << byte_offset << "~" << byte_length << ": "
-                 << nbd_get_error() << " (errno = " << rc << ")"
+                 << nbd_client->get_error() << " (errno = " << rc << ")"
                  << dendl;
       finish(from_nbd_errno(rc));
       return;
@@ -160,12 +215,13 @@ struct NBDStream<I>::ListSparseExtentsRequest {
     tmp_sparse_extents.insert(byte_offset, byte_length,
                               {io::SPARSE_EXTENT_STATE_DATA, byte_length});
 
-    int rc = nbd_block_status(nbd_stream->m_nbd, byte_length, byte_offset,
-                              {extent_cb, &tmp_sparse_extents}, 0);
+    auto& nbd_client = nbd_stream->m_nbd_client;
+    int rc = nbd_client->block_status(byte_length, byte_offset,
+                                      {extent_cb, &tmp_sparse_extents}, 0);
     if (rc == -1) {
-      rc = nbd_get_errno();
+      rc = nbd_client->get_errno();
       lderr(cct) << "block_status " << byte_offset << "~" << byte_length << ": "
-                 << nbd_get_error() << " (errno = " << rc << ")"
+                 << nbd_client->get_error() << " (errno = " << rc << ")"
                  << dendl;
       // don't propagate errors -- we are set up to list any missing
       // parts of the range as DATA if nbd_block_status() returns less
@@ -201,9 +257,6 @@ NBDStream<I>::NBDStream(I* image_ctx, const json_spirit::mObject& json_object)
 
 template <typename I>
 NBDStream<I>::~NBDStream() {
-  if (m_nbd != nullptr) {
-    nbd_close(m_nbd);
-  }
 }
 
 template <typename I>
@@ -228,28 +281,29 @@ void NBDStream<I>::open(Context* on_finish) {
 
   ldout(m_cct, 10) << "uri=" << uri << dendl;
 
-  m_nbd = nbd_create();
-  if (m_nbd == nullptr) {
-    rc = nbd_get_errno();
-    lderr(m_cct) << "create: " << nbd_get_error()
+  m_nbd_client.reset(NBDClient<I>::create());
+  rc = m_nbd_client->init();
+  if (rc == -1) {
+    rc = m_nbd_client->get_errno();
+    lderr(m_cct) << "init: " << m_nbd_client->get_error()
                  << " (errno = " << rc << ")" << dendl;
     on_finish->complete(from_nbd_errno(rc));
     return;
   }
 
-  rc = nbd_add_meta_context(m_nbd, LIBNBD_CONTEXT_BASE_ALLOCATION);
+  rc = m_nbd_client->add_meta_context(LIBNBD_CONTEXT_BASE_ALLOCATION);
   if (rc == -1) {
-    rc = nbd_get_errno();
-    lderr(m_cct) << "add_meta_context: " << nbd_get_error()
+    rc = m_nbd_client->get_errno();
+    lderr(m_cct) << "add_meta_context: " << m_nbd_client->get_error()
                  << " (errno = " << rc << ")" << dendl;
     on_finish->complete(from_nbd_errno(rc));
     return;
   }
 
-  rc = nbd_connect_uri(m_nbd, uri.c_str());
+  rc = m_nbd_client->connect_uri(uri.c_str());
   if (rc == -1) {
-    rc = nbd_get_errno();
-    lderr(m_cct) << "connect_uri: " << nbd_get_error()
+    rc = m_nbd_client->get_errno();
+    lderr(m_cct) << "connect_uri: " << m_nbd_client->get_error()
                  << " (errno = " << rc << ")" << dendl;
     on_finish->complete(from_nbd_errno(rc));
     return;
@@ -262,15 +316,13 @@ template <typename I>
 void NBDStream<I>::close(Context* on_finish) {
   ldout(m_cct, 20) << dendl;
 
-  if (m_nbd != nullptr) {
+  if (m_nbd_client != nullptr) {
     // send a graceful shutdown to the server
     // ignore errors -- we are read-only, also from the client's
     // POV there is no disadvantage to abruptly closing the socket
     // in nbd_close()
-    nbd_shutdown(m_nbd, 0);
-
-    nbd_close(m_nbd);
-    m_nbd = nullptr;
+    m_nbd_client->shutdown(0);
+    m_nbd_client.reset();
   }
 
   on_finish->complete(0);
@@ -280,10 +332,10 @@ template <typename I>
 void NBDStream<I>::get_size(uint64_t* size, Context* on_finish) {
   ldout(m_cct, 20) << dendl;
 
-  int64_t rc = nbd_get_size(m_nbd);
+  int64_t rc = m_nbd_client->get_size();
   if (rc == -1) {
-    rc = nbd_get_errno();
-    lderr(m_cct) << "get_size: " << nbd_get_error()
+    rc = m_nbd_client->get_errno();
+    lderr(m_cct) << "get_size: " << m_nbd_client->get_error()
                  << " (errno = " << rc << ")" << dendl;
     on_finish->complete(from_nbd_errno(rc));
     return;

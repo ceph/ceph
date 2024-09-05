@@ -12,14 +12,14 @@
 
 struct Context;
 
-struct nbd_handle;
-
 namespace librbd {
 
 struct AsioEngine;
 struct ImageCtx;
 
 namespace migration {
+
+template <typename> class NBDClient;
 
 template <typename ImageCtxT>
 class NBDStream : public StreamInterface {
@@ -53,7 +53,7 @@ private:
   json_spirit::mObject m_json_object;
   boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
 
-  struct nbd_handle* m_nbd = nullptr;
+  std::unique_ptr<NBDClient<ImageCtxT>> m_nbd_client;
 
   struct ReadRequest;
   struct ListSparseExtentsRequest;
