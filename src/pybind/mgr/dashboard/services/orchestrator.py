@@ -120,10 +120,12 @@ class ServiceManager(ResourceManager):
     def list_daemons(self,
                      service_name: Optional[str] = None,
                      daemon_type: Optional[str] = None,
-                     hostname: Optional[str] = None) -> List[DaemonDescription]:
+                     hostname: Optional[str] = None,
+                     status: Optional[List[str]] = None) -> List[DaemonDescription]:
         return self.api.list_daemons(service_name=service_name,
                                      daemon_type=daemon_type,
-                                     host=hostname)
+                                     host=hostname,
+                                     status=status)
 
     def reload(self, service_type, service_ids):
         if not isinstance(service_ids, list):

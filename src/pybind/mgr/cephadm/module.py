@@ -2419,7 +2419,8 @@ Then run the following:
                      daemon_type: Optional[str] = None,
                      daemon_id: Optional[str] = None,
                      host: Optional[str] = None,
-                     refresh: bool = False) -> List[orchestrator.DaemonDescription]:
+                     refresh: bool = False,
+                     status: Optional[List[str]] = None) -> List[orchestrator.DaemonDescription]:
         if refresh:
             self._invalidate_daemons_and_kick_serve(host)
             self.log.debug('Kicked serve() loop to refresh all daemons')
@@ -2434,6 +2435,8 @@ Then run the following:
                 if daemon_id is not None and daemon_id != dd.daemon_id:
                     continue
                 if service_name is not None and service_name != dd.service_name():
+                    continue
+                if status is not None and dd.status_desc not in status:
                     continue
                 if not dd.memory_request and dd.daemon_type in ['osd', 'mon']:
                     dd.memory_request = cast(Optional[int], self.get_foreign_ceph_option(

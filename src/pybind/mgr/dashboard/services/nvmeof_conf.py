@@ -99,18 +99,16 @@ class NvmeofGatewaysConfig(object):
                     for service_name, svc_config in gateways.items():
                         # get the group name of the service and match it against the
                         # group name provided
-                        group_name_from_svc = orch.services.get(service_name)[0].spec.group
+                        group_name_from_spec = orch.services.get(service_name)[0].spec.group
 
-                        if group == group_name_from_svc:
-                            daemons = [d.to_dict() for d in orch.services.list_daemons(
-                                service_name=service_name)]
-
+                        if group == group_name_from_spec:
                             # get the running nvmeof daemons
-                            running_daemons = [d['daemon_name'] for d in daemons
-                                            if d['status_desc'] == 'running']
+                            running_daemons = [d.to_dict() for d in orch.services.list_daemons(
+                                service_name=service_name, status=['running'])]
+
                             try:
                                 config = next((config for config in svc_config
-                                          if config['daemon_name'] in running_daemons))
+                                               if config['daemon_name'] in running_daemons))
 
                                 return service_name, config['service_url']
                             except StopIteration:
