@@ -154,11 +154,9 @@ bool PgScrubber::verify_against_abort(epoch_t epoch_to_verify)
 
 bool PgScrubber::should_abort() const
 {
-  // note that set_op_parameters() guarantees that we would never have
-  // must_scrub set (i.e. possibly have started a scrub even though noscrub
-  // was set), without having 'required' also set.
-  if (m_flags.required) {
-    return false;  // not stopping 'required' scrubs for configuration changes
+  if (!ScrubJob::observes_noscrub_flags(m_active_target->urgency())) {
+    // not aborting some types of high-priority scrubs
+    return false;
   }
 
   // note: deep scrubs are allowed even if 'no-scrub' is set (but not
