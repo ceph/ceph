@@ -899,6 +899,30 @@ TEST_F(CrushWrapperTest, dump_rules) {
 				"osd.0", loc));
   }
 
+  item = 1;
+  loc = c->get_immediate_parent(item, &ret);
+  EXPECT_EQ(-ENOENT, ret);
+
+  {
+    map<string,string> loc;
+    loc["root"] = root_name;
+
+    EXPECT_EQ(0, c->insert_item(cct, item, 1.0,
+				"osd.1", loc));
+  }
+
+  item = 2;
+  loc = c->get_immediate_parent(item, &ret);
+  EXPECT_EQ(-ENOENT, ret);
+
+  {
+    map<string,string> loc;
+    loc["root"] = root_name;
+
+    EXPECT_EQ(0, c->insert_item(cct, item, 1.0,
+				"osd.2", loc));
+  }
+
   // no rule by default
   {
     auto f = Formatter::create_unique("json-pretty");
@@ -934,9 +958,11 @@ TEST_F(CrushWrapperTest, dump_rules) {
   }
 
   map<int,float> wm;
-  c->get_rule_weight_osd_map(0, &wm);
-  ASSERT_TRUE(wm.size() == 1);
-  ASSERT_TRUE(wm[0] == 1.0);
+  //for erasure pool, k = 2 m = 1
+  unsigned size = 3;
+  c->get_rule_weight_osd_map(0, &wm, size);
+  ASSERT_TRUE(wm.size() == 3);
+  ASSERT_TRUE(wm[0] == 1.0 / 3);
 }
 
 TEST_F(CrushWrapperTest, distance) {
