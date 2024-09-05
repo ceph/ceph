@@ -42,17 +42,15 @@ namespace rgw { namespace sal {
 inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version, bool is_dirty)
 {
   if (is_dirty) {
-    //return "D_" + object->get_bucket()->get_bucket_id() + "_" + version + "_" + object->get_name();
-    return fmt::format("{}{}{}{}{}{}", "D_", object->get_bucket()->get_bucket_id(), "_", version, "_", object->get_name());
+    return fmt::format("{}{}{}{}{}{}", DIRTY_BLOCK_PREFIX, object->get_bucket()->get_bucket_id(), CACHE_DELIM, version, CACHE_DELIM, object->get_name());
   } else {
-    //return object->get_bucket()->get_bucket_id() + "_" + version + "_" + object->get_name();
-    return fmt::format("{}{}{}{}{}", object->get_bucket()->get_bucket_id(), "_", version, "_", object->get_name());
+    return fmt::format("{}{}{}{}{}", object->get_bucket()->get_bucket_id(), CACHE_DELIM, version, CACHE_DELIM, object->get_name());
   }
 }
 
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
 {
-  return fmt::format("{}{}{}{}{}", prefix, "_", offset, "_", len);
+  return fmt::format("{}{}{}{}{}", prefix, CACHE_DELIM, offset, CACHE_DELIM, len);
 }
 
 using boost::redis::connection;
