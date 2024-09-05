@@ -183,6 +183,13 @@ RADOS
   offers upmap and read optimization simultaneously, or ``read``, which may be
   used to only optimize reads. For more detailed information see
   https://docs.ceph.com/en/latest/rados/operations/read-balancer/#online-optimization.
+* RADOS: BlueStore has been optimized for better performance in snapshot-intensive workloads.
+* RADOS: BlueStore RocksDB LZ4 compression is now enabled by default to improve average
+  performance and "fast device" space usage.
+* RADOS: A new CRUSH rule type, MSR (Multi-Step Retry), allows for more flexible EC
+  configurations.
+* RADOS: An OpTracker to help debug mgr module issues is now available.
+* RADOS: Scrub scheduling behavior has been improved.
 
 RBD
 ~~~
