@@ -369,7 +369,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
 
   std::string oid_in_cache = key;
   if (dirty == true) {
-    oid_in_cache = "D_" + key;
+    oid_in_cache = DIRTY_BLOCK_PREFIX + key;
   }
 
   if (!restore_val.empty()) {
@@ -513,13 +513,13 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         erase_dirty_object(dpp, e->key, null_yield);
       }
 
-      std::string prefix = e->bucket_id + "_" + e->version + "_" + c_obj->get_name();
+      std::string prefix = url_encode(e->bucket_id) + CACHE_DELIM + url_encode(e->version) + CACHE_DELIM + url_encode(c_obj->get_name());
       off_t lst = e->size;
       off_t fst = 0;
       off_t ofs = 0;
 
       rgw::sal::DataProcessor *filter = processor.get();
-      std::string head_oid_in_cache = "D_" + prefix;
+      std::string head_oid_in_cache = DIRTY_BLOCK_PREFIX + prefix;
       std::string new_head_oid_in_cache = prefix;
       ldpp_dout(dpp, 10) << __func__ << "(): head_oid_in_cache=" << head_oid_in_cache << dendl;
       ldpp_dout(dpp, 10) << __func__ << "(): new_head_oid_in_cache=" << new_head_oid_in_cache << dendl;
@@ -537,7 +537,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         }
         off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
         off_t cur_len = cur_size - fst;
-        std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+        std::string oid_in_cache = DIRTY_BLOCK_PREFIX + prefix + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
         ldpp_dout(dpp, 10) << __func__ << "(): oid_in_cache=" << oid_in_cache << dendl;
         rgw::sal::Attrs attrs;
         cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, attrs, null_yield);
@@ -583,9 +583,9 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
         off_t cur_len = cur_size - fst;
 
-        std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+        std::string oid_in_cache = DIRTY_BLOCK_PREFIX + prefix + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
         ldpp_dout(dpp, 20) << __func__ << "(): oid_in_cache =" << oid_in_cache << dendl;
-        std::string new_oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+        std::string new_oid_in_cache = prefix + CACHE_DELIM + std::to_string(fst) + CACHE_DELIM + std::to_string(cur_len);
         //Rename block to remove "D" prefix
         cacheDriver->rename(dpp, oid_in_cache, new_oid_in_cache, null_yield);
         //Update in-memory data structure for each block
