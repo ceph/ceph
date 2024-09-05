@@ -21,7 +21,7 @@ class RawBlueStore(BlueStore):
         super().__init__(args)
         self.method = 'raw'
         self.devices: List[str] = getattr(args, 'devices', [])
-        self.osd_id = getattr(self.args, 'osd_id', '')
+        self.osd_id = getattr(self.args, 'osd_id', None)
         self.osd_fsid = getattr(self.args, 'osd_fsid', '')
         self.block_device_path = getattr(self.args, 'data', '')
         self.db_device_path = getattr(self.args, 'block_db', '')
@@ -95,7 +95,7 @@ class RawBlueStore(BlueStore):
 
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
-            self.osd_fsid, json.dumps(self.secrets))
+            self.osd_fsid, json.dumps(self.secrets), self.osd_id)
 
         if self.encrypted:
             self.prepare_dmcrypt()
