@@ -8,10 +8,35 @@
 namespace crimson::os::seastore::backref {
 
 using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
-using backref_node_meta_le_t = fixed_kv_node_meta_le_t<paddr_t>;
+using backref_node_meta_le_t = fixed_kv_node_meta_le_t<paddr_le_t>;
 
+/**
+ * Layout (4KiB):
+ *   checksum   : ceph_le32[1]               4B
+ *   size       : ceph_le32[1]               4B
+ *   meta       : backref_node_meta_le_t[1]  20B
+ *   keys       : paddr_le_t[CAPACITY]       (254*8)B
+ *   values     : paddr_le_t[CAPACITY]       (254*8)B
+ *                                           = 4092B
+ *
+ * TODO: make the above capacity calculation part of FixedKVNodeLayout
+ * TODO: the above alignment probably isn't portable without further work
+ */
 constexpr size_t INTERNAL_NODE_CAPACITY = 254;
-constexpr size_t LEAF_NODE_CAPACITY = 169;
+
+/**
+ * Layout (4KiB):
+ *   checksum   : ceph_le32[1]                    4B
+ *   size       : ceph_le32[1]                    4B
+ *   meta       : backref_node_meta_le_t[1]       20B
+ *   keys       : paddr_le_t[CAPACITY]            (193*8)B
+ *   values     : backref_map_val_le_t[CAPACITY]  (193*13)B
+ *                                                = 4081B
+ *
+ * TODO: update FixedKVNodeLayout to handle the above calculation
+ * TODO: the above alignment probably isn't portable without further work
+ */
+constexpr size_t LEAF_NODE_CAPACITY = 193;
 
 using BackrefNode = FixedKVNode<paddr_t>;
 
@@ -34,7 +59,7 @@ struct backref_map_val_t {
 
 std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
 
-struct backref_map_val_le_t {
+struct __attribute__((packed)) backref_map_val_le_t {
   extent_len_le_t len = init_extent_len_le(0);
   laddr_le_t laddr = laddr_le_t(L_ADDR_MIN);
   extent_types_le_t type = 0;
@@ -57,6 +82,9 @@ class BackrefInternalNode
       paddr_t, paddr_le_t,
       BACKREF_NODE_SIZE,
       BackrefInternalNode> {
+  static_assert(
+    check_capacity(BACKREF_NODE_SIZE),
+    "INTERNAL_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
   template <typename... T>
   BackrefInternalNode(T&&... t) :
@@ -78,6 +106,9 @@ class BackrefLeafNode
       BACKREF_NODE_SIZE,
       BackrefLeafNode,
       false> {
+  static_assert(
+    check_capacity(BACKREF_NODE_SIZE),
+    "LEAF_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
   template <typename... T>
   BackrefLeafNode(T&&... t) :
