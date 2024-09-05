@@ -19,6 +19,9 @@ constexpr char RGW_CACHE_ATTR_DIRTY[] = "user.rgw.dirty";
 
 constexpr char CACHE_DELIM = '#';
 
+constexpr char DIRTY_BLOCK_PREFIX[] = "D#";
+constexpr char CACHE_DELIM = '#';
+
 namespace rgw { namespace cache {
 
 typedef std::function<void(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, 
