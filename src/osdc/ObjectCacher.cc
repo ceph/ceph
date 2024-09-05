@@ -1394,7 +1394,14 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     trace.event("start");
   }
 
-  int r =_readx(rd, oset, onfinish, true, &trace, holes);
+  int r;
+  if (holes == nullptr) {
+      std::vector<ObjHole> holes2;
+      r =_readx(rd, oset, onfinish, true, &trace, &holes2);
+  } else {
+      r =_readx(rd, oset, onfinish, true, &trace, holes);
+  }
+
   if (r < 0) {
     trace.event("finish");
   }
