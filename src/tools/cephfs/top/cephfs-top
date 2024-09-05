@@ -941,6 +941,15 @@ class FSTop(FSTopBase):
         self.header.addstr(5, 0, help, curses.A_DIM)
         return True
 
+    def handle_header(self, stats_json, help, screen_title, color_id=0):
+        try:
+            return self.create_header(stats_json, help, screen_title, color_id)
+        except curses.error:
+            curses.endwin()
+            sys.stderr.write("Error creating header. Please increase the window width to use "
+                             "cephfs-top.\n")
+            exit()
+
     def run_display(self):
         # clear the pads to have a smooth refresh
         self.header.erase()
@@ -990,7 +999,7 @@ class FSTop(FSTopBase):
                     current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
-                self.create_header(stats_json, help, screen_title, 3)
+                self.handle_header(stats_json, help, screen_title, 3)
             else:
                 self.tablehead_y = 0
                 help = "COMMANDS: " + help_commands
@@ -1003,7 +1012,7 @@ class FSTop(FSTopBase):
                 else:
                     num_client = len(client_metadata)
                 vscrollEnd += num_client
-                if self.create_header(stats_json, help, screen_title, 3):
+                if self.handle_header(stats_json, help, screen_title, 3):
                     self.create_table_header()
                     self.create_clients(stats_json, fs)
 
@@ -1122,7 +1131,7 @@ class FSTop(FSTopBase):
                 current_states["limit"] = None
                 self.header.erase()  # erase previous text
                 self.fsstats.erase()
-                self.create_header(stats_json, help, screen_title, 2)
+                self.handle_header(stats_json, help, screen_title, 2)
             else:
                 self.tablehead_y = 0
                 num_client = 0
@@ -1138,7 +1147,7 @@ class FSTop(FSTopBase):
                     else:
                         num_client = len(client_metadata)
                     vscrollEnd += num_client
-                    if self.create_header(stats_json, help, screen_title, 2):
+                    if self.handle_header(stats_json, help, screen_title, 2):
                         if not index:  # do it only for the first fs
                             self.create_table_header()
                         self.create_clients(stats_json, fs)
