@@ -63,3 +63,6 @@ to the values of the SRV weight fields.
 
 For the above example, this will result in approximate 40% of the clients and daemons connecting to mon1,
 60% of them connecting to mon2. However, if neither of them is reachable, then mon3 will be reconsidered as a fallback.
+
+See also `Messenger v2 <msgr2>`_.
+
