@@ -307,6 +307,7 @@ int main(int argc, char **argv)
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
+    ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ;
@@ -345,7 +346,11 @@ int main(int argc, char **argv)
   po::variables_map vm;
   try {
     po::parsed_options parsed =
-      po::command_line_parser(argc, argv).options(po_all).allow_unregistered().run();
+      po::command_line_parser(argc, argv).options(po_all)
+        .allow_unregistered()
+        .style(po::command_line_style::default_style &
+               ~po::command_line_style::allow_guessing)
+        .run();
     po::store( parsed, vm);
     po::notify(vm);
     ceph_option_strings = po::collect_unrecognized(parsed.options,
