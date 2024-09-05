@@ -160,7 +160,7 @@ uint64_t ceph_release_features(int r)
 	if (r <= CEPH_RELEASE_REEF)
 		return req;
 
-	req |= CEPH_FEATURE_CRUSH_MSR;
+	req |= CEPH_FEATUREMASK_CRUSH_MSR;
 	if (r <= CEPH_RELEASE_SQUID)
 		return req;
 
