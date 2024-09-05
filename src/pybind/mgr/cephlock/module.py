@@ -3,10 +3,11 @@ import threading
 import datetime
 import json
 from typing import Optional
-from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, PG_STATES
+from mgr_module import CLICommand, CLIReadCommand, MgrModule
 
 
 _LOCK_PREFIX = "lock/"
+
 
 class FleetLockAPI:
     def __init__(self, module):
@@ -18,12 +19,8 @@ class FleetLockAPI:
     )
     @cherrypy.tools.json_out()
     def pre_reboot(self, **kwargs):
-        # try:
-        #     print(kwargs)
-        #     print(cherrypy.request.header_list)
-        #     print(cherrypy.request.json)
-        # except:
-        #     print("kaputt")
+        self.module.log.debug(f"{kwargs=}")
+        self.module.log.debug(f"{cherrypy.request.json=}")
         if not cherrypy.request.method == "POST":
             cherrypy.response.status = 405
             return {
@@ -75,12 +72,8 @@ class FleetLockAPI:
     )
     @cherrypy.tools.json_out()
     def steady_state(self, **kwargs):
-        # try:
-        #     print(kwargs)
-        #     print(cherrypy.request.header_list)
-        #     print(cherrypy.request.json)
-        # except:
-        #     print("kaputt")
+        self.module.log.debug(f"{kwargs=}")
+        self.module.log.debug(f"{cherrypy.request.json=}")
         if not cherrypy.request.method == "POST":
             cherrypy.response.status = 405
             return {
@@ -211,9 +204,9 @@ class Module(MgrModule):
                 cmd["UpdateOnlyBefore"] = datetime.time.fromisoformat(before).strftime("%H:%M:%S")
             except ValueError:
                 return (1,"",f"Could not parse {before=}   try %H:%M:%S")
-        for key,value in cmd.items():
+        for key, value in cmd.items():
             self.write_kv(key, value)
-        return self.info()       
+        return self.info()      
 
     @CLIReadCommand("cephlock status")
     def status(self) -> tuple[int, str, str]:
@@ -229,7 +222,6 @@ class Module(MgrModule):
             "",
         )
 
-
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.mutex = threading.Lock()
@@ -238,6 +230,7 @@ class Module(MgrModule):
     def serve(self):
         cherrypy.config.update(
             {
+                'environment': 'production',
                 "server.socket_host": "0.0.0.0",
                 "server.socket_port": int(self.read_kv("port")),
             }
@@ -249,8 +242,10 @@ class Module(MgrModule):
         self.server = cherrypy.engine
         self.server.start()
 
+
     def write_kv(self, key: str, value: str) -> None:
         self.set_store(key=key, val=value)
+
 
     def read_kv(self, key: str):
         return self.get_store(key=key)
@@ -261,7 +256,7 @@ class Module(MgrModule):
     def set_defaults(self):
         with self.mutex:
             if not self.read_kv("port"):
-                self.write_kv("port","8080")
+                self.write_kv("port", "8080")
             if not self.read_kv("enableUpdates"):
                 self.write_kv("enableUpdates", "True")
             if not self.read_kv("UpdateOnlyAfter"):
