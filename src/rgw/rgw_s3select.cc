@@ -761,16 +761,15 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
       ldout(s->cct, 10) << "S3select: failed to process query <" << m_sql_query << "> on object " << s->object->get_name() << dendl;
       op_ret = -ERR_INVALID_REQUEST;
     } else {
-      {//status per amount of processed data
-       //TODO add number of calls to range_request
-       //TODO check stats for the amount of data processed (scanned, returned)
+      //status per amount of processed data
+      m_aws_response_handler.update_total_bytes_returned(m_s3_parquet_object.get_return_result_size());
       m_aws_response_handler.init_stats_response();
       m_aws_response_handler.send_stats_response();
       m_aws_response_handler.init_end_response();
       ldpp_dout(this, 10) << "s3select : reached the end of parquet query request : aws_response_handler.get_processed_size() " 
       << m_aws_response_handler.get_processed_size()
       << "m_object_size_for_processing : " << m_object_size_for_processing << dendl;
-      } 
+       
       ldout(s->cct, 10) << "S3select: complete parquet query with success " << dendl;
     }
     } else { 
@@ -796,7 +795,7 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
 
 int RGWSelectObj_ObjStore_S3::parquet_processing(bufferlist& bl, off_t ofs, off_t len)
 {//purpose: to process the returned buffer from range-request, and to send it to the Parquet-reader.
- //range_request() is called by arrow::ReadAt, and upon completion the control is back to execute()
+ //range_request() is called by arrow::ReadAt, and upon request completion the control is back to RGWSelectObj_ObjStore_S3::execute()
     fp_chunked_transfer_encoding();
     size_t append_in_callback = 0;
     int part_no = 1;
