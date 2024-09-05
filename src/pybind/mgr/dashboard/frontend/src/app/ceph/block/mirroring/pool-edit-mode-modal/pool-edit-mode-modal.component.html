@@ -1,0 +1,47 @@
+<cds-modal size="md"
+           [open]="open"
+           (overlaySelected)="closeModal()">
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Edit pool mirror mode</h3>
+  </cds-modal-header>
+
+  <section cdsModalContent>
+    <form name="editModeForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="editModeForm"
+          novalidate>
+      <p>
+        <ng-container i18n>To edit the mirror mode for pool&nbsp;
+        <kbd>{{ poolName }}</kbd>, select a new mode from the list and click&nbsp;
+        <kbd>Update</kbd>.</ng-container>
+      </p>
+
+      <div class="form-item">
+        <cds-select label="Mode"
+                    for="mirrorMode"
+                    formControlName="mirrorMode"
+                    name="mirrorMode"
+                    id="mirrorMode"
+                    [invalid]="editModeForm.controls['mirrorMode'].invalid && (editModeForm.controls['mirrorMode'].dirty)"
+                    [invalidText]="mirrorModeError"
+                    cdRequiredField="Mode"
+                    i18n>
+          <option *ngFor="let mirrorMode of mirrorModes"
+                  [value]="mirrorMode.id">{{ mirrorMode.name }}</option>
+        </cds-select>
+        <ng-template #mirrorModeError>
+          <span class="invalid-feedback"
+                *ngIf="editModeForm.showError('mirrorMode', formDir, 'cannotDisable')"
+                i18n>Peer clusters must be removed prior to disabling mirror.</span>
+        </ng-template>
+      </div>
+    </form>
+  </section>
+
+  <cd-form-button-panel (submitActionEvent)="update()"
+                        [form]="editModeForm"
+                        [submitText]="actionLabels.UPDATE"
+                        [modalForm]="true"></cd-form-button-panel>
+</cds-modal>
