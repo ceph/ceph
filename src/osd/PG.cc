@@ -1279,12 +1279,6 @@ void PG::requeue_map_waiters()
   }
 }
 
-bool PG::get_must_scrub() const
-{
-  dout(20) << __func__ << " must_scrub? " << (m_planned_scrub.must_scrub ? "true" : "false") << dendl;
-  return m_planned_scrub.must_scrub;
-}
-
 unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority) const
 {
   return m_scrubber->scrub_requeue_priority(with_priority);

@@ -876,14 +876,6 @@ class PgScrubber : public ScrubPgIF,
       utime_t scrub_clock_now);
 
   /**
-   * use the 'planned scrub' flags to determine the urgency attribute
-   * of the 'shallow target' part of the ScrubJob object.
-   */
-  void flags_to_shallow_priority(
-      const Scrub::sched_conf_t& app_conf,
-      utime_t scrub_clock_now);
-
-  /**
    * recompute the two ScrubJob targets, taking into account not
    * only the up-to-date 'last' stamps, but also the 'planned scrub'
    * flags.

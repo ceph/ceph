@@ -508,26 +508,6 @@ bool PgScrubber::flags_to_deep_priority(
 }
 
 
-void PgScrubber::flags_to_shallow_priority(
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
-{
-  auto& entry = m_scrub_job->shallow_target.sched_info_ref();
-
-  if (m_planned_scrub.must_scrub) {
-
-    // Set the smallest time that isn't utime_t()
-    entry.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
-    ///\todo missing a distinct urgency level for 'must' scrubs
-    entry.urgency = urgency_t::operator_requested;
-
-  } else if (m_pg->info.stats.stats_invalid && app_conf.mandatory_on_invalid) {
-    entry.schedule.scheduled_at = scrub_clock_now;
-    entry.urgency = urgency_t::operator_requested;
-  }
-}
-
-
 void PgScrubber::update_targets(
     const requested_scrub_t& planned,
     utime_t scrub_clock_now)
@@ -543,9 +523,12 @@ void PgScrubber::update_targets(
   // first, use the planned-scrub flags to possibly set one of the
   // targets as high-priority.
   // Note - this step is to be removed in the followup commits.
-  auto deep_hp_set = flags_to_deep_priority(applicable_conf, scrub_clock_now);
-  if (!deep_hp_set) {
-    flags_to_shallow_priority(populate_config_params(), scrub_clock_now);
+  flags_to_deep_priority(applicable_conf, scrub_clock_now);
+
+  if (m_pg->info.stats.stats_invalid && applicable_conf.mandatory_on_invalid) {
+    m_scrub_job->shallow_target.sched_info_ref().schedule.scheduled_at =
+	scrub_clock_now;
+    m_scrub_job->shallow_target.up_urgency_to(urgency_t::must_scrub);
   }
 
   // the next periodic scrubs:
