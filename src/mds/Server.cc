@@ -3594,8 +3594,8 @@ CInode* Server::prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t 
   const cref_t<MClientRequest> &req = mdr->client_request;
 
   dout(10) << "copying fscrypt_auth len " << req->fscrypt_auth.size() << dendl;
-  _inode->fscrypt_auth = req->fscrypt_auth;
-  _inode->fscrypt_file = req->fscrypt_file;
+  _inode->fscrypt_auth.assign(req->fscrypt_auth.begin(), req->fscrypt_auth.end());
+  _inode->fscrypt_file.assign(req->fscrypt_file.begin(), req->fscrypt_file.end());
 
   if (req->get_data().length()) {
     auto p = req->get_data().cbegin();
@@ -5491,7 +5491,7 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     pi.inode->time_warp_seq++;   // maybe not a timewarp, but still a serialization point.
   if (mask & CEPH_SETATTR_SIZE) {
     if (truncating_smaller) {
-      pi.inode->truncate(old_size, req->head.args.setattr.size, req->get_data());
+      pi.inode->truncate(old_size, req->head.args.setattr.size, req->get_data().cbegin());
       le->metablob.add_truncate_start(cur->ino());
     } else {
       pi.inode->size = req->head.args.setattr.size;
@@ -5508,9 +5508,9 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
   }
 
   if (mask & CEPH_SETATTR_FSCRYPT_AUTH)
-    pi.inode->fscrypt_auth = req->fscrypt_auth;
+    pi.inode->fscrypt_auth.assign(req->fscrypt_auth.begin(), req->fscrypt_auth.end());
   if (mask & CEPH_SETATTR_FSCRYPT_FILE)
-    pi.inode->fscrypt_file = req->fscrypt_file;
+    pi.inode->fscrypt_file.assign(req->fscrypt_file.begin(), req->fscrypt_file.end());
 
   pi.inode->version = cur->pre_dirty();
   pi.inode->ctime = mdr->get_op_stamp();
