@@ -156,13 +156,6 @@ struct scrub_flags_t {
 
   /// checked at the end of the scrub, to possibly initiate a deep-scrub
   bool deep_scrub_on_error{false};
-
-  /**
-   * scrub must not be aborted.
-   * Set for explicitly requested scrubs, and for scrubs originated by the
-   * pairing process with the 'repair' flag set (in the RequestScrub event).
-   */
-  bool required{false};
 };
 
 ostream& operator<<(ostream& out, const scrub_flags_t& sf);
@@ -187,9 +180,6 @@ struct formatter<scrub_flags_t> {
     if (sf.deep_scrub_on_error) {
       txt += sep ? ",deep-scrub-on-error" : "deep-scrub-on-error";
       sep = true;
-    }
-    if (sf.required) {
-      txt += sep ? ",required" : "required";
     }
     return fmt::format_to(ctx.out(), "{}", txt);
   }

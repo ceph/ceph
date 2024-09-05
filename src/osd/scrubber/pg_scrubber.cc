@@ -55,8 +55,6 @@ ostream& operator<<(ostream& out, const scrub_flags_t& sf)
     out << " CHECK_REPAIR";
   if (sf.deep_scrub_on_error)
     out << " DEEP_SCRUB_ON_ERROR";
-  if (sf.required)
-    out << " REQ_SCRUB";
 
   return out;
 }
@@ -1700,8 +1698,6 @@ void PgScrubber::set_op_parameters(
 
   m_flags.check_repair = m_active_target->urgency() == urgency_t::after_repair;
   m_flags.auto_repair = false;
-  m_flags.required = request.req_scrub || request.must_scrub;
-
   m_flags.priority = (request.must_scrub || request.need_auto)
 		       ? get_pg_cct()->_conf->osd_requested_scrub_priority
 		       : m_pg->get_scrub_priority();
@@ -2022,12 +2018,13 @@ void PgScrubber::scrub_finish()
 
     } else if (has_error) {
 
-      // Deep scrub in order to get corrected error counts
+      // a recovery will be initiated (below). Arrange for a deep-scrub
+      // after the recovery, to get the updated error counts.
       m_after_repair_scrub_required = true;
-      m_planned_scrub.req_scrub = m_planned_scrub.req_scrub || m_flags.required;
-
-      dout(20) << __func__ << " Current 'required': " << m_flags.required
-	       << " Planned 'req_scrub': " << m_planned_scrub.req_scrub
+      dout(20) << fmt::format(
+		      "{}: setting for deep-scrub-after-repair ({} errors. {} "
+		      "errors fixed)",
+		      __func__, m_shallow_errors + m_deep_errors, m_fixed_count)
 	       << dendl;
 
     } else if (m_shallow_errors || m_deep_errors) {
@@ -2183,10 +2180,8 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
   // e.g. - the 'aborted_schedule' data should be passed thru the scrubber.
   // In this current patchwork, for example, we are only guessing at
   // the original value of 'must_deep_scrub'.
-  m_planned_scrub.must_deep_scrub =
-      m_planned_scrub.must_deep_scrub || (m_flags.required && m_is_deep);
   m_planned_scrub.must_scrub = m_planned_scrub.must_deep_scrub ||
-			       m_planned_scrub.must_scrub || m_flags.required;
+			       m_planned_scrub.must_scrub;
   m_planned_scrub.must_repair = m_planned_scrub.must_repair || m_is_repair;
   m_planned_scrub.need_auto = m_planned_scrub.need_auto || m_flags.auto_repair;
 
@@ -2450,7 +2445,7 @@ void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
   f->dump_bool("deep", m_active_target->is_deep());
 
   // dump the scrub-type flags
-  f->dump_bool("req_scrub", m_flags.required);
+  f->dump_bool("req_scrub", m_active_target->is_high_priority());
   f->dump_bool("auto_repair", m_flags.auto_repair);
   f->dump_bool("check_repair", m_flags.check_repair);
   f->dump_bool("deep_scrub_on_error", m_flags.deep_scrub_on_error);
@@ -2656,7 +2651,8 @@ void PgScrubber::replica_handling_done()
 std::chrono::milliseconds PgScrubber::get_scrub_sleep_time() const
 {
   return m_osds->get_scrub_services().scrub_sleep_time(
-    ceph_clock_now(), m_flags.required);
+      ceph_clock_now(),
+      !ScrubJob::observes_allowed_hours(m_active_target->urgency()));
 }
 
 void PgScrubber::queue_for_scrub_resched(Scrub::scrub_prio_t prio)
