@@ -1,0 +1,99 @@
+<cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
+
+<div *ngIf="flag === 'hostDetails'; else serviceDetailsTpl">
+  <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
+</div>
+
+<ng-template #serviceDetailsTpl>
+  <ng-container>
+    <nav ngbNav
+         #nav="ngbNav"
+         class="nav-tabs"
+         cdStatefulTab="service-details">
+      <ng-container ngbNavItem="details">
+        <a ngbNavLink
+           i18n>Daemons</a>
+        <ng-template ngbNavContent>
+          <ng-container *ngTemplateOutlet="serviceDaemonDetailsTpl"></ng-container>
+        </ng-template>
+      </ng-container>
+      <ng-container ngbNavItem="service_events">
+        <a ngbNavLink
+           i18n>Service Events</a>
+        <ng-template ngbNavContent>
+          <cd-table *ngIf="hasOrchestrator"
+                    #serviceTable
+                    [data]="services"
+                    [columns]="serviceColumns"
+                    columnMode="flex"
+                    (fetchData)="getServices($event)">
+          </cd-table>
+        </ng-template>
+      </ng-container>
+    </nav>
+    <div [ngbNavOutlet]="nav"></div>
+  </ng-container>
+</ng-template>
+
+<ng-template #statusTpl
+             let-row="data.row">
+  <span class="badge"
+        [ngClass]="row | pipeFunction:getStatusClass">
+    {{ row.status_desc }}
+  </span>
+</ng-template>
+
+<ng-template #listTpl
+             let-events="value">
+  <ul class="list-group list-group-flush"
+      *ngIf="events?.length else noEventsAvailable">
+    <li class="list-group-item"
+        *ngFor="let event of events; trackBy:trackByFn">
+      <b>{{ event.created | relativeDate }} - </b>
+      <span class="badge badge-info">{{ event.subject }}</span><br>
+      <span *ngIf="event.level === 'INFO'">
+      <i [ngClass]="[icons.infoCircle]"
+         aria-hidden="true"></i>
+      </span>
+      <span *ngIf="event.level === 'ERROR'">
+      <i [ngClass]="[icons.warning]"
+         aria-hidden="true"></i>
+      </span>
+      {{ event.message }}
+    </li>
+  </ul>
+  <ng-template #noEventsAvailable>
+    <div *ngIf="events?.length === 0"
+         class="list-group-item">
+      <span>No data available</span>
+    </div>
+  </ng-template>
+</ng-template>
+
+<ng-template #serviceDaemonDetailsTpl>
+  <cd-table *ngIf="hasOrchestrator"
+            #daemonsTable
+            [data]="daemons"
+            selectionType="single"
+            [columns]="columns"
+            columnMode="flex"
+            identifier="daemon_name"
+            (fetchData)="getDaemons($event)"
+            (updateSelection)="updateSelection($event)">
+    <cd-table-actions id="service-daemon-list-actions"
+                      class="table-actions"
+                      [selection]="selection"
+                      [permission]="permissions.hosts"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+  </cd-table>
+</ng-template>
+
+<ng-template #cpuTpl
+             let-row="data.row">
+  <cd-usage-bar [total]="total"
+                [calculatePerc]="false"
+                [used]="row.cpu_percentage"
+                [isBinary]="false">
+  </cd-usage-bar>
+</ng-template>
