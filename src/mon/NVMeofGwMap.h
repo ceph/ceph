@@ -44,7 +44,8 @@ public:
   std::map<NvmeGroupKey, NvmeGwTimers> fsm_timers;
 
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
-
+  void track_deleting_gws(const NvmeGroupKey& group_key,
+    const BeaconSubsystems&  subs, bool &propose_pending);
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   void process_gw_map_ka(
@@ -64,6 +65,9 @@ public:
   void handle_gw_performing_fast_reboot(const NvmeGwId &gw_id,
        const NvmeGroupKey& group_key, bool &map_modified);
 private:
+  int  do_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+  int  do_erase_gw_id(const NvmeGwId &gw_id,
+      const NvmeGroupKey& group_key);
   void add_grp_id(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     const NvmeAnaGrpId grpid);
@@ -95,7 +99,8 @@ private:
   void set_failover_gw_for_ANA_group(
     const NvmeGwId &failed_gw_id, const NvmeGroupKey& group_key,
     const NvmeGwId &gw_id, NvmeAnaGrpId groupid);
-
+  int get_num_namespaces(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key, const BeaconSubsystems&  subs );
   int get_timer(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId anagrpid);
