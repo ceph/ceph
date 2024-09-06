@@ -131,7 +131,21 @@ doesn't use ``cephadm shell``) to a version compatible with the new version.
 Potential problems
 ==================
 
-There are a few health alerts that can arise during the upgrade process.
+
+Error: ENOENT: Module not found
+-------------------------------
+
+The message ``Error ENOENT: Module not found`` appears in response to the command ``ceph orch upgrade status`` if the orchestrator has crashed:
+
+.. prompt:: bash #
+
+   ceph orch upgrade status
+
+::
+
+   Error ENOENT: Module not found
+
+This is possibly caused by invalid JSON in a mgr config-key. See `Redmine tracker Issue #67329 <https://tracker.ceph.com/issues/67329>`_ and `the discussion on the [ceph-users] mailing list <https://www.spinics.net/lists/ceph-users/msg83667.html>`_.
 
 UPGRADE_NO_STANDBY_MGR
 ----------------------
