@@ -490,58 +490,50 @@ class interval_set {
 
   void insert(T start, T len, T *pstart=0, T *plen=0) {
     //cout << "insert " << start << "~" << len << endl;
-    ceph_assert(len > 0);
-    _size += len;
+    T new_len = len;
     auto p = find_adj_m(start);
-    if (p == m.end()) {
+    auto o = std::pair(start, len);
+    T end = start+len;
+
+    if(len == 0) {
+      if (p != m.end() && start >= p->first && start < p->first + p->second) {
+        o = *p;
+      }
+    } else if (p == m.end()) {
       m[start] = len;                  // new interval
-      if (pstart)
-	*pstart = start;
-      if (plen)
-	*plen = len;
     } else {
       if (p->first < start) {
-        
-        if (p->first + p->second != start) {
-          //cout << "p is " << p->first << "~" << p->second << ", start is " << start << ", len is " << len << endl;
-          ceph_abort();
-        }
-        
-        p->second += len;               // append to end
+        T pend = p->first + p->second;
+        p->second = std::max(pend, end) - p->first; // Adjust existing
+        new_len = p->first + p->second - pend;
         
         auto n = p;
         ++n;
-	if (pstart)
-	  *pstart = p->first;
-        if (n != m.end() && 
-            start+len == n->first) {   // combine with next, too!
+        if (n != m.end() && end == n->first) {   // combine with next
           p->second += n->second;
-	  if (plen)
-	    *plen = p->second;
           m.erase(n);
-        } else {
-	  if (plen)
-	    *plen = p->second;
-	}
+        }
+
+        o = *p;
       } else {
-        if (start+len == p->first) {
-	  if (pstart)
-	    *pstart = start;
-	  if (plen)
-	    *plen = len + p->second;
-	  T psecond = p->second;
+        if (end >= p->first) {
+          T pend = p->first + p->second;
+          T old_len = p->second;
           m.erase(p);
-          m[start] = len + psecond;  // append to front
+          o.second = m[start] = std::max(end, pend) - start;
+          new_len = o.second - old_len;
         } else {
-          ceph_assert(p->first > start+len);
-	  if (pstart)
-	    *pstart = start;
-	  if (plen)
-	    *plen = len;
           m[start] = len;              // new interval
         }
       }
     }
+
+    _size += new_len;
+
+    if (pstart)
+      *pstart = o.first;
+    if (plen)
+      *plen = o.second;
   }
 
   void swap(interval_set& other) {
@@ -694,9 +686,8 @@ class interval_set {
     union_of(a, b);
   }
   void union_insert(T off, T len) {
-    interval_set a;
-    a.insert(off, len);
-    union_of(a);
+    // insert supports overlapping entries. This function is redundant.
+    insert(off, len);
   }
 
   bool subset_of(const interval_set &big) const {
