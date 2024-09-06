@@ -8891,6 +8891,55 @@ int BlueStore::dump_bluefs_sizes(ostream& out)
   return r;
 }
 
+int BlueStore::zap_device(CephContext* cct, const string& dev, uint64_t gap_size)
+{
+  string path; // dummy var for dout
+  dout(5)<<  __func__ << " " << dev << dendl;
+  auto * _bdev =
+    BlockDevice::create(cct, dev, nullptr, nullptr, nullptr, nullptr);
+  int r = _bdev->open(dev);
+  if (r < 0)
+    goto fail;
+  if (!gap_size) {
+    gap_size = _bdev->get_block_size();
+  }
+  if (p2align(gap_size, _bdev->get_block_size()) != gap_size) {
+    derr << __func__
+         << " zapping size has to be aligned with device block size: 0x" 
+         << std::hex << gap_size << " vs. 0x" << _bdev->get_block_size()
+         << std::dec << dendl;
+    return -EINVAL;
+  }
+  for (auto off : bdev_label_positions) {
+    uint64_t end = std::min(off + gap_size, _bdev->get_size());
+    if (end > off) {
+      uint64_t l = end - off;
+      bufferlist bl;
+      bl.append_zero(l);
+      dout(10) << __func__ << " writing 0x"
+               << std::hex << off << "~" << l
+               << std::dec << " to " << dev
+               <<  dendl;
+      r = _bdev->write(off, bl, false);
+      if (r < 0) {
+        derr << __func__ << " error writing 0x"
+             << std::hex << off << "~" << l
+             << std::dec << " to " << dev
+             << " : " << cpp_strerror(r) <<  dendl;
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+fail_close:
+  _bdev->close();
+
+fail:
+  return r;
+}
+
 void BlueStore::set_cache_shards(unsigned num)
 {
   dout(10) << __func__ << " " << num << dendl;

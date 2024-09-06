@@ -289,6 +289,7 @@ int main(int argc, char **argv)
   string new_sharding = empty_sharding;
   string resharding_ctrl;
   int log_level = 30;
+  uint64_t zap_size = 0;
   bool fsck_deep = false;
   po::options_description po_options("Options");
   po_options.add_options()
@@ -310,6 +311,7 @@ int main(int argc, char **argv)
     ("yes-i-really-really-mean-it", "additional confirmation for dangerous commands")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
+    ("zap-size", po::value<uint64_t>(&zap_size), "size of a block written when zapping device")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -337,7 +339,9 @@ int main(int argc, char **argv)
         "free-fragmentation, "
         "bluefs-stats, "
         "reshard, "
-        "show-sharding")
+        "show-sharding, "
+        "zap-device"
+)
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -550,6 +554,18 @@ int main(int argc, char **argv)
     }
     if (new_sharding == empty_sharding) {
       cerr << "must provide reshard specification" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (action == "zap-device") {
+    if (devs.empty()) {
+      cerr << "must specify device(s) with --dev option" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (!vm.count("yes-i-really-really-mean-it")) {
+      cerr << "zap-osd is a DESTRUCTIVE operation, it causes OSD data loss, "
+           << "please confirm with --yes-i-really-really-mean-it option"
+           << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -1188,6 +1204,14 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << sharding << std::endl;
+  } else if (action == "zap-device") {
+    for(auto& dev : devs) {
+      int r = BlueStore::zap_device(cct.get(), dev, zap_size);
+      if (r < 0) {
+        cerr << "error from zap: " << cpp_strerror(r) << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
