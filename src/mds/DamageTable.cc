@@ -123,6 +123,41 @@ class BacktraceDamage : public DamageEntry
     f->close_section();
   }
 };
+
+/**
+ * Record about Uninline failures during scrub
+ */
+class UninlineDamage : public DamageEntry
+{
+  public:
+  inodeno_t ino;
+  mds_rank_t rank;
+  int32_t failure_errno;
+  std::string scrub_tag;
+
+  UninlineDamage(
+    inodeno_t ino_, mds_rank_t rank_, int32_t errno_, std::string_view scrub_tag_)
+    : ino(ino_), rank(rank_), failure_errno(errno_), scrub_tag(scrub_tag_)
+  {}
+
+  damage_entry_type_t get_type() const override
+  {
+    return DAMAGE_ENTRY_UNINLINE_FILE;
+  }
+
+  void dump(Formatter *f) const override
+  {
+    f->open_object_section("uninline_damage");
+    f->dump_string("damage_type", "uninline");
+    f->dump_int("id", id);
+    f->dump_int("ino", ino);
+    f->dump_int("rank", rank);
+    f->dump_string("errno", cpp_strerror(failure_errno));
+    f->dump_string("scrub_tag", scrub_tag);
+    f->dump_string("path", path);
+    f->close_section();
+  }
+};
 }
 
 DamageEntry::~DamageEntry()
@@ -228,6 +263,27 @@ void DamageTable::remove_backtrace_damage_entry(inodeno_t ino)
   }  
 }
 
+bool DamageTable::notify_uninline_failed(
+  inodeno_t ino,
+  mds_rank_t rank,
+  int32_t failure_errno,
+  std::string_view scrub_tag,
+  std::string_view path)
+{
+  if (oversized()) {
+    return true;
+  }
+
+  if (auto [it, inserted] = uninline_failures.try_emplace(ino); inserted) {
+    auto entry = std::make_shared<UninlineDamage>(ino, rank, errno, scrub_tag);
+    entry->path = path;
+    it->second = entry;
+    by_id[entry->id] = std::move(entry);
+  }
+
+  return false;
+}
+
 bool DamageTable::oversized() const
 {
   return by_id.size() > (size_t)(g_conf()->mds_damage_table_max_entries);
@@ -293,6 +349,9 @@ void DamageTable::erase(damage_entry_id_t damage_id)
   } else if (type == DAMAGE_ENTRY_BACKTRACE) {
     auto backtrace_entry = std::static_pointer_cast<BacktraceDamage>(entry);
     remotes.erase(backtrace_entry->ino);
+  } else if (type == DAMAGE_ENTRY_UNINLINE_FILE) {
+    auto uninline_entry = std::static_pointer_cast<UninlineDamage>(entry);
+    uninline_failures.erase(uninline_entry->ino);
   } else {
     derr << "Invalid type " << type << dendl;
     ceph_abort();

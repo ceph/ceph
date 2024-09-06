@@ -782,8 +782,10 @@ void MDSRankDispatcher::tick()
       }
     }
 
-    if (whoami == 0)
+    if (whoami == 0) {
       scrubstack->advance_scrub_status();
+      scrubstack->purge_old_scrub_counters();
+    }
   }
 
   if (is_active() || is_stopping()) {
@@ -2965,6 +2967,15 @@ void MDSRankDispatcher::handle_asok_command(
     command_scrub_resume(f);
   } else if (command == "scrub status") {
     command_scrub_status(f);
+  } else if (command == "scrub purge_status") {
+    if (whoami != 0) {
+      *css << "Not rank 0";
+      r = -CEPHFS_EXDEV;
+      goto out;
+    }
+    string tag;
+    cmd_getval(cmdmap, "tag", tag);
+    command_scrub_purge_status(tag);
   } else if (command == "tag path") {
     if (whoami != 0) {
       *css << "Not rank 0";
@@ -3223,6 +3234,11 @@ void MDSRank::command_scrub_resume(Formatter *f) {
 void MDSRank::command_scrub_status(Formatter *f) {
   std::lock_guard l(mds_lock);
   scrubstack->scrub_status(f);
+}
+
+void MDSRank::command_scrub_purge_status(std::string_view tag) {
+  std::lock_guard l(mds_lock);
+  scrubstack->purge_scrub_counters(tag);
 }
 
 void MDSRank::command_get_subtrees(Formatter *f)
@@ -4233,6 +4249,7 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
     mdcache->handle_conf_change(changed, *mdsmap);
     mdlog->handle_conf_change(changed, *mdsmap);
     purge_queue.handle_conf_change(changed, *mdsmap);
+    scrubstack->handle_conf_change(changed);
   }));
 }
 
