@@ -28,7 +28,35 @@
 
 using ceph::coarse_mono_clock;
 class Monitor;
-/*-------------------*/
+
+/**
+ * NVMeofGwMap
+ *
+ * Encapsulates state maintained by NVMeofMon
+ *
+ * Type Summary:
+ * created_gw {NvmeGroupKey -> {NvmeGwID -> NvmeGwMonState}}
+ * fsm_timers {NvmeGroupKey -> {NvmeGwID -> NvmeGwTimerState}}
+ *
+ * NvmeGwMonState:
+ * - State for a single gateway within a group
+ * - Each gateway has an associated NvmeAnaGrpId (NvmeGwMonState::ana_grp_id)
+ *   which identifies the ana group associated with that gateway or, if the value
+ *   is REDUNDANT_GW_ANA_GROUP, that the gateway is a designated failover target.
+ * - NvmeGwMonState::sm_state indicates the status of each of the group's
+ *   ana_group_id with respect to that gateway.
+ *
+ * Invariants:
+ * - NvmeGwMonState::ana_grp_id for each gateway is either
+ *   REDUNDANT_GW_ANA_GROUP_ID or is unique within the group.
+ * - NvmeGwMonState::sm_state contains an entry matching the
+ *   NvmeGwMonState::ana_grp_id for each gateway in the group
+ *   with an NvmeGwMonState::ana_grp_id value other than
+ *   REDUNDANT_GW_ANA_GROUP
+ * - NvmeGwMonState::sm_state will list a given ana-group-id as active for no
+ *   more than one gateway within the group -- see
+ *   NVMeofGwMap::validate_gw_map.
+ */
 class NVMeofGwMap
 {
 public:
@@ -45,19 +73,94 @@ public:
 
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
 
+  /**
+   * cfg_add_gw
+   *
+   * Adds a new gateway with id gw_id to group group_key.
+   * - Allocates a new NvmeAnaGrpId for the new gateway
+   * - Adds the newly allocated NvmeAnaGrpId to all existing gateways
+   *   in group_key in state gw_states_per_group_t::GW_STANDBY_STATE
+   * - Adds newly allocated NvmeAnaGrpId along with those for gateways
+   *   already in the group to the newly added gateway.
+   *
+   * @param [in] gw_id     id of gateway to add
+   * @param [in] group_key key for group to
+   * @return -EEXIST if gw_id is already present in group, 0 otherwise
+   */
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+
+  /**
+   * cfg_delete_gw
+   *
+   * Remove gateway gw_id from group group_key
+   * - Resets ana group failover/back to/from gw_id
+   * - Clears NvmeAnaGrpId owned by gw_id from other gateways in the group
+   *
+   * @param [in] gw_id     id of gateway to add
+   * @param [in] group_key key for group containing <gw_id>
+   * @return -EINVAL if gw_id is not present in group, 0 otherwise
+   */
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+
+  /**
+   * process_gw_map_ka
+   *
+   * Notifies NVMeofGwMap of receipt of a keep-alive beacon from
+   * gateway <gw_id> in group <group_key>.  Adds <group_key>/<gw_id>
+   * to map if not already present.
+   *
+   * Caller must ensure that <group_key>/<gw_id> is already present
+   * in the map.
+   *
+   * @param [in] gw_id          id of gateway to add
+   * @param [in] group_key      key for group containing <gw_id>
+   * @param [in] last_osd_epoch most recent OSDMap epoch seen by gw_id
+   *                            prior to sending beacon.
+   * @param [out] propose_pending set to true if map is mutated
+   */
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
+
+  /**
+   * process_gw_map_gw_down
+   *
+   * Notifies NVMeofGwMap that <group_key>/<gw_id> is down, either due
+   * to receipt of an MNVMeofGwBeacon specifying that the sender is
+   * unavailable or due to NvmeofGwMon::tick noting that the grace period
+   * has expired.  Initiates the process of failing over any NvmeAnaGrpId's
+   * for which the gateway is currently responsible.
+   *
+   * Caller must ensure that <group_key>/<gw_id> is already present
+   * in the map.
+   *
+   * @param [in] gw_id          id of gateway to add
+   * @param [in] group_key      key for group containing <gw_id>
+   * @param [out] propose_pending set to true if map is mutated
+   * @return 0 on succes, -EINVAL if <group_key>/<gw_id> is not
+   *         present in map.
+   */
   int process_gw_map_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     bool &propose_pending);
+
+  /**
+   * update_active_timers
+   *
+   * Check timers in fsm_timers and handle any that have expired.
+   *
+   * @param [out] propose_pending set to true if map is mutated
+   */
   void update_active_timers(bool &propose_pending);
+
+  /**
+   * handle_abandoned_ana_groups
+   *
+   * Check for and reassign any unhandled ana groups.
+   *
+   * @param [out] propose_pending set to true if map is mutated
+   */
   void handle_abandoned_ana_groups(bool &propose_pending);
-  void handle_removed_subsystems(
-    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    const std::vector<NvmeNqnId> &current_subsystems, bool &propose_pending);
   void start_timer(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId anagrpid, uint8_t value);
@@ -65,11 +168,9 @@ public:
        const NvmeGroupKey& group_key, bool &map_modified);
 private:
   void add_grp_id(
-    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    const NvmeAnaGrpId grpid);
+    NvmeGwMonState &gw_state, NvmeGwTimerState &timer, const NvmeAnaGrpId grpid);
   void remove_grp_id(
-    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    const NvmeAnaGrpId grpid);
+    NvmeGwMonState &gw_state, NvmeGwTimerState &timer, const NvmeAnaGrpId grpid);
   void fsm_handle_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
@@ -102,8 +203,10 @@ private:
   void cancel_timer(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     NvmeAnaGrpId anagrpid);
+
+  /// checks that any particular ana group is active no more than 1 gw
   void validate_gw_map(
-    const NvmeGroupKey& group_key);
+    const NvmeGroupKey& group_key) const;
 
 public:
   int blocklist_gw(
