@@ -60,7 +60,11 @@ struct uuid_d {
   }
 
   const char *bytes() const {
+#if BOOST_VERSION >= 108600
+    return (const char*)uuid.data();
+#else
     return (const char*)uuid.data;
+#endif
   }
 
   void encode(::ceph::buffer::list::contiguous_appender& p) const {
