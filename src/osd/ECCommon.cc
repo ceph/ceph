@@ -16,12 +16,8 @@
 #include <sstream>
 
 #include "ECCommon.h"
-#include "messages/MOSDPGPush.h"
-#include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDECSubOpWrite.h"
-#include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
-#include "messages/MOSDECSubOpReadReply.h"
 #include "ECMsgTypes.h"
 #include "PGLog.h"
 
@@ -114,7 +110,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::read_result_t &rhs)
   } else {
     lhs << ", noattrs";
   }
-  return lhs << ", returned=" << rhs.returned << ")";
+  return lhs << ", buffers_read=" << rhs.buffers_read << ")";
 }
 
 ostream &operator<<(ostream &lhs, const ECCommon::ReadOp &rhs)
@@ -616,6 +612,70 @@ void ECCommon::ReadPipeline::get_want_to_read_shards(
   }
 }
 
+uint64_t ECCommon::ReadPipeline::shard_buffer_list_to_chunk_buffer_list(
+  ec_align_t &read,
+  std::map<int, extent_map> buffers_read,
+  list<map<int, bufferlist>> &chunk_bufferlists,
+  list<set<int>> &want_to_reads)
+{
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  int data_chunk_count = sinfo.get_data_chunk_count();
+  uint64_t stripe_width = sinfo.get_stripe_width();
+
+  pair read_pair(read.offset, read.size);
+  auto aligned_read = sinfo.offset_len_to_page_bounds(read_pair);
+  auto chunk_aligned_read = sinfo.offset_len_to_chunk_bounds(read_pair);
+  const std::vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+
+  int raw_shard = (aligned_read.first / chunk_size) % data_chunk_count;
+
+  for (uint64_t chunk_offset = chunk_aligned_read.first;
+      chunk_offset < chunk_aligned_read.first + chunk_aligned_read.second;
+      chunk_offset += chunk_size, raw_shard++) {
+    if (raw_shard == data_chunk_count) raw_shard = 0;
+    auto shard = ((int)chunk_mapping.size()) > raw_shard ?
+               chunk_mapping[raw_shard] : raw_shard;
+
+    set<int> want_to_read;
+    want_to_read.insert(shard);
+
+    uint64_t sub_chunk_offset = std::max(chunk_offset, aligned_read.first);
+    uint64_t sub_chunk_shard_offset = (chunk_offset / stripe_width) * chunk_size + sub_chunk_offset - chunk_offset;
+    uint64_t sub_chunk_len = std::min(aligned_read.first + aligned_read.second, chunk_offset + chunk_size) - sub_chunk_offset;
+    map<int, bufferlist> chunk_buffers;
+
+    if (buffers_read.contains(shard)) {
+      extent_map &emap = buffers_read[shard];
+      auto [range, _] = emap.get_containing_range(sub_chunk_shard_offset, sub_chunk_len);
+
+      /* We received a success for this range, so it had better contain the
+       * data. */
+      ceph_assert(range != emap.end());
+      ceph_assert(range.contains(sub_chunk_shard_offset, sub_chunk_len));
+      chunk_buffers[shard].substr_of(range.get_val(), sub_chunk_shard_offset - range.get_off(), sub_chunk_len);
+    } else for (auto [shardi, emap] : buffers_read) {
+      auto [range, _] = emap.get_containing_range(sub_chunk_shard_offset, sub_chunk_len);
+      /* EC can often recover without having read every data/coding shard, so
+       * ignore the range if the data is missing */
+      if (range != emap.end() && range.contains(sub_chunk_shard_offset, sub_chunk_len)) {
+        chunk_buffers[shardi].substr_of(range.get_val(), sub_chunk_shard_offset - range.get_off(), sub_chunk_len);
+      }
+    }
+    dout(20) << "decode_prepare: read: (" << read.offset << "~" << read.size << ")" <<
+      " aligned: " << aligned_read <<
+      " chunk_buffers: " << chunk_buffers <<
+      " want_to_read: " << want_to_read << dendl;
+    chunk_bufferlists.emplace_back(std::move(chunk_buffers));
+    want_to_reads.emplace_back(std::move(want_to_read));
+  }
+
+  /* At this point, we could potentially pack multiple chunk decodes into one,
+   * as the EC decode methods are able to cope with multiple chunks being
+   * decoded at once. Not doing that for now. */
+
+  return read.offset - aligned_read.first;
+}
+
 struct ClientReadCompleter : ECCommon::ReadCompleter {
   ClientReadCompleter(ECCommon::ReadPipeline &read_pipeline,
                       ECCommon::ClientAsyncReadStatus *status)
@@ -634,31 +694,20 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     extent_map result;
     if (res.r != 0)
       goto out;
-    ceph_assert(res.returned.size() == to_read.size());
     ceph_assert(res.errors.empty());
+
     for (auto &&read: to_read) {
-      const auto bounds = make_pair(read.offset, read.size);
-      const auto aligned =
-	read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds);
-      ceph_assert(res.returned.front().get<0>() == aligned.first);
-      ceph_assert(res.returned.front().get<1>() == aligned.second);
-      map<int, bufferlist> to_decode;
+      list<map<int, bufferlist>> chunk_bufferlists;
+      list<set<int>> want_to_reads;
+
+      auto off =read_pipeline.shard_buffer_list_to_chunk_buffer_list(
+        read, res.buffers_read, chunk_bufferlists, want_to_reads);
+
       bufferlist bl;
-      for (map<pg_shard_t, bufferlist>::iterator j =
-	     res.returned.front().get<2>().begin();
-	   j != res.returned.front().get<2>().end();
-	   ++j) {
-	to_decode[j->first.shard] = std::move(j->second);
-      }
-      dout(20) << __func__ << " going to decode: "
-               << " wanted_to_read=" << wanted_to_read
-               << " to_decode=" << to_decode
-               << dendl;
       int r = ECUtil::decode(
-	read_pipeline.sinfo,
 	read_pipeline.ec_impl,
-	wanted_to_read,
-	to_decode,
+	want_to_reads,
+	chunk_bufferlists,
 	&bl);
       if (r < 0) {
         dout(10) << __func__ << " error on ECUtil::decode r=" << r << dendl;
@@ -666,32 +715,14 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         goto out;
       }
       bufferlist trimmed;
-      // If partial stripe reads are disabled read_offset_in_stripe will be 0
-      // which will mean trim_offset is 0. When partial reads are enabled the
-      // shards read (wanted_to_read) is a union of the requirements for each
-      // stripe, each range being read may need to trim unneeded shards
-      uint64_t read_offset_in_stripe = read.offset -
-	read_pipeline.sinfo.logical_to_prev_stripe_offset(read.offset);
-      uint64_t chunk_size = read_pipeline.sinfo.get_chunk_size();
-      uint64_t trim_offset = 0;
-      for (auto shard: wanted_to_read) {
-	if (shard * chunk_size < read_offset_in_stripe) {
-	  trim_offset += chunk_size;
-	} else {
-	  break;
-	}
-      }
-      auto off = read.offset + trim_offset - aligned.first;
-      ceph_assert(read.size <= bl.length() - off);
-      dout(20) << __func__ << "bl.length()=" << bl.length()
-	       << " off=" << off
-	       << " read.offset=" << read.offset
-	       << " read.size=" << read.size
-	       << " trim_offset="<< trim_offset << dendl;
-      trimmed.substr_of(bl, off, read.size);
+      auto len = std::min(read.size, bl.length() - off);
+      dout(20) << __func__ << " bl.length()=" << bl.length()
+               << " len=" << len << " read.size=" << read.size
+               << " off=" << off << " read.offset=" << read.offset
+               << dendl;
+      trimmed.substr_of(bl, off, len);
       result.insert(
 	read.offset, trimmed.length(), std::move(trimmed));
-      res.returned.pop_front();
     }
 out:
     dout(20) << __func__ << " calling complete_object with result="
@@ -729,23 +760,14 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
 
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&[hoid, to_read]: reads) {
-    vector<shard_read_t> want_shard_reads(sinfo.get_stripe_width());
+    vector want_shard_reads(ec_impl->get_chunk_count(), shard_read_t());
 
-    /* Populate vector with empty reads */
-    fill(want_shard_reads.begin(), want_shard_reads.end(), shard_read_t());
-
-    if (cct->_conf->osd_ec_partial_reads) {
-      for (const auto& single_region : to_read) {
-        get_min_want_to_read_shards(single_region, want_shard_reads);
-      }
-    } else {
-      get_want_to_read_shards(to_read, want_shard_reads);
-    }
+    get_want_to_read_shards(to_read, want_shard_reads);
 
     // This is required by the completion.  This currently only contains the
     // relevant shards. We may find this needs the actual relevant extents
     // within the shards, in which case a bigger refactor will be required.
-    for (int i=0; i<want_shard_reads.size(); i++) {
+    for (unsigned int i=0; i<want_shard_reads.size(); i++) {
       if (!want_shard_reads[i].extents.empty()) {
         want_to_read.insert(i);
       }

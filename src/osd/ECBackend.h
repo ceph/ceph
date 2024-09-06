@@ -284,7 +284,7 @@ public:
     RecoveryMessages *m);
   void handle_recovery_read_complete(
     const hobject_t &hoid,
-    boost::tuple<uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > &to_read,
+    std::map<int, extent_map> &buffers_read,
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs,
     RecoveryMessages *m);
   void handle_recovery_push(

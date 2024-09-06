@@ -128,6 +128,12 @@ public:
 };
 
 int decode(
+  ErasureCodeInterfaceRef &ec_impl,
+  const std::list<std::set<int>> want_to_read,
+  const std::list<std::map<int, bufferlist>> chunk_list,
+  bufferlist *out);
+
+int decode(
   const stripe_info_t &sinfo,
   ceph::ErasureCodeInterfaceRef &ec_impl,
   const std::set<int> want_to_read,

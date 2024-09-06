@@ -4,6 +4,7 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
+#include "common/interval_map.h"
 #include "ECUtil.h"
 
 using namespace std;
@@ -12,13 +13,46 @@ using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
 std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::chunk_aligned_offset_len_to_chunk(
-  uint64_t off, uint64_t len) const {
-  pair<uint64_t, uint64_t> tmp = offset_len_to_stripe_bounds(in);
+  uint64_t _off, uint64_t _len) const {
+  auto [off, len] = offset_len_to_stripe_bounds(_off, _len);
   return std::make_pair(
     chunk_aligned_logical_offset_to_chunk_offset(off),
     chunk_aligned_logical_size_to_chunk_size(len));
 }
 
+/* This variant of decode allows for minimal reads. It expects the caller to
+ * provide a map of buffers for each stripe that needs to be decoded.
+ *
+ * For each stripe, there is a corresponding set of "want_to_read" which is
+ * the set of shards which need to be decoded.
+ */
+int ECUtil::decode(
+  ErasureCodeInterfaceRef &ec_impl,
+  const list<set<int>> want_to_read,
+  const list<map<int, bufferlist>> chunk_list,
+  bufferlist *out)
+{
+  ceph_assert(out);
+  ceph_assert(out->length() == 0);
+
+  auto want_to_read_iter = want_to_read.begin();
+  for (auto chunks : chunk_list) {
+    ceph_assert(want_to_read_iter != want_to_read.end());
+    bufferlist bl;
+    int r = ec_impl->decode_concat(*want_to_read_iter, chunks, &bl);
+    ceph_assert(r == 0);
+    out->claim_append(bl);
+    want_to_read_iter++;
+  }
+  return 0;
+}
+
+/** This variant of decode requires that the set of shards contained in
+ * want_to_read is the same for every stripe. Unlike the previous decode, this
+ * variant is able to take the entire buffer list of each shard in a single
+ * buffer list.  If performance is not critical, this is a simpler interface
+ * * and as such is suitable for test tools.
+ */
 int ECUtil::decode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
@@ -59,6 +93,7 @@ int ECUtil::decode(
   return 0;
 }
 
+/* This variant of decode is used from recovery of an EC */
 int ECUtil::decode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,

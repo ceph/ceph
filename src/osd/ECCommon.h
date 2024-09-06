@@ -287,9 +287,7 @@ struct ECCommon {
     int r;
     std::map<pg_shard_t, int> errors;
     std::optional<std::map<std::string, ceph::buffer::list, std::less<>> > attrs;
-    std::list<
-      boost::tuple<
-	uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > > returned;
+    std::map<int, extent_map> buffers_read;
     read_result_t() : r(0) {}
   };
 
@@ -373,18 +371,7 @@ struct ECCommon {
         for_recovery(for_recovery),
         on_complete(std::move(_on_complete)),
         want_to_read(std::move(_want_to_read)),
-	to_read(std::move(_to_read)) {
-      for (auto &&hpair: to_read) {
-	auto &returned = complete[hpair.first].returned;
-	for (auto &&extent: hpair.second.to_read) {
-	  returned.push_back(
-	    boost::make_tuple(
-	      extent.offset,
-	      extent.size,
-	      std::map<pg_shard_t, ceph::buffer::list>()));
-	}
-      }
-    }
+	to_read(std::move(_to_read)) {}
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
     ReadOp(ReadOp &&) = default;
@@ -493,7 +480,7 @@ struct ECCommon {
 
     void get_want_to_read_shards(
       const std::list<ec_align_t> &to_read,
-      std::vector<shard_read_t> &want_shard_reads) const;
+      std::vector<shard_read_t> &want_shard_reads);
 
     /// Returns to_read replicas sufficient to reconstruct want
     int get_min_avail_to_read_shards(
@@ -505,6 +492,12 @@ struct ECCommon {
       ); ///< @return error code, 0 on success
 
     void schedule_recovery_work();
+
+    uint64_t shard_buffer_list_to_chunk_buffer_list(
+      ec_align_t &read,
+      std::map<int, extent_map> buffers_read,
+      std::list<std::map<int, bufferlist>> &chunk_bufferlists,
+      std::list<std::set<int>> &want_to_reads);
   };
 
   /**
