@@ -242,10 +242,6 @@ class SSHManager:
         if log_command:
             logger.debug(f'Running command: {rcmd}')
         try:
-            test_cmd = RemoteSudoCommand(
-                Executables.TRUE, [], use_sudo=use_sudo
-            )
-            r = await conn.run(str(test_cmd), check=True, timeout=5)  # host quick check
             r = await conn.run(str(rcmd), input=stdin)
         # handle these Exceptions otherwise you might get a weird error like
         # TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
