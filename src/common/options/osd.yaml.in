@@ -349,8 +349,10 @@ options:
   type: int
   level: advanced
   desc: Maximum number of objects to deep-scrub in a single chunk
-  fmt_desc: The maximum number of object store chunks to scrub during single operation.
-  default: 25
+  fmt_desc: The maximum number of objects to deep-scrub during single internal
+    scrub operation. Large values would improve scrubbing performance but
+    may adversely affect client operations latency.
+  default: 15
   see_also:
   - osd_scrub_chunk_min
   with_legacy: true
