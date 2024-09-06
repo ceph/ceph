@@ -4817,9 +4817,14 @@ void BlueFS::trim_free_space(const string& type, std::ostream& outss)
     outss << "device " << type << " is not configured";
     return;
   }
-  if (alloc[bdev_id] && !is_shared_alloc(bdev_id)) {
+  if (alloc[bdev_id]) {
     if (!bdev[bdev_id]->is_discard_supported()) {
       outss << "device " << type << " does not support trim";
+      return;
+    }
+    if (is_shared_alloc(bdev_id)) {
+      outss << "device " << type
+            << " shares allocations with main device, trimming skipped.";
       return;
     }
     alloc[bdev_id]->foreach(iterated_allocation);
