@@ -290,6 +290,7 @@ int main(int argc, char **argv)
   string new_sharding = empty_sharding;
   string resharding_ctrl;
   int log_level = 30;
+  uint64_t zap_size = 0;
   bool fsck_deep = false;
   po::options_description po_options("Options");
   po_options.add_options()
@@ -316,6 +317,7 @@ int main(int argc, char **argv)
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
     ("op", po::value<string>(&action_aux),
       "--command alias, ignored if the latter is present")
+    ("zap-size", po::value<uint64_t>(&zap_size), "size of a block written when zapping device")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -344,7 +346,9 @@ int main(int argc, char **argv)
         "bluefs-stats, "
         "reshard, "
         "show-sharding, "
-	"trim")
+	"trim, "
+        "zap-device"
+)
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -602,6 +606,18 @@ int main(int argc, char **argv)
     }
     if (bdev_type.empty())
       bdev_type = vector<string>{"bdev-block", "bdev-db", "bdev-wal"};
+  }
+  if (action == "zap-device") {
+    if (devs.empty()) {
+      cerr << "must specify device(s) with --dev option" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (!vm.count("yes-i-really-really-mean-it")) {
+      cerr << "zap-osd is a DESTRUCTIVE operation, it causes OSD data loss, "
+           << "please confirm with --yes-i-really-really-mean-it option"
+           << std::endl;
+      exit(EXIT_FAILURE);
+    }
   }
 
   if (action == "restore_cfb") {
@@ -1252,6 +1268,14 @@ int main(int argc, char **argv)
       cout << "status: " << outss.str() << std::endl;
     }
     bluestore.cold_close();
+  } else if (action == "zap-device") {
+    for(auto& dev : devs) {
+      int r = BlueStore::zap_device(cct.get(), dev, zap_size);
+      if (r < 0) {
+        cerr << "error from zap: " << cpp_strerror(r) << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
