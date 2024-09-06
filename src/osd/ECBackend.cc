@@ -25,7 +25,6 @@
 #include "ECMsgTypes.h"
 
 #include "PrimaryLogPG.h"
-#include "osd_tracer.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -63,19 +62,6 @@ static ostream& _prefix(std::ostream *_dout, ECBackend::RecoveryBackend *pgb) {
 struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
   list<ECBackend::RecoveryBackend::RecoveryOp> ops;
 };
-
-static ostream &operator<<(ostream &lhs, const map<pg_shard_t, bufferlist> &rhs)
-{
-  lhs << "[";
-  for (map<pg_shard_t, bufferlist>::const_iterator i = rhs.begin();
-       i != rhs.end();
-       ++i) {
-    if (i != rhs.begin())
-      lhs << ", ";
-    lhs << make_pair(i->first, i->second.length());
-  }
-  return lhs << "]";
-}
 
 static ostream &operator<<(ostream &lhs, const map<int, bufferlist> &rhs)
 {
@@ -344,16 +330,11 @@ void ECBackend::RecoveryBackend::handle_recovery_push_reply(
 
 void ECBackend::RecoveryBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
-  boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
+  std::map<int, extent_map> &buffers_read,
   std::optional<map<string, bufferlist, less<>> > attrs,
   RecoveryMessages *m)
 {
-  dout(10) << __func__ << ": returned " << hoid << " "
-	   << "(" << to_read.get<0>()
-	   << ", " << to_read.get<1>()
-	   << ", " << to_read.get<2>()
-	   << ")"
-	   << dendl;
+  dout(10) << __func__ << ": returned " << hoid << " " << buffers_read << dendl;
   ceph_assert(recovery_ops.count(hoid));
   RecoveryBackend::RecoveryOp &op = recovery_ops[hoid];
   ceph_assert(op.returned_data.empty());
@@ -364,10 +345,9 @@ void ECBackend::RecoveryBackend::handle_recovery_read_complete(
     target[*i] = &(op.returned_data[*i]);
   }
   map<int, bufferlist> from;
-  for(map<pg_shard_t, bufferlist>::iterator i = to_read.get<2>().begin();
-      i != to_read.get<2>().end();
-      ++i) {
-    from[i->first.shard] = std::move(i->second);
+  for (auto &&[shard, emap] : buffers_read) {
+    auto range = emap.begin();
+    from[shard].substr_of(range.get_val(), range.get_off(), range.get_len());
   }
   dout(10) << __func__ << ": " << from << dendl;
   int r;
@@ -451,17 +431,17 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommon::read_result_t &res,
-    list<ECCommon::ec_align_t>,
+    list<ECCommon::ec_align_t> to_read,
     set<int> wanted_to_read) override
   {
     if (!(res.r == 0 && res.errors.empty())) {
       backend._failed_push(hoid, res);
       return;
     }
-    ceph_assert(res.returned.size() == 1);
+    ceph_assert(to_read.size() == 1);
     backend.handle_recovery_read_complete(
       hoid,
-      res.returned.back(),
+      res.buffers_read,
       res.attrs,
       &rm);
   }
@@ -579,10 +559,10 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
 	encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
       }
 
-      list<ECCommon::ec_align_t> to_read;
-      to_read.emplace_back(ECCommon::ec_align_t{op.recovery_progress.data_recovered_to, amount, 0});
-      ECCommon::read_request_t read_request(to_read, op.recovery_progress.first && !op.obc);
-      std::vector<shard_read_t> want_shard_reads(sinfo.get_stripe_width(), shard_read_t());
+      list<ec_align_t> to_read;
+      to_read.emplace_back(op.recovery_progress.data_recovered_to, amount, 0);
+      read_request_t read_request(to_read, op.recovery_progress.first && !op.obc);
+      std::vector want_shard_reads(sinfo.get_stripe_width(), shard_read_t());
       for (int w : want) {
 	want_shard_reads[w].extents.insert(from, amount);
       }
@@ -1199,30 +1179,17 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
-  for (auto i = op.buffers_read.begin();
-       i != op.buffers_read.end();
-       ++i) {
-    ceph_assert(!op.errors.count(i->first));	// If attribute error we better not have sent a buffer
-    if (!rop.to_read.count(i->first)) {
+  for (auto &&[hoid, offset_buffer_map] : op.buffers_read) {
+    ceph_assert(!op.errors.contains(hoid));	// If attribute error we better not have sent a buffer
+    if (!rop.to_read.contains(hoid)) {
       // We canceled this read! @see filter_read_op
       dout(20) << __func__ << " to_read skipping" << dendl;
       continue;
     }
-    list<ec_align_t>::const_iterator req_iter =
-      rop.to_read.find(i->first)->second.to_read.begin();
-    list<
-      boost::tuple<
-	uint64_t, uint64_t, map<pg_shard_t, bufferlist> > >::iterator riter =
-      rop.complete[i->first].returned.begin();
-    for (list<pair<uint64_t, bufferlist> >::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ++j, ++req_iter, ++riter) {
-      ceph_assert(req_iter != rop.to_read.find(i->first)->second.to_read.end());
-      ceph_assert(riter != rop.complete[i->first].returned.end());
-      pair<uint64_t, uint64_t> aligned =
-	sinfo.chunk_aligned_offset_len_to_chunk(req_iter->offset, req_iter->size);
-      ceph_assert(aligned.first == j->first);
-      riter->get<2>()[from] = std::move(j->second);
+
+    auto &buffers_read = rop.complete[hoid].buffers_read;
+    for (auto &&[offset, buffer_list] : offset_buffer_map) {
+      buffers_read[from.shard].insert(offset, buffer_list.length(), buffer_list);
     }
   }
   for (auto i = op.attrs_read.begin();
@@ -1265,12 +1232,9 @@ void ECBackend::handle_sub_read_reply(
       iter != rop.complete.end();
       ++iter) {
       set<int> have;
-      for (map<pg_shard_t, bufferlist>::const_iterator j =
-          iter->second.returned.front().get<2>().begin();
-        j != iter->second.returned.front().get<2>().end();
-        ++j) {
-        have.insert(j->first.shard);
-        dout(20) << __func__ << " have shard=" << j->first.shard << dendl;
+      for ( auto&& [shard, _] : iter->second.buffers_read) {
+        have.insert(shard);
+        dout(20) << __func__ << " have shard=" << shard << dendl;
       }
       map<int, vector<pair<int, int>>> dummy_minimum;
       int err;
@@ -1538,7 +1502,8 @@ void ECBackend::objects_read_async(
     if (!cct->_conf->osd_ec_partial_reads || fast_read) {
       tmp = sinfo.offset_len_to_stripe_bounds(read.offset, read.size);
     } else {
-      tmp = sinfo.offset_len_to_chunk_bounds(make_pair(read.offset, read.size));
+      tmp.first = read.offset;
+      tmp.second = read.size;
     }
     es.union_insert(tmp.first, tmp.second);
     flags |= read.flags;
@@ -1593,20 +1558,18 @@ void ECBackend::objects_read_async(
 	  uint64_t offset = read.first.offset;
 	  uint64_t length = read.first.size;
 	  auto range = got.emap.get_containing_range(offset, length);
-	  uint64_t range_offset = range.first.get_off();
-	  uint64_t range_length = range.first.get_len();
 	  ceph_assert(range.first != range.second);
-	  ceph_assert(range_offset <= offset);
+	  ceph_assert(range.first.get_off() <= offset);
           ldpp_dout(dpp, 20) << "offset: " << offset << dendl;
-          ldpp_dout(dpp, 20) << "range offset: " << range_offset << dendl;
+          ldpp_dout(dpp, 20) << "range offset: " << range.first.get_off() << dendl;
           ldpp_dout(dpp, 20) << "length: " << length << dendl;
-          ldpp_dout(dpp, 20) << "range length: " << range_length << dendl;
+          ldpp_dout(dpp, 20) << "range length: " << range.first.get_len()  << dendl;
 	  ceph_assert(
 	    (offset + length) <=
-	    (range_offset + range_length));
+	    (range.first.get_off() + range.first.get_len()));
 	  read.second.first->substr_of(
 	    range.first.get_val(),
-	    offset - range_offset,
+	    offset - range.first.get_off(),
 	    length);
 	  if (read.second.second) {
 	    read.second.second->complete(length);
