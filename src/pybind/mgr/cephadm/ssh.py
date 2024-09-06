@@ -170,7 +170,6 @@ class SSHManager:
         if log_command:
             logger.debug(f'Running command: {cmd}')
         try:
-            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)  # host quick check
             r = await conn.run(cmd, input=stdin)
         # handle these Exceptions otherwise you might get a weird error like
         # TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
