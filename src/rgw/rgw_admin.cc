@@ -360,6 +360,7 @@ void usage()
   cout << "   --secret/--secret-key=<key>       specify secret key\n";
   cout << "   --gen-access-key                  generate random access key (for S3)\n";
   cout << "   --gen-secret                      generate random secret key\n";
+  cout << "   --generate-key                    create user with or without credentials\n";
   cout << "   --key-type=<type>                 key type, options are: swift, s3\n";
   cout << "   --key-active=<bool>               activate or deactivate a key\n";
   cout << "   --temp-url-key[-2]=<key>          temp url key\n";
@@ -3428,6 +3429,13 @@ int main(int argc, const char **argv)
   OPT opt_cmd = OPT::NO_CMD;
   int gen_access_key = 0;
   int gen_secret_key = 0;
+  enum generate_key_enum {
+    OPTION_SET_FALSE = 0,
+    OPTION_SET_TRUE  = 1,
+    OPTION_NOT_SET   = 2,
+  };
+
+  generate_key_enum generate_key = OPTION_NOT_SET;
   bool set_perm = false;
   bool set_temp_url_key = false;
   map<int, string> temp_url_keys;
@@ -3708,6 +3716,17 @@ int main(int argc, const char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         exit(1);
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--generate-key", (char*)NULL)) {
+      key_type_str = val;
+      if (key_type_str.compare("true") == 0) {
+	generate_key = OPTION_SET_TRUE;
+      } else if(key_type_str.compare("false") == 0) {
+	generate_key = OPTION_SET_FALSE;
+      } else {
+        cerr << "wrong value for --generate-key: " << key_type_str << " please specify either true or false" << std::endl;
+        exit(1);
+      }
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &key_active, NULL, "--key-active", (char*)NULL)) {
       key_active_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
@@ -4470,14 +4489,21 @@ int main(int argc, const char **argv)
     }
 
     /* check key parameter conflict */
-    if ((!access_key.empty()) && gen_access_key) {
-        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
+    if ((!access_key.empty()) && (gen_access_key || generate_key == OPTION_SET_TRUE)) {
+        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key/generate-key" << std::endl;
         return EINVAL;
     }
-    if ((!secret_key.empty()) && gen_secret_key) {
-        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
+    if ((!secret_key.empty()) && (gen_secret_key || generate_key == OPTION_SET_TRUE)) {
+        cerr << "ERROR: key parameter conflict, --secret & --gen-secret/generate-key" << std::endl;
         return EINVAL;
     }
+    if (generate_key == OPTION_SET_FALSE) {
+      if ((!access_key.empty()) || gen_access_key || (!secret_key.empty()) || gen_secret_key) {
+        cerr << "ERROR: key parameter conflict, if --generate-key is not set so no other key parameters can be set" << std::endl;
+        return EINVAL;
+      }
+    }
+
   }
 
   // default to pretty json
@@ -6642,7 +6668,7 @@ int main(int argc, const char **argv)
     }
     break;
   case OPT::USER_CREATE:
-    if (!user_op.has_existing_user()) {
+    if (!user_op.has_existing_user() && (generate_key != OPTION_SET_FALSE)) {
       user_op.set_generate_key(); // generate a new key by default
     }
     ret = ruser.add(dpp(), user_op, null_yield, &err_msg);

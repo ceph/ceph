@@ -548,6 +548,13 @@ Options
 
     Generate random secret key.
 
+.. option:: --generate-key
+
+    create user with or without credentials.
+    If this option set to false, then user cannot set --gen-access-key/--gen-secret/--secret-key/--access-key.
+    If this option set to true, then user cannot set  --secret-key/--access-key and bypass options for --gen-secret/--gen-access-key.
+    Default is true.
+
 .. option:: --key-type=<type>
 
     Key type, options are: swift, s3.
