@@ -3705,11 +3705,8 @@ options:
   type: uint
   level: advanced
   default: 5
-  fmt_desc: The priority set for user requested scrub on the work queue.  If
-    this value were to be smaller than ``osd_client_op_priority`` it
-    can be boosted to the value of ``osd_client_op_priority`` when
-    scrub is blocking client operations.
-  with_legacy: true
+  fmt_desc: deprecated.  Use ``osd_scrub_priority`` instead.
+  with_legacy: false
 - name: osd_recovery_priority
   type: uint
   level: advanced
