@@ -75,14 +75,15 @@ public:
       CollectionRef c,
       const ghobject_t& oid) = 0;
 
-    using omap_values_t = std::map<std::string, ceph::bufferlist, std::less<>>;
+    using omap_values_t = attrs_t;
     using omap_keys_t = std::set<std::string>;
     virtual read_errorator::future<omap_values_t> omap_get_values(
       CollectionRef c,
       const ghobject_t& oid,
       const omap_keys_t& keys) = 0;
 
-    virtual read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
+    using omap_values_paged_t = std::tuple<bool, omap_values_t>;
+    virtual read_errorator::future<omap_values_paged_t> omap_get_values(
       CollectionRef c,           ///< [in] collection
       const ghobject_t &oid,     ///< [in] oid
       const std::optional<std::string> &start ///< [in] start, empty for begin
@@ -147,7 +148,8 @@ public:
       return seastar::now();
     }
 
-    virtual read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
+    using fiemap_ret_t = std::map<uint64_t, uint64_t>;
+    virtual read_errorator::future<fiemap_ret_t> fiemap(
       CollectionRef ch,
       const ghobject_t& oid,
       uint64_t off,

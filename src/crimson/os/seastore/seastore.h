@@ -71,20 +71,19 @@ struct col_obj_ranges_t {
 
 class SeaStore final : public FuturizedStore {
 public:
+  using base_ertr = TransactionManager::base_ertr;
+  using base_iertr = TransactionManager::base_iertr;
+
   class MDStore {
   public:
-    using base_iertr = crimson::errorator<
-      crimson::ct_error::input_output_error
-    >;
-
-    using write_meta_ertr = base_iertr;
+    using write_meta_ertr = base_ertr;
     using write_meta_ret = write_meta_ertr::future<>;
     virtual write_meta_ret write_meta(
       const std::string &key,
       const std::string &val
     ) = 0;
 
-    using read_meta_ertr = base_iertr;
+    using read_meta_ertr = base_ertr;
     using read_meta_ret = write_meta_ertr::future<std::optional<std::string>>;
     virtual read_meta_ret read_meta(const std::string &key) = 0;
 
@@ -136,10 +135,7 @@ public:
       const omap_keys_t& keys) final;
 
     /// Retrieves paged set of values > start (if present)
-    using omap_get_values_ret_bare_t = std::tuple<bool, omap_values_t>;
-    using omap_get_values_ret_t = read_errorator::future<
-      omap_get_values_ret_bare_t>;
-    omap_get_values_ret_t omap_get_values(
+    read_errorator::future<omap_values_paged_t> omap_get_values(
       CollectionRef c,           ///< [in] collection
       const ghobject_t &oid,     ///< [in] oid
       const std::optional<std::string> &start ///< [in] start, empty for begin
@@ -170,7 +166,7 @@ public:
      * stages and locks as do_transaction. */
     seastar::future<> flush(CollectionRef ch) final;
 
-    read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
+    read_errorator::future<fiemap_ret_t> fiemap(
       CollectionRef ch,
       const ghobject_t& oid,
       uint64_t off,
@@ -190,7 +186,6 @@ public:
       secondaries.emplace_back(&sec_dev);
     }
 
-    using coll_core_t = FuturizedStore::coll_core_t;
     seastar::future<std::vector<coll_core_t>> list_collections();
 
     seastar::future<> write_meta(const std::string& key,
@@ -334,14 +329,16 @@ public:
       });
     }
 
-    using _fiemap_ret = ObjectDataHandler::fiemap_ret;
-    _fiemap_ret _fiemap(
-      Transaction &t,
-      Onode &onode,
-      uint64_t off,
-      uint64_t len) const;
+    using omap_list_bare_ret = OMapManager::omap_list_bare_ret;
+    using omap_list_ret = OMapManager::omap_list_ret;
+    omap_list_ret omap_list(
+      Onode& onode,
+      const omap_root_le_t& omap_root,
+      Transaction& t,
+      const std::optional<std::string>& start,
+      OMapManager::omap_list_config_t config) const;
 
-    using _omap_get_value_iertr = OMapManager::base_iertr::extend<
+    using _omap_get_value_iertr = base_iertr::extend<
       crimson::ct_error::enodata
       >;
     using _omap_get_value_ret = _omap_get_value_iertr::future<ceph::bufferlist>;
@@ -350,25 +347,20 @@ public:
       omap_root_t &&root,
       std::string_view key) const;
 
-    using _omap_get_values_iertr = OMapManager::base_iertr;
-    using _omap_get_values_ret = _omap_get_values_iertr::future<omap_values_t>;
-    _omap_get_values_ret _omap_get_values(
+    base_iertr::future<omap_values_t> _omap_get_values(
       Transaction &t,
       omap_root_t &&root,
       const omap_keys_t &keys) const;
 
     friend class SeaStoreOmapIterator;
 
-    using omap_list_bare_ret = OMapManager::omap_list_bare_ret;
-    using omap_list_ret = OMapManager::omap_list_ret;
-    omap_list_ret omap_list(
+    base_iertr::future<fiemap_ret_t> _fiemap(
+      Transaction &t,
       Onode &onode,
-      const omap_root_le_t& omap_root,
-      Transaction& t,
-      const std::optional<std::string>& start,
-      OMapManager::omap_list_config_t config) const;
+      uint64_t off,
+      uint64_t len) const;
 
-    using tm_iertr = TransactionManager::base_iertr;
+    using tm_iertr = base_iertr;
     using tm_ret = tm_iertr::future<>;
     tm_ret _do_transaction_step(
       internal_context_t &ctx,
@@ -535,17 +527,7 @@ public:
     return shard_stores.local().get_fsid();
   }
 
-  seastar::future<> write_meta(
-    const std::string& key,
-    const std::string& value) final {
-    ceph_assert(seastar::this_shard_id() == primary_core);
-    return shard_stores.local().write_meta(
-      key, value).then([this, key, value] {
-      return mdstore->write_meta(key, value);
-    }).handle_error(
-      crimson::ct_error::assert_all{"Invalid error in SeaStore::write_meta"}
-    );
-  }
+  seastar::future<> write_meta(const std::string& key, const std::string& value) final;
 
   seastar::future<std::tuple<int, std::string>> read_meta(const std::string& key) final;
 
