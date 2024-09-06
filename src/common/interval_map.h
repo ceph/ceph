@@ -245,6 +245,11 @@ public:
     const_iterator &operator*() {
       return *this;
     }
+    const bool contains(K _off, K _len) const {
+      K off = get_off();
+      K len = get_len();
+      return off <= _off && off + len >= _off + _len;
+    }
   };
   const_iterator begin() const {
     return const_iterator(m.begin());
