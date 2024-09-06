@@ -19,10 +19,8 @@
 #include "osd/ECCommon.h"
 #include "osd/ECBackend.h"
 #include "gtest/gtest.h"
-#include "erasure-code/ErasureCode.h"
 #include "osd/osd_types.h"
 #include "common/ceph_argparse.h"
-#include "common/admin_socket_client.h"
 
 using namespace std;
 
@@ -564,7 +562,6 @@ TEST(ECCommon, get_min_want_to_read_shards)
     ECCommon::ec_align_t to_read(0, 3*csize, 1);
     pipeline.get_min_want_to_read_shards(to_read, want_to_read);
     std::vector<ECCommon::shard_read_t> ref(empty_shard_vector);
-    ECCommon::ec_align_t extent_a(0, csize, 1);
     ref[0].extents.insert(0, csize);
     ref[1].extents.insert(0, csize);
     ref[2].extents.insert(0, csize);
@@ -601,7 +598,6 @@ TEST(ECCommon, get_min_want_to_read_shards)
     ECCommon::ec_align_t to_read(swidth + csize, swidth - csize, 1);
     pipeline.get_min_want_to_read_shards(to_read, want_to_read);
     std::vector<ECCommon::shard_read_t> ref(empty_shard_vector);
-    ECCommon::ec_align_t extent_a(0, csize, 1);
     ref[1].extents.insert(csize, csize);
     ref[2].extents.insert(csize, csize);
     ref[3].extents.insert(csize, csize);
@@ -688,7 +684,6 @@ TEST(ECCommon, get_min_avail_to_read_shards) {
   const uint64_t swidth = 64*page_size;
   const uint64_t ssize = 4;
   const int nshards = 6;
-  const uint64_t block_size = 512;
 
   ECUtil::stripe_info_t s(ssize, swidth);
   ECListenerStub listenerStub;
@@ -898,16 +893,26 @@ TEST(ECCommon, get_min_want_to_read_shards_bug67087)
 
   const std::vector<int> chunk_mapping = {}; // no remapping
 
-  std::set<int> want_to_read;
+  std::vector<ECCommon::shard_read_t> empty_shard_vector(ssize);
+  std::vector want_to_read(empty_shard_vector);
+  ECCommon::ec_align_t to_read1(512,512, 1);
+  ECCommon::ec_align_t to_read2(512+16*1024,512, 1);
+
+  std::vector<ECCommon::shard_read_t> ref(empty_shard_vector);
+
+  ref[0].extents.insert(512, 512);
 
   // multitple calls with the same want_to_read can happen during
-  // multi-region reads.
+  // multi-region reads. This will create multiple extents in want_to_read,
   {
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      512, 512, s, chunk_mapping, &want_to_read);
-    ASSERT_EQ(want_to_read, std::set<int>{0});
+     to_read1, s, chunk_mapping, want_to_read);
+    ASSERT_EQ(want_to_read, ref);
     ECCommon::ReadPipeline::get_min_want_to_read_shards(
-      512+16*1024, 512, s, chunk_mapping, &want_to_read);
-    ASSERT_EQ(want_to_read, std::set<int>{0});
+     to_read2, s, chunk_mapping, want_to_read);
+
+    // We have 4 data shards per stripe.
+    ref[0].extents.insert(512+4*1024, 512);
+    ASSERT_EQ(want_to_read, ref);
   }
 }
