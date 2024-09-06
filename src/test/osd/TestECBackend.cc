@@ -81,11 +81,11 @@ TEST(ECUtil, stripe_info_t)
 
   // Stripe 0 + 2 chunks for (10 stripes + 2 chunks) needs to read 11 stripes
   // starting from 0 because there is a partial stripe at the start
-  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(2*s.get_chunk_size(),
-							  10*swidth + 2*s.get_chunk_size())),
-	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
+  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(2*s.get_chunk_size(),
+    10*swidth + 2*s.get_chunk_size()),
+    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
 
-  ASSERT_EQ(s.offset_len_to_stripe_bounds(make_pair(swidth-10, (uint64_t)20)),
+  ASSERT_EQ(s.offset_len_to_stripe_bounds(swidth-10, (uint64_t)20),
             make_pair((uint64_t)0, 2*swidth));
 }
 

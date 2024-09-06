@@ -1544,7 +1544,7 @@ void ECBackend::objects_read_async(
   for (const auto& [read, ctx] : to_read) {
     pair<uint64_t, uint64_t> tmp;
     if (!cct->_conf->osd_ec_partial_reads || fast_read) {
-      tmp = sinfo.offset_len_to_stripe_bounds(make_pair(read.offset, read.size));
+      tmp = sinfo.offset_len_to_stripe_bounds(read.offset, read.size);
     } else {
       tmp = sinfo.offset_len_to_chunk_bounds(make_pair(read.offset, read.size));
     }

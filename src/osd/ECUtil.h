@@ -81,10 +81,10 @@ public:
   std::pair<uint64_t, uint64_t> chunk_aligned_offset_len_to_chunk(
     uint64_t off, uint64_t len) const;
   std::pair<uint64_t, uint64_t> offset_len_to_stripe_bounds(
-    std::pair<uint64_t, uint64_t> in) const {
-    uint64_t off = logical_to_prev_stripe_offset(in.first);
+    uint64_t _off, uint64_t _len) const {
+    uint64_t off = logical_to_prev_stripe_offset(_off);
     uint64_t len = logical_to_next_stripe_offset(
-      (in.first - off) + in.second);
+      (_off - off) + _len);
     return std::make_pair(off, len);
   }
   std::pair<uint64_t, uint64_t> offset_len_to_chunk_bounds(
@@ -93,6 +93,15 @@ public:
     uint64_t tmp_len = (in.first - off) + in.second;
     uint64_t len = ((tmp_len % chunk_size) ?
       (tmp_len - (tmp_len % chunk_size) + chunk_size) :
+      tmp_len);
+    return std::make_pair(off, len);
+  }
+  std::pair<uint64_t, uint64_t> offset_len_to_page_bounds(
+  std::pair<uint64_t, uint64_t> in) const {
+    uint64_t off = in.first - (in.first % CEPH_PAGE_SIZE);
+    uint64_t tmp_len = (in.first - off) + in.second;
+    uint64_t len = ((tmp_len % CEPH_PAGE_SIZE) ?
+      (tmp_len - (tmp_len % CEPH_PAGE_SIZE) + CEPH_PAGE_SIZE) :
       tmp_len);
     return std::make_pair(off, len);
   }
