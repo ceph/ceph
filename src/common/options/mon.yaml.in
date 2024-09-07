@@ -495,6 +495,13 @@ options:
   default: true
   services:
   - mon
+- name: mon_warn_on_pool_pg_creation_blocked
+  type: bool
+  level: dev
+  desc: issue CRIMSON_FLAG_OFF warning if necessery osd_pool_default_crimson flag is not set, as PG creation won't happen without it
+  default: false
+  services:
+  - mon
 - name: mon_allow_pool_size_one
   type: bool
   level: advanced
