@@ -20,7 +20,7 @@ parent.
 The live-migration process can also be used in an import-only mode where the
 source image remains unmodified and the target image can be linked to an image
 in another Ceph cluster or to an external data source such as a backing file,
-HTTP(s) file, or S3 object.
+HTTP(s) file, S3 object, or NBD export.
 
 The live-migration copy process can safely run in the background while the new
 target image is in use. There is currently a requirement to temporarily stop
@@ -145,8 +145,8 @@ The general format for the ``source-spec`` JSON is as follows::
         }
 
 The following formats are currently supported: ``native``, ``qcow``, and
-``raw``. The following streams are currently supported: ``file``, ``http``, and
-``s3``.
+``raw``. The following streams are currently supported: ``file``, ``http``,
+``s3``, and ``nbd``.
 
 Formats
 ~~~~~~~
@@ -306,6 +306,33 @@ as follows::
   stored in the config-key store via ``ceph config-key set <key-path> <value>``
   (e.g. ``ceph config-key set rbd/s3/access_key NX5QOQKC6BH2IDN8HC7A``).
 
+The ``nbd`` stream can be used to import from a remote NBD export. Its
+``source-spec`` JSON is encoded as follows::
+
+        {
+            <format unique parameters>
+            "stream": {
+                "type": "nbd",
+                "uri": "<nbd-uri>",
+            }
+        }
+
+For example, to import a raw-format image from an NBD export located at
+``nbd://nbd.ceph.com`` with export name ``image.raw``, its ``source-spec``
+JSON is encoded as follows::
+
+        {
+            "type": "raw",
+            "stream": {
+                "type": "nbd",
+                "uri": "nbd://nbd.ceph.com/image.raw",
+            }
+        }
+
+``nbd-uri`` parameter should follow the `NBD URI specification`_. The
+default NBD port is ``10809``.
+
+
 Execute Migration
 =================
 
@@ -370,3 +397,4 @@ to the original source image being restored::
 
 
 .. _layered images: ../rbd-snapshot/#layering
+.. _NBD URI specification: https://github.com/NetworkBlockDevice/nbd/blob/master/doc/uri.md
