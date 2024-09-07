@@ -8,6 +8,9 @@ overrides:
 tasks:
 - pexec:
     all:
+    # in order to work around a possible nvme-cli <-> libnvme linking issue
+    # See https://tracker.ceph.com/issues/67684
+    - sudo dnf remove nvme-cli -y
     - sudo dnf install runc nvmetcli nvme-cli -y
     - sudo sed -i 's/^#runtime = "crun"/runtime = "runc"/g' /usr/share/containers/containers.conf
     - sudo sed -i 's/runtime = "crun"/#runtime = "crun"/g' /usr/share/containers/containers.conf
