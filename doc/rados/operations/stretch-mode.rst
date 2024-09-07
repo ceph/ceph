@@ -259,7 +259,7 @@ possible, if needed.
 .. _Changing Monitor elections: ../change-mon-elections
 
 Exiting Stretch Mode
---------------------
+====================
 To exit stretch mode, run the following command:
 
 .. prompt:: bash $
