@@ -2555,6 +2555,7 @@ public:
       }
 
       notify_stack->cancel();
+      drain_all();
 
       return set_cr_done();
     }
