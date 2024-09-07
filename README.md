@@ -45,19 +45,21 @@ out the git submodules associated with it:
 
 ## Build Prerequisites
 
-*section last updated 27 Jul 2023*
+*section last updated 06 Sep 2024*
 
-Make sure that ``curl`` is installed. The Debian and Ubuntu ``apt`` command is
-provided here, but if you use a system with a different package manager, then
-you must use whatever command is the proper counterpart of this one:
+We provide the Debian and Ubuntu ``apt`` commands in this procedure. If you use
+a system with a different package manager, then you will have to use different
+commands. 
+
+#. Install ``curl``:
 
     apt install curl
 
-Install Debian or RPM package dependencies by running the following command:
+#. Install package dependencies by running the ``install-deps.sh`` script:
 
 	./install-deps.sh
 
-Install the ``python3-routes`` package:
+#. Install the ``python3-routes`` package:
 
     apt install python3-routes
 
