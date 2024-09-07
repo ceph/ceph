@@ -247,6 +247,34 @@ possible, if needed).
 
 .. _Changing Monitor elections: ../change-mon-elections
 
+Exiting Stretch Mode
+=====================
+To exit stretch mode, run the following command:
+
+.. prompt:: bash $
+
+   ceph mon disable_stretch_mode [{crush_rule}] --yes-i-really-mean-it
+
+
+.. describe:: {crush_rule}
+
+   The CRUSH rule that the user wants all pools to move back to. If this
+   is not specified, the pools will move back to the default CRUSH rule.
+
+   :Type: String
+   :Required: No.
+
+The command will move the cluster back to normal mode,
+and the cluster will no longer be in stretch mode.
+All pools will move its ``size`` and ``min_size``
+back to the default values it started with.
+At this point the user is responsible for scaling down the cluster
+to the desired number of OSDs if they choose to operate with less number of OSDs.
+
+Please note that the command will not execute when the cluster is in
+``recovery stretch mode``. The command will only execute when the cluster
+is in ``degraded stretch mode`` or ``healthy stretch mode``.
+
 Limitations of Stretch Mode 
 ===========================
 When using stretch mode, OSDs must be located at exactly two sites. 
