@@ -802,8 +802,14 @@ int NVMeofGwMap::blocklist_gw(
 {
   // find_already_created_gw(gw_id, group_key);
   NvmeGwMonState& gw_map = created_gws[group_key][gw_id];
+  NvmeNonceVector nonces;
+  for (auto& state_itr: gw_map.sm_state) {
+    // to make blocklist on all clusters of the failing GW
+    nonces.insert(nonces.end(), gw_map.nonce_map[state_itr.first].begin(),
+        gw_map.nonce_map[state_itr.first].end());
+  }
 
-  if (gw_map.nonce_map[grpid].size() > 0) {
+  if (nonces.size() > 0) {
     NvmeNonceVector &nonce_vector = gw_map.nonce_map[grpid];;
     std::string str = "[";
     entity_addrvec_t addr_vect;
@@ -817,10 +823,10 @@ int NVMeofGwMap::blocklist_gw(
       str += it;
     }
     str += "]";
-    bool rc = addr_vect.parse(&str[0]);
-    dout(10) << str << " rc " << rc <<  " network vector: " << addr_vect
+    bool success = addr_vect.parse(&str[0]);
+    dout(10) << str << " parse success " << success <<  " network vector: " << addr_vect
 	     << " " << addr_vect.size() << dendl;
-    if (rc) {
+    if (!success) {
       return 1;
     }
 
