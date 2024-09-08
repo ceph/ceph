@@ -191,6 +191,13 @@ RADOS
   configurations.
 * RADOS: Scrub scheduling behavior has been improved.
 
+Crimson/Seastore
+~~~~~~~~~~~~~~~~
+
+* Crimson's first tech preview release!
+  Supporting RBD workloads on Replicated pools.
+  For more information please visit: https://ceph.io/en/news/crimson
+
 RBD
 ~~~
 
