@@ -2220,7 +2220,7 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
   // that made any of the targets into a high-priority one. All that's left:
   // delay the specific target that was aborted.
 
-  auto& trgt = m_scrub_job->delay_on_failure(aborted_target.level(), 5s, issue,
+  auto& trgt = m_scrub_job->delay_on_failure(aborted_target.level(), issue,
       scrub_clock_now);
 
   /// \todo complete the merging of the deadline & target for non-hp targets
@@ -2251,8 +2251,7 @@ void PgScrubber::requeue_penalized(
     return;
   }
   /// \todo fix the 5s' to use a cause-specific delay parameter
-  auto& trgt =
-      m_scrub_job->delay_on_failure(s_or_d, 5s, cause, scrub_clock_now);
+  auto& trgt = m_scrub_job->delay_on_failure(s_or_d, cause, scrub_clock_now);
   ceph_assert(!trgt.queued);
   m_osds->get_scrub_services().enqueue_target(trgt);
   trgt.queued = true;
@@ -2274,7 +2273,7 @@ void PgScrubber::requeue_penalized(
       m_osds->get_scrub_services().dequeue_target(m_pg_id, sister_level);
       trgt2.queued = false;
     }
-    m_scrub_job->delay_on_failure(sister_level, 5s, cause, scrub_clock_now);
+    m_scrub_job->delay_on_failure(sister_level, cause, scrub_clock_now);
     m_osds->get_scrub_services().enqueue_target(trgt2);
     trgt2.queued = true;
   }
@@ -2333,7 +2332,8 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
     // i.e. some time before setting 'snaptrim'.
     dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
     requeue_penalized(
-	s_or_d, delay_both_targets_t::yes, delay_cause_t::pg_state, clock_now);
+	s_or_d, delay_both_targets_t::yes, delay_cause_t::snap_trimming,
+	clock_now);
     return schedule_result_t::target_specific_failure;
   }
 

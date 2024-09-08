@@ -520,6 +520,70 @@ options:
     stats (inc. scrub/block duration) every this many seconds.
   default: 120
   with_legacy: false
+- name: osd_scrub_retry_delay
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying a PG that has failed a prior scrub.
+  long_desc: Minimum delay after a failed attempt to scrub a PG. The delay is
+    either applied to one of the scheduled scrubs for the PG (the next shallow
+    scrub or the next deep scrub), or to both.
+    This is a default value, used when the cause of the delay does not have an
+    associated configuration option. See the 'see also' for the configuration
+    options for some delay reasons that have their own configuration.
+  default: 30
+  min: 1
+  see_also:
+  - osd_scrub_retry_pg_state
+  - osd_scrub_retry_after_noscrub
+  - osd_scrub_retry_new_interval
+  - osd_scrub_retry_trimming
+  with_legacy: false
+- name: osd_scrub_retry_after_noscrub
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying to scrub a PG at a specific level
+    after detecting a no-scrub or no-deep-scrub flag
+  long_desc: Minimum delay after a failed attempt to scrub a PG at a level
+    (shallow or deep) that is disabled by cluster or pool no-scrub or no-deep-scrub
+    flags.
+  default: 60
+  min: 1
+  see_also:
+  - osd_scrub_retry_delay
+  with_legacy: false
+- name: osd_scrub_retry_pg_state
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying to scrub a previously inactive/not-clean PG
+  long_desc: Minimum delay after a failed attempt to scrub a PG that is not
+    active and clean.
+  default: 60
+  min: 1
+  see_also:
+  - osd_scrub_retry_delay
+  with_legacy: false
+- name: osd_scrub_retry_trimming
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying to scrub a previously snap-trimming PG
+  long_desc: Minimum delay after a failed attempt to scrub a PG that was performing
+    snap trimming and not available for scrubbing.
+  default: 10
+  min: 1
+  see_also:
+  - osd_scrub_retry_delay
+  with_legacy: false
+- name: osd_scrub_retry_new_interval
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying a scrub aborted on a new interval
+  long_desc: Minimum delay before retrying, after a scrub was aborted as the
+    PG interval changed.
+  default: 10
+  min: 1
+  see_also:
+  - osd_scrub_retry_delay
+  with_legacy: false
 - name: osd_scrub_disable_reservation_queuing
   type: bool
   level: advanced

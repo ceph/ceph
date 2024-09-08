@@ -551,6 +551,10 @@ struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
 
   /// the time when the session was initiated
   ScrubTimePoint m_session_started_at{ScrubClock::now()};
+
+  /// abort reason - if known. Determines the delay time imposed on the
+  /// failed scrub target.
+  std::optional<Scrub::delay_cause_t> m_abort_reason{std::nullopt};
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, Session>, NamedSimply {

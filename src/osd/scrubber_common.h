@@ -229,7 +229,8 @@ enum class delay_cause_t {
   none,		    ///< scrub attempt was successful
   replicas,	    ///< failed to reserve replicas
   flags,	    ///< noscrub or nodeep-scrub
-  pg_state,	    ///< e.g. snap-trimming
+  pg_state,	    ///< not active+clean
+  snap_trimming,    ///< snap-trimming is in progress
   restricted_time,  ///< time restrictions or busy CPU
   local_resources,  ///< too many scrubbing PGs
   aborted,	    ///< scrub was aborted w/ unspecified reason
@@ -252,6 +253,7 @@ struct formatter<Scrub::delay_cause_t> : ::fmt::formatter<std::string_view> {
       case replicas:            desc = "replicas"; break;
       case flags:               desc = "noscrub"; break;
       case pg_state:            desc = "pg-state"; break;
+      case snap_trimming:       desc = "snap-trim"; break;
       case restricted_time:     desc = "time/load"; break;
       case local_resources:     desc = "local-cnt"; break;
       case aborted:             desc = "aborted"; break;

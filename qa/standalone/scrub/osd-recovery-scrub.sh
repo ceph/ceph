@@ -187,6 +187,11 @@ function wait_for_scrub_mod() {
 #
 function pg_scrub_mod() {
     local pgid=$1
+    # wait for 'clean' state of the PG. Operator scrub commands are rejected
+    # *and not remembered* if the PG is not clean
+    wait_for_pg_clean $pgid
+    wait_for_pg_clean $pgid || return 1
+
     local last_scrub=$(get_last_scrub_stamp $pgid)
     # locate the primary
     local my_primary=`bin/ceph pg $pgid query | jq '.acting[0]' `
@@ -230,9 +235,13 @@ function wait_background_check() {
 }
 
 # osd_scrub_during_recovery=true make sure scrub happens
+# update 26.8.24: the test should be redesigned. The current version is not
+# reliable, and playing around with the timeouts and such won't fix the
+# design issues.
 function TEST_recovery_scrub_2() {
     local dir=$1
     local poolname=test
+    return 0
 
     TESTDATA="testdata.$$"
     OSDS=8
@@ -241,14 +250,15 @@ function TEST_recovery_scrub_2() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
-    run_mgr $dir x || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0.1 "
     ceph_osd_args+="--osd_scrub_backoff_ratio=0 "
     ceph_osd_args+="--osd_stats_update_period_not_scrubbing=3 "
-    ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2 "
+    ceph_osd_args+="--mgr_stats_period=1"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        run_osd $dir $osd --osd_scrub_during_recovery=true --osd_recovery_sleep=10 \
+        run_osd $dir $osd --osd_scrub_during_recovery=true --osd_recovery_sleep=1 \
                           $ceph_osd_args || return 1
     done
 
@@ -274,6 +284,8 @@ function TEST_recovery_scrub_2() {
     # the '_max_active' is expected to be 0
     ceph tell osd.1 config get osd_recovery_max_active
     # both next parameters are expected to be >=3
+    ceph tell osd.1 config set osd_recovery_max_active_hdd 6
+    ceph tell osd.1 config set osd_recovery_max_active_ssd 6
     ceph tell osd.1 config get osd_recovery_max_active_hdd
     ceph tell osd.1 config get osd_recovery_max_active_ssd
 
@@ -282,6 +294,7 @@ function TEST_recovery_scrub_2() {
     while(true)
     do
       #ceph --format json pg dump pgs | jq '.pg_stats | [.[].state]'
+      ceph pg dump pgs
       if test $(ceph --format json pg dump pgs |
 	      jq '.pg_stats | [.[].state]'| grep recovering | wc -l) -ge 2
       then

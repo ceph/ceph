@@ -239,14 +239,14 @@ class ScrubJob {
 
   /**
    * For the level specified, set the 'not-before' time to 'now+delay',
-   * so that this scrub target
-   * would not be retried before 'delay' seconds have passed.
+   * so that this scrub target would not be retried before the required
+   * delay seconds have passed.
+   * The delay is determined based on the 'cause' parameter.
    * The 'last_issue' is updated to the cause of the delay.
    * \returns a reference to the target that was modified.
    */
   [[maybe_unused]] SchedTarget& delay_on_failure(
       scrub_level_t level,
-      std::chrono::seconds delay,
       delay_cause_t delay_cause,
       utime_t scrub_clock_now);
 
