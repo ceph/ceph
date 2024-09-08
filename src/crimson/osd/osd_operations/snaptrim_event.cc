@@ -197,7 +197,7 @@ SnapTrimObjSubEvent::remove_clone(
     pg->get_collection_ref()->get_cid(),
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD});
   obc->obs.oi = object_info_t(coid);
-  return OpsExecuter::snap_map_remove(coid, pg->snap_mapper, pg->osdriver, txn);
+  return interruptor::now();
 }
 
 void SnapTrimObjSubEvent::remove_head_whiteout(
