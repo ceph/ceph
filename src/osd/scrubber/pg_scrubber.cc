@@ -1698,9 +1698,15 @@ void PgScrubber::set_op_parameters(
 
   m_flags.check_repair = m_active_target->urgency() == urgency_t::after_repair;
   m_flags.auto_repair = false;
-  m_flags.priority = (request.must_scrub || request.need_auto)
-		       ? get_pg_cct()->_conf->osd_requested_scrub_priority
-		       : m_pg->get_scrub_priority();
+  if (ScrubJob::has_high_queue_priority(m_active_target->urgency())) {
+    // specific high priority scrubs - high queue priority
+    /// \todo consider - do we really want high queue priority for any scrub?
+    m_flags.priority = get_pg_cct()->_conf->osd_requested_scrub_priority;
+  } else {
+    // regular, low-priority scrubs - low queue priority - unless blocking
+    // client I/O
+    m_flags.priority = m_pg->get_scrub_priority();
+  }
 
   // 'deep-on-error' is set for periodic shallow scrubs, if allowed
   // by the environment
@@ -1722,9 +1728,6 @@ void PgScrubber::set_op_parameters(
     if (pg_cond.can_autorepair || request.auto_repair) {
       m_flags.auto_repair = true;
     }
-  } else {
-    ceph_assert(!request.must_deep_scrub);
-    ceph_assert(!request.need_auto);
   }
 
   // m_is_repair is set for either 'must_repair' or 'repair-on-the-go' (i.e.

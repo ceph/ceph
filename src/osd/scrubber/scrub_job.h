@@ -366,6 +366,8 @@ class ScrubJob {
   static bool observes_random_backoff(urgency_t urgency);
 
   static bool observes_recovery(urgency_t urgency);
+
+  static bool has_high_queue_priority(urgency_t urgency);
 };
 }  // namespace Scrub
 
