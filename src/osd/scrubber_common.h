@@ -314,21 +314,11 @@ struct requested_scrub_t {
    *  - scrub_finish() - if can_autorepair is set, and we have errors
    *
    * If set, will prevent the OSD from casually postponing our scrub. When
-   * scrubbing starts, will cause must_deep_scrub and auto_repair to
-   * be set.
+   * scrubbing starts, will cause auto_repair to be set.
    */
   bool need_auto{false};
 
   /**
-   * Set for scrub-after-recovery just before we initiate the recovery deep
-   * scrub, or if scrub_requested() was called with either need_auto ot repair.
-   * Affects PG_STATE_DEEP_SCRUB.
-   */
-  bool must_deep_scrub{false};
-
-  /**
-   * If set, we should see must_deep_scrub, too
-   *
    * - 'must_repair' is checked by the OSD when scheduling the scrubs.
    * - also checked & cleared at pg::queue_scrub()
    */
@@ -353,10 +343,9 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{}{}{})",
+                          "(plnd:{}{}{}{})",
                           rs.must_repair ? " must_repair" : "",
                           rs.auto_repair ? " auto_repair" : "",
-                          rs.must_deep_scrub ? " must_deep_scrub" : "",
                           rs.need_auto ? " need_auto" : "",
                           rs.req_scrub ? " req_scrub" : "");
   }

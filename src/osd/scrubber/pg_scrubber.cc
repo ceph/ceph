@@ -65,8 +65,6 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
     out << " MUST_REPAIR";
   if (sf.auto_repair)
     out << " planned AUTO_REPAIR";
-  if (sf.must_deep_scrub)
-    out << " MUST_DEEP_SCRUB";
   if (sf.need_auto)
     out << " NEED_AUTO";
   if (sf.req_scrub)
@@ -491,7 +489,7 @@ bool PgScrubber::flags_to_deep_priority(
     return false;
   }
 
-  if (m_planned_scrub.need_auto || m_planned_scrub.must_deep_scrub) {
+  if (m_planned_scrub.need_auto) {
     // Set the smallest time that isn't utime_t()
     entry.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
     entry.urgency = urgency_t::operator_requested;
@@ -644,7 +642,6 @@ scrub_level_t PgScrubber::scrub_requested(
   }
 
   // modifying the planned-scrub flags - to be removed shortly
-  req_flags.must_deep_scrub = deep_requested;
   req_flags.must_repair = repair_requested;
   // User might intervene, so clear this
   req_flags.need_auto = false;
@@ -1707,6 +1704,7 @@ void PgScrubber::set_op_parameters(
 
   // 'deep-on-error' is set for periodic shallow scrubs, if allowed
   // by the environment
+  // RRR didn't we remove the 'periodic' requirement?
   if (m_active_target->is_shallow() && pg_cond.can_autorepair &&
       m_active_target->urgency() == urgency_t::periodic_regular) {
     m_flags.deep_scrub_on_error = true;
@@ -2397,13 +2395,15 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
   return schedule_result_t::scrub_initiated;
 }
 
+
 /*
  * note that the flags-set fetched from the PG (m_pg->m_planned_scrub)
  * is cleared once scrubbing starts; Some of the values dumped here are
  * thus transitory.
  */
-void PgScrubber::dump_scrubber(ceph::Formatter* f,
-			       const requested_scrub_t& request_flags) const
+void PgScrubber::dump_scrubber(
+    ceph::Formatter* f,
+    const requested_scrub_t& request_flags) const
 {
   f->open_object_section("scrubber");
 
@@ -2415,11 +2415,13 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f,
     const auto now_is = ceph_clock_now();
     const auto& earliest = m_scrub_job->earliest_target(now_is);
     f->dump_bool("must_scrub", earliest.is_high_priority());
-    f->dump_bool("must_deep_scrub", request_flags.must_deep_scrub); // RRR
+    f->dump_bool(
+	"must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
     f->dump_bool("must_repair", request_flags.must_repair);
     f->dump_bool("need_auto", request_flags.need_auto);
 
-    f->dump_stream("scrub_reg_stamp") << earliest.sched_info.schedule.not_before;
+    f->dump_stream("scrub_reg_stamp")
+	<< earliest.sched_info.schedule.not_before;
     auto sched_state = m_scrub_job->scheduling_state(now_is);
     f->dump_string("schedule", sched_state);
   }
@@ -2432,6 +2434,7 @@ void PgScrubber::dump_scrubber(ceph::Formatter* f,
 
   f->close_section();
 }
+
 
 void PgScrubber::dump_active_scrubber(ceph::Formatter* f) const
 {
