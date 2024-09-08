@@ -875,7 +875,7 @@ Shell::Action action_list(
   {"group", "list"}, {"group", "ls"}, "List rbd groups.",
   "", &get_list_arguments, &execute_list);
 Shell::Action action_rename(
-  {"group", "rename"}, {}, "Rename a group within pool.",
+  {"group", "rename"}, {}, "Rename a group within its pool or namespace.",
   "", &get_rename_arguments, &execute_rename);
 Shell::Action action_add(
   {"group", "image", "add"}, {}, "Add an image to a group.",
