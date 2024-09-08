@@ -3,7 +3,7 @@
 SCRIPTNAME="$(basename "${0}")"
 BASEDIR="$(readlink -f "$(dirname "${0}")")"
 
-if [ ! -d .git ]; then
+if [ ! -e .git ]; then
     echo "$SCRIPTNAME: Full path to the script: $BASEDIR/$SCRIPTNAME"
     echo "$SCRIPTNAME: No .git present. Run this from the base dir of the git checkout."
     exit 1
