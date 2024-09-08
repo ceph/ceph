@@ -963,6 +963,15 @@ PG::BackgroundProcessLock::lock() noexcept
   return interruptor::make_interruptible(mutex.lock());
 }
 
+// We may need to rollback the ObjectContext on failed op execution.
+// Copy the current obc before mutating it in order to recover on failures.
+ObjectContextRef duplicate_obc(const ObjectContextRef &obc) {
+  ObjectContextRef object_context = new ObjectContext(obc->obs.oi.soid);
+  object_context->obs = obc->obs;
+  object_context->ssc = new SnapSetContext(*obc->ssc);
+  return object_context;
+}
+
 template <class Ret, class SuccessFunc, class FailureFunc>
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ret>>
 PG::do_osd_ops_execute(
@@ -975,9 +984,9 @@ PG::do_osd_ops_execute(
   FailureFunc&& failure_func)
 {
   assert(ox);
-  auto rollbacker = ox->create_rollbacker([this] (auto& obc) {
-    return obc_loader.reload_obc(obc).handle_error_interruptible(
-      load_obc_ertr::assert_all{"can't live with object state messed up"});
+  auto rollbacker = ox->create_rollbacker(
+    [object_context=duplicate_obc(obc)] (auto& obc) mutable {
+    obc->update_from(*object_context);
   });
   auto failure_func_ptr = seastar::make_lw_shared(std::move(failure_func));
   return interruptor::do_for_each(ops, [ox](OSDOp& osd_op) {

@@ -619,7 +619,10 @@ OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified(
     ox->obc->get_oid(),
     e,
     need_rollback);
-  return need_rollback ? func(*ox->obc) : interruptor::now();
+  if (need_rollback) {
+    func(ox->obc);
+  }
+  return interruptor::now();
 }
 
 // PgOpsExecuter -- a class for executing ops targeting a certain PG.
