@@ -54,6 +54,9 @@ public:
   int process_gw_map_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     bool &propose_pending);
+  int process_gw_map_gw_no_subsystems(
+    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+    bool &propose_pending);
   void update_active_timers(bool &propose_pending);
   void handle_abandoned_ana_groups(bool &propose_pending);
   void handle_removed_subsystems(
@@ -77,6 +80,9 @@ private:
   void fsm_handle_gw_down(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
+  void fsm_handle_gw_no_subsystems(
+     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+     gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
   void fsm_handle_gw_delete(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     gw_states_per_group_t state, NvmeAnaGrpId grpid,  bool &map_modified);
