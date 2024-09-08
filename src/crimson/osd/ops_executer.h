@@ -427,7 +427,7 @@ public:
     const std::vector<OSDOp>& ops,
     SnapMapper& snap_mapper,
     OSDriver& osdriver,
-    MutFunc&& mut_func) &&;
+    MutFunc mut_func) &&;
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
   void fill_op_params(modified_by m);
@@ -513,7 +513,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
   const std::vector<OSDOp>& ops,
   SnapMapper& snap_mapper,
   OSDriver& osdriver,
-  MutFunc&& mut_func) &&
+  MutFunc mut_func) &&
 {
   const bool want_mutate = !txn.empty();
   // osd_op_params are instantiated by every wr-like operation.
