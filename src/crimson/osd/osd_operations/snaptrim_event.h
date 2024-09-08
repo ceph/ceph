@@ -155,7 +155,6 @@ private:
       rid,
       mt,
       return_code);
-    osd_op_p.at_version.version++;
     return log_entries.back();
   }
 

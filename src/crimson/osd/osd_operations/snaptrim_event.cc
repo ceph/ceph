@@ -363,6 +363,7 @@ SnapTrimObjSubEvent::remove_or_update(
       // save head snapset
       logger().debug("{}: {} new snapset {} on {}",
 		     *this, coid, head_obc->ssc->snapset, head_obc->obs.oi);
+      osd_op_p.at_version.version++;
       if (head_obc->ssc->snapset.clones.empty() && head_obc->obs.oi.is_whiteout()) {
 	remove_head_whiteout(obc, head_obc, txn);
       } else {
