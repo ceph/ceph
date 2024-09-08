@@ -299,17 +299,6 @@ struct PgScrubBeListener {
  * for the next scrub, and one frozen at initiation (i.e. in pg::queue_scrub())
  */
 struct requested_scrub_t {
-
-  // flags to indicate explicitly requested scrubs (by admin):
-  // bool must_scrub, must_deep_scrub, must_repair, need_auto;
-
-  /**
-   * 'must_scrub' is set by an admin command (or by need_auto).
-   *  Affects the priority of the scrubbing, and the sleep periods
-   *  during the scrub.
-   */
-  bool must_scrub{false};
-
   /**
    * scrub must not be aborted.
    * Set for explicitly requested scrubs, and for scrubs originated by the
@@ -325,7 +314,7 @@ struct requested_scrub_t {
    *  - scrub_finish() - if can_autorepair is set, and we have errors
    *
    * If set, will prevent the OSD from casually postponing our scrub. When
-   * scrubbing starts, will cause must_scrub, must_deep_scrub and auto_repair to
+   * scrubbing starts, will cause must_deep_scrub and auto_repair to
    * be set.
    */
   bool need_auto{false};
@@ -338,7 +327,7 @@ struct requested_scrub_t {
   bool must_deep_scrub{false};
 
   /**
-   * If set, we should see must_deep_scrub & must_scrub, too
+   * If set, we should see must_deep_scrub, too
    *
    * - 'must_repair' is checked by the OSD when scheduling the scrubs.
    * - also checked & cleared at pg::queue_scrub()
@@ -364,11 +353,10 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{}{}{}{})",
+                          "(plnd:{}{}{}{}{})",
                           rs.must_repair ? " must_repair" : "",
                           rs.auto_repair ? " auto_repair" : "",
                           rs.must_deep_scrub ? " must_deep_scrub" : "",
-                          rs.must_scrub ? " must_scrub" : "",
                           rs.need_auto ? " need_auto" : "",
                           rs.req_scrub ? " req_scrub" : "");
   }

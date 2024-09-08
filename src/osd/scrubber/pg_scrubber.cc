@@ -67,8 +67,6 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
     out << " planned AUTO_REPAIR";
   if (sf.must_deep_scrub)
     out << " MUST_DEEP_SCRUB";
-  if (sf.must_scrub)
-    out << " MUST_SCRUB";
   if (sf.need_auto)
     out << " NEED_AUTO";
   if (sf.req_scrub)
@@ -646,7 +644,6 @@ scrub_level_t PgScrubber::scrub_requested(
   }
 
   // modifying the planned-scrub flags - to be removed shortly
-  req_flags.must_scrub = true;
   req_flags.must_deep_scrub = deep_requested;
   req_flags.must_repair = repair_requested;
   // User might intervene, so clear this
@@ -2183,8 +2180,6 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
   // e.g. - the 'aborted_schedule' data should be passed thru the scrubber.
   // In this current patchwork, for example, we are only guessing at
   // the original value of 'must_deep_scrub'.
-  m_planned_scrub.must_scrub = m_planned_scrub.must_deep_scrub ||
-			       m_planned_scrub.must_scrub;
   m_planned_scrub.must_repair = m_planned_scrub.must_repair || m_is_repair;
   m_planned_scrub.need_auto = m_planned_scrub.need_auto || m_flags.auto_repair;
 
