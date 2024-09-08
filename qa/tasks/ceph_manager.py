@@ -2796,6 +2796,59 @@ class CephManager:
                  num += 1
         return num
 
+    def _print_not_active_clean_pg(self, pgs):
+        """
+        Print the PGs that are not active+clean.
+        """
+        for pg in pgs:
+            if not (pg['state'].count('active') and
+                    pg['state'].count('clean') and
+                    not pg['state'].count('stale')):
+                log.debug(
+                    "PG %s is not active+clean, but %s",
+                    pg['pgid'], pg['state']
+                )
+
+    def pg_all_active_clean(self):
+        """
+        Check if all pgs are active+clean
+        return: True if all pgs are active+clean else False
+        """
+        pgs = self.get_pg_stats()
+        result = self._get_num_active_clean(pgs) == len(pgs)
+        if result:
+            log.debug("All PGs are active+clean")
+        else:
+            log.debug("Not all PGs are active+clean")
+            self._print_not_active_clean_pg(pgs)
+        return result
+
+    def _print_not_active_pg(self, pgs):
+        """
+        Print the PGs that are not active.
+        """
+        for pg in pgs:
+            if not (pg['state'].count('active')
+                    and not pg['state'].count('stale')):
+                log.debug(
+                    "PG %s is not active, but %s",
+                    pg['pgid'], pg['state']
+                )
+
+    def pg_all_active(self):
+        """
+        Check if all pgs are active
+        return: True if all pgs are active else False
+        """
+        pgs = self.get_pg_stats()
+        result = self._get_num_active(pgs) == len(pgs)
+        if result:
+            log.debug("All PGs are active")
+        else:
+            log.debug("Not all PGs are active")
+            self._print_not_active_pg(pgs)
+        return result
+
     def is_clean(self):
         """
         True if all pgs are clean
@@ -3237,6 +3290,26 @@ class CephManager:
             self.make_admin_daemon_dir(remote)
         self.ctx.daemons.get_daemon('mgr', mgr, self.cluster).restart()
 
+    def get_crush_rule_id(self, crush_rule_name):
+        """
+        Get crush rule id by name
+        :returns: int -- crush rule id
+        """
+        out = self.raw_cluster_cmd('osd', 'crush', 'rule', 'dump', '--format=json')
+        j = json.loads('\n'.join(out.split('\n')[1:]))
+        for rule in j:
+            if rule['rule_name'] == crush_rule_name:
+                return rule['rule_id']
+        assert False, 'rule %s not found' % crush_rule_name
+
+    def get_mon_dump_json(self):
+        """
+        mon dump --format=json converted to a python object
+        :returns: the python object
+        """
+        out = self.raw_cluster_cmd('mon', 'dump', '--format=json')
+        return json.loads('\n'.join(out.split('\n')[1:]))
+
     def get_mon_status(self, mon):
         """
         Extract all the monitor status information from the cluster
@@ -3339,6 +3412,23 @@ class CephManager:
             return {}
         self.log(task_status)
         return task_status
+
+    # Stretch mode related functions
+    def is_degraded_stretch_mode(self):
+        """
+        Return whether the cluster is in degraded stretch mode
+        """
+        try:
+            osdmap = self.get_osd_dump_json()
+            stretch_mode = osdmap.get('stretch_mode', {})
+            degraded_stretch_mode = stretch_mode.get('degraded_stretch_mode', 0)
+            self.log("is_degraded_stretch_mode: {0}".format(degraded_stretch_mode))
+            return degraded_stretch_mode == 1
+        except (TypeError, AttributeError) as e:
+            # Log the error or handle it as needed
+            self.log("Error accessing degraded_stretch_mode: {0}".format(e))
+            return False
+
 
 def utility_task(name):
     """
