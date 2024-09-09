@@ -1866,12 +1866,7 @@ public:
 				 error_repo, entry_timestamp, lease_cr,
 				 bucket_shard_cache, &*marker_tracker, tn),
 			       sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
-			       [&](uint64_t stack_id, int ret) {
-                                if (ret < 0) {
-                                  retcode = ret;
-                                }
-                                return retcode;
-                                });
+             std::nullopt);
           }
           sync_marker.marker = iter->first;
         }
