@@ -96,6 +96,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   clusterDetailsArray: any[];
   prometheusConnectionErrors: any[] = [];
   reconnectionError: string;
+  configSet = false;
 
   constructor(
     private multiClusterService: MultiClusterService,
@@ -122,7 +123,23 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.columns = [
+    this.columns = this.getColumns();
+    this.subs.add(
+      this.multiClusterService.subscribe((resp: any) => {
+        this.handleMultiClusterResponse(resp);
+      })
+    );
+    this.subs.add(
+      this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
+        this.clusterTokenStatus = resp;
+      })
+    );
+    this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
+    this.handlePrometheusDataFetching();
+  }
+
+  private getColumns() {
+    return [
       {
         prop: 'cluster',
         name: $localize`Cluster Name`,
@@ -167,46 +184,50 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       { prop: 'hosts', name: $localize`Hosts`, flexGrow: 1 },
       { prop: 'osds', name: $localize`OSDs`, flexGrow: 1 }
     ];
+  }
 
-    this.subs.add(
-      this.multiClusterService.subscribe((resp: any) => {
-        this.isMultiCluster = Object.keys(resp['config']).length > 1;
-        this.clusterDetailsArray = Object.values(resp['config']).flat();
-        const hubUrl = resp['hub_url'];
-        for (const key in resp['config']) {
-          if (resp['config'].hasOwnProperty(key)) {
-            const cluster = resp['config'][key][0];
-            if (hubUrl === cluster.url) {
-              this.localClusterName = cluster.name;
-              break;
-            }
+  private handleMultiClusterResponse(resp: any): void {
+    if (Object.keys(resp).length === 0) {
+      this.multiClusterService.setLocalClusterConfig().subscribe(() => {
+        this.configSet = true;
+        this.processClusterConfig(resp);
+      });
+    } else {
+      this.configSet = true;
+      this.processClusterConfig(resp);
+    }
+  }
+
+  private processClusterConfig(resp: any): void {
+    if (this.configSet) {
+      this.isMultiCluster = Object.keys(resp['config']).length > 1;
+      this.clusterDetailsArray = Object.values(resp['config']).flat();
+      const hubUrl = resp['hub_url'];
+      for (const key in resp['config']) {
+        if (resp['config'].hasOwnProperty(key)) {
+          const cluster = resp['config'][key][0];
+          if (hubUrl === cluster.url) {
+            this.localClusterName = cluster.name;
+            break;
           }
         }
-      })
-    );
-    this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
-    this.subs.add(
-      this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
-        this.clusterTokenStatus = resp;
-      })
-    );
+      }
+    }
+  }
 
+  private handlePrometheusDataFetching(): void {
     this.isClusterAdded = this.multiClusterService.isClusterAdded();
-
-    if (this.isClusterAdded) {
+    const delay = this.isClusterAdded ? this.PROMETHEUS_DELAY : this.LOAD_DELAY;
+    this.showDeletionMessage = this.multiClusterService.showPrometheusDelayMessage();
+    if (this.showDeletionMessage || this.isClusterAdded) {
       setTimeout(() => {
         this.getPrometheusData(this.prometheusService.lastHourDateObject);
-        this.multiClusterService.isClusterAdded(false);
-      }, this.PROMETHEUS_DELAY);
+        if (this.isClusterAdded) {
+          this.multiClusterService.isClusterAdded(false);
+        }
+      }, delay);
     } else {
-      this.showDeletionMessage = this.multiClusterService.showPrometheusDelayMessage();
-      if (this.showDeletionMessage) {
-        setTimeout(() => {
-          this.getPrometheusData(this.prometheusService.lastHourDateObject);
-        }, this.LOAD_DELAY);
-      } else {
-        this.getPrometheusData(this.prometheusService.lastHourDateObject);
-      }
+      this.getPrometheusData(this.prometheusService.lastHourDateObject);
     }
   }
 

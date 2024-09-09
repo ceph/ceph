@@ -118,6 +118,10 @@ export class MultiClusterService {
     return this.http.put('api/multi-cluster/set_config', { config: cluster });
   }
 
+  setLocalClusterConfig() {
+    return this.http.put('api/multi-cluster/set_local_cluster_config', {});
+  }
+
   getCluster() {
     return this.http.get('api/multi-cluster/get_config');
   }
