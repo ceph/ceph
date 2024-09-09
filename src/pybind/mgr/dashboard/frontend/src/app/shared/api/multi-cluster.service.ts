@@ -17,6 +17,8 @@ export class MultiClusterService {
   tokenStatusSource$ = this.tokenStatusSource.asObservable();
   showDeletionMessage = false;
   isClusterAddedFlag = false;
+  prometheusConnectionError: any[] = [];
+
   constructor(
     private http: HttpClient,
     private timerService: TimerService,
@@ -116,6 +118,10 @@ export class MultiClusterService {
     return this.http.put('api/multi-cluster/set_config', { config: cluster });
   }
 
+  setLocalClusterConfig() {
+    return this.http.put('api/multi-cluster/set_local_cluster_config', {});
+  }
+
   getCluster() {
     return this.http.get('api/multi-cluster/get_config');
   }
@@ -170,16 +176,23 @@ export class MultiClusterService {
     password: string,
     ssl = false,
     cert = '',
-    ttl: number
+    ttl: number,
+    cluster_token?: string
   ) {
-    return this.http.put('api/multi-cluster/reconnect_cluster', {
+    const requestBody: any = {
       url,
       username,
       password,
       ssl_verify: ssl,
       ssl_certificate: cert,
       ttl: ttl
-    });
+    };
+
+    if (cluster_token) {
+      requestBody.cluster_token = cluster_token;
+    }
+
+    return this.http.put('api/multi-cluster/reconnect_cluster', requestBody);
   }
 
   private getClusterObserver() {
@@ -217,6 +230,13 @@ export class MultiClusterService {
       this.isClusterAddedFlag = isClusterAddedFlag;
     }
     return this.isClusterAddedFlag;
+  }
+
+  managePrometheusConnectionError(prometheusConnectionError?: any[]) {
+    if (prometheusConnectionError !== undefined) {
+      this.prometheusConnectionError = prometheusConnectionError;
+    }
+    return this.prometheusConnectionError;
   }
 
   refreshMultiCluster(currentRoute: string) {

@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
@@ -3173,6 +3174,19 @@ Then run the following:
 
     @handle_orch_error
     def set_prometheus_target(self, url: str) -> str:
+        try:
+            if url.startswith("http://") or url.startswith("https://"):
+                return f"Invalid service endpoint '{url}'. It should only be in the format host_ip:port."
+            parsed_url_with_scheme = urlparse(f'http://{url}')
+            host = parsed_url_with_scheme.hostname
+            port = parsed_url_with_scheme.port
+            if not host:
+                return "Invalid service endpoint. Host IP address is missing."
+            ipaddress.ip_address(host)
+            if port and (port <= 0 or port > 65535):
+                return f"Invalid port number '{port}'. The port must be between 1 and 65535."
+        except ValueError as e:
+            return f"Invalid service endpoint. {e}"
         prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
         if url not in prometheus_spec.targets:
             prometheus_spec.targets.append(url)
@@ -3218,6 +3232,14 @@ Then run the following:
         return {'user': user,
                 'password': password,
                 'certificate': self.cert_mgr.get_root_ca()}
+
+    @handle_orch_error
+    def get_security_config(self) -> Dict[str, bool]:
+        security_enabled, mgmt_gw_enabled, _ = self._get_security_config()
+        return {
+            'security_enabled': security_enabled,
+            'mgmt_gw_enabled': mgmt_gw_enabled
+        }
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:

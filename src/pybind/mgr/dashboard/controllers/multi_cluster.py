@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
 
 import base64
+import cherrypy
+import ipaddress
 import json
-import re
 import tempfile
+import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import requests
 
+from ..services.auth import JwtManager
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -18,6 +21,69 @@ from ..settings import Settings
 from ..tools import configure_cors
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
     EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission
+
+logger = logging.getLogger('controllers.multi_cluster')
+
+class PrometheusAccessInfo:
+    def __init__(self, user: str, password: str, certificate: str):
+        self.user = user
+        self.password = password
+        self.certificate = certificate
+
+    def to_dict(self) -> Dict:
+        return {
+            "user": self.user,
+            "password": self.password,
+            "certificate": self.certificate,
+        }
+
+
+class ClusterConfig:
+    def __init__(self, name: str, url: str, cluster_alias: str, user: str,
+                 token: Optional[str] = None, prometheus_url: Optional[str] = None,
+                 ssl_verify: Optional[bool] = None, ssl_certificate: Optional[str] = None,
+                 prometheus_access_info: Optional[PrometheusAccessInfo] = None):
+        self.name = name
+        self.url = url
+        self.cluster_alias = cluster_alias
+        self.user = user
+        self.token = token
+        self.prometheus_url = prometheus_url
+        self.ssl_verify = ssl_verify
+        self.ssl_certificate = ssl_certificate
+        self.prometheus_access_info = prometheus_access_info
+
+    def to_dict(self) -> Dict:
+        config_dict = {
+            "name": self.name,
+            "url": self.url,
+            "cluster_alias": self.cluster_alias,
+            "user": self.user,
+            "token": self.token,
+            "prometheus_url": self.prometheus_url,
+            "ssl_verify": self.ssl_verify,
+            "ssl_certificate": self.ssl_certificate,
+        }
+        if self.prometheus_access_info:
+            config_dict["prometheus_access_info"] = self.prometheus_access_info.to_dict()
+        return config_dict
+
+
+class MultiClusterConfig:
+    def __init__(self, current_url: str, current_user: str, hub_url: str,
+                 config: Dict[str, List[ClusterConfig]]):
+        self.current_url = current_url
+        self.current_user = current_user
+        self.hub_url = hub_url
+        self.config = config
+
+    def to_dict(self) -> Dict:
+        return {
+            "current_url": self.current_url,
+            "current_user": self.current_user,
+            "hub_url": self.hub_url,
+            "config": {key: [cluster.to_dict() for cluster in value] for key, value in self.config.items()}
+        }
 
 
 @APIRouter('/multi-cluster', Scope.CONFIG_OPT)
@@ -78,7 +144,8 @@ class MultiCluster(RESTController):
                 'ttl': ttl
             }
             cluster_token = self.check_cluster_connection(url, payload, username,
-                                                          ssl_verify, ssl_certificate)
+                                                          ssl_verify, ssl_certificate,
+                                                          'connect')
 
             cors_endpoints_string = self.get_cors_endpoints_string(hub_url)
 
@@ -107,14 +174,18 @@ class MultiCluster(RESTController):
             prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
                                          token=cluster_token, verify=ssl_verify,
                                          cert=ssl_certificate)
+            logger.info('prometheus_url: %s', prometheus_url)
+            prometheus_access_info = self._proxy('GET', url,
+                                                 'ui-api/multi-cluster/get_prometheus_access_info',  # noqa E501 #pylint: disable=line-too-long
+                                                 token=cluster_token, verify=ssl_verify,
+                                                 cert=ssl_certificate)
 
             _set_prometheus_targets(prometheus_url)
 
             self.set_multi_cluster_config(fsid, username, url, cluster_alias,
-                                          cluster_token, prometheus_url,
-                                          ssl_verify, ssl_certificate)
+                                          cluster_token, prometheus_url, ssl_verify,
+                                          ssl_certificate, prometheus_access_info)
             return True
-
         return False
 
     def get_cors_endpoints_string(self, hub_url):
@@ -137,7 +208,8 @@ class MultiCluster(RESTController):
         cors_endpoints_string = ", ".join(cors_endpoints_set)
         return cors_endpoints_string
 
-    def check_cluster_connection(self, url, payload, username, ssl_verify, ssl_certificate):
+    def check_cluster_connection(self, url, payload, username, ssl_verify, ssl_certificate,
+                                 action, cluster_token=None):
         try:
             hub_cluster_version = mgr.version.split('ceph version ')[1]
             multi_cluster_content = self._proxy('GET', url, 'api/multi-cluster/get_config',
@@ -175,58 +247,85 @@ class MultiCluster(RESTController):
 
         cluster_token = content['token']
 
+        if cluster_token:
+            self.check_connection_errors(url, cluster_token, ssl_verify, ssl_certificate, action)
+        return cluster_token
+
+    def check_connection_errors(self, url, cluster_token, ssl_verify, ssl_certificate, action):
         managed_by_clusters_content = self._proxy('GET', url, 'api/settings/MANAGED_BY_CLUSTERS',
                                                   token=cluster_token, verify=ssl_verify,
                                                   cert=ssl_certificate)
 
         managed_by_clusters_config = managed_by_clusters_content['value']
 
-        if len(managed_by_clusters_config) > 1:
+        if len(managed_by_clusters_config) > 1 and action == 'connect':
             raise DashboardException(msg='Cluster is already managed by another cluster',
                                      code='cluster_managed_by_another_cluster',
                                      component='multi-cluster')
-        return cluster_token
 
-    def set_multi_cluster_config(self, fsid, username, url, cluster_alias, token,
-                                 prometheus_url=None, ssl_verify=False, ssl_certificate=None):
-        multi_cluster_config = self.load_multi_cluster_config()
-        if fsid in multi_cluster_config['config']:
-            existing_entries = multi_cluster_config['config'][fsid]
+        self.check_security_config(url, cluster_token, ssl_verify, ssl_certificate)
+
+    def check_security_config(self, url, cluster_token, ssl_verify, ssl_certificate):
+        remote_security_config_content = self._proxy('GET', url,
+                                                     'api/multi-cluster/security_config',
+                                                     token=cluster_token, verify=ssl_verify,
+                                                     cert=ssl_certificate)
+        local_security_config_content = self._get_security_config()
+
+        if remote_security_config_content and local_security_config_content:
+            remote_security_enabled = remote_security_config_content['security_enabled']
+            local_security_enabled = local_security_config_content['security_enabled']
+
+            def raise_mismatch_exception(config_name, local_enabled, remote_enabled):
+                enabled_on = "local" if local_enabled else "remote"
+                disabled_on = "remote" if local_enabled else "local"
+                raise DashboardException(
+                    msg=f'{config_name} is enabled on the {enabled_on} cluster, but not on the {disabled_on} cluster. '  # noqa E501 #pylint: disable=line-too-long
+                        f'Both clusters should either have {config_name} enabled or disabled.',
+                    code=f'{config_name.lower()}_mismatch', component='multi-cluster'
+                )
+
+            if remote_security_enabled != local_security_enabled:
+                raise_mismatch_exception('Security', local_security_enabled,
+                                         remote_security_enabled)
+
+    def set_multi_cluster_config(self, fsid: str, username: str, url: str, cluster_alias: str, token: str,
+                                prometheus_url: Optional[str] = None, ssl_verify: bool = False,
+                                ssl_certificate: Optional[str] = None,
+                                prometheus_access_info: Optional[PrometheusAccessInfo] = None):
+        multi_cluster_config_dict = self.load_multi_cluster_config()
+        if isinstance(prometheus_access_info, dict):
+            prometheus_access_info = PrometheusAccessInfo(
+                user=prometheus_access_info.get('user', ''),
+                password=prometheus_access_info.get('password', ''),
+                certificate=prometheus_access_info.get('certificate', '')
+            )
+        if fsid in multi_cluster_config_dict['config']:
+            existing_entries = multi_cluster_config_dict['config'][fsid]
             if not any(entry['user'] == username for entry in existing_entries):
-                existing_entries.append({
-                    "name": fsid,
-                    "url": url,
-                    "cluster_alias": cluster_alias,
-                    "user": username,
-                    "token": token,
-                    "prometheus_url": prometheus_url if prometheus_url else '',
-                    "ssl_verify": ssl_verify,
-                    "ssl_certificate": ssl_certificate if ssl_certificate else ''
-                })
+                existing_entries.append(ClusterConfig(
+                    fsid, url, cluster_alias, username, token,
+                    prometheus_url, ssl_verify, ssl_certificate,
+                    prometheus_access_info
+                ).to_dict())
         else:
-            multi_cluster_config['current_user'] = username
-            multi_cluster_config['config'][fsid] = [{
-                "name": fsid,
-                "url": url,
-                "cluster_alias": cluster_alias,
-                "user": username,
-                "token": token,
-                "prometheus_url": prometheus_url if prometheus_url else '',
-                "ssl_verify": ssl_verify,
-                "ssl_certificate": ssl_certificate if ssl_certificate else ''
-            }]
-        Settings.MULTICLUSTER_CONFIG = multi_cluster_config
+            multi_cluster_config_dict['current_user'] = username
+            multi_cluster_config_dict['config'][fsid] = [ClusterConfig(
+                fsid, url, cluster_alias, username, token,
+                prometheus_url, ssl_verify, ssl_certificate,
+                prometheus_access_info
+            ).to_dict()]
+        Settings.MULTICLUSTER_CONFIG = json.dumps(multi_cluster_config_dict)
 
-    def load_multi_cluster_config(self):
+    def load_multi_cluster_config(self) -> Dict[str, Any]:
         if isinstance(Settings.MULTICLUSTER_CONFIG, str):
             try:
-                itemw_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
+                item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
             except json.JSONDecodeError:
-                itemw_to_dict = {}
-            multi_cluster_config = itemw_to_dict.copy()
+                item_to_dict = {}
+            multi_cluster_config = item_to_dict.copy()
         else:
             multi_cluster_config = Settings.MULTICLUSTER_CONFIG.copy()
-
         return multi_cluster_config
 
     @Endpoint('PUT')
@@ -235,26 +334,44 @@ class MultiCluster(RESTController):
         multicluster_config = self.load_multi_cluster_config()
         multicluster_config.update({'current_url': config['url']})
         multicluster_config.update({'current_user': config['user']})
-        Settings.MULTICLUSTER_CONFIG = multicluster_config
-        return Settings.MULTICLUSTER_CONFIG
+        Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
+        return multicluster_config
 
     @Endpoint('PUT')
     @UpdatePermission
-    # pylint: disable=W0613
-    def reconnect_cluster(self, url: str, username=None, password=None,
-                          ssl_verify=False, ssl_certificate=None, ttl=None):
+    def reconnect_cluster(self, url: str, username: Optional[str] = None, password: Optional[str] = None,
+                          ssl_verify: bool = False, ssl_certificate: Optional[str] = None,
+                          ttl: Optional[int] = None, cluster_token: Optional[str] = None):
         multicluster_config = self.load_multi_cluster_config()
-        if username and password:
+        if username and password and cluster_token is None:
             payload = {
                 'username': username,
                 'password': password,
                 'ttl': ttl
             }
-
             cluster_token = self.check_cluster_connection(url, payload, username,
-                                                          ssl_verify, ssl_certificate)
+                                                          ssl_verify, ssl_certificate,
+                                                          'reconnect')
+        else:
+            self.check_connection_errors(url, cluster_token, ssl_verify, ssl_certificate,
+                                         'reconnect')
 
-        if username and cluster_token:
+        if cluster_token:
+            prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
+                                         token=cluster_token, verify=ssl_verify,
+                                         cert=ssl_certificate)
+
+            prometheus_access_info = self._proxy('GET', url,
+                                                 'ui-api/multi-cluster/get_prometheus_access_info',
+                                                 token=cluster_token, verify=ssl_verify,
+                                                 cert=ssl_certificate)
+            if isinstance(prometheus_access_info, dict):
+                prometheus_access_info = PrometheusAccessInfo(
+                    user=prometheus_access_info.get('user', ''),
+                    password=prometheus_access_info.get('password', ''),
+                    certificate=prometheus_access_info.get('certificate', '')
+                )
+        if username and cluster_token and prometheus_url and prometheus_access_info:
             if "config" in multicluster_config:
                 for _, cluster_details in multicluster_config["config"].items():
                     for cluster in cluster_details:
@@ -262,13 +379,19 @@ class MultiCluster(RESTController):
                             cluster['token'] = cluster_token
                             cluster['ssl_verify'] = ssl_verify
                             cluster['ssl_certificate'] = ssl_certificate
-            Settings.MULTICLUSTER_CONFIG = multicluster_config
+                            cluster['prometheus_access_info'] = prometheus_access_info.to_dict()
+                            _remove_prometheus_targets(cluster['prometheus_url'])
+                            time.sleep(5)
+                            cluster['prometheus_url'] = prometheus_url
+                            _set_prometheus_targets(prometheus_url)
+
+            Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
         return True
 
     @Endpoint('PUT')
     @UpdatePermission
-    # pylint: disable=unused-variable
-    def edit_cluster(self, name, url, cluster_alias, username, verify=False, ssl_certificate=None):
+    def edit_cluster(self, name: str, url: str, cluster_alias: str, username: str,
+                     verify: bool = False, ssl_certificate: Optional[str] = None):
         multicluster_config = self.load_multi_cluster_config()
         if "config" in multicluster_config:
             for key, cluster_details in multicluster_config["config"].items():
@@ -278,12 +401,12 @@ class MultiCluster(RESTController):
                         cluster['cluster_alias'] = cluster_alias
                         cluster['ssl_verify'] = verify
                         cluster['ssl_certificate'] = ssl_certificate if verify else ''
-        Settings.MULTICLUSTER_CONFIG = multicluster_config
-        return Settings.MULTICLUSTER_CONFIG
+        Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
+        return multicluster_config
 
     @Endpoint(method='DELETE')
     @DeletePermission
-    def delete_cluster(self, cluster_name, cluster_user):
+    def delete_cluster(self, cluster_name: str, cluster_user: str):
         multicluster_config = self.load_multi_cluster_config()
         try:
             hub_fsid = mgr.get('config')['fsid']
@@ -296,16 +419,9 @@ class MultiCluster(RESTController):
                     cluster_token = value[0]['token']
                     cluster_ssl_certificate = value[0]['ssl_certificate']
                     cluster_ssl_verify = value[0]['ssl_verify']
-                    orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
-                    try:
-                        if orch_backend == 'cephadm':
-                            cmd = {
-                                'prefix': 'orch prometheus remove-target',
-                                'url': value[0]['prometheus_url'].replace('http://', '').replace('https://', '')  # noqa E501 #pylint: disable=line-too-long
-                            }
-                            mgr.mon_command(cmd)
-                    except KeyError:
-                        pass
+                    cluster_prometheus_url = value[0]['prometheus_url']
+
+                    _remove_prometheus_targets(cluster_prometheus_url)
 
                     managed_by_clusters_content = self._proxy('GET', cluster_url,
                                                               'api/settings/MANAGED_BY_CLUSTERS',
@@ -325,13 +441,14 @@ class MultiCluster(RESTController):
                     del multicluster_config['config'][key]
                     break
 
-        Settings.MULTICLUSTER_CONFIG = multicluster_config
-        return Settings.MULTICLUSTER_CONFIG
+        Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
+        return multicluster_config
 
     @Endpoint()
     @ReadPermission
     def get_config(self):
-        return Settings.MULTICLUSTER_CONFIG
+        multi_cluster_config = self.load_multi_cluster_config()
+        return multi_cluster_config
 
     def is_token_expired(self, jwt_token):
         split_message = jwt_token.split(".")
@@ -377,22 +494,157 @@ class MultiCluster(RESTController):
 
     @Endpoint()
     @ReadPermission
+    def security_config(self):
+        return self._get_security_config()
+
+    def _get_security_config(self):
+        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+        if orch_backend == 'cephadm':
+            cmd = {
+                'prefix': 'orch get-security-config',
+            }
+            ret_status, out, _ = mgr.mon_command(cmd)
+            if ret_status == 0 and out is not None:
+                security_info = json.loads(out)
+                security_enabled = security_info['security_enabled']
+                mgmt_gw_enabled = security_info['mgmt_gw_enabled']
+                return {
+                    'security_enabled': bool(security_enabled),
+                    'mgmt_gw_enabled': bool(mgmt_gw_enabled)
+                }
+        return None
+
+    @Endpoint()
+    @ReadPermission
     def get_prometheus_api_url(self):
+        security_content = self._get_security_config()
+        mgmt_gw_enabled = security_content['mgmt_gw_enabled']
         prometheus_url = Settings.PROMETHEUS_API_HOST
+
         if prometheus_url is not None:
-            # check if is url is already in IP format
-            pattern = r'^(?:https?|http):\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+$'
-            valid_ip_url = bool(re.match(pattern, prometheus_url))
-            if not valid_ip_url:
-                parsed_url = urlparse(prometheus_url)
-                hostname = parsed_url.hostname
-                orch = OrchClient.instance()
-                inventory_hosts = [host.to_json() for host in orch.hosts.list()]
-                for host in inventory_hosts:
-                    if host['hostname'] == hostname or host['hostname'] in hostname:
-                        node_ip = host['addr']
-                prometheus_url = prometheus_url.replace(hostname, node_ip)
+            if '.ceph-dashboard' in prometheus_url:
+                prometheus_url = prometheus_url.replace('.ceph-dashboard', '')
+            parsed_url = urlparse(prometheus_url)
+            hostname = parsed_url.hostname
+            try:
+                # Check if the hostname is already an IP address
+                ipaddress.ip_address(hostname)
+                valid_ip_url = True
+            except ValueError:
+                valid_ip_url = False
+
+            if mgmt_gw_enabled:
+                # If management gateway is enabled and hostname is not an IP
+                if not valid_ip_url:
+                    orch = OrchClient.instance()
+                    inventory_hosts = [host.to_json() for host in orch.hosts.list()]
+                    for host in inventory_hosts:
+                        if host['hostname'] == hostname or hostname in host['hostname']:
+                            node_ip = host['addr']
+                            prometheus_url = node_ip  # we need just IP if mgmt gw is enabled
+                            break
+                else:
+                    prometheus_url = hostname  # we need just the node IP if mgmt gw is enabled
+                return prometheus_url
+            else:
+                # If management gateway is disabled, return complete URL with IP replaced hostname
+                if not valid_ip_url:
+                    orch = OrchClient.instance()
+                    inventory_hosts = [host.to_json() for host in orch.hosts.list()]
+                    for host in inventory_hosts:
+                        if host['hostname'] == hostname or hostname in host['hostname']:
+                            node_ip = host['addr']
+                            prometheus_url = prometheus_url.replace(hostname, node_ip)
+                            break
         return prometheus_url
+
+    def find_prometheus_credentials(self, multicluster_config: Dict[str, Any], url: str) -> Optional[Dict[str, Any]]:
+        for _, clusters in multicluster_config['config'].items():
+            for cluster in clusters:
+                prometheus_url = cluster.get('prometheus_url')
+                if prometheus_url:
+                    clean_prometheus_url = prometheus_url.replace("https://", "").replace("http://", "")  # since target URLs are without scheme
+                    if clean_prometheus_url == url:  # check if the target URL matches with the prometheus URL (without scheme) in the config
+                        return cluster.get('prometheus_access_info')
+        return None
+
+    def get_cluster_credentials(self, targets: List[str]) -> Dict[str, Any]:
+        clusters_credentials = {}
+        multi_cluster_config = self.load_multi_cluster_config()
+        try:
+            if multi_cluster_config:
+                for url in targets:
+                    credentials = self.find_prometheus_credentials(multi_cluster_config, url)
+                    if credentials:
+                        clusters_credentials[url] = credentials
+                        clusters_credentials[url]['cert_file_name'] = ''
+                    else:
+                        logger.error(f'No credentials found for target: {url}')
+        except json.JSONDecodeError as e:
+            multi_cluster_config = None
+            logger.error(f'Invalid JSON format for multi-cluster config: {e}')
+        except Exception as e:
+            logger.error(f'Error retrieving cluster credentials: {e}')
+
+        return clusters_credentials
+
+    def get_cluster_credentials_files(self, targets: List[str]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        cluster_credentials_files: Dict[str, Any] = {'files': {}}
+        clusters_credentials = self.get_cluster_credentials(targets=targets)
+        for i, (url, credentials) in enumerate(clusters_credentials.items()):
+            cluster_credentials_files['files'][f'prometheus_{i+1}_cert.crt'] = credentials['certificate']
+            credentials['cert_file_name'] = f'prometheus_{i+1}_cert.crt'
+        return cluster_credentials_files, clusters_credentials
+
+    @Endpoint('PUT')
+    @UpdatePermission
+    def set_local_cluster_config(self):
+        multicluster_config = self.load_multi_cluster_config()
+        try:
+            fsid = mgr.get('config')['fsid']
+        except KeyError:
+            fsid = ''
+        origin = cherrypy.request.headers.get('Origin', None)
+        username = JwtManager.get_username()
+        token = JwtManager.get_token_from_header()
+        try:
+            if fsid in multicluster_config['config']:
+                existing_entries = multicluster_config['config'][fsid]
+                if not any((entry['user'] == username or entry['cluster_alias'] == 'local-cluster') for entry in existing_entries):  # noqa E501 #pylint: disable=line-too-long
+                    existing_entries.append({
+                        "name": fsid,
+                        "url": origin,
+                        "cluster_alias": "local-cluster",
+                        "user": username,
+                        "token": token
+                    })
+            else:
+                multicluster_config['config'][fsid] = [{
+                    "name": fsid,
+                    "url": origin,
+                    "cluster_alias": "local-cluster",
+                    "user": username,
+                    "token": token
+                }]
+
+        except KeyError:
+            multicluster_config = {
+                'current_url': origin,
+                'current_user': username,
+                'hub_url': origin,
+                'config': {
+                    fsid: [
+                        {
+                            "name": fsid,
+                            "url": origin,
+                            "cluster_alias": "local-cluster",
+                            "user": username,
+                            "token": token
+                        }
+                    ]
+                }
+            }
+        Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
 
 
 @UIRouter('/multi-cluster', Scope.CONFIG_OPT)
@@ -402,12 +654,49 @@ class MultiClusterUi(RESTController):
     def set_cors_endpoint(self, url: str):
         configure_cors(url)
 
+    @Endpoint('GET')
+    @ReadPermission
+    def get_prometheus_access_info(self):
+        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+        if orch_backend == 'cephadm':
+            cmd = {
+                'prefix': 'orch prometheus get-credentials',
+            }
+            ret_status, out, _ = mgr.mon_command(cmd)
+            if ret_status == 0 and out is not None:
+                prom_access_info = json.loads(out)
+                user = prom_access_info['user']
+                password = prom_access_info['password']
+                certificate = prom_access_info['certificate']
+            return {
+                'user': user,
+                'password': password,
+                'certificate': certificate
+            }
+        return None
+
 
 def _set_prometheus_targets(prometheus_url: str):
     orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
-    if orch_backend == 'cephadm':
-        cmd = {
-            'prefix': 'orch prometheus set-target',
-            'url': prometheus_url.replace('http://', '').replace('https://', '')
-        }
-        mgr.mon_command(cmd)
+    try:
+        if orch_backend == 'cephadm':
+            cmd = {
+                'prefix': 'orch prometheus set-target',
+                'url': prometheus_url.replace('http://', '').replace('https://', '')
+            }
+            mgr.mon_command(cmd)
+    except KeyError:
+        logger.exception('Failed to set prometheus targets')
+
+
+def _remove_prometheus_targets(prometheus_url: str):
+    orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+    try:
+        if orch_backend == 'cephadm':
+            cmd = {
+                'prefix': 'orch prometheus remove-target',
+                'url': prometheus_url.replace('http://', '').replace('https://', '')
+            }
+            mgr.mon_command(cmd)
+    except KeyError:
+        logger.exception('Failed to remove prometheus targets')

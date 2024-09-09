@@ -63,6 +63,7 @@ export class ApiInterceptorService implements HttpInterceptor {
       'api/auth/logout',
       'api/multi-cluster/set_config',
       'api/multi-cluster/get_config',
+      'api/multi-cluster/set_local_cluster_config',
       'api/multi-cluster/auth'
     ];
 
