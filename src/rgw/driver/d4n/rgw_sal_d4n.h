@@ -183,6 +183,7 @@ class D4NFilterObject : public FilterObject {
       virtual ~D4NFilterDeleteOp() = default;
 
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
+      int delete_from_cache_and_policy(const DoutPrefixProvider* dpp, std::string oid, std::string prefix, optional_yield y);
     };
 
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _driver) : FilterObject(std::move(_next)),
