@@ -2176,40 +2176,46 @@ void PgScrubber::on_mid_scrub_abort(Scrub::delay_cause_t issue)
 		  m_planned_scrub)
 	   << dendl;
 
-  // assuming we can still depend on the 'scrubbing' flag being set;
-  // Also on Queued&Active.
-
-  // note again: this is not how merging should work in the final version:
-  // e.g. - the 'aborted_schedule' data should be passed thru the scrubber.
-  // In this current patchwork, for example, we are only guessing at
-  // the original value of 'must_deep_scrub'.
-  m_planned_scrub.must_repair = m_planned_scrub.must_repair || m_is_repair;
-  m_planned_scrub.need_auto = m_planned_scrub.need_auto || m_flags.auto_repair;
-
   // copy the aborted target
   const auto aborted_target = *m_active_target;
   m_active_target.reset();
 
   const auto scrub_clock_now = ceph_clock_now();
-  update_targets(m_planned_scrub, scrub_clock_now);
+  auto& current_targ = m_scrub_job->get_target(aborted_target.level());
+  ceph_assert(!current_targ.queued);
 
-  // we may have updated both targets. For sure - we took notice of any change
-  // that made any of the targets into a high-priority one. All that's left:
-  // delay the specific target that was aborted.
+  // merge the aborted target with the current one
+  auto& curr_sched = current_targ.sched_info.schedule;
+  auto& abrt_sched = aborted_target.sched_info.schedule;
 
-  auto& trgt = m_scrub_job->delay_on_failure(aborted_target.level(), issue,
-      scrub_clock_now);
+  current_targ.sched_info.urgency =
+      std::max(current_targ.urgency(), aborted_target.urgency());
+  curr_sched.scheduled_at =
+      std::min(curr_sched.scheduled_at, abrt_sched.scheduled_at);
+  curr_sched.deadline = std::min(curr_sched.deadline, abrt_sched.deadline);
+  curr_sched.not_before =
+      std::min(curr_sched.not_before, abrt_sched.not_before);
 
-  /// \todo complete the merging of the deadline & target for non-hp targets
-#ifdef NOT_YET
-  if (!aborted_target.is_high_priority()) {
-    std::ignore = aborted_target;
+  dout(10) << fmt::format(
+		  "{}: merged target (before delay): {}", __func__,
+		  current_targ)
+	   << dendl;
+
+  // affect a delay, as there was a failure mid-scrub
+  m_scrub_job->delay_on_failure(current_targ.level(), issue, scrub_clock_now);
+
+  // reinstate both targets in the queue
+  m_osds->get_scrub_services().enqueue_target(current_targ);
+  current_targ.queued = true;
+
+  // our sister target is off the queue, too:
+  auto& sister = m_scrub_job->get_target(
+      aborted_target.level() == scrub_level_t::deep ? scrub_level_t::shallow
+						    : scrub_level_t::deep);
+  if (!sister.queued) {
+    m_osds->get_scrub_services().enqueue_target(sister);
+    sister.queued = true;
   }
-#endif
-  ceph_assert(!trgt.queued);
-  ceph_assert(!m_scrub_job->is_queued());
-  m_osds->get_scrub_services().enqueue_target(trgt);
-  trgt.queued = true;
 }
 
 
