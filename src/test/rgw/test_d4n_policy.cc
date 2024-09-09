@@ -218,7 +218,6 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
       .blockID = 0,
       .version = "version",
       .deleteMarker = false,
-      .prevVersion = {},
       .size = bl.length(),
       .globalWeight = 5,
     };
