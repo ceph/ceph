@@ -532,6 +532,13 @@ The resulting keyring file is:
 
   -rw-r-----. 1 qemu qemu 156 Apr 21 08:47 /etc/ceph/client.client.rbd.keyring
 
+By default, cephadm will also manage ``/etc/ceph/ceph.conf`` on hosts where it writes the keyrings.
+This feature can be suppressed by passing ``--no-ceph-conf`` when setting the keyring.
+
+.. prompt:: bash #
+
+  ceph orch client-keyring set client.foo label:foo 0:0 --no-ceph-conf
+
 Disabling Management of a Keyring File
 --------------------------------------
 
