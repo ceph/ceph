@@ -829,6 +829,10 @@ class TestMonitoring:
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=nfs
 
+                  - job_name: 'smb'
+                    http_sd_configs:
+                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=smb
+
                   - job_name: 'federate'
                     scrape_interval: 15s
                     honor_labels: true
@@ -1033,6 +1037,19 @@ class TestMonitoring:
                       ca_file: root_cert.pem
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=nfs
+                      basic_auth:
+                        username: sd_user
+                        password: sd_password
+                      tls_config:
+                        ca_file: root_cert.pem
+
+                  - job_name: 'smb'
+                    honor_labels: true
+                    scheme: https
+                    tls_config:
+                      ca_file: root_cert.pem
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=smb
                       basic_auth:
                         username: sd_user
                         password: sd_password
@@ -3176,6 +3193,8 @@ class TestSMB:
                 'config': '',
                 'keyring': '[client.smb.config.tango.briskly]\nkey = None\n',
                 'config_auth_entity': 'client.smb.config.tango.briskly',
+                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_port': 9922,
             },
         }
         with with_host(cephadm_module, 'hostx'):
@@ -3246,6 +3265,8 @@ class TestSMB:
                     '[client.smb.fs.fs2.share3]\nkey = None\n'
                 ),
                 'config_auth_entity': 'client.smb.config.tango.briskly',
+                'metrics_image': 'quay.io/samba.org/samba-metrics:latest',
+                'metrics_port': 9922,
             },
         }
         with with_host(cephadm_module, 'hostx'):
