@@ -102,7 +102,6 @@ class BlockDirectoryFixture: public ::testing::Test {
         .blockID = 0,
 	.version = "",
 	.deleteMarker = false,
-	.prevVersion = {},
 	.size = 0
       };
 
@@ -129,9 +128,9 @@ class BlockDirectoryFixture: public ::testing::Test {
     net::io_context io;
     std::shared_ptr<connection> conn;
 
-    std::vector<std::string> vals{"0", "", "0", "", "0", "0", 
+    std::vector<std::string> vals{"0", "", "0", "0", "0", 
                                    "testName", "testBucket", "", "0", env->redisHost};
-    std::vector<std::string> fields{"blockID", "version", "deleteMarker", "prevVersion", "size", "globalWeight", 
+    std::vector<std::string> fields{"blockID", "version", "deleteMarker", "size", "globalWeight", 
 				     "objName", "bucketName", "creationTime", "dirty", "hosts"};
 };
 
