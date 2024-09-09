@@ -27,9 +27,9 @@ import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permission } from '~/app/shared/models/permissions';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { InventoryDevice } from './inventory-device.model';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-inventory-devices',
@@ -84,7 +84,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
   constructor(
     private authStorageService: AuthStorageService,
     private dimlessBinary: DimlessBinaryPipe,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService,
     private orchService: OrchestratorService,
     private hostService: HostService

@@ -53,12 +53,22 @@
   @extend .cd-col-form-input;
 }
 
+// Until all the modals are converted to carbon
+// need to keep this so that modals won't get hidden
+// behind nav bar
+ngb-modal-window {
+  .modal-dialog {
+    margin-top: 3rem;
+  }
+}
+
 cd-modal {
   .modal {
     /* stylelint-disable */
     background-color: rgba(0, 0, 0, 0.4);
     /* stylelint-enable */
     display: block;
+    margin-top: 3rem;
   }
 
   .modal-dialog {

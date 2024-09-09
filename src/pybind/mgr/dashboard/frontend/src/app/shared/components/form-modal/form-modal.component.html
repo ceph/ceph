@@ -61,6 +61,7 @@
           <cds-select *ngIf="field.type === 'select'"
                       [label]="field.label"
                       [for]="field.name"
+                      [id]="field.name"
                       [formControlName]="field.name"
                       [options]="field?.typeConfig?.options"
                       [placeholder]="field?.typeConfig?.placeholder"
