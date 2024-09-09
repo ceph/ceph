@@ -670,8 +670,9 @@ void PgScrubber::recovery_completed()
     m_osds->get_scrub_services().dequeue_target(m_pg_id, scrub_level_t::deep);
     auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
     trgt.up_urgency_to(urgency_t::after_repair);
-    trgt.sched_info.schedule.scheduled_at = {0, 0};
-    trgt.sched_info.schedule.not_before = ceph_clock_now();
+    const auto clock_now = ceph_clock_now();
+    trgt.sched_info.schedule.scheduled_at = clock_now;
+    trgt.sched_info.schedule.not_before = clock_now;
     m_osds->get_scrub_services().enqueue_target(trgt);
   }
 }
@@ -695,8 +696,9 @@ void PgScrubber::request_rescrubbing(requested_scrub_t& request_flags)
   request_flags.need_auto = true;
   auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
   trgt.up_urgency_to(urgency_t::repairing);
-  trgt.sched_info.schedule.scheduled_at = {0, 0};
-  trgt.sched_info.schedule.not_before = ceph_clock_now();
+  const auto clock_now = ceph_clock_now();
+  trgt.sched_info.schedule.scheduled_at = clock_now;
+  trgt.sched_info.schedule.not_before = clock_now;
 }
 
 
