@@ -1095,7 +1095,7 @@ class CephadmServe:
                 action = 'reconfig'
                 # we need only redeploy if secure_monitoring_stack value has changed:
                 if dd.daemon_type in ['prometheus', 'node-exporter', 'alertmanager']:
-                    diff = list(set(last_deps) - set(deps))
+                    diff = list(set(last_deps).symmetric_difference(set(deps)))
                     if any('secure_monitoring_stack' in e for e in diff):
                         action = 'redeploy'
                 elif dd.daemon_type == 'jaeger-agent':
