@@ -460,20 +460,24 @@ done:
   } else {
     ldpp_dout(s, 2) << "http status=" << s->err.http_ret << dendl;
   }
-  if (handler)
-    handler->put_op(op);
-  rest->put_handler(handler);
 
   const auto lat = s->time_elapsed();
   if (latency) {
     *latency = lat;
   }
   dout(1) << "====== req done req=" << hex << req << dec
-	  << " op status=" << op_ret
-	  << " http_status=" << s->err.http_ret
-	  << " latency=" << lat
-	  << " ======"
-	  << dendl;
+          << " op=" << (op ? op->name() : "unknown")
+          << " bucket=" << s->bucket_name
+          << " status=" << op_ret
+          << " http_status=" << s->err.http_ret
+          << " latency=" << lat
+          << " request_id=" << s->trans_id
+          << " ======"
+          << dendl;
+
+  if (handler)
+    handler->put_op(op);
+  rest->put_handler(handler);
 
   return (ret < 0 ? ret : s->err.ret);
 } /* process_request */
