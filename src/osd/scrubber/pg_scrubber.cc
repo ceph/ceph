@@ -61,8 +61,6 @@ ostream& operator<<(ostream& out, const scrub_flags_t& sf)
 
 ostream& operator<<(ostream& out, const requested_scrub_t& sf)
 {
-  if (sf.must_repair)
-    out << " MUST_REPAIR";
   if (sf.auto_repair)
     out << " planned AUTO_REPAIR";
   if (sf.need_auto)
@@ -642,7 +640,6 @@ scrub_level_t PgScrubber::scrub_requested(
   }
 
   // modifying the planned-scrub flags - to be removed shortly
-  req_flags.must_repair = repair_requested;
   // User might intervene, so clear this
   req_flags.need_auto = false;
   req_flags.req_scrub = true;
@@ -2428,7 +2425,9 @@ void PgScrubber::dump_scrubber(
     f->dump_bool("must_scrub", earliest.is_high_priority());
     f->dump_bool(
 	"must_deep_scrub", m_scrub_job->deep_target.is_high_priority());
-    f->dump_bool("must_repair", request_flags.must_repair);
+    // the following data item is deprecated. Will be replaced by a set
+    // of reported attributes that match the updated scrub-job state.
+    f->dump_bool("must_repair", earliest.urgency() == urgency_t::must_repair);
     f->dump_bool("need_auto", request_flags.need_auto);
 
     f->dump_stream("scrub_reg_stamp")

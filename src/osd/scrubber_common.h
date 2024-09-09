@@ -318,12 +318,6 @@ struct requested_scrub_t {
    */
   bool need_auto{false};
 
-  /**
-   * - 'must_repair' is checked by the OSD when scheduling the scrubs.
-   * - also checked & cleared at pg::queue_scrub()
-   */
-  bool must_repair{false};
-
   /*
    * the value of auto_repair is determined in sched_scrub() (once per scrub.
    * previous value is not remembered). Set if
@@ -343,8 +337,7 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{}{})",
-                          rs.must_repair ? " must_repair" : "",
+                          "(plnd:{}{}{})",
                           rs.auto_repair ? " auto_repair" : "",
                           rs.need_auto ? " need_auto" : "",
                           rs.req_scrub ? " req_scrub" : "");
