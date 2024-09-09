@@ -1506,6 +1506,21 @@ public:
   virtual ~LCSerializer() = default;
 };
 
+/** Head of a lifecycle run.  Used for tracking parallel lifecycle runs. */
+struct LCHead {
+  time_t start_date = 0;
+  std::string marker;
+  time_t shard_rollover_date = 0;
+};
+
+/** Single entry in a lifecycle run.  Multiple entries can exist processing different
+ * buckets. */
+struct LCEntry {
+  std::string bucket;
+  uint64_t start_time = 0;
+  uint32_t status = 0;
+};
+
 /**
  * @brief Abstraction for lifecycle processing
  *
@@ -1515,84 +1530,34 @@ public:
  */
 class Lifecycle {
 public:
-  /** Head of a lifecycle run.  Used for tracking parallel lifecycle runs. */
-  struct LCHead {
-    LCHead() = default;
-    virtual ~LCHead() = default;
-
-    virtual time_t& get_start_date() = 0;
-    virtual void set_start_date(time_t) = 0;
-    virtual std::string& get_marker() = 0;
-    virtual void set_marker(const std::string&) = 0;
-    virtual time_t& get_shard_rollover_date() = 0;
-    virtual void set_shard_rollover_date(time_t) = 0;
-  };
-
-  /** Single entry in a lifecycle run.  Multiple entries can exist processing different
-   * buckets. */
-  struct LCEntry {
-    LCEntry() = default;
-    virtual ~LCEntry() = default;
-
-    virtual std::string& get_bucket() = 0;
-    virtual void set_bucket(const std::string&) = 0;
-    virtual std::string& get_oid() = 0;
-    virtual void set_oid(const std::string&) = 0;
-    virtual uint64_t get_start_time() = 0;
-    virtual void set_start_time(uint64_t) = 0;
-    virtual uint32_t get_status() = 0;
-    virtual void set_status(uint32_t) = 0;
-
-    /** Print the entry to @a out */
-    virtual void print(std::ostream& out) const = 0;
-
-    friend inline std::ostream& operator<<(std::ostream& out, const LCEntry& e) {
-      e.print(out);
-      return out;
-    }
-    friend inline std::ostream& operator<<(std::ostream& out, const LCEntry* e) {
-      if (!e)
-	out << "<NULL>";
-      else
-	e->print(out);
-      return out;
-    }
-    friend inline std::ostream& operator<<(std::ostream& out, const std::unique_ptr<LCEntry>& p) {
-      out << p.get();
-      return out;
-      }
-  };
-
   Lifecycle() = default;
   virtual ~Lifecycle() = default;
 
-  /** Get an empty entry */
-  virtual std::unique_ptr<LCEntry> get_entry() = 0;
   /** Get an entry matching the given marker */
   virtual int get_entry(const DoutPrefixProvider* dpp, optional_yield y,
                         const std::string& oid, const std::string& marker,
-                        std::unique_ptr<LCEntry>* entry) = 0;
+                        LCEntry& entry) = 0;
   /** Get the entry following the given marker */
   virtual int get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& oid, const std::string& marker,
-                             std::unique_ptr<LCEntry>* entry) = 0;
+                             LCEntry& entry) = 0;
   /** Store a modified entry in then backing store */
   virtual int set_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                        const std::string& oid, LCEntry& entry) = 0;
+                        const std::string& oid, const LCEntry& entry) = 0;
   /** List all known entries */
   virtual int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
                            const std::string& oid, const std::string& marker,
 			   uint32_t max_entries,
-			   std::vector<std::unique_ptr<LCEntry>>& entries) = 0;
+			   std::vector<LCEntry>& entries) = 0;
   /** Remove an entry from the backing store */
   virtual int rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                       const std::string& oid, LCEntry& entry) = 0;
+                       const std::string& oid, const LCEntry& entry) = 0;
   /** Get a head */
   virtual int get_head(const DoutPrefixProvider* dpp, optional_yield y,
-                       const std::string& oid, std::unique_ptr<LCHead>* head) = 0;
+                       const std::string& oid, LCHead& head) = 0;
   /** Store a modified head to the backing store */
   virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
-                       const std::string& oid, LCHead& head) = 0;
+                       const std::string& oid, const LCHead& head) = 0;
 
   /** Get a serializer for lifecycle */
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,

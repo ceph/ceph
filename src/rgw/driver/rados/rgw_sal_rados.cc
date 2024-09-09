@@ -3727,7 +3727,7 @@ int LCRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, opti
 
 int RadosLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
                               const std::string& oid, const std::string& marker,
-			      std::unique_ptr<LCEntry>* entry)
+			      LCEntry& entry)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
@@ -3745,13 +3745,15 @@ int RadosLifecycle::get_entry(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  *entry = std::make_unique<StoreLCEntry>(cls_entry.bucket, cls_entry.start_time, cls_entry.status);
+  entry.bucket = std::move(cls_entry.bucket);
+  entry.start_time = cls_entry.start_time;
+  entry.status = cls_entry.status;
   return 0;
 }
 
 int RadosLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
                                    const std::string& oid, const std::string& marker,
-				   std::unique_ptr<LCEntry>* entry)
+				   LCEntry& entry)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
@@ -3769,18 +3771,20 @@ int RadosLifecycle::get_next_entry(const DoutPrefixProvider* dpp, optional_yield
     return ret;
   }
 
-  *entry = std::make_unique<StoreLCEntry>(cls_entry.bucket, cls_entry.start_time, cls_entry.status);
+  entry.bucket = std::move(cls_entry.bucket);
+  entry.start_time = cls_entry.start_time;
+  entry.status = cls_entry.status;
   return 0;
 }
 
 int RadosLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                              const std::string& oid, LCEntry& entry)
+                              const std::string& oid, const LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
 
-  cls_entry.bucket = entry.get_bucket();
-  cls_entry.start_time = entry.get_start_time();
-  cls_entry.status = entry.get_status();
+  cls_entry.bucket = entry.bucket;
+  cls_entry.start_time = entry.start_time;
+  cls_entry.status = entry.status;
 
   librados::ObjectWriteOperation op;
   cls_rgw_lc_set_entry(op, cls_entry);
@@ -3791,7 +3795,7 @@ int RadosLifecycle::set_entry(const DoutPrefixProvider* dpp, optional_yield y,
 
 int RadosLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
                                  const std::string& oid, const std::string& marker,
-                                 uint32_t max_entries, std::vector<std::unique_ptr<LCEntry>>& entries)
+                                 uint32_t max_entries, std::vector<LCEntry>& entries)
 {
   entries.clear();
 
@@ -3812,20 +3816,19 @@ int RadosLifecycle::list_entries(const DoutPrefixProvider* dpp, optional_yield y
   }
 
   for (auto& entry : cls_entries) {
-    entries.push_back(std::make_unique<StoreLCEntry>(entry.bucket, oid,
-				entry.start_time, entry.status));
+    entries.push_back(LCEntry{entry.bucket, entry.start_time, entry.status});
   }
 
   return ret;
 }
 
 int RadosLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                             const std::string& oid, LCEntry& entry)
+                             const std::string& oid, const LCEntry& entry)
 {
   cls_rgw_lc_entry cls_entry;
-  cls_entry.bucket = entry.get_bucket();
-  cls_entry.start_time = entry.get_start_time();
-  cls_entry.status = entry.get_status();
+  cls_entry.bucket = entry.bucket;
+  cls_entry.start_time = entry.start_time;
+  cls_entry.status = entry.status;
 
   librados::ObjectWriteOperation op;
   cls_rgw_lc_rm_entry(op, cls_entry);
@@ -3835,7 +3838,7 @@ int RadosLifecycle::rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int RadosLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
-                             const std::string& oid, std::unique_ptr<LCHead>* head)
+                             const std::string& oid, LCHead& head)
 {
   librados::ObjectReadOperation op;
   bufferlist bl;
@@ -3853,18 +3856,20 @@ int RadosLifecycle::get_head(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  *head = std::make_unique<StoreLCHead>(cls_head.start_date, cls_head.shard_rollover_date, cls_head.marker);
+  head.start_date = cls_head.start_date;
+  head.shard_rollover_date = cls_head.shard_rollover_date;
+  head.marker = std::move(cls_head.marker);
   return 0;
 }
 
 int RadosLifecycle::put_head(const DoutPrefixProvider* dpp, optional_yield y,
-                             const std::string& oid, LCHead& head)
+                             const std::string& oid, const LCHead& head)
 {
   cls_rgw_lc_obj_head cls_head;
 
-  cls_head.marker = head.get_marker();
-  cls_head.start_date = head.get_start_date();
-  cls_head.shard_rollover_date = head.get_shard_rollover_date();
+  cls_head.marker = head.marker;
+  cls_head.start_date = head.start_date;
+  cls_head.shard_rollover_date = head.shard_rollover_date;
 
   librados::ObjectWriteOperation op;
   cls_rgw_lc_put_head(op, cls_head);

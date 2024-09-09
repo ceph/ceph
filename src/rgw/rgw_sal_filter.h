@@ -979,59 +979,28 @@ protected:
   std::unique_ptr<Lifecycle> next;
 
 public:
-  struct FilterLCHead : LCHead {
-    std::unique_ptr<LCHead> next;
-
-    FilterLCHead(std::unique_ptr<LCHead> _next) : next(std::move(_next)) {}
-    virtual ~FilterLCHead() = default;
-
-    virtual time_t& get_start_date() override { return next->get_start_date(); }
-    virtual void set_start_date(time_t t) override { next->set_start_date(t); }
-    virtual std::string& get_marker() override { return next->get_marker(); }
-    virtual void set_marker(const std::string& m) override { next->set_marker(m); }
-    virtual time_t& get_shard_rollover_date() override { return next->get_shard_rollover_date(); }
-    virtual void set_shard_rollover_date(time_t t) override { next->set_shard_rollover_date(t); }
-  };
-
-  struct FilterLCEntry : LCEntry {
-    std::unique_ptr<LCEntry> next;
-
-    FilterLCEntry(std::unique_ptr<LCEntry> _next) : next(std::move(_next)) {}
-    virtual ~FilterLCEntry() = default;
-
-    virtual std::string& get_bucket() override { return next->get_bucket(); }
-    virtual void set_bucket(const std::string& b) override { next->set_bucket(b); }
-    virtual std::string& get_oid() override { return next->get_oid(); }
-    virtual void set_oid(const std::string& o) override { next->set_oid(o); }
-    virtual uint64_t get_start_time() override { return next->get_start_time(); }
-    virtual void set_start_time(uint64_t t) override { next->set_start_time(t); }
-    virtual uint32_t get_status() override { return next->get_status(); }
-    virtual void set_status(uint32_t s) override { next->set_status(s); }
-    virtual void print(std::ostream& out) const override { return next->print(out); }
-  };
 
   FilterLifecycle(std::unique_ptr<Lifecycle> _next) : next(std::move(_next)) {}
   virtual ~FilterLifecycle() = default;
 
-  virtual std::unique_ptr<LCEntry> get_entry() override;
   virtual int get_entry(const DoutPrefixProvider* dpp, optional_yield y,
                         const std::string& oid, const std::string& marker,
-			std::unique_ptr<LCEntry>* entry) override;
+			LCEntry& entry) override;
   virtual int get_next_entry(const DoutPrefixProvider* dpp, optional_yield y,
                              const std::string& oid, const std::string& marker,
-			     std::unique_ptr<LCEntry>* entry) override;
+			     LCEntry& entry) override;
   virtual int set_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                        const std::string& oid, LCEntry& entry) override;
+                        const std::string& oid, const LCEntry& entry) override;
   virtual int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
                            const std::string& oid, const std::string& marker,
 			   uint32_t max_entries,
-			   std::vector<std::unique_ptr<LCEntry>>& entries) override;
+			   std::vector<LCEntry>& entries) override;
   virtual int rm_entry(const DoutPrefixProvider* dpp, optional_yield y,
-                       const std::string& oid, LCEntry& entry) override;
+                       const std::string& oid, const LCEntry& entry) override;
   virtual int get_head(const DoutPrefixProvider* dpp, optional_yield y,
-                       const std::string& oid, std::unique_ptr<LCHead>* head) override;
-  virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
                        const std::string& oid, LCHead& head) override;
+  virtual int put_head(const DoutPrefixProvider* dpp, optional_yield y,
+                       const std::string& oid, const LCHead& head) override;
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
 						       const std::string& oid,
 						       const std::string& cookie) override;

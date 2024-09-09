@@ -1573,9 +1573,6 @@ public:
   int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y);
 
   int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
-  int list_lc_progress(std::string& marker, uint32_t max_entries,
-		       std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>& progress_map,
-		       int& index);
 
   int bucket_check_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
                          std::map<RGWObjCategory, RGWStorageStats> *existing_stats,

@@ -8835,16 +8835,16 @@ next:
 
   if (opt_cmd == OPT::LC_LIST) {
     formatter->open_array_section("lifecycle_list");
-    vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>> bucket_lc_map;
+    vector<rgw::sal::LCEntry> bucket_lc_map;
     string marker;
     int index{0};
 #define MAX_LC_LIST_ENTRIES 100
     if (max_entries < 0) {
       max_entries = MAX_LC_LIST_ENTRIES;
     }
+    RGWLC* lc = driver->get_rgwlc();
     do {
-      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_lc_progress(marker, max_entries,
-						    bucket_lc_map, index);
+      int ret = lc->list_lc_progress(marker, max_entries, bucket_lc_map, index);
       if (ret < 0) {
         cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret)
 	     << std::endl;
@@ -8852,17 +8852,15 @@ next:
       }
       for (const auto& entry : bucket_lc_map) {
         formatter->open_object_section("bucket_lc_info");
-        formatter->dump_string("bucket", entry->get_bucket());
-	formatter->dump_string("shard", entry->get_oid());
+        formatter->dump_string("bucket", entry.bucket);
 	char exp_buf[100];
-	time_t t{time_t(entry->get_start_time())};
+        time_t t = entry.start_time;
 	if (std::strftime(
 	      exp_buf, sizeof(exp_buf),
 	      "%a, %d %b %Y %T %Z", std::gmtime(&t))) {
 	  formatter->dump_string("started", exp_buf);
 	}
-        string lc_status = LC_STATUS[entry->get_status()];
-        formatter->dump_string("status", lc_status);
+        formatter->dump_string("status", LC_STATUS[entry.status]);
         formatter->close_section(); // objs
         formatter->flush(cout);
       }
