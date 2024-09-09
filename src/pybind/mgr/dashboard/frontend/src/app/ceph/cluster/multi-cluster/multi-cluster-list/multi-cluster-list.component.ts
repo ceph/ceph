@@ -96,28 +96,42 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.subs.add(
-      this.multiClusterService.subscribe((resp: object) => {
-        if (resp && resp['config']) {
-          this.hubUrl = resp['hub_url'];
-          this.currentUrl = resp['current_url'];
-          const clusterDetailsArray = Object.values(resp['config']).flat();
-          this.data = clusterDetailsArray;
-          this.checkClusterConnectionStatus();
-          this.data.forEach((cluster: any) => {
-            cluster['remainingTimeWithoutSeconds'] = 0;
-            if (cluster['ttl'] && cluster['ttl'] > 0) {
-              cluster['ttl'] = cluster['ttl'] * 1000;
-              cluster['remainingTimeWithoutSeconds'] = this.getRemainingTimeWithoutSeconds(
-                cluster['ttl']
-              );
-              cluster['remainingDays'] = this.getRemainingDays(cluster['ttl']);
-            }
-          });
-        }
-      })
-    );
+    this.initializeClusterConfig();
+    this.initializeColumns();
+    this.initializeClusterTokenStatus();
+    this.loadManagedByConfig();
+  }
 
+  private initializeClusterConfig(): void {
+    this.multiClusterService.setLocalClusterConfig().subscribe(() => {
+      const sub = this.multiClusterService.subscribe((resp: any) => {
+        if (resp && resp.config) {
+          this.processClusterConfig(resp);
+        }
+      });
+      this.subs.add(sub);
+    });
+  }
+
+  private processClusterConfig(resp: any): void {
+    this.hubUrl = resp.hub_url;
+    this.currentUrl = resp.current_url;
+    const clusterDetailsArray = Object.values(resp.config).flat();
+    this.data = clusterDetailsArray;
+    this.checkClusterConnectionStatus();
+    this.data.forEach((cluster: any) => this.processClusterTTL(cluster));
+  }
+
+  private processClusterTTL(cluster: any): void {
+    cluster.remainingTimeWithoutSeconds = 0;
+    if (cluster.ttl && cluster.ttl > 0) {
+      cluster.ttl = cluster.ttl * 1000;
+      cluster.remainingTimeWithoutSeconds = this.getRemainingTimeWithoutSeconds(cluster.ttl);
+      cluster.remainingDays = this.getRemainingDays(cluster.ttl);
+    }
+  }
+
+  private initializeColumns(): void {
     this.columns = [
       {
         prop: 'cluster_alias',
@@ -160,14 +174,17 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
         cellTemplate: this.durationTpl
       }
     ];
+  }
 
-    this.subs.add(
-      this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
-        this.clusterTokenStatus = resp;
-        this.checkClusterConnectionStatus();
-      })
-    );
+  private initializeClusterTokenStatus(): void {
+    const sub = this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
+      this.clusterTokenStatus = resp;
+      this.checkClusterConnectionStatus();
+    });
+    this.subs.add(sub);
+  }
 
+  private loadManagedByConfig(): void {
     this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
   }
 
