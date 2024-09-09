@@ -130,7 +130,7 @@ int ggate_drv_create(char *name, size_t namelen, size_t sectorsize,
 
   drv = calloc(1, sizeof(*drv));
   if (drv == NULL) {
-    errno = -ENOMEM;
+    errno = ENOMEM;
     goto fail_close;
   }
 
