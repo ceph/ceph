@@ -38,12 +38,14 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
 	      trans_intr::make_interruptible(
 		c.cache.get_extent_viewable_by_trans(c.trans, backref_root))};
     } else {
+      c.cache.account_absent_access(c.trans.get_src());
       return {false,
 	      trans_intr::make_interruptible(
 		Cache::get_extent_ertr::make_ready_future<
 		  CachedExtentRef>())};
     }
   } else {
+    c.cache.account_absent_access(c.trans.get_src());
     return {false,
 	    trans_intr::make_interruptible(
 	      Cache::get_extent_ertr::make_ready_future<
