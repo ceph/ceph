@@ -1709,12 +1709,13 @@ public:
     off_t ofs{0};
     uint64_t accounted_size{0};
     std::string tag;
+    rgw::sal::MultipartUpload::prefix_map_t processed_prefixes;
     ACLOwner owner;
     owner.id = bucket->get_owner();
 
     int ret = upload->complete(env->dpp, null_yield, get_pointer(env->cct), parts,
                                remove_objs, accounted_size, compressed, cs_info,
-                               ofs, tag, owner, 0, mp_obj.get());
+                               ofs, tag, owner, 0, mp_obj.get(), processed_prefixes);
     EXPECT_EQ(ret, 0);
     EXPECT_EQ(write_size, ofs);
     EXPECT_EQ(write_size, accounted_size);
@@ -2480,6 +2481,7 @@ public:
     off_t ofs{0};
     uint64_t accounted_size{0};
     std::string tag;
+    rgw::sal::MultipartUpload::prefix_map_t processed_prefixes;
     ACLOwner owner;
     owner.id = bucket->get_owner();
     mp_obj->gen_rand_obj_instance_name();
@@ -2489,7 +2491,7 @@ public:
 
     int ret = upload->complete(env->dpp, null_yield, get_pointer(env->cct), parts,
                                remove_objs, accounted_size, compressed, cs_info,
-                               ofs, tag, owner, 0, mp_obj.get());
+                               ofs, tag, owner, 0, mp_obj.get(), processed_prefixes);
     EXPECT_EQ(ret, 0);
     EXPECT_EQ(write_size, ofs);
     EXPECT_EQ(write_size, accounted_size);

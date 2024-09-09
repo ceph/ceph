@@ -715,7 +715,11 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
+  int DBObject::delete_object(const DoutPrefixProvider* dpp,
+      optional_yield y,
+      uint32_t flags,
+      std::list<rgw_obj_index_key>* remove_objs,
+      RGWObjVersionTracker* objv)
   {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);
@@ -907,7 +911,8 @@ namespace rgw::sal {
 				   RGWCompressionInfo& cs_info, off_t& ofs,
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
-				   rgw::sal::Object* target_obj)
+				   rgw::sal::Object* target_obj,
+				   prefix_map_t& processed_prefixes)
   {
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -1015,6 +1020,15 @@ namespace rgw::sal {
 
     /* No need to delete Meta obj here. It is deleted from sal */
     return ret;
+  }
+
+  int DBMultipartUpload::cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
+      CephContext *cct, optional_yield y,
+      const rgw_obj& obj,
+      std::list<rgw_obj_index_key>& remove_objs,
+      prefix_map_t& processed_prefixes)
+  {
+    return -ENOTSUP;
   }
 
   int DBMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs)
