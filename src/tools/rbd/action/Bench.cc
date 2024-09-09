@@ -49,9 +49,13 @@ enum io_pattern_t {
   IO_PATTERN_FULL_SEQ
 };
 
+const int PATTERN_BYTE_RAND = -1;
+const int PATTERN_BYTE_RAND_STR = -2;
+
 struct IOType {};
 struct Size {};
 struct IOPattern {};
+struct PatternByte {};
 
 void validate(boost::any& v, const std::vector<std::string>& values,
               Size *target_type, int) {
@@ -103,6 +107,27 @@ void validate(boost::any& v, const std::vector<std::string>& values,
     v = boost::any(io_type);
 }
 
+void validate(boost::any& v, const std::vector<std::string>& values,
+              PatternByte *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  if (s == "rand") {
+    v = boost::any(PATTERN_BYTE_RAND);
+  } else if (s == "rand-str") {
+    v = boost::any(PATTERN_BYTE_RAND_STR);
+  } else {
+    try {
+      int pattern_byte = boost::lexical_cast<int>(s);
+      if (pattern_byte >= 0 && pattern_byte <= 255) {
+        v = boost::any(pattern_byte);
+        return;
+      }
+    } catch (const boost::bad_lexical_cast &) {
+    }
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+}
+
 } // anonymous namespace
 
 static void rbd_bencher_completion(void *c, void *pc);
@@ -132,8 +157,10 @@ struct rbd_bencher {
   io_type_t io_type;
   uint64_t io_size;
   bufferlist write_bl;
+  int pattern_byte;
 
-  explicit rbd_bencher(librbd::Image *i, io_type_t io_type, uint64_t io_size)
+  explicit rbd_bencher(librbd::Image *i, io_type_t io_type, uint64_t io_size,
+                       int pattern_byte)
     : image(i),
       in_flight(0),
       io_type(io_type),
@@ -141,7 +168,15 @@ struct rbd_bencher {
   {
     if (io_type == IO_TYPE_WRITE || io_type == IO_TYPE_RW) {
       bufferptr bp(io_size);
-      memset(bp.c_str(), rand() & 0xff, io_size);
+      if (pattern_byte == PATTERN_BYTE_RAND) {
+        memset(bp.c_str(), rand() & 0xff, io_size);
+      } else if (pattern_byte == PATTERN_BYTE_RAND_STR) {
+        for (uint64_t i = 0; i < io_size; i++) {
+          bp.c_str()[i] = rand() & 0xff;
+        }
+      } else {
+        memset(bp.c_str(), pattern_byte, io_size);
+      }
       write_bl.push_back(bp);
     }
   }
@@ -212,7 +247,7 @@ bool should_read(uint64_t read_proportion)
 int do_bench(librbd::Image& image, io_type_t io_type,
 		   uint64_t io_size, uint64_t io_threads,
 		   uint64_t io_bytes, io_pattern_t io_pattern,
-                   uint64_t read_proportion)
+                   uint64_t read_proportion, int pattern_byte)
 {
   uint64_t size = 0;
   image.size(&size);
@@ -236,7 +271,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   // seed rand() before constructing rbd_bencher
   srand(time(NULL) % (unsigned long) -1);
 
-  rbd_bencher b(&image, io_type, io_size);
+  rbd_bencher b(&image, io_type, io_size, pattern_byte);
 
   std::cout << "bench "
        << " type " << (io_type == IO_TYPE_READ ? "read" :
@@ -443,7 +478,9 @@ void add_bench_common_options(po::options_description *positional,
     ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
     ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
     ("io-pattern", po::value<IOPattern>(), "IO pattern (rand, seq, or full-seq) [default: seq]")
-    ("rw-mix-read", po::value<uint64_t>(), "read proportion in readwrite (<= 100) [default: 50]");
+    ("rw-mix-read", po::value<uint64_t>(), "read proportion in readwrite (<= 100) [default: 50]")
+    ("pattern-byte", po::value<PatternByte>(),
+     "which byte value to write (integer between 0-255, rand or rand-str [default: rand]");
 }
 
 void get_arguments_for_write(po::options_description *positional,
@@ -512,6 +549,13 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
     bench_pattern = IO_PATTERN_SEQ;
   }
 
+  int pattern_byte;
+  if (vm.count("pattern-byte")) {
+    pattern_byte = vm["pattern-byte"].as<int>();
+  } else {
+    pattern_byte = PATTERN_BYTE_RAND;
+  }
+
   uint64_t bench_read_proportion;
   if (bench_io_type == IO_TYPE_READ) {
     bench_read_proportion = 100;
@@ -545,7 +589,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
   r = do_bench(image, bench_io_type, bench_io_size, bench_io_threads,
-		     bench_bytes, bench_pattern, bench_read_proportion);
+               bench_bytes, bench_pattern, bench_read_proportion, pattern_byte);
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_signal);

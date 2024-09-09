@@ -178,7 +178,8 @@
   usage: rbd bench [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                    [--io-size <io-size>] [--io-threads <io-threads>] 
                    [--io-total <io-total>] [--io-pattern <io-pattern>] 
-                   [--rw-mix-read <rw-mix-read>] --io-type <io-type> 
+                   [--rw-mix-read <rw-mix-read>] 
+                   [--pattern-byte <pattern-byte>] --io-type <io-type> 
                    <image-spec> 
   
   Simple benchmark.
@@ -196,6 +197,8 @@
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand, seq, or full-seq) [default: seq]
     --rw-mix-read arg    read proportion in readwrite (<= 100) [default: 50]
+    --pattern-byte arg   which byte value to write (integer between 0-255, rand
+                         or rand-str [default: rand]
     --io-type arg        IO type (read, write, or readwrite(rw))
   
   rbd help children
