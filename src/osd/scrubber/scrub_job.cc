@@ -435,3 +435,9 @@ bool ScrubJob::has_high_queue_priority(urgency_t urgency)
 {
   return urgency >= urgency_t::operator_requested;
 }
+
+bool ScrubJob::is_repair_implied(urgency_t urgency)
+{
+  return urgency == urgency_t::after_repair ||
+	 urgency == urgency_t::repairing || urgency == urgency_t::must_repair;
+}

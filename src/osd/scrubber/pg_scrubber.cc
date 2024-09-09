@@ -694,10 +694,9 @@ void PgScrubber::request_rescrubbing(requested_scrub_t& request_flags)
 
   request_flags.need_auto = true;
   auto& trgt = m_scrub_job->get_target(scrub_level_t::deep);
-  trgt.up_urgency_to(urgency_t::must_repair);
+  trgt.up_urgency_to(urgency_t::repairing);
   trgt.sched_info.schedule.scheduled_at = {0, 0};
   trgt.sched_info.schedule.not_before = ceph_clock_now();
-  // no need to requeue, as scrub_finish() will do that.
 }
 
 
@@ -1704,7 +1703,6 @@ void PgScrubber::set_op_parameters(
 
   // 'deep-on-error' is set for periodic shallow scrubs, if allowed
   // by the environment
-  // RRR didn't we remove the 'periodic' requirement?
   if (m_active_target->is_shallow() && pg_cond.can_autorepair &&
       m_active_target->urgency() == urgency_t::periodic_regular) {
     m_flags.deep_scrub_on_error = true;
@@ -1725,14 +1723,19 @@ void PgScrubber::set_op_parameters(
     }
   }
 
-  // m_is_repair is set for either 'must_repair' or 'repair-on-the-go' (i.e.
+  // m_is_repair is set for all repair cases - for operator-requested
+  // repairs, for deep-scrubs initiated automatically after a shallow scrub
+  // that has ended with repairable error, and for 'repair-on-the-go' (i.e.
   // deep-scrub with the auto_repair configuration flag set). m_is_repair value
-  // determines the scrubber behavior.
+  // determines the scrubber behavior (especially the scrubber backend's).
   //
   // PG_STATE_REPAIR, on the other hand, is only used for status reports (inc.
-  // the PG status as appearing in the logs).
-  m_is_repair = request.must_repair || m_flags.auto_repair;
-  if (request.must_repair) {
+  // the PG status as appearing in the logs), and would not be turned on for
+  // 'on the go' - only after errors to be repair are found.
+  m_is_repair = m_flags.auto_repair ||
+		ScrubJob::is_repair_implied(m_active_target->urgency());
+  ceph_assert(!m_is_repair || m_is_deep);  // repair implies deep-scrub
+  if (ScrubJob::is_repair_implied(m_active_target->urgency())) {
     state_set(PG_STATE_REPAIR);
     update_op_mode_text();
   }
@@ -2352,7 +2355,7 @@ Scrub::schedule_result_t PgScrubber::start_scrub_session(
   // if only explicitly requested repairing is allowed - skip other types
   // of scrubbing
   if (osd_restrictions.allow_requested_repair_only &&
-      !m_planned_scrub.must_repair) {
+      ScrubJob::observes_recovery(trgt.urgency())) {
     dout(10) << __func__
 	     << ": skipping this PG as repairing was not explicitly "
 		"requested for it"
