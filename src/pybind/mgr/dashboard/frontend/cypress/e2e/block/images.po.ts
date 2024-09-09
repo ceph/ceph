@@ -45,7 +45,7 @@ export class ImagesPageHelper extends PageHelper {
   // checks that it is present in the trash table
   moveToTrash(name: string) {
     // wait for image to be created
-    cy.get('cds-table table tbody').first().should('not.contain.text', '(Creating...)');
+    cy.get('table[cdstable] tbody').first().should('not.contain.text', '(Creating...)');
 
     this.getFirstTableCell(name).click();
 

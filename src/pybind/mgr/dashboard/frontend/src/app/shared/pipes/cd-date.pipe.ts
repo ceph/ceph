@@ -22,7 +22,7 @@ export class CdDatePipe implements PipeTransform {
         .local()
         .format('D/M/YY hh:mm A');
     } else {
-      value = value?.replace('Z', '');
+      value = value?.replace?.('Z', '');
       date = moment.parseZone(value).utc().utcOffset(offset).local().format('D/M/YY hh:mm A');
     }
     return date;

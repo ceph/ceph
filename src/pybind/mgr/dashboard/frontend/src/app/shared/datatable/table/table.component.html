@@ -1,5 +1,6 @@
 <cds-table-container [cdsLayer]="layer"
-                     [cdsTheme]="theme">
+                     [cdsTheme]="theme"
+                     class="content-theme">
   <cds-table-toolbar #toolbar
                      *ngIf="toolHeader"
                      (cancel)="onBatchActionsCancel()"
@@ -131,48 +132,86 @@
   </div>
   </div>
   <!-- end filter chips for column filters -->
-  <cds-table [model]="model"
-             [sortable]="!!userConfig.sorts"
-             [size]="size"
-             class="overflow-y-hidden"
-             [skeleton]="false"
-             [showSelectionColumn]="selectionType === 'multiClick'"
-             [enableSingleSelect]="selectionType === 'single'"
-             [stickyHeader]="false"
-             [striped]="false"
-             [isDataGrid]="false"
-             (sort)="changeSorting($event)"
-             (selectRow)="onSelect($event)"
-             (selectAll)="onSelectAll($event)"
-             (deselectRow)="onDeselect($event)"
-             (deselectAll)="onDeselectAll($event)">
-    <tbody>
-      <tr cdstablerow
-          *ngIf="!rows?.length && !loadingIndicator">
-        <td class="no-data"
-            cdstabledata
-            [attr.colspan]="selectionType === 'single' ? visibleColumns.length + 1 : visibleColumns.length + 2">
-          <span class="d-flex justify-content-center align-items-center"
-                i18n>No data to display</span>
-        </td>
-      </tr>
-      <tr cdstablerow
-          *ngIf="loadingIndicator">
-        <td class="no-data"
-            cdstabledata
-            [attr.colspan]="visibleColumns.length + 1">
-          <span class="d-flex justify-content-center align-items-center"
-                i18n>Loading</span>
-        </td>
-      </tr>
+  <table cdsTable
+         [sortable]="sortable"
+         [noBorder]="false"
+         [size]="size"
+         [striped]="false"
+         [skeleton]="loadingIndicator">
+    <thead cdsTableHead
+           [sortable]="sortable"
+           (deselectAll)="onDeselectAll()"
+           (selectAll)="onSelectAll()"
+           (sort)="changeSorting($event)"
+           [model]="model"
+           [showSelectionColumn]="showSelectionColumn"
+           [enableSingleSelect]="enableSingleSelect"
+           [skeleton]="loadingIndicator"
+           [stickyHeader]="false">
+    </thead>
+    <tbody cdsTableBody
+           *ngIf="!noData; else noDataTemplate"
+           [skeleton]="loadingIndicator">
+      <ng-container *ngFor="let row of model.data; let i = index; trackBy: trackByFn.bind(this, identifier)">
+        <tr	cdsTableRow
+            [model]="model"
+            [row]="row"
+            [size]="size"
+            [selected]="model.isRowSelected(i)"
+            [expandable]="model.isRowExpandable(i)"
+            [expanded]="model.isRowExpanded(i)"
+            [showSelectionColumn]="showSelectionColumn"
+            [enableSingleSelect]="enableSingleSelect"
+            [skeleton]="loadingIndicator"
+            (selectRow)="onSelect(i)"
+            (deselectRow)="onDeselect(i)"
+            (expandRow)="model.expandRow(i, !model.isRowExpanded(i))"
+            (rowClick)="onSelect(i)"
+            *ngIf="!model.isRowFiltered(i)">
+        </tr>
+        <tr	cdsTableExpandedRow
+            cdsExpandedRowHover
+            *ngIf="model.isRowExpandable(i) && !shouldExpandAsTable(row) && !model.isRowFiltered(i)"
+            [row]="row"
+            [expanded]="model.isRowExpanded(i)"
+            [skeleton]="loadingIndicator">
+        </tr>
+        <ng-container	*ngIf="model.isRowExpandable(i) && shouldExpandAsTable(row) && model.isRowExpanded(i) && !model.isRowFiltered(i)">
+          <tr	cdsTableRow
+              *ngFor="let expandedDataRow of firstExpandedDataInRow(row)"
+              [model]="model"
+              [showSelectionColumnCheckbox]="false"
+              [showSelectionColumn]="showSelectionColumn"
+              [row]="expandedDataRow"
+              [size]="size"
+              [selected]="model.isRowSelected(i)"
+              [skeleton]="loadingIndicator">
+          </tr>
+        </ng-container>
+      </ng-container>
     </tbody>
-  </cds-table>
+  </table>
   <cds-pagination [model]="model"
                   (selectPage)="onPageChange($event)"
                   [disabled]="limit === 0"
+                  [skeleton]="loadingIndicator"
                   [pageInputDisabled]="limit === 0">
   </cds-pagination>
 </cds-table-container>
+
+<ng-template #noDataTemplate>
+  <tbody>
+    <tr cdstablerow>
+      <td *ngIf="!rows?.length && !loadingIndicator"
+          class="no-data"
+          cdstabledata
+          [attr.colspan]="visibleColumns.length + 2">
+        <span class="d-flex justify-content-center align-items-center"
+              i18n>No data to display</span>
+      </td>
+    </tr>
+  </tbody>
+</ng-template>
 
 <ng-template #rowDetailTpl
              let-row="data">

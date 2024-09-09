@@ -27,13 +27,12 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableColumnFilter } from '~/app/shared/models/cd-table-column-filter';
 import { CdTableColumnFiltersChange } from '~/app/shared/models/cd-table-column-filters-change';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
-import { PageInfo } from '~/app/shared/models/cd-table-paging';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CdUserConfig } from '~/app/shared/models/cd-user-config';
 import { TimerService } from '~/app/shared/services/timer.service';
 import { TableActionsComponent } from '../table-actions/table-actions.component';
 import { TableDetailDirective } from '../directives/table-detail.directive';
-import { filter, map, throttleTime } from 'rxjs/operators';
+import { filter, map } from 'rxjs/operators';
 import { CdSortDirection } from '../../enum/cd-sort-direction';
 import { CdSortPropDir } from '../../models/cd-sort-prop-dir';
 
@@ -254,6 +253,32 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   private _expanded: any = undefined;
 
+  get sortable() {
+    return !!this.userConfig?.sorts;
+  }
+
+  get noData() {
+    return !this.rows?.length && !this.loadingIndicator;
+  }
+
+  get showSelectionColumn() {
+    return this.selectionType === 'multiClick';
+  }
+
+  get enableSingleSelect() {
+    return this.selectionType === 'single';
+  }
+
+  /**
+   * Controls if all checkboxes are viewed as selected.
+   */
+  selectAllCheckbox = false;
+
+  /**
+   * Controls the indeterminate state of the header checkbox.
+   */
+  selectAllCheckboxSomeSelected = false;
+
   /**
    * To prevent making changes to the original columns list, that might change
    * how the table is renderer a second time, we now clone that list into a
@@ -295,7 +320,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       size: this.model.pageLength,
       filteredData: value
     });
-    this.model.totalDataLength = value?.length || 0;
+    this.model.totalDataLength = this.serverSide ? this.count : value?.length || 0;
   }
 
   get rows() {
@@ -343,13 +368,6 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     return search.split(' ').filter((word) => word);
   }
 
-  shouldThrottle(): number {
-    if (this.autoReload === -1) {
-      return 500;
-    }
-    return 0;
-  }
-
   ngAfterViewInit(): void {
     if (this.tableActions?.dropDownActions?.length) {
       this.tableColumns = [
@@ -394,10 +412,6 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
             return false;
           }
           return true;
-        }),
-        throttleTime(this.shouldThrottle(), undefined, {
-          leading: true,
-          trailing: false
         })
       )
       .subscribe({
@@ -409,7 +423,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
               let tableItem = new TableItem({
                 selected: val,
                 data: {
-                  value: column.pipe ? column.pipe.transform(rowValue || val) : rowValue,
+                  value: column.pipe ? column.pipe.transform(rowValue) : rowValue,
                   row: val,
                   column: { ...column, ...val }
                 }
@@ -419,7 +433,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
                 tableItem.data = { ...tableItem.data, row: val };
 
                 if (this.hasDetails) {
-                  (tableItem.expandedData = val), (tableItem.expandedTemplate = this.rowDetailTpl);
+                  tableItem.expandedData = val;
+                  tableItem.expandedTemplate = this.rowDetailTpl;
                 }
               }
 
@@ -455,9 +470,18 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       }
     });
 
+    const rowsChangeSubscription = this.model.rowsSelectedChange.subscribe(() =>
+      this.updateSelectAllCheckbox()
+    );
+    const dataChangeSubscription = this.model.dataChange.subscribe(() => {
+      this.updateSelectAllCheckbox();
+    });
+
     this._subscriptions.add(tableHeadersSubscription);
     this._subscriptions.add(datasetSubscription);
     this._subscriptions.add(rowsExpandedSubscription);
+    this._subscriptions.add(rowsChangeSubscription);
+    this._subscriptions.add(dataChangeSubscription);
   }
 
   ngOnInit() {
@@ -546,7 +570,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       this.userConfig.limit = this.limit;
     }
     if (!(this.userConfig.offset >= 0)) {
-      // this.userConfig.offset = this.model.currentPage;
+      this.userConfig.offset = this.model.currentPage - 1;
     }
     if (!this.userConfig.search) {
       this.userConfig.search = this.search;
@@ -771,11 +795,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   ngOnChanges(changes: SimpleChanges) {
     if (changes?.data?.currentValue) {
-      if (_.isNil(this.expanded)) {
-        this.useData();
-      } else if (this.model.rowsExpanded.every((x) => !x)) {
-        this.expanded = undefined;
-      }
+      this.useData();
     }
   }
 
@@ -828,16 +848,17 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.reloadData();
   }
 
-  changePage(pageInfo: PageInfo) {
-    this.userConfig.offset = pageInfo.offset;
-    this.userConfig.limit = pageInfo.limit;
-    if (this.serverSide) {
-      this.reloadData();
-    }
-  }
-
   onPageChange(page: number) {
     this.model.currentPage = page;
+
+    this.userConfig.offset = this.model.currentPage - 1;
+    this.userConfig.limit = this.model.pageLength;
+
+    if (this.serverSide) {
+      this.reloadData();
+      return;
+    }
+
     this.doPagination({});
   }
 
@@ -846,6 +867,11 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     size = this.model.pageLength,
     filteredData = this.rows
   }): void {
+    if (this.serverSide) {
+      this._dataset.next(filteredData);
+      return;
+    }
+
     if (this.limit === 0) {
       this.model.currentPage = 1;
       this.model.pageLength = filteredData.length;
@@ -893,10 +919,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.updateColumnFilterOptions();
     this.updateFilter();
     this.reset();
+    this.doSorting();
     this.updateSelected();
     this.updateExpanded();
     this.toggleExpandRow();
-    this.doSorting();
   }
 
   /**
@@ -978,9 +1004,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     }
   }
 
-  onSelect($event: any) {
-    const { selectedRowIndex } = $event;
+  onSelect(selectedRowIndex: number) {
     const selectedData = _.get(this.model.data?.[selectedRowIndex], [0, 'selected']);
+    this.model.selectRow(selectedRowIndex, true);
     if (this.selectionType === 'single') {
       this.selection.selected = [selectedData];
     } else {
@@ -989,24 +1015,27 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.updateSelection.emit(this.selection);
   }
 
-  onSelectAll($event: TableModel) {
-    $event.rowsSelected.forEach((isSelected: boolean, rowIndex: number) =>
+  onSelectAll() {
+    this.model.selectAll(!this.selectAllCheckbox && !this.selectAllCheckboxSomeSelected);
+    this.model.rowsSelected.forEach((isSelected: boolean, rowIndex: number) =>
       this._toggleSelection(rowIndex, isSelected)
     );
     this.updateSelection.emit(this.selection);
+    this.cdRef.detectChanges();
   }
 
-  onDeselect($event: any) {
+  onDeselect(deselectedRowIndex: number) {
+    this.model.selectRow(deselectedRowIndex, false);
     if (this.selectionType === 'single') {
       return;
     }
-    const { deselectedRowIndex } = $event;
     this._toggleSelection(deselectedRowIndex, false);
     this.updateSelection.emit(this.selection);
   }
 
-  onDeselectAll($event: TableModel) {
-    $event.rowsSelected.forEach((isSelected: boolean, rowIndex: number) =>
+  onDeselectAll() {
+    this.model.selectAll(false);
+    this.model.rowsSelected.forEach((isSelected: boolean, rowIndex: number) =>
       this._toggleSelection(rowIndex, isSelected)
     );
     this.updateSelection.emit(this.selection);
@@ -1242,5 +1271,42 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.model.rowsExpanded = this.model.rowsExpanded.map(
       (_, rowIndex: number) => rowIndex === expandedRowIndex
     );
+  }
+
+  firstExpandedDataInRow(row: TableItem[]) {
+    const found = row.find((d) => d.expandedData);
+    if (found) {
+      return found.expandedData;
+    }
+    return found;
+  }
+
+  shouldExpandAsTable(row: TableItem[]) {
+    return row.some((d) => d.expandAsTable);
+  }
+
+  isRowExpandable(index: number) {
+    return this.model.data[index].some((d) => d && d.expandedData);
+  }
+
+  trackByFn(id: string, _index: number, row: TableItem[]) {
+    const uniqueIdentifier = _.get(row, [0, 'data', 'row', id])?.toString?.();
+    return uniqueIdentifier || row;
+  }
+
+  updateSelectAllCheckbox() {
+    const selectedRowsCount = this.model.selectedRowsCount();
+
+    if (selectedRowsCount <= 0) {
+      // reset select all checkbox if nothing selected
+      this.selectAllCheckbox = false;
+      this.selectAllCheckboxSomeSelected = false;
+    } else if (selectedRowsCount < this.model.data.length) {
+      this.selectAllCheckbox = true;
+      this.selectAllCheckboxSomeSelected = true;
+    } else {
+      this.selectAllCheckbox = true;
+      this.selectAllCheckboxSomeSelected = false;
+    }
   }
 }
