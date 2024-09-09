@@ -69,9 +69,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(avail_space_by_rule, bl);
   encode(purged_snaps, bl);
   encode(osd_sum_by_class, bl, features);
-  if (v >= 5) {
-    encode(pool_pg_unavailable_map, bl);
-  }
+  encode(pool_pg_unavailable_map, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -97,7 +95,7 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(avail_space_by_rule, p);
   decode(purged_snaps, p);
   decode(osd_sum_by_class, p);
-  if (v >= 5) {
+  if (struct_v >= 5) {
     decode(pool_pg_unavailable_map, p);
   }
   DECODE_FINISH(p);
