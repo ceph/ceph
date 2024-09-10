@@ -1927,12 +1927,6 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 	  return ret;
 	}
       }
-
-      if ((ret = source->driver->get_obj_dir()->del(dpp, &block.cacheObj, y)) < 0) {
-	ldpp_dout(dpp, 0) << "Failed to delete object directory entry for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-	return ret;
-      }
-      
       std::string size;
       if (attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE) != attrs.end()) {
 	size = attrs.find(RGW_CACHE_ATTR_OBJECT_SIZE)->second.to_str();
