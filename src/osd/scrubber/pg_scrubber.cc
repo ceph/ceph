@@ -469,48 +469,15 @@ void PgScrubber::rm_from_osd_scrubbing()
 }
 
 
-bool PgScrubber::flags_to_deep_priority(
-    const Scrub::sched_conf_t& app_conf,
-    utime_t scrub_clock_now)
-{
-  auto& targ = m_scrub_job->deep_target;
-  auto& entry = m_scrub_job->deep_target.sched_info_ref();
-
-  // note: as we depend on the returned value to distinguish between existing h.p.
-  // and an instance in which that is set here, there is the added "not already
-  // high-priority" condition.
-  if (targ.urgency() >= urgency_t::operator_requested) {
-    return false;
-  }
-
-  if (m_planned_scrub.need_auto) {
-    // Set the smallest time that isn't utime_t()
-    entry.schedule.scheduled_at = PgScrubber::scrub_must_stamp();
-    entry.urgency = urgency_t::operator_requested;
-    return true;
-  }
-
-  return false; // not set to high-priority *by this function*
-}
-
-
-void PgScrubber::update_targets(
-    const requested_scrub_t& planned,
-    utime_t scrub_clock_now)
+void PgScrubber::update_targets(utime_t scrub_clock_now)
 {
   const auto applicable_conf = populate_config_params();
 
   dout(10) << fmt::format(
-		  "{}: config:{} flags:<{}> job on entry:{}{}", __func__,
-		  applicable_conf, planned, *m_scrub_job,
+		  "{}: config:{} job on entry:{}{}", __func__, applicable_conf,
+		  *m_scrub_job,
 		  m_pg->info.stats.stats_invalid ? " invalid-stats" : "")
 	   << dendl;
-
-  // first, use the planned-scrub flags to possibly set one of the
-  // targets as high-priority.
-  // Note - this step is to be removed in the followup commits.
-  flags_to_deep_priority(applicable_conf, scrub_clock_now);
-
   if (m_pg->info.stats.stats_invalid && applicable_conf.mandatory_on_invalid) {
     m_scrub_job->shallow_target.sched_info_ref().schedule.scheduled_at =
 	scrub_clock_now;
@@ -572,9 +539,7 @@ void PgScrubber::update_scrub_job(Scrub::delay_ready_t delay_ready)
     return;
   }
 
-  dout(15) << fmt::format(
-		  "{}: flags:<{}> job on entry:{}", __func__, m_planned_scrub,
-		  *m_scrub_job)
+  dout(15) << fmt::format("{}: job on entry:{}", __func__, *m_scrub_job)
 	   << dendl;
 
   // if we were marked as 'not registered' - do not try to push into
@@ -594,14 +559,11 @@ void PgScrubber::update_scrub_job(Scrub::delay_ready_t delay_ready)
 	     << dendl;
   }
 
-  const auto scrub_clock_now = ceph_clock_now();
-  update_targets(m_planned_scrub, scrub_clock_now);
+  update_targets(ceph_clock_now());
   m_osds->get_scrub_services().enqueue_scrub_job(*m_scrub_job);
   m_scrub_job->set_both_targets_queued();
   m_pg->publish_stats_to_osd();
-  dout(10) << fmt::format(
-		  "{}: flags:<{}> job on exit:{}", __func__, m_planned_scrub,
-		  *m_scrub_job)
+  dout(10) << fmt::format("{}: job on exit:{}", __func__, *m_scrub_job)
 	   << dendl;
 }
 
@@ -637,7 +599,6 @@ scrub_level_t PgScrubber::scrub_requested(
 
   // modifying the planned-scrub flags - to be removed shortly
   // User might intervene, so clear this
-  req_flags.need_auto = false;
   req_flags.req_scrub = true;
   dout(20) << fmt::format("{}: planned scrub:{}", __func__, req_flags) << dendl;
 
@@ -2424,7 +2385,6 @@ void PgScrubber::dump_scrubber(
     // the following data item is deprecated. Will be replaced by a set
     // of reported attributes that match the updated scrub-job state.
     f->dump_bool("must_repair", earliest.urgency() == urgency_t::must_repair);
-    f->dump_bool("need_auto", request_flags.need_auto);
 
     f->dump_stream("scrub_reg_stamp")
 	<< earliest.sched_info.schedule.not_before;

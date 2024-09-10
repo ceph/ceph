@@ -307,16 +307,6 @@ struct requested_scrub_t {
    * Will be copied into the 'required' scrub flag upon scrub start.
    */
   bool req_scrub{false};
-
-  /**
-   * Set from:
-   *  - scrub_requested() with need_auto param set, which only happens in
-   *  - scrub_finish() - if can_autorepair is set, and we have errors
-   *
-   * If set, will prevent the OSD from casually postponing our scrub. When
-   * scrubbing starts, will cause auto_repair to be set.
-   */
-  bool need_auto{false};
 };
 
 std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
@@ -329,8 +319,7 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{})",
-                          rs.need_auto ? " need_auto" : "",
+                          "(plnd:{})",
                           rs.req_scrub ? " req_scrub" : "");
   }
 };

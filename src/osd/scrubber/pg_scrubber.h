@@ -843,29 +843,11 @@ class PgScrubber : public ScrubPgIF,
   Scrub::sched_conf_t populate_config_params() const;
 
   /**
-   * use the 'planned scrub' flags to determine the urgency attribute
-   * of the 'deep target' part of the ScrubJob object.
-   *
-   * Returns 'true' if a high-priority 'urgency' level was set by this
-   * call (note: not if it was already set).
-   *
-   * Note: in the previous implementation, if the shallow scrub had
-   * high priority, and it was time for the periodic deep scrub, a
-   * high priority deep scrub was initiated. This behavior is not
-   * replicated here.
-   */
-  bool flags_to_deep_priority(
-      const Scrub::sched_conf_t& app_conf,
-      utime_t scrub_clock_now);
-
-  /**
    * recompute the two ScrubJob targets, taking into account not
-   * only the up-to-date 'last' stamps, but also the 'planned scrub'
-   * flags.
+   * only the up-to-date 'last' stamps, but also the 'urgency'
+   * attributes of both targets.
    */
-  void update_targets(
-      const requested_scrub_t& planned,
-      utime_t scrub_clock_now);
+  void update_targets(utime_t scrub_clock_now);
 
   /*
    * Select a range of objects to scrub.
