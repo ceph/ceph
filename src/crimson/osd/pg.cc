@@ -1498,6 +1498,7 @@ PG::interruptible_future<> PG::update_snap_map(
     log_entries,
     [this, &t](const auto& entry) mutable {
     if (entry.soid.snap < CEPH_MAXSNAP) {
+      // TODO: avoid seastar::async https://tracker.ceph.com/issues/67704
       return interruptor::async(
         [this, entry, _t=osdriver.get_transaction(&t)]() mutable {
         snap_mapper.update_snap_map(entry, &_t);

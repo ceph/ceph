@@ -844,58 +844,6 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   return log_entries;
 }
 
-OpsExecuter::interruptible_future<> OpsExecuter::snap_map_remove(
-  const hobject_t& soid,
-  SnapMapper& snap_mapper,
-  OSDriver& osdriver,
-  ceph::os::Transaction& txn)
-{
-  logger().debug("{}: soid {}", __func__, soid);
-  return interruptor::async([soid, &snap_mapper,
-                             _t=osdriver.get_transaction(&txn)]() mutable {
-    const auto r = snap_mapper.remove_oid(soid, &_t);
-    if (r) {
-      logger().error("{}: remove_oid {} failed with {}",
-                     __func__, soid, r);
-    }
-    // On removal tolerate missing key corruption
-    assert(r == 0 || r == -ENOENT);
-  });
-}
-
-OpsExecuter::interruptible_future<> OpsExecuter::snap_map_modify(
-  const hobject_t& soid,
-  const std::set<snapid_t>& snaps,
-  SnapMapper& snap_mapper,
-  OSDriver& osdriver,
-  ceph::os::Transaction& txn)
-{
-  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
-  // TODO: avoid seastar::async https://tracker.ceph.com/issues/67704
-  return interruptor::async([soid, snaps, &snap_mapper,
-                             _t=osdriver.get_transaction(&txn)]() mutable {
-    assert(std::size(snaps) > 0);
-    [[maybe_unused]] const auto r = snap_mapper.update_snaps(
-      soid, snaps, 0, &_t);
-    assert(r == 0);
-  });
-}
-
-OpsExecuter::interruptible_future<> OpsExecuter::snap_map_clone(
-  const hobject_t& soid,
-  const std::set<snapid_t>& snaps,
-  SnapMapper& snap_mapper,
-  OSDriver& osdriver,
-  ceph::os::Transaction& txn)
-{
-  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
-  return interruptor::async([soid, snaps, &snap_mapper,
-                             _t=osdriver.get_transaction(&txn)]() mutable {
-    assert(std::size(snaps) > 0);
-    snap_mapper.add_oid(soid, snaps, &_t);
-  });
-}
-
 // Defined here because there is a circular dependency between OpsExecuter and PG
 uint32_t OpsExecuter::get_pool_stripe_width() const {
   return pg->get_pgpool().info.get_stripe_width();
