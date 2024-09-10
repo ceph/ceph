@@ -620,11 +620,6 @@ class ClusterConfigHandler:
             change_group.cluster.cluster_id,
             set(change_group.cache),
         )
-        external.rm_other_in_ns(
-            self.public_store,
-            change_group.cluster.cluster_id,
-            set(change_group.cache),
-        )
 
         # ensure a entity exists with access to the volumes
         for volume in vols:
