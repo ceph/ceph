@@ -6928,6 +6928,10 @@ int BlueStore::read_bdev_label(
 {
   unique_ptr<BlockDevice> bdev(BlockDevice::create(
     cct, path, nullptr, nullptr, nullptr, nullptr));
+  if (!bdev) {
+    return -EIO;
+  }
+  bdev->set_no_exclusive_lock();
   int r = bdev->open(path);
   if (r < 0)
     return r;
