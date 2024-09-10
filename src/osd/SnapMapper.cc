@@ -728,6 +728,50 @@ int SnapMapper::get_snaps(
   return 0;
 }
 
+void SnapMapper::update_snap_map(
+  const pg_log_entry_t& i,
+  MapCacher::Transaction<std::string, ceph::buffer::list> *_t)
+{
+  ceph_assert(i.soid.snap < CEPH_MAXSNAP);
+  dout(20) << __func__ << " " << i << dendl;
+  if (i.is_delete()) {
+    int r = remove_oid(
+      i.soid,
+      _t);
+    if (r)
+      dout(20) << __func__ << " remove_oid " << i.soid << " failed with " << r << dendl;
+    // On removal tolerate missing key corruption
+    ceph_assert(r == 0 || r == -ENOENT);
+  } else if (i.is_update()) {
+    ceph_assert(i.snaps.length() > 0);
+    std::vector<snapid_t> snaps;
+    bufferlist snapbl = i.snaps;
+    auto p = snapbl.cbegin();
+    try {
+      decode(snaps, p);
+    } catch (...) {
+      dout(20) << __func__ << " decode snaps failure on " << i << dendl;
+      snaps.clear();
+    }
+    std::set<snapid_t> _snaps(snaps.begin(), snaps.end());
+
+    if (i.is_clone() || i.is_promote()) {
+      add_oid(
+        i.soid,
+        _snaps,
+        _t);
+    } else if (i.is_modify()) {
+      int r = update_snaps(
+        i.soid,
+        _snaps,
+        0,
+        _t);
+      ceph_assert(r == 0);
+    } else {
+      ceph_assert(i.is_clean());
+    }
+  }
+}
 
 // -- purged snaps --
 
