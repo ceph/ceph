@@ -158,6 +158,8 @@ protected:
   std::string pool_name;
   bool forced_plugin;
   std::string plugin;
+  bool forced_stripe_unit;
+  int stripe_unit;
 
   static constexpr int kmsize = 6;
 
@@ -178,6 +180,15 @@ protected:
     "jerasure",
     "isa"
   };
+
+  static constexpr int stripeunitsize = 3;
+
+  // Choices for stripe unit
+  static constexpr int stripeunitchoices[stripeunitsize] = {
+    4096,
+    64*1024,
+    256*1024
+  };
   
 public:
   SelectECProfile(ceph::util::random_number_generator<int>& rng,
@@ -196,10 +207,14 @@ public:
     if (forced_plugin) {
       plugin = vm["plugin"].as<std::string>();
     }
+    forced_stripe_unit = vm.count("stripe_unit");
+    if (forced_stripe_unit) {
+      stripe_unit = vm["stripe_unit"].as<int>();
+    }
   }
     
   void create_pool(librados::Rados& rados, const std::string& pool_name,
-		   const std::string& plugin, int k, int m)
+                   const std::string& plugin, int k, int m, int stripe_unit)
   {
     int rc;
     bufferlist inbl, outbl;
@@ -207,7 +222,8 @@ public:
       "{\"prefix\": \"osd erasure-code-profile set\", \
       \"name\": \"testprofile-" + pool_name + "\", \
       \"profile\": [ \"plugin=" + plugin + "\", \"k=" + std::to_string(k) +
-      "\", \"m=" + std::to_string(m) + "\", \"crush-failure-domain=osd\"]}";
+      "\", \"m=" + std::to_string(m) + "\", \"crush-failure-domain=osd\", \
+      \"stripe_unit=" + std::to_string(stripe_unit) + "\"]}";
     rc = rados.mon_command(profile_create, inbl, &outbl, nullptr);
     ceph_assert(rc == 0);
     std::string cmdstr =
@@ -238,9 +254,12 @@ public:
     if (!forced_plugin) {
       plugin = pluginchoices[rng(pluginsize-1)];
     }
+    if (!forced_stripe_unit) {
+      stripe_unit = stripeunitchoices[rng(stripeunitsize-1)];
+    }
     pool_name = "ec_" + plugin + "_k" + std::to_string(k) +
-      "_m" + std::to_string(m);
-    create_pool(rados, pool_name, plugin, k, m);
+      "_m" + std::to_string(m) + "_s" + std::to_string(stripe_unit);
+    create_pool(rados, pool_name, plugin, k, m, stripe_unit);
     return pool_name;
   }
 };
@@ -631,6 +650,7 @@ int main(int argc, char **argv)
     ("pool,p", po::value<std::string>(), "pool name")
     ("object,o", po::value<std::string>()->default_value("test"), "object name")
     ("km", po::value<Pair>(), "k,m EC pool profile (default 2,2)")
+    ("stripeunit,u", po::value<int>(), "stripe_unit aka chunk size for EC pool profile (e.g. 4096)")
     ("plugin", po::value<std::string>(), "EC plugin (isa or jerasure)")
     ("objectsize", po::value<Pair>(), "min,max object size in blocks (default 1,32)")
     ("threads,t", po::value<int>(), "number of threads of I/O per object (default 1)")
