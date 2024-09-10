@@ -4,11 +4,12 @@ export class UserFormRoleModel implements SelectOption {
   name: string;
   description: string;
   selected = false;
-  scopes_permissions: object;
-  enabled = true;
-
-  constructor(name: string, description: string) {
+  scopes_permissions?: object;
+  enabled: boolean;
+  content: string;
+  constructor(name: string, description: string, content: string) {
     this.name = name;
     this.description = description;
+    this.content = content;
   }
 }
