@@ -4845,6 +4845,7 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
 
   set_reply_extra_bl(req, _inode->ino, mdr->reply_extra_bl);
 
+  push_notification(le);
   journal_and_reply(mdr, newi, dn, le, fin);
 
   // We hit_dir (via hit_inode) in our finish callback, but by then we might
@@ -5522,7 +5523,8 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-  
+
+  push_notification(le);
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
 								   truncating_smaller, changed_ranges));
 
@@ -5586,7 +5588,7 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
     ceph_assert(mdr->dn[0].size());
     dn = mdr->dn[0].back();
   }
-
+  push_notification(le);
   journal_and_reply(mdr, in, dn, le, new C_MDS_inode_update_finish(this, mdr, in, old_size > 0,
 								   changed_ranges));
   // Although the `open` part can give an early reply, the truncation won't
@@ -5675,7 +5677,7 @@ void Server::handle_client_setlayout(const MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-  
+  push_notification(le);
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
@@ -5792,6 +5794,7 @@ void Server::handle_client_setdirlayout(const MDRequestRef& mdr)
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
   mdr->no_early_reply = true;
+  push_notification(le);
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
@@ -6494,7 +6497,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-
+  push_notification(le);
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
 								   false, false, adjust_realm));
   return;
@@ -6776,7 +6779,7 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-
+  push_notification(le);
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
@@ -6845,7 +6848,7 @@ void Server::handle_client_removexattr(const MDRequestRef& mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
-
+  push_notification(le);
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
 }
 
@@ -7161,7 +7164,7 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(),
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true, true);
-
+  push_notification(le);
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
   mds->balancer->maybe_fragment(dn->get_dir(), false);
 }
@@ -7252,7 +7255,7 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
-
+  push_notification(le);
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
 
   // We hit_dir (via hit_inode) in our finish callback, but by then we might
@@ -7315,7 +7318,7 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
   le->metablob.add_primary_dentry(dn, newi, true, true);
-
+  push_notification(le);
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
   mds->balancer->maybe_fragment(dir, false);
 
@@ -7511,7 +7514,7 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
 
   // do this after predirty_*, to avoid funky extra dnl arg
   dn->push_projected_linkage(targeti->ino(), targeti->d_type());
-
+  push_notification(le);
   journal_and_reply(mdr, targeti, dn, le,
 		    new C_MDS_link_local_finish(this, mdr, dn, targeti, dnpv, tipv, adjust_realm));
 }
@@ -7633,7 +7636,7 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     le->metablob.add_null_dentry(dn, true);
     dn->push_projected_linkage();
   }
-
+  push_notification(le);
   journal_and_reply(mdr, (inc ? targeti : nullptr), dn, le,
 		    new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
 }
@@ -8283,7 +8286,7 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
     ceph_assert(straydn);
     mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
   }
-
+  push_notification(le);
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(this, mdr, dn, straydn));
 }
 
@@ -9205,7 +9208,7 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
 
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(this, mdr, srcdn, destdn, straydn);
-
+  push_notification(le);
   journal_and_reply(mdr, srci, destdn, le, fin);
   mds->balancer->maybe_fragment(destdn->get_dir(), false);
 }
@@ -11925,4 +11928,13 @@ bool Server::build_snap_diff(
     insert_deleted(before);
   }
   return it == dir->end();
+}
+
+void Server::push_notification(LogEvent* le) {
+  std::shared_ptr <bufferlist> message(new bufferlist());
+  JSONFormatter* formatter = new JSONFormatter();
+  le->dump(formatter);
+  formatter->flush(*message);
+  delete formatter;
+  int res = MDSNotificationManager::send(message);
 }

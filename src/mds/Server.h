@@ -36,6 +36,7 @@ using namespace std::literals::string_view_literals;
 #include "MDSRank.h"
 #include "Mutation.h"
 #include "MDSContext.h"
+#include "MDSNotificationInterface.h"
 
 class OSDMap;
 class LogEvent;
@@ -411,6 +412,8 @@ private:
 
   inline static const std::string DEFAULT_HANDLER = "<default>";
   static const XattrHandler xattr_handlers[];
+
+  void push_notification(LogEvent* le);
 
   const XattrHandler* get_xattr_or_default_handler(std::string_view xattr_name);
 
