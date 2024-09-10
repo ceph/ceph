@@ -143,9 +143,8 @@ struct scrub_flags_t {
   unsigned int priority{0};
 
   /**
-   * set by queue_scrub() if either planned_scrub.auto_repair or
-   * need_auto were set.
-   * Tested at scrub end.
+   * set by set_op_parameters() for deep scrubs, if the hardware
+   * supports auto repairing and osd_scrub_auto_repair is enabled.
    */
   bool auto_repair{false};
 
@@ -365,14 +364,8 @@ class PgScrubber : public ScrubPgIF,
 
   /**
    * finalize the parameters of the initiated scrubbing session:
-   *
-   * The "current scrub" flags (m_flags) are set from the 'planned_scrub'
-   * flag-set; PG_STATE_SCRUBBING, and possibly PG_STATE_DEEP_SCRUB &
-   * PG_STATE_REPAIR are set.
    */
-  void set_op_parameters(
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t& request) final;
+  void set_op_parameters(Scrub::ScrubPGPreconds pg_cond) final;
 
   void cleanup_store(ObjectStore::Transaction* t) final;
 
@@ -841,7 +834,7 @@ class PgScrubber : public ScrubPgIF,
   /**
    * initiate a deep-scrub after the current scrub ended with errors.
    */
-  void request_rescrubbing(requested_scrub_t& req_flags);
+  void request_rescrubbing();
 
   /**
    * combine cluster & pool configuration options into a single struct

@@ -317,14 +317,6 @@ struct requested_scrub_t {
    * scrubbing starts, will cause auto_repair to be set.
    */
   bool need_auto{false};
-
-  /*
-   * the value of auto_repair is determined in sched_scrub() (once per scrub.
-   * previous value is not remembered). Set if
-   * - allowed by configuration and backend, and
-   * - for periodic scrubs: time_for_deep was just set RRR
-   */
-  bool auto_repair{false};
 };
 
 std::ostream& operator<<(std::ostream& out, const requested_scrub_t& sf);
@@ -337,8 +329,7 @@ struct fmt::formatter<requested_scrub_t> {
   auto format(const requested_scrub_t& rs, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(),
-                          "(plnd:{}{}{})",
-                          rs.auto_repair ? " auto_repair" : "",
+                          "(plnd:{}{})",
                           rs.need_auto ? " need_auto" : "",
                           rs.req_scrub ? " req_scrub" : "");
   }
@@ -457,9 +448,7 @@ struct ScrubPgIF {
       Scrub::ScrubPGPreconds pg_cond,
       const requested_scrub_t& requested_flags) = 0;
 
-  virtual void set_op_parameters(
-      Scrub::ScrubPGPreconds pg_cond,
-      const requested_scrub_t&) = 0;
+  virtual void set_op_parameters(Scrub::ScrubPGPreconds pg_cond) = 0;
 
   /// stop any active scrubbing (on interval end) and unregister from
   /// the OSD scrub queue
