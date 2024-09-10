@@ -716,10 +716,10 @@ class TestMonitoring:
                                                     "name": "ceph-exporter.test",
                                                     "image": "",
                                                     "deploy_arguments": [],
-                                                    "params": {},
+                                                    "params": {"tcp_ports": [9926]},
                                                     "meta": {
                                                         "service_name": "ceph-exporter",
-                                                        "ports": [],
+                                                        "ports": [9926],
                                                         "ip": None,
                                                         "deployed_by": [],
                                                         "rank": None,

@@ -2821,6 +2821,9 @@ class CephExporterSpec(ServiceSpec):
         self.prio_limit = prio_limit
         self.stats_period = stats_period
 
+    def get_port_start(self) -> List[int]:
+        return [self.port or 9926]
+
     def validate(self) -> None:
         super(CephExporterSpec, self).validate()
 
