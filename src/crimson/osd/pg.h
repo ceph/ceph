@@ -591,6 +591,9 @@ public:
 
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
   void update_stats(const pg_stat_t &stat);
+  interruptible_future<> update_snap_map(
+    const std::vector<pg_log_entry_t> &log_entries,
+    ObjectStore::Transaction& t);
   void log_operation(
     std::vector<pg_log_entry_t>&& logv,
     const eversion_t &trim_to,
@@ -673,7 +676,8 @@ private:
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
-  std::tuple<interruptible_future<>, interruptible_future<>>
+  interruptible_future<
+    std::tuple<interruptible_future<>, interruptible_future<>>>
   submit_transaction(
     ObjectContextRef&& obc,
     ceph::os::Transaction&& txn,

@@ -871,6 +871,7 @@ OpsExecuter::interruptible_future<> OpsExecuter::snap_map_modify(
   ceph::os::Transaction& txn)
 {
   logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  // TODO: avoid seastar::async https://tracker.ceph.com/issues/67704
   return interruptor::async([soid, snaps, &snap_mapper,
                              _t=osdriver.get_transaction(&txn)]() mutable {
     assert(std::size(snaps) > 0);
@@ -974,6 +975,7 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     0
   };
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
+  cloning_ctx->log_entry.clean_regions.mark_data_region_dirty(0, initial_obs.oi.size);
 
   return cloning_ctx;
 }
@@ -1019,14 +1021,6 @@ OpsExecuter::flush_clone_metadata(
   update_clone_overlap();
   if (cloning_ctx) {
     std::move(*cloning_ctx).apply_to(log_entries, *obc);
-    const auto& coid = log_entries.front().soid;
-    const auto& cloned_snaps = obc->ssc->snapset.clone_snaps[coid.snap];
-    maybe_snap_mapped = snap_map_clone(
-      coid,
-      std::set<snapid_t>{std::begin(cloned_snaps), std::end(cloned_snaps)},
-      snap_mapper,
-      osdriver,
-      txn);
   }
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context

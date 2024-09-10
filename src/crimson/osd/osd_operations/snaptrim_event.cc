@@ -263,7 +263,7 @@ SnapTrimObjSubEvent::adjust_snaps(
     ghobject_t{coid, ghobject_t::NO_GEN, shard_id_t::NO_SHARD},
     OI_ATTR,
     bl);
-  add_log_entry(
+  auto &loge = add_log_entry(
     pg_log_entry_t::MODIFY,
     coid,
     obc->obs.oi.prior_version,
@@ -271,8 +271,10 @@ SnapTrimObjSubEvent::adjust_snaps(
     osd_reqid_t(),
     obc->obs.oi.mtime,
     0);
-  return OpsExecuter::snap_map_modify(
-    coid, new_snaps, pg->snap_mapper, pg->osdriver, txn);
+  bufferlist snapsbl;
+  encode(new_snaps, snapsbl);
+  loge.snaps.swap(snapsbl);
+  return interruptor::now();
 }
 
 void SnapTrimObjSubEvent::update_head(
@@ -400,32 +402,8 @@ SnapTrimObjSubEvent::start()
   // lock both clone's and head's obcs
   co_await pg->obc_loader.with_obc<RWState::RWWRITE>(
     coid,
-    [this](auto head_obc, auto clone_obc) {
-      logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
-      return enter_stage<interruptor>(
-        client_pp().process
-      ).then_interruptible(
-        [this,clone_obc=std::move(clone_obc), head_obc=std::move(head_obc)]() mutable {
-	  logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
-	  return remove_or_update(
-	    clone_obc, head_obc
-	  ).safe_then_interruptible([clone_obc, this](auto&& txn) mutable {
-	    auto [submitted, all_completed] = pg->submit_transaction(
-	      std::move(clone_obc),
-	      std::move(txn),
-	      std::move(osd_op_p),
-	      std::move(log_entries));
-	    return submitted.then_interruptible(
-	      [this, all_completed=std::move(all_completed)]() mutable {
-		return enter_stage<interruptor>(
-		  client_pp().wait_repop
-		).then_interruptible([all_completed=std::move(all_completed)]() mutable{
-		  return std::move(all_completed);
-		});
-	      });
-	  });
-	});
-    },
+    std::bind(&SnapTrimObjSubEvent::process_and_submit,
+              this, std::placeholders::_1, std::placeholders::_2),
     false
   ).handle_error_interruptible(
     remove_or_update_iertr::pass_further{},
@@ -434,6 +412,33 @@ SnapTrimObjSubEvent::start()
 
   logger().debug("{}: completed", *this);
   co_await interruptor::make_interruptible(handle.complete());
+}
+
+ObjectContextLoader::load_obc_iertr::future<>
+SnapTrimObjSubEvent::process_and_submit(ObjectContextRef head_obc,
+                                        ObjectContextRef clone_obc) {
+  logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
+
+  co_await enter_stage<interruptor>(client_pp().process);
+
+  logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
+
+  auto txn = co_await remove_or_update(clone_obc, head_obc);
+
+  auto [submitted, all_completed] = co_await pg->submit_transaction(
+	  std::move(clone_obc),
+	  std::move(txn),
+	  std::move(osd_op_p),
+	  std::move(log_entries)
+  );
+
+  co_await std::move(submitted);
+
+  co_await enter_stage<interruptor>(client_pp().wait_repop);
+
+  co_await std::move(all_completed);
+
+  co_return;
 }
 
 void SnapTrimObjSubEvent::print(std::ostream &lhs) const
