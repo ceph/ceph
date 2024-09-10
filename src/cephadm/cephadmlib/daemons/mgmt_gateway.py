@@ -5,13 +5,13 @@ import re
 
 from ..call_wrappers import call, CallVerbosity
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer
+from ..container_types import CephContainer, extract_uid_gid
 from ..context import CephadmContext
 from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
-from ..constants import DEFAULT_NGINX_IMAGE, UID_NOBODY, GID_NOGROUP
+from ..constants import DEFAULT_NGINX_IMAGE
 from ..data_utils import dict_get, is_fsid
 from ..file_utils import populate_files, makedirs, recursive_chown
 from ..exceptions import Error
@@ -90,7 +90,7 @@ class MgmtGateway(ContainerDaemonForm):
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
-        return UID_NOBODY, GID_NOGROUP
+        return extract_uid_gid(ctx, file_path='/etc/nginx/')
 
     def get_daemon_args(self) -> List[str]:
         return []
@@ -149,6 +149,24 @@ class MgmtGateway(ContainerDaemonForm):
             if match:
                 version = match.group(1)
         return version
+
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        uid, _ = self.uid_gid(ctx)
+        extra_args = [
+            '--user',
+            str(uid),
+        ]
+        args.extend(extra_args)
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        # The following noqa comment is intentional to suppress warnings about using double quotes
+        # instead of single quotes. We use double quotes here to ensure that single quotes are
+        # used in the final parsed output: nginx -g 'daemon off;'
+        args.extend(['nginx', '-g', "daemon off;"])  # noqa
 
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
